@@ -31,7 +31,12 @@ mod source_routing_training;
 mod source_span;
 mod source_span_training;
 pub use source_routing_training::SourceRoutingConfig;
+mod action_binding;
+mod action_emission;
+#[cfg(test)]
+mod action_emission_tests;
 mod mixed_initial_training;
+pub use action_emission::{ActionEmissionExample, ActionEmissionSegment};
 mod mixed_operators;
 pub use mixed_operators::{MixedOperatorExample, MixedOperatorTarget};
 mod composed_output;
@@ -261,6 +266,10 @@ pub enum Control {
     MixedOperatorsDisabled,
     MixedInitialDisabled,
     MixedTransitionDisabled,
+    ActionTransitionDisabled,
+    ActionBindingDisabled,
+    ActionEmissionDisabled,
+    LexicalActionContextDisabled,
     LexicalEmissionDisabled,
     LexicalRecordReadDisabled,
     LexicalEmissionGeometryDisabled,
@@ -333,6 +342,10 @@ impl Feature {
             | Control::SourceContextWindowOnly
             | Control::JointAdmissionDisabled
             | Control::OperationTransitionIntermediateDisabled
+            | Control::ActionTransitionDisabled
+            | Control::ActionBindingDisabled
+            | Control::ActionEmissionDisabled
+            | Control::LexicalActionContextDisabled
             | Control::LexicalEmissionDisabled
             | Control::LexicalRecordReadDisabled
             | Control::LexicalEmissionGeometryDisabled
@@ -427,6 +440,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    action_emission: Option<action_emission::ActionEmission>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     mixed_operators: Option<mixed_operators::MixedOperators>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     composed_output: Option<composed_output::ComposedOutput>,
@@ -503,6 +518,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    action_emission: Option<action_emission::ActionEmission>,
+    #[serde(default)]
     mixed_operators: Option<mixed_operators::MixedOperators>,
     #[serde(default)]
     composed_output: Option<composed_output::ComposedOutput>,
@@ -578,6 +595,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            action_emission: wire.action_emission,
             mixed_operators: wire.mixed_operators,
             composed_output: wire.composed_output,
             instruction_binding: wire.instruction_binding,

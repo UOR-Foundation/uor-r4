@@ -550,6 +550,30 @@ pub(super) fn learn(
     frames: &mut [Frame],
     start: Instant,
 ) -> serde_json::Value {
+    learn_impl(model, block, frames, start, None)
+}
+
+/// Offline restricted coordinate fitting. The mask indexes the final sorted
+/// vocabulary; all other roots, landmarks and biases are frozen.
+pub(super) fn learn_code_subset(
+    model: &Model,
+    block: &mut SourceRouting,
+    frames: &mut [Frame],
+    start: Instant,
+    mutable: &[bool],
+) -> Result<serde_json::Value> {
+    if mutable.len() != block.codes.len() {
+        return Err(Error("mutable source-code mask length differs".into()));
+    }
+    Ok(learn_impl(model, block, frames, start, Some(mutable)))
+}
+fn learn_impl(
+    model: &Model,
+    block: &mut SourceRouting,
+    frames: &mut [Frame],
+    start: Instant,
+    mutable: Option<&[bool]>,
+) -> serde_json::Value {
     let config = block.config.clone();
     let mut rng = config.seed;
     for _ in 0..block.landmarks.len() * LANES {
@@ -571,12 +595,18 @@ pub(super) fn learn(
     let mut stopped = false;
     'passes: for _ in 0..config.passes {
         for kind in [2, 0, 1] {
+            if mutable.is_some() && kind != 0 {
+                continue;
+            }
             let count = if kind == 0 {
                 block.codes.len()
             } else {
                 block.landmarks.len()
             };
             for index in 0..count {
+                if mutable.is_some_and(|mask| !mask[index]) {
+                    continue;
+                }
                 for lane in 0..if kind == 2 { 1 } else { LANES } {
                     let mut value = match kind {
                         0 => block.codes[index].roots[lane] as i16,

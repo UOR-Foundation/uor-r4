@@ -1,0 +1,3375 @@
+{
+  "schema": "uor-r4.native-action-emission-result/1",
+  "decision": "RETAIN_BOUNDED_FORMATTED_ADD_COPY",
+  "artifact": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+    "bytes": 12895470,
+    "sha256": "1979d9a13c44f36c2dccf0833a0f16900833339bdc2b50af30b710a9eddfb134",
+    "cid": "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d",
+    "retained_path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/action-emission/model.json"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/mixed-operators/model.json",
+    "bytes": 12562902,
+    "sha256": "14c76d1375eadec57cb34e9fff98c43b52f16926495c8493bc530c2e077e0de5",
+    "cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59"
+  },
+  "scope": "Four authored Add/Copy/Again forms crossed with plain/sentence/Rust-equality formatting. Actual generated history, exact pending/committed operands and reads, EOS/checkpoints and following independent fresh-record sums. No general wording/program/prose claim.",
+  "source_base": "113b531f959ac732432cb2abc9d6fb0bd8fdc7f9",
+  "source_freeze": {
+    "at": "2026-09-08T22:26:08.667Z",
+    "sources": [
+      {
+        "repository_path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+        "bytes": 43172,
+        "sha256": "6b55b5967ed401064137a45e6e684fccd195028e3a189802c8817c730d6103d4"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/lexical_emission.rs",
+        "bytes": 28567,
+        "sha256": "14c7889d8e3ef33cb76bbc2b108d4094f7674081e2b3a94f9a983e6ed91d89f4"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/lexical_emission_tests.rs",
+        "bytes": 11721,
+        "sha256": "78542b00fe2df9e5e21cd9ac374c26660d24b7046a3de47c8f9d29b5660c3ccb"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/mixed_operators.rs",
+        "bytes": 16339,
+        "sha256": "dfeac6dd5b0c6bd18e9b2f3b758d05d2b60951a0f25c8ceb2f3be8007e03aad7"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+        "bytes": 29062,
+        "sha256": "173f76d1f35081a7e5996f5b252656cf36016bc4378fee113de98ba8bbfd708a"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/operation_transition.rs",
+        "bytes": 24061,
+        "sha256": "2f260a11d4ad0028d694e96383e15c746b6534720b191a9c2acf4c0f58256301"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+        "bytes": 31645,
+        "sha256": "26e99135f29929f4bb681113a733827daccc1efc103266dcdc393505cf8f095f"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+        "bytes": 61262,
+        "sha256": "0b43c6b70899f1d33fc4bffc65e3c087cf7ae94ae67eeda2bdd38f91514e8073"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/typed_routing.rs",
+        "bytes": 18494,
+        "sha256": "560f70f3a39799d74de0deb411d24fdb46b6e79042a50f6254ae2a2bceab8f99"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+        "bytes": 121887,
+        "sha256": "11e0c963995a656cf7bc4eaea4daf18f464e950e3066a9877001a779aeae17f1"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/examples/native_action_emission.rs",
+        "bytes": 25343,
+        "sha256": "a34f4719b52503f6993430f549e94aad300852b9fd909c428387fbe89823561b"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/action_binding.rs",
+        "bytes": 2045,
+        "sha256": "384d85ab89c95e7a8c98216883c270b13c7341ae5f0242ced63f4b04b6e4f4d2"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/action_emission.rs",
+        "bytes": 30825,
+        "sha256": "2d82838175e99a040d09606555fbfc1f3514b4da184c7cbbb10b2992f24db4a0"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/action_emission_tests.rs",
+        "bytes": 10518,
+        "sha256": "c62e656923adb5a74eda92229673672461aa7041955f1835be5f586400a63000"
+      }
+    ]
+  },
+  "projection": {
+    "at": "2026-09-08T21:48:39.251Z",
+    "reason": "Diagnose mixed operation formatting and, if confirmed, learn shared committed-action-conditioned lexical emission with exact record reads. Preserve prior mixed/composed/literal/numeric behavior, controls and native API.",
+    "authorization": "Owner next-step request and standing necessary local-extension authorization",
+    "ledger_before": {
+      "cumulative_ms": 12707541,
+      "limit_ms": 13350000
+    },
+    "increment_ms": 2100000,
+    "updated_limit_ms": 15450000,
+    "cycle_model_ms": 2400000,
+    "cycle_engineering_ms": 1800000,
+    "phase_breakdown_ms": {
+      "diagnosis": 120000,
+      "preparation_fit": 720000,
+      "controls_preservation": 600000,
+      "interfaces": 240000,
+      "fresh": 120000,
+      "retries_checkpoint": 600000
+    },
+    "engineering_breakdown_ms": {
+      "build": 900000,
+      "focused_tests": 600000,
+      "formatting_delivery": 300000
+    },
+    "prior_unverified_reservation_ms": 196620,
+    "context_tokens": 512,
+    "output_tokens": 96,
+    "input_window_bytes_max": 4096,
+    "construction_frames_max": 4096,
+    "open_cases_max": 128,
+    "fresh_cases_max": 32,
+    "threads": 2,
+    "model_processes": 1,
+    "peak_model_rss_bytes": 4294967296,
+    "peak_build_rss_bytes": 6442450944,
+    "new_storage_bytes": 1610612736,
+    "storage_breakdown": {
+      "build": 1073741824,
+      "artifacts_checkpoints": 134217728,
+      "reports_temporary": 385875968,
+      "metadata": 16777216
+    },
+    "storage_limit_bytes": 34863214592,
+    "stop_margin_bytes": 134217728,
+    "accounted_before_bytes": 32580792320,
+    "baselines": {
+      "target": 2704314368,
+      "worktree": 477986816,
+      "evidence": 0,
+      "git": 1023766528
+    },
+    "worktree": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+    "branch": "codex/action-conditioned-emission",
+    "source_base": "113b531f959ac732432cb2abc9d6fb0bd8fdc7f9",
+    "artifact": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/mixed-operators/model.json",
+      "bytes": 12562902,
+      "sha256": "14c76d1375eadec57cb34e9fff98c43b52f16926495c8493bc530c2e077e0de5"
+    },
+    "prior_receipt": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/resources.json",
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "retry_projection": {
+    "reason": "The first joint candidate has exact lexical fit but misses two of 101 operation frames and six formatted Copy-original responses. Preserve candidate61e24998 and stagea6faba85. Add a pre-fit check for contradictory full feature frames and scored failed-frame diagnostics; if the source frames are distinguishable, evaluate a second deterministic seed from the same frozen binding parent to test coordinate-optimization sensitivity. This changes no serving law or data scope.",
+    "model_allowance_increment_ms": 0,
+    "engineering_allowance_increment_ms": 0,
+    "retry_model_projection_ms": 300000,
+    "retry_engineering_projection_ms": 180000,
+    "within_existing_cycle_model_limit_ms": 2400000,
+    "within_existing_cycle_engineering_limit_ms": 1800000,
+    "preserve_all_previous_charges_and_artifacts": true,
+    "seed_before": 1140,
+    "seed_after": 1141
+  },
+  "interface_projection": {
+    "at": "2026-09-08T22:45:42.464Z",
+    "reason": "The expanded API integrity and parent-reconstruction check is still executing CPU work after 189 seconds. Allow for completion and four actual allocation checks by moving 360 seconds of the existing retry/checkpoint allowance to interfaces before using that phase allowance. No additional candidate fitting is planned.",
+    "interface_projection_before_ms": 240000,
+    "interface_projection_after_ms": 600000,
+    "retry_checkpoint_projection_before_ms": 600000,
+    "retry_checkpoint_projection_after_ms": 240000,
+    "cycle_model_limit_unchanged_ms": 2400000,
+    "cumulative_limit_unchanged_ms": 15450000,
+    "additional_model_allowance_ms": 0,
+    "additional_storage_bytes": 0,
+    "all_previous_charges_preserved": true
+  },
+  "selection": {
+    "at": "2026-09-08T22:49:05.567Z",
+    "decision": "SELECT_BOUNDED_FORMATTED_ADD_COPY_BEFORE_FRESH",
+    "artifact": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+      "bytes": 12895470,
+      "sha256": "1979d9a13c44f36c2dccf0833a0f16900833339bdc2b50af30b710a9eddfb134",
+      "cid": "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d"
+    },
+    "construction": "36/36",
+    "open": "24/24",
+    "stress": "24/24",
+    "main_preservation": "663/663",
+    "historical_reports": {
+      "exact": 12,
+      "total": 14,
+      "previously_correct_regressions": 0,
+      "changed_already_incorrect_rows": 18
+    },
+    "api": "91/91",
+    "actual_allocation_checks": 4,
+    "unique_focused_tests": 21,
+    "fresh_values_not_yet_chosen": true,
+    "no_further_fit_planned": true,
+    "limitations": [
+      "finite authored forms",
+      "no general wording transfer",
+      "no general prose or program synthesis",
+      "no alpha or energy qualification"
+    ]
+  },
+  "panels": {
+    "fit-emission-seed1141": {
+      "exact": 36,
+      "total": 36,
+      "full": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/result.json",
+        "bytes": 981471,
+        "sha256": "b74c16c6956dc46283247ddf157093a9068fdac6033ca36ecf32c24c8be6140b"
+      },
+      "controls": [
+        {
+          "control": "action-binding-disabled",
+          "exact": 24,
+          "total": 36,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/action-binding-disabled.json",
+            "bytes": 724349,
+            "sha256": "e56a76a2a7a0bf0e49edf4fa4ccca292f68fe14135b075fa9aacb5c93a255c22"
+          }
+        },
+        {
+          "control": "action-transition-disabled",
+          "exact": 24,
+          "total": 36,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/action-transition-disabled.json",
+            "bytes": 709963,
+            "sha256": "4aa15fbbc2dd4b6602d4a049c823b59a3524d60132fd89ff69601cccc07451e5"
+          }
+        },
+        {
+          "control": "action-context-disabled",
+          "exact": 24,
+          "total": 36,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/action-context-disabled.json",
+            "bytes": 1049772,
+            "sha256": "eb2b2c13f990461fc142f87f05b1e16618510d96aa1aa8a345e6b3ce247349a9"
+          }
+        },
+        {
+          "control": "action-emission-disabled",
+          "exact": 24,
+          "total": 36,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/action-emission-disabled.json",
+            "bytes": 1049765,
+            "sha256": "a948aed074f02b3442f3492a9b117dcbee5b76743833e3e9f6f914a39d5f1878"
+          }
+        },
+        {
+          "control": "record-read-disabled",
+          "exact": 12,
+          "total": 36,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/record-read-disabled.json",
+            "bytes": 690776,
+            "sha256": "31ba8b25f0d98f4013fc618e8e3d031cbaeee6209e7bc8150390688a2d907c60"
+          }
+        },
+        {
+          "control": "emission-geometry-disabled",
+          "exact": 12,
+          "total": 36,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/emission-geometry-disabled.json",
+            "bytes": 376885,
+            "sha256": "174debf8691925d3834363cda5ea61c8dadee025965929b90064750173a4b7eb"
+          }
+        }
+      ]
+    },
+    "open": {
+      "exact": 24,
+      "total": 24,
+      "full": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/result.json",
+        "bytes": 654185,
+        "sha256": "fa105a55e2c9ebea4d78610d9b7520b45aa0a20621c89b94124eae449e75aae3"
+      },
+      "controls": [
+        {
+          "control": "action-binding-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/action-binding-disabled.json",
+            "bytes": 482749,
+            "sha256": "e4da25f8b2c1d868e39f38056af82eda579b40e355cdf0ad4f289844035e5f01"
+          }
+        },
+        {
+          "control": "action-transition-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/action-transition-disabled.json",
+            "bytes": 473232,
+            "sha256": "2dfdef88d9b401e3e3c64cdf58ccef5ad71c1bc78885e6f76faa74cec727b683"
+          }
+        },
+        {
+          "control": "action-context-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/action-context-disabled.json",
+            "bytes": 705534,
+            "sha256": "ae7bce77126cbf717be9df1d4af5fc1fa4c2bf96eb4a2b11b7b4a03cb0302d62"
+          }
+        },
+        {
+          "control": "action-emission-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/action-emission-disabled.json",
+            "bytes": 705527,
+            "sha256": "848a41b0faba992445e7c2521923960f336defc6cd71474aabb6e3a52872d52d"
+          }
+        },
+        {
+          "control": "record-read-disabled",
+          "exact": 8,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/record-read-disabled.json",
+            "bytes": 434221,
+            "sha256": "eaebe4bcae07d1cefae6c747fbf029045633b3fa2297f07c45255ce149d9663d"
+          }
+        },
+        {
+          "control": "emission-geometry-disabled",
+          "exact": 8,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/emission-geometry-disabled.json",
+            "bytes": 251176,
+            "sha256": "f7973950477f435b34d9fdc813a44e7eb151f3cfb0dfc7057af35f8b4ed28037"
+          }
+        }
+      ]
+    },
+    "stress": {
+      "exact": 24,
+      "total": 24,
+      "full": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/result.json",
+        "bytes": 654448,
+        "sha256": "9131bd7b4652aa49c5f27fbfc20e929f91579747842db2329b418f712dc33330"
+      },
+      "controls": [
+        {
+          "control": "action-binding-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/action-binding-disabled.json",
+            "bytes": 480090,
+            "sha256": "e77955a7340dcc6132c61ba82b0662d864f7ff022f088d4c280c1ac8b1684ca6"
+          }
+        },
+        {
+          "control": "action-transition-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/action-transition-disabled.json",
+            "bytes": 473338,
+            "sha256": "7836cc2ad9f3a7e77b3b6c11ff31f94feddcf7da1418e4604ceac8b4e379f365"
+          }
+        },
+        {
+          "control": "action-context-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/action-context-disabled.json",
+            "bytes": 698198,
+            "sha256": "d9e49e13ef65a156fede6cda15eaf59be5d7e61d2d19e24beac324c4fb5e22a3"
+          }
+        },
+        {
+          "control": "action-emission-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/action-emission-disabled.json",
+            "bytes": 698191,
+            "sha256": "6634075931591d1f264f36f4bf8f262b2b98c5a7a5de8d947649dd6d004c8a53"
+          }
+        },
+        {
+          "control": "record-read-disabled",
+          "exact": 8,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/record-read-disabled.json",
+            "bytes": 448915,
+            "sha256": "7d53cfac1d71dbbcfc3660feff494749ec4ee847403bd98a3700bddcaad19b33"
+          }
+        },
+        {
+          "control": "emission-geometry-disabled",
+          "exact": 8,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/emission-geometry-disabled.json",
+            "bytes": 251197,
+            "sha256": "d7b6a23350bb4438642ee7455d5eb1341f12dbf8e7bfa68a970964a62b23a215"
+          }
+        }
+      ]
+    },
+    "fresh": {
+      "exact": 24,
+      "total": 24,
+      "full": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/result.json",
+        "bytes": 740802,
+        "sha256": "5375bd782db20259b24bd070ce4e35e3087fb756f15fcba18d54bec778fe0611"
+      },
+      "controls": [
+        {
+          "control": "action-binding-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/action-binding-disabled.json",
+            "bytes": 552985,
+            "sha256": "df45d1e6791e0b17d55f8933dbaf6413621e289be8499c9e390d96eea27a9a1d"
+          }
+        },
+        {
+          "control": "action-transition-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/action-transition-disabled.json",
+            "bytes": 544262,
+            "sha256": "bfbe5fac55103c1efd2da3c540e3e2e906977b1aaca1cac4f0200d5f76455c25"
+          }
+        },
+        {
+          "control": "action-context-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/action-context-disabled.json",
+            "bytes": 779469,
+            "sha256": "7df9995ab90acb86ea26d0df5edfdfe18cdf3e7ad7965ca7d2c3ddcef17dc17f"
+          }
+        },
+        {
+          "control": "action-emission-disabled",
+          "exact": 16,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/action-emission-disabled.json",
+            "bytes": 779462,
+            "sha256": "b62f1fda81f26eeead9365fc10c1c850c88e5d821581748d0ca9689f790bb48f"
+          }
+        },
+        {
+          "control": "record-read-disabled",
+          "exact": 8,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/record-read-disabled.json",
+            "bytes": 480720,
+            "sha256": "b61708bb8d5788e71e605c6bfe8a21bc0ddb82cc61c0745e20876859348882e3"
+          }
+        },
+        {
+          "control": "emission-geometry-disabled",
+          "exact": 8,
+          "total": 24,
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/emission-geometry-disabled.json",
+            "bytes": 263795,
+            "sha256": "e4aa28b525a15e6471707a67cf7cf2c999851882df5b014f930cbee8f3d492f5"
+          }
+        }
+      ]
+    }
+  },
+  "fit": {
+    "added_features": 285,
+    "explicit_offline_record_alignment": true,
+    "features": 660,
+    "fit": {
+      "accepted": [
+        20,
+        0,
+        0
+      ],
+      "final_correct": 65,
+      "final_hinge": 0,
+      "initial_correct": 55,
+      "initial_hinge": 64,
+      "proposals": 545142,
+      "stopped_at_time_limit": false
+    },
+    "frames": 65,
+    "inherited_lexical_parameters_exact": true,
+    "operation": {
+      "added_features": 37,
+      "dictionary": [
+        "a",
+        "add",
+        "again",
+        "and",
+        "are",
+        "assistant",
+        "coins",
+        "copy",
+        "equality",
+        "explain",
+        "extra",
+        "has",
+        "in",
+        "is",
+        "latest",
+        "of",
+        "original",
+        "orin",
+        "result",
+        "rust",
+        "s",
+        "sentence",
+        "sum",
+        "suri",
+        "the",
+        "there",
+        "to",
+        "total",
+        "user",
+        "what",
+        "write"
+      ],
+      "dictionary_expanded_from_construction_queries": true,
+      "existing_prime_feature_roots_remapped_by_exact_word_identity": true,
+      "features": 323,
+      "fit": {
+        "accepted": [
+          27,
+          0,
+          0
+        ],
+        "final_correct": 101,
+        "final_hinge": 0,
+        "initial_correct": 97,
+        "initial_hinge": 62,
+        "proposals": 624043,
+        "stopped_at_time_limit": false
+      },
+      "frames": 101,
+      "max_operations_unchanged": true,
+      "misclassified_frames": {
+        "count": 0,
+        "frames": [],
+        "scope": "Post-fit exact serving encode/score over retained construction alternatives; strict greater-than selection preserves first-slot tie behavior. No free-generation claim."
+      },
+      "operation_frame_conflicts": {
+        "count": 0,
+        "groups": [],
+        "scope": "Exact ordered feature/action alternatives with disjoint jointly acceptable slot labels. Absence of these contradictions does not establish geometric separability or fit convergence."
+      },
+      "presented_frames": 1109,
+      "rejection_frames": 98,
+      "unreachable_final_boundaries": 0
+    },
+    "presented_frames": 351,
+    "scope": "Only added Copy action-context H4 roots fitted; legacy lexical codes, query codes, dictionary, tokens, landmarks and biases frozen. Construction suffixes and subsequent operator/record selections are teacher forced; the typed executor computes values from actual records and numeric prefixes plus exact committed derivations are checked. The shared operation router is refined on these labels plus freely generated parent decisions and generic rejection companions. Free generation is separate acceptance.",
+    "skipped_unchanged_legacy_frames": 4824,
+    "teacher_forced_lexical_labels": true,
+    "teacher_forced_operator_and_record_labels": true,
+    "transitions_model_selected_at_supervised_lexical_boundary": false
+  },
+  "main_preservation": {
+    "exact": 663,
+    "total": 663,
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/preserve/preservation/retained-construction.json",
+      "bytes": 214913,
+      "sha256": "0d67aecb2bdc2be3f35a970a8954fea006523f9d3711ea2a08151bf7b64b02a0"
+    }
+  },
+  "historical_comparison": {
+    "at": "2026-09-08T22:42:13.630Z",
+    "scope": "Actual bytes, EOS, correctness, action/value/record/read identities and applicable dependency fields; timings/scores excluded. Already-incorrect interventions remain negative evidence.",
+    "reports": [
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-operations/result.json",
+          "sha256": "9ccef4000188a80e60fe613e7ba83e486ac8f1c3e928314283e61b4bdad6a307"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-operations/result.json",
+          "sha256": "e9e59bda2ecfda7a09360316baf92235369e10d93570a0b494caf8957914cda8"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-operations/disabled.json",
+          "sha256": "dd7bca0d3f656309b6fde30d54bb7f5736b413b52e19fa50de54a051af9eded5"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-operations/disabled.json",
+          "sha256": "7de752af6b4dda95f561041d2174aa7b12101d57d5dee4a5b5e855d2b9018dad"
+        },
+        "total": 24,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-operations/intermediate-disabled.json",
+          "sha256": "6569aacdcf3715c3f820b72b949ab1d3f37ec8075d9d8f2c235dce3d9cf53a5d"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-operations/intermediate-disabled.json",
+          "sha256": "2bdd4dabe7c15748d47ce1cea37ac84349f399bbcbba240bb01aee087029d976"
+        },
+        "total": 24,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/result.json",
+          "sha256": "fcc43d68cad01a16442c85a242b8cbf614f023e07e5dce45a688ffb1240235ba"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-controls/result.json",
+          "sha256": "fe0bab7268af66cdf018bf96e4ae4bb4cb4d865ffad5d646eddce5ca45e76f92"
+        },
+        "total": 18,
+        "exact": 18,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/disabled.json",
+          "sha256": "9a65c5779f141ca8a4b522ad69ab3fbd0fd7b710028f09dc21acca1fb0602fb6"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-controls/disabled.json",
+          "sha256": "3a1f2d77c6aa8c59044793826f8fbdd29826996035cc709863789eb3c09f727c"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/read-disabled.json",
+          "sha256": "405d480e63a0e548598ac20c6bda23d631546a1f4c9139e9571059e8f03aa93f"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-controls/read-disabled.json",
+          "sha256": "9c02939119bc0ec640b75db5a18b3b51af27360031e1c1a8fd15cb27f0fbdde6"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/geometry-disabled.json",
+          "sha256": "9a65c5779f141ca8a4b522ad69ab3fbd0fd7b710028f09dc21acca1fb0602fb6"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-controls/geometry-disabled.json",
+          "sha256": "3a1f2d77c6aa8c59044793826f8fbdd29826996035cc709863789eb3c09f727c"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-evaluate/result.json",
+          "sha256": "b5dce2ae660fcdd6c39de427ed13e57e651002a77a6c3ea57232f10b81ae6a67"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-current-evaluate/result.json",
+          "sha256": "e02ba86bf47e616aef58a279adebb0b7e62cda41b57b4fcdf74c46ad458e380f"
+        },
+        "total": 48,
+        "exact": 48,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-controls/result.json",
+          "sha256": "7446240ea665be44d3ea5b95dd7874c43ebbb3bc4c656cf9d0334fe7d8bdb409"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-current-controls/result.json",
+          "sha256": "85558acfa8661289ecb7094f825a0a5c8dc85aca240ee85be1360a7300d4bc5f"
+        },
+        "total": 48,
+        "exact": 32,
+        "all_actual_outputs_and_decision_identities_equal": false,
+        "changed_previously_incorrect_rows": 8,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-stress/result.json",
+          "sha256": "e6c666c491d7c6ea70e90febda97ef20f84a0b6eceabb2dadd558352ba943f6a"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-current-stress/result.json",
+          "sha256": "5517a5e7bffe205876cf8900a3fcae2a93fb14315003f6349532c0f08b263713"
+        },
+        "total": 16,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-evaluate/result.json",
+          "sha256": "5bd91fba8301571bcf3b4e5995f42b94b67cc37094bae425fde3b96df7ebe895"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-instruction-evaluate/result.json",
+          "sha256": "5b3c27825609ed1248c82f36b0b6838a9a3e108d68da792f2e97c481cc94642b"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-stress/result.json",
+          "sha256": "ebf0265985068d08343d5345848a390c3761a5fca646976fed40277825196e43"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-instruction-stress/result.json",
+          "sha256": "4fe087c7d3b91850ced3735665bf3b1dd3d5e0e0924f3735e5c18339acab823a"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-fresh/result.json",
+          "sha256": "455c2905b1629a7a6d2aeeb27067e7bac00f4e1dcf0c46e0ca4e8c3ffba9b0c0"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-instruction-fresh/result.json",
+          "sha256": "9c77012584a5dec9138b6d3fee8d7ecabc1a1826049998fd6ff462b461ea3c88"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-evaluate/disabled.json",
+          "sha256": "fba4f4cf5f146a2e0ccd35da37a35790f382ab07bc6c7ccea7d58d361e57d979"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-instruction-evaluate/disabled.json",
+          "sha256": "1230d953ab9901c7b146e0a3fecbe65c1f280c9c3a2fea471c8567041330bf39"
+        },
+        "total": 24,
+        "exact": 8,
+        "all_actual_outputs_and_decision_identities_equal": false,
+        "changed_previously_incorrect_rows": 10,
+        "all_previously_correct_rows_exactly_preserved": true
+      }
+    ],
+    "differences": [
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-0-3",
+        "parent": {
+          "id": "current-query-open-0-3",
+          "text": "62.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 62,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 58
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 57,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 53
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-0-3",
+          "text": "62.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 62,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 58
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 57,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 53
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-1-3",
+        "parent": {
+          "id": "current-query-open-1-3",
+          "text": "63.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 59
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 58,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 54
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-1-3",
+          "text": "63.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 59
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 58,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 54
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-2-3",
+        "parent": {
+          "id": "current-query-open-2-3",
+          "text": "64.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 64,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 60
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 59,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 55
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-2-3",
+          "text": "64.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 64,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 60
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 59,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 55
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-3-3",
+        "parent": {
+          "id": "current-query-open-3-3",
+          "text": "65.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 65,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 61
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 60,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 56
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-3-3",
+          "text": "65.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 65,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 61
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 60,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 56
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-4-3",
+        "parent": {
+          "id": "current-query-open-4-3",
+          "text": "66.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 66,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 62
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 61,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 57
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-4-3",
+          "text": "66.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 66,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 62
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 61,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 57
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-5-3",
+        "parent": {
+          "id": "current-query-open-5-3",
+          "text": "67.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 67,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 63
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 62,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 58
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-5-3",
+          "text": "67.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 67,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 63
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 62,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 58
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-6-3",
+        "parent": {
+          "id": "current-query-open-6-3",
+          "text": "68.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 68,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 64
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 59
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-6-3",
+          "text": "68.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 68,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 64
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 59
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-7-3",
+        "parent": {
+          "id": "current-query-open-7-3",
+          "text": "69.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 69,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 65
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 64,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 60
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-7-3",
+          "text": "69.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 69,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 5,
+                "value": 65
+              },
+              {
+                "id": 1,
+                "value": 4
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 64,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 60
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-0-3-1",
+        "parent": {
+          "id": "open-0-3-1",
+          "text": "4 is 4 plus 4 plus 4 plus 4 plus () ()(((()(((((((()((((((((value:(((value:((:((((:((:((:((:((:((:((:((:",
+          "eos": false,
+          "exact": false,
+          "reads": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-0-3-1",
+          "text": "4 is 4.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-0-4-2",
+        "parent": {
+          "id": "open-0-4-2",
+          "text": "4 == 4 +  .\n\n.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-0-4-2",
+          "text": "4 == 4\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-0-7-1",
+        "parent": {
+          "id": "open-0-7-1",
+          "text": "4 is 4 plus 4 plus 4 plus 4 plus .2857.1011.2121.69 27.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-0-7-1",
+          "text": "4 is 4.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-0-9-1",
+        "parent": {
+          "id": "open-0-9-1",
+          "text": "4 is 4 plus 4 plus 4 plus 4 plus . Assistant 178 178 178::.161011 What city does not give a not give a not give a not a green badge.\nUser: Update: badge.::.\nUser: badge:::::: badge is:::::::: Correction::: i32) -",
+          "eos": false,
+          "exact": false,
+          "reads": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-0-9-1",
+          "text": "4 is 4.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-0-10-2",
+        "parent": {
+          "id": "open-0-10-2",
+          "text": "4 == 4 +  .\n\n.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-0-10-2",
+          "text": "4 == 4\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 4,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 4
+                },
+                {
+                  "id": 1,
+                  "value": 4
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-1-3-1",
+        "parent": {
+          "id": "open-1-3-1",
+          "text": "5 is 5 plus 5 plus 5 plus 5 plus ;\n}\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-1-3-1",
+          "text": "5 is 5.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-1-4-2",
+        "parent": {
+          "id": "open-1-4-2",
+          "text": "5 == 5 +  ...\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-1-4-2",
+          "text": "5 == 5\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-1-7-1",
+        "parent": {
+          "id": "open-1-7-1",
+          "text": "5 is 5 plus 5 plus 5 plus 5 plus ;\n}\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-1-7-1",
+          "text": "5 is 5.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-1-9-1",
+        "parent": {
+          "id": "open-1-9-1",
+          "text": "5 is 5 plus 5 plus 5 plus 5 plus : i32) -> i32 { value * 2 }\nfn main i32) -> i32 {\n    value + 2 93\nfn combine1011 main() {\n    assert_eq!(combine(12) -> i32 { value * 2 101\nfn 2 }\nfn main }\nfn 2() {\n    let shifted = value + 1",
+          "eos": false,
+          "exact": false,
+          "reads": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-1-9-1",
+          "text": "5 is 5.\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-instruction-evaluate/disabled.json",
+        "id": "open-1-10-2",
+        "parent": {
+          "id": "open-1-10-2",
+          "text": "5 == 5 +  ...\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "id": "open-1-10-2",
+          "text": "5 == 5\n",
+          "eos": true,
+          "exact": false,
+          "reads": [
+            1
+          ],
+          "writes": [
+            {
+              "action": "copy",
+              "value": 5,
+              "write_id": 2,
+              "operands": [
+                {
+                  "id": 1,
+                  "value": 5
+                },
+                {
+                  "id": 1,
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      }
+    ]
+  },
+  "api": {
+    "checks": 91,
+    "status": "PASS",
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/api.json",
+      "bytes": 54339,
+      "sha256": "5b6248aab803d8a27c96e61cb3c5c0be60d9450263abd83765ea3e1347c507ff"
+    }
+  },
+  "identity_checks": {
+    "at": "2026-09-08T22:35:43.316Z",
+    "parent": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/mixed-operators/model.json",
+      "bytes": 12562902,
+      "sha256": "14c76d1375eadec57cb34e9fff98c43b52f16926495c8493bc530c2e077e0de5",
+      "cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59"
+    },
+    "candidate": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+      "bytes": 12895470,
+      "sha256": "1979d9a13c44f36c2dccf0833a0f16900833339bdc2b50af30b710a9eddfb134",
+      "cid": "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d"
+    },
+    "previous_complete_blocks_equal_parent": true,
+    "unaffected_fields_including_fixed_geometry_equal": true,
+    "inherited_lexical_codes_query_dictionary_tokens_landmarks_biases_ranks_equal": true,
+    "inherited_lexical_code_count": 375,
+    "new_lexical_code_count": 660,
+    "scope": "Structural preservation check complements native exact artifact validation and API malformed-artifact rejection; native validation reconstructs and validates parent CID."
+  },
+  "mechanical": {
+    "unique_focused_tests": 21,
+    "kernel_source_guard": 1,
+    "actual_artifact_allocation_checks": 4,
+    "generated_rust_equalities": 42,
+    "rust_sources": [
+      {
+        "artifact": "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d",
+        "expressions": 14,
+        "scope": "Actual generated numeric equality lines embedded unchanged in Rust assert harness; compile and execute separately",
+        "source_result": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/result.json",
+        "source_result_blake3": "1224957c6354e09b928b2e4651a2c03d1595c6a3a99985bf1e5200d8a2a25d4a"
+      },
+      {
+        "artifact": "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d",
+        "expressions": 14,
+        "scope": "Actual generated numeric equality lines embedded unchanged in Rust assert harness; compile and execute separately",
+        "source_result": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/result.json",
+        "source_result_blake3": "567f5d818c8e882b7c49ab54b0e7d30aed269ca3dfb04eac85c72843ec3ffe82"
+      },
+      {
+        "artifact": "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d",
+        "expressions": 14,
+        "scope": "Actual generated numeric equality lines embedded unchanged in Rust assert harness; compile and execute separately",
+        "source_result": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/result.json",
+        "source_result_blake3": "4039b089a2621470fbca07921988446c51614eb5ec5dd13aed8bdbb0c4deab2f"
+      }
+    ],
+    "scope": "Measured zero allocation only for ingestion/begin/predict/observe; load/encoding/session/checkpoint/API outside that scope. Compilation and execution of actual equality lines in assert harness, not synthesized programs."
+  },
+  "negative_artifacts": [
+    {
+      "name": "binding-only a6faba85",
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-binding/model.json",
+      "exact": 24,
+      "total": 36,
+      "decision": "PARTIAL_CHECKPOINT",
+      "fit_time_limit_hit": true
+    },
+    {
+      "name": "joint seed1140 61e24998",
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission/model.json",
+      "exact": 30,
+      "total": 36,
+      "decision": "REJECTED",
+      "operation_fit": "99/101"
+    }
+  ],
+  "reviews": {
+    "scope": "Read-only independent source and artifact-structure reviews; no independent model execution or test execution claimed",
+    "core_review": {
+      "agent": "action_review",
+      "blockers": [],
+      "inspected": [
+        "serving action feature law and controls",
+        "shared geometric scoring",
+        "operation dictionary restoration",
+        "Model/ModelWire serialization and witness validation order",
+        "anchor action checkpoint consistency",
+        "restricted learner",
+        "conflict and misclassification diagnostics",
+        "candidate and parent JSON structural preservation"
+      ]
+    },
+    "evaluation_review": {
+      "agent": "emission_diagnostic",
+      "blockers": [],
+      "inspected": [
+        "Full construction/open/stress exact pending and committed identities",
+        "read identities and following independent fresh-record calculations",
+        "six open control outcomes",
+        "API output parity and checkpoint scope"
+      ],
+      "documentation_correction": "Historical turns are compared to saved responses during collection; preservation-query preferences are freely generated without a saved-answer comparison at collection time. Separate final preservation evaluation performs saved-answer checks. Draft wording corrected before delivery."
+    }
+  },
+  "resources": {
+    "at": "2026-09-08T22:50:58.969Z",
+    "model_ms": 1445811,
+    "engineering_command_ms": 653576,
+    "ledger": {
+      "cumulative_ms": 14153352,
+      "limit_ms": 15450000
+    },
+    "prior_reservation_ms": 196620,
+    "available_after_reservation_ms": 1100028,
+    "cycle_model_limit_ms": 2400000,
+    "cycle_engineering_limit_ms": 1800000,
+    "preuse_increment_ms": 2100000,
+    "extensions": [
+      "projection.json",
+      "retry-projection.json",
+      "interface-projection.json"
+    ],
+    "locations": {
+      "target": {
+        "path": "/Users/casey.allard/uor-r4/target",
+        "before": 2704314368,
+        "after": 2716377088,
+        "charged_growth": 35913728
+      },
+      "worktree": {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+        "before": 477986816,
+        "after": 478089216,
+        "charged_growth": 102400
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission",
+        "before": 0,
+        "after": 120692736,
+        "charged_growth": 120692736
+      },
+      "retained_copy": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/action-emission",
+        "before": 0,
+        "after": 13697024,
+        "charged_growth": 13697024
+      }
+    },
+    "new_storage_charged_bytes": 187183104,
+    "final_metadata_reserve_bytes": 16777216,
+    "accounted_before_bytes": 32580792320,
+    "accounted_after_bytes": 32767975424,
+    "storage_limit_bytes": 34863214592,
+    "stop_margin_bytes": 134217728,
+    "effective_headroom_bytes": 1961021440,
+    "peak_model_sampled_rss_bytes": 2195947520,
+    "peak_engineering_sampled_rss_bytes": 2693267456,
+    "inherited_receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/resources.json",
+      "sha256": "bdebef80744d44481b182832ad72ad536057377eb3975e486f964ee163e2a608"
+    },
+    "filesystem": "Filesystem   1024-blocks      Used Available Capacity iused     ifree %iused  Mounted on\n/dev/disk3s1   239362496 167505704  43801260    80% 2119930 438012600    0%   /System/Volumes/Data\n",
+    "metadata_scope": "16MiB reserved before final documents, receipt copies, Git objects and owner fast-forward. Small documentation/receipt/Git commands outside engineering stopwatch. All model/preparation/evaluation/retry work charged.",
+    "storage_charge_policy": "Retain inherited charges and all observed positive growth; no refund for Cargo output replacement or earlier disposable cleanup.",
+    "unique_deletions": false,
+    "paid_external_compute": false,
+    "final_command_accounting_at": "2026-09-08T22:52:24.157Z"
+  },
+  "command_receipt": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/commands.jsonl",
+    "bytes": 37499,
+    "sha256": "d3f9f5b033ca82f945da176c6482c1c6b49dae5af3e69c807417e2a5db293b13"
+  },
+  "commands": [
+    {
+      "kind": "engineering",
+      "label": "build-diagnostic",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_action_emission"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T21:51:41.397Z",
+      "elapsed_ms": 2693,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 231555072,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-diagnostic.log"
+    },
+    {
+      "kind": "model",
+      "label": "diagnostic",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "diagnostic",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/mixed-operators/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/diagnostic"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T21:52:03.682Z",
+      "elapsed_ms": 21708,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1021313024,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/diagnostic.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-binding",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_action_emission"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T21:57:43.138Z",
+      "elapsed_ms": 86995,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2100396032,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-binding.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "format-stage",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T21:59:24.376Z",
+      "elapsed_ms": 3648,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 147193856,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/format-stage.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-staged",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_action_emission"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T21:59:36.233Z",
+      "elapsed_ms": 81608,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2196668416,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-staged.log"
+    },
+    {
+      "kind": "model",
+      "label": "fit-binding",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "fit-binding",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/mixed-operators/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-binding",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-numeric/preservation.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/fit-final/preservation-training.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-numeric/source.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:01:12.619Z",
+      "elapsed_ms": 168713,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1088552960,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-binding.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "format-implementation",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:09:53.470Z",
+      "elapsed_ms": 3628,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 147341312,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/format-implementation.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-examples",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_action_emission",
+        "--example",
+        "native_mixed_operators",
+        "--example",
+        "native_composed_output",
+        "--example",
+        "native_instruction_binding",
+        "--example",
+        "native_lexical_emission",
+        "--example",
+        "native_operation_transition",
+        "--example",
+        "native_current_query",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:09:57.141Z",
+      "elapsed_ms": 102179,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2105524224,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-examples.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-focused-tests",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:11:39.371Z",
+      "elapsed_ms": 70128,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2176565248,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-focused-tests.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-api",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-api",
+        "--example",
+        "native_artifact_recovery_check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:12:49.549Z",
+      "elapsed_ms": 133284,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2693267456,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-api.log"
+    },
+    {
+      "kind": "model",
+      "label": "focused-action",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_action_emission_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:15:36.469Z",
+      "elapsed_ms": 824,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/focused-action.log"
+    },
+    {
+      "kind": "model",
+      "label": "focused-lexical",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_lexical_read",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:15:37.338Z",
+      "elapsed_ms": 967,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/focused-lexical.log"
+    },
+    {
+      "kind": "model",
+      "label": "focused-mixed",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_mixed_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:15:38.350Z",
+      "elapsed_ms": 542,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/focused-mixed.log"
+    },
+    {
+      "kind": "model",
+      "label": "focused-operation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_operation_transition",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:15:38.936Z",
+      "elapsed_ms": 735,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/focused-operation.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "kernel-guard",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:15:39.718Z",
+      "elapsed_ms": 151,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/kernel-guard.log"
+    },
+    {
+      "kind": "model",
+      "label": "fit-emission",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "fit-emission",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-binding/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-binding/preservation-training.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:15:45.564Z",
+      "elapsed_ms": 199721,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1101840384,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "format-retry",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:23:29.208Z",
+      "elapsed_ms": 3603,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 148340736,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/format-retry.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-retry",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_action_emission"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:23:46.843Z",
+      "elapsed_ms": 83873,
+      "code": 101,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2124169216,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-retry.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-retry-driver",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_action_emission"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:25:45.266Z",
+      "elapsed_ms": 2468,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 292093952,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-retry-driver.log"
+    },
+    {
+      "kind": "model",
+      "label": "fit-emission-seed1141",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "fit-emission",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-binding/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-binding/preservation-training.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:26:08.712Z",
+      "elapsed_ms": 201878,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1105264640,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141.log"
+    },
+    {
+      "kind": "model",
+      "label": "open",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:33:41.164Z",
+      "elapsed_ms": 39654,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1030275072,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open.log"
+    },
+    {
+      "kind": "model",
+      "label": "stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:34:20.868Z",
+      "elapsed_ms": 39573,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1028718592,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-refinement",
+        "preserve",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/preserve"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:35:00.492Z",
+      "elapsed_ms": 26701,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1041514496,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/preserve.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-mixed-open",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_mixed_operators",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/mixed-open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:35:27.281Z",
+      "elapsed_ms": 24305,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1039417344,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-mixed-open.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-mixed-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_mixed_operators",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/mixed-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:35:51.636Z",
+      "elapsed_ms": 22324,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1024475136,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-mixed-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-open",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_composed_output",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:36:14.013Z",
+      "elapsed_ms": 39156,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1031618560,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-open.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_composed_output",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:36:53.216Z",
+      "elapsed_ms": 24807,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1031520256,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-preservation-replay",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_composed_output",
+      "args": [
+        "replay-preservation",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/preservation-replay",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-composed-output/preservation-construction-boundary.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:37:18.076Z",
+      "elapsed_ms": 27297,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1025474560,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-preservation-replay.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-lexical-fit-variable",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/fit-variable/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-fit-variable"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:37:45.446Z",
+      "elapsed_ms": 22411,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1027031040,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-lexical-fit-variable.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-lexical-open-variable",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/open-variable/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-open-variable"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:38:07.913Z",
+      "elapsed_ms": 22361,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1025015808,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-lexical-open-variable.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-lexical-stress-variable",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/stress-variable/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-stress-variable"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:38:30.322Z",
+      "elapsed_ms": 22085,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1022443520,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-lexical-stress-variable.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-lexical-fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/fresh/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:38:52.459Z",
+      "elapsed_ms": 22355,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1025540096,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-lexical-fresh.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-operations",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_operation_transition",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-operations"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:39:14.863Z",
+      "elapsed_ms": 22230,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1034207232,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-operations.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-lexical-controls",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_lexical_emission",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-lexical-controls"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:39:37.140Z",
+      "elapsed_ms": 22347,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1037598720,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-lexical-controls.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-current-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-current-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:39:59.539Z",
+      "elapsed_ms": 22074,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1024032768,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-current-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-current-controls",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "controls",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-current-controls"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:40:21.682Z",
+      "elapsed_ms": 21888,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1023590400,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-current-controls.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-current-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-current-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:40:43.624Z",
+      "elapsed_ms": 21817,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1023049728,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-current-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-instruction-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-instruction-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:41:05.498Z",
+      "elapsed_ms": 22519,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1020116992,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-instruction-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-instruction-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-instruction-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:41:28.065Z",
+      "elapsed_ms": 22675,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1039958016,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-instruction-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "validate-prior-instruction-fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validation/prior-instruction-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:41:50.796Z",
+      "elapsed_ms": 22613,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1027670016,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/validate-prior-instruction-fresh.log"
+    },
+    {
+      "kind": "model",
+      "label": "api",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_artifact_recovery_check",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/api.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:42:13.786Z",
+      "elapsed_ms": 206215,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2195947520,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/api.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-action",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_action_emission_actual_checkpoint_and_allocation",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:45:40.058Z",
+      "elapsed_ms": 22532,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 550518784,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/allocation-action.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-mixed",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_mixed_operators_actual_checkpoint_and_allocation",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:46:02.640Z",
+      "elapsed_ms": 22071,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 315441152,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/allocation-mixed.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-composed",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_composed_output_actual_checkpoint_and_allocation",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:46:24.756Z",
+      "elapsed_ms": 22081,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 315801600,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/allocation-composed.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-lexical",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_lexical_emission_actual_checkpoint_and_allocation",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:46:46.884Z",
+      "elapsed_ms": 22335,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 557809664,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/allocation-lexical.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-final-lib-tests",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:47:33.051Z",
+      "elapsed_ms": 74858,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2197618688,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/build-final-lib-tests.log"
+    },
+    {
+      "kind": "model",
+      "label": "focused-final-action",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_action_emission_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:48:47.957Z",
+      "elapsed_ms": 785,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/focused-final-action.log"
+    },
+    {
+      "kind": "model",
+      "label": "fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh-input.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:49:25.187Z",
+      "elapsed_ms": 43266,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1024147456,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-open-source",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/open/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:29.787Z",
+      "elapsed_ms": 8,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-open-source.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-open-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-open/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-open/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:29.839Z",
+      "elapsed_ms": 131,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-open-build.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-open-execute",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-open/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:30.017Z",
+      "elapsed_ms": 111,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-open-execute.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-stress-source",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/stress/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:30.186Z",
+      "elapsed_ms": 9,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-stress-source.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-stress-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-stress/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-stress/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:30.243Z",
+      "elapsed_ms": 105,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-stress-build.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-stress-execute",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-stress/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:30.392Z",
+      "elapsed_ms": 53,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-stress-execute.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-fresh-source",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fresh/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:30.495Z",
+      "elapsed_ms": 10,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-fresh-source.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-fresh-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-fresh/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-fresh/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:30.551Z",
+      "elapsed_ms": 103,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-fresh-build.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-fresh-execute",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-fresh/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:30.698Z",
+      "elapsed_ms": 55,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/rust-fresh-execute.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "format-final",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:46.598Z",
+      "elapsed_ms": 3691,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 150667264,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/format-final.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "claim-wording",
+      "cmd": "python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:50:50.335Z",
+      "elapsed_ms": 244,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/claim-wording.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "claim-wording-final",
+      "cmd": "python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T22:51:55.726Z",
+      "elapsed_ms": 186,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/claim-wording-final.log"
+    }
+  ],
+  "not_qualified": [
+    "Copy→Add",
+    "three-operation learned stopping",
+    "arbitrary wording",
+    "general prose",
+    "general reasoning",
+    "Rust program synthesis",
+    "alpha",
+    "complete-path energy advantage"
+  ],
+  "not_run": [
+    "new-artifact browser",
+    "new-artifact WASM",
+    "new-artifact HTTP"
+  ],
+  "next": "Diagnose actual Copy→Add with changed copied-record dependency; refine shared routers only at the observed seam while preserving current results.",
+  "evidence_root": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission",
+  "fit_receipt": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-action-emission/fit-emission-seed1141/fit.json",
+    "bytes": 50029,
+    "sha256": "eeee6f0ea463fafe92116fc4c7e72ba5e4801aeb9c2e43ed942f0e18219314a9"
+  }
+}

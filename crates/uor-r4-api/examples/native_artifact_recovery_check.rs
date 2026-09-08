@@ -218,6 +218,9 @@ fn run(
     )?;
 
     let document: Value = serde_json::from_slice(&bytes)?;
+    let action_parent = document
+        .get("action_emission")
+        .is_some_and(Value::is_object);
     let mixed_parent = document
         .get("mixed_operators")
         .is_some_and(Value::is_object);
@@ -391,7 +394,15 @@ fn run(
                 "instruction binding identity differs",
             ),
         ] {
-            let boundary = if mixed_parent {
+            let boundary = if action_parent {
+                if pointer.starts_with("/operation_transition/")
+                    || pointer.starts_with("/typed_roles/")
+                {
+                    "action emission identity differs"
+                } else {
+                    "action emission frozen parent differs"
+                }
+            } else if mixed_parent {
                 "mixed operators frozen parent differs"
             } else if composed_parent {
                 "composed output frozen parent differs"
@@ -418,7 +429,9 @@ fn run(
                 json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
             )?;
         }
-        let parent_boundary = if mixed_parent {
+        let parent_boundary = if action_parent {
+            "action emission frozen parent differs"
+        } else if mixed_parent {
             "mixed operators frozen parent differs"
         } else if composed_parent {
             "composed output frozen parent differs"
@@ -528,7 +541,15 @@ fn run(
                 "composed output identity differs",
             ),
         ] {
-            let boundary = if mixed_parent {
+            let boundary = if action_parent {
+                if pointer.starts_with("/operation_transition/")
+                    || pointer.starts_with("/typed_roles/")
+                {
+                    "action emission identity differs"
+                } else {
+                    "action emission frozen parent differs"
+                }
+            } else if mixed_parent {
                 if pointer == "/operation_transition/router/biases/0" {
                     "mixed operators identity differs"
                 } else {
@@ -560,7 +581,9 @@ fn run(
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
         changed["composed_output"]["parent_artifact"] = json!(wrong_parent);
-        let parent_boundary = if mixed_parent {
+        let parent_boundary = if action_parent {
+            "action emission frozen parent differs"
+        } else if mixed_parent {
             "mixed operators frozen parent differs"
         } else {
             "composed output frozen parent differs"
@@ -683,6 +706,17 @@ fn run(
                 "mixed operators identity differs",
             ),
         ] {
+            let boundary = if action_parent {
+                if pointer.starts_with("/operation_transition/")
+                    || pointer.starts_with("/typed_roles/")
+                {
+                    "action emission identity differs"
+                } else {
+                    "action emission frozen parent differs"
+                }
+            } else {
+                boundary
+            };
             let mut changed = document.clone();
             let bias = changed
                 .pointer_mut(pointer)
@@ -703,6 +737,11 @@ fn run(
         }
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
+        let parent_boundary = if action_parent {
+            "action emission frozen parent differs"
+        } else {
+            "mixed operators frozen parent differs"
+        };
         changed["mixed_operators"]["parent_artifact"] = json!(wrong_parent);
         let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
         record(
@@ -711,8 +750,8 @@ fn run(
             rejected
                 && error
                     .as_deref()
-                    .is_some_and(|e| e.contains("mixed operators frozen parent differs")),
-            json!({"old":witness["parent_artifact"],"new":wrong_parent,"expected_boundary":"mixed operators frozen parent differs","error":error}),
+                    .is_some_and(|e| e.contains(parent_boundary)),
+            json!({"old":witness["parent_artifact"],"new":wrong_parent,"expected_boundary":parent_boundary,"error":error}),
         )?;
         let mut changed = document.clone();
         changed["mixed_operators"]["unexpected_witness_field"] = json!(true);
@@ -728,6 +767,183 @@ fn run(
         )?;
     } else {
         checks.push(json!({"name":"mixed_operator_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no mixed_operators witness"}));
+    }
+    if let Some(witness) = document.get("action_emission").filter(|v| v.is_object()) {
+        if witness.get("context_enabled").and_then(Value::as_bool) == Some(true) {
+            for (label, suffix, target) in [
+                (
+                    "sentence_copy_latest",
+                    " Copy the latest result. Explain in a sentence.",
+                    "20 is 3 plus 17.\n20 is 20.\n",
+                ),
+                (
+                    "sentence_copy_original",
+                    " Copy the original total. Explain in a sentence.",
+                    "20 is 3 plus 17.\n17 is 17.\n",
+                ),
+                (
+                    "rust_copy_latest",
+                    " Copy the latest result. Write a Rust equality.",
+                    "20 == 3 + 17\n20 == 20\n",
+                ),
+                (
+                    "rust_copy_original",
+                    " Copy the original total. Write a Rust equality.",
+                    "20 == 3 + 17\n17 == 17\n",
+                ),
+            ] {
+                let config = SessionConfig {
+                    session_id: format!("action-emission-{label}"),
+                    ..SessionConfig::default()
+                };
+                let mut direct = model.session(Control::Full)?;
+                let mut api = api_model.create_session(config.clone())?;
+                compare_turn(
+                    &model,
+                    &mut direct,
+                    &mut api,
+                    SUM_13,
+                    "17.\n",
+                    &format!("action_{label}_actual_history"),
+                    checks,
+                )?;
+                api.import_state(&api.export_state()?)?;
+                direct = model.restore_session(&direct.checkpoint()?)?;
+                let prompt = format!("User: There are 3 extra coins. Add the extra coins to the original total.{suffix}\nAssistant:");
+                compare_turn(
+                    &model,
+                    &mut direct,
+                    &mut api,
+                    &prompt,
+                    target,
+                    &format!("action_{label}_api_direct_parity_after_history_checkpoint"),
+                    checks,
+                )?;
+                let exported = api.export_state()?;
+                let mut imported = api_model.create_session(config)?;
+                imported.import_state(&exported)?;
+                direct = model.restore_session(&direct.checkpoint()?)?;
+                record(
+                    checks,
+                    &format!("action_{label}_checkpoint_import"),
+                    imported.identity_scope() == api.identity_scope(),
+                    json!({"checkpoint_bytes":exported.len(),"scope":imported.identity_scope(),"development_case":true}),
+                )?;
+                compare_turn(
+                    &model,
+                    &mut direct,
+                    &mut imported,
+                    SUM_13,
+                    "17.\n",
+                    &format!("action_{label}_checkpoint_next_independent_sum"),
+                    checks,
+                )?;
+            }
+        } else {
+            checks.push(json!({"name":"action_emission_behavior","status":"NOT_APPLICABLE","reason":"staged artifact has context_enabled false"}));
+        }
+        let expected_parent =
+            "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59";
+        record(
+            checks,
+            "action_emission_parent_reconstruction_and_roundtrip",
+            witness.get("parent_artifact").and_then(Value::as_str) == Some(expected_parent),
+            json!({"parent_artifact":witness["parent_artifact"],"expected_parent":expected_parent,"current_artifact":expected_cid,
+                "validated_by":["NativeModel::load_from_bytes","artifact_load_save_roundtrip"],
+                "boundary":"Loader restores full previous lexical emission, operation transition, and shared role router, and validates the frozen parent recursively; no separate extracted parent is claimed."}),
+        )?;
+        for (name, pointer, boundary) in [
+            (
+                "action_previous_lexical_frozen_parent_rejected",
+                "/action_emission/previous_lexical/router/biases/0",
+                "action emission frozen parent differs",
+            ),
+            (
+                "action_current_lexical_identity_rejected",
+                "/lexical_emission/router/biases/0",
+                "action emission identity differs",
+            ),
+            (
+                "action_previous_roles_frozen_parent_rejected",
+                "/action_emission/previous_roles/biases/0",
+                "action emission frozen parent differs",
+            ),
+            (
+                "action_current_roles_identity_rejected",
+                "/typed_roles/router/biases/0",
+                "action emission identity differs",
+            ),
+            (
+                "action_previous_operation_frozen_parent_rejected",
+                "/action_emission/previous_operation/router/biases/0",
+                "action emission frozen parent differs",
+            ),
+            (
+                "action_current_operation_identity_rejected",
+                "/operation_transition/router/biases/0",
+                "action emission identity differs",
+            ),
+        ] {
+            let mut changed = document.clone();
+            let bias = changed
+                .pointer_mut(pointer)
+                .ok_or("action router bias absent")?;
+            let old = bias
+                .as_i64()
+                .ok_or("action router bias is not an integer")?;
+            if !(-32..=32).contains(&old) {
+                return Err("action router bias outside documented range".into());
+            }
+            let new = if old == 32 { old - 1 } else { old + 1 };
+            *bias = json!(new);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+            )?;
+        }
+        let mut changed = document.clone();
+        changed["action_emission"]["parent_artifact"] = json!(format!("blake3:{}", "0".repeat(64)));
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "action_wrong_parent_cid_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("action emission frozen parent differs")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["action_emission"]["context_enabled"] = json!(!witness["context_enabled"]
+            .as_bool()
+            .ok_or("action context flag absent")?);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "action_context_flag_identity_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("action emission identity differs")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["action_emission"]["unexpected_witness_field"] = json!(true);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "action_unknown_witness_field_rejected",
+            rejected
+                && error.as_deref().is_some_and(|e| {
+                    e.contains("unknown field") && e.contains("unexpected_witness_field")
+                }),
+            json!({"error":error}),
+        )?;
+    } else {
+        checks.push(json!({"name":"action_emission_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no action_emission witness"}));
     }
     if document
         .get("typed_role_refinement")

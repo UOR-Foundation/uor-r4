@@ -2632,21 +2632,28 @@ fn native_lexical_emission_actual_checkpoint_and_allocation() {
 #[test]
 #[ignore = "requires composed output artifact; charged actual-model development cases"]
 fn native_composed_output_actual_checkpoint_and_allocation() {
-    actual_composed_or_mixed_checkpoint_and_allocation(false);
+    actual_composed_or_mixed_checkpoint_and_allocation("composed");
 }
 
 #[test]
 #[ignore = "requires R4_MIXED_OPERATORS_MODEL; charged actual-model development cases"]
 fn native_mixed_operators_actual_checkpoint_and_allocation() {
-    actual_composed_or_mixed_checkpoint_and_allocation(true);
+    actual_composed_or_mixed_checkpoint_and_allocation("mixed");
 }
 
-fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
+#[test]
+#[ignore = "requires R4_ACTION_EMISSION_MODEL; charged actual-model development cases"]
+fn native_action_emission_actual_checkpoint_and_allocation() {
+    actual_composed_or_mixed_checkpoint_and_allocation("action");
+}
+
+fn actual_composed_or_mixed_checkpoint_and_allocation(scope: &str) {
     use uor_r4_core::native_geometric::{Model, ValueAction};
-    let (artifact_env, witness, scope) = if mixed {
-        ("R4_MIXED_OPERATORS_MODEL", "mixed_operators", "mixed")
-    } else {
-        ("R4_COMPOSED_OUTPUT_MODEL", "composed_output", "composed")
+    let (artifact_env, witness) = match scope {
+        "action" => ("R4_ACTION_EMISSION_MODEL", "action_emission"),
+        "mixed" => ("R4_MIXED_OPERATORS_MODEL", "mixed_operators"),
+        "composed" => ("R4_COMPOSED_OUTPUT_MODEL", "composed_output"),
+        _ => panic!("unknown authored allocation panel"),
     };
     let bytes = std::fs::read(std::env::var(artifact_env).unwrap()).unwrap();
     let load = std::time::Instant::now();
@@ -2654,6 +2661,9 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
     let load_ns = load.elapsed().as_nanos();
     let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(wire[witness].is_object());
+    if scope == "action" {
+        assert_eq!(wire[witness]["context_enabled"], true);
+    }
     let history = "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
     let mut times = Vec::new();
     let mut positions = 0;
@@ -2662,8 +2672,49 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
     // never serving inputs other than the query itself.
     let formatted_reads: &[(u64, u64)] = &[(4, 3), (4, 2), (5, 3), (5, 4)];
     let no_reads: &[(u64, u64)] = &[];
-    let cases = if mixed {
-        [
+    let latest_reads: &[(u64, u64)] = &[(4, 3), (4, 2), (5, 4)];
+    let original_reads: &[(u64, u64)] = &[(4, 3), (4, 2), (5, 2)];
+    let cases = if scope == "action" {
+        vec![
+            (
+                "sentence_copy_latest",
+                " Copy the latest result. Explain in a sentence.",
+                "20 is 3 plus 17.\n20 is 20.\n",
+                ValueAction::Copy,
+                20,
+                [4, 4],
+                latest_reads,
+            ),
+            (
+                "sentence_copy_original",
+                " Copy the original total. Explain in a sentence.",
+                "20 is 3 plus 17.\n17 is 17.\n",
+                ValueAction::Copy,
+                17,
+                [2, 2],
+                original_reads,
+            ),
+            (
+                "rust_copy_latest",
+                " Copy the latest result. Write a Rust equality.",
+                "20 == 3 + 17\n20 == 20\n",
+                ValueAction::Copy,
+                20,
+                [4, 4],
+                latest_reads,
+            ),
+            (
+                "rust_copy_original",
+                " Copy the original total. Write a Rust equality.",
+                "20 == 3 + 17\n17 == 17\n",
+                ValueAction::Copy,
+                17,
+                [2, 2],
+                original_reads,
+            ),
+        ]
+    } else if scope == "mixed" {
+        vec![
             (
                 "copy_latest",
                 " Copy the latest result.",
@@ -2684,7 +2735,7 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
             ),
         ]
     } else {
-        [
+        vec![
             (
                 "sentence",
                 " Again. Explain in a sentence.",
@@ -2705,6 +2756,7 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
             ),
         ]
     };
+    let case_count = cases.len();
     for (label, request, expected, second_action, second_value, second_operands, expected_reads) in
         cases
     {
@@ -2712,9 +2764,14 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
         let query = format!("User: There are 3 extra coins. Add the extra coins to the original total.{request}\nAssistant:");
         let mut session = model.session(Control::Full).unwrap();
         session.observe(&model, BOS).unwrap();
-        for (prompt, expected, composed) in
-            [(history, "17.\n", false), (query.as_str(), expected, true)]
-        {
+        let mut turns = vec![
+            (history, "17.\n", false, 2),
+            (query.as_str(), expected, true, 0),
+        ];
+        if scope == "action" {
+            turns.push((history, "17.\n", false, 8));
+        }
+        for (prompt, expected, composed, independent_id) in turns {
             let tokens = model.encode(prompt).unwrap();
             ALLOCATIONS.with(|v| v.set(0));
             BYTES.with(|v| v.set(0));
@@ -2811,7 +2868,12 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
             } else {
                 assert_eq!(session.work.values.derived_writes - before_writes, 1);
                 assert_eq!(writes.len(), 1);
-                assert_eq!(writes[0].write_id, 2);
+                assert_eq!(writes[0].write_id, independent_id);
+                assert_eq!(writes[0].action, ValueAction::Add);
+                assert_eq!(
+                    writes[0].operands.map(|r| r.id),
+                    [independent_id - 1, independent_id - 2]
+                );
                 assert_eq!(writes[0].value, 17);
                 assert!(reads.is_empty());
             }
@@ -2821,5 +2883,5 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
         println!("actual {scope} case={label}; checkpoint_positions={}; includes actual history plus bounded two-operation response; exact actions/write IDs/operand IDs/lexical reads; allocations=0 bytes=0 for measured ingestion/begin/predict/observe", positions - case_positions_start);
     }
     times.sort_unstable();
-    println!("actual {scope} artifact={}; load_ns={load_ns}; development_cases=2; checkpoint_positions={positions}; two typed writes and exact occurrence/read checks per requested response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
+    println!("actual {scope} artifact={}; load_ns={load_ns}; development_cases={case_count}; checkpoint_positions={positions}; two typed writes and exact occurrence/read checks per requested response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
 }
