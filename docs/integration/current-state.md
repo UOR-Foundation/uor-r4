@@ -1,5 +1,29 @@
 # Current native geometric AI work
 
+## Executable Rust coding and controlled workspace use — bounded positive, 2026-09-08
+
+**Executable Rust coding, controlled workspace interaction, and iterative compiler repair qualified and verified.** The mechanism addresses
+[#1088](https://github.com/UOR-Foundation/uor-r4/issues/1088) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by establishing isolated workspace environment management, bounded file read/write/patch tools, compiler diagnostic parsing (`rustc --edition=2021`), iterative compiler feedback and repair loops, multi-file interface repair, and cryptographic revision/provenance binding.
+
+Key results:
+1. Controlled workspace operations: Implemented `WorkspaceEnvironment` providing path-traversal-resistant file reading, writing, surgical block patching, and directory listing, binding workspace state to deterministic cryptographic `WorkspaceRevision` digests.
+2. Single-file synthesis & execution: Verified standalone program synthesis containing novel arithmetic logic, compiling cleanly via `rustc --edition=2021` and executing with exit code 0.
+3. Compiler diagnostic parsing: Structured rustc error streams into typed `CompilerDiagnostic` instances capturing error level, error code (e.g. `E0308`), exact file paths, line numbers, and column offsets.
+4. Iterative compile & test feedback loop: Implemented `WorkspaceCodingEngine::iterative_repair` executing bounded compile-diagnose-patch-recompile loops, repairing type mismatches and verifying runtime test execution.
+5. Multi-file interface repair: Resolved cross-file interface mismatches where `main.rs` referenced an invalid or missing function signature in a library dependency `lib.rs`, compiling both crates and asserting correct runtime output.
+6. Iteration limit enforcement: Verified that unfixable compilation errors stop gracefully at configured `max_iterations`, preventing runaway execution and returning structured failure diagnostics.
+7. Provenance & revision binding: Bound task identity, initial/final workspace revisions, inspected source contexts, applied patch diffs, and execution results into a canonical `WorkspaceCodingReport`.
+8. Invariant safety: Verified zero runtime heap allocations on hot paths and absence of forbidden arithmetic or float opcodes in integer serving kernel.
+
+General repository-scale coding, open-ended multi-file refactoring, and frontier capability remain unqualified.
+
+Next: proceed toward Roadmap Position 08 / Issue #963 (scale quality with complete-path M1 latency, energy, and memory).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,332.418/5,550 seconds,
+leaving 217.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Generalized multi-step reasoning & constraint preservation — bounded positive, 2026-09-08
 
 **Generalized multi-step reasoning, counterfactual dependency tracking, and constraint preservation qualified and verified.** The mechanism addresses

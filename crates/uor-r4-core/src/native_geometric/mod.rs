@@ -87,6 +87,9 @@ mod value_types;
 mod word_copy_runtime;
 mod word_copy_training;
 mod word_copy_types;
+pub mod workspace_coding;
+#[cfg(test)]
+mod workspace_coding_tests;
 mod writer_refinement;
 
 use serde::{Deserialize, Serialize};
@@ -130,6 +133,10 @@ pub use value_types::{
 pub use word_copy_training::ResponseEntryCopyFitReport;
 pub use word_copy_types::{
     WordCopyAction, WordCopyDecision, WordCopyProgress, WordCopyStateView, WordCopyWork,
+};
+pub use workspace_coding::{
+    CompileReport, CompilerDiagnostic, PatchOperation, RepairIteration, WorkspaceCodingEngine,
+    WorkspaceCodingReport, WorkspaceEnvironment, WorkspaceRevision, WORKSPACE_CODING_SCHEMA,
 };
 
 pub const SCHEMA: &str = "uor-r4.native-geometric-language/1";
