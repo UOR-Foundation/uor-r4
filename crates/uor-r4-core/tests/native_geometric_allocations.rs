@@ -2628,3 +2628,136 @@ fn native_lexical_emission_actual_checkpoint_and_allocation() {
     times.sort_unstable();
     println!("actual learned lexical artifact={}; load_ns={load_ns}; development_cases={cases}; checkpoint_positions={positions}; exactly one derived write per response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
 }
+
+#[test]
+#[ignore = "requires composed output artifact; charged actual-model development cases"]
+fn native_composed_output_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Model, ValueAction};
+    let bytes = std::fs::read(std::env::var("R4_COMPOSED_OUTPUT_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["composed_output"].is_object());
+    let history = "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
+    let mut times = Vec::new();
+    let mut positions = 0;
+    for (request, expected) in [
+        (
+            " Explain in a sentence.",
+            "20 is 3 plus 17.\n23 is 3 plus 20.\n",
+        ),
+        (" Write a Rust equality.", "20 == 3 + 17\n23 == 3 + 20\n"),
+    ] {
+        let query = format!("User: There are 3 extra coins. Add the extra coins to the original total. Again.{request}\nAssistant:");
+        let mut session = model.session(Control::Full).unwrap();
+        session.observe(&model, BOS).unwrap();
+        for (prompt, expected, composed) in
+            [(history, "17.\n", false), (query.as_str(), expected, true)]
+        {
+            let tokens = model.encode(prompt).unwrap();
+            ALLOCATIONS.with(|v| v.set(0));
+            BYTES.with(|v| v.set(0));
+            MEASURING.with(|v| v.set(true));
+            for &token in &tokens {
+                session.observe(&model, token).unwrap();
+            }
+            session.begin_response(&model).unwrap();
+            MEASURING.with(|v| v.set(false));
+            let initial: serde_json::Value =
+                serde_json::from_slice(&session.checkpoint().unwrap()).unwrap();
+            let before_writes = session.work.values.derived_writes;
+            let mut output = [EOS; 96];
+            let mut used = 0;
+            let mut writes = Vec::new();
+            let mut reads = Vec::new();
+            let mut last_read_start = None;
+            loop {
+                let mut restored = model
+                    .restore_session(&session.checkpoint().unwrap())
+                    .unwrap();
+                let prediction = restored.predict(&model).unwrap();
+                let completion = restored.completion_decision();
+                let value = restored.value_decision();
+                assert_eq!(restored.predict(&model).unwrap(), prediction);
+                assert_eq!(restored.completion_decision(), completion);
+                assert_eq!(restored.value_decision(), value);
+                MEASURING.with(|v| v.set(true));
+                let start = std::time::Instant::now();
+                let actual = session.predict(&model).unwrap();
+                let actual_completion = session.completion_decision();
+                let actual_value = session.value_decision();
+                session.observe(&model, actual.token).unwrap();
+                let elapsed = start.elapsed().as_nanos();
+                MEASURING.with(|v| v.set(false));
+                assert_eq!(actual, prediction);
+                assert_eq!(actual_completion, completion);
+                assert_eq!(actual_value, value);
+                if let Some(write) = actual_value.filter(|v| v.cursor == 0) {
+                    writes.push(write);
+                }
+                restored.observe(&model, prediction.token).unwrap();
+                let state: serde_json::Value =
+                    serde_json::from_slice(&session.checkpoint().unwrap()).unwrap();
+                let restored_state: serde_json::Value =
+                    serde_json::from_slice(&restored.checkpoint().unwrap()).unwrap();
+                assert_eq!(state["completion"], restored_state["completion"]);
+                assert_eq!(state["values"], restored_state["values"]);
+                // Capture observed read starts, not the evaluator's expected
+                // derivation. Equal-valued records cannot substitute identities.
+                if let Some(read) = state["completion"]
+                    .get("lexical_read")
+                    .filter(|r| r.is_object())
+                {
+                    let at = read["start_at"].as_u64().unwrap();
+                    if last_read_start != Some(at) {
+                        assert_eq!(read["cursor"], 1);
+                        reads.push((
+                            state["completion"]["anchor"]["write_id"].as_u64().unwrap(),
+                            read["record_id"].as_u64().unwrap(),
+                        ));
+                        last_read_start = Some(at);
+                    }
+                }
+                if actual.token != EOS {
+                    // Later operations read committed records without replacing
+                    // the original captured source/query state.
+                    assert_eq!(state["values"]["sources"], initial["values"]["sources"]);
+                    assert_eq!(state["values"]["queries"], initial["values"]["queries"]);
+                }
+                times.push(elapsed);
+                positions += 1;
+                output[used] = actual.token;
+                used += 1;
+                if actual.token == EOS || used == output.len() {
+                    break;
+                }
+            }
+            assert_eq!(output[used - 1], EOS);
+            assert_eq!(model.decode(&output[..used]).unwrap(), expected.as_bytes());
+            if composed {
+                assert_eq!(session.work.values.derived_writes - before_writes, 2);
+                assert_eq!(writes.len(), 2);
+                for (write, id, value, operands) in
+                    [(&writes[0], 4, 20, [3, 2]), (&writes[1], 5, 23, [3, 4])]
+                {
+                    assert_eq!(write.action, ValueAction::Add);
+                    assert_eq!(write.write_id, id);
+                    assert_eq!(write.value, value);
+                    assert_eq!(write.operands.map(|r| r.id), operands);
+                }
+                assert_eq!(reads, vec![(4, 3), (4, 2), (5, 3), (5, 4)]);
+            } else {
+                assert_eq!(session.work.values.derived_writes - before_writes, 1);
+                assert_eq!(writes.len(), 1);
+                assert_eq!(writes[0].write_id, 2);
+                assert_eq!(writes[0].value, 17);
+                assert!(reads.is_empty());
+            }
+            assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+            session.end_response(&model).unwrap();
+        }
+    }
+    times.sort_unstable();
+    println!("actual composed artifact={}; load_ns={load_ns}; development_composed_cases=2; checkpoint_positions={positions}; two dependent typed writes and exact ordered read IDs per composed response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/JSON/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
+}

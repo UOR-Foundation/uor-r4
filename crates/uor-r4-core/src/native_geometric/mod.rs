@@ -31,6 +31,8 @@ mod source_routing_training;
 mod source_span;
 mod source_span_training;
 pub use source_routing_training::SourceRoutingConfig;
+mod composed_output;
+mod composed_output_training;
 mod instruction_binding;
 mod instruction_binding_training;
 pub use instruction_binding_training::InstructionExample;
@@ -252,6 +254,7 @@ pub enum Control {
     JointAdmissionDisabled,
     LiteralRefinementDisabled,
     InstructionBindingDisabled,
+    ComposedOutputDisabled,
     LexicalEmissionDisabled,
     LexicalRecordReadDisabled,
     LexicalEmissionGeometryDisabled,
@@ -330,6 +333,7 @@ impl Feature {
             | Control::OperationTransitionDisabled
             | Control::LiteralRefinementDisabled
             | Control::InstructionBindingDisabled
+            | Control::ComposedOutputDisabled
             | Control::MemoryDisabled
             | Control::ResponseStateDisabled
             | Control::ValuesDisabled
@@ -414,6 +418,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    composed_output: Option<composed_output::ComposedOutput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     instruction_binding: Option<instruction_binding::InstructionBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     lexical_emission: Option<lexical_emission::LexicalEmission>,
@@ -486,6 +492,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    composed_output: Option<composed_output::ComposedOutput>,
+    #[serde(default)]
     instruction_binding: Option<instruction_binding::InstructionBinding>,
     #[serde(default)]
     lexical_emission: Option<lexical_emission::LexicalEmission>,
@@ -557,6 +565,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            composed_output: wire.composed_output,
             instruction_binding: wire.instruction_binding,
             lexical_emission: wire.lexical_emission,
             operation_transition: wire.operation_transition,
