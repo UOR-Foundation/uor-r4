@@ -1003,6 +1003,29 @@
             position: relative;
         }
 
+        .input-engine-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: rgba(0, 216, 255, 0.12);
+            border: 1px solid rgba(0, 216, 255, 0.4);
+            color: var(--accent-cyan);
+            padding: 0.22rem 0.65rem;
+            border-radius: 16px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+        .input-engine-badge:hover {
+            background: rgba(0, 216, 255, 0.22);
+            border-color: var(--accent-cyan);
+            color: #ffffff;
+            box-shadow: 0 0 10px rgba(0, 216, 255, 0.3);
+        }
+
         .input-model-pill-btn {
             display: flex;
             align-items: center;
@@ -2318,55 +2341,10 @@
                             </button>
                             <input type="file" id="fileUploadInput" multiple style="display:none;" onchange="handleFileUpload(this.files)">
 
-                            <!-- WEB SEARCH TOGGLE -->
-                            <button type="button" class="input-tool-pill-btn active" id="btnToggleWebSearch" onclick="toggleWebSearch()" title="Toggle Web Search & Knowledge Grounding (Wikipedia & Live Web)">
-                                <span id="webSearchIcon">🌐</span>
-                                <span id="webSearchLabel">Search</span>
-                            </button>
-                            
-                            <!-- IN-PROMPT MODEL SELECTOR -->
-                            <div class="input-model-selector-wrapper" id="inputModelSelectorWrapper" style="position:relative; display:inline-flex;">
-                                <button type="button" class="input-model-pill-btn" onclick="toggleInputModelDropdown(event)" title="Select Neural Model">
-                                    <span id="inputActiveModelIcon">🌌</span>
-                                    <span id="inputActiveModelName">UOR-R4 Geometric Core</span>
-                                    <span class="pill-arrow">▼</span>
-                                </button>
-                                
-                                <div class="input-model-dropdown-menu" id="inputModelDropdownMenu">
-                                    <div class="input-model-opt active" id="opt-uor-r4-geometric-alpha" onclick="selectModelFromInput('uor-r4-geometric-alpha')">
-                                        <div class="opt-left">
-                                            <span class="opt-icon">🌌</span>
-                                            <div class="opt-info">
-                                                <span class="opt-name">UOR-R4 Geometric Core</span>
-                                                <span class="opt-tier">Native Geometric Alpha (Zero-Matmul)</span>
-                                            </div>
-                                        </div>
-                                        <span class="opt-check" id="check-uor-r4-geometric-alpha">✓</span>
-                                    </div>
-                                    <div class="input-model-opt" id="opt-uor-r4-memory-grounded" onclick="selectModelFromInput('uor-r4-memory-grounded')">
-                                        <div class="opt-left">
-                                            <span class="opt-icon">💎</span>
-                                            <div class="opt-info">
-                                                <span class="opt-name">UOR-R4 Memory Ring</span>
-                                                <span class="opt-tier">Exact Addressed Memory & Causal State</span>
-                                            </div>
-                                        </div>
-                                        <span class="opt-check" id="check-uor-r4-memory-grounded" style="display:none;">✓</span>
-                                    </div>
-                                    <div class="input-model-opt" id="opt-uor-r4-transformerless-r4g1" onclick="selectModelFromInput('uor-r4-transformerless-r4g1')">
-                                        <div class="opt-left">
-                                            <span class="opt-icon">⚡</span>
-                                            <div class="opt-info">
-                                                <span class="opt-name">UOR-R4 Frozen Kernel</span>
-                                                <span class="opt-tier">R4G1 Integer Table Lookup (&lt;70µs)</span>
-                                            </div>
-                                        </div>
-                                        <span class="opt-check" id="check-uor-r4-transformerless-r4g1" style="display:none;">✓</span>
-                                    </div>
-                                    <div style="padding:0.4rem 0.65rem; border-top:1px solid rgba(255,255,255,0.08); font-size:0.7rem; color:var(--accent-cyan); cursor:pointer; text-align:center; font-weight:600;" onclick="openModelManagerModal()">
-                                        ⚙️ Manage Caches & Models...
-                                    </div>
-                                </div>
+                            <!-- SINGLE ENGINE BADGE -->
+                            <div class="input-engine-badge" id="inputActiveEngineBadge" onclick="openModelManagerModal()" title="UOR-R4 API: Autoregressive Geometric State Model (Zero-Matmul Serving, Z[phi] Golden Integer Ring)">
+                                <span>⚡</span>
+                                <span>uor-r4 api</span>
                             </div>
                         </div>
 
@@ -2446,53 +2424,9 @@
                                     📎
                                 </button>
                                 
-                                <button type="button" class="input-tool-pill-btn active" onclick="toggleWebSearch()" title="Toggle Web Grounding">
-                                    <span>🌐</span>
-                                    <span>Search</span>
-                                </button>
-
-                                <div class="input-model-selector-wrapper" id="ideModelSelectorWrapper" style="position:relative; display:inline-flex;">
-                                    <button type="button" class="input-model-pill-btn" onclick="toggleInputModelDropdown(event)" title="Select Neural Model">
-                                        <span id="ideActiveModelIcon">🌌</span>
-                                        <span id="ideActiveModelName">UOR-R4 Geometric Core</span>
-                                        <span class="pill-arrow">▼</span>
-                                    </button>
-                                    
-                                    <div class="input-model-dropdown-menu" id="ideModelDropdownMenu">
-                                        <div class="input-model-opt active" id="ide-opt-uor-r4-geometric-alpha" onclick="selectModelFromInput('uor-r4-geometric-alpha')">
-                                            <div class="opt-left">
-                                                <span class="opt-icon">🌌</span>
-                                                <div class="opt-info">
-                                                    <span class="opt-name">UOR-R4 Geometric Core</span>
-                                                    <span class="opt-tier">Native Geometric Alpha (Zero-Matmul)</span>
-                                                </div>
-                                            </div>
-                                            <span class="opt-check" id="ide-check-uor-r4-geometric-alpha">✓</span>
-                                        </div>
-                                        <div class="input-model-opt" id="ide-opt-uor-r4-memory-grounded" onclick="selectModelFromInput('uor-r4-memory-grounded')">
-                                            <div class="opt-left">
-                                                <span class="opt-icon">💎</span>
-                                                <div class="opt-info">
-                                                    <span class="opt-name">UOR-R4 Memory Ring</span>
-                                                    <span class="opt-tier">Exact Addressed Memory & Causal State</span>
-                                                </div>
-                                            </div>
-                                            <span class="opt-check" id="ide-check-uor-r4-memory-grounded" style="display:none;">✓</span>
-                                        </div>
-                                        <div class="input-model-opt" id="ide-opt-uor-r4-transformerless-r4g1" onclick="selectModelFromInput('uor-r4-transformerless-r4g1')">
-                                            <div class="opt-left">
-                                                <span class="opt-icon">⚡</span>
-                                                <div class="opt-info">
-                                                    <span class="opt-name">UOR-R4 Frozen Kernel</span>
-                                                    <span class="opt-tier">R4G1 Integer Table Lookup (&lt;70µs)</span>
-                                                </div>
-                                            </div>
-                                            <span class="opt-check" id="ide-check-uor-r4-transformerless-r4g1" style="display:none;">✓</span>
-                                        </div>
-                                        <div style="padding:0.4rem 0.65rem; border-top:1px solid rgba(255,255,255,0.08); font-size:0.7rem; color:var(--accent-cyan); cursor:pointer; text-align:center; font-weight:600;" onclick="openModelManagerModal()">
-                                            ⚙️ Manage Caches & Models...
-                                        </div>
-                                    </div>
+                                <!-- SINGLE ENGINE BADGE -->
+                                <div class="input-engine-badge" id="ideActiveEngineBadge" onclick="openModelManagerModal()" title="UOR-R4 API: Autoregressive Geometric State Model (Zero-Matmul Serving, Z[phi] Golden Integer Ring)">
+                                    <span>⚡</span>
                                 </div>
                             </div>
 
@@ -2857,49 +2791,23 @@
             marked.use({ renderer: renderer });
         }        // --- MODEL DEFINITIONS ---
         window.MODEL_CONFIGS = {
-            'uor-r4-geometric-alpha': {
-                id: 'uor-r4-geometric-alpha',
-                name: 'UOR-R4 Geometric Core',
-                fullName: 'UOR-R4 Geometric Model (Alpha)',
-                icon: '🌌',
-                source: 'uor:native-geometric/r4/1',
+            'uor-r4-api': {
+                id: 'uor-r4-api',
+                name: 'uor-r4 api',
+                fullName: 'UOR-R4 API (Native Geometric Language Model)',
+                icon: '⚡',
+                source: 'uor:native-geometric/api/1',
                 localPath: './pkg/uor_r4_wasm_router_bg.wasm',
                 size_mb: 2.8,
                 tier: 'Native Geometric Alpha',
-                dtype: 'Z[phi] integer ring',
-                desc: 'Autoregressive geometric state model. Riemann zeta-zero phase channels (N=14), exact Z[phi] icosian paired-H4 ring, R4/S3/H4 causal transport, zero matmul serving.'
-            },
-            'uor-r4-memory-grounded': {
-                id: 'uor-r4-memory-grounded',
-                name: 'UOR-R4 Memory Ring',
-                fullName: 'UOR-R4 Memory Ring (Grounded)',
-                icon: '💎',
-                source: 'uor:grounded-memory/1',
-                localPath: './pkg/uor_r4_wasm_router_bg.wasm',
-                size_mb: 2.8,
-                tier: 'Exact Memory Ring',
-                dtype: 'Z[phi] + 12-axis causal state',
-                desc: 'Exact addressed memory state with 12-axis causal tracking, deterministic replay, and 0-byte steady-state allocation.'
-            },
-            'uor-r4-transformerless-r4g1': {
-                id: 'uor-r4-transformerless-r4g1',
-                name: 'UOR-R4 Frozen Kernel',
-                fullName: 'UOR-R4 Frozen Kernel (R4G1 Table Lookup)',
-                icon: '⚡',
-                source: 'uor:r4g1/frozen',
-                localPath: './pkg/uor_r4_wasm_router_bg.wasm',
-                size_mb: 2.8,
-                tier: 'R4G1 Frozen Kernel',
-                dtype: 'no_std table lookup',
-                desc: 'Frozen zero-multiply, zero-float integer table lookup kernel. Sub-70µs latency with XOR/AND/shift/rotate/popcount operations.'
+                dtype: 'Z[phi] golden integer ring, zero-matmul',
+                desc: 'Autoregressive geometric state language model. 14 Riemann zeta-zero phase clocks, exact Z[phi] icosian paired-H4 ring (E8 = H4 + phi H4), continuous R4/S3/H4 causal transport, 100% zero-matmul serving.'
             }
         };
 
         // --- STATE ---
-        window.activeModelId = localStorage.getItem('uor_active_model') || 'qwen2.5-coder-0.5b';
-        if (!MODEL_CONFIGS[window.activeModelId]) {
-            window.activeModelId = 'uor-r4-geometric-alpha';
-        }
+        window.activeModelId = 'uor-r4-api';
+        localStorage.setItem('uor_active_model', 'uor-r4-api');
         window.loadedPipelines = {};
         window.isGenerating = false;
         window.wasmChatSession = null;
@@ -5256,46 +5164,41 @@
                 }
             }
 
-            grid.innerHTML = localDiskSection + Object.keys(MODEL_CONFIGS).map(mId => {
-                const m = MODEL_CONFIGS[mId];
-                const isCached = window.modelCacheStatus[mId] || false;
-                const isCompiling = (window.activeCompileModelId === mId);
-                const isActive = (window.activeModelId === mId);
-
-                return `
-                    <div class="model-manager-card">
-                        <div class="model-card-info">
-                            <span class="model-card-icon">${m.icon}</span>
-                            <div class="model-card-details">
-                                <div class="model-card-name">
-                                    ${escapeHtml(m.name)}
-                                    <span class="model-cache-status-badge ${isCached ? 'cached' : 'uncached'}">
-                                        ${isCached ? '💾 Cached & Ready' : `📥 ~${m.size_mb} MB`}
-                                    </span>
-                                    ${isActive ? '<span style="color:var(--accent-cyan); font-size:0.65rem; font-weight:700;">[ACTIVE]</span>' : ''}
-                                </div>
-                                <div class="model-card-desc">${escapeHtml(m.desc)}</div>
+            grid.innerHTML = `
+                <div class="model-manager-card active" style="grid-column: 1 / -1; background: rgba(0, 216, 255, 0.05); border: 1px solid rgba(0, 216, 255, 0.35); border-radius: 8px; padding: 1.2rem; display: flex; flex-direction: column; gap: 0.8rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <span style="font-size: 1.6rem;">⚡</span>
+                            <div>
+                                <div style="font-size: 1.05rem; font-weight: 700; color: #ffffff;">uor-r4 api</div>
+                                <div style="font-size: 0.76rem; color: var(--accent-cyan); font-weight: 600;">Native Geometric Language Model (Alpha v0.1.0)</div>
                             </div>
                         </div>
-                        <div class="model-card-actions">
-                            ${isCompiling ? `
-                                <span style="font-size:0.72rem; color:var(--accent-cyan); font-family:var(--font-mono);">⚡ Compiling...</span>
-                            ` : isCached ? `
-                                <button class="modal-btn secondary" style="padding:0.3rem 0.6rem; font-size:0.72rem;" onclick="selectModelFromInput('${mId}'); closeModelManagerModal();">
-                                    ${isActive ? 'Active Substrate' : '⚡ Switch To'}
-                                </button>
-                                <button class="modal-btn secondary" style="padding:0.3rem 0.6rem; font-size:0.72rem; color:var(--accent-magenta);" onclick="purgeSingleModelCache('${mId}')" title="Delete model cache">
-                                    🗑️
-                                </button>
-                            ` : `
-                                <button class="modal-btn primary" style="padding:0.3rem 0.75rem; font-size:0.72rem;" onclick="triggerBackgroundCompile('${mId}'); renderModelManagerUI();">
-                                    📥 Download & Precompile
-                                </button>
-                            `}
+                        <span class="model-cache-status-badge cached" style="background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3); padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.72rem; font-weight: 700;">
+                            ⚡ Sovereign WebAssembly Loaded (~2.8 MB)
+                        </span>
+                    </div>
+
+                    <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; background: rgba(0, 0, 0, 0.3); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                        Autoregressive geometric state machine executing directly over exact prime coordinates, 14 Riemann zeta-zero phase channels, and golden integer ring arithmetic Z[phi]. Zero matrix multiplications, zero floating-point operations, and zero steady-state heap allocations in serving.
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.6rem; font-size: 0.74rem;">
+                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
+                            <span style="color: var(--text-muted);">Architecture:</span> <strong style="color: #ffffff;">R⁴/S³/H⁴ Continuous Manifold</strong>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
+                            <span style="color: var(--text-muted);">Serving Matmul:</span> <strong style="color: #00ff88;">0 Mathematical Products</strong>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
+                            <span style="color: var(--text-muted);">Harmonic Clocks:</span> <strong style="color: #ffffff;">14 Zeta-Zero Phase Channels</strong>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
+                            <span style="color: var(--text-muted);">Memory Substrate:</span> <strong style="color: #ffffff;">Exact Addressed Ring (Durable)</strong>
                         </div>
                     </div>
-                `;
-            }).join('');
+                </div>
+            `;
 
             // Update storage
             if (navigator.storage && navigator.storage.estimate) {
@@ -5386,7 +5289,7 @@
         });
 
         function updateInputModelDisplay() {
-            const meta = MODEL_CONFIGS[activeModelId] || MODEL_CONFIGS['qwen2.5-coder-0.5b'];
+            const meta = MODEL_CONFIGS[activeModelId] || MODEL_CONFIGS['uor-r4-api'];
             
             // Update Chat Studio selector
             const chatName = document.getElementById('inputActiveModelName');
@@ -5615,7 +5518,7 @@
                         <div class="hero-logo-orb">🧠</div>
                         <h2 class="hero-title">UOR-R4 Sovereign AI Developer Studio</h2>
                         <p class="hero-desc">
-                            Full-stack in-browser engineering environment: Local Workspace File System Access, Side-by-Side Monaco Diff Inspector, and WebGPU/WASM GLM-5.3 & Qwen 2.5 models.
+                            Full-stack in-browser engineering environment: Local Workspace File System Access, Side-by-Side Monaco Diff Inspector, and WebAssembly native geometric uor-r4 api.
                         </p>
 
                         <div class="prompt-starter-grid">
@@ -5678,7 +5581,7 @@
                                 <span>📋</span> Copy Response
                             </button>
                             <span class="model-tag-span" style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono); margin-left:auto;">
-                                ${MODEL_CONFIGS[activeModelId] ? MODEL_CONFIGS[activeModelId].name : 'GLM-5.3'}
+                                ${MODEL_CONFIGS[activeModelId] ? MODEL_CONFIGS[activeModelId].name : 'uor-r4 api'}
                             </span>
                         </div>
                     </div>
@@ -6267,7 +6170,7 @@
             const userPrompt = (input ? input.value : '').trim();
             if (!userPrompt && !attachedFiles.length) return;
 
-            const meta = MODEL_CONFIGS[activeModelId] || MODEL_CONFIGS['uor-r4-geometric-alpha'];
+            const meta = MODEL_CONFIGS[activeModelId] || MODEL_CONFIGS['uor-r4-api'];
 
             let fullContext = userPrompt;
 
@@ -6425,7 +6328,7 @@
                                 <span>📋</span> Copy Response
                             </button>
                             <span class="model-tag-span" style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono); margin-left:auto;">
-                                ${MODEL_CONFIGS[activeModelId] ? MODEL_CONFIGS[activeModelId].name : 'GLM-5.3'}
+                                ${MODEL_CONFIGS[activeModelId] ? MODEL_CONFIGS[activeModelId].name : 'uor-r4 api'}
                             </span>
                         </div>
                     </div>
@@ -6501,7 +6404,7 @@
                         toolbar.style.display = 'flex';
                         const modelSpan = toolbar.querySelector('.model-tag-span') || toolbar.querySelector('span:last-child');
                         if (modelSpan) {
-                            const mName = MODEL_CONFIGS[activeModelId] ? MODEL_CONFIGS[activeModelId].name : 'GLM-5.3';
+                            const mName = MODEL_CONFIGS[activeModelId] ? MODEL_CONFIGS[activeModelId].name : 'uor-r4 api';
                             const countStr = tokenCount ? ` • ${tokenCount} tokens` : '';
                             const tpsStr = avgTps ? ` • ${avgTps} tok/s` : '';
                             modelSpan.innerText = `${mName}${countStr}${tpsStr}`;
@@ -7127,7 +7030,7 @@
 
             const activeTab = openEditorTabs.find(t => t.name === activeEditorTab) || { name: 'main.rs', language: 'rust', content: '' };
             const activeCode = monacoEditorInstance ? monacoEditorInstance.getValue() : (activeTab ? activeTab.content : '');
-            const selectedModelId = document.getElementById('ideAgentModelSelect')?.value || activeModelId || 'qwen2.5-coder-0.5b';
+            const selectedModelId = document.getElementById('ideAgentModelSelect')?.value || activeModelId || 'uor-r4-api';
 
             if (input) input.value = '';
 

@@ -153,7 +153,9 @@ impl DurableSession {
     /// Synchronize durable relations with the session's internal value state if present.
     fn sync_to_session(&mut self) {
         if let Some(values) = self.session.values.as_mut() {
-            values.relations = Some(self.relations.clone());
+            if values.relations.is_some() {
+                values.relations = Some(self.relations.clone());
+            }
         }
     }
 
@@ -377,7 +379,9 @@ impl DurableSession {
 
         let mut fresh = model.session(self.session.control)?;
         if let Some(values) = fresh.values.as_mut() {
-            values.relations = Some(preserved_relations.clone());
+            if values.relations.is_some() {
+                values.relations = Some(preserved_relations.clone());
+            }
         }
         if let Some(memory) = preserved_memory {
             if let Some(fresh_memory) = fresh.memory.as_mut() {
@@ -500,7 +504,9 @@ impl DurableSession {
         }
         let mut session = Session::from_checkpoint(model, &envelope.checkpoint)?;
         if let Some(values) = session.values.as_mut() {
-            values.relations = Some(envelope.relations.clone());
+            if values.relations.is_some() {
+                values.relations = Some(envelope.relations.clone());
+            }
         }
         Ok(Self {
             scope: envelope.scope,
