@@ -18,7 +18,7 @@ pub(super) fn legal(action: ValueAction, a: i64, b: i64) -> bool {
     match action {
         ValueAction::Copy => true,
         ValueAction::Add => !((b > 0 && a > i64::MAX - b) || (b < 0 && a < i64::MIN - b)),
-        ValueAction::Sub => a.checked_sub(b).is_some(),
+        ValueAction::Sub => !((b > 0 && a < i64::MIN + b) || (b < 0 && a > i64::MAX + b)),
         ValueAction::Mul => super::value_runtime::shift_add_product(a, b).is_some(),
     }
 }
@@ -101,7 +101,7 @@ pub(super) fn permits(
 mod tests {
     use super::*;
     #[test]
-    fn admission_legality_matches_exact_add_and_sub_at_boundaries() {
+    fn admission_legality_matches_exact_operations_at_boundaries() {
         for a in [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX] {
             for b in [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX] {
                 assert_eq!(legal(ValueAction::Add, a, b), a.checked_add(b).is_some());

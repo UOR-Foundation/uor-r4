@@ -16,6 +16,8 @@ pub use dependent_read_training::DependentReadExample;
 #[cfg(test)]
 mod dependent_read_tests;
 mod joint_admission;
+#[cfg(test)]
+mod joint_admission_tests;
 mod joint_admission_training;
 mod literal_refinement;
 #[cfg(test)]
