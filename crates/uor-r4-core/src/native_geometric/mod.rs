@@ -55,6 +55,9 @@ mod durable_memory_tests;
 pub mod groundedness;
 #[cfg(test)]
 mod groundedness_tests;
+pub mod guarantees;
+#[cfg(test)]
+mod guarantees_tests;
 pub mod m1_profiler;
 #[cfg(test)]
 mod m1_profiler_tests;
@@ -114,6 +117,12 @@ pub use groundedness::{
     AbstentionReason, ConflictStatus, GroundedAbstention, GroundedAnswer, GroundedCase,
     GroundedCaseResult, GroundedClarification, GroundedConflict, GroundedOutcome,
     GroundedProvenance, GroundednessEvaluator, GroundednessReport, GROUNDEDNESS_SCHEMA,
+};
+pub use guarantees::{
+    AllowedOp, ArtifactIntegrityWitness, BridgeBoundary, CensusReport, ChartAdapter, ChartKind,
+    ChartWitness, ClaimClass, ClaimStatus, CodecRole, DossierAuditReport, EulerHopfBridge,
+    ForbiddenOp, FormalClaim, FormalClaimDossier, IcosianQuaternion, PairedH4Icosian,
+    ServingOperationCensus, ZPhi,
 };
 pub use m1_profiler::{
     HardwareMetrics, LatencyDistribution, M1EnergyModel, M1Profiler, StageBreakdown,
