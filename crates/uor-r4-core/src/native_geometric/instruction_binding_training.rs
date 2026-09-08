@@ -136,7 +136,7 @@ fn frame(
     }
     Ok(Some(Frame { alternatives }))
 }
-fn fit_router(
+pub(super) fn fit_router(
     model: &Model,
     old: &SourceRouting,
     frames: &mut Vec<Frame>,

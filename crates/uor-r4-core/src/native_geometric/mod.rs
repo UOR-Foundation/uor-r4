@@ -31,6 +31,9 @@ mod source_routing_training;
 mod source_span;
 mod source_span_training;
 pub use source_routing_training::SourceRoutingConfig;
+mod mixed_initial_training;
+mod mixed_operators;
+pub use mixed_operators::{MixedOperatorExample, MixedOperatorTarget};
 mod composed_output;
 mod composed_output_training;
 mod instruction_binding;
@@ -255,6 +258,9 @@ pub enum Control {
     LiteralRefinementDisabled,
     InstructionBindingDisabled,
     ComposedOutputDisabled,
+    MixedOperatorsDisabled,
+    MixedInitialDisabled,
+    MixedTransitionDisabled,
     LexicalEmissionDisabled,
     LexicalRecordReadDisabled,
     LexicalEmissionGeometryDisabled,
@@ -334,6 +340,9 @@ impl Feature {
             | Control::LiteralRefinementDisabled
             | Control::InstructionBindingDisabled
             | Control::ComposedOutputDisabled
+            | Control::MixedOperatorsDisabled
+            | Control::MixedInitialDisabled
+            | Control::MixedTransitionDisabled
             | Control::MemoryDisabled
             | Control::ResponseStateDisabled
             | Control::ValuesDisabled
@@ -418,6 +427,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    mixed_operators: Option<mixed_operators::MixedOperators>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     composed_output: Option<composed_output::ComposedOutput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     instruction_binding: Option<instruction_binding::InstructionBinding>,
@@ -492,6 +503,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    mixed_operators: Option<mixed_operators::MixedOperators>,
+    #[serde(default)]
     composed_output: Option<composed_output::ComposedOutput>,
     #[serde(default)]
     instruction_binding: Option<instruction_binding::InstructionBinding>,
@@ -565,6 +578,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            mixed_operators: wire.mixed_operators,
             composed_output: wire.composed_output,
             instruction_binding: wire.instruction_binding,
             lexical_emission: wire.lexical_emission,

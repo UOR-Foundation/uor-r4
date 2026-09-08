@@ -15,7 +15,7 @@ pub(super) struct OperationTransition {
     pub max_operations: u8,
 }
 impl OperationTransition {
-    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+    pub(super) fn validate_shape(&self, model: &Model) -> Result<()> {
         self.router.validate_shape(model, 3, 7)?;
         if self.max_operations != 3 || model.completion.is_none() || model.values.is_none() {
             return Err(Error("invalid operation transition contract".into()));
@@ -37,6 +37,10 @@ impl OperationTransition {
         {
             return Err(Error("invalid operation transition dictionary".into()));
         }
+        Ok(())
+    }
+    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+        self.validate_shape(model)?;
         let mut parent = model.clone();
         parent.operation_transition = None;
         parent.refresh_identity()?;
@@ -56,7 +60,10 @@ impl OperationTransition {
 }
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
-fn proposal(values: &ValueState, index: usize) -> Option<(ValueAction, [ValueRecord; 2])> {
+pub(super) fn proposal(
+    values: &ValueState,
+    index: usize,
+) -> Option<(ValueAction, [ValueRecord; 2])> {
     let n = values.records.len();
     if index < 16 {
         let a = *values.records.get(index)?;
@@ -98,7 +105,7 @@ fn latest(values: &ValueState) -> Option<u64> {
         .find(|r| r.derived && r.start >= values.started_at)
         .map(|r| r.id)
 }
-fn features(
+pub(super) fn features(
     block: &OperationTransition,
     values: &ValueState,
     operands: Option<[ValueRecord; 2]>,
@@ -215,7 +222,20 @@ pub(super) fn offer(
     control: Control,
     work: &mut ValueWork,
 ) -> Option<Candidate> {
-    let block = model.operation_transition.as_ref()?;
+    let block = if matches!(
+        control,
+        Control::MixedOperatorsDisabled
+            | Control::MixedTransitionDisabled
+            | Control::ComposedOutputDisabled
+    ) {
+        model
+            .mixed_operators
+            .as_ref()
+            .map(|w| &w.previous_operation)
+            .or(model.operation_transition.as_ref())?
+    } else {
+        model.operation_transition.as_ref()?
+    };
     if values.next_id == u64::MAX
         || baseline.token != EOS
         || !values.can_transition()
@@ -354,6 +374,9 @@ pub(super) fn frame(
     let mut chosen = None;
     for index in 0..272 {
         if let Some((action, pair)) = proposal(v, index) {
+            if !super::joint_admission::legal(action, pair[0].value, pair[1].value) {
+                continue;
+            }
             let correct = target.is_some_and(|(a, extra)| {
                 a == action
                     && pair.iter().any(|r| Some(r.id) == last)

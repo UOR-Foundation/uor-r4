@@ -2632,24 +2632,84 @@ fn native_lexical_emission_actual_checkpoint_and_allocation() {
 #[test]
 #[ignore = "requires composed output artifact; charged actual-model development cases"]
 fn native_composed_output_actual_checkpoint_and_allocation() {
+    actual_composed_or_mixed_checkpoint_and_allocation(false);
+}
+
+#[test]
+#[ignore = "requires R4_MIXED_OPERATORS_MODEL; charged actual-model development cases"]
+fn native_mixed_operators_actual_checkpoint_and_allocation() {
+    actual_composed_or_mixed_checkpoint_and_allocation(true);
+}
+
+fn actual_composed_or_mixed_checkpoint_and_allocation(mixed: bool) {
     use uor_r4_core::native_geometric::{Model, ValueAction};
-    let bytes = std::fs::read(std::env::var("R4_COMPOSED_OUTPUT_MODEL").unwrap()).unwrap();
+    let (artifact_env, witness, scope) = if mixed {
+        ("R4_MIXED_OPERATORS_MODEL", "mixed_operators", "mixed")
+    } else {
+        ("R4_COMPOSED_OUTPUT_MODEL", "composed_output", "composed")
+    };
+    let bytes = std::fs::read(std::env::var(artifact_env).unwrap()).unwrap();
     let load = std::time::Instant::now();
     let model = Model::from_bytes(&bytes).unwrap();
     let load_ns = load.elapsed().as_nanos();
     let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(wire["composed_output"].is_object());
+    assert!(wire[witness].is_object());
     let history = "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
     let mut times = Vec::new();
     let mut positions = 0;
-    for (request, expected) in [
-        (
-            " Explain in a sentence.",
-            "20 is 3 plus 17.\n23 is 3 plus 20.\n",
-        ),
-        (" Write a Rust equality.", "20 == 3 + 17\n23 == 3 + 20\n"),
-    ] {
-        let query = format!("User: There are 3 extra coins. Add the extra coins to the original total. Again.{request}\nAssistant:");
+    // Query, targets, exact occurrence IDs and expected lexical reads are
+    // prepared outside every measured region. These are authored checks,
+    // never serving inputs other than the query itself.
+    let formatted_reads: &[(u64, u64)] = &[(4, 3), (4, 2), (5, 3), (5, 4)];
+    let no_reads: &[(u64, u64)] = &[];
+    let cases = if mixed {
+        [
+            (
+                "copy_latest",
+                " Copy the latest result.",
+                "20.\n20.\n",
+                ValueAction::Copy,
+                20,
+                [4, 4],
+                no_reads,
+            ),
+            (
+                "copy_original",
+                " Copy the original total.",
+                "20.\n17.\n",
+                ValueAction::Copy,
+                17,
+                [2, 2],
+                no_reads,
+            ),
+        ]
+    } else {
+        [
+            (
+                "sentence",
+                " Again. Explain in a sentence.",
+                "20 is 3 plus 17.\n23 is 3 plus 20.\n",
+                ValueAction::Add,
+                23,
+                [3, 4],
+                formatted_reads,
+            ),
+            (
+                "rust",
+                " Again. Write a Rust equality.",
+                "20 == 3 + 17\n23 == 3 + 20\n",
+                ValueAction::Add,
+                23,
+                [3, 4],
+                formatted_reads,
+            ),
+        ]
+    };
+    for (label, request, expected, second_action, second_value, second_operands, expected_reads) in
+        cases
+    {
+        let case_positions_start = positions;
+        let query = format!("User: There are 3 extra coins. Add the extra coins to the original total.{request}\nAssistant:");
         let mut session = model.session(Control::Full).unwrap();
         session.observe(&model, BOS).unwrap();
         for (prompt, expected, composed) in
@@ -2738,15 +2798,16 @@ fn native_composed_output_actual_checkpoint_and_allocation() {
             if composed {
                 assert_eq!(session.work.values.derived_writes - before_writes, 2);
                 assert_eq!(writes.len(), 2);
-                for (write, id, value, operands) in
-                    [(&writes[0], 4, 20, [3, 2]), (&writes[1], 5, 23, [3, 4])]
-                {
-                    assert_eq!(write.action, ValueAction::Add);
+                for (write, action, id, value, operands) in [
+                    (&writes[0], ValueAction::Add, 4, 20, [3, 2]),
+                    (&writes[1], second_action, 5, second_value, second_operands),
+                ] {
+                    assert_eq!(write.action, action);
                     assert_eq!(write.write_id, id);
                     assert_eq!(write.value, value);
                     assert_eq!(write.operands.map(|r| r.id), operands);
                 }
-                assert_eq!(reads, vec![(4, 3), (4, 2), (5, 3), (5, 4)]);
+                assert_eq!(reads.as_slice(), expected_reads);
             } else {
                 assert_eq!(session.work.values.derived_writes - before_writes, 1);
                 assert_eq!(writes.len(), 1);
@@ -2757,7 +2818,8 @@ fn native_composed_output_actual_checkpoint_and_allocation() {
             assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
             session.end_response(&model).unwrap();
         }
+        println!("actual {scope} case={label}; checkpoint_positions={}; includes actual history plus bounded two-operation response; exact actions/write IDs/operand IDs/lexical reads; allocations=0 bytes=0 for measured ingestion/begin/predict/observe", positions - case_positions_start);
     }
     times.sort_unstable();
-    println!("actual composed artifact={}; load_ns={load_ns}; development_composed_cases=2; checkpoint_positions={positions}; two dependent typed writes and exact ordered read IDs per composed response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/JSON/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
+    println!("actual {scope} artifact={}; load_ns={load_ns}; development_cases=2; checkpoint_positions={positions}; two typed writes and exact occurrence/read checks per requested response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
 }
