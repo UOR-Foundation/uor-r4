@@ -59,6 +59,9 @@ mod memory_runtime;
 mod memory_training;
 mod memory_types;
 mod mixture;
+pub mod multi_step_reasoning;
+#[cfg(test)]
+mod multi_step_reasoning_tests;
 mod numeral;
 mod relation;
 mod relation_admission;
@@ -114,6 +117,10 @@ pub use memory_training::{
 pub use memory_types::{MemoryReadFitConfig, MemoryReadFitReport, MemoryStateView};
 pub use memory_types::{ResponseAction, ResponseDecision, ResponseStateView};
 pub use mixture::{ReadoutFitConfig, ReadoutFitReport};
+pub use multi_step_reasoning::{
+    ConstraintPolicy, MultiStepReasoningEngine, MultiStepReasoningReport, ReasoningChain,
+    ReasoningStep, ReasoningStepKind, MULTI_STEP_REASONING_SCHEMA,
+};
 pub use runtime::{Session, StateView};
 pub use training::Trainer;
 pub use value_training::{ValueExample, ValueFitConfig, ValueFitReport};

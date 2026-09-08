@@ -1,5 +1,28 @@
 # Current native geometric AI work
 
+## Generalized multi-step reasoning & constraint preservation — bounded positive, 2026-09-08
+
+**Generalized multi-step reasoning, counterfactual dependency tracking, and constraint preservation qualified and verified.** The mechanism addresses
+[#955](https://github.com/UOR-Foundation/uor-r4/issues/955) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by establishing explicit multi-step dependency DAG execution, counterfactual intermediate state mutation with transitive causal propagation, intermediate state ablation, domain constraint preservation across transformations, relational transitive deduction ($A \to B \to C$), and standalone compiling Rust code synthesis.
+
+Key results:
+1. Multi-step dependency construction: Implemented `ReasoningChain`, `ReasoningStep`, and `MultiStepReasoningEngine` supporting DAG evaluation where Step $k$ causally takes intermediate state from Step $j$ ($j < k$).
+2. Counterfactual intermediate state mutation: Verified that mutating an intermediate step value ($17 \to 20$) causally propagates through downstream transitive dependencies, updating subsequent steps ($34 \to 40$, $24 \to 30$) and changing the final result deterministically ($24 \to 30$).
+3. Intermediate state ablation: Verified that removing a load-bearing intermediate dependency causes immediate execution failure, confirming causal reliance on the intermediate state.
+4. Constraint preservation: Enforced `ConstraintPolicy` (e.g. `Range { min, max }`, `NonNegative`) across intermediate DAG transformations, surfacing constraint violations when intermediate or terminal states breach invariants.
+5. Relational transitive deduction: Verified multi-turn transitive inference ($A \to B \to C$) using versioned facts in `DurableSession`, returning verified deductions with step dependencies.
+6. Standalone compiling Rust synthesis: Verified synthesis of standalone Rust source code representing the multi-step reasoning DAG, compiling cleanly via `rustc --edition=2021` and executing with exit code 0.
+7. Zero runtime allocations & integer kernel compliance: Verified zero runtime heap allocations on hot paths and absence of forbidden arithmetic or float opcodes in integer serving kernel.
+
+General open-domain multi-step reasoning, arbitrary search depth, and frontier capability remain unqualified.
+
+Next: proceed toward Roadmap Position 07 / Issue #956 (self-correction and runtime verification).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,327.918/5,550 seconds,
+leaving 222.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Grounded correctness, conflict handling & calibrated abstention — bounded positive, 2026-09-08
 
 **Grounded correctness, conflict handling, and calibrated abstention qualified and verified.** The mechanism addresses
