@@ -40,6 +40,13 @@ pub mod learned_reference;
 /// it is not an alpha capability or historical R4G1 certification claim.
 pub use uor_r4_core::native_geometric;
 
+pub mod native_capability_api;
+pub use native_capability_api::{
+    CapabilityTruthMatrix, CompletionRequest, CompletionResponse, IngestReceipt, NativeApiError,
+    NativeModel, NativeModelMetadata, NativeSession, SessionConfig, WasmModelRuntime,
+    WasmSessionHandle, BACKEND_IDENTIFIER, NATIVE_API_SCHEMA,
+};
+
 #[cfg(feature = "full")]
 pub mod capability_suite;
 #[cfg(feature = "full")]
