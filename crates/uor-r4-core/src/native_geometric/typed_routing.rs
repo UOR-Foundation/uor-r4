@@ -524,7 +524,12 @@ pub(super) fn score(
         context.provenance.as_ref(),
         work,
     );
-    let router = if context.literal_component && control == Control::LiteralRefinementDisabled {
+    let router = if context.literal_component && control == Control::InstructionBindingDisabled {
+        model
+            .instruction_binding
+            .as_ref()
+            .map_or(&block.router, |w| &w.previous_literals)
+    } else if context.literal_component && control == Control::LiteralRefinementDisabled {
         model
             .literal_routing_refinement
             .as_ref()

@@ -82,11 +82,17 @@ pub(super) fn permits(
     let (f, n) = features(values, action, operands, margin, context, work);
     work.admission_decisions += 1;
     work.routing.predictions += 1;
-    let pose = gate
-        .router
-        .encode(model, &f[..n], control, &mut work.routing);
-    let numeric = gate.router.score(model, pose, 0, &mut work.routing);
-    let lexical = gate.router.score(model, pose, 1, &mut work.routing);
+    let router = if control == Control::InstructionBindingDisabled {
+        model
+            .instruction_binding
+            .as_ref()
+            .map_or(&gate.router, |w| &w.previous_admission)
+    } else {
+        &gate.router
+    };
+    let pose = router.encode(model, &f[..n], control, &mut work.routing);
+    let numeric = router.score(model, pose, 0, &mut work.routing);
+    let lexical = router.score(model, pose, 1, &mut work.routing);
     work.routing.comparisons += 1;
     if lexical > numeric {
         work.admission_rejections += 1;

@@ -31,6 +31,9 @@ mod source_routing_training;
 mod source_span;
 mod source_span_training;
 pub use source_routing_training::SourceRoutingConfig;
+mod instruction_binding;
+mod instruction_binding_training;
+pub use instruction_binding_training::InstructionExample;
 mod lexical_emission;
 #[cfg(test)]
 mod lexical_emission_tests;
@@ -248,6 +251,7 @@ pub enum Control {
     SourceContextWindowOnly,
     JointAdmissionDisabled,
     LiteralRefinementDisabled,
+    InstructionBindingDisabled,
     LexicalEmissionDisabled,
     LexicalRecordReadDisabled,
     LexicalEmissionGeometryDisabled,
@@ -325,6 +329,7 @@ impl Feature {
             | Control::LexicalEmissionGeometryDisabled
             | Control::OperationTransitionDisabled
             | Control::LiteralRefinementDisabled
+            | Control::InstructionBindingDisabled
             | Control::MemoryDisabled
             | Control::ResponseStateDisabled
             | Control::ValuesDisabled
@@ -409,6 +414,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    instruction_binding: Option<instruction_binding::InstructionBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     lexical_emission: Option<lexical_emission::LexicalEmission>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     operation_transition: Option<operation_transition::OperationTransition>,
@@ -479,6 +486,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    instruction_binding: Option<instruction_binding::InstructionBinding>,
+    #[serde(default)]
     lexical_emission: Option<lexical_emission::LexicalEmission>,
     #[serde(default)]
     operation_transition: Option<operation_transition::OperationTransition>,
@@ -548,6 +557,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            instruction_binding: wire.instruction_binding,
             lexical_emission: wire.lexical_emission,
             operation_transition: wire.operation_transition,
             typed_role_refinement: wire.typed_role_refinement,

@@ -284,6 +284,155 @@ fn run(
             )?;
         }
     }
+    if let Some(witness) = document.get("instruction_binding").filter(|v| !v.is_null()) {
+        // Both successful loads above run the outer validator: it restores the
+        // two witnessed routers, checks the exact parent CID and recursively
+        // validates that parent before validating the current artifact identity.
+        // Reuse those loads instead of adding a redundant full reconstruction.
+        record(
+            checks,
+            "instruction_binding_parent_reconstruction_and_roundtrip",
+            witness
+                .get("parent_artifact")
+                .and_then(Value::as_str)
+                .is_some(),
+            json!({"parent_artifact":witness["parent_artifact"],"current_artifact":expected_cid,
+                "validated_by":["NativeModel::load_from_bytes","artifact_load_save_roundtrip"],
+                "boundary":"The loader reconstructs and validates the full frozen parent; this check does not extract a separate parent artifact."}),
+        )?;
+        // These are authored open development cases. Operand order is fixed to
+        // the retained parent's exact ordered source IDs [1, 0], independently
+        // of the response currently produced by either interface.
+        for (label, before, after, target) in [
+            (
+                "sentence_prefix",
+                "Explain in a sentence. ",
+                "",
+                "17 is 4 plus 13.\n",
+            ),
+            (
+                "sentence_suffix",
+                "",
+                " Explain in a sentence.",
+                "17 is 4 plus 13.\n",
+            ),
+            (
+                "rust_prefix",
+                "Write a Rust equality. ",
+                "",
+                "17 == 4 + 13\n",
+            ),
+            (
+                "rust_suffix",
+                "",
+                " Write a Rust equality.",
+                "17 == 4 + 13\n",
+            ),
+        ] {
+            let prompt = format!("User: suri has 13 coins. orin has 4 coins.\nUser: {before}What is the sum of suri's and orin's coins?{after}\nAssistant:");
+            let config = SessionConfig {
+                session_id: format!("instruction-binding-{label}"),
+                ..SessionConfig::default()
+            };
+            let mut direct = model.session(Control::Full)?;
+            let mut api = api_model.create_session(config.clone())?;
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut api,
+                &prompt,
+                target,
+                &format!("instruction_{label}_api_direct_parity"),
+                checks,
+            )?;
+            let checkpoint = api.export_state()?;
+            let mut imported = api_model.create_session(config)?;
+            imported.import_state(&checkpoint)?;
+            direct = model.restore_session(&direct.checkpoint()?)?;
+            record(
+                checks,
+                &format!("instruction_{label}_checkpoint_import"),
+                imported.identity_scope() == api.identity_scope(),
+                json!({"checkpoint_bytes":checkpoint.len(),"scope":imported.identity_scope(),"development_case":true}),
+            )?;
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut imported,
+                SUM_13,
+                "17.\n",
+                &format!("instruction_{label}_checkpoint_next_independent_sum"),
+                checks,
+            )?;
+        }
+        // Legal scalar mutations isolate identity boundaries from shape errors.
+        // Witness changes must fail at parent reconstruction, while a changed
+        // current router must preserve that parent and fail at current identity.
+        for (name, pointer, boundary) in [
+            (
+                "instruction_previous_literals_frozen_parent_rejected",
+                "/instruction_binding/previous_literals/biases/0",
+                "instruction binding frozen parent differs",
+            ),
+            (
+                "instruction_previous_admission_frozen_parent_rejected",
+                "/instruction_binding/previous_admission/biases/0",
+                "instruction binding frozen parent differs",
+            ),
+            (
+                "instruction_current_literals_identity_rejected",
+                "/typed_literals/router/biases/0",
+                "instruction binding identity differs",
+            ),
+        ] {
+            let mut changed = document.clone();
+            let bias = changed
+                .pointer_mut(pointer)
+                .ok_or("instruction router bias absent")?;
+            let old = bias
+                .as_i64()
+                .ok_or("instruction router bias is not an integer")?;
+            if !(-32..=32).contains(&old) {
+                return Err("instruction router bias lies outside documented range".into());
+            }
+            let new = if old == 32 { old - 1 } else { old + 1 };
+            *bias = json!(new);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+            )?;
+        }
+        let mut changed = document.clone();
+        let wrong_parent = format!("blake3:{}", "0".repeat(64));
+        changed["instruction_binding"]["parent_artifact"] = json!(wrong_parent);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "instruction_wrong_parent_cid_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("instruction binding frozen parent differs")),
+            json!({"old":witness["parent_artifact"],"new":wrong_parent,"expected_boundary":"instruction binding frozen parent differs","error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["instruction_binding"]["unexpected_witness_field"] = json!(true);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "instruction_unknown_witness_field_rejected",
+            rejected
+                && error.as_deref().is_some_and(|e| {
+                    e.contains("unknown field") && e.contains("unexpected_witness_field")
+                }),
+            json!({"expected_boundary":"witness deserialization denies unknown fields","error":error}),
+        )?;
+    } else {
+        checks.push(json!({"name":"instruction_binding_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no instruction_binding witness"}));
+    }
     if document
         .get("typed_role_refinement")
         .is_some_and(|v| !v.is_null())
