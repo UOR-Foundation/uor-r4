@@ -524,7 +524,17 @@ pub(super) fn score(
         context.provenance.as_ref(),
         work,
     );
-    let router = if context.literal_component && control == Control::InstructionBindingDisabled {
+    let router = if !context.literal_component
+        && context.depths.is_some()
+        && matches!(
+            control,
+            Control::MixedOperatorsDisabled | Control::MixedInitialDisabled
+        ) {
+        model
+            .mixed_operators
+            .as_ref()
+            .map_or(&block.router, |w| &w.previous_roles)
+    } else if context.literal_component && control == Control::InstructionBindingDisabled {
         model
             .instruction_binding
             .as_ref()

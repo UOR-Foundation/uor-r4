@@ -5,7 +5,7 @@ use super::source_routing_training::learn;
 use super::*;
 use std::{collections::BTreeSet, time::Instant};
 
-fn reachable(s: &Session, max_operations: u8) -> bool {
+pub(super) fn reachable(s: &Session, max_operations: u8) -> bool {
     s.values
         .as_ref()
         .zip(s.completion.as_ref())

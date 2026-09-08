@@ -1,0 +1,3439 @@
+{
+  "schema": "uor-r4.native-mixed-operators/1",
+  "at": "2026-09-08T21:37:17.195Z",
+  "status": "RETAIN_AT_BOUNDED_MIXED_ADD_COPY_EXACT_REFERENCE_SCOPE",
+  "source_base_commit": "66a4e1e01dab634e4890180290ecbeb965fb0e54",
+  "artifact": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-numeric/model.json",
+    "bytes": 12562902,
+    "sha256": "14c76d1375eadec57cb34e9fff98c43b52f16926495c8493bc530c2e077e0de5",
+    "cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+    "retained": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/mixed-operators/model.json",
+      "bytes": 12562902,
+      "sha256": "14c76d1375eadec57cb34e9fff98c43b52f16926495c8493bc530c2e077e0de5"
+    }
+  },
+  "source": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mixed_operators.rs",
+      "bytes": 16295,
+      "sha256": "ff60e67dc12716a82f00f7fb1b71ccced810d802cff8421559e2c86004fb0215",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mixed_operators.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mixed_initial_training.rs",
+      "bytes": 10671,
+      "sha256": "83cd1642f104937deea4eb5e62c00b0b8326e35e03fc6a11fe35a3add9ef9027",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mixed_initial_training.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/operation_transition.rs",
+      "bytes": 23837,
+      "sha256": "151c520649ae37a5dd5aa457e44fce8da337561b34484fa36bf3591b585dc293",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/operation_transition.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/typed_routing.rs",
+      "bytes": 18231,
+      "sha256": "d9d52df11c1b4ac27d55d121eb3815db53867e457fff2706833f315d425caeea",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/typed_routing.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/instruction_binding_training.rs",
+      "bytes": 12861,
+      "sha256": "ea667a8a40eae5463d686b6fc6cf012c86ae4076fe2e6add661b9e4be0a90c26",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/instruction_binding_training.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 28338,
+      "sha256": "a35cfe5023d34ded4ee9d85d9b9888f18606445f9f37e09fbbf7dc557486aa28",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 61119,
+      "sha256": "b9d325fe7143abecb8b446f5ae382273284a97893db1e3d8ba9c057180ed5d03",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_mixed_operators.rs",
+      "bytes": 27318,
+      "sha256": "695e5688deb0429c916f723be6bdb6a9e158907b1b97f66f930311ccc55084c1",
+      "repository_path": "crates/uor-r4-core/examples/native_mixed_operators.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/Cargo.lock",
+      "bytes": 58336,
+      "sha256": "7337e6b47e5f7a8d4589164cb6ad23637e3d1b5413b462716cfdc1ab72d2558c",
+      "repository_path": "Cargo.lock"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/rust-toolchain.toml",
+      "bytes": 553,
+      "sha256": "0a4b55522951f5475fcdd9ebcbfbbe650bfac272e8baff599585f0e8a120d5ee",
+      "repository_path": "rust-toolchain.toml"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mixed_operator_tests.rs",
+      "bytes": 10301,
+      "sha256": "4ce2adf49e652853c3a502378cbe5e620ff6676ae0bcde924c6ec20614fa6943",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mixed_operator_tests.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/composed_output_training.rs",
+      "bytes": 7532,
+      "sha256": "c858cf803615257adba0852d1ce21756c870c98e253565a7a961c4c3528f4c60",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/composed_output_training.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing.rs",
+      "bytes": 7145,
+      "sha256": "21d301a9547dd89b299029101882b8914a9a4879607e72c00b9b66fad062189d",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 30709,
+      "sha256": "81265c2802a0b7cb96038a61bad8acd603e3addb05f0f24af28e566199833f9d",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/lexical_emission.rs",
+      "bytes": 26916,
+      "sha256": "98f4ec06bc6f58f8039990f9854df107fb9d3d0cad63e3dbc2291adb0a8b197e",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/lexical_emission.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/runtime.rs",
+      "bytes": 37043,
+      "sha256": "b3d362d7fbba1cac20e2a482f6f412983cee1a896db08e44621b58cb232fc091",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/runtime.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 119614,
+      "sha256": "a85c91e9dab1143e50a21afa05eb6bef03e1a0c969d9c76694c2a951a71af891",
+      "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "bytes": 33640,
+      "sha256": "1bc54c793e5611cd8eecf7e8b448c1a0001eef327dd8fa18a0fef33cdd9c10e6",
+      "repository_path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs"
+    }
+  ],
+  "fit": {
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-numeric/fit.json",
+      "bytes": 44790307,
+      "sha256": "eeb02f4e8f53093fd713ede7dd6b52d53ad964d502801dc83ac67dee08ab2ce2"
+    },
+    "initial": {
+      "history_boundaries_preserved": 436,
+      "history_model": "frozen parent",
+      "new_documents": 12,
+      "non_role_preservation_skipped": 1204,
+      "parent": "blake3:866cb92de4ad5c130da811d3f2fe8828aed1fe9b2b39b9c9b3c7ad3dbf7dee62",
+      "preservation_contexts": 447,
+      "preservation_prompt_manifest": "canonical serde_json Vec<Document> in original order, binding every ID and text",
+      "preservation_prompts": 745,
+      "scope": "Offline exact initial Copy/Add operand IDs; frozen-parent ordered derived-role preference preservation including NoOperation; literal routing and admission remain frozen; unchanged serving feature law",
+      "selection": {
+        "feature_expansion_frames": 12,
+        "features_added": 12,
+        "fit": {
+          "accepted": [
+            10,
+            0,
+            0
+          ],
+          "final_correct": 41,
+          "final_hinge": 0,
+          "initial_correct": 39,
+          "initial_hinge": 14,
+          "proposals": 266247,
+          "stopped_at_time_limit": false
+        },
+        "presented_frames": 436,
+        "scope": "Exact ordered action/operand-ID targets for new prompts; original ordered router preference targets for preservation",
+        "unique_frames": 41
+      }
+    },
+    "transition": {
+      "accepted": [
+        17,
+        2,
+        30
+      ],
+      "final_correct": 70,
+      "final_hinge": 0,
+      "initial_correct": 67,
+      "initial_hinge": 82,
+      "proposals": 117872,
+      "stopped_at_time_limit": false
+    },
+    "presented": 505,
+    "unique": 70,
+    "rejection_margin_frames": 50,
+    "rejection_objective": "correct operation > Stop > incorrect substitutes; remove all labelled operation candidates while retaining state and feature values",
+    "skipped_ineligible_boundaries": 54
+  },
+  "artifact_comparison": {
+    "at": "2026-09-08T21:24:00.244Z",
+    "parent": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/composed-output/model.json",
+      "bytes": 12365057,
+      "sha256": "3a951eb5cf88af0982bcafac3ac0a00ac1340dca3078413a95424fb749db38f0",
+      "cid": "blake3:866cb92de4ad5c130da811d3f2fe8828aed1fe9b2b39b9c9b3c7ad3dbf7dee62"
+    },
+    "candidate": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-numeric/model.json",
+      "bytes": 12562902,
+      "sha256": "14c76d1375eadec57cb34e9fff98c43b52f16926495c8493bc530c2e077e0de5",
+      "cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59"
+    },
+    "changed_top_level_fields": [
+      "mixed_operators",
+      "operation_transition",
+      "typed_roles",
+      "artifact_cid",
+      "uor_model_address"
+    ],
+    "previous_operation_and_roles_exact": true,
+    "other_components_exact": true,
+    "geometry_exact": true,
+    "unchanged_max_operations": true,
+    "role_codes_before": 667,
+    "role_codes_after": 679,
+    "transition_codes_before": 270,
+    "transition_codes_after": 286,
+    "dictionary_before": 21,
+    "dictionary_after": 24,
+    "scope": "Structural comparison; native loader/API independently checks frozen parent and current identities."
+  },
+  "construction": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-numeric/result.json",
+    "bytes": 93517,
+    "sha256": "6287cd6a9ee7182c6f45804b565de0516f315a918e74eb9409dff6f8abb308db",
+    "exact": 12,
+    "total": 12
+  },
+  "reports": {
+    "mixed-open": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-open/result.json",
+      "bytes": 62467,
+      "sha256": "5094eee3bcddbba6bd35fb649283b0e6a33dc4e4f8188326b52d36b23e66aac1",
+      "exact": 8,
+      "total": 8,
+      "scope": "Open development or previously opened preservation"
+    },
+    "mixed-stress": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-stress/result.json",
+      "bytes": 62515,
+      "sha256": "7b87d7a71ffb6458cba0af913b10f4c86f3d4ce630e24020f1a6e4ca8407edf6",
+      "exact": 8,
+      "total": 8,
+      "scope": "Open development or previously opened preservation"
+    },
+    "mixed-fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-fresh/result.json",
+      "bytes": 63813,
+      "sha256": "47b57be9c8986ef79247534e72d2c27829480b8e3801eb8f323821cb5c943f93",
+      "exact": 8,
+      "total": 8,
+      "scope": "Post-selection numeric and name transfer"
+    },
+    "open": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/open/result.json",
+      "bytes": 79074,
+      "sha256": "37e518c26273d57d0f25b4daa7cb03bc533c4ba40b72e5252f5813d16e18019c",
+      "exact": 28,
+      "total": 28,
+      "scope": "Open development or previously opened preservation"
+    },
+    "stress": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/stress/result.json",
+      "bytes": 79410,
+      "sha256": "85f0b2612bc0efc97d78dd524d15d9879d425ef5eb6d1a414d19decfd623113a",
+      "exact": 28,
+      "total": 28,
+      "scope": "Open development or previously opened preservation"
+    },
+    "fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/fresh/result.json",
+      "bytes": 79906,
+      "sha256": "87776df021869cebc19efd4ee5d0eab7d98445fbd0834e2b082df723ce14c371",
+      "exact": 28,
+      "total": 28,
+      "scope": "Open development or previously opened preservation"
+    },
+    "preservation-replay": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/preservation-replay/result.json",
+      "bytes": 13330875,
+      "sha256": "aa9032d607bed1addab08a4f2bf7c54fcf4718d56323705813dbed07e50859d2",
+      "exact": 254,
+      "total": 254,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-operations": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-operations/result.json",
+      "bytes": 1569998,
+      "sha256": "9ccef4000188a80e60fe613e7ba83e486ac8f1c3e928314283e61b4bdad6a307",
+      "exact": 24,
+      "total": 24,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-current-evaluate": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-evaluate/result.json",
+      "bytes": 10744736,
+      "sha256": "b5dce2ae660fcdd6c39de427ed13e57e651002a77a6c3ea57232f10b81ae6a67",
+      "exact": 48,
+      "total": 48,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-current-stress": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-stress/result.json",
+      "bytes": 4054276,
+      "sha256": "e6c666c491d7c6ea70e90febda97ef20f84a0b6eceabb2dadd558352ba943f6a",
+      "exact": 16,
+      "total": 16,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-instruction-evaluate": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-evaluate/result.json",
+      "bytes": 908847,
+      "sha256": "5bd91fba8301571bcf3b4e5995f42b94b67cc37094bae425fde3b96df7ebe895",
+      "exact": 24,
+      "total": 24,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-instruction-stress": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-stress/result.json",
+      "bytes": 908652,
+      "sha256": "ebf0265985068d08343d5345848a390c3761a5fca646976fed40277825196e43",
+      "exact": 24,
+      "total": 24,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-instruction-fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-fresh/result.json",
+      "bytes": 909203,
+      "sha256": "455c2905b1629a7a6d2aeeb27067e7bac00f4e1dcf0c46e0ca4e8c3ffba9b0c0",
+      "exact": 24,
+      "total": 24,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-lexical-fit-variable": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-fit-variable/result.json",
+      "bytes": 681202,
+      "sha256": "964221b067a159d7d680c20e27347ca9d64a53f478010e9acf4c48155c5d5901",
+      "exact": 18,
+      "total": 18,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-lexical-open-variable": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-open-variable/result.json",
+      "bytes": 681067,
+      "sha256": "66569824b4c30213d8b257d96e2eb885737ea6a3b0301cae83a89a7a9fe2c232",
+      "exact": 18,
+      "total": 18,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-lexical-stress-variable": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-stress-variable/result.json",
+      "bytes": 454078,
+      "sha256": "bdb335af321d7859eb7ec44706f7b29bca7a59e78dd0915b9a4f3fd5bdaed264",
+      "exact": 12,
+      "total": 12,
+      "scope": "Open development or previously opened preservation"
+    },
+    "prior-lexical-fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-fresh/result.json",
+      "bytes": 908406,
+      "sha256": "95b69f29817f628d1a3c37343088a3a1e2150a1e238aaa33f0a95e06efe51d90",
+      "exact": 24,
+      "total": 24,
+      "scope": "Open development or previously opened preservation"
+    }
+  },
+  "controls": {
+    "mixed-open/mixed-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-open/mixed-disabled.json",
+      "bytes": 36963,
+      "sha256": "6800d9489db841f29e91135bbc2b7e64a5e770cafb65317ef8ad1f5e3fb4390a",
+      "exact": 4,
+      "total": 8
+    },
+    "mixed-open/initial-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-open/initial-disabled.json",
+      "bytes": 38269,
+      "sha256": "76d11084714057b10c3abdc1e84ea244a13d0e6248ad2de58b0c75430e3b2cf0",
+      "exact": 4,
+      "total": 8
+    },
+    "mixed-open/transition-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-open/transition-disabled.json",
+      "bytes": 36948,
+      "sha256": "bd2cc76d17535e432bd80516862aa0bd75c76edec2f64ae6c277cb7baa418c17",
+      "exact": 4,
+      "total": 8
+    },
+    "mixed-open/operation-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-open/operation-disabled.json",
+      "bytes": 34374,
+      "sha256": "c16fb33a690bdbd038431d1c9e1641295ed6cc40138623fa6d28b4e1f1100f81",
+      "exact": 2,
+      "total": 8
+    },
+    "mixed-open/intermediate-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-open/intermediate-disabled.json",
+      "bytes": 35681,
+      "sha256": "6b60e5a570466eb568b60571c5d374d41adbe885dccaf0e76666157f64e4335b",
+      "exact": 4,
+      "total": 8
+    },
+    "mixed-fresh/mixed-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-fresh/mixed-disabled.json",
+      "bytes": 37827,
+      "sha256": "bbed3de4bc29ba0913a3c92ba205bd07d822a141360cd71b61958f16607e77a1",
+      "exact": 4,
+      "total": 8
+    },
+    "mixed-fresh/initial-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-fresh/initial-disabled.json",
+      "bytes": 39197,
+      "sha256": "fa7b732a9454e5fa215c98a9f7fce8dc1bcd0907d309682ba4f66452ed3ea183",
+      "exact": 4,
+      "total": 8
+    },
+    "mixed-fresh/transition-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-fresh/transition-disabled.json",
+      "bytes": 37812,
+      "sha256": "44bf446732d89fe618b79065d88cba777f898385db562641940f3a8838fcb359",
+      "exact": 4,
+      "total": 8
+    },
+    "mixed-fresh/operation-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-fresh/operation-disabled.json",
+      "bytes": 35110,
+      "sha256": "f31febc191e38661b8859376a9e3b6a78798dc91f91abed36d6d60b4c220e354",
+      "exact": 2,
+      "total": 8
+    },
+    "mixed-fresh/intermediate-disabled": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/mixed-fresh/intermediate-disabled.json",
+      "bytes": 36481,
+      "sha256": "698056f0cb7269536d95b7ef820ebef305d38e77d4003f04e3145f5e63f28ad7",
+      "exact": 4,
+      "total": 8
+    }
+  },
+  "preservation": {
+    "artifact": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+    "preserved": true,
+    "scope": "Previously opened retained populations; no new held-out evaluation"
+  },
+  "preserved_comparison": {
+    "at": "2026-09-08T21:34:22.718Z",
+    "scope": "Actual bytes, EOS, correctness, action/value/record/read identities and applicable dependency fields; timings/scores excluded. Already-incorrect interventions remain negative evidence.",
+    "reports": [
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-operations/result.json",
+          "sha256": "a922e06d40070e45e85d01674008262ed138f58eeafbf496a93050ef1c0e293a"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-operations/result.json",
+          "sha256": "9ccef4000188a80e60fe613e7ba83e486ac8f1c3e928314283e61b4bdad6a307"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-operations/disabled.json",
+          "sha256": "d0057fe1d7f225c12882463f927ec6339c4e20071ac0ea15055a2e071a359350"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-operations/disabled.json",
+          "sha256": "dd7bca0d3f656309b6fde30d54bb7f5736b413b52e19fa50de54a051af9eded5"
+        },
+        "total": 24,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-operations/intermediate-disabled.json",
+          "sha256": "45b72202f05c554cddd4d3287dfb2fea3c203575781a92fccdaee829b9f37675"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-operations/intermediate-disabled.json",
+          "sha256": "6569aacdcf3715c3f820b72b949ab1d3f37ec8075d9d8f2c235dce3d9cf53a5d"
+        },
+        "total": 24,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-lexical-controls/result.json",
+          "sha256": "c4ac5c09569ccc80ea35998edd10c36512a95bd97832af49e6ae4f52a84f8e0e"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/result.json",
+          "sha256": "fcc43d68cad01a16442c85a242b8cbf614f023e07e5dce45a688ffb1240235ba"
+        },
+        "total": 18,
+        "exact": 18,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-lexical-controls/disabled.json",
+          "sha256": "a3e3cc4ce8a2afb6631f81c7c1068235037573b8349898726d79bb969b18d81d"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/disabled.json",
+          "sha256": "9a65c5779f141ca8a4b522ad69ab3fbd0fd7b710028f09dc21acca1fb0602fb6"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-lexical-controls/read-disabled.json",
+          "sha256": "1e3c89ba6b560b287fe87674551dac6292d96791f5dc8d7c0f1c1b5d86b735ae"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/read-disabled.json",
+          "sha256": "405d480e63a0e548598ac20c6bda23d631546a1f4c9139e9571059e8f03aa93f"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-lexical-controls/geometry-disabled.json",
+          "sha256": "a3e3cc4ce8a2afb6631f81c7c1068235037573b8349898726d79bb969b18d81d"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-lexical-controls/geometry-disabled.json",
+          "sha256": "9a65c5779f141ca8a4b522ad69ab3fbd0fd7b710028f09dc21acca1fb0602fb6"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-current-evaluate/result.json",
+          "sha256": "45220f5a41330956d837aba86875b935762f4b114f83145b57a52825cdd03ca0"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-evaluate/result.json",
+          "sha256": "b5dce2ae660fcdd6c39de427ed13e57e651002a77a6c3ea57232f10b81ae6a67"
+        },
+        "total": 48,
+        "exact": 48,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-current-controls/result.json",
+          "sha256": "326e11572f3509dea4d477397f4b20c7c5ea6d6cbbc0cdb4ba40378f87b45a85"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-controls/result.json",
+          "sha256": "7446240ea665be44d3ea5b95dd7874c43ebbb3bc4c656cf9d0334fe7d8bdb409"
+        },
+        "total": 48,
+        "exact": 32,
+        "all_actual_outputs_and_decision_identities_equal": false,
+        "changed_previously_incorrect_rows": 8,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/prior-current-stress/result.json",
+          "sha256": "cf4e724e99365f28434aa42efe8debe0416450dd260f263a922d50b90a0abff5"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-current-stress/result.json",
+          "sha256": "e6c666c491d7c6ea70e90febda97ef20f84a0b6eceabb2dadd558352ba943f6a"
+        },
+        "total": 16,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/open-final/result.json",
+          "sha256": "49fe56565b8f57fd72d711de19d0bb0b9ad79a3a515c13c929fd6fc990db4e8e"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-evaluate/result.json",
+          "sha256": "5bd91fba8301571bcf3b4e5995f42b94b67cc37094bae425fde3b96df7ebe895"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/stress-final/result.json",
+          "sha256": "82351f1361856ae852762153b3bb5a2f4f922c71dd7e981aace9b39a9ed98fea"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-stress/result.json",
+          "sha256": "ebf0265985068d08343d5345848a390c3761a5fca646976fed40277825196e43"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/fresh/result.json",
+          "sha256": "629b914a5b50fd3879f1af4ad97e7bc27881b9faa3c160e3143d6bd64c0a0d96"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-fresh/result.json",
+          "sha256": "455c2905b1629a7a6d2aeeb27067e7bac00f4e1dcf0c46e0ca4e8c3ffba9b0c0"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-binding/open-final/disabled.json",
+          "sha256": "fb0fd1b0d71571532efbb2f3b4e09010ca92dc8b2dc2a54ac2034b2031301ce3"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/final-numeric/prior-instruction-evaluate/disabled.json",
+          "sha256": "fba4f4cf5f146a2e0ccd35da37a35790f382ab07bc6c7ccea7d58d361e57d979"
+        },
+        "total": 24,
+        "exact": 8,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      }
+    ],
+    "differences": [
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-0-3",
+        "parent": {
+          "id": "current-query-open-0-3",
+          "text": "61.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 61,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 3
+              },
+              {
+                "id": 5,
+                "value": 58
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 57,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 53
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-0-3",
+          "text": "62.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 62,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 58
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 57,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 53
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-1-3",
+        "parent": {
+          "id": "current-query-open-1-3",
+          "text": "63.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 59
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 58,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 54
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-1-3",
+          "text": "63.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 59
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 58,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 54
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-2-3",
+        "parent": {
+          "id": "current-query-open-2-3",
+          "text": "65.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 65,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 5
+              },
+              {
+                "id": 5,
+                "value": 60
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 59,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 55
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-2-3",
+          "text": "64.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 64,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 60
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 59,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 55
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-3-3",
+        "parent": {
+          "id": "current-query-open-3-3",
+          "text": "67.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 67,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 6
+              },
+              {
+                "id": 5,
+                "value": 61
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 60,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 56
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-3-3",
+          "text": "65.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 65,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 61
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 60,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 56
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-4-3",
+        "parent": {
+          "id": "current-query-open-4-3",
+          "text": "69.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 69,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 7
+              },
+              {
+                "id": 5,
+                "value": 62
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 61,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 57
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-4-3",
+          "text": "66.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 66,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 62
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 61,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 57
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-5-3",
+        "parent": {
+          "id": "current-query-open-5-3",
+          "text": "71.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 71,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 8
+              },
+              {
+                "id": 5,
+                "value": 63
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 62,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 58
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-5-3",
+          "text": "67.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 67,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 63
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 62,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 58
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-6-3",
+        "parent": {
+          "id": "current-query-open-6-3",
+          "text": "73.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 73,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 9
+              },
+              {
+                "id": 5,
+                "value": 64
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 59
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-6-3",
+          "text": "68.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 68,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 64
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 63,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 59
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      },
+      {
+        "report": "prior-current-controls/result.json",
+        "id": "current-query-open-7-3",
+        "parent": {
+          "id": "current-query-open-7-3",
+          "text": "68.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 68,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 6,
+                "value": 3
+              },
+              {
+                "id": 5,
+                "value": 65
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 64,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 60
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "candidate": {
+          "id": "current-query-open-7-3",
+          "text": "69.\n",
+          "eos": true,
+          "exact": false,
+          "decision": {
+            "action": "add",
+            "value": 69,
+            "write_id": 7,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 5,
+                "value": 65
+              }
+            ]
+          },
+          "first_decision": {
+            "action": "add",
+            "value": 64,
+            "write_id": 2,
+            "operands": [
+              {
+                "id": 1,
+                "value": 4
+              },
+              {
+                "id": 0,
+                "value": 60
+              }
+            ]
+          },
+          "used_intermediate": false
+        },
+        "status": "BOTH_INCORRECT_CONTROL_OUTPUT_CHANGED"
+      }
+    ]
+  },
+  "exclusion_open": {
+    "at": "2026-09-08T21:34:22.769Z",
+    "artifact": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+    "total": 8,
+    "qualified": 8,
+    "scope": "Opened development cases under intervention-trained candidate exclusion; no independent robustness claim",
+    "rows": [
+      {
+        "id": "mixed-evaluate-0/add-only",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              6,
+              43
+            ],
+            "value": 49
+          }
+        ],
+        "actual_bytes": [
+          52,
+          57,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-evaluate-0/add-copy-latest",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              6,
+              43
+            ],
+            "value": 49
+          }
+        ],
+        "actual_bytes": [
+          52,
+          57,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-evaluate-0/add-copy-original",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              6,
+              43
+            ],
+            "value": 49
+          },
+          {
+            "action": "copy",
+            "id": 5,
+            "operand_ids": [
+              2,
+              2
+            ],
+            "operand_values": [
+              43,
+              43
+            ],
+            "value": 43
+          }
+        ],
+        "actual_bytes": [
+          52,
+          57,
+          46,
+          10,
+          52,
+          51,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-evaluate-0/add-add-control",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              6,
+              43
+            ],
+            "value": 49
+          }
+        ],
+        "actual_bytes": [
+          52,
+          57,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-evaluate-1/add-only",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              7,
+              45
+            ],
+            "value": 52
+          }
+        ],
+        "actual_bytes": [
+          53,
+          50,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-evaluate-1/add-copy-latest",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              7,
+              45
+            ],
+            "value": 52
+          }
+        ],
+        "actual_bytes": [
+          53,
+          50,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-evaluate-1/add-copy-original",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              7,
+              45
+            ],
+            "value": 52
+          },
+          {
+            "action": "copy",
+            "id": 5,
+            "operand_ids": [
+              2,
+              2
+            ],
+            "operand_values": [
+              45,
+              45
+            ],
+            "value": 45
+          }
+        ],
+        "actual_bytes": [
+          53,
+          50,
+          46,
+          10,
+          52,
+          53,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-evaluate-1/add-add-control",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              7,
+              45
+            ],
+            "value": 52
+          }
+        ],
+        "actual_bytes": [
+          53,
+          50,
+          46,
+          10
+        ]
+      }
+    ]
+  },
+  "exclusion_fresh": {
+    "at": "2026-09-08T21:36:07.292Z",
+    "artifact": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+    "total": 8,
+    "qualified": 8,
+    "scope": "Post-selection numeric/name transfer under intervention-trained candidate exclusion; not memory erasure or wording transfer",
+    "rows": [
+      {
+        "id": "mixed-fresh-0/add-only",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              10,
+              133
+            ],
+            "value": 143
+          }
+        ],
+        "actual_bytes": [
+          49,
+          52,
+          51,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-fresh-0/add-copy-latest",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              10,
+              133
+            ],
+            "value": 143
+          }
+        ],
+        "actual_bytes": [
+          49,
+          52,
+          51,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-fresh-0/add-copy-original",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              10,
+              133
+            ],
+            "value": 143
+          },
+          {
+            "action": "copy",
+            "id": 5,
+            "operand_ids": [
+              2,
+              2
+            ],
+            "operand_values": [
+              133,
+              133
+            ],
+            "value": 133
+          }
+        ],
+        "actual_bytes": [
+          49,
+          52,
+          51,
+          46,
+          10,
+          49,
+          51,
+          51,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-fresh-0/add-add-control",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              10,
+              133
+            ],
+            "value": 143
+          }
+        ],
+        "actual_bytes": [
+          49,
+          52,
+          51,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-fresh-1/add-only",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              11,
+              -35
+            ],
+            "value": -24
+          }
+        ],
+        "actual_bytes": [
+          45,
+          50,
+          52,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-fresh-1/add-copy-latest",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              11,
+              -35
+            ],
+            "value": -24
+          }
+        ],
+        "actual_bytes": [
+          45,
+          50,
+          52,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-fresh-1/add-copy-original",
+        "needs_latest": false,
+        "stops_without_substitution": false,
+        "available_operation_preserved": true,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              11,
+              -35
+            ],
+            "value": -24
+          },
+          {
+            "action": "copy",
+            "id": 5,
+            "operand_ids": [
+              2,
+              2
+            ],
+            "operand_values": [
+              -35,
+              -35
+            ],
+            "value": -35
+          }
+        ],
+        "actual_bytes": [
+          45,
+          50,
+          52,
+          46,
+          10,
+          45,
+          51,
+          53,
+          46,
+          10
+        ]
+      },
+      {
+        "id": "mixed-fresh-1/add-add-control",
+        "needs_latest": true,
+        "stops_without_substitution": true,
+        "available_operation_preserved": false,
+        "writes": [
+          {
+            "action": "add",
+            "id": 4,
+            "operand_ids": [
+              3,
+              2
+            ],
+            "operand_values": [
+              11,
+              -35
+            ],
+            "value": -24
+          }
+        ],
+        "actual_bytes": [
+          45,
+          50,
+          52,
+          46,
+          10
+        ]
+      }
+    ]
+  },
+  "selection": {
+    "at": "2026-09-08T21:35:43.423Z",
+    "artifact": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+    "sha256": "14c76d1375eadec57cb34e9fff98c43b52f16926495c8493bc530c2e077e0de5",
+    "status": "SELECTED_BEFORE_FRESH_NUMERIC_NAME_TRANSFER",
+    "basis": "12 construction,8 open,8 stress, all qualified preserved outputs and historical controls; exact ID exclusion; API65, focused5+6+6 and actual allocation/checkpoint paths pass",
+    "negative_control_scope": "Eight already-incorrect current-query removal outputs changed; preserved as failed interventions, not arbitrary wrong-value training targets.",
+    "fresh_unique_cases": 8,
+    "fresh_execution_variants": 48,
+    "training_after_selection": false
+  },
+  "api": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/api.json",
+    "bytes": 39099,
+    "sha256": "30b63cd544ba3b7b1ec04893d497d8cbd45f5e49d1a9ce9e6218b4a6dfa4d3be",
+    "report": {
+      "checks": [
+        {
+          "evidence": {
+            "actual": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+            "expected": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59"
+          },
+          "name": "expected_artifact_identity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "input_bytes": 12562902,
+            "serialized_bytes": 12562902
+          },
+          "name": "artifact_serialization_byte_exact",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "restored_cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59"
+          },
+          "name": "artifact_load_save_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 679,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": " quiet river.\n",
+              "token_count": 14
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                32,
+                113,
+                117,
+                105,
+                101,
+                116,
+                32,
+                114,
+                105,
+                118,
+                101,
+                114,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": " quiet river.\n",
+              "token_count": 14
+            },
+            "prompt": "the report says quiet river holds selra. Where is selra? Answer:",
+            "target": " quiet river.\n"
+          },
+          "name": "quiet_river_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 488,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "first_turn_sum_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 770,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "18.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                56,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "18.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "18.\n"
+          },
+          "name": "second_turn_new_inputs_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 221330,
+            "scope": {
+              "project_id": "recovery-project",
+              "session_id": "recovery-check",
+              "user_id": "recovery-user"
+            }
+          },
+          "name": "checkpoint_same_identity_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "original": {
+              "elapsed_us": 898,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "restored": {
+              "elapsed_us": 852,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            }
+          },
+          "name": "checkpoint_next_response_byte_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "Identity scope isolation violation: checkpoint scope differs from target session",
+            "target_scope": {
+              "project_id": "recovery-project",
+              "session_id": "recovery-check",
+              "user_id": "different-user"
+            }
+          },
+          "name": "checkpoint_cross_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "chunked": {
+              "elapsed_us": 535,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "chunks": [
+              "User: suri has 1",
+              "3 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:"
+            ],
+            "joined": {
+              "elapsed_us": 502,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prefill_checkpoint_bytes": 72884
+          },
+          "name": "chunked_prefill_checkpoint_preserves_literal",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 493,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "transition_history_api",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 1181,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "20.\n23.\n",
+              "token_count": 8
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                50,
+                48,
+                46,
+                10,
+                50,
+                51,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "20.\n23.\n",
+              "token_count": 8
+            },
+            "prompt": "User: There are 3 extra coins. Add the extra coins to the original total. Again.\nAssistant:",
+            "target": "20.\n23.\n"
+          },
+          "name": "same_query_add_add_api_after_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 2343,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17 is 4 plus 13.\n",
+              "token_count": 17
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                32,
+                105,
+                115,
+                32,
+                52,
+                32,
+                112,
+                108,
+                117,
+                115,
+                32,
+                49,
+                51,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17 is 4 plus 13.\n",
+              "token_count": 17
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: sentence. What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17 is 4 plus 13.\n"
+          },
+          "name": "lexical_sentence_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 165024,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "lexical-emission-sentence",
+              "user_id": "default-user"
+            }
+          },
+          "name": "lexical_sentence_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 810,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "lexical_sentence_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 1575,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17 == 4 + 13\n",
+              "token_count": 13
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                32,
+                61,
+                61,
+                32,
+                52,
+                32,
+                43,
+                32,
+                49,
+                51,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17 == 4 + 13\n",
+              "token_count": 13
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: Rust. What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17 == 4 + 13\n"
+          },
+          "name": "lexical_rust_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 164678,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "lexical-emission-rust",
+              "user_id": "default-user"
+            }
+          },
+          "name": "lexical_rust_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 815,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "lexical_rust_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "boundary": "The loader reconstructs and validates the full frozen parent; this check does not extract a separate parent artifact.",
+            "current_artifact": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+            "parent_artifact": "blake3:0f0f5fe4d58d65fb7769ac73fe839973a3eb579cf65f327fe8a2e9a6ecd0468b",
+            "validated_by": [
+              "NativeModel::load_from_bytes",
+              "artifact_load_save_roundtrip"
+            ]
+          },
+          "name": "instruction_binding_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 2318,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17 is 4 plus 13.\n",
+              "token_count": 17
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                32,
+                105,
+                115,
+                32,
+                52,
+                32,
+                112,
+                108,
+                117,
+                115,
+                32,
+                49,
+                51,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17 is 4 plus 13.\n",
+              "token_count": 17
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: Explain in a sentence. What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17 is 4 plus 13.\n"
+          },
+          "name": "instruction_sentence_prefix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 173850,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "instruction-binding-sentence_prefix",
+              "user_id": "default-user"
+            }
+          },
+          "name": "instruction_sentence_prefix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 690,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "instruction_sentence_prefix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 2393,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17 is 4 plus 13.\n",
+              "token_count": 17
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                32,
+                105,
+                115,
+                32,
+                52,
+                32,
+                112,
+                108,
+                117,
+                115,
+                32,
+                49,
+                51,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17 is 4 plus 13.\n",
+              "token_count": 17
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins? Explain in a sentence.\nAssistant:",
+            "target": "17 is 4 plus 13.\n"
+          },
+          "name": "instruction_sentence_suffix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 173785,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "instruction-binding-sentence_suffix",
+              "user_id": "default-user"
+            }
+          },
+          "name": "instruction_sentence_suffix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 710,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "instruction_sentence_suffix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 1566,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17 == 4 + 13\n",
+              "token_count": 13
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                32,
+                61,
+                61,
+                32,
+                52,
+                32,
+                43,
+                32,
+                49,
+                51,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17 == 4 + 13\n",
+              "token_count": 13
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: Write a Rust equality. What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17 == 4 + 13\n"
+          },
+          "name": "instruction_rust_prefix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 165114,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "instruction-binding-rust_prefix",
+              "user_id": "default-user"
+            }
+          },
+          "name": "instruction_rust_prefix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 690,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "instruction_rust_prefix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 1582,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17 == 4 + 13\n",
+              "token_count": 13
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                32,
+                61,
+                61,
+                32,
+                52,
+                32,
+                43,
+                32,
+                49,
+                51,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17 == 4 + 13\n",
+              "token_count": 13
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins? Write a Rust equality.\nAssistant:",
+            "target": "17 == 4 + 13\n"
+          },
+          "name": "instruction_rust_suffix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 164880,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "instruction-binding-rust_suffix",
+              "user_id": "default-user"
+            }
+          },
+          "name": "instruction_rust_suffix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 732,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "instruction_rust_suffix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "field": "/instruction_binding/previous_literals/biases/0",
+            "new": 4,
+            "old": 3
+          },
+          "name": "instruction_previous_literals_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "field": "/instruction_binding/previous_admission/biases/0",
+            "new": 4,
+            "old": 3
+          },
+          "name": "instruction_previous_admission_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "field": "/typed_literals/router/biases/0",
+            "new": 3,
+            "old": 2
+          },
+          "name": "instruction_current_literals_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "new": "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+            "old": "blake3:0f0f5fe4d58d65fb7769ac73fe839973a3eb579cf65f327fe8a2e9a6ecd0468b"
+          },
+          "name": "instruction_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "unknown field `unexpected_witness_field`, expected one of `parent_artifact`, `previous_literals`, `previous_admission` at line 1 column 624464",
+            "expected_boundary": "witness deserialization denies unknown fields"
+          },
+          "name": "instruction_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 616,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "composed_sentence_actual_history",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 5119,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "20 is 3 plus 17.\n23 is 3 plus 20.\n",
+              "token_count": 34
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                50,
+                48,
+                32,
+                105,
+                115,
+                32,
+                51,
+                32,
+                112,
+                108,
+                117,
+                115,
+                32,
+                49,
+                55,
+                46,
+                10,
+                50,
+                51,
+                32,
+                105,
+                115,
+                32,
+                51,
+                32,
+                112,
+                108,
+                117,
+                115,
+                32,
+                50,
+                48,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "20 is 3 plus 17.\n23 is 3 plus 20.\n",
+              "token_count": 34
+            },
+            "prompt": "User: There are 3 extra coins. Add the extra coins to the original total. Again. Explain in a sentence.\nAssistant:",
+            "target": "20 is 3 plus 17.\n23 is 3 plus 20.\n"
+          },
+          "name": "composed_sentence_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 223140,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "composed-output-sentence",
+              "user_id": "default-user"
+            }
+          },
+          "name": "composed_sentence_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 869,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "composed_sentence_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 490,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "composed_rust_actual_history",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 3375,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "20 == 3 + 17\n23 == 3 + 20\n",
+              "token_count": 26
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                50,
+                48,
+                32,
+                61,
+                61,
+                32,
+                51,
+                32,
+                43,
+                32,
+                49,
+                55,
+                10,
+                50,
+                51,
+                32,
+                61,
+                61,
+                32,
+                51,
+                32,
+                43,
+                32,
+                50,
+                48,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "20 == 3 + 17\n23 == 3 + 20\n",
+              "token_count": 26
+            },
+            "prompt": "User: There are 3 extra coins. Add the extra coins to the original total. Again. Write a Rust equality.\nAssistant:",
+            "target": "20 == 3 + 17\n23 == 3 + 20\n"
+          },
+          "name": "composed_rust_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 214123,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "composed-output-rust",
+              "user_id": "default-user"
+            }
+          },
+          "name": "composed_rust_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 871,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "composed_rust_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "field": "/composed_output/previous_operation/biases/0",
+            "new": 12,
+            "old": 11
+          },
+          "name": "composed_previous_operation_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators identity differs",
+            "expected_boundary": "mixed operators identity differs",
+            "field": "/operation_transition/router/biases/0",
+            "new": 9,
+            "old": 8
+          },
+          "name": "composed_current_operation_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "new": "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+            "old": "blake3:ccbe7f2a5038b0707a26b8a85d8b67ee274fd82b2a7f1b8afd7121ad2ada46ad"
+          },
+          "name": "composed_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "unknown field `unexpected_witness_field`, expected `parent_artifact` or `previous_operation` at line 1 column 63319",
+            "expected_boundary": "witness deserialization denies unknown fields"
+          },
+          "name": "composed_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 502,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "mixed_copy_latest_actual_history",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 1133,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "20.\n20.\n",
+              "token_count": 8
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                50,
+                48,
+                46,
+                10,
+                50,
+                48,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "20.\n20.\n",
+              "token_count": 8
+            },
+            "prompt": "User: There are 3 extra coins. Add the extra coins to the original total. Copy the latest result.\nAssistant:",
+            "target": "20.\n20.\n"
+          },
+          "name": "mixed_copy_latest_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 214005,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "mixed-operators-copy_latest",
+              "user_id": "default-user"
+            }
+          },
+          "name": "mixed_copy_latest_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 880,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "mixed_copy_latest_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 503,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "mixed_copy_original_actual_history",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 1100,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "20.\n17.\n",
+              "token_count": 8
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                50,
+                48,
+                46,
+                10,
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "20.\n17.\n",
+              "token_count": 8
+            },
+            "prompt": "User: There are 3 extra coins. Add the extra coins to the original total. Copy the original total.\nAssistant:",
+            "target": "20.\n17.\n"
+          },
+          "name": "mixed_copy_original_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "checkpoint_bytes": 214232,
+            "development_case": true,
+            "scope": {
+              "project_id": "default-project",
+              "session_id": "mixed-operators-copy_original",
+              "user_id": "default-user"
+            }
+          },
+          "name": "mixed_copy_original_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "api": {
+              "elapsed_us": 974,
+              "memory_facts_read": null,
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "byte_parity": true,
+            "direct": {
+              "bytes": [
+                49,
+                55,
+                46,
+                10
+              ],
+              "stopped_by": "eos",
+              "text": "17.\n",
+              "token_count": 4
+            },
+            "prompt": "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "target": "17.\n"
+          },
+          "name": "mixed_copy_original_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "boundary": "The loader restores the full previous OperationTransition and previous shared role router and validates the frozen parent recursively; no separate extracted parent is claimed.",
+            "current_artifact": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+            "expected_parent": "blake3:866cb92de4ad5c130da811d3f2fe8828aed1fe9b2b39b9c9b3c7ad3dbf7dee62",
+            "parent_artifact": "blake3:866cb92de4ad5c130da811d3f2fe8828aed1fe9b2b39b9c9b3c7ad3dbf7dee62",
+            "validated_by": [
+              "NativeModel::load_from_bytes",
+              "artifact_load_save_roundtrip"
+            ]
+          },
+          "name": "mixed_operators_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "field": "/mixed_operators/previous_operation/router/biases/0",
+            "new": 9,
+            "old": 8
+          },
+          "name": "mixed_previous_operation_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators identity differs",
+            "expected_boundary": "mixed operators identity differs",
+            "field": "/operation_transition/router/biases/0",
+            "new": 9,
+            "old": 8
+          },
+          "name": "mixed_current_operation_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "field": "/mixed_operators/previous_roles/biases/0",
+            "new": 5,
+            "old": 4
+          },
+          "name": "mixed_previous_roles_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators identity differs",
+            "expected_boundary": "mixed operators identity differs",
+            "field": "/typed_roles/router/biases/0",
+            "new": 5,
+            "old": 4
+          },
+          "name": "mixed_current_roles_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "expected_boundary": "mixed operators frozen parent differs",
+            "new": "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+            "old": "blake3:866cb92de4ad5c130da811d3f2fe8828aed1fe9b2b39b9c9b3c7ad3dbf7dee62"
+          },
+          "name": "mixed_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "unknown field `unexpected_witness_field`, expected one of `parent_artifact`, `previous_operation`, `previous_roles` at line 1 column 4499160",
+            "expected_boundary": "witness deserialization denies unknown fields"
+          },
+          "name": "mixed_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "field": "typed_role_refinement.previous.router.biases[0]",
+            "new": 5,
+            "old": 4
+          },
+          "name": "changed_previous_router_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "evidence": {
+            "error": "mixed operators frozen parent differs",
+            "field": "typed_role_refinement.parent_artifact",
+            "new": "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+            "old": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd"
+          },
+          "name": "wrong_refinement_parent_cid_rejected",
+          "status": "PASS"
+        }
+      ],
+      "error": null,
+      "identity": {
+        "artifact_cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+        "expected_cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+        "input_bytes": 12562902,
+        "input_bytes_blake3": "34f935531bf0b012f74c28f819a8641fa1af6ac6678ae73d471288571cce1aa4",
+        "metadata": {
+          "api_schema_version": "uor-r4.native-capability-api/2",
+          "backend_name": "native-geometric-language-v1",
+          "canonical_uor_address": "blake3:df23fa29ece04bf215e2009139a5c7edd57e2a626fb69e6c7cd5a05b799c06a1",
+          "is_provider_free": true,
+          "max_context_tokens": 512,
+          "max_sessions": 32,
+          "model_cid": "blake3:9ab64902d4811f4e23e2119bdee74f16a6675eee7446e85e21666dfccfabea59",
+          "schema_version": "uor-r4.native-geometric-language/1",
+          "supported_modalities": [
+            "text"
+          ],
+          "truth_matrix": {
+            "causal_attention": "Artifact-dependent bounded context and exact retained copying; consult artifact evidence",
+            "durable_memory": "Explicit scoped checkpoint API; learned memory depends on the supplied artifact",
+            "executable_coding": "UNQUALIFIED: general Rust synthesis and workspace repair",
+            "general_ai_disavowal": "Pre-alpha; general prose, general reasoning and frontier capability remain unproven",
+            "language_prose": "UNQUALIFIED: general prose is not established",
+            "m1_performance_profile": "NOT_MEASURED: no complete-path energy or comparative performance qualification",
+            "multi_step_reasoning": "UNQUALIFIED: generalized multi-step reasoning",
+            "serving_guarantees": "Native geometric model path; wrapper allocates and has no blanket proof claim"
+          },
+          "zero_heap_alloc_hot_path": false,
+          "zero_matmul_serving": true
+        },
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-numeric/model.json"
+      },
+      "schema": "uor-r4.native-artifact-recovery-check/1",
+      "scope": "Artifact integrity and actual narrow interface behavior only; no general capability, alpha, energy, or performance qualification.",
+      "status": "PASS"
+    }
+  },
+  "runtime_receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/focused-mixed.log",
+      "bytes": 721,
+      "sha256": "b666a5e6d1c6017731fe626c059c2140adf1b5e71b7370f261d39e79ca828417"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/focused-lexical.log",
+      "bytes": 858,
+      "sha256": "dcb339fe771faf0e3a5efebc99a59c83c95a94d153f151561a56e8c28f972069"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/focused-operations.log",
+      "bytes": 950,
+      "sha256": "20d4d8f2e666575c926d5b3f46d1f283cfea343d86c98ed145f90722b02f5664"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/kernel-guard.log",
+      "bytes": 189,
+      "sha256": "52bf1217568e56ab9a200ab10d53a298d6fb9326bd1040abf948ffb4a72382f4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/numeric-actual-allocation-mixed.log",
+      "bytes": 1084,
+      "sha256": "2350b0d784af6ffb6d28251f14341c5d123a595f43338098efdb1f4efc275478"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/numeric-actual-allocation-composed.log",
+      "bytes": 1081,
+      "sha256": "9a4dab171a23a97aca19bf4475bc7c026e4ede73e3e1be7c6ac8194bdad8fcb2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/numeric-actual-allocation-lexical.log",
+      "bytes": 568,
+      "sha256": "c7d4d3da255514324bce49b49d1be6e9566c15f9b515e197bf0b4929a56ddedf"
+    }
+  ],
+  "rust": [
+    {
+      "panel": "open",
+      "source": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-open/generated_checks.rs",
+        "bytes": 968,
+        "sha256": "a230455916412df97a9127cf14ae2857437225b4458f90a32f5ef4181554c7a9"
+      },
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-open/source-receipt.json",
+        "bytes": 449,
+        "sha256": "5d6ac7b7827a1d190b3fa326e2fe31ec51bb4c03de54a3f11921a44dc325dedc"
+      },
+      "compiled": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-open/generated_checks",
+        "bytes": 462352,
+        "sha256": "ea53831e906952206d5b81e4efd7bf201835880434d85c4d758cb9c0ade6c56e"
+      }
+    },
+    {
+      "panel": "stress",
+      "source": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-stress/generated_checks.rs",
+        "bytes": 1166,
+        "sha256": "ab044e80a089c5deb4e73af1392c42063dfc3726f5fc68f01c1b044db37a20ea"
+      },
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-stress/source-receipt.json",
+        "bytes": 451,
+        "sha256": "b821240ef6a2652cee1adb5db0efe1ac57232a73fc22615804a027471e460a0f"
+      },
+      "compiled": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-stress/generated_checks",
+        "bytes": 462352,
+        "sha256": "8a2023cb8ff3763fe84b985b449e695d8b52b566a9502eec1f1c6112fd5ff0b8"
+      }
+    },
+    {
+      "panel": "fresh",
+      "source": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-fresh/generated_checks.rs",
+        "bytes": 1040,
+        "sha256": "b3dc9e33442f334ebcee2e6322fa4dddc9a788fdeed817759dd8df7a626b3974"
+      },
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-fresh/source-receipt.json",
+        "bytes": 450,
+        "sha256": "744d27af4bf4b86bd251d66b076c32c9e112828fffe11c66e42089026c7b31eb"
+      },
+      "compiled": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/rust-fresh/generated_checks",
+        "bytes": 462352,
+        "sha256": "cacdfb95ad99b48cc8d09079fc21f012d0cf1c170405efed6f38ebe7ca5b49df"
+      }
+    }
+  ],
+  "candidate_decisions": {
+    "at": "2026-09-08T20:25:10.181Z",
+    "retained_parent": "blake3:866cb92de4ad5c130da811d3f2fe8828aed1fe9b2b39b9c9b3c7ad3dbf7dee62",
+    "failed_first_fit": {
+      "log": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-first.log",
+      "status": "STOPPED_BEFORE_FINAL_ARTIFACT",
+      "reason": "Role update regressed historical intermediate22 to4; intermediate history boundaries were not themselves constrained. All72.005seconds charged."
+    },
+    "rejected": [
+      {
+        "artifact": "blake3:c24ab20446b213f192716f27bb6fcb14843773a9ce25117733050d4b9f81d4b9",
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-history/model.json",
+        "reason": "Retained literal case literal-fit/0/true/0 repeats13; main662/663. Newconstruction12/open8/stress8 and254transitionreplay pass but do not offset regression.",
+        "remedy": "Include complete qualified103-case parent literal panel as Stop construction."
+      },
+      {
+        "artifact": "blake3:7e0f5780d711c61104536a6544edb2b4e599273ccade5b590228071465aeb445",
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-literal-stop/model.json",
+        "ordinary_results": "All qualified ordinary panels pass; all previously correct control rows preserved.",
+        "reason": "Operation intermediate exclusion replaces Stop with unrelated Copy on eight already-failing second-operation cases, e.g.43 then40.",
+        "remedy": "Generic correct-target-removed companion frames learn Stop over all wrong alternatives. No serving control feature or exception.",
+        "other_negative_changes": "Eight current-query original-removal rows change already-wrong values/IDs, no correct-to-incorrect change; preserved as negative outputs, not training targets."
+      },
+      {
+        "artifact": "blake3:a107f3e5a148aeea07e1a53bcb597a63544843c4ee11a13f0beedaa879ba589c",
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-rejection-margin/model.json",
+        "reason": "API composed_sentence_checkpoint_next_independent_sum and directnative emit36 instead17 after20/23formatted answer; ordinary panels and controls pass but do not offset next-turn regression.",
+        "api": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/api-a107-failed.json",
+        "remedy": "Complete42priorcomposedhistories followedbyoriginalindependentsum as role and Stop preservation; no serving exception."
+      },
+      {
+        "artifact": "blake3:66f3d262700c97b70659afb6bf3c8818a2c6aff51e35881e8634b26d493274bb",
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/fit-followup/model.json",
+        "reason": "API65passesincludingindependentfollowup; historicalnumericCopy3of6regressUnknown, otherretainedreports pass. Complete6caserolloutcontextmissingfromrolepreservation.",
+        "remedy": "Complete6-case qualified parent numeric panel converted to actual history contexts."
+      }
+    ]
+  },
+  "resources": {
+    "at": "2026-09-08T21:37:16.041Z",
+    "model_ms": 2739786,
+    "engineering_command_ms": 1037308,
+    "ledger": {
+      "cumulative_ms": 12707541,
+      "limit_ms": 13350000
+    },
+    "prior_reservation_ms": 196620,
+    "available_after_reservation_ms": 445839,
+    "cycle_model_limit_ms": 3000000,
+    "cycle_engineering_limit_ms": 1800000,
+    "preuse_increment_ms": 2100000,
+    "extensions": [
+      "projection-initial.json",
+      "extension-stop-margin.json",
+      "extension-followup.json"
+    ],
+    "locations": {
+      "target": {
+        "path": "/Users/casey.allard/uor-r4/target",
+        "before": 22933684224,
+        "after": 2704314368,
+        "charged_growth": 8257536
+      },
+      "worktree": {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+        "before": 477765632,
+        "after": 477863936,
+        "charged_growth": 98304
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators",
+        "before": 0,
+        "after": 517771264,
+        "charged_growth": 517771264
+      },
+      "retained_copy": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/mixed-operators",
+        "before": 0,
+        "after": 12566528,
+        "charged_growth": 12566528
+      }
+    },
+    "new_storage_charged_bytes": 547082240,
+    "final_metadata_reserve_bytes": 8388608,
+    "accounted_before_bytes": 32033710080,
+    "accounted_after_bytes": 32580792320,
+    "storage_limit_bytes": 34863214592,
+    "stop_margin_bytes": 134217728,
+    "effective_headroom_bytes": 2148204544,
+    "peak_model_sampled_rss_bytes": 1899954176,
+    "peak_engineering_sampled_rss_bytes": 2447785984,
+    "inherited_receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-composed-output/resources.json",
+      "sha256": "132ea8b75b655e7806dcfb1abb4f89386bd806413b102188721825f69551b7a2"
+    },
+    "filesystem": "Filesystem   1024-blocks      Used Available Capacity iused     ifree %iused  Mounted on\n/dev/disk3s1   239362496 167220948  44087044    80% 2118271 440870440    0%   /System/Volumes/Data\n",
+    "metadata_scope": "8MiB reserved before final documents, receipt copies, Git objects and owner-checkout fast-forward. Small documentation/receipt/Git commands are outside the engineering-command stopwatch. All model/preparation/evaluation/retry work is charged, including superseded checker execution.",
+    "unique_deletions": false,
+    "disposable_cache_cleanup_receipt": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/cleanup-report.json",
+    "storage_charge_policy": "Inherited charges and pre-cleanup positive target growth retained; no refunds from reclaimed disposable cache",
+    "paid_external_compute": false
+  },
+  "commands": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/commands.jsonl",
+    "bytes": 80930,
+    "sha256": "4d96bb91531d17f434a1557c32cb92bcfdd00c09576b1f35d9e749b4db51b354"
+  },
+  "raw_manifest": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-mixed-operators/raw-manifest.json",
+    "bytes": 152386,
+    "sha256": "f82cb97c297c3b519beaab726324958b22e4c7d1fa82bdc8710ca8314b7b597d"
+  },
+  "preservation_scope": "All previously correct outputs and control outcomes retained. 13 of fourteen saved reports exactly match; 8 already-incorrect current-query removal rows change wrong outputs/IDs and remain negative evidence. See exact comparison.",
+  "not_established": [
+    "Formatted Copy",
+    "Copy then Add",
+    "Learned stopping after three operations",
+    "Arbitrary wording or placement",
+    "General prose or general reasoning",
+    "Rust program synthesis",
+    "Alpha or frontier capability",
+    "Complete-path energy advantage"
+  ],
+  "not_run": [
+    "New-artifact browser/WASM/HTTP"
+  ],
+  "next": "Diagnose mixed Add/Copy formatted generation; if actual output confirms the missing committed-action feature seam, learn action-conditioned shared lexical emission with exact record reads.",
+  "delivery": "Protected PR; queue compatibility acknowledgements are not test results; actual merge recorded separately."
+}
