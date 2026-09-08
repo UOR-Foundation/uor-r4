@@ -1180,6 +1180,9 @@ impl Model {
             }
             token_ids.push(token);
             session.observe(self, token)?;
+            if session.can_transition() {
+                session.refresh_value_sources(self)?;
+            }
         }
         let bytes = self.decode(&token_ids)?;
         let utf8_valid = std::str::from_utf8(&bytes).is_ok();

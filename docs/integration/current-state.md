@@ -1,5 +1,29 @@
 # Current native geometric AI work
 
+## Autonomous multi-step causal composition — bounded positive, 2026-09-08
+
+**Autonomous multi-step transition integrated into generation loop.** The mechanism addresses
+[#1140](https://github.com/UOR-Foundation/uor-r4/issues/1140) by coupling the learned
+source refresh transition directly into `Model::generate` via `Session::can_transition` and
+`Session::refresh_value_sources`. Multi-step operator chaining executes autonomously during
+autoregressive token generation without requiring external stepping harness intervention.
+
+Key results:
+1. `Model::generate` autonomously executes two-operator chained arithmetic (`13 + 4 = 17`, then `17 + 5 = 22`).
+2. Source refresh autonomously resets `consumed`, refreshes operand sources, and increments `work.source_refreshes`.
+3. Operator 2 evaluates the refreshed source view, consuming Operator 1's committed output (`write_id`), preserving exact causal provenance (`operand_ids: [write_id_1, next_id]`, `operand_values: [17, 5]`).
+4. Emits intermediate (`17`) and final (`22`) tokens into generation output text while maintaining exact typed state.
+5. Invariants preserved: zero runtime heap allocations (`#![no_std]` hot path), format compatibility via `max_operations: u8` with default serialization skip, and bit-exact preservation of all prior benchmarks (663 answers, 12/12 city transfers, 24/24 numerals, 20/20 Rust hashes).
+
+General prose, arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: expand multi-operator benchmarks to subtraction/multiplication mixed composition and proceed with #973 native recovery roadmap.
+
+This cycle charges 3.500 model seconds. Cumulative use is 5,291.418/5,550 seconds,
+leaving 258.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Shared causal state transitions — bounded positive, 2026-09-08
 
 **Causal Add→Add transition implemented and verified.** The mechanism addresses

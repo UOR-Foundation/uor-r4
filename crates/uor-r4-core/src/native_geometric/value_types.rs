@@ -71,6 +71,12 @@ fn is_zero_u64(value: &u64) -> bool {
 fn is_zero_u8(value: &u8) -> bool {
     *value == 0
 }
+fn default_max_operations() -> u8 {
+    2
+}
+fn is_default_max_operations(value: &u8) -> bool {
+    *value == default_max_operations()
+}
 impl ValueWork {
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
@@ -173,6 +179,11 @@ pub(super) struct ValueState {
     pub consumed: bool,
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub operations_committed: u8,
+    #[serde(
+        default = "default_max_operations",
+        skip_serializing_if = "is_default_max_operations"
+    )]
+    pub max_operations: u8,
     pub started_at: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_boundary: Option<u64>,
@@ -205,6 +216,7 @@ impl ValueState {
             active: false,
             consumed: false,
             operations_committed: 0,
+            max_operations: default_max_operations(),
             started_at: 0,
             query_boundary: model
                 .typed_roles

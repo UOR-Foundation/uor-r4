@@ -262,6 +262,19 @@ impl Session {
         Ok(())
     }
 
+    pub fn can_transition(&self) -> bool {
+        self.values.as_ref().is_some_and(|v| v.can_transition())
+    }
+
+    pub fn maybe_transition(&mut self, model: &Model) -> Result<bool> {
+        if self.can_transition() {
+            self.refresh_value_sources(model)?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     fn product(&mut self, model: &Model, left: u16, right: u16) -> u16 {
         self.work.h4_table_reads = self.work.h4_table_reads.saturating_add(1);
         model.geometry.products[model.geometry.row_bases[usize::from(left)] + usize::from(right)]

@@ -179,6 +179,12 @@ impl ValueState {
         self.emission = None;
         work.source_refreshes = work.source_refreshes.saturating_add(1);
     }
+    pub(super) fn can_transition(&self) -> bool {
+        self.active
+            && self.consumed
+            && self.emission.is_none()
+            && self.operations_committed < self.max_operations
+    }
     pub(super) fn end(&mut self) {
         if self.query_boundary.is_some() {
             self.query_boundary = Some(self.seen);
