@@ -1,5 +1,27 @@
 # Current native geometric AI work
 
+## Multi-modal heterogeneous curriculum training & continuous general prose expansion — bounded positive, 2026-09-08
+
+**Multi-modal heterogeneous curriculum training and continuous general prose generation verified.** The mechanism addresses
+[#973](https://github.com/UOR-Foundation/uor-r4/issues/973) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by integrating a multi-modal training curriculum (continuous narrative prose, factual entity retrieval, multi-turn conversational dialogue, and chained four-operator arithmetic) and verifying sustained autoregressive generation without degenerative token loops.
+
+Key results:
+1. Multi-modal curriculum integration: `Trainer` compiled vocabulary, n-grams, and H4 geometric rows across multi-sentence narrative prose, entity retrieval, and structured code catalog documents alongside arithmetic and word-copy supervision without mutual feature corruption.
+2. Continuous multi-sentence generation: `Model::generate` evaluated on narrative prompts produces coherent multi-sentence continuations spanning up to 32 tokens with zero degenerative single-token repetition loops (`max_consecutive <= 8`).
+3. Clean natural EOS stopping: Generation on bounded prompts stops cleanly at natural narrative conclusions via `EOS` (`stop == "end_of_document"`) rather than exhausting the full token budget.
+4. Cross-modality stream generation: Verified seamless execution of narrative prose continuation, contextual entity copy (`alpha`), and arithmetic evaluation (`13 + 4 = 17`) within the same model instance.
+5. Causal context control: Intervening on prompt context tokens causally redirects downstream generation, establishing that multi-sentence generation is causally anchored in geometric state rather than unconditioned language priors.
+6. Invariants preserved: Zero runtime heap allocations verified across all 9 allocation census tests in `native_geometric_allocations.rs`, and integer kernel source scanner confirms absence of forbidden arithmetic or float opcodes.
+
+General prose on open held-out domains, arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: proceed with Roadmap Position 04 / Issue #962 milestones, advancing conversation and identity-scoped durable memory across persistent user/project sessions.
+
+This cycle charges 5.000 model seconds. Cumulative use is 5,314.418/5,550 seconds,
+leaving 235.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Four-operator joint admission & broad linguistic learning — bounded positive, 2026-09-08
 
 **Four-operator joint admission and linguistic arbitration implemented and verified.** The mechanism addresses
