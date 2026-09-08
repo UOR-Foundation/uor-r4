@@ -32,6 +32,8 @@ jobs:
         run: |
           mkdir dist
           cp index.html index.css geometric_prime_router_webapp.html dist/
+          cp coi-serviceworker.js r4_worker.js dist/ || true
+          cp -r assets dist/ || true
           cp -r pkg dist/
           rm -f dist/pkg/.gitignore
           rm -f .gitignore
