@@ -133,6 +133,7 @@ impl CompletionState {
             ValueAction::Copy => 0,
             ValueAction::Add => 1,
             ValueAction::Sub => 2,
+            ValueAction::Mul => 3,
         };
         add(5, (op << 8) | u64::from(self.steps));
         if !matches!(

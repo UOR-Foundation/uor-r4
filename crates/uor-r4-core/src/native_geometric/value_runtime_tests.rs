@@ -29,18 +29,23 @@ fn mechanical_model(action: ValueAction) -> Model {
         schema: VALUE_SCHEMA.into(),
         codec: NUMERAL_CODEC.into(),
         capacity: VALUES,
-        rows: [ValueAction::Copy, ValueAction::Add, ValueAction::Sub]
-            .into_iter()
-            .enumerate()
-            .map(|(index, candidate)| ValueRow {
-                feature: ValueFeature {
-                    kind: 0,
-                    a: index as u64,
-                    b: 0,
-                },
-                weight: if candidate == action { 4096 } else { -4096 },
-            })
-            .collect(),
+        rows: [
+            ValueAction::Copy,
+            ValueAction::Add,
+            ValueAction::Sub,
+            ValueAction::Mul,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, candidate)| ValueRow {
+            feature: ValueFeature {
+                kind: 0,
+                a: index as u64,
+                b: 0,
+            },
+            weight: if candidate == action { 4096 } else { -4096 },
+        })
+        .collect(),
         continuation_score: 4096,
         fit_config: [0; 4],
         training: Vec::new(),
@@ -351,7 +356,7 @@ fn native_value_document_boundaries_do_not_join_numerals() {
 }
 
 #[test]
-fn native_value_selected_execution_runs_one_of_256_scored_choices() {
+fn native_value_selected_execution_runs_one_of_736_scored_choices() {
     let model = mechanical_model(ValueAction::Add);
     let mut session = prefix(
         &model,
@@ -362,10 +367,10 @@ fn native_value_selected_execution_runs_one_of_256_scored_choices() {
     let d = session.value_decision().unwrap();
     assert_eq!(d.value, 3);
     assert_eq!(d.operands.map(|v| v.value), [2, 1]);
-    assert_eq!(session.work.values.proposals, 256);
+    assert_eq!(session.work.values.proposals, 736);
     assert_eq!(session.work.values.operator_executions, 1);
     assert_eq!(session.work.values.additions, 1);
-    assert_eq!(session.work.values.selection_comparisons, 256);
+    assert_eq!(session.work.values.selection_comparisons, 736);
     assert_eq!(session.work.values.selection_passes, 1);
     assert_eq!(session.work.values.derived_writes, 0);
 }
@@ -621,7 +626,7 @@ fn native_value_selected_execution_preserves_overflow_fallback_order() {
     assert_eq!(session.work.values.operator_executions, 2);
     assert_eq!(session.work.values.overflow_rejections, 1);
     assert_eq!(session.work.values.selection_passes, 2);
-    assert_eq!(session.work.values.proposals, 18);
+    assert_eq!(session.work.values.proposals, 42);
 }
 
 #[test]
@@ -634,7 +639,7 @@ fn native_value_selected_execution_abstention_does_no_arithmetic() {
     let mut session = prefix(&model, "13 4 total:", Control::Full);
     session.predict(&model).unwrap();
     assert!(session.value_decision().is_none());
-    assert_eq!(session.work.values.proposals, 4);
+    assert_eq!(session.work.values.proposals, 8);
     assert_eq!(session.work.values.operator_executions, 0);
     assert_eq!(session.work.values.additions, 0);
 }
@@ -756,7 +761,7 @@ fn native_value_selected_execution_learned_chain_diagnostic() {
             let question = match action {
                 ValueAction::Copy => "Repeat the previous total without adding the new coins.",
                 ValueAction::Add => "Add the new coins to the previous total.",
-                ValueAction::Sub => unreachable!(),
+                ValueAction::Sub | ValueAction::Mul => unreachable!(),
             };
             let query = format!("User: There are {delta} new coins. {question}\nAssistant:");
             let expected = a + b + if action == ValueAction::Add { delta } else { 0 };
@@ -1567,6 +1572,353 @@ fn native_value_mixed_chained_rust_execution() {
             assert!(
                 run_status.success(),
                 "compiled mixed chained Rust program exited with failure"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn native_value_mul_execution() {
+    let mut model = mechanical_model(ValueAction::Mul);
+    model.values.as_mut().unwrap().rows.extend([ValueRow {
+        feature: ValueFeature {
+            kind: 1,
+            a: 3,   // Mul
+            b: 256, // ranks 1 and 0: (1 << 8) | 0 = 256 (6 * 7)
+        },
+        weight: 16384,
+    }]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let mut session = prefix(&model, "left = 6; right = 7; total:", Control::Full);
+    session.begin_response(&model).unwrap();
+
+    let prediction = session.predict(&model).unwrap();
+    let decision = session.value_decision().unwrap();
+    assert_eq!(decision.action, ValueAction::Mul);
+    assert_eq!(decision.value, 42);
+    assert_eq!(decision.operands[0].value, 6);
+    assert_eq!(decision.operands[1].value, 7);
+
+    // Observe numeral emission
+    session.observe(&model, prediction.token).unwrap();
+    let next_token = session.predict(&model).unwrap().token;
+    session.observe(&model, next_token).unwrap();
+
+    let work = session.work;
+    assert_eq!(work.values.multiplications, 1);
+    assert_eq!(work.values.derived_writes, 1);
+}
+
+#[test]
+fn native_value_causal_add_to_mul_transition() {
+    let mut model = mechanical_model(ValueAction::Add);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,   // Add
+                b: 513, // ranks 2 and 1: (2 << 8) | 1 = 513 (10 + 5)
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 3, // Mul
+                b: 1, // a.derived is true
+            },
+            weight: 32768,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 3, // Mul
+                b: 1, // ranks 0 (15) and 1 (2): 15 * 2
+            },
+            weight: 2048,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let prompt = "left = 10; mid = 5; right = 2; total:";
+    let mut session = prefix(&model, prompt, Control::Full);
+    session.begin_response(&model).unwrap();
+
+    // Step 1: Operator 1 computes 10 + 5 = 15 (Add)
+    let p1 = session.predict(&model).unwrap();
+    let d1 = session.value_decision().unwrap();
+    assert_eq!(d1.action, ValueAction::Add);
+    assert_eq!(d1.value, 15);
+    let op1_write_id = d1.write_id;
+
+    // Emit tokens for 15 ('1', '5')
+    session.observe(&model, p1.token).unwrap();
+    let p1_digit2 = session.predict(&model).unwrap();
+    session.observe(&model, p1_digit2.token).unwrap();
+
+    assert!(session.can_transition());
+
+    // Save checkpoint for causal intervention test
+    let checkpoint = session.checkpoint().unwrap();
+
+    session.refresh_value_sources(&model).unwrap();
+    assert_eq!(session.work.values.source_refreshes, 1);
+
+    // Step 2: Operator 2 computes 15 * 2 = 30 (Mul)
+    let _p2 = session.predict(&model).unwrap();
+    let d2 = session.value_decision().unwrap();
+    assert_eq!(d2.action, ValueAction::Mul);
+    assert_eq!(d2.value, 30);
+    assert_eq!(d2.operands[0].id, op1_write_id);
+    assert_eq!(d2.operands[0].value, 15);
+    assert!(d2.operands[0].derived);
+    assert_eq!(d2.operands[1].value, 2);
+
+    // Causal intervention: Ablate Operator 1's intermediate record from state
+    let mut intervened = model.restore_session(&checkpoint).unwrap();
+    intervened
+        .values
+        .as_mut()
+        .unwrap()
+        .records
+        .retain(|r| r.id != op1_write_id);
+    intervened.refresh_value_sources(&model).unwrap();
+
+    let _ = intervened.predict(&model);
+    let d_intervened = intervened.value_decision().unwrap();
+    assert_ne!(
+        d_intervened.value, 30,
+        "ablating intermediate state must causally change Operator 2 prediction"
+    );
+    assert_ne!(d_intervened.operands[0].id, op1_write_id);
+}
+
+#[test]
+fn native_value_causal_sub_to_mul_transition() {
+    let mut model = mechanical_model(ValueAction::Sub);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 2,   // Sub
+                b: 513, // ranks 2 and 1: 20 - 6
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 3, // Mul
+                b: 1, // a.derived is true
+            },
+            weight: 32768,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 3, // Mul
+                b: 1, // ranks 0 (14) and 1 (2): 14 * 2
+            },
+            weight: 2048,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let prompt = "left = 20; mid = 6; right = 2; total:";
+    let mut session = prefix(&model, prompt, Control::Full);
+    session.begin_response(&model).unwrap();
+
+    // Step 1: Operator 1 computes 20 - 6 = 14 (Sub)
+    let p1 = session.predict(&model).unwrap();
+    let d1 = session.value_decision().unwrap();
+    assert_eq!(d1.action, ValueAction::Sub);
+    assert_eq!(d1.value, 14);
+    let op1_write_id = d1.write_id;
+
+    // Emit tokens for 14 ('1', '4')
+    session.observe(&model, p1.token).unwrap();
+    let p1_digit2 = session.predict(&model).unwrap();
+    session.observe(&model, p1_digit2.token).unwrap();
+
+    assert!(session.can_transition());
+
+    // Save checkpoint for causal intervention test
+    let checkpoint = session.checkpoint().unwrap();
+
+    session.refresh_value_sources(&model).unwrap();
+    assert_eq!(session.work.values.source_refreshes, 1);
+
+    // Step 2: Operator 2 computes 14 * 2 = 28 (Mul)
+    let _p2 = session.predict(&model).unwrap();
+    let d2 = session.value_decision().unwrap();
+    assert_eq!(d2.action, ValueAction::Mul);
+    assert_eq!(d2.value, 28);
+    assert_eq!(d2.operands[0].id, op1_write_id);
+    assert_eq!(d2.operands[0].value, 14);
+    assert!(d2.operands[0].derived);
+    assert_eq!(d2.operands[1].value, 2);
+
+    // Causal intervention: Ablate Operator 1's intermediate record from state
+    let mut intervened = model.restore_session(&checkpoint).unwrap();
+    intervened
+        .values
+        .as_mut()
+        .unwrap()
+        .records
+        .retain(|r| r.id != op1_write_id);
+    intervened.refresh_value_sources(&model).unwrap();
+
+    let _ = intervened.predict(&model);
+    let d_intervened = intervened.value_decision().unwrap();
+    assert_ne!(
+        d_intervened.value, 28,
+        "ablating intermediate state must causally change Operator 2 prediction"
+    );
+    assert_ne!(d_intervened.operands[0].id, op1_write_id);
+}
+
+#[test]
+fn native_value_autonomous_mixed_add_sub_mul_generation() {
+    let mut model = mechanical_model(ValueAction::Add);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,   // Add
+                b: 513, // ranks 2 and 1: 10 + 5
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 3, // Mul
+                b: 1, // a.derived is true
+            },
+            weight: 32768,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 3, // Mul
+                b: 1, // ranks 0 (15) and 1 (2): 15 * 2
+            },
+            weight: 2048,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let prompt = "left = 10; mid = 5; right = 2; total:";
+    let generation = model.generate(prompt, 32, Control::Full).unwrap();
+
+    let root_operations: Vec<_> = generation
+        .value_trace
+        .iter()
+        .filter(|d| d.cursor == 0)
+        .collect();
+    assert_eq!(
+        root_operations.len(),
+        2,
+        "must execute exactly two operations"
+    );
+
+    // Operator 1: 10 + 5 = 15
+    let op1 = root_operations[0];
+    assert_eq!(op1.action, ValueAction::Add);
+    assert_eq!(op1.value, 15);
+    let op1_write_id = op1.write_id;
+
+    // Operator 2: 15 * 2 = 30
+    let op2 = root_operations[1];
+    assert_eq!(op2.action, ValueAction::Mul);
+    assert_eq!(op2.value, 30);
+    assert_eq!(op2.operands[0].id, op1_write_id);
+    assert_eq!(op2.operands[0].value, 15);
+    assert!(op2.operands[0].derived);
+    assert_eq!(op2.operands[1].value, 2);
+
+    assert_eq!(generation.work.values.source_refreshes, 1);
+    assert_eq!(generation.work.values.additions, 1);
+    assert_eq!(generation.work.values.multiplications, 1);
+
+    assert!(
+        generation.text.contains("15") && generation.text.contains("30"),
+        "generation must contain both 15 and 30: {:?}",
+        generation.text
+    );
+}
+
+#[test]
+fn native_value_mixed_mul_rust_execution() {
+    let a: i64 = 10;
+    let b: i64 = 5;
+    let c: i64 = 2;
+    let intermediate = a + b;
+    let final_val = intermediate * c;
+    assert_eq!(intermediate, 15);
+    assert_eq!(final_val, 30);
+
+    let rust_source = format!(
+        r#"fn main() {{
+    let a: i64 = {a};
+    let b: i64 = {b};
+    let step1: i64 = a + b;
+    assert_eq!(step1, {intermediate});
+    let c: i64 = {c};
+    let step2: i64 = step1 * c;
+    assert_eq!(step2, {final_val});
+}}
+"#
+    );
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("uor_r4_mixed_mul_rust_{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let src_path = temp_dir.join("main.rs");
+    let bin_path = temp_dir.join("main_bin");
+    std::fs::write(&src_path, rust_source.as_bytes()).unwrap();
+
+    let compile_status = std::process::Command::new("rustc")
+        .args([
+            "--edition=2021",
+            src_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+        ])
+        .status();
+
+    if let Ok(status) = compile_status {
+        if status.success() {
+            let run_status = std::process::Command::new(&bin_path).status().unwrap();
+            assert!(
+                run_status.success(),
+                "compiled mixed chained multiplication Rust program exited with failure"
             );
         }
     }

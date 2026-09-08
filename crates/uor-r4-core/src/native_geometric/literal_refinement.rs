@@ -99,7 +99,7 @@ impl Model {
                 });
             };
             add(None, 2, target.is_none());
-            for i in 0..528 {
+            for i in 0..784 {
                 let Some((action, a, b)) = values.proposal(i) else {
                     continue;
                 };
@@ -107,6 +107,7 @@ impl Model {
                     ValueAction::Copy => Some(a.value),
                     ValueAction::Add => a.value.checked_add(b.value),
                     ValueAction::Sub => a.value.checked_sub(b.value),
+                    ValueAction::Mul => a.value.checked_mul(b.value),
                 };
                 if result.is_none() {
                     continue;
@@ -115,7 +116,7 @@ impl Model {
                     Some((a, b)),
                     match action {
                         ValueAction::Copy => 0,
-                        ValueAction::Add | ValueAction::Sub => 1,
+                        ValueAction::Add | ValueAction::Sub | ValueAction::Mul => 1,
                     },
                     target.is_some() && result == target,
                 );

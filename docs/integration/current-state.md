@@ -1,5 +1,28 @@
 # Current native geometric AI work
 
+## Complete four-operator geometric computation suite (Add/Sub/Mul) — bounded positive, 2026-09-08
+
+**Complete four-operator geometric computation suite implemented and verified.** The mechanism addresses
+[#973](https://github.com/UOR-Foundation/uor-r4/issues/973) by extending the typed geometric value runtime to support multiplication (`ValueAction::Mul`) alongside addition, subtraction, and copying. Proposal addressing expands to 784 choices (`0..16` copy, `16..272` add, `272..528` sub, `528..784` mul) with exact operand rank encoding, zero-multiply integer kernel shift-and-add execution (`shift_add_product`), checked exact Z[phi] multiplication (`ZPhi::checked_mul`), and execution tracking in `ValueWork.multiplications`.
+
+Key results:
+1. Single-step multiplication executes correctly ($6 \times 7 = 42$, incrementing `multiplications: 1`).
+2. Causal mixed Add -> Mul state transition ($10 + 5 = 15 \to 15 \times 2 = 30$): Operator 2 consumes Operator 1's committed output (`write_id`), preserving exact causal provenance (`operand_ids: [write_id_1, next_id]`, `operand_values: [15, 2]`).
+3. Causal mixed Sub -> Mul state transition ($20 - 6 = 14 \to 14 \times 2 = 28$): Operator 2 consumes Operator 1's committed output (`write_id`), preserving exact causal provenance (`operand_ids: [write_id_1, next_id]`, `operand_values: [14, 2]`).
+4. Causal intervention confirms intermediate state is strictly load-bearing: ablating Operator 1's committed record causes Operator 2's prediction to diverge, establishing causal necessity across operator families.
+5. Autonomous mixed-operator generation evaluates chained Add -> Sub -> Mul sequences during token generation while tracking `additions: 1`, `subtractions: 1`, `multiplications: 1`, and `source_refreshes: 2`.
+6. Generated four-operator chained Rust programs compile with `rustc --edition=2021` and execute with exit code 0.
+7. Zero runtime heap allocations on `#![no_std]` hot path verified across all 9 allocation census tests in `native_geometric_allocations.rs`, and source scanner verifies absence of forbidden arithmetic or float opcodes in integer kernel.
+
+All earlier span panels, 663 retained answers, 12/12 city transfers, 24/24 numeric targets, and compiling Rust programs remain preserved. General prose, arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: integrate contextual memory/readout routing with the four-operator compute suite and proceed with #973 native recovery roadmap.
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,299.918/5,550 seconds,
+leaving 250.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Mixed multi-operator causal composition (Add/Sub) — bounded positive, 2026-09-08
 
 **Mixed multi-operator composition with non-commutative provenance implemented and verified.** The mechanism addresses
