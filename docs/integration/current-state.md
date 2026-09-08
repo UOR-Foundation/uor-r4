@@ -1,5 +1,29 @@
 # Current native geometric AI work
 
+## Native capability API and WASM model runtime — bounded positive, 2026-09-08
+
+**Unified native capability API, session management, and filesystem-free WASM model runtime qualified and verified.** The mechanism addresses
+[#1172](https://github.com/UOR-Foundation/uor-r4/issues/1172) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by establishing a common artifact and session lifecycle across Rust library consumers (`uor-r4-api`), CLI/service execution, and browser-compatible WASM execution, absorbing interface obligations transferred from [#962](https://github.com/UOR-Foundation/uor-r4/issues/962) and [#1084](https://github.com/UOR-Foundation/uor-r4/issues/1084).
+
+Key results:
+1. Unified native model container: Implemented `NativeModel` wrapping `Arc<Model>` with byte-slice artifact loading (`load_from_bytes`), schema verification, and canonical address identification (`uor:native-geometric/r4/1`).
+2. Truthful capability metadata: Integrated `NativeModelMetadata` and `CapabilityTruthMatrix` explicitly declaring implemented capabilities (#973, #1139, #955, #1088, #962, #964, #963) while formally disavowing unproven open-domain reasoning and frontier capability.
+3. Common session management: Implemented `NativeSession` with UTF-8 text ingestion, multi-turn completion, streaming chunk emission (`complete_stream`), cooperative atomic cancellation (`cancel`), and state reset (`reset`).
+4. Identity-scoped memory isolation: Absorbed #962 durable relation memory into `NativeSession` (`store_fact`, `query_memory`, `query_memory_record`), enforcing multi-tenant physical isolation where Session A cannot view or access facts stored in Session B.
+5. Session persistence round-trip: Verified lossless serialization and restoration of conversational state across restarts (`export_state`, `import_state`).
+6. Browser-compatible WASM runtime bridge: Implemented `WasmModelRuntime` with handle-based routing (`wasm_create_session`, `wasm_ingest`, `wasm_generate_step`, `wasm_cancel`, `wasm_export_session`, `wasm_import_session`, `wasm_free_session`), zero filesystem I/O, and bit-exact parity with native library execution.
+7. Typed error taxonomy: Implemented `NativeApiError` providing structured error variants for model loading, schema mismatch, missing session handles, concurrency conflicts, cancellation, context overflow, and identity scope violations.
+8. Invariant safety & allocations: Verified zero steady-state runtime allocations on the integer serving kernel hot path and absence of forbidden arithmetic or float opcodes.
+
+Open-domain autonomous reasoning, unconstrained general language generation, and frontier capability remain unqualified.
+
+Next: proceed toward Roadmap Position 11 / Issue #1173 (run the native geometric model in GitHub Pages AI Studio).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,350.918/5,550 seconds,
+leaving 199.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Scoped serving, geometry, and artifact guarantees — bounded positive, 2026-09-08
 
 **Formal serving operation census, exact Z[phi] arithmetic, paired-H4 inverse witnesses, and theorem-to-code mapping qualified and verified.** The mechanism addresses
