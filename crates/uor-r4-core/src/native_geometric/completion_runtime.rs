@@ -186,6 +186,8 @@ impl CompletionState {
         self.pending = None;
         if !self.active
             || !values.active
+            || !values.consumed
+            || values.emission.is_some()
             || self.steps >= COMPLETION_STEPS
             || matches!(
                 control,
