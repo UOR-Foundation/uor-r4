@@ -1,11 +1,13 @@
 //! Integration tests verifying heterogeneous multi-modal curriculum training,
 //! continuous multi-sentence general prose generation, natural EOS stopping,
-//! cross-modality stream transitions, and causal context controls.
+//! cross-modality stream transitions, multi-domain generation, repetition entropy,
+//! and unified capability coexistence (#973).
 
 use super::*;
 use std::sync::OnceLock;
 
-/// Multi-modal heterogeneous curriculum model fixture.
+/// Multi-modal heterogeneous curriculum model fixture spanning narrative prose,
+/// technical exposition, procedural Q&A, and structured code.
 fn curriculum_model() -> &'static Model {
     static MODEL: OnceLock<Model> = OnceLock::new();
     MODEL.get_or_init(|| {
@@ -19,6 +21,18 @@ fn curriculum_model() -> &'static Model {
                 text: "In the morning, Elena packed her supplies. She carried a leather map and a brass compass. The mountain road was steep and winding.\n".into(),
             },
             Document {
+                id: "doc-technical-exposition".into(),
+                text: "Geometric language models map prime coordinates to invariant algebraic addresses. State transitions follow bounded routes on four-dimensional manifolds without matrix multiplications.\n".into(),
+            },
+            Document {
+                id: "doc-procedural-dialogue".into(),
+                text: "Question: How does the navigator find the path? Answer: The navigator observes the fixed reference stars and calculates the shortest bearing.\n".into(),
+            },
+            Document {
+                id: "doc-code-synthesis".into(),
+                text: "fn verify_bounds(value: i64, limit: i64) -> bool {\n    value <= limit\n}\n".into(),
+            },
+            Document {
                 id: "doc-contract-catalog".into(),
                 text: "left = 13; right = 4; total: 17.\nreply: Unknown.\n Unknown.\nfn identity(value: i32) -> i32 {\n    value\n}\n".into(),
             },
@@ -27,8 +41,8 @@ fn curriculum_model() -> &'static Model {
         let mut trainer = Trainer::new(
             Config {
                 context_tokens: 128,
-                candidate_limit: 16,
-                max_lexical_pieces: 128,
+                candidate_limit: 32,
+                max_lexical_pieces: 256,
                 ..Config::default()
             },
             &catalog,
@@ -69,6 +83,20 @@ fn curriculum_model() -> &'static Model {
                 response: format!("{name}\n}}\n"),
             });
         }
+
+        // 3. Procedural question answering examples
+        examples.push(ValueExample {
+            id: "curriculum-qa-navigator".into(),
+            prompt: "Question: How does the navigator find the path? Answer: ".into(),
+            response: "The navigator observes the fixed reference stars.\n".into(),
+        });
+
+        // 4. Narrative continuation examples
+        examples.push(ValueExample {
+            id: "curriculum-narrative-elena".into(),
+            prompt: "The mountain road was steep and winding. Elena ".into(),
+            response: "carried a leather map and a brass compass.\n".into(),
+        });
 
         let (typed, _) = compiled
             .fit_values_with_lexeme_cues(
@@ -259,4 +287,143 @@ fn native_general_prose_heterogeneous_curriculum_calibration() {
     let loaded = Model::from_bytes(&bytes).expect("deserialization must succeed");
     assert_eq!(model.artifact_cid, loaded.artifact_cid);
     assert_eq!(model.config, loaded.config);
+}
+
+#[test]
+fn native_general_prose_multi_domain_generation() {
+    let model = curriculum_model();
+
+    // Genre 1: Narrative continuation
+    let nar_prompt = "The forest was quiet. Sunlight filtered through the";
+    let nar_gen = model
+        .generate(nar_prompt, 24, Control::Full)
+        .expect("narrative generation must succeed");
+    assert!(nar_gen.utf8_valid);
+    assert!(!nar_gen.token_ids.is_empty());
+
+    // Genre 2: Technical exposition
+    let tech_prompt = "Geometric language models map prime coordinates to";
+    let tech_gen = model
+        .generate(tech_prompt, 24, Control::Full)
+        .expect("technical generation must succeed");
+    assert!(tech_gen.utf8_valid);
+    assert!(!tech_gen.token_ids.is_empty());
+
+    // Genre 3: Procedural dialogue
+    let proc_prompt = "Question: How does the navigator find the path? Answer:";
+    let proc_gen = model
+        .generate(proc_prompt, 24, Control::Full)
+        .expect("procedural generation must succeed");
+    assert!(proc_gen.utf8_valid);
+    assert!(!proc_gen.token_ids.is_empty());
+}
+
+#[test]
+fn native_general_prose_instruction_following_and_qa() {
+    let model = curriculum_model();
+
+    let qa_prompt = "Question: How does the navigator find the path? Answer: ";
+    let gen = model
+        .generate(qa_prompt, 24, Control::Full)
+        .expect("Q&A generation must succeed");
+
+    assert!(gen.utf8_valid);
+    assert!(
+        gen.text.contains("navigator")
+            || gen.text.contains("observes")
+            || gen.text.contains("calculates"),
+        "Q&A response must emit relevant topical terms from curriculum: '{}'",
+        gen.text
+    );
+}
+
+#[test]
+fn native_general_prose_vocabulary_and_punctuation_handling() {
+    let model = curriculum_model();
+
+    // Evaluate generation with diverse punctuation marks (. , : ? \n)
+    let punctuated_prompt =
+        "Question: Where does the river flow? Answer: The river flows gently, toward the sea.\n";
+    let gen = model
+        .generate(punctuated_prompt, 16, Control::Full)
+        .expect("punctuated prompt generation must succeed");
+
+    assert!(gen.utf8_valid);
+    assert!(!gen.bytes.is_empty() || gen.stop == "end_of_document");
+}
+
+#[test]
+fn native_general_prose_repetition_entropy_and_diversity() {
+    let model = curriculum_model();
+
+    let prompt = "The forest was quiet. Sunlight filtered through the green leaves.";
+    let gen = model
+        .generate(prompt, 32, Control::Full)
+        .expect("generation must succeed");
+
+    if !gen.token_ids.is_empty() {
+        let unique_tokens: std::collections::BTreeSet<_> = gen.token_ids.iter().copied().collect();
+        assert!(
+            unique_tokens.len() >= 3,
+            "Must emit multiple distinct tokens across generation (unique: {})",
+            unique_tokens.len()
+        );
+        let mut max_consecutive = 1;
+        let mut current_consecutive = 1;
+        for window in gen.token_ids.windows(2) {
+            if window[0] == window[1] {
+                current_consecutive += 1;
+                max_consecutive = max_consecutive.max(current_consecutive);
+            } else {
+                current_consecutive = 1;
+            }
+        }
+        assert!(
+            max_consecutive <= 8,
+            "Generation must avoid degenerate absorbing token loops (max consecutive: {max_consecutive})"
+        );
+    }
+}
+
+#[test]
+fn native_general_prose_unified_capability_coexistence() {
+    let model = curriculum_model();
+
+    // 1. General prose generation
+    let prose_gen = model
+        .generate(
+            "The mountain road was steep and winding. Elena ",
+            16,
+            Control::Full,
+        )
+        .expect("prose generation");
+    assert!(prose_gen.utf8_valid);
+
+    // 2. Durable session memory with isolated scopes (#962)
+    let scope = IdentityScope::new("user_a", "proj_a", "sess_a").unwrap();
+    let mut session = DurableSession::new(model, scope, Control::Full).unwrap();
+    session.assert_fact("river", "gently").unwrap();
+    assert_eq!(session.get_fact("river"), Some("gently".to_string()));
+
+    // 3. Groundedness evaluation with causal source provenance (#954)
+    let grounded_outcome =
+        GroundednessEvaluator::evaluate_query(&mut session, model, "Where does river flow?");
+    match grounded_outcome {
+        GroundedOutcome::Answer(ans) => {
+            assert_eq!(ans.text, "gently");
+        }
+        other => panic!("expected Answer outcome, got {:?}", other),
+    }
+
+    // 4. Multi-step reasoning DAG execution (#955)
+    let steps_spec = vec![("+", 13, None, 4), ("*", 0, Some(1), 2)];
+    let dag_chain =
+        MultiStepReasoningEngine::execute_arithmetic_dag("unified-dag", &steps_spec, &[])
+            .expect("multi-step DAG");
+    assert_eq!(dag_chain.final_result, "34");
+
+    // 5. Rust code synthesis verification (#1088)
+    let rust_code = MultiStepReasoningEngine::generate_rust_code(&dag_chain);
+    assert!(rust_code.contains("fn main() {"));
+    assert!(rust_code.contains("assert_eq!(step_2, 34);"));
 }
