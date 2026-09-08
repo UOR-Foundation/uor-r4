@@ -41,3 +41,8 @@ uor-r4-router = { version = "0.1.0", path = "../uor-r4-router" }
 name = "r4-learned-reference-1102"
 path = "src/bin/r4-learned-reference-1102.rs"
 required-features = ["learned-reference"]
+
+[[bin]]
+name = "r4-native-chat"
+path = "src/bin/r4-native-chat.rs"
+
