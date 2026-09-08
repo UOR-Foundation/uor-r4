@@ -1,2 +1,4 @@
 [target.wasm32-unknown-unknown]
-rustflags = ["-C", "target-feature=+simd128"]
+# Bounded host stack for fixed-capacity native checkpoint deserialization.
+# This changes WASM host memory, not the geometric serving operations.
+rustflags = ["-C", "target-feature=+simd128", "-C", "link-arg=-zstack-size=8388608"]

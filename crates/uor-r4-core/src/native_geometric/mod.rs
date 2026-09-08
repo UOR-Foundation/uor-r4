@@ -391,6 +391,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_role_refinement: Option<typed_routing::TypedRoleRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_writer_refinement: Option<writer_refinement::WriterRefinement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_start_context: Option<Vec<word_copy_types::WordCopyAddress>>,
@@ -455,6 +457,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    typed_role_refinement: Option<typed_routing::TypedRoleRefinement>,
+    #[serde(default)]
     relation_writer_refinement: Option<writer_refinement::WriterRefinement>,
     #[serde(default)]
     relation_start_context: Option<Vec<word_copy_types::WordCopyAddress>>,
@@ -518,6 +522,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            typed_role_refinement: wire.typed_role_refinement,
             relation_writer_refinement: wire.relation_writer_refinement,
             relation_start_context: wire.relation_start_context,
             relation_start: wire.relation_start,

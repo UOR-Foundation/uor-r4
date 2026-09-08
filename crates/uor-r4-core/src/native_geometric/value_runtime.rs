@@ -378,6 +378,11 @@ impl ValueState {
                 let Some((action, a, b)) = self.proposal(index) else {
                     continue;
                 };
+                // The retained geometric router has Copy/Add/NoOperation landmarks.
+                // Sub/Mul require distinct learned action landmarks before routing.
+                if routed.is_some() && matches!(action, ValueAction::Sub | ValueAction::Mul) {
+                    continue;
+                }
                 work.proposals = work.proposals.saturating_add(1);
                 if action == ValueAction::Add
                     && super::typed_routing::alias_self_add(

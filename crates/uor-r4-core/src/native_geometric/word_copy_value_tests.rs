@@ -1,5 +1,6 @@
-//! Integration tests verifying unified contextual word-copy and multi-operator
-//! response routing, causal state transitions, and interleaved execution.
+//! Bounded copy/value interface checks and explicitly hand-weighted arithmetic
+//! mechanics. Host-authored code compilation is an infrastructure check only;
+//! these tests do not qualify autonomous composition or model code synthesis.
 use super::value_types::*;
 use super::word_copy_types::WordCopyAction;
 use super::*;
@@ -100,14 +101,16 @@ fn native_value_to_word_copy_transition() {
 }
 
 #[test]
-fn native_autonomous_interleaved_copy_and_chained_computation() {
+fn native_word_copy_fixture_does_not_implicitly_chain_hand_weighted_operations() {
     let (_, copy) = fixture::fitted();
     let mut model = copy.clone();
 
-    // Configure 3-source chained arithmetic:
+    // Manually install preferences for two operations; no transition policy is fitted.
+    // Configure three arithmetic sources:
     // left = 13 (rank 2), mid = 4 (rank 1), factor = 2 (rank 0)
     // Op 1: Add ranks 2 and 1: 13 + 4 = 17
-    // Op 2: Mul derived (rank 0) and factor (rank 1): 17 * 2 = 34
+    // A later explicit source refresh could offer derived 17 * factor 2.
+    // Ordinary generation must not authorize that refresh on its own.
     let values = model.values.as_mut().unwrap();
     values.rows.extend([
         ValueRow {
@@ -141,7 +144,7 @@ fn native_autonomous_interleaved_copy_and_chained_computation() {
     let prompt = "left = 13; mid = 4; factor = 2; total:";
     let generation = model.generate(prompt, 32, Control::Full).unwrap();
 
-    // Verify both arithmetic operations executed autonomously in value_trace
+    // Finishing the first value is not evidence of a learned continuation.
     let root_ops: Vec<_> = generation
         .value_trace
         .iter()
@@ -149,23 +152,19 @@ fn native_autonomous_interleaved_copy_and_chained_computation() {
         .collect();
     assert_eq!(
         root_ops.len(),
-        2,
-        "generation must execute exactly two operations"
+        1,
+        "completion alone must not authorize another operation"
     );
     assert_eq!(root_ops[0].action, ValueAction::Add);
     assert_eq!(root_ops[0].value, 17);
-
-    assert_eq!(root_ops[1].action, ValueAction::Mul);
-    assert_eq!(root_ops[1].value, 34);
-
-    assert_eq!(generation.work.values.source_refreshes, 1);
+    assert_eq!(generation.work.values.source_refreshes, 0);
+    assert_eq!(generation.work.values.derived_writes, 1);
     assert_eq!(generation.work.values.additions, 1);
-    assert_eq!(generation.work.values.multiplications, 1);
-    assert!(generation.text.contains("17") && generation.text.contains("34"));
+    assert_eq!(generation.work.values.multiplications, 0);
 }
 
 #[test]
-fn native_causal_interleaved_ablation_proof() {
+fn native_hand_weighted_explicit_refresh_depends_on_committed_intermediate() {
     let (_, copy) = fixture::fitted();
     let mut model = copy.clone();
 
@@ -213,7 +212,8 @@ fn native_causal_interleaved_ablation_proof() {
     let p2 = session.predict(&model).unwrap();
     session.observe(&model, p2.token).unwrap();
 
-    // Trigger transition and refresh sources
+    // The host explicitly requests this transition. This is a mechanical
+    // intervention under manually installed weights, not autonomous reasoning.
     assert!(session.can_transition());
     let checkpoint = session.checkpoint().unwrap();
     session.refresh_value_sources(&model).unwrap();
@@ -235,7 +235,7 @@ fn native_causal_interleaved_ablation_proof() {
         .retain(|r| r.id != op1_write_id);
     intervened.refresh_value_sources(&model).unwrap();
 
-    let _ = intervened.predict(&model);
+    let _ = intervened.predict(&model).unwrap();
     assert!(
         intervened
             .value_decision()
@@ -245,7 +245,9 @@ fn native_causal_interleaved_ablation_proof() {
 }
 
 #[test]
-fn native_interleaved_compiled_rust_execution() {
+fn native_host_authored_interleaved_rust_fixture_compiles_and_executes() {
+    // Rust source and expected results below are authored by the test.
+    // No model supplies this program.
     let fn_name = "identity_alpha";
     let a: i64 = 13;
     let b: i64 = 4;
@@ -289,14 +291,18 @@ fn main() {{
         ])
         .status();
 
-    if let Ok(status) = compile_status {
-        if status.success() {
-            let run_status = std::process::Command::new(&bin_path).status().unwrap();
-            assert!(
-                run_status.success(),
-                "compiled interleaved Rust program exited with failure"
-            );
-        }
-    }
+    let status =
+        compile_status.expect("rustc must run for the host-authored infrastructure fixture");
+    assert!(
+        status.success(),
+        "host-authored Rust fixture failed to compile"
+    );
+    let run_status = std::process::Command::new(&bin_path)
+        .status()
+        .expect("compiled host-authored fixture must execute");
+    assert!(
+        run_status.success(),
+        "host-authored Rust fixture exited with failure"
+    );
     let _ = std::fs::remove_dir_all(&temp_dir);
 }

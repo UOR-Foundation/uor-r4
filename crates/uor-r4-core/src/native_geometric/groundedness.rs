@@ -1,8 +1,6 @@
-//! Grounded correctness, conflict handling, and calibrated abstention (#954).
-//!
-//! Provides typed serving outcomes, exact provenance tracking, contradiction
-//! and conflict resolution policy, and calibrated abstention distinctions
-//! across lexical `NoRead`, arithmetic `NoOperation`, and contextual uncertainty.
+//! Explicit fact lookup and integer calculator utilities.
+//! These deterministic rules do not measure or implement learned groundedness,
+//! natural-language understanding, or calibrated uncertainty in the model.
 
 use super::durable_memory::DurableSession;
 use super::Model;
@@ -193,15 +191,6 @@ impl GroundednessEvaluator {
         let candidate_entity = Self::extract_entity_subject(session, trimmed);
 
         if let Some(entity) = candidate_entity {
-            // Check for ambiguous query terms
-            if entity == "ambiguous" {
-                return GroundedOutcome::Clarify(GroundedClarification {
-                    ambiguous_term: entity,
-                    candidate_entities: vec!["city_a".into(), "city_b".into()],
-                    prompt: "Did you mean city_a or city_b?".into(),
-                });
-            }
-
             // Check if entity has an active relation record
             if let Some(record) = session.get_fact_record(&entity) {
                 if record.conflict {
@@ -246,52 +235,51 @@ impl GroundednessEvaluator {
 
     /// Try parsing and evaluating arithmetic queries while respecting integer kernel
     /// boundary checks and `NoOperation` refusal.
-    fn try_evaluate_arithmetic(query: &str) -> Option<GroundedOutcome> {
-        let lower = query.to_ascii_lowercase();
-        // Check for arithmetic cues
-        let (op, parts) = if lower.contains('+') {
-            ("+", lower.split('+').collect::<Vec<_>>())
-        } else if lower.contains('-') && !lower.starts_with('-') {
-            ("-", lower.split('-').collect::<Vec<_>>())
-        } else if lower.contains('*') {
-            ("*", lower.split('*').collect::<Vec<_>>())
-        } else {
-            return None;
-        };
-
-        if parts.len() != 2 {
+    pub(super) fn try_evaluate_arithmetic(query: &str) -> Option<GroundedOutcome> {
+        if !query.bytes().any(|b| matches!(b, b'+' | b'-' | b'*')) {
             return None;
         }
-
-        // Clean operands
-        let left_str = parts[0]
-            .chars()
-            .filter(|c| c.is_ascii_digit() || *c == '-')
-            .collect::<String>();
-        let right_raw = parts[1].split('=').next().unwrap_or(parts[1]);
-        let right_str = right_raw
-            .chars()
-            .filter(|c| c.is_ascii_digit() || *c == '-')
-            .collect::<String>();
-
-        let left: i64 = match left_str.parse() {
-            Ok(v) => v,
-            Err(_) => {
-                return Some(GroundedOutcome::Abstain(GroundedAbstention {
-                    reason: AbstentionReason::NoOperationPrecondition,
-                    detail: "Invalid left numeric operand".into(),
-                }))
+        // Exact grammar: signed integer, one operator, signed integer, optional '='.
+        // Never strip punctuation or words: "1.5 + 2" must not become "15 + 2".
+        let expression = query
+            .trim()
+            .strip_suffix('=')
+            .unwrap_or(query.trim())
+            .trim();
+        fn integer(input: &str) -> Option<(i64, &str)> {
+            let input = input.trim_start();
+            let bytes = input.as_bytes();
+            let mut end = usize::from(matches!(bytes.first(), Some(b'+') | Some(b'-')));
+            let digits = end;
+            while bytes.get(end).is_some_and(u8::is_ascii_digit) {
+                end += 1;
             }
-        };
-
-        let right: i64 = match right_str.parse() {
-            Ok(v) => v,
-            Err(_) => {
-                return Some(GroundedOutcome::Abstain(GroundedAbstention {
-                    reason: AbstentionReason::NoOperationPrecondition,
-                    detail: "Invalid right numeric operand".into(),
-                }))
+            if end == digits {
+                return None;
             }
+            Some((input[..end].parse().ok()?, &input[end..]))
+        }
+        let parsed = (|| {
+            let (left, rest) = integer(expression)?;
+            let rest = rest.trim_start();
+            let op = match rest.as_bytes().first()? {
+                b'+' => "+",
+                b'-' => "-",
+                b'*' => "*",
+                _ => return None,
+            };
+            let (right, tail) = integer(&rest[1..])?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            Some((left, op, right))
+        })();
+        let Some((left, op, right)) = parsed else {
+            return Some(GroundedOutcome::Abstain(GroundedAbstention {
+                reason: AbstentionReason::NoOperationPrecondition,
+                detail: "Expected exactly two signed i64 integers and one +, - or * operator"
+                    .into(),
+            }));
         };
 
         // Enforce operator legality bounds

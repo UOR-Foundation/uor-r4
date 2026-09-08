@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
+
     <!-- MARKED.JS, KATEX, PDF.JS & THREE.JS -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -2083,7 +2083,7 @@
             gap: 0.5rem;
         }
 
-    
+
         /* Apple-Grade Modern Typography & Polished Studio Components */
         body, input, textarea, button, select {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif !important;
@@ -2149,7 +2149,7 @@
             color: #ef4444;
         }
 
-    
+
         .ide-agent-status-bar {
             display: flex;
             align-items: center;
@@ -2178,6 +2178,7 @@
     </style>
 </head>
 <body>
+    <div style="position:fixed;bottom:8px;right:8px;z-index:10000"><button class="modal-btn" onclick="toggleSidecar()">Load model / native session</button></div>
 
     <!-- ================= SIDEBAR ================= -->
     <aside class="sidebar" id="leftSidebar">
@@ -2222,7 +2223,7 @@
                     <span id="activeWorkspaceName" style="font-weight:600; font-size:0.85rem; color:#ffffff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">No Folder Connected</span>
                     <span class="workspace-badge" id="activeWorkspaceBadge" style="font-size:0.65rem; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.08); color:var(--accent-cyan);">Browser</span>
                 </div>
-                
+
                 <div id="sidebarGitStatusRow" style="display:none; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.72rem; color:var(--text-muted);">
                     <span id="sidebarGitBranch">🌿 main</span>
                     <span>•</span>
@@ -2256,7 +2257,7 @@
                 <span id="browserCacheUsageLabel" style="font-size:0.62rem; color:var(--text-muted); cursor:pointer;" onclick="openModelManagerModal()">Storage: Calculating...</span>
                 <button class="icon-btn" style="font-size:0.62rem; color:var(--accent-cyan); padding:1px 4px;" onclick="openModelManagerModal()" title="Manage Sovereign Neural Substrates">⚙️ Manage Models</button>
             </div>
-            <div style="font-size:0.6rem; color:var(--text-muted); margin-top:2px;">Web Worker • WebGPU/WASM • GitHub Pages</div>
+            <div style="font-size:0.6rem; color:var(--text-muted); margin-top:2px;">Native WASM worker • GitHub Pages</div>
         </div>
     </aside>
 
@@ -2296,13 +2297,13 @@
                 </div>
 
                 <!-- HARDWARE ACCELERATION BADGE -->
-                <div class="header-hw-badge" style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.72rem; color:var(--accent-cyan); background:rgba(6,182,212,0.08); border:1px solid rgba(6,182,212,0.2); padding:0.25rem 0.6rem; border-radius:6px; font-family:var(--font-mono);" title="Hardware-Accelerated WebGPU / WASM SIMD Inference">
+                <div class="header-hw-badge" style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.72rem; color:var(--accent-cyan); background:rgba(6,182,212,0.08); border:1px solid rgba(6,182,212,0.2); padding:0.25rem 0.6rem; border-radius:6px; font-family:var(--font-mono);" title="CPU WebAssembly worker; hardware acceleration is not measured">
                     <span>⚡</span>
-                    <span id="headerHwStatus">WebGPU • SIMD</span>
+                    <span id="headerHwStatus">CPU WebAssembly</span>
                 </div>
 
                 <!-- SIDECAR TOGGLE ICON -->
-                <button class="icon-btn" id="btnSidecarToggle" onclick="toggleSidecar()" title="Toggle Holographic Brain Telemetry" style="width:32px; height:32px; border-radius:6px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center;">
+                <button class="icon-btn" id="btnSidecarToggle" onclick="toggleSidecar()" title="Native model and checkpoint controls" style="width:32px; height:32px; border-radius:6px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center;">
                     🧠
                 </button>
 
@@ -2325,15 +2326,15 @@
             <div class="input-floating-wrapper">
                 <div class="attachment-chips-row" id="attachmentChipsRow"></div>
                 <div class="input-capsule">
-                    <textarea 
-                        id="chatInput" 
-                        class="chat-textarea" 
-                        placeholder="Ask questions, generate code, edit files, or type @file to attach..." 
+                    <textarea
+                        id="chatInput"
+                        class="chat-textarea"
+                        placeholder="Ask questions, generate code, edit files, or type @file to attach..."
                         rows="1"
                         oninput="autoResizeTextarea(this)"
                         onkeydown="handleTextareaKey(event)"
                     ></textarea>
-                    
+
                     <div class="input-controls-row">
                         <div class="input-tools-left">
                             <button class="tool-icon-btn" onclick="document.getElementById('fileUploadInput').click()" title="Attach Document (PDF, Code, Text)">
@@ -2409,21 +2410,21 @@
                     </div>
 
                     <div class="input-capsule">
-                        <textarea 
-                            id="editorAgentPromptInput" 
-                            class="chat-textarea" 
-                            placeholder="Ask Agent: 'Refactor this module', 'Add SIMD vectorization', 'Write tests'..." 
+                        <textarea
+                            id="editorAgentPromptInput"
+                            class="chat-textarea"
+                            placeholder="Ask Agent: 'Refactor this module', 'Add SIMD vectorization', 'Write tests'..."
                             rows="1"
                             oninput="autoResizeTextarea(this)"
                             onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); executeEditorAgentPrompt(); }"
                         ></textarea>
-                        
+
                         <div class="input-controls-row">
                             <div class="input-tools-left">
                                 <button class="tool-icon-btn" onclick="document.getElementById('fileUploadInput').click()" title="Attach Document (PDF, Code, Text)">
                                     📎
                                 </button>
-                                
+
                                 <!-- SINGLE ENGINE BADGE -->
                                 <div class="input-engine-badge" id="ideActiveEngineBadge" onclick="openModelManagerModal()" title="UOR-R4 API: Autoregressive Geometric State Model (Zero-Matmul Serving, Z[phi] Golden Integer Ring)">
                                     <span>⚡</span>
@@ -2475,69 +2476,21 @@
         </div>
     </main>
 
-    <!-- ================= SIDECAR: 3D REALISTIC HOLOGRAPHIC BLUE BRAIN ================= -->
     <aside class="telemetry-sidecar" id="telemetrySidecar">
-        <div class="sidecar-header">
-            <div class="sidecar-title">
-                <span>🧠</span>
-                <span>Holographic Brain Synapses</span>
-            </div>
-            <button class="icon-btn" onclick="toggleSidecar()">✕</button>
-        </div>
-
+        <div class="sidecar-header"><span>Native model session</span><button class="icon-btn" onclick="toggleSidecar()">✕</button></div>
         <div class="sidecar-content">
-            <!-- 3D HOLOGRAPHIC BLUE BRAIN CANVAS -->
-            <div class="canvas-container">
-                <div class="canvas-controls-overlay">
-                    <button class="canvas-chip-btn" onclick="triggerSynapticFlash()">Flash Synapse</button>
-                    <button class="canvas-chip-btn" onclick="reset3DCamera()">Reset View</button>
-                </div>
-                <div class="canvas-active-token-badge" id="canvasTokenBadge">Synaptic Ready</div>
-                <canvas id="threeCanvas"></canvas>
-            </div>
-
-            <!-- EEG BRAINWAVE OSCILLOSCOPE & PERSISTED THROUGHPUT METER -->
-            <div class="eeg-card">
-                <div class="eeg-header">
-                    <span>⚡ Thought Wave EEG (α, β, γ)</span>
-                    <span class="eeg-tps-meter" id="eegTpsMeter">Ready</span>
-                </div>
-                <canvas id="eegCanvas" width="350" height="55"></canvas>
-            </div>
-
-            <!-- UNIFIED BRAIN REASONING HUD CARD -->
-            <div class="bold-hud-card">
-                <div class="card-header-subtle">
-                    <div class="active-concept-badge" id="activeConceptBadge">
-                        <span style="color:var(--accent-cyan);">●</span>
-                        <span id="activeDomainName">Neural Synaptic Core</span>
-                    </div>
-                    <span class="active-phase-tag ready" id="activePhaseTag">⚡ Neural Substrate Ready</span>
-                </div>
-                <div class="token-trace-pill" id="tokenTracePill">
-                    "Awaiting semantic thought stream..."
-                </div>
-            </div>
-
-            <!-- UNIFIED METRIC CAPSULES -->
-            <div class="metric-capsules-grid">
-                <div class="metric-capsule">
-                    <span class="capsule-key">Action Potential (χ)</span>
-                    <span class="capsule-val" id="capsuleChiVal">1.57 mV</span>
-                </div>
-                <div class="metric-capsule">
-                    <span class="capsule-key">Synaptic Phase (δ)</span>
-                    <span class="capsule-val" id="capsuleDeltaVal">4.75 rad</span>
-                </div>
-                <div class="metric-capsule">
-                    <span class="capsule-key">E8 Gosset Snap</span>
-                    <span class="capsule-val" id="capsuleE8Val" style="color:var(--accent-emerald);">Root #42</span>
-                </div>
-                <div class="metric-capsule">
-                    <span class="capsule-key">Hopf Fiber (α)</span>
-                    <span class="capsule-val" id="capsuleAlphaVal" style="color:var(--accent-cyan);">0.67 rad</span>
-                </div>
-            </div>
+            <p id="nativeModelStatus">No model loaded. Select a retained native model JSON file.</p>
+            <input id="nativeModelFile" type="file" accept=".json,application/json" aria-label="Load retained model" onchange="loadNativeModelFile(this.files[0])">
+            <p>Pre-alpha: bounded copying and typed operations. General prose, broad reasoning, energy savings and browser capability qualification are not established.</p>
+            <p>Model geometry and energy telemetry: unavailable in this view.</p>
+            <p id="eegTpsMeter">Throughput: unavailable until generation</p>
+            <p id="activePhaseTag">Awaiting model</p>
+            <label>Maximum output tokens <input id="nativeTokenLimit" type="number" min="1" max="4096" value="256"></label>
+            <p id="nativeStopReason">Last generation: unavailable</p>
+            <button class="modal-btn" onclick="exportNativeSession()">Export checkpoint</button>
+            <label>Import checkpoint <input id="nativeCheckpointFile" type="file" accept=".json" onchange="importNativeSessionFile(this.files[0])"></label>
+            <button class="modal-btn secondary" onclick="resetNativeSession()">Reset current model session</button>
+            <p>Conversation text is saved by the browser. Native state survives while this page remains open; export a checkpoint to preserve it across reloads.</p>
         </div>
     </aside>
 
@@ -2548,7 +2501,7 @@
                 <span>🐙</span>
                 <span>Connect GitHub Account</span>
             </div>
-            
+
             <p style="font-size:0.76rem; color:var(--text-secondary); line-height:1.45;">
                 Connect your GitHub account to explore repositories, inspect code trees, and open Pull Requests directly from the Sovereign AI Studio.
             </p>
@@ -2741,7 +2694,7 @@
 
             const activeTab = openEditorTabs.find(t => t.name === activeEditorTab);
             const tabName = activeTab ? activeTab.name : `code.${getExtForLang(lang)}`;
-            
+
             // Set proposed code as modified against existing original
             openFileInMonaco(tabName, code, lang);
             if (!isDiffModeActive) {
@@ -2798,10 +2751,10 @@
                 icon: '⚡',
                 source: 'uor:native-geometric/api/1',
                 localPath: './pkg/uor_r4_wasm_router_bg.wasm',
-                size_mb: 2.8,
-                tier: 'Native Geometric Alpha',
+                size_mb: null,
+                tier: 'Native Geometric Pre-alpha',
                 dtype: 'Z[phi] golden integer ring, zero-matmul',
-                desc: 'Autoregressive geometric state language model. 14 Riemann zeta-zero phase clocks, exact Z[phi] icosian paired-H4 ring (E8 = H4 + phi H4), continuous R4/S3/H4 causal transport, 100% zero-matmul serving.'
+                desc: 'Experimental native geometric model. Load an artifact to inspect its identity; general prose and broad reasoning remain unqualified.'
             }
         };
 
@@ -2977,18 +2930,18 @@
             if (!window.workspaceFiles[fileName]) {
                 window.workspaceFiles[fileName] = { content: '// New File\n', lang: getLangForExt(fileName) };
             }
-            
+
             // Save previous active tab content from Monaco if valid
             if (window.monacoEditorInstance && window.currentWorkspaceFile && window.workspaceFiles[window.currentWorkspaceFile]) {
                 window.workspaceFiles[window.currentWorkspaceFile].content = window.monacoEditorInstance.getValue();
             }
-            
+
             window.currentWorkspaceFile = fileName;
             const agentTarget = document.getElementById('agentActiveFileLabel');
             if (agentTarget) agentTarget.innerText = fileName;
             const fileObj = window.workspaceFiles[fileName];
             const lang = fileObj.lang || getLangForExt(fileName);
-            
+
             if (window.monacoEditorInstance && typeof monaco !== 'undefined') {
                 let model = window.monacoEditorInstance.getModel();
                 if (model) {
@@ -2999,14 +2952,14 @@
                     window.monacoEditorInstance.setModel(newModel);
                 }
             }
-            
+
             renderEditorTabsBar();
         };
 
         function renderEditorTabsBar() {
             const bar = document.getElementById('editorTabsBar');
             if (!bar) return;
-            
+
             const fileKeys = Object.keys(window.workspaceFiles);
             bar.innerHTML = fileKeys.map(name => `
                 <div class="editor-tab ${name === window.currentWorkspaceFile ? 'active' : ''}" onclick="switchEditorTab('${name}')">
@@ -3048,7 +3001,7 @@
             try {
                 const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
                 window.localDirectoryHandle = dirHandle;
-                
+
                 showToast(`📂 Connected local folder: ${dirHandle.name}`);
                 await inspectAndLoadLocalWorkspace(dirHandle);
             } catch(err) {
@@ -3110,7 +3063,7 @@
             if (container) container.innerHTML = '<div style="padding:1rem; text-align:center; color:var(--text-muted); font-size:0.75rem;"><span class="pulse-dot"></span> Scanning directory structure...</div>';
 
             window.localWorkspaceTree = await scanDirectoryRecursive(dirHandle, '');
-            
+
             // Count total files
             let totalFileCount = 0;
             function countFiles(nodes) {
@@ -3136,8 +3089,8 @@
             }
 
             // If index.html, main.rs, or src/lib.rs exists, open it in Monaco
-            const priorityFile = findFileInTree(window.localWorkspaceTree, 'index.html') || 
-                                 findFileInTree(window.localWorkspaceTree, 'src/lib.rs') || 
+            const priorityFile = findFileInTree(window.localWorkspaceTree, 'index.html') ||
+                                 findFileInTree(window.localWorkspaceTree, 'src/lib.rs') ||
                                  findFileInTree(window.localWorkspaceTree, 'main.rs');
             if (priorityFile) {
                 await openWorkspaceFileInEditor(priorityFile);
@@ -3230,8 +3183,8 @@
                 row.style.transition = 'background 0.1s ease';
 
                 row.onmouseenter = () => { row.style.background = 'rgba(255,255,255,0.06)'; };
-                row.onmouseleave = () => { 
-                    if (!row.classList.contains('active-file')) row.style.background = 'transparent'; 
+                row.onmouseleave = () => {
+                    if (!row.classList.contains('active-file')) row.style.background = 'transparent';
                 };
 
                 if (node.kind === 'directory') {
@@ -3324,7 +3277,7 @@
                 }
 
                 const lang = getLangForExt(fileNode.ext || fileNode.name.split('.').pop());
-                
+
                 // Add or switch Monaco tab
                 let existingTab = openEditorTabs.find(t => t.name === fileNode.name || t.path === fileNode.path);
                 if (!existingTab) {
@@ -3641,7 +3594,7 @@
 
             try {
                 showToast("Connecting to GitHub API...");
-                
+
                 // 1. Fetch User Profile
                 let user = null;
                 try {
@@ -3764,7 +3717,7 @@
                 const defaultBranch = repo.default_branch || 'main';
                 const ownerLogin = repo.owner ? (repo.owner.login || repo.owner) : repo.full_name.split('/')[0];
                 const repoName = repo.name || repo.full_name.split('/')[1];
-                
+
                 const treeData = await callGithubApi(`/repos/${ownerLogin}/${repoName}/git/trees/${defaultBranch}?recursive=1`);
 
                 window.workspaceFilesArray = (treeData.tree || []).map(item => ({
@@ -3870,7 +3823,7 @@
                     if (window.currentWorkspaceFile && window.workspaceFiles[window.currentWorkspaceFile]) {
                         const val = monacoEditorInstance.getValue();
                         window.workspaceFiles[window.currentWorkspaceFile].content = val;
-                        
+
                         if (window.remoteOriginalFiles[window.currentWorkspaceFile] !== undefined) {
                             if (window.remoteOriginalFiles[window.currentWorkspaceFile] !== val) {
                                 window.modifiedWorktreeFiles.add(window.currentWorkspaceFile);
@@ -4031,7 +3984,7 @@
         h1 { margin: 0 0 6px 0; font-size: 15px; color: #00e5ff; letter-spacing: 0.5px; }
         p { margin: 0; font-size: 11.5px; color: #94a3b8; line-height: 1.4; }
         canvas { width: 100vw; height: 100vh; display: block; }
-    
+
         /* Apple-Grade Modern Typography & Polished Studio Components */
         body, input, textarea, button, select {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif !important;
@@ -4097,7 +4050,7 @@
             color: #ef4444;
         }
 
-    
+
         .ide-agent-status-bar {
             display: flex;
             align-items: center;
@@ -4221,7 +4174,7 @@
                 htmlCode = (window.workspaceFiles['index.html'] ? window.workspaceFiles['index.html'].content : '');
                 cssCode = (window.workspaceFiles['style.css'] ? window.workspaceFiles['style.css'].content : '');
                 jsCode = (window.workspaceFiles['app.js'] ? window.workspaceFiles['app.js'].content : '');
-                
+
                 if (window.monacoEditorInstance && window.currentWorkspaceFile) {
                     const currentVal = window.monacoEditorInstance.getValue();
                     if (window.currentWorkspaceFile === 'index.html') htmlCode = currentVal;
@@ -4300,7 +4253,7 @@
             color: #ef4444;
         }
 
-    
+
         .ide-agent-status-bar {
             display: flex;
             align-items: center;
@@ -4343,7 +4296,7 @@
         canvas { display: block; max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 0 25px rgba(0, 216, 255, 0.25); }
         #app { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
         ${cssCode}
-    
+
         /* Apple-Grade Modern Typography & Polished Studio Components */
         body, input, textarea, button, select {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif !important;
@@ -4409,7 +4362,7 @@
             color: #ef4444;
         }
 
-    
+
         .ide-agent-status-bar {
             display: flex;
             align-items: center;
@@ -4466,7 +4419,7 @@
         * { box-sizing: border-box; }
         body { margin: 0; padding: 1.5rem; background: #0b0f19; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
         ${cssCode}
-    
+
         /* Apple-Grade Modern Typography & Polished Studio Components */
         body, input, textarea, button, select {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif !important;
@@ -4532,7 +4485,7 @@
             color: #ef4444;
         }
 
-    
+
         .ide-agent-status-bar {
             display: flex;
             align-items: center;
@@ -4582,7 +4535,7 @@
         .hero-card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 2rem; max-width: 480px; }
         h2 { color: #00d8ff; margin-bottom: 0.5rem; }
         p { color: #94a3b8; font-size: 0.85rem; line-height: 1.5; }
-    
+
         /* Apple-Grade Modern Typography & Polished Studio Components */
         body, input, textarea, button, select {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif !important;
@@ -4648,7 +4601,7 @@
             color: #ef4444;
         }
 
-    
+
         .ide-agent-status-bar {
             display: flex;
             align-items: center;
@@ -4810,7 +4763,7 @@
             }
             const modal = document.getElementById('gitCommitModal');
             document.getElementById('commitTargetRepoLabel').innerText = `${activeRepo.full_name} (${activeGitBranch})`;
-            
+
             const listEl = document.getElementById('commitModifiedFilesList');
             if (modifiedWorktreeFiles.size === 0) {
                 listEl.innerHTML = `<div>${window.currentWorkspaceFile} (Active buffer)</div>`;
@@ -4830,20 +4783,20 @@
             const msgInput = document.getElementById('gitCommitMessageInput');
             const commitMsg = (msgInput ? msgInput.value.trim() : '') || `Update ${window.currentWorkspaceFile} via Sovereign AI Studio`;
             const btn = document.getElementById('btnExecuteCommit');
-            
+
             if (btn) { btn.disabled = true; btn.innerText = "Pushing..."; }
 
             try {
                 showToast("🚀 Pushing commit to GitHub...");
-                
+
                 // Commit each modified file to the active branch
                 const filesToCommit = modifiedWorktreeFiles.size > 0 ? Array.from(modifiedWorktreeFiles) : [window.currentWorkspaceFile];
-                
+
                 for (const fileName of filesToCommit) {
                     const fileObj = workspaceFiles[fileName];
                     const contentStr = fileObj ? fileObj.content : (monacoEditorInstance ? monacoEditorInstance.getValue() : '');
                     const remotePath = fileObj?.remotePath || fileName;
-                    
+
                     // Encode to base64 UTF-8
                     const utf8Bytes = new TextEncoder().encode(contentStr);
                     let binary = '';
@@ -5011,42 +4964,10 @@
         }
 
         // --- IN-BROWSER PIPELINE ---
-        async function getBrowserPipeline(modelId) {
-            if (loadedPipelines[modelId]) return loadedPipelines[modelId];
-
-            const meta = MODEL_CONFIGS[modelId];
-            if (!meta) return null;
-
-            const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3');
-            env.allowLocalModels = false;
-            env.allowRemoteModels = true;
-            env.useBrowserCache = true;
-
-            let device = 'wasm';
-            if (navigator.gpu) {
-                try {
-                    const adapter = await navigator.gpu.requestAdapter();
-                    if (adapter) device = 'webgpu';
-                } catch(e) {}
-            }
-
-            const pipe = await pipeline('text-generation', meta.source, {
-                dtype: meta.dtype || 'q4',
-                device: device
-            });
-
-            loadedPipelines[modelId] = pipe;
-            return pipe;
+        async function getBrowserPipeline() {
+            throw new Error('Studio serves only the explicitly loaded native artifact through its worker.');
         }
-
-        async function prewarmActivePipeline() {
-            const meta = MODEL_CONFIGS[activeModelId];
-            if (meta) {
-                try {
-                    await getBrowserPipeline(activeModelId);
-                } catch(e) {}
-            }
-        }
+        async function prewarmActivePipeline() { initModelWorker(); }
 
         // --- IN-PROMPT MODEL SELECTOR ---
         window.toggleInputModelDropdown = function(event) {
@@ -5054,7 +4975,7 @@
             const btn = event.currentTarget || event.target.closest('button');
             const wrapper = btn ? btn.closest('.input-model-selector-wrapper') : null;
             const menu = wrapper ? wrapper.querySelector('.input-model-dropdown-menu') : document.getElementById('inputModelDropdownMenu');
-            
+
             // Close other dropdowns
             document.querySelectorAll('.input-model-dropdown-menu.show').forEach(m => {
                 if (m !== menu) m.classList.remove('show');
@@ -5069,50 +4990,17 @@
         window.modelCacheStatus = {};
 
         async function checkAllModelCaches() {
-            if (!('caches' in window)) return;
-            try {
-                const cache = await caches.open('transformers-cache');
-                const reqs = await cache.keys();
-                
-                for (const modelId in MODEL_CONFIGS) {
-                    const src = MODEL_CONFIGS[modelId].source;
-                    const isCached = reqs.some(r => r.url.includes(src) && (r.url.includes('.onnx') || r.url.includes('.onnx_data')));
-                    window.modelCacheStatus[modelId] = isCached;
-                    
-                    // Update dropdown check / badge
-                    const badge = document.getElementById(`cache-badge-${modelId}`);
-                    if (badge) {
-                        badge.className = `model-cache-status-badge ${isCached ? 'cached' : 'uncached'}`;
-                        badge.innerText = isCached ? '💾 Cached' : `📥 ~${MODEL_CONFIGS[modelId].size_mb}MB`;
-                    }
-                }
-            } catch(e) {}
+            for (const modelId in MODEL_CONFIGS) {
+                const badge = document.getElementById(`cache-badge-${modelId}`);
+                if (badge) badge.textContent = window.nativeModelCid ? 'Artifact loaded in memory' : 'Load artifact';
+            }
         }
         window.checkAllModelCaches = checkAllModelCaches;
 
-        window.triggerBackgroundCompile = function(modelId) {
-            const meta = MODEL_CONFIGS[modelId];
-            if (!meta) return;
-
-            window.activeCompileModelId = modelId;
-            showToast(`🚀 Spawning detached compiler for: ${meta.fullName}`);
-
-            const pill = document.getElementById('detachedCompilePill');
-            const txt = document.getElementById('detachedCompileText');
-            const fill = document.getElementById('detachedMiniProgressFill');
-            if (pill && txt && fill) {
-                pill.style.display = 'inline-flex';
-                txt.innerText = `📥 ${meta.name} (1%)`;
-                fill.style.width = '1%';
-            }
-
-            if (modelWorker) {
-                modelWorker.postMessage({
-                    action: 'prewarm',
-                    id: `compile_${modelId}_${Date.now()}`,
-                    modelId: modelId
-                });
-            }
+        window.triggerBackgroundCompile = function() {
+            initModelWorker();
+            toggleSidecar();
+            showToast('Choose a retained model JSON file. WASM loading does not train or load a model.');
         };
 
         window.openModelManagerModal = async function() {
@@ -5164,41 +5052,12 @@
                 }
             }
 
-            grid.innerHTML = `
-                <div class="model-manager-card active" style="grid-column: 1 / -1; background: rgba(0, 216, 255, 0.05); border: 1px solid rgba(0, 216, 255, 0.35); border-radius: 8px; padding: 1.2rem; display: flex; flex-direction: column; gap: 0.8rem;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <span style="font-size: 1.6rem;">⚡</span>
-                            <div>
-                                <div style="font-size: 1.05rem; font-weight: 700; color: #ffffff;">uor-r4 api</div>
-                                <div style="font-size: 0.76rem; color: var(--accent-cyan); font-weight: 600;">Native Geometric Language Model (Alpha v0.1.0)</div>
-                            </div>
-                        </div>
-                        <span class="model-cache-status-badge cached" style="background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3); padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.72rem; font-weight: 700;">
-                            ⚡ Sovereign WebAssembly Loaded (~2.8 MB)
-                        </span>
-                    </div>
-
-                    <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; background: rgba(0, 0, 0, 0.3); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-subtle);">
-                        Autoregressive geometric state machine executing directly over exact prime coordinates, 14 Riemann zeta-zero phase channels, and golden integer ring arithmetic Z[phi]. Zero matrix multiplications, zero floating-point operations, and zero steady-state heap allocations in serving.
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.6rem; font-size: 0.74rem;">
-                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
-                            <span style="color: var(--text-muted);">Architecture:</span> <strong style="color: #ffffff;">R⁴/S³/H⁴ Continuous Manifold</strong>
-                        </div>
-                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
-                            <span style="color: var(--text-muted);">Serving Matmul:</span> <strong style="color: #00ff88;">0 Mathematical Products</strong>
-                        </div>
-                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
-                            <span style="color: var(--text-muted);">Harmonic Clocks:</span> <strong style="color: #ffffff;">14 Zeta-Zero Phase Channels</strong>
-                        </div>
-                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem 0.7rem; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
-                            <span style="color: var(--text-muted);">Memory Substrate:</span> <strong style="color: #ffffff;">Exact Addressed Ring (Durable)</strong>
-                        </div>
-                    </div>
-                </div>
-            `;
+            grid.innerHTML = `<div class="model-manager-card active">
+                <strong>UOR-R4 Geometric Language Model — pre-alpha</strong>
+                <p>No model is bundled. Load the retained model JSON using the Native model session panel.</p>
+                <p>Current artifact: ${escapeHtml(window.nativeModelCid || 'not loaded')}</p>
+                <button class="modal-btn" onclick="toggleSidecar()">Open model session panel</button>
+            </div>`;
 
             // Update storage
             if (navigator.storage && navigator.storage.estimate) {
@@ -5290,7 +5149,7 @@
 
         function updateInputModelDisplay() {
             const meta = MODEL_CONFIGS[activeModelId] || MODEL_CONFIGS['uor-r4-api'];
-            
+
             // Update Chat Studio selector
             const chatName = document.getElementById('inputActiveModelName');
             const chatIcon = document.getElementById('inputActiveModelIcon');
@@ -5467,6 +5326,7 @@
         };
 
         window.deleteConversation = function(id) {
+            modelWorker?.postMessage({action: 'close_session', payload: {conversationId: id}});
             conversations = conversations.filter(c => c.id !== id);
             if (currentConvId === id) {
                 currentConvId = conversations.length > 0 ? conversations[0].id : null;
@@ -5703,7 +5563,7 @@
             cleanText = cleanText.replace(/^[ \t]*\[\s*(\\[a-zA-Z]+|[a-zA-Z0-9_]+[ \t]*=)(.*?)(?:\]|\n\n|$)/gm, '\n\n$$$$ $1$2 $$$$\n\n');
             cleanText = cleanText.replace(/^[ \t]*([a-zA-Z0-9_\{\}]+\s*=\s*\\[a-zA-Z]+[\s\S]*?)$/gm, '\n\n$$$$ $1 $$$$\n\n');
             cleanText = cleanText.replace(/\\begin\{(aligned|align\*?|equation\*?|gather\*?|matrix|pmatrix|bmatrix)\}([\s\S]*?)\\end\{\1\}/g, '\n\n$$$$ \\begin{$1}$2\\end{$1} $$$$\n\n');
-            
+
             cleanText = cleanText.replace(/\$\$([\s\S]*?)\$\$/g, (match, mathContent) => {
                 mathBlocks.push({ content: sanitizeLatexMath(mathContent), isBlock: true });
                 return `QQQMATHBLOCK${mathBlocks.length - 1}QQQ`;
@@ -5797,14 +5657,63 @@
 
         let activeGenerationId = null;
 
+        window.loadNativeModelFile = async function(file) {
+            if (!file) return;
+            if (file.size > 64 * 1024 * 1024) { showToast('Model file exceeds the 64 MiB browser load limit.'); return; }
+            initModelWorker();
+            document.getElementById('nativeModelStatus').textContent = 'Validating retained artifact…';
+            try { modelWorker.postMessage({action: 'load_model', payload: {bytes: await file.arrayBuffer()}}); }
+            catch(error) { showToast(`Model load failed: ${error}`); }
+        };
+        window.exportNativeSession = function() {
+            modelWorker?.postMessage({action: 'export_session', payload: {conversationId: currentConvId}});
+        };
+        window.resetNativeSession = function() {
+            modelWorker?.postMessage({action: 'reset_session', payload: {conversationId: currentConvId}});
+        };
+        window.importNativeSessionFile = async function(file) {
+            if (!file) return;
+            if (file.size > 64 * 1024 * 1024) { showToast('Checkpoint exceeds the 64 MiB browser import limit.'); return; }
+            try {
+                const saved = JSON.parse(await file.text());
+                if (typeof saved.conversationId !== 'string' || !Array.isArray(saved.checkpoint)) throw new Error('Expected an exported Studio checkpoint.');
+                if (!conversations.some(c => c.id === saved.conversationId)) conversations.unshift({id: saved.conversationId, title: 'Imported native session', messages: [], timestamp: Date.now()});
+                loadConversation(saved.conversationId);
+                modelWorker.postMessage({action: 'import_session', payload: {conversationId: saved.conversationId, bytes: saved.checkpoint}});
+            } catch(error) { showToast(`Checkpoint import failed: ${error}`); }
+        };
+
         function initModelWorker() {
             if (modelWorker) return; // Keep existing active worker and compiled shaders warm!
             try {
-                modelWorker = new Worker(new URL('./assets/js/uor_model_worker.js?v=4.0.0', import.meta.url), { type: 'module' });
+                modelWorker = new Worker(new URL('./assets/js/uor_model_worker.js?v=recovery-1', import.meta.url), { type: 'module' });
                 window.modelWorker = modelWorker;
 
                 modelWorker.onmessage = (e) => {
                     const { action, id, modelId, chunk, fullText, tokenCount, durationSec, tps, storage, error, stage, text, progress } = e.data;
+
+                    if (action === 'model_loaded') {
+                        const caps = e.data.capabilities;
+                        window.nativeModelCid = caps.artifact_cid || caps.model_cid || caps.model_id;
+                        document.getElementById('nativeModelStatus').textContent = `Loaded artifact ${window.nativeModelCid || JSON.stringify(caps)} (${e.data.bytes} bytes).`;
+                        document.getElementById('activePhaseTag').textContent = 'Model loaded';
+                        showToast('Native artifact loaded. Start a new session or import its checkpoint.');
+                    }
+                    if (action === 'runtime_loaded') {
+                        if (!e.data.ready) document.getElementById('nativeModelStatus').textContent = 'WASM runtime loaded; select a retained model JSON file to begin.';
+                    }
+                    if (action === 'operation_error') {
+                        showToast(`Native operation failed: ${error}`);
+                        document.getElementById('nativeModelStatus').textContent = `Operation failed: ${error}. Active artifact: ${window.nativeModelCid || 'none'}`;
+                    }
+                    if (action === 'session_imported') showToast('Native checkpoint imported for this conversation.');
+                    if (action === 'session_reset') showToast('Native state reset; saved conversation text is unchanged.');
+                    if (action === 'session_exported') {
+                        const checkpoint = { conversationId: e.data.conversationId, checkpoint: Array.from(e.data.bytes) };
+                        const url = URL.createObjectURL(new Blob([JSON.stringify(checkpoint)], {type: 'application/json'}));
+                        const link = document.createElement('a'); link.href = url; link.download = `uor-session-${e.data.conversationId}.json`; link.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 0);
+                    }
 
                     if (action === 'prewarm_complete') {
                         const cMeta = MODEL_CONFIGS[modelId];
@@ -5824,13 +5733,13 @@
 
                     if (action === 'storage_status_result') {
                         const lbl = document.getElementById('browserCacheUsageLabel');
-                        if (lbl && storage) lbl.innerText = `Storage: ${storage.usageMB} MB`;
+                        if (lbl && storage) lbl.innerText = `Browser origin storage: ${storage.usageMB} MB`;
                     }
 
                     if (action === 'purge_complete') {
                         showToast("🧹 Browser model cache cleared!");
                         const lbl = document.getElementById('browserCacheUsageLabel');
-                        if (lbl && storage) lbl.innerText = `Storage: ${storage.usageMB} MB`;
+                        if (lbl && storage) lbl.innerText = `Browser origin storage: ${storage.usageMB} MB`;
                     }
 
                     if (action === 'compile_stage') {
@@ -5838,10 +5747,10 @@
                         if (phaseTag) {
                             if (stage === 'ready') {
                                 phaseTag.className = 'active-phase-tag ready';
-                                phaseTag.innerText = `⚡ Neural Substrate Ready`;
+                                phaseTag.innerText = `Model loaded`;
                             } else if (stage === 'compiling') {
                                 phaseTag.className = 'active-phase-tag compiling';
-                                phaseTag.innerText = `⚡ Compiling Shaders (${progress || 99}%)`;
+                                phaseTag.innerText = `Loading WASM runtime`;
                             } else {
                                 phaseTag.className = 'active-phase-tag downloading';
                                 phaseTag.innerText = `📥 Downloading (${progress || 0}%)`;
@@ -5900,7 +5809,7 @@
                             const textEl = aiRow.querySelector('.ai-text');
                             if (textEl) {
                                 textEl.style.display = 'block';
-                                
+
                                 // Live on-the-fly markdown & code compilation
                                 let streamText = fullText;
                                 const openTicks = (streamText.match(/```/g) || []).length;
@@ -5913,19 +5822,11 @@
                         }
 
                         const tpsEl = document.getElementById('eegTpsMeter');
-                        if (tpsEl && tps) tpsEl.innerText = `${tps} tok/s`;
-                        triggerEegTokenWave(tps);
-
-                        if (wasmChatSession && chunk) {
-                            wasmChatSession.ingest_token(chunk);
-                            try {
-                                const geo = JSON.parse(wasmChatSession.process_input_run(chunk));
-                                fireRealisticSynapses(geo.chi, geo.delta, geo.alpha, chunk.trim(), geo.snapped);
-                            } catch(err) {}
-                        }
+                        if (tpsEl && tps) tpsEl.innerText = `${Number(tps).toFixed(1)} model tokens/s`;
                     }
 
                     if (action === 'generate_complete' && id === activeGenerationId) {
+                        document.getElementById('nativeStopReason').textContent = `Last generation: ${e.data.stoppedBy || 'unavailable'}`;
                         finalizeChatGeneration(id, fullText, tps, tokenCount);
                     }
 
@@ -5947,7 +5848,7 @@
                         const textEl = aiRow.querySelector('.ai-text');
                         if (textEl) {
                             textEl.style.display = 'block';
-                            textEl.innerHTML = `<div style="color:var(--accent-red); font-family:var(--font-mono); padding:8px; background:rgba(239,68,68,0.1); border-radius:6px; border:1px solid rgba(239,68,68,0.3);">⚠️ <strong>Neural Execution Error:</strong> ${error}<br><small style="color:var(--text-muted);">Please try again or select another model tier.</small></div>`;
+                            textEl.innerHTML = `<div style="color:var(--accent-red); font-family:var(--font-mono); padding:8px; background:rgba(239,68,68,0.1); border-radius:6px; border:1px solid rgba(239,68,68,0.3);">⚠️ <strong>Neural Execution Error:</strong> ${escapeHtml(error)}<br><small style="color:var(--text-muted);">Inspect the loaded artifact and prompt.</small></div>`;
                         }
 
                         isGenerating = false;
@@ -5960,7 +5861,7 @@
                 modelWorker.postMessage({ action: 'prewarm', modelId: activeModelId });
 
             } catch(err) {
-                console.warn("Web worker init failed, fallback ready", err);
+                showToast(`Native worker failed to start: ${err}`);
             }
         }
 
@@ -5974,7 +5875,7 @@
 
 
         // ================= 🌐 LIVE WEB SEARCH & GROUNDING ENGINE =================
-        window.isWebSearchActive = localStorage.getItem('uor_web_search') !== 'false'; // default ON
+        window.isWebSearchActive = false; // Explicit native model evaluation does not inject external search material
 
         window.toggleWebSearch = function() {
             window.isWebSearchActive = !window.isWebSearchActive;
@@ -5999,13 +5900,13 @@
         function extractSearchQuery(prompt) {
             if (!prompt) return '';
             let q = prompt.trim();
-            
+
             // Strip conversational preambles
             q = q.replace(/^(please\s+)?(can\s+you\s+|could\s+you\s+|would\s+you\s+)?(please\s+)?/i, '');
             q = q.replace(/^(search\s+(wikipedia|the\s+web|web|google|online)?\s+(for|about)?|look\s+up(\s+on\s+wikipedia)?|find(\s+out)?|tell\s+me\s+about|what\s+is|who\s+is|where\s+is|give\s+me|show\s+me|get\s+me)\s+/i, '');
             q = q.replace(/^(the\s+)?(wikipedia\s+article\s+(on|for|about)?|wikipedia\s+page\s+(on|for|about)?|wikipedia\s+(on|for|about)?|article\s+(on|for|about)?|info\s+(on|for|about)?|information\s+(on|for|about)?)\s+/i, '');
             q = q.replace(/\s+(on\s+wikipedia|in\s+wikipedia|wikipedia\s+article|wikipedia\s+page|wikipedia)$/i, '');
-            
+
             q = q.replace(/^[\"'`]+|[\"'`?.!]+$/g, '').trim();
             return q || prompt.trim();
         }
@@ -6033,7 +5934,7 @@
                             const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`;
                             const sumRes = await fetch(summaryUrl);
                             const sumData = await sumRes.json();
-                            
+
                             sources.push({
                                 title: sumData.title || title,
                                 snippet: sumData.extract || sumData.description || ('Wikipedia Encyclopedia Article for ' + title),
@@ -6118,14 +6019,11 @@
 
         window.stopGeneration = function() {
             if (modelWorker) {
-                modelWorker.postMessage({ action: 'stop_generation' });
+                modelWorker.postMessage({ action: 'cancel' });
             }
-            isGenerating = false;
-            updateSendStopButtonUI(false);
-            showToast("⏹️ Generation stopped");
+            showToast("Stop requested; waiting for the native worker.");
             const phaseTag = document.getElementById('activePhaseTag');
-            if (phaseTag) phaseTag.innerText = '⚡ Idle';
-            setEegRestingState();
+            if (phaseTag) phaseTag.innerText = 'Stopping…';
         };
 
         function updateSendStopButtonUI(generating) {
@@ -6166,6 +6064,7 @@
 
         window.sendChat = async function() {
             if (isGenerating) return;
+            if (!window.nativeModelCid) { showToast('Load a retained model before sending a prompt.'); toggleSidecar(); return; }
             const input = document.getElementById('chatInput');
             const userPrompt = (input ? input.value : '').trim();
             if (!userPrompt && !attachedFiles.length) return;
@@ -6247,16 +6146,8 @@
                 }
             }
 
-            if (wasmChatSession) {
-                try {
-                    const geoResJson = wasmChatSession.process_input_run(userPrompt);
-                    const geo = JSON.parse(geoResJson);
-                    fireRealisticSynapses(geo.chi, geo.delta, geo.alpha, userPrompt, geo.snapped);
-                } catch(e) {}
-            }
-
             const isCodingAction = !!window.pendingCodeActionPayload || userPrompt.includes('@editor') || userPrompt.includes('@code') || userPrompt.includes('@file') || /refactor|optimize|test|function|module|class|struct|implement|fix|bug|code|create|build/i.test(userPrompt);
-            
+
             let systemPromptText = '';
             if (isCodingAction) {
                 systemPromptText = 'You are the sovereign AI Coding Copilot and Software Engineer in Monaco IDE. You have full authority to analyze, refactor, debug, optimize, and generate complete code for the workspace. When asked to write, refactor, or fix code, provide the full updated code directly inside clean markdown code blocks (e.g. ```rust or ```javascript) with a brief, clear explanation of improvements. Always write robust, production-ready, clean code with zero fluff.';
@@ -6337,29 +6228,6 @@
             container.appendChild(aiThinkingRow);
             scrollDown();
 
-            
-
-            // Check for math or factual query to enforce deterministic precision
-            const isDeterministicMath = /^(\s*[\d\.\+\-\*\/\^\(\)\s%]+|\s*(what\s+is|calculate|solve|evaluate)\s+[\d\.\+\-\*\/\^\(\)\s%]+)/i.test(userPrompt);
-            const isShortFact = userPrompt.length < 50 && (/^(who|when|where|what|how\s+many|is\s+it)\b/i.test(userPrompt));
-
-            let dynamicMaxTokens = 1024;
-            let dynamicTemp = 0.6;
-            let dynamicTopP = 0.9;
-            let dynamicRepPenalty = 1.1;
-
-            if (isDeterministicMath) {
-                dynamicMaxTokens = 128;
-                dynamicTemp = 0.0; // Greedy / exact arithmetic
-                dynamicRepPenalty = 1.15;
-            } else if (isShortFact) {
-                dynamicMaxTokens = 256;
-                dynamicTemp = 0.2;
-            } else if (userPrompt.toLowerCase().includes('code') || userPrompt.toLowerCase().includes('function') || userPrompt.toLowerCase().includes('write')) {
-                dynamicMaxTokens = 1536;
-                dynamicTemp = 0.2;
-            }
-
 
 
             if (modelWorker) {
@@ -6368,13 +6236,10 @@
                     id: activeGenerationId,
                     modelId: activeModelId,
                     payload: {
-                        messages: messagesPayload,
+                        conversationId: currentConvId,
+                        messages: [{role: 'user', content: fullContext}],
                         options: {
-                            is_math_or_fact: (isDeterministicMath || isShortFact),
-                            max_new_tokens: dynamicMaxTokens,
-                            temperature: dynamicTemp,
-                            top_p: dynamicTopP,
-                            repetition_penalty: dynamicRepPenalty
+                            max_new_tokens: Math.max(1, Math.min(4096, Number(document.getElementById('nativeTokenLimit').value) || 256))
                         }
                     }
                 });
@@ -6406,7 +6271,7 @@
                         if (modelSpan) {
                             const mName = MODEL_CONFIGS[activeModelId] ? MODEL_CONFIGS[activeModelId].name : 'uor-r4 api';
                             const countStr = tokenCount ? ` • ${tokenCount} tokens` : '';
-                            const tpsStr = avgTps ? ` • ${avgTps} tok/s` : '';
+                            const tpsStr = avgTps ? ` • ${Number(avgTps).toFixed(1)} model tokens/s` : '';
                             modelSpan.innerText = `${mName}${countStr}${tpsStr}`;
                         }
                     }
@@ -6428,14 +6293,14 @@
                     }
 
                     const fileName = (lang === 'html') ? 'index.html' : `app.${getExtForLang(lang)}`;
-                    
+
                     openFileInMonaco(fileName, code, lang);
                     refreshLivePreview(code, lang);
                     showToast(`🚀 Generated ${fileName} & loaded in Live Preview!`);
                 }
 
                 const tpsEl = document.getElementById('eegTpsMeter');
-                if (tpsEl) tpsEl.innerText = `${avgTps || '9.5'} tok/s (avg)`;
+                if (tpsEl) tpsEl.innerText = avgTps == null ? 'Throughput: unavailable' : `${Number(avgTps).toFixed(1)} model tokens/s (average)`;
 
                 const curConv = conversations.find(c => c.id === currentConvId);
                 if (curConv) {
@@ -6881,7 +6746,7 @@
         function setEegRestingState() {
             eegEnergy = 0.15;
             const phaseTag = document.getElementById('activePhaseTag');
-            if (phaseTag) phaseTag.innerText = `⚡ Synaptic Ready`;
+            if (phaseTag) phaseTag.innerText = `Model session idle`;
         }
 
 
@@ -6941,7 +6806,7 @@
             try {
                 const dirHandle = await window.showDirectoryPicker();
                 showToast(`📂 Opened folder: ${dirHandle.name}`);
-                
+
                 // Read top-level files
                 const loadedFiles = [];
                 for await (const entry of dirHandle.values()) {
@@ -7062,7 +6927,7 @@
                 const results = window.queryWorkspaceGeometric(prompt, 2);
                 const otherFiles = results.filter(r => r.file_path !== activeTab.path && r.file_path !== activeTab.name);
                 if (otherFiles.length > 0) {
-                    crossFileContext = '\n\n[Related Workspace Definitions (Retrieved via UOR Geometric Index)]:\n' + 
+                    crossFileContext = '\n\n[Related Workspace Definitions (Retrieved via UOR Geometric Index)]:\n' +
                         otherFiles.map(r => `// File: ${r.file_path} (${r.signature}, Lines ${r.start_line}-${r.end_line})\n${r.snippet}`).join('\n\n');
                 }
             }
@@ -7121,10 +6986,10 @@
                     id: activeIdeGenerationId,
                     modelId: selectedModelId,
                     payload: {
+                        conversationId: 'ide-session',
                         messages: messagesPayload,
                         options: {
-                            max_new_tokens: 1536,
-                            temperature: 0.2
+                            max_new_tokens: Math.max(1, Math.min(4096, Number(document.getElementById('nativeTokenLimit').value) || 256))
                         }
                     }
                 });
@@ -7133,7 +6998,7 @@
 
         window.cancelIdeAgent = function() {
             if (activeIdeGenerationId && modelWorker) {
-                modelWorker.postMessage({ action: 'stop_generation' });
+                modelWorker.postMessage({ action: 'cancel' });
             }
             const statusBanner = document.getElementById('ideAgentStatusBar');
             if (statusBanner) statusBanner.style.display = 'none';
@@ -7248,8 +7113,8 @@
         // --- INITIALIZATION (INSTANT SYNCHRONOUS UI STARTUP) ---
         window.addEventListener('DOMContentLoaded', () => {
             // 1. Instantly and synchronously render all UI components (0ms delay)
-            try { initThreeVisualizer(); } catch(e) { console.warn("Three.js init error:", e); }
-            try { initEegOscilloscope(); } catch(e) { console.warn("EEG init error:", e); }
+            // Historical visualization code remains preserved but is not model telemetry.
+
             try { initMonacoEditor(); } catch(e) { console.warn("Monaco init error:", e); }
             try { loadPersistentState(); } catch(e) { console.warn("Persistent state error:", e); }
             try { updateInputModelDisplay(); } catch(e) { console.warn("Model display error:", e); }
@@ -7275,29 +7140,9 @@
                 })();
             }
 
-            // 3. Asynchronously load Rust WASM Geometric Bridge in background without blocking UI
-            (async () => {
-                try {
-                    const wasmModule = await import('./pkg/uor_r4_wasm_router.js');
-                    window.wasmModule = wasmModule;
-                    if (wasmModule && typeof wasmModule.default === 'function') {
-                        await wasmModule.default();
-                        if (typeof wasmModule.InteractiveChatSession !== 'undefined') {
-                            window.wasmChatSession = new wasmModule.InteractiveChatSession();
-                            console.log("⚡ Rust WASM Geometric Bridge active!");
-                        }
-                        if (window.localWorkspaceTree && window.localWorkspaceTree.length > 0 && typeof window.indexWorkspaceFilesGeometric === 'function') {
-                            window.indexWorkspaceFilesGeometric(window.localWorkspaceTree).catch(() => {});
-                        }
-                    }
-                } catch(wasmErr) {
-                    console.warn("WASM bridge loaded in fallback mode:", wasmErr);
-                }
-            })();
-
             console.log("⚡ UOR-R4 Sovereign AI Developer Studio Initialized.");
         });
-    
+
         // =====================================================================
         // ⚡ AGENTIC LOCAL TERMINAL & WORKSPACE TOOL RUNNER
         // =====================================================================

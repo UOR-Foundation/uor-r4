@@ -219,6 +219,27 @@ fn preserve(model: &Model, root: &Path, out: &Path, contextual: &Path) -> ProbeR
 }
 
 pub(super) fn run(args: &[String]) -> ProbeResult<()> {
+    if args.first().map(String::as_str) == Some("preserve") {
+        if args.len() != 5 {
+            return Err(
+                "writer-refinement preserve MODEL ROOT PRIOR_CONTEXT_DIR NEW_DIRECTORY".into(),
+            );
+        }
+        OUTPUT_BYTES_REMAINING.store(64 * 1024 * 1024, Ordering::Relaxed);
+        let model = Model::from_bytes(&fs::read(&args[1])?)?;
+        let root = Path::new(&args[2]);
+        let out = Path::new(&args[4]);
+        fs::create_dir(out)?;
+        let passed = preserve(&model, root, out, Path::new(&args[3]))?;
+        write_json(
+            &out.join("result.json"),
+            &json!({"artifact":model.artifact_cid(),"preserved":passed,"scope":"Previously opened retained populations; no new held-out evaluation"}),
+        )?;
+        if !passed {
+            return Err("retained population regression".into());
+        }
+        return Ok(());
+    }
     if args.first().map(String::as_str) == Some("inspect") {
         return inspect(&args[1..]);
     }

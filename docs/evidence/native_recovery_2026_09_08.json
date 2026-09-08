@@ -1,0 +1,1502 @@
+{
+  "schema": "uor-r4.native-recovery-evidence/1",
+  "recorded_at": "2026-09-08T14:25:38.851Z",
+  "source": {
+    "base_commit": "f8e9fa328565e4dbea4036cb2b1cbcea3e3b0007",
+    "branch": "codex/recover-native-geometric",
+    "files": {
+      ".cargo/config.toml": "9731763990e397c21e82ef2272f1cd57324242cdd0c8413e38e5af4cc10af7c3",
+      ".github/workflows/deploy.yml": "2c38a89b057f243f4963cee6796fa19beb59bb1e423f04152116da676bda909c",
+      "assets/js/uor_model_worker.js": "9edcd06ecdb3673c314b6f4204751914086a0243d9a412c4f960bf2c0285db92",
+      "crates/uor-r4-api/examples/native_artifact_recovery_check.rs": "98568554dc4df6ee92b5c99ad3172fd7f7363ca6e0b12596373f8ab64b6ad65a",
+      "crates/uor-r4-api/src/bin/r4-native-chat.rs": "d1592a4686cce4eaa3eb65961e604d0cfe88b9b227a22a33cd769d930eaad299",
+      "crates/uor-r4-api/src/native_capability_api.rs": "840c21fb4f5a8473845628c3b11c3ed4625435650a83af1d0a7f6064a779aa08",
+      "crates/uor-r4-api/src/release_qualification.rs": "16bc166c2cf6b3654cfe722938afc374f4c14d75d32cc854b2784d529de60d45",
+      "crates/uor-r4-api/tests/native_capability_api_tests.rs": "e180afae9ecbc14120f9f02ab77b5ee783ee7cd38a771b430815e4ada3a51356",
+      "crates/uor-r4-api/tests/release_qualification_tests.rs": "f891a342cd6ebe1dd7433f7576006802f171cbd55628dcc383795a87037b6311",
+      "crates/uor-r4-core/examples/native_geometric_value_probe/typed_routing.rs": "455afd2c3d3156d3afad37a64627b786c35f281ad87859cbc2980865f8076432",
+      "crates/uor-r4-core/examples/native_geometric_value_probe/writer_refinement.rs": "21db160e5eb2121875097e76e2bd5f695eb447570ca10aea33ed68960c480d5b",
+      "crates/uor-r4-core/examples/native_shared_transition.rs": "bc7d75518f37a9483d9a6c2ce43cb5bdbd900c5b5d5c9b815135ec796716da26",
+      "crates/uor-r4-core/src/native_geometric/durable_memory.rs": "781faa16a1337309c150cb04ea8a1a12aefada2e4cc088822033d0b078bb79be",
+      "crates/uor-r4-core/src/native_geometric/durable_memory_tests.rs": "d4297766370cf655bf8850cb05eed1a08c316c9f26b9510747141911988c8ec3",
+      "crates/uor-r4-core/src/native_geometric/groundedness.rs": "d763055f729b74abf97a72165a1759dfd04f8fa8ed57c3c80b6b2896f7135536",
+      "crates/uor-r4-core/src/native_geometric/groundedness_tests.rs": "45f45af0bcaf9b85eac96ec432a5354d420210febaaa7b71ed7a8479cc638721",
+      "crates/uor-r4-core/src/native_geometric/guarantees.rs": "459581a31fcfd75942ee93cf19ee34ba7f791c8938a3ecb25e15ce770dd34ff0",
+      "crates/uor-r4-core/src/native_geometric/guarantees_tests.rs": "a9931a00bd9579fb44a663d24ebce82be495aeaa8837b3443e6acca1f1da3227",
+      "crates/uor-r4-core/src/native_geometric/m1_profiler.rs": "48cecfb17e848f4a97864c83fd3516e5e413a70a90653f63f7912dcde74fab82",
+      "crates/uor-r4-core/src/native_geometric/m1_profiler_tests.rs": "e6a628f7411d94d46afbd49522c96318930bd3cc7e8eb6f7c72f0a12a06145b1",
+      "crates/uor-r4-core/src/native_geometric/mod.rs": "2c63f926f7398209c1532441b2f96b52b5d0a42136781de0c6116a1906ff649d",
+      "crates/uor-r4-core/src/native_geometric/runtime.rs": "ebbfe4de3286401787eb60fc0d1b07f0ebe8d96708f90cc83e90ba5d6b281c5c",
+      "crates/uor-r4-core/src/native_geometric/training.rs": "f55dec3690d12613407719e9d956e0f67ee366ce22ad97cad0767a7dfb34b4d5",
+      "crates/uor-r4-core/src/native_geometric/typed_routing.rs": "f99183104b33813e8125398a90bd962f8f72b21f6749fc5651ce3edd71fc01ca",
+      "crates/uor-r4-core/src/native_geometric/typed_routing_training.rs": "4d6d4b15cb8a0264d877d0f683f99b9fe9961f05ed085018c7d113b9d63d6166",
+      "crates/uor-r4-core/src/native_geometric/value_runtime.rs": "9cb1f7876c082253e548e0397ed40b70d0f96e3f7a3151b657a781639b39b7d3",
+      "crates/uor-r4-core/src/native_geometric/value_runtime_tests.rs": "28e2d82a2d9f0207153fc5b0da09e37391a1d8bc8905ff808984706a61cc070f",
+      "crates/uor-r4-core/src/native_geometric/word_copy_value_tests.rs": "357a54d135690d6998728d0f39f18acd8a2d3a6dd8d48bec4bccf567320fb6ad",
+      "crates/uor-r4-core/src/native_geometric/workspace_coding.rs": "6f04bb02e4b46838fd202e8b2f2941a37df705ad31fa0b715f569a2ccebc2968",
+      "crates/uor-r4-core/src/native_geometric/workspace_coding_tests.rs": "85a81ccabb0e9ec294db96feec0f35f1916317d5fbfbb9c6c496e24c5f7a26e7",
+      "index.html": "755bd4568972bd4c28052eaf57b201aede12b10a8099220be864483cc34ccec8",
+      "r4_worker.js": "0f7dd420f9c2a449ab26978b09db334b724f9f2d7a9ff907212e4f41790de9de",
+      "src/lib.rs": "339978d40136498f0d6913bf301d483c7a63e591b00cbde87fff4dcf75576f7e",
+      "src/native_wasm.rs": "b1cff906e852945b2497a3b3dd3a7df99b175ce6032e0ef8c11444426449f496"
+    },
+    "delivery": "Protected PR required; merge identity recorded separately after delivery"
+  },
+  "decision": {
+    "retained": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+    "candidate": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+    "candidate_status": "NOT_PROMOTED",
+    "reason": "After two independent arithmetic turns yielding17 then18, repeated13+4 gives35 on candidate; retained parent abstains Unknown. This new abstention regression overrides earlier selection.",
+    "next": "Learn current-query operand provenance against multiple accumulated derived values with matched controls, before learned within-response transition policy and compositional lexical emission"
+  },
+  "baseline": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+    "sha256": "d65434912f8b47317ea38ed0c76b6485a7e20c41a20ffab0e2b082621b8be82b",
+    "bytes": 11881164
+  },
+  "baseline_final_preservation": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/retained-final-preservation/result.json",
+    "sha256": "7bf099d05924a21cc46385ca5fb732e54a5ae01926c8c73eaff304432dcc57f3",
+    "bytes": 193
+  },
+  "candidate": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/model.json",
+    "sha256": "a1cd0417f499768a3ea7404d0224c1d891d94a4cb4f7467d9b1c7e94219ed654",
+    "bytes": 11952169
+  },
+  "candidate_learning": {
+    "fit": {
+      "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+      "block_bytes": 70875,
+      "config": {
+        "learned_features": 768,
+        "max_seconds": 120,
+        "mode": "angular",
+        "passes": 8,
+        "proposals": 24,
+        "seed": 1139
+      },
+      "construction_ms": 372,
+      "dictionary_words": 60,
+      "effective_query_classes": 58,
+      "feature_universe": 651,
+      "features": 651,
+      "fit": {
+        "accepted": [
+          65,
+          0,
+          1
+        ],
+        "final_correct": 183,
+        "final_hinge": 0,
+        "initial_correct": 100,
+        "initial_hinge": 533,
+        "proposals": 204013,
+        "stopped_at_time_limit": true
+      },
+      "frames": 183,
+      "incompatible_feature_classes": 0,
+      "parent": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+      "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+    },
+    "selection_before_fresh": {
+      "at": "2026-09-08T14:07:14.136Z",
+      "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+      "sha256": "a1cd0417f499768a3ea7404d0224c1d891d94a4cb4f7467d9b1c7e94219ed654",
+      "construction": 183,
+      "open": 12,
+      "open_total": 12,
+      "intermediate_ablation_dependency_exact": 0,
+      "retained_preservation": true,
+      "fresh": "NOT_RUN_AT_SELECTION",
+      "criterion": "All construction183/open12, exact generated intermediate/query occurrence dependency, ablation loses dependency, every recorded prior preservation gate passes; no generalized prose/coding claim",
+      "interface_baseline_verified": "79710468; candidate interface tests next",
+      "raw_input_hashes": {
+        "construction.json": "bb90bba190718dd028fa207bd6dc8e1ff4bce9380df4ae3df02159960f0544a0",
+        "open.json": "0bdf0e88250252fff4603ec9168c5bd991ae41b619a68de7dbaaef340dfd84c6"
+      }
+    },
+    "construction": {
+      "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+      "exact": 183,
+      "total": 183,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction-result.json",
+        "sha256": "25853a334c3f59c2c50bf2fc27514d5aa79d401b1b641bcca7caccb7823add0e",
+        "bytes": 32047241
+      }
+    },
+    "open": {
+      "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+      "exact": 12,
+      "total": 12,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/open-result.json",
+        "sha256": "d900161c4b98b5e55a8001c231ce82047c0b0bc552ed1e87f6d9cda1ff86da82",
+        "bytes": 1781869
+      }
+    },
+    "parent_open": {
+      "artifact": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+      "exact": 8,
+      "total": 12,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/parent-open.json",
+        "sha256": "dda23b3dbcee17288ce5b1e6471305da5d268b859aacbccd4219a1fd2eb069c9",
+        "bytes": 1780881
+      }
+    },
+    "ablation": {
+      "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+      "exact": 0,
+      "total": 12,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/open-ablation-result.json",
+        "sha256": "550fb52abd527b188e7039fee32998d361da8428c63ec4c1e2028da19e61a237",
+        "bytes": 1441992
+      }
+    },
+    "ablation_scope": "0/12 full dependency criterion; four Copy outputs remain byte-correct, so this is not0/12 text accuracy",
+    "fresh": {
+      "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+      "exact": 12,
+      "total": 12,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-fresh/result.json",
+        "sha256": "a3c54b578c2d7b9fe3f04fa175792820af7c0419dde0bafeeae226d4295490d9",
+        "bytes": 1781936
+      }
+    },
+    "fresh_scope": "12 numeric transfer cases with same names/wording, executed after selection; source JSON exported after run from unchanged Rust generator",
+    "fresh_source": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-fresh/source.json",
+      "sha256": "d69e1a2e67cf3d410c36c30aae3ed3d523251a4740c14e9eb80186284265f070",
+      "bytes": 4872
+    },
+    "preservation": {
+      "aliases.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 12,
+        "total": 12,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/aliases.json",
+          "sha256": "5dd6c015518fff21215d6fe36e5534cc408e2d8951be2558ebc750e3ef378325",
+          "bytes": 15252
+        }
+      },
+      "chains.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/chains.json",
+          "sha256": "7c16c39e34b63edd1218d5e3a8ba02f0c28500fa49e7b46ea3b1dbb1d499df12",
+          "bytes": 18506
+        }
+      },
+      "computed-construction.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 58,
+        "total": 58,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/computed-construction.json",
+          "sha256": "7d56bbf6e108b7e0d579999e95cba3ee202f4804db5c8c9ed801ac71412fc443",
+          "bytes": 61339
+        }
+      },
+      "dependent.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 48,
+        "total": 48,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/dependent.json",
+          "sha256": "89b0e02df5fa45a14655e11ce1680d097cdf08661eeb43c343cc1a1b49d8af8a",
+          "bytes": 45899
+        }
+      },
+      "exposed-literals.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/exposed-literals.json",
+          "sha256": "f7706391bf557bd603a0718cd6b7ac0d4af2274ba42c5c9d339549fcf6ee1a04",
+          "bytes": 14928
+        }
+      },
+      "exposed-roles.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 12,
+        "total": 12,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/exposed-roles.json",
+          "sha256": "5d1240504b78c6c9c5eaf041f518b16b02170f6f8177291ae9409a0476c4abd9",
+          "bytes": 15136
+        }
+      },
+      "forward-construction.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/forward-construction.json",
+          "sha256": "344d649d544bab0d3bdcbd31e5a0753ded1ce2ca89cc4f006fcfab0cb9b0142a",
+          "bytes": 159840
+        }
+      },
+      "forward-open.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/forward-open.json",
+          "sha256": "bb475a0bc92312bcaf7abbf64fc34da2289a69991784003cb78f7b9dcb2047e2",
+          "bytes": 159878
+        }
+      },
+      "forward-prior-fresh.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/forward-prior-fresh.json",
+          "sha256": "2adc3c7b94cc8b6168e4290d8eb55ac51692170df841b405ccc61a1ce0fa9431",
+          "bytes": 160240
+        }
+      },
+      "identifiers.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 8,
+        "total": 8,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/identifiers.json",
+          "sha256": "4587c432e0ca29e9d713820d51261715322dde0ce9043e4e829fd8a35732e860",
+          "bytes": 7264
+        }
+      },
+      "literal-construction.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 103,
+        "total": 103,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/literal-construction.json",
+          "sha256": "8229c99f29fdb1df5ab50e5805adf4a285eb9182e69fdf9a3a37323726289c19",
+          "bytes": 93929
+        }
+      },
+      "long.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 28,
+        "total": 28,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/long.json",
+          "sha256": "48532797d89379161d1045e31472ecbd6990683514c380ec511d2fca796302cf",
+          "bytes": 147373
+        }
+      },
+      "names.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 28,
+        "total": 28,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/names.json",
+          "sha256": "51ceb52927111a46269d8ce0137acb9089e376ee8cdcb015ae00f97d2422a203",
+          "bytes": 27972
+        }
+      },
+      "numeric.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/numeric.json",
+          "sha256": "04d9d658e802e34bb4a440d11f662141fd19793e36d48828b40ac59e8b658f39",
+          "bytes": 6094
+        }
+      },
+      "preservation.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 62,
+        "total": 62,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/preservation.json",
+          "sha256": "e93ee2a403143ba300e19c329ac5361b072eac1ebf57ccb20f910df4f0bdaedb",
+          "bytes": 21669
+        }
+      },
+      "prior-chains.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/prior-chains.json",
+          "sha256": "c45718da4e0ebd3a5dbf570a3092f30cff31317f1821c8c91179b78447815164",
+          "bytes": 18496
+        }
+      },
+      "prior-fresh.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/prior-fresh.json",
+          "sha256": "ba0a132d76c433bc67833e29a892bbb08c3f47c20682dac0f0dd63cdf5836880",
+          "bytes": 14552
+        }
+      },
+      "prior-span-construction.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 14,
+        "total": 14,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/prior-span-construction.json",
+          "sha256": "bea28e68cf1d637426b62440d57076772093f791ba587c2bf0b511b77548aa70",
+          "bytes": 4445
+        }
+      },
+      "prior-span-development.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/prior-span-development.json",
+          "sha256": "97bf6c9f2c7e8971e5eca855650dfcc413ce2d87721e73b5bd14a353e23eec10",
+          "bytes": 2175
+        }
+      },
+      "prior-span-fresh.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 9,
+        "total": 9,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/prior-span-fresh.json",
+          "sha256": "6e39f56c3da81451890285fa71f574ef9a0b169718e95cadad5f4d89e6f9c479",
+          "bytes": 3102
+        }
+      },
+      "prior-start-open.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 8,
+        "total": 8,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/prior-start-open.json",
+          "sha256": "d5e0753a345c480163bfb52ccd11d968d4efa7ca143e947dd5e4b6dc258b1ae7",
+          "bytes": 70358
+        }
+      },
+      "prior.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 24,
+        "total": 24,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/prior.json",
+          "sha256": "803c42666361639ada5bb8f14dd7cb910a491ee5f418bb94d6d3137cdbb723a8",
+          "bytes": 7457
+        }
+      },
+      "retained-construction.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 663,
+        "total": 663,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/retained-construction.json",
+          "sha256": "06d6c83c8f68bf59810c48881d856f859f73813122943e537192bdb57cb9848e",
+          "bytes": 214913
+        }
+      },
+      "reverse-construction.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/reverse-construction.json",
+          "sha256": "a119d21428c8004ec02830b195203a6e6f23762e0e2d8b54ab4337ef378bf6a4",
+          "bytes": 412677
+        }
+      },
+      "reverse-open.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/reverse-open.json",
+          "sha256": "2f83d8db6140d5c2a1ea8a884846d8b19decde0150f16191347eb8d1c895b58f",
+          "bytes": 435793
+        }
+      },
+      "reverse-prior-fresh.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/reverse-prior-fresh.json",
+          "sha256": "4f3e8b0770630a9ded9d1aa12a60a31a7e293906d4290f4a424f0d0222a38bcf",
+          "bytes": 413304
+        }
+      },
+      "reverse-short.json": {
+        "exact": 3,
+        "total": 3,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/reverse-short.json",
+          "sha256": "7e9ed91a4d52b277dc6110bb8f38005a9dbbabd607fa8ad2b4c0cfd0d48166c7",
+          "bytes": 559
+        }
+      },
+      "roles.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "exact": 12,
+        "total": 12,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/roles.json",
+          "sha256": "2575b6acbd4f13a5e7d757970a164a58f5a1d54323ab6a52d27a884d23417b5f",
+          "bytes": 15264
+        }
+      },
+      "sessions.json": {
+        "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation/preservation/sessions.json",
+          "sha256": "cf6453aff074bc05a2965a3c8839e18fd22c6a697f9cc9a1b9607f9486ade1fb",
+          "bytes": 59042
+        }
+      }
+    }
+  },
+  "negatives": {
+    "first_trial": "shared-open-candidate: unsuitable initial prompt did not produce intended first answer; not promoted",
+    "zero_update": "shared-open-corrected/8bc80bf9: no learned parameter update, prior computed/numeric/chain regressions; not promoted",
+    "mixed": "shared-mixed-replay/eb011ae5: learned fit but prior computed/chain regressions; not promoted",
+    "legacy_diagnostic": {
+      "artifact": "79710468",
+      "actual": 3,
+      "total": 6,
+      "status": "FAIL",
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/retained-chain-diagnostic.log",
+        "sha256": "ebf03ff248466afdb859c5d5269669fa8fcd6cdc4c3adc8a1f56e3d5c3288d22",
+        "bytes": 327479
+      },
+      "note": "Explicit ignored untrained-follow-up diagnostic; earlier missing-env attempt is preserved and superseded by actual execution"
+    },
+    "third_independent_question": {
+      "expected": "17.\n",
+      "retained_parent": " Unknown.\n",
+      "candidate": "35.\n",
+      "live_and_restored_same": true,
+      "status": "CANDIDATE_ABSTENTION_REGRESSION"
+    },
+    "general_prose": "Actual baseline browser prompt about astronomy produced Where is selra.; general prose remains unqualified"
+  },
+  "interfaces": {
+    "baseline": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/parent-api-validation.json",
+      "sha256": "65be58c12e97bab39c427a13173ef73a1e45554ac5a3657f85a3bea150687b41",
+      "bytes": 7293
+    },
+    "candidate": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/candidate-api-validation.json",
+      "sha256": "5ee3b96ca2399b50f657882f1eb033546fe9f8f929cfd15659263a4e52fe6346",
+      "bytes": 7820
+    },
+    "scope": "Artifact integrity, exact bytes/CID, direct/API parity, scoped checkpoint isolation and split prefill. Parity alone is not answer correctness.",
+    "browser_baseline": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/browser-final-receipt.json",
+      "sha256": "95d49942c7b06a345013e1b197b7d150b636a122ab33ebc21ec160bdd1a352e9",
+      "bytes": 4290
+    },
+    "browser_queued_cancel": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/browser-queued-cancel-receipt.json",
+      "sha256": "6850b8ab44d4123f75e1b1546326f94dd76f9f749efa51538995e53c5435e0b4",
+      "bytes": 2760
+    },
+    "browser_candidate": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/browser-candidate-receipt.json",
+      "sha256": "c5a1cee374b3dc245ab85342c42f0b587be565b968f3c1fe46757bea9e644bb2",
+      "bytes": 3531
+    },
+    "wasm_source": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/wasm-source-final-hashes.json",
+      "sha256": "f3f53906c498c78011a1ce29439e9e70fa178406eaadfd828fbd377a60844ec0",
+      "bytes": 1005
+    }
+  },
+  "focused_checks": {
+    "core_regular_and_durable_passed": 81,
+    "core_legacy_opt_in_failed": 1,
+    "api_integration_passed": 10,
+    "api_utf8_helper_passed": 1,
+    "release_qualification_passed": 2,
+    "blanket_suite": "NOT_RUN",
+    "queue_statuses": "Five compatibility acknowledgements execute no formatting, Clippy or tests"
+  },
+  "commands": [
+    {
+      "kind": "engineering",
+      "label": "check-core",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "check",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_shared_transition"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:18:06.006Z",
+      "elapsed_ms": 17539,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1439088640,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/check-core.log",
+      "evidence_sha256": "ecff52ae8d5ba3e7940c37a7d7590fde0fc8c831834b161a9056b05dfa01916a"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-shared-release",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_shared_transition"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:19:01.046Z",
+      "elapsed_ms": 97262,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2134671360,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/build-shared-release.log",
+      "evidence_sha256": "38483094f2af1d78d3a8707c86da490dbdd286f803804bad95ff2984eeee8598"
+    },
+    {
+      "kind": "engineering",
+      "label": "compile-focused",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "-p",
+        "uor-r4-api",
+        "--test",
+        "native_capability_api_tests",
+        "--test",
+        "release_qualification_tests",
+        "--lib",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:21:10.201Z",
+      "elapsed_ms": 32,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/compile-focused.log",
+      "evidence_sha256": "5d55ca7babae4e279e48e45e204d2ab1accfa14813cd231cb3df42307dd2c61a"
+    },
+    {
+      "kind": "model",
+      "label": "shared-fit-open",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_shared_transition",
+      "args": [
+        "fit",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-open-candidate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:21:09.038Z",
+      "elapsed_ms": 32367,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1002717184,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-fit-open.log",
+      "evidence_sha256": "7c1069de1b154cdedfd0f4a1dd1407b48e0d1f200e6482fde0c4eb6e90090b8e"
+    },
+    {
+      "kind": "engineering",
+      "label": "compile-focused-corrected",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-api",
+        "--test",
+        "native_capability_api_tests",
+        "--test",
+        "release_qualification_tests",
+        "--lib",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:21:25.213Z",
+      "elapsed_ms": 242060,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 3562160128,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/compile-focused-corrected.log",
+      "evidence_sha256": "0ab74ad83e360e56818cdae03aa96d5620728ce9f3a2e8a86d981e6b4dd03882"
+    },
+    {
+      "kind": "model",
+      "label": "api-focused",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-api",
+        "--test",
+        "native_capability_api_tests",
+        "--test",
+        "release_qualification_tests",
+        "--",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:25:35.296Z",
+      "elapsed_ms": 61121,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1218658304,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/api-focused.log",
+      "evidence_sha256": "4520113a56790fbb90be3e840eddc4332ee3df59bf45a341058b5c69cbf4a86f"
+    },
+    {
+      "kind": "model",
+      "label": "retained-api",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_capability_api_tests-e5aaf81d70c72583",
+      "args": [
+        "--ignored",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:27:11.014Z",
+      "elapsed_ms": 33836,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1012301824,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/retained-api.log",
+      "evidence_sha256": "fa2e38f3c19cca06a0a6001bd784403814b9e20d921dab5ccc23389a4255d9c8"
+    },
+    {
+      "kind": "engineering",
+      "label": "wasm-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/wasm-pack",
+      "args": [
+        "build",
+        "--target",
+        "web",
+        "--",
+        "--locked",
+        "--offline"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:25:56.366Z",
+      "elapsed_ms": 146162,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2188836864,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/wasm-build.log",
+      "evidence_sha256": "b06f59919a94979c5b6a2c852ca6870ed01e29236fabc06e14efc2a26813db87"
+    },
+    {
+      "kind": "model",
+      "label": "core-mechanical",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-bcfa237762d7b509",
+      "args": [
+        "native_geometric::",
+        "--skip",
+        "native_attention",
+        "--skip",
+        "native_value",
+        "--skip",
+        "native_durable",
+        "--skip",
+        "native_word",
+        "--skip",
+        "native_source",
+        "--skip",
+        "native_relation",
+        "--skip",
+        "native_retained",
+        "--skip",
+        "native_joint",
+        "--skip",
+        "native_response",
+        "--skip",
+        "native_learned",
+        "--skip",
+        "native_geometric::tests",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:28:31.089Z",
+      "elapsed_ms": 15922,
+      "code": 101,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 39600128,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/core-mechanical.log",
+      "evidence_sha256": "5ed10484788e34020ce0737edf5a57b1acaeca71d0fcf76822f9f303e8edab13"
+    },
+    {
+      "kind": "engineering",
+      "label": "rebuild-native",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_shared_transition",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-api",
+        "--bin",
+        "r4-native-chat"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:28:13.625Z",
+      "elapsed_ms": 161047,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2686287872,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/rebuild-native.log",
+      "evidence_sha256": "89cf9855f32ccde250ff842289066284280169161cebd219aae3b810801df36c"
+    },
+    {
+      "kind": "engineering",
+      "label": "rebuild-tests",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-api",
+        "--test",
+        "native_capability_api_tests",
+        "--test",
+        "release_qualification_tests",
+        "--lib",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:29:26.158Z",
+      "elapsed_ms": 170652,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2282520576,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/rebuild-tests.log",
+      "evidence_sha256": "396f3e5fe3c29a177f5235215280552172026a07832b4e26c9d71dd1f0d7b132"
+    },
+    {
+      "kind": "model",
+      "label": "browser-real",
+      "started": "2026-09-08T13:29:51.395Z",
+      "elapsed_ms": 228606,
+      "code": 1,
+      "signal": null,
+      "stopped": "checkpoint import runtime error",
+      "detail_receipt": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/browser-real-receipt.json",
+      "scope": "actual ChromeWASMmodel phase includingUI overhead; rendererRSSsamplesnotisolatedmodelattribution",
+      "evidence_sha256": "b82afb8025830af5a4f9373375a01394f12277fa1242626983a389ea5e7d48cc"
+    },
+    {
+      "kind": "model",
+      "label": "shared-fit-corrected",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_shared_transition",
+      "args": [
+        "fit",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-open-corrected"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:34:26.929Z",
+      "elapsed_ms": 56611,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1007681536,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-fit-corrected.log",
+      "evidence_sha256": "96fb979df02ddd3012f267d9a78c8466f97773f55042b218be27b3183529ebf3"
+    },
+    {
+      "kind": "model",
+      "label": "shared-preservation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-refinement",
+        "preserve",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-open-corrected/model.json",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-preservation"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:36:06.605Z",
+      "elapsed_ms": 22621,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 979501056,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-preservation.log",
+      "evidence_sha256": "508992b6f036dfdbbf462d4a1f204e5a509e8b8df5f1f2236c3eabeb9728d9e7"
+    },
+    {
+      "kind": "engineering",
+      "label": "final-api-core-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-api",
+        "--test",
+        "native_capability_api_tests",
+        "--test",
+        "release_qualification_tests",
+        "--lib",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:33:19.680Z",
+      "elapsed_ms": 211628,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 3656630272,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/final-api-core-build.log",
+      "evidence_sha256": "b711bd8f6b21d51915945a4ef1e233d730da9016a264b51ddbb4518be78dc2a3"
+    },
+    {
+      "kind": "engineering",
+      "label": "wasm-final-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/wasm-pack",
+      "args": [
+        "build",
+        "--target",
+        "web",
+        "--",
+        "--locked",
+        "--offline"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:35:34.496Z",
+      "elapsed_ms": 236679,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2311569408,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/wasm-final-build.log",
+      "evidence_sha256": "b3bb5563bc8da6fa46bee6c56375529f1184a37abacb2ff1de5cc4cda49663ef"
+    },
+    {
+      "kind": "model",
+      "label": "api-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_capability_api_tests-208bdcecbcc48596",
+      "args": [
+        "--include-ignored",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:39:22.121Z",
+      "elapsed_ms": 50863,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1020510208,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/api-final.log",
+      "evidence_sha256": "475d7c24f4934f47dc1956b169eea1deaab27897826874a8e1736f1ff7dbb87b"
+    },
+    {
+      "kind": "engineering",
+      "label": "mixed-replay-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_shared_transition",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:40:00.009Z",
+      "elapsed_ms": 101373,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2128986112,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/mixed-replay-build.log",
+      "evidence_sha256": "8397f8914153cc4856d9ff094ecae596e889557abe8e3a2df0b65bfd49f10500"
+    },
+    {
+      "kind": "engineering",
+      "label": "mixed-core-test-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:41:45.200Z",
+      "elapsed_ms": 78788,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2120941568,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/mixed-core-test-build.log",
+      "evidence_sha256": "ff98759a302db4dd413c25ec2f73f1e13dd0ce45e5a1f3e92f9882e3681b3576"
+    },
+    {
+      "kind": "engineering",
+      "label": "final-cli-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-api",
+        "--bin",
+        "r4-native-chat"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:43:50.838Z",
+      "elapsed_ms": 149274,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2538045440,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/final-cli-build.log",
+      "evidence_sha256": "61926778e2b184e107249d423ea412c3b059e87192b68cf8f3d763fc671f7375"
+    },
+    {
+      "kind": "model",
+      "label": "browser-final",
+      "started": "2026-09-08T13:40:59.731Z",
+      "elapsed_ms": 506625,
+      "code": 0,
+      "details": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/browser-final-receipt.json",
+      "peak_sampled_process_tree_rss_bytes": null,
+      "evidence_sha256": "95d49942c7b06a345013e1b197b7d150b636a122ab33ebc21ec160bdd1a352e9"
+    },
+    {
+      "kind": "model",
+      "label": "mixed-replay-fit",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_shared_transition",
+      "args": [
+        "fit-replay",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-mixed-replay"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:51:06.175Z",
+      "elapsed_ms": 111654,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 992952320,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/mixed-replay-fit.log",
+      "evidence_sha256": "daf8dca12dfddfa99d6cb7eb9bcad85b51729f5bbda3b611b730b3106afce653"
+    },
+    {
+      "kind": "engineering",
+      "label": "wasm-source-final",
+      "cmd": "/Users/casey.allard/.cargo/bin/wasm-pack",
+      "args": [
+        "build",
+        "--target",
+        "web",
+        "--",
+        "--locked",
+        "--offline"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:52:15.919Z",
+      "elapsed_ms": 98382,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2145894400,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/wasm-source-final.log",
+      "evidence_sha256": "ba6eb004fb222b2027138532398dd4c9b57fa1261f1cd7dea3acf41a5aa9bd53"
+    },
+    {
+      "kind": "model",
+      "label": "mixed-preservation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-refinement",
+        "preserve",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-mixed-replay/model.json",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/mixed-preservation"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:53:57.551Z",
+      "elapsed_ms": 20828,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 974159872,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/mixed-preservation.log",
+      "evidence_sha256": "93ffe1b1a6da131b3cbac5bbf9c923656afecbf328f991addbd43d841d107cbd"
+    },
+    {
+      "kind": "model",
+      "label": "core-focused-final",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/core-focused.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:56:11.128Z",
+      "elapsed_ms": 18535,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1016496128,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/core-focused-final.log",
+      "evidence_sha256": "2e1d413dd3af7bfa2099549633d009c49b3400fb305c4e124d420a66d650b0fa"
+    },
+    {
+      "kind": "engineering",
+      "label": "continuation-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_shared_transition"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:57:09.857Z",
+      "elapsed_ms": 1833,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 255705088,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-build.log",
+      "evidence_sha256": "7e4d08b08db91a059f180aa007f9affaaea55dd1e1623f5449bfbefb44eed54c"
+    },
+    {
+      "kind": "model",
+      "label": "core-focused-corrected",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/core-focused.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T13:58:12.451Z",
+      "elapsed_ms": 9901,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 129957888,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/core-focused-corrected.log",
+      "evidence_sha256": "acdc119b56fdd4f18ee61e3336a6bd17add441fb51ce444180a710af46e27334"
+    },
+    {
+      "kind": "model",
+      "label": "browser-queued-cancel",
+      "started": "2026-09-08T13:59:24.937Z",
+      "elapsed_ms": 126603,
+      "code": 0,
+      "details": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/browser-queued-cancel-receipt.json",
+      "peak_sampled_process_tree_rss_bytes": null,
+      "evidence_sha256": "6850b8ab44d4123f75e1b1546326f94dd76f9f749efa51538995e53c5435e0b4"
+    },
+    {
+      "kind": "model",
+      "label": "continuation-fit",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_shared_transition",
+      "args": [
+        "fit-replay",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:02:17.617Z",
+      "elapsed_ms": 169592,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1002487808,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-fit.log",
+      "evidence_sha256": "7c859e5d53bd64cdc4e85a53e453e997426471969591c2d7431cc378208e5d19"
+    },
+    {
+      "kind": "model",
+      "label": "continuation-preservation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-refinement",
+        "preserve",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/model.json",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:05:27.383Z",
+      "elapsed_ms": 20647,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 987463680,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/continuation-preservation.log",
+      "evidence_sha256": "252a7aff99efb3b6620b6540ebc011c3038325acaa6495789a084d9d528a76b3"
+    },
+    {
+      "kind": "model",
+      "label": "selected-fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_shared_transition",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:07:14.242Z",
+      "elapsed_ms": 16399,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 993886208,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/selected-fresh.log",
+      "evidence_sha256": "accd3787acf5aa0b9ee323016e465ae87b3bd72ff5807b72d45976653aa68a6b"
+    },
+    {
+      "kind": "model",
+      "label": "api-cli-boundaries",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/api-cli-checks.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:09:30.382Z",
+      "elapsed_ms": 16118,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1023410176,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/api-cli-boundaries.log",
+      "evidence_sha256": "9577b3f81257a2ae4ad600b0f826de0f026452f9c0470d47a857604258d9db65"
+    },
+    {
+      "kind": "engineering",
+      "label": "fresh-source-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_shared_transition"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:10:13.609Z",
+      "elapsed_ms": 2407,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 217120768,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/fresh-source-build.log",
+      "evidence_sha256": "227ca934c8f2d45ea210f57fc2faa302c7e314ead78f07e393ce83ba00e0ccd6"
+    },
+    {
+      "kind": "engineering",
+      "label": "candidate-api-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-api",
+        "--example",
+        "native_artifact_recovery_check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:15:07.611Z",
+      "elapsed_ms": 1636,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 231161856,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/candidate-api-build.log",
+      "evidence_sha256": "1a2b5fb3f43fc0cf7c967df3070ac7559c745259a7e9fcd836ee150cc4f42e5d"
+    },
+    {
+      "kind": "engineering",
+      "label": "export-fresh-source",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_shared_transition",
+      "args": [
+        "export-fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:15:30.664Z",
+      "elapsed_ms": 144,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/export-fresh-source.log",
+      "evidence_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "kind": "model",
+      "label": "candidate-api-validation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_artifact_recovery_check",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/model.json",
+        "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/candidate-api-validation.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:15:43.579Z",
+      "elapsed_ms": 33506,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1047625728,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/candidate-api-validation.log",
+      "evidence_sha256": "adeb078f10b56f79d61599c55b9b55d1137c43ee9418716dcb0a74645d59c583"
+    },
+    {
+      "kind": "model",
+      "label": "retained-chain-diagnostic",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_value_selected_execution_learned_chain_diagnostic",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:16:25.680Z",
+      "elapsed_ms": 15430,
+      "code": 101,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 964804608,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/retained-chain-diagnostic.log",
+      "evidence_sha256": "ebf03ff248466afdb859c5d5269669fa8fcd6cdc4c3adc8a1f56e3d5c3288d22"
+    },
+    {
+      "kind": "model",
+      "label": "parent-api-validation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_artifact_recovery_check",
+      "args": [
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/parent-api-validation.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:17:01.001Z",
+      "elapsed_ms": 31146,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1037303808,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/parent-api-validation.log",
+      "evidence_sha256": "3619ab60bfd6a2dfcf6f2053ed9c09f43d97c519568858850133111796c07fa3"
+    },
+    {
+      "kind": "model",
+      "label": "browser-candidate",
+      "started": "2026-09-08T14:18:17.032Z",
+      "elapsed_ms": 146400,
+      "code": 0,
+      "details": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/browser-candidate-receipt.json",
+      "peak_sampled_process_tree_rss_bytes": null,
+      "evidence_sha256": "c5a1cee374b3dc245ab85342c42f0b587be565b968f3c1fe46757bea9e644bb2"
+    },
+    {
+      "kind": "model",
+      "label": "retained-final-preservation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-refinement",
+        "preserve",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/retained-final-preservation"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:21:15.390Z",
+      "elapsed_ms": 19785,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 979255296,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/retained-final-preservation.log",
+      "evidence_sha256": "8f87a8cb6255350fbc9460b0e477b37f5ce11e5bda3711d3cffe836b7c5f4c29"
+    },
+    {
+      "kind": "engineering",
+      "label": "final-static",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/final-static.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:24:12.951Z",
+      "elapsed_ms": 4187,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 191381504,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/final-static.log",
+      "evidence_sha256": "317e7ea186454e30407852679a2a144bda23ad691b0f84756bb57f7e1cf75a4f"
+    },
+    {
+      "kind": "engineering",
+      "label": "final-static-corrected",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/final-static.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:24:55.127Z",
+      "elapsed_ms": 3953,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 196853760,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/final-static-corrected.log",
+      "evidence_sha256": "842b29db9f902904f596dffda0a595a58379aec0a8ce87503053b8f27e52bc72"
+    }
+  ],
+  "resources": {
+    "ledger": {
+      "cumulative_ms": 6960652,
+      "limit_ms": 7650000
+    },
+    "cycle_start_cumulative_ms": 5195536,
+    "cycle_actual_model_ms": 1765116,
+    "command_charged_model_ms": 1765116,
+    "engineering_ms": 1725038,
+    "prior_unverified_claim_reservation_ms": 196620,
+    "available_after_reservation_ms": 492728,
+    "model_cycle_limit_ms": 2100000,
+    "engineering_cycle_limit_ms": 3600000,
+    "threads": 2,
+    "model_processes": 1,
+    "model_rss_limit_bytes": 4294967296,
+    "build_rss_limit_bytes": 6442450944,
+    "context_tokens": 512,
+    "storage": {
+      "limit_bytes": 34863214592,
+      "stop_margin_bytes": 134217728,
+      "baseline_accounted_bytes": 29865385984,
+      "target_bytes": 22675771392,
+      "worktree_bytes": 476753920,
+      "execution_bytes": 129064960,
+      "conservative_cycle_growth_bytes": 1163034624,
+      "conservative_accounted_bytes": 31028420608,
+      "effective_headroom_bytes": 3700576256,
+      "note": "Directory allocated-byte deltas plus full execution directory; preserved owner artifacts unchanged. Shared cache accounting is conservative, not filesystem free space."
+    },
+    "phase_deviation": {
+      "phase": "browser-final",
+      "cap_ms": 480000,
+      "actual_ms": 506625,
+      "excess_ms": 26625,
+      "fully_charged": true,
+      "retroactive_extension_applied": false,
+      "note": "Capture/finalization overshot local phase cap; overall model-cycle and cumulative ceilings stayed intact. Subsequent worker hard-stop introduced."
+    },
+    "projections": [
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/projection.json",
+        "sha256": "d0485ae69ce6ad2d998c7e00beacbbbc9f449b81b2e8ca967210f54dcc62c761",
+        "bytes": 1588
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/projection-context-correction.json",
+        "sha256": "838e0c051f224d00504f6b3b94ff54f069cf13334ff55f07e2393a70b4453879",
+        "bytes": 434
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/selected-validation-projection.json",
+        "sha256": "49d83608e4bc7f7dfb0760b48009940a30af79c6cc788b495289102dd208d27b",
+        "bytes": 1273
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/wasm-stack-projection.json",
+        "sha256": "9b9f90076b11cbf782de5f79a55d98447a4f59b7770a1a4f9d8f3846bf6f1e77",
+        "bytes": 646
+      }
+    ],
+    "external_compute": false,
+    "unique_deletions": false
+  },
+  "unqualified": [
+    "General prose",
+    "Generalized reasoning and coding",
+    "Learned within-response transition policy",
+    "Compositional lexical emission",
+    "Isolated predictive advantage of geometry",
+    "Complete-path quality-matched energy and thermal savings",
+    "Alpha or frontier capability"
+  ],
+  "audit": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/audit.md",
+    "sha256": "44816ceb360d519ff5af82f2e6ef006674afb0b6fe6a1b2383855fe919e7ae6b",
+    "bytes": 19750
+  }
+}

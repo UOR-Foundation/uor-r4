@@ -22,6 +22,14 @@ pub struct TypedRoutingExample {
     /// Offline frame with no preceding response or supplied intermediate.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub literal_only: bool,
+    /// Offline Add supervision: the non-intermediate operand must be the unique
+    /// matching literal occurrence introduced in this query. Never a serving rule.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub current_query_operand: bool,
+    /// Offline Copy/Add contrast after actual generated history: select only
+    /// literal occurrences introduced by this query, not a retained intermediate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub current_query_literals: bool,
     pub initial_prompt: String,
     pub initial_response: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -157,7 +165,14 @@ fn initial(
     model: &Model,
     d: &TypedRoutingExample,
     local_query: bool,
-) -> Result<(Session, Option<ValueDecision>)> {
+) -> Result<(Session, Option<ValueDecision>, Option<u64>, Option<u64>)> {
+    if d.current_query_literals
+        && (d.literal_only
+            || d.current_query_operand
+            || !matches!(d.action, Some(ValueAction::Copy | ValueAction::Add)))
+    {
+        return Err(Error("current-query literal supervision requires Copy/Add after generated history and excludes other input modes".into()));
+    }
     let mut s = model.session(Control::Full)?;
     s.observe(model, BOS)?;
     if d.literal_only
@@ -212,6 +227,7 @@ fn initial(
             s.end_response(model)?;
         }
     }
+    let query_start = s.values.as_ref().map(|v| v.seen);
     if local_query {
         if let Some(v) = &mut s.values {
             v.query_boundary = Some(v.seen);
@@ -221,7 +237,92 @@ fn initial(
         s.observe(model, t)?;
     }
     s.begin_response(model)?;
-    Ok((s, first))
+    let query_operand = if d.current_query_operand {
+        let values = s
+            .values
+            .as_ref()
+            .ok_or_else(|| Error("query operand state absent".into()))?;
+        Some(resolve_current_query_operand(
+            d,
+            first,
+            &values.sources,
+            query_start.ok_or_else(|| Error("query operand boundary absent".into()))?,
+        )?)
+    } else {
+        None
+    };
+    let query_literals_start = if d.current_query_literals {
+        if first.is_none() {
+            return Err(Error(
+                "current-query literal supervision requires an actual generated intermediate"
+                    .into(),
+            ));
+        }
+        Some(query_start.ok_or_else(|| Error("current-query literal boundary absent".into()))?)
+    } else {
+        None
+    };
+    Ok((s, first, query_operand, query_literals_start))
+}
+
+/// Offline correctness only: retain exact current-query occurrence provenance.
+fn current_query_literals_match(
+    d: &TypedRoutingExample,
+    action: ValueAction,
+    operands: [ValueRecord; 2],
+    query_start: u64,
+) -> bool {
+    d.action == Some(action)
+        && matches!(action, ValueAction::Copy | ValueAction::Add)
+        && operands
+            .iter()
+            .all(|r| !r.derived && r.start >= query_start)
+        && d.operands.is_some_and(|expected| {
+            let pair = operands.map(|r| r.value);
+            pair == expected || (action == ValueAction::Add && pair == [expected[1], expected[0]])
+        })
+}
+
+/// Resolve supervision to one exact source occurrence before generation/control.
+/// Equal numeric values in an earlier turn are not interchangeable with this input.
+fn resolve_current_query_operand(
+    d: &TypedRoutingExample,
+    first: Option<ValueDecision>,
+    sources: &[ValueRecord],
+    query_start: u64,
+) -> Result<u64> {
+    if d.literal_only || d.action != Some(ValueAction::Add) {
+        return Err(Error(
+            "current-query operand supervision requires Add after an intermediate".into(),
+        ));
+    }
+    let first = first.ok_or_else(|| Error("query operand intermediate absent".into()))?;
+    let pair = d
+        .operands
+        .ok_or_else(|| Error("query operand labels absent".into()))?;
+    let expected = if pair[0] == first.value {
+        pair[1]
+    } else if pair[1] == first.value {
+        pair[0]
+    } else {
+        return Err(Error(
+            "query operand labels omit generated intermediate value".into(),
+        ));
+    };
+    let mut matching = sources
+        .iter()
+        .filter(|r| !r.derived && r.start >= query_start && r.value == expected);
+    let id = matching
+        .next()
+        .ok_or_else(|| Error(format!("current-query operand occurrence absent: {}", d.id)))?
+        .id;
+    if matching.next().is_some() {
+        return Err(Error(format!(
+            "ambiguous current-query operand occurrences: {}",
+            d.id
+        )));
+    }
+    Ok(id)
 }
 
 // Offline provenance checks follow exact Copy aliases only. Add remains a new
@@ -243,6 +344,36 @@ fn copy_origin(values: &ValueState, mut id: u64) -> u64 {
 }
 
 impl Model {
+    /// Continue the shared geometric role selector on actual generated intermediates.
+    /// Parent word, writer, literal and response components are retained byte-for-byte.
+    pub fn refine_typed_roles(
+        &self,
+        docs: &[TypedRoutingExample],
+        config: SourceRoutingConfig,
+    ) -> Result<(Self, serde_json::Value)> {
+        let old = self
+            .typed_roles
+            .as_ref()
+            .ok_or_else(|| Error("typed role parent absent".into()))?;
+        if self.typed_role_refinement.is_some()
+            || docs.iter().any(|d| {
+                d.literal_only || matches!(d.action, Some(ValueAction::Sub | ValueAction::Mul))
+            })
+        {
+            return Err(Error("invalid shared typed role continuation".into()));
+        }
+        self.fit_typed(
+            docs,
+            config,
+            true,
+            true,
+            true,
+            true,
+            false,
+            Some((old, self.artifact_cid())),
+        )
+    }
+
     pub fn canonicalize_typed_role_aliases(&self) -> Result<Self> {
         self.validate()?;
         let mut model = self.clone();
@@ -396,9 +527,10 @@ impl Model {
     ) -> Result<(Self, serde_json::Value)> {
         config.validate()?;
         self.validate()?;
-        if self.typed_literals.is_some()
+        let refining = roles && initialization.is_some() && self.typed_roles.is_some();
+        if (self.typed_literals.is_some() && !refining)
             || (if roles {
-                self.typed_roles.is_some() || self.typed_routing.is_none()
+                (!refining && self.typed_roles.is_some()) || self.typed_routing.is_none()
             } else {
                 self.typed_routing.is_some()
             })
@@ -439,6 +571,15 @@ impl Model {
                         w.to_vec()
                     });
                 }
+            }
+        }
+        if refining {
+            for word in &initialization
+                .ok_or_else(|| Error("initialization absent".into()))?
+                .0
+                .dictionary
+            {
+                words.insert(word.bytes[..usize::from(word.len)].to_vec());
             }
         }
         if words.len() > 256 {
@@ -489,12 +630,16 @@ impl Model {
         let mut frequency = BTreeMap::<ValueFeature, usize>::new();
         let mut frames = Vec::new();
         for d in docs {
-            let (s, first) = initial(self, d, local_query)?;
+            let (s, first, query_operand, query_literals_start) = initial(self, d, local_query)?;
             let values = s
                 .values
                 .as_ref()
                 .ok_or_else(|| Error("typed state absent".into()))?;
-            if roles && !d.literal_only && values.sources.iter().filter(|r| r.derived).count() < 2 {
+            if roles
+                && !d.literal_only
+                && values.sources.iter().filter(|r| r.derived).count()
+                    < if refining { 1 } else { 2 }
+            {
                 return Err(Error(
                     "typed role frame has fewer than two derived sources".into(),
                 ));
@@ -518,19 +663,24 @@ impl Model {
                 action: 2,
                 correct: d.action.is_none(),
             }];
-            for i in 0..784 {
+            for i in 0..272 {
                 let Some((action, a, b)) = values.proposal(i) else {
                     continue;
                 };
-                let correct = d.action == Some(action)
-                    && d.operands.is_some_and(|pair| {
-                        ([a.value, b.value] == pair
-                            || ((action == ValueAction::Add || action == ValueAction::Mul)
-                                && [b.value, a.value] == pair))
-                            && first.map_or(!a.derived && !b.derived, |first| {
-                                a.id == first.write_id || b.id == first.write_id
-                            })
-                    });
+                let correct = if let Some(start) = query_literals_start {
+                    current_query_literals_match(d, action, [a, b], start)
+                } else {
+                    d.action == Some(action)
+                        && d.operands.is_some_and(|pair| {
+                            ([a.value, b.value] == pair
+                                || ((action == ValueAction::Add || action == ValueAction::Mul)
+                                    && [b.value, a.value] == pair))
+                                && first.map_or(!a.derived && !b.derived, |first| {
+                                    a.id == first.write_id || b.id == first.write_id
+                                })
+                                && query_operand.is_none_or(|id| a.id == id || b.id == id)
+                        })
+                };
                 let (f, n) = typed_routing::features_with_provenance(
                     values,
                     Some((a, b)),
@@ -564,6 +714,38 @@ impl Model {
                 bytes: bytes.len(),
                 text_cid: format!("blake3:{}", blake3::hash(&bytes).to_hex()),
             });
+        }
+        // Preserve all prior code addresses when continuing the shared selector.
+        if refining {
+            let old = initialization
+                .ok_or_else(|| Error("initialization absent".into()))?
+                .0;
+            for code in &old.router.codes {
+                let mut feature = code.feature;
+                let prime = match feature.kind {
+                    2 => Some(&mut feature.a),
+                    3 => Some(&mut feature.b),
+                    _ => None,
+                };
+                if let Some(prime) = prime {
+                    if let Some(word) = old.dictionary.iter().find(|w| u64::from(w.prime) == *prime)
+                    {
+                        if let Some(new) = block
+                            .dictionary
+                            .iter()
+                            .find(|w| w.bytes == word.bytes && w.len == word.len)
+                        {
+                            *prime = u64::from(new.prime);
+                        }
+                    }
+                }
+                frequency.entry(feature).or_insert(0);
+            }
+            if frequency.len() > config.learned_features {
+                return Err(Error(
+                    "shared continuation feature cap would discard parent codes".into(),
+                ));
+            }
         }
         let mut vocab: Vec<_> = frequency.iter().map(|(f, n)| (*f, *n)).collect();
         vocab.sort_by(|a, b| {
@@ -634,6 +816,15 @@ impl Model {
             .len();
         let dictionary_words = block.dictionary.len();
         let mut model = self.clone();
+        if refining {
+            model.typed_role_refinement = Some(typed_routing::TypedRoleRefinement {
+                parent_artifact: self.artifact_cid.clone(),
+                previous: initialization
+                    .ok_or_else(|| Error("initialization absent".into()))?
+                    .0
+                    .clone(),
+            });
+        }
         if roles {
             model.typed_roles = Some(block);
         } else {
@@ -659,7 +850,7 @@ impl Model {
         let started = Instant::now();
         let mut cases = Vec::new();
         for d in docs {
-            let (mut s, first) = match initial(
+            let (mut s, first, query_operand, query_literals_start) = match initial(
                 self,
                 d,
                 self.typed_roles.as_ref().is_some_and(|b| b.local_query),
@@ -695,23 +886,175 @@ impl Model {
                     })
                 })
             });
+            let query_operand_provenance = query_operand.map(|id| {
+                decision.is_some_and(|chosen| chosen.operands.iter().any(|r| r.id == id))
+            });
+            let query_literal_provenance = query_literals_start.map(|start| {
+                decision.is_some_and(|chosen| {
+                    current_query_literals_match(d, chosen.action, chosen.operands, start)
+                })
+            });
             let action = decision.map(|d| d.action);
             let exact = bytes == d.response.as_bytes()
                 && eos
                 && action == d.action
-                && (d.action.is_none()
-                    || used
-                    || (d.literal_only
-                        && decision.is_some_and(|x| {
-                            d.operands.is_some_and(|p| {
-                                let pair = x.operands.map(|r| r.value);
-                                pair == p || (x.action == ValueAction::Add && pair == [p[1], p[0]])
-                            })
-                        })));
-            cases.push(serde_json::json!({"id":d.id,"query":d.query,"expected":d.response,"text":String::from_utf8_lossy(&bytes),"expected_action":d.action,"exact":exact,"used_intermediate":used,"terminated":eos,"decision":decision,"first_decision":first,"captured":captured,"work":s.work}));
+                && query_operand_provenance.unwrap_or(true)
+                && (if d.current_query_literals {
+                    query_literal_provenance == Some(true)
+                } else {
+                    d.action.is_none()
+                        || used
+                        || (d.literal_only
+                            && decision.is_some_and(|x| {
+                                d.operands.is_some_and(|p| {
+                                    let pair = x.operands.map(|r| r.value);
+                                    pair == p
+                                        || (x.action == ValueAction::Add && pair == [p[1], p[0]])
+                                })
+                            }))
+                });
+            cases.push(serde_json::json!({"id":d.id,"query":d.query,"expected":d.response,"text":String::from_utf8_lossy(&bytes),"expected_action":d.action,"exact":exact,"used_intermediate":used,"terminated":eos,"decision":decision,"first_decision":first,"expected_query_operand_id":query_operand,"query_operand_provenance":query_operand_provenance,"query_literals_start":query_literals_start,"query_literal_provenance":query_literal_provenance,"captured":captured,"work":s.work}));
         }
         Ok(
             serde_json::json!({"artifact":self.artifact_cid(),"total":cases.len(),"exact":cases.iter().filter(|r|r["exact"]==true).count(),"remove_intermediate_control":remove_intermediate,"elapsed_ms":started.elapsed().as_millis(),"cases":cases}),
         )
+    }
+}
+
+#[cfg(test)]
+mod query_operand_supervision_tests {
+    use super::*;
+
+    fn record(id: u64, value: i64, start: u64) -> ValueRecord {
+        ValueRecord {
+            id,
+            value,
+            start,
+            end: start,
+            derived: false,
+            derivation: None,
+            cue: [0; 4],
+            pose: 0,
+            phases: [0; PHASE_CHANNELS],
+            lexical: None,
+        }
+    }
+
+    #[test]
+    fn current_query_operand_binds_occurrence_and_rejects_ambiguity() {
+        let example: TypedRoutingExample = serde_json::from_value(serde_json::json!({
+            "id":"duplicate-four", "initial_prompt":"left = 14; right = 4; total:",
+            "initial_response":"18.\n", "query":"extra = 4; add earlier result and extra; total:",
+            "response":"22.\n", "action":"add", "operands":[18,4],
+            "current_query_operand":true
+        }))
+        .expect("offline example");
+        let old = record(2, 4, 6);
+        let new = record(5, 4, 40);
+        let first = ValueDecision {
+            action: ValueAction::Add,
+            operands: [record(1, 14, 2), old],
+            value: 18,
+            write_id: 4,
+            token: 0,
+            cursor: 0,
+            score: 0,
+            at_seen: 20,
+        };
+        assert_eq!(
+            resolve_current_query_operand(&example, Some(first), &[old, new], 35)
+                .expect("new occurrence"),
+            5
+        );
+        assert!(resolve_current_query_operand(&example, Some(first), &[old], 35).is_err());
+        assert!(resolve_current_query_operand(
+            &example,
+            Some(first),
+            &[old, new, record(6, 4, 45)],
+            35
+        )
+        .is_err());
+        assert!(resolve_current_query_operand(&example, None, &[new], 35).is_err());
+        let mut invalid = example.clone();
+        invalid.action = Some(ValueAction::Copy);
+        assert!(resolve_current_query_operand(&invalid, Some(first), &[new], 35).is_err());
+        // Old serialized examples omit the field and retain their previous labels.
+        let mut wire = serde_json::to_value(example).expect("serialized example");
+        wire.as_object_mut()
+            .expect("object")
+            .remove("current_query_operand");
+        let legacy: TypedRoutingExample = serde_json::from_value(wire).expect("legacy example");
+        assert!(!legacy.current_query_operand);
+        assert!(!legacy.current_query_literals);
+        assert!(serde_json::to_value(legacy)
+            .expect("legacy roundtrip")
+            .get("current_query_operand")
+            .is_none());
+    }
+
+    #[test]
+    fn current_query_literals_reject_stale_and_derived_equal_values() {
+        let example: TypedRoutingExample = serde_json::from_value(serde_json::json!({
+            "id":"independent-next-turn", "initial_prompt":"left = 14; right = 4; total:",
+            "initial_response":"18.\n", "query":"left = 18; right = 4; total:",
+            "response":"22.\n", "action":"add", "operands":[18,4],
+            "current_query_literals":true
+        }))
+        .expect("offline literal contrast");
+        let left = record(5, 18, 40);
+        let right = record(6, 4, 45);
+        assert!(current_query_literals_match(
+            &example,
+            ValueAction::Add,
+            [left, right],
+            35
+        ));
+        assert!(current_query_literals_match(
+            &example,
+            ValueAction::Add,
+            [right, left],
+            35
+        ));
+        assert!(!current_query_literals_match(
+            &example,
+            ValueAction::Add,
+            [record(2, 18, 6), right],
+            35
+        ));
+        let mut derived = left;
+        derived.derived = true;
+        assert!(!current_query_literals_match(
+            &example,
+            ValueAction::Add,
+            [derived, right],
+            35
+        ));
+        assert!(!current_query_literals_match(
+            &example,
+            ValueAction::Add,
+            [left, record(7, 5, 45)],
+            35
+        ));
+        assert!(!current_query_literals_match(
+            &example,
+            ValueAction::Sub,
+            [left, right],
+            35
+        ));
+        let mut copy = example;
+        copy.action = Some(ValueAction::Copy);
+        copy.operands = Some([18, 18]);
+        assert!(current_query_literals_match(
+            &copy,
+            ValueAction::Copy,
+            [left, left],
+            35
+        ));
+        assert!(!current_query_literals_match(
+            &copy,
+            ValueAction::Copy,
+            [derived, derived],
+            35
+        ));
     }
 }

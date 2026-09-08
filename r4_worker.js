@@ -79,15 +79,10 @@ self.onmessage = async function (e) {
                     r4g1InstallError = String(err);
                     console.error('[r4_worker] strict R4G1 installation refused:', err);
                 }
-                // Initialize native geometric language model runtime
-                if (typeof wasmModule.native_geometric_init === 'function') {
-                    try {
-                        const capsJson = wasmModule.native_geometric_init(new Uint8Array());
-                        self.native_capabilities = JSON.parse(capsJson);
-                        console.log('[r4_worker] Native geometric language model runtime initialized');
-                    } catch (nErr) {
-                        console.warn('[r4_worker] Native geometric runtime init warning:', nErr);
-                    }
+                // Native inference requires an explicit artifact; legacy router readiness
+                // does not imply that a native model has been loaded.
+                if (payload?.modelBytes?.length) {
+                    self.native_capabilities = JSON.parse(wasmModule.native_geometric_init(new Uint8Array(payload.modelBytes)));
                 }
                 router = new UorR4Router(1.2);
                 wasmInitialized = true;
@@ -131,25 +126,35 @@ self.onmessage = async function (e) {
                     if (typeof self.wasm_module?.native_geometric_create_session !== 'function') {
                         throw new Error('WASM module has no native geometric runtime exports');
                     }
-                    const sessId = `session-${Date.now()}`;
-                    const uId = userId || identity || "default-user";
-                    const pId = projectId || "studio-project";
-                    const handle = self.wasm_module.native_geometric_create_session(sessId, uId, pId);
-                    self.active_native_session = handle;
-
+                    if (!self.native_capabilities) throw new Error('No native model loaded. Supply modelBytes in INIT_ENGINE or use the active Studio model loader.');
+                    const scope = JSON.stringify([payload.sessionId || 'legacy-native', userId || identity || 'default-user', projectId || 'studio-project']);
+                    if (self.nativeScope !== scope) {
+                        if (self.active_native_session !== undefined) self.wasm_module.native_geometric_free_session(self.active_native_session);
+                        const [sessionId, uId, pId] = JSON.parse(scope);
+                        self.active_native_session = self.wasm_module.native_geometric_create_session(sessionId, uId, pId);
+                        self.nativeScope = scope;
+                    }
+                    const handle = self.active_native_session;
+                    self.nativeCancelled = false;
                     self.wasm_module.native_geometric_ingest(handle, text);
-                    const stepJson = self.wasm_module.native_geometric_generate_step(handle, max_tokens || 32);
-                    const stepResult = JSON.parse(stepJson);
-
-                    responseText = stepResult.text || "Native geometric completion finished.";
-                    generationMode = "native-geometric-wasm";
-                    nativeMeta = {
-                        tokenCount: stepResult.token_count,
-                        stoppedBy: stepResult.stopped_by,
-                        elapsedUs: stepResult.elapsed_us,
-                        memoryFactsRead: stepResult.memory_facts_read,
-                        handle,
-                    };
+                    let count = 0;
+                    let stoppedBy = 'length';
+                    const limit = Math.min(4096, Math.max(1, max_tokens || 32));
+                    while (count < limit && !self.nativeCancelled) {
+                        const result = JSON.parse(self.wasm_module.native_geometric_generate_step(handle, Math.min(8, limit - count)));
+                        responseText += result.text;
+                        count += result.token_count;
+                        stoppedBy = result.stopped_by;
+                        self.postMessage({type: 'GENERATION_CHUNK', id, chunk: result.text, tokenCount: count});
+                        if (stoppedBy !== 'length' || result.token_count === 0) break;
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                    if (self.nativeCancelled || stoppedBy === 'length') {
+                        const finished = JSON.parse(self.wasm_module.native_geometric_finish_generation(handle));
+                        responseText += finished.text || '';
+                    }
+                    generationMode = 'native-geometric-wasm';
+                    nativeMeta = {tokenCount: count, stoppedBy: self.nativeCancelled ? 'cancelled' : stoppedBy, handle, elapsedUs: null, memoryFactsRead: null};
                 } else if (selectedEngine === "transformerless" || selectedEngine === "r4g1") {
                     if (!r4g1ProductionInstalled) {
                         throw new Error(`strict R4G1 production bundle unavailable: ${r4g1InstallError}`);
@@ -199,7 +204,8 @@ self.onmessage = async function (e) {
         }
 
         case 'CANCEL_GENERATION': {
-            if (self.active_native_session && typeof self.wasm_module?.native_geometric_cancel === 'function') {
+            self.nativeCancelled = true;
+            if (self.active_native_session !== undefined && typeof self.wasm_module?.native_geometric_cancel === 'function') {
                 try {
                     self.wasm_module.native_geometric_cancel(self.active_native_session);
                 } catch (cErr) {
@@ -212,8 +218,8 @@ self.onmessage = async function (e) {
 
         case 'EXPORT_SESSION': {
             try {
-                const handle = payload?.handle || self.active_native_session;
-                if (!handle || typeof self.wasm_module?.native_geometric_export_session !== 'function') {
+                const handle = payload?.handle ?? self.active_native_session;
+                if (handle === undefined || typeof self.wasm_module?.native_geometric_export_session !== 'function') {
                     throw new Error("No active session to export");
                 }
                 const bytes = self.wasm_module.native_geometric_export_session(handle);
@@ -226,9 +232,9 @@ self.onmessage = async function (e) {
 
         case 'IMPORT_SESSION': {
             try {
-                const handle = payload?.handle || self.active_native_session;
+                const handle = payload?.handle ?? self.active_native_session;
                 const bytes = payload?.bytes;
-                if (!handle || !bytes || typeof self.wasm_module?.native_geometric_import_session !== 'function') {
+                if (handle === undefined || !bytes || typeof self.wasm_module?.native_geometric_import_session !== 'function') {
                     throw new Error("Invalid session import parameters");
                 }
                 self.wasm_module.native_geometric_import_session(handle, bytes);

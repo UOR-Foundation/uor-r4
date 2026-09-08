@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            typed_role_refinement: None,
             relation_writer_refinement: None,
             relation_writer: None,
             dependent_read: None,
@@ -555,6 +556,9 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.typed_role_refinement {
+            return witness.validate(self);
+        }
         // Restore the complete accepted model before peeling its earlier layers.
         // A writer refinement changes the active writer beneath those layers.
         if let Some(witness) = &self.relation_writer_refinement {
@@ -1180,9 +1184,8 @@ impl Model {
             }
             token_ids.push(token);
             session.observe(self, token)?;
-            if session.can_transition() {
-                session.refresh_value_sources(self)?;
-            }
+            // A completed numeral does not authorize another operation.
+            // The next contextual request begins through begin_response.
         }
         let bytes = self.decode(&token_ids)?;
         let utf8_valid = std::str::from_utf8(&bytes).is_ok();

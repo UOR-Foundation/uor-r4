@@ -16,7 +16,7 @@ fn example(
     } else {
         a + b
     };
-    TypedRoutingExample {id, literal_only: false, continuation: None, refresh: Vec::new(), target_intermediate: 0,
+    TypedRoutingExample {id, current_query_literals: false, current_query_operand: false, literal_only: false, continuation: None, refresh: Vec::new(), target_intermediate: 0,
         initial_prompt:format!("User: suri has {a} coins. orin has {b} coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:"),
         initial_response:format!("{}.\n",a+b),query:format!("User: There are {delta} new coins. {question}\nAssistant:"),
         response:if action.is_some(){format!("{value}.\n")}else{" Unknown.\n".into()},
@@ -130,6 +130,8 @@ fn independent_example(
     };
     TypedRoutingExample {
         id,
+        current_query_literals: false,
+        current_query_operand: false,
         literal_only: false,
         initial_prompt,
         initial_response: format!("{initial_value}.\n"),
@@ -189,6 +191,8 @@ fn literal_example(
     };
     TypedRoutingExample {
         id,
+        current_query_literals: false,
+        current_query_operand: false,
         literal_only: true,
         initial_prompt: String::new(),
         initial_response: String::new(),
@@ -251,13 +255,13 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
             let all:Vec<TypedRoutingExample>=serde_json::from_value(prior["fit"].clone())?;
             let mut fit:Vec<_>=all.into_iter().filter(|d|d.literal_only).collect();
             for c in old.fit.iter().filter(|c|c.id.starts_with("word-copy/fit/")) {
-                fit.push(TypedRoutingExample{id:format!("literal-admission/{}",c.id),literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:c.prompt.clone(),response:c.response.clone(),action:None,operands:None});
+                fit.push(TypedRoutingExample{id:format!("literal-admission/{}",c.id),current_query_literals: false, current_query_operand: false, literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:c.prompt.clone(),response:c.response.clone(),action:None,operands:None});
             }
             let mut first_use=Vec::new();let mut transfer=Vec::new();let mut identifiers=Vec::new();
             for (i,(names,numbers)) in [(["leni","varo"],[17,-5]),(["rona","peli"],[-6,28])].into_iter().enumerate(){for reverse in [false,true]{for kind in 0..4{first_use.push(literal_example(format!("admission-new-literal/{i}/{reverse}/{kind}"),names,numbers,reverse,kind));}}}
             for (i,(names,numbers)) in [(["leni","varo","kesa","tanu"],[17,-5,8,3,6]),(["rona","peli","sena","jora"],[-6,28,5,-9,7])].into_iter().enumerate(){for reverse in [false,true]{for kind in 0..4{transfer.push(independent_example(format!("admission-new-chain/{i}/{reverse}/{kind}"),names,numbers,reverse,kind));}}}
             for context in 0..4 {let id=format!("word-copy/fit/context-{context}/name-0");let template=old.fit.iter().find(|c|c.id==id).ok_or("missing construction identifier template")?;
-                for name in ["zorin","navi"] {identifiers.push(TypedRoutingExample{id:format!("admission-new-identifier/{context}/{name}"),literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:template.prompt.replace("item",name).replace("11","-17").replace("301","907"),response:template.response.replace("item",name),action:None,operands:None});}}
+                for name in ["zorin","navi"] {identifiers.push(TypedRoutingExample{id:format!("admission-new-identifier/{context}/{name}"),current_query_literals: false, current_query_operand: false, literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:template.prompt.replace("item",name).replace("11","-17").replace("301","907"),response:template.response.replace("item",name),action:None,operands:None});}}
             write_json(Path::new(&args[3]),&json!({"schema":"uor-r4.literal-admission-source/1","fit":fit,"development":prior["development"],"exposed_first_use":prior["first_use"],"exposed_chain":prior["transfer"],"first_use":first_use,"transfer":transfer,"identifiers":identifiers,"scope":"71 prior literal construction frames plus32 original word-copy construction frames labeled NoOperation; protected computed roles unchanged. Prior transfers exposed. New16 literal,16 complete chain and8 identifier tasks opened after design selection. No serving target injection."}))?;
         }
         Some("admission-fit") if args.len()==6 => {
@@ -287,7 +291,7 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
                 let response=String::from_utf8(model.decode(&out)?)?;
                 let correct=eos&&response==expected;
                 preservation_labels.push(json!({"id":id,"accepted":correct,"text":response,"expected":expected,"decision":decision}));
-                if correct {fit.push(TypedRoutingExample {id:format!("literal-preserve/{id}"),literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:prompt,response:expected,action:decision.map(|d|d.action),operands:decision.map(|d|d.operands.map(|r|r.value))});}
+                if correct {fit.push(TypedRoutingExample {id:format!("literal-preserve/{id}"),current_query_literals: false, current_query_operand: false, literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:prompt,response:expected,action:decision.map(|d|d.action),operands:decision.map(|d|d.operands.map(|r|r.value))});}
             }
             for (i,(names,numbers)) in [(["suri","orin"],[13,4]),(["mira","neri"],[5,9]),(["kira","fenn"],[2,5]),(["ada","ben"],[8,7])].into_iter().enumerate(){for reverse in [false,true] {for kind in 0..4 {fit.push(literal_example(format!("literal-fit/{i}/{reverse}/{kind}"),names,numbers,reverse,kind));}}}
             let mut development=Vec::new();let mut first_use=Vec::new();let mut transfer=Vec::new();

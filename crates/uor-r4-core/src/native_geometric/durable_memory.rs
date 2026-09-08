@@ -1,9 +1,9 @@
 //! Conversation and identity-scoped durable memory.
 //!
-//! Provides learned retention, read, update, conflict handling, and correction
-//! over the exact versioned relation and memory foundation. Bounded memory
-//! survives token window eviction in circular ring buffers and persists across
-//! session restarts, with strict isolation across user/project identities.
+//! Wraps core learned relations when present and explicit host fact operations
+//! otherwise. Checkpoint bytes preserve state across a host-managed restart.
+//! These storage operations do not qualify conversational understanding, learned
+//! pronoun resolution, or automatic disk persistence.
 
 use super::relation::{RelationRecord, RelationState};
 use super::value_lexemes::WordAtom;
@@ -150,6 +150,29 @@ impl DurableSession {
         })
     }
 
+    /// The learned core relation state is authoritative when the artifact has it.
+    /// The separate store exists only for explicit host facts on relation-free artifacts.
+    fn authoritative_relations(&self) -> &RelationState {
+        self.session
+            .values
+            .as_ref()
+            .and_then(|v| v.relations.as_ref())
+            .unwrap_or(&self.relations)
+    }
+
+    fn sync_from_session(&mut self) {
+        self.relations = self.authoritative_relations().clone();
+    }
+
+    fn validate_fact_text(text: &str) -> Result<()> {
+        if text.is_empty() || text.len() > super::value_lexemes::WORD_BYTES {
+            return Err(Error(
+                "explicit fact fields must fit one nonempty word atom without truncation".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Synchronize durable relations with the session's internal value state if present.
     fn sync_to_session(&mut self) {
         if let Some(values) = self.session.values.as_mut() {
@@ -169,6 +192,9 @@ impl DurableSession {
     ) -> Result<Generation> {
         if !(1..=4096).contains(&max_tokens) {
             return Err(Error("generation budget must be 1..=4096 tokens".into()));
+        }
+        if self.session.is_response_active() {
+            self.session.end_response(model)?;
         }
         if self.session.work.observed_tokens == 0 {
             self.session.observe(model, BOS)?;
@@ -246,6 +272,9 @@ impl DurableSession {
     /// If the owner already possesses an active value and the new value differs
     /// without explicit revision, a conflict is flagged (`conflict: true`).
     pub fn assert_fact(&mut self, owner: &str, value: &str) -> Result<u64> {
+        Self::validate_fact_text(owner)?;
+        Self::validate_fact_text(value)?;
+        self.sync_from_session();
         let owner_atom = make_atom(owner, self.session.work.observed_tokens);
         let value_atom = make_atom(value, self.session.work.observed_tokens + 1);
         let next_id = self.relations.next_id;
@@ -261,6 +290,9 @@ impl DurableSession {
     /// Links the new record to the preceding version (`previous: prior_id`)
     /// and resolves any outstanding conflict on that owner.
     pub fn revise_fact(&mut self, owner: &str, new_value: &str) -> Result<u64> {
+        Self::validate_fact_text(owner)?;
+        Self::validate_fact_text(new_value)?;
+        self.sync_from_session();
         let owner_atom = make_atom(owner, self.session.work.observed_tokens);
         let value_atom = make_atom(new_value, self.session.work.observed_tokens + 1);
         let next_id = self.relations.next_id;
@@ -275,10 +307,13 @@ impl DurableSession {
     /// to the most recently active conversational entity when appropriate.
     pub fn get_fact(&self, owner: &str) -> Option<String> {
         let resolved = self.resolve_pronoun(owner);
+        if Self::validate_fact_text(resolved).is_err() {
+            return None;
+        }
         let owner_atom = make_atom(resolved, 0);
         let mut work = ValueWork::default();
-        for &id in &self.relations.directory {
-            if let Some(r) = self.relations.record(id) {
+        for &id in &self.authoritative_relations().directory {
+            if let Some(r) = self.authoritative_relations().record(id) {
                 if r.owner.matches(&owner_atom, &mut work) {
                     return Some(atom_to_string(&r.value));
                 }
@@ -290,10 +325,13 @@ impl DurableSession {
     /// Retrieve the exact active `DurableFactRecord` for an owner.
     pub fn get_fact_record(&self, owner: &str) -> Option<DurableFactRecord> {
         let resolved = self.resolve_pronoun(owner);
+        if Self::validate_fact_text(resolved).is_err() {
+            return None;
+        }
         let owner_atom = make_atom(resolved, 0);
         let mut work = ValueWork::default();
-        for &id in &self.relations.directory {
-            if let Some(r) = self.relations.record(id) {
+        for &id in &self.authoritative_relations().directory {
+            if let Some(r) = self.authoritative_relations().record(id) {
                 if r.owner.matches(&owner_atom, &mut work) {
                     return Some(to_durable_record(r));
                 }
@@ -311,11 +349,14 @@ impl DurableSession {
     pub fn get_fact_history(&self, owner: &str) -> Vec<DurableFactRecord> {
         let mut history = Vec::new();
         let resolved = self.resolve_pronoun(owner);
+        if Self::validate_fact_text(resolved).is_err() {
+            return history;
+        }
         let owner_atom = make_atom(resolved, 0);
         let mut work = ValueWork::default();
         let mut current_id = None;
-        for &id in &self.relations.directory {
-            if let Some(r) = self.relations.record(id) {
+        for &id in &self.authoritative_relations().directory {
+            if let Some(r) = self.authoritative_relations().record(id) {
                 if r.owner.matches(&owner_atom, &mut work) {
                     current_id = Some(id);
                     break;
@@ -323,7 +364,7 @@ impl DurableSession {
             }
         }
         while let Some(id) = current_id {
-            if let Some(r) = self.relations.record(id) {
+            if let Some(r) = self.authoritative_relations().record(id) {
                 history.push(to_durable_record(r));
                 current_id = if r.previous != 0 && r.previous != id {
                     Some(r.previous)
@@ -340,8 +381,8 @@ impl DurableSession {
     /// Return all active `(owner, value)` fact pairs in the directory.
     pub fn active_facts(&self) -> Vec<(String, String)> {
         let mut facts = Vec::new();
-        for &id in &self.relations.directory {
-            if let Some(r) = self.relations.record(id) {
+        for &id in &self.authoritative_relations().directory {
+            if let Some(r) = self.authoritative_relations().record(id) {
                 facts.push((atom_to_string(&r.owner), atom_to_string(&r.value)));
             }
         }
@@ -350,7 +391,7 @@ impl DurableSession {
 
     /// Total count of active directory records.
     pub fn fact_count(&self) -> usize {
-        self.relations
+        self.authoritative_relations()
             .directory
             .iter()
             .filter(|&&id| id != 0)
@@ -374,7 +415,7 @@ impl DurableSession {
     /// Restart session dialogue while strictly preserving durable relations
     /// and memory indices. Transient circular token ring buffers are reset.
     pub fn restart(&mut self, model: &Model) -> Result<()> {
-        let preserved_relations = self.relations.clone();
+        let preserved_relations = self.authoritative_relations().clone();
         let preserved_memory = self.session.memory.clone();
 
         let mut fresh = model.session(self.session.control)?;
@@ -404,8 +445,10 @@ impl DurableSession {
 
     /// Selectively forget an entity or wipe all active facts for the scope.
     pub fn forget(&mut self, entity: Option<&str>) -> Result<usize> {
+        self.sync_from_session();
         let mut forgotten = 0;
         if let Some(name) = entity {
+            Self::validate_fact_text(name)?;
             let target = make_atom(name, 0);
             let mut work = ValueWork::default();
             for i in 0..self.relations.directory.len() {
@@ -440,6 +483,7 @@ impl DurableSession {
     /// Bounded consolidation of relation versions: reconciles conflicts,
     /// compacts directory slots, and returns metrics.
     pub fn consolidate(&mut self) -> Result<DurableConsolidationReport> {
+        self.sync_from_session();
         let mut active_count = 0;
         let mut conflicts_resolved = 0;
         let mut active_ids = BTreeSet::new();
@@ -489,7 +533,7 @@ impl DurableSession {
             schema: DURABLE_SESSION_SCHEMA.to_string(),
             scope: self.scope.clone(),
             last_entity: self.last_entity.clone(),
-            relations: self.relations.clone(),
+            relations: self.authoritative_relations().clone(),
             checkpoint: inner_checkpoint,
         };
         serde_json::to_vec(&envelope).map_err(|e| Error(e.to_string()))
@@ -502,10 +546,20 @@ impl DurableSession {
         if envelope.schema != DURABLE_SESSION_SCHEMA {
             return Err(Error("invalid durable session schema".into()));
         }
-        let mut session = Session::from_checkpoint(model, &envelope.checkpoint)?;
-        if let Some(values) = session.values.as_mut() {
-            if values.relations.is_some() {
-                values.relations = Some(envelope.relations.clone());
+        IdentityScope::new(
+            &envelope.scope.user_id,
+            &envelope.scope.project_id,
+            &envelope.scope.session_id,
+        )?;
+        let session = Session::from_checkpoint(model, &envelope.checkpoint)?;
+        if let Some(values) = session.values.as_ref() {
+            if let Some(relations) = &values.relations {
+                if relations != &envelope.relations {
+                    return Err(Error(
+                        "durable envelope conflicts with authoritative learned relation state"
+                            .into(),
+                    ));
+                }
             }
         }
         Ok(Self {
@@ -595,7 +649,7 @@ impl DurableMemoryStore {
         self.sessions.keys().cloned().collect()
     }
 
-    /// Formally verify that two scopes cannot read each other's memory.
+    /// Compare scope identities. This is not an isolation proof or an access check.
     pub fn is_isolated(&self, scope_a: &IdentityScope, scope_b: &IdentityScope) -> bool {
         scope_a != scope_b
     }

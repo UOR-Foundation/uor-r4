@@ -1,12 +1,7 @@
-//! Native geometric serving, geometry, and artifact guarantees.
-//!
-//! Implements formal verification and runtime invariants for:
-//! 1. Serving operation census and integer kernel purity (#1087).
-//! 2. Exact Z[phi] ring arithmetic, Fibonacci recurrence, and orientation (#1083).
-//! 3. Paired-H4 / Icosian golden folding (E8 = H4 x H4 shorthand) and inverse witnesses (#1083).
-//! 4. Euler/Hopf bridge, chirality/polarity, and least-cost chart adapters (#1083).
-//! 5. Artifact integrity CID binding and lexical codec vs kappa separation (#1083).
-//! 6. Formal vocabulary and theorem-to-code claim dossier (#1089).
+//! Legacy diagnostic helpers introduced in PR #1191.
+//! These helpers are not instrumented serving proofs, exact arithmetic certificates,
+//! E8 construction witnesses or capability evidence. See recovery-2026-09-08.md.
+//! The primary checked typed-value arithmetic remains separate.
 
 use super::{Error, Result, SCHEMA};
 use serde::{Deserialize, Serialize};
@@ -99,14 +94,11 @@ impl ServingOperationCensus {
             total_allowed_ops: total,
             op_counts: self.counts.clone(),
             forbidden_detected: self.forbidden.clone(),
-            is_kernel_pure: is_pure,
-            no_std_compliant: is_pure,
-            zero_float_verified: !self.forbidden.contains(&ForbiddenOp::FloatingPointType)
-                && !self.forbidden.contains(&ForbiddenOp::FloatingPointOp),
-            zero_matrix_product_verified: !self
-                .forbidden
-                .contains(&ForbiddenOp::DirectHardwareMultiply)
-                && !self.forbidden.contains(&ForbiddenOp::TransformerAttention),
+            // Caller-supplied counters cannot establish complete instrumentation coverage.
+            is_kernel_pure: false,
+            no_std_compliant: false,
+            zero_float_verified: false,
+            zero_matrix_product_verified: false,
         };
 
         if !is_pure {
@@ -120,7 +112,7 @@ impl ServingOperationCensus {
     }
 
     /// Decomposed integer multiplication via shift and add only.
-    /// Ensures zero direct hardware multiplier or matrix-product opcodes.
+    /// Modular arithmetic helper; this does not inspect compiler output or serving code.
     pub fn shift_add_product(mut a: u64, mut b: u64) -> u64 {
         let mut res: u64 = 0;
         while b > 0 {
@@ -138,7 +130,8 @@ impl ServingOperationCensus {
 // 2. Exact Z[phi] Ring Arithmetic & Fibonacci Recurrence (#1083)
 // ============================================================================
 
-/// Exact element of the quadratic integer ring Z[phi], where phi = (1 + sqrt(5))/2.
+/// Legacy saturating coordinate pair, not the primary checked Z[phi] value type.
+/// Overflow destroys exact ring identities; do not use this type as a witness.
 /// Satisfies phi^2 = phi + 1.
 /// Represented as integer pair (a, b) denoting a + b*phi.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -156,7 +149,7 @@ impl ZPhi {
         Self { a, b }
     }
 
-    /// Exact ring addition: (a1 + b1*phi) + (a2 + b2*phi) = (a1 + a2) + (b1 + b2)*phi.
+    /// Saturating diagnostic addition: (a1 + b1*phi) + (a2 + b2*phi) = (a1 + a2) + (b1 + b2)*phi.
     pub fn add(&self, other: &Self) -> Self {
         Self {
             a: self.a.saturating_add(other.a),
@@ -164,7 +157,7 @@ impl ZPhi {
         }
     }
 
-    /// Exact ring subtraction: (a1 + b1*phi) - (a2 + b2*phi) = (a1 - a2) + (b1 - b2)*phi.
+    /// Saturating diagnostic subtraction: (a1 + b1*phi) - (a2 + b2*phi) = (a1 - a2) + (b1 - b2)*phi.
     pub fn sub(&self, other: &Self) -> Self {
         Self {
             a: self.a.saturating_sub(other.a),
@@ -172,7 +165,7 @@ impl ZPhi {
         }
     }
 
-    /// Exact ring multiplication:
+    /// Saturating diagnostic multiplication:
     /// (a1 + b1*phi)(a2 + b2*phi) = a1*a2 + (a1*b2 + a2*b1)*phi + b1*b2*phi^2
     /// Since phi^2 = phi + 1:
     /// = (a1*a2 + b1*b2) + (a1*b2 + a2*b1 + b1*b2)*phi.
@@ -188,7 +181,7 @@ impl ZPhi {
         Self { a: new_a, b: new_b }
     }
 
-    /// Exact algebraic norm N(a + b*phi) = a^2 + ab - b^2 in Q(sqrt(5)).
+    /// Saturating diagnostic norm N(a + b*phi) = a^2 + ab - b^2 in Q(sqrt(5)).
     pub fn norm(&self) -> i64 {
         let a2 = self.a.saturating_mul(self.a);
         let ab = self.a.saturating_mul(self.b);
@@ -200,11 +193,11 @@ impl ZPhi {
     pub fn galois_conjugate(&self) -> Self {
         Self {
             a: self.a.saturating_add(self.b),
-            b: -self.b,
+            b: self.b.saturating_neg(),
         }
     }
 
-    /// Fibonacci forward step: multiplication by phi.
+    /// Saturating forward step: multiplication by phi.
     /// (a + b*phi)*phi = a*phi + b*phi^2 = b + (a + b)*phi => (b, a + b).
     pub fn fibonacci_step(&self) -> Self {
         Self {
@@ -213,7 +206,7 @@ impl ZPhi {
         }
     }
 
-    /// Fibonacci inverse step: multiplication by phi^-1 = phi - 1.
+    /// Saturating inverse-form step (not invertible on overflow): multiplication by phi^-1 = phi - 1.
     /// (a + b*phi)*(phi - 1) = (b - a) + a*phi => (b - a, a).
     pub fn fibonacci_step_inv(&self) -> Self {
         Self {
@@ -307,43 +300,27 @@ pub enum ChartKind {
     RiemannianInterval,
 }
 
-/// Verified witness for a chosen chart adapter.
+/// Unverified chart request. No adapter execution or inverse is implemented here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChartWitness {
     pub chart: ChartKind,
-    pub cost_rating: u32,
-    pub error_bound_ppm: u32, // parts per million: 0 = exact
+    pub cost_rating: Option<u32>,
+    pub error_bound_ppm: Option<u32>, // None: no approximation measurement supplied
     pub preserves_orientation: bool,
     pub has_inverse_witness: bool,
 }
 
-/// Selector and verifier for least-cost chart adapters.
+/// Legacy chart selector. It cannot select by measured cost without measurements.
 pub struct ChartAdapter;
 
 impl ChartAdapter {
     pub fn witness(chart: ChartKind) -> ChartWitness {
-        match chart {
-            ChartKind::EuclideanSqrt2 => ChartWitness {
-                chart,
-                cost_rating: 10,
-                error_bound_ppm: 0, // exact integer coordinate representation
-                preserves_orientation: true,
-                has_inverse_witness: true,
-            },
-            ChartKind::ComplexDiscrete2i => ChartWitness {
-                chart,
-                cost_rating: 15,
-                error_bound_ppm: 0,
-                preserves_orientation: true,
-                has_inverse_witness: true,
-            },
-            ChartKind::RiemannianInterval => ChartWitness {
-                chart,
-                cost_rating: 25,
-                error_bound_ppm: 0,
-                preserves_orientation: true,
-                has_inverse_witness: true,
-            },
+        ChartWitness {
+            chart,
+            cost_rating: None,
+            error_bound_ppm: None,
+            preserves_orientation: false,
+            has_inverse_witness: false,
         }
     }
 
@@ -360,7 +337,7 @@ impl ChartAdapter {
 // 4. Paired-H4 / Icosian Quaternions & Inverse Witnesses (#1083)
 // ============================================================================
 
-/// Quaternion with coordinates in the exact quadratic integer ring Z[phi].
+/// Diagnostic quaternion over legacy saturating coordinates, not an E8 lattice construction.
 /// q = w + x*i + y*j + z*k where w, x, y, z in Z[phi].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct IcosianQuaternion {
@@ -382,7 +359,7 @@ impl IcosianQuaternion {
         Self { w, x, y, z }
     }
 
-    /// Exact Hamiltonian quaternion addition.
+    /// Saturating diagnostic quaternion addition.
     pub fn add(&self, other: &Self) -> Self {
         Self {
             w: self.w.add(&other.w),
@@ -392,7 +369,7 @@ impl IcosianQuaternion {
         }
     }
 
-    /// Exact Hamiltonian quaternion subtraction.
+    /// Saturating diagnostic quaternion subtraction.
     pub fn sub(&self, other: &Self) -> Self {
         Self {
             w: self.w.sub(&other.w),
@@ -402,7 +379,7 @@ impl IcosianQuaternion {
         }
     }
 
-    /// Exact Hamiltonian quaternion multiplication over Z[phi].
+    /// Saturating diagnostic quaternion multiplication over Z[phi].
     /// w' = w1*w2 - x1*x2 - y1*y2 - z1*z2
     /// x' = w1*x2 + x1*w2 + y1*z2 - z1*y2
     /// y' = w1*y2 - x1*z2 + y1*w2 + z1*x2
@@ -445,9 +422,9 @@ impl IcosianQuaternion {
     pub fn conjugate(&self) -> Self {
         Self {
             w: self.w,
-            x: ZPhi::new(-self.x.a, -self.x.b),
-            y: ZPhi::new(-self.y.a, -self.y.b),
-            z: ZPhi::new(-self.z.a, -self.z.b),
+            x: ZPhi::new(self.x.a.saturating_neg(), self.x.b.saturating_neg()),
+            y: ZPhi::new(self.y.a.saturating_neg(), self.y.b.saturating_neg()),
+            z: ZPhi::new(self.z.a.saturating_neg(), self.z.b.saturating_neg()),
         }
     }
 
@@ -465,32 +442,18 @@ impl IcosianQuaternion {
         self.norm_squared().is_one()
     }
 
-    /// Verify the exact inverse witness: q * q^-1 == 1.
-    /// For unit icosians, q^-1 = q*.
+    /// Unavailable: saturating coordinates cannot certify an exact ring inverse.
     pub fn verify_inverse_witness(&self) -> Result<()> {
-        if !self.is_unit() {
-            return Err(Error(
-                "Cannot compute unit inverse witness: quaternion is not unit norm in Z[phi]".into(),
-            ));
-        }
-
-        let inv = self.conjugate();
-        let prod = self.mul(&inv);
-
-        if prod == Self::IDENTITY {
-            Ok(())
-        } else {
-            Err(Error(format!(
-                "Inverse witness failed: q * q^-1 = {:?} != IDENTITY",
-                prod
-            )))
-        }
+        Err(Error(
+            "UNAVAILABLE: legacy saturating quaternion helper is not an exact inverse witness"
+                .into(),
+        ))
     }
 }
 
-/// Paired-H4 / Golden Folding representation of the E8 lattice.
-/// Realizes E8 as the Z-module of quaternions over Z[phi]: H4 (+) phi*H4.
-/// Shorthand: E8 = H4 x H4.
+/// Legacy pair of independent diagnostic quaternions.
+/// No fixed basis, glue, Galois coupling or E8 map is bound here; this is not
+/// the project's paired-H4 / icosian construction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairedH4Icosian {
     pub primary_h4: IcosianQuaternion,
@@ -536,13 +499,14 @@ impl ArtifactIntegrityWitness {
             canonical_uor_address: "uor:native-geometric/r4/1".into(),
             model_cid: model_cid.into(),
             config_hash: config_hash.into(),
-            is_provider_free: true,
-            zero_matmul_serving: true,
-            zero_heap_alloc_hot_path: true,
+            is_provider_free: false,
+            zero_matmul_serving: false,
+            zero_heap_alloc_hot_path: false,
         }
     }
 
-    /// Verify that the loaded artifact matches its sealed CID and schema.
+    /// Compare caller-supplied identity strings and schema only. This does not
+    /// hash artifact bytes or verify provider, arithmetic or allocation properties.
     pub fn verify(&self, expected_cid: &str) -> Result<()> {
         if self.schema_version != SCHEMA {
             return Err(Error(format!(
@@ -555,21 +519,6 @@ impl ArtifactIntegrityWitness {
                 "Artifact CID mismatch: expected {}, got {}",
                 expected_cid, self.model_cid
             )));
-        }
-        if !self.is_provider_free {
-            return Err(Error(
-                "Forbidden external provider detected in artifact".into(),
-            ));
-        }
-        if !self.zero_matmul_serving {
-            return Err(Error(
-                "Serving path requires mathematical matrix products; forbidden by #1087".into(),
-            ));
-        }
-        if !self.zero_heap_alloc_hot_path {
-            return Err(Error(
-                "Hot path serving allocates on heap; violates #![no_std] contract".into(),
-            ));
         }
         Ok(())
     }
@@ -661,89 +610,61 @@ impl FormalClaimDossier {
 
     /// Register the 9 foundational project claims under #964 / #1089.
     pub fn register_default_claims(&mut self) {
-        self.claims = vec![
-            FormalClaim {
-                id: "CLAIM-1087-01".into(),
-                title: "Integer/Table Serving Kernel Operation Census".into(),
-                class: ClaimClass::Guarantee,
-                status: ClaimStatus::Structural,
-                vocabulary_section: "§3 (Serving Kernel Boundary)".into(),
-                code_binding: "ServingOperationCensus::audit".into(),
-                disavowal_note: "No floating point or matrix multiplication in hot path serving.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1083-01".into(),
-                title: "Exact Z[phi] Ring Arithmetic and Norm".into(),
-                class: ClaimClass::Guarantee,
-                status: ClaimStatus::Structural,
-                vocabulary_section: "§3 (r_t = a_t + b_t*phi in Z[phi])".into(),
-                code_binding: "ZPhi::add, ZPhi::sub, ZPhi::mul, ZPhi::norm".into(),
-                disavowal_note: "Exact integer representation without rounding error; no semantic distance implied.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1083-02".into(),
-                title: "Fibonacci Bidirectional Recurrence and Exact Inverse".into(),
-                class: ClaimClass::Guarantee,
-                status: ClaimStatus::Structural,
-                vocabulary_section: "§3 (phi:(a,b)->(b,a+b))".into(),
-                code_binding: "ZPhi::fibonacci_step, ZPhi::fibonacci_step_inv".into(),
-                disavowal_note: "Fibonacci recurrence preserves scale but does not establish semantic superiority.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1083-03".into(),
-                title: "Euler/Hopf Bridge and Orientation Preservation".into(),
-                class: ClaimClass::Definition,
-                status: ClaimStatus::Structural,
-                vocabulary_section: "§3 (e^(i*pi) + pi^0 =_bridge 0^0)".into(),
-                code_binding: "EulerHopfBridge".into(),
-                disavowal_note: "Domain-transition operator; does not assert numerical equality across disjoint domains.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1083-04".into(),
-                title: "Least-Cost Chart Adapters and Fidelity Witnesses".into(),
-                class: ClaimClass::Guarantee,
-                status: ClaimStatus::Witnessed,
-                vocabulary_section: "§3 (m_E=sqrt(2), m_C=2i, m_R in [0,2])".into(),
-                code_binding: "ChartAdapter::witness".into(),
-                disavowal_note: "Typed coordinate conventions, not literal domain equalities.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1083-05".into(),
-                title: "Paired-H4 Icosian Unit Quaternion Inverse Witness".into(),
-                class: ClaimClass::Guarantee,
-                status: ClaimStatus::Witnessed,
-                vocabulary_section: "§3 (B_ico: Lambda_E8 ~= I -> H4 (+) phi*H4)".into(),
-                code_binding: "IcosianQuaternion::verify_inverse_witness".into(),
-                disavowal_note: "Project shorthand E8 = H4 x H4 denotes golden folding; no physical energy minimization claimed.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1083-06".into(),
-                title: "Artifact Integrity CID and Codec Separation".into(),
-                class: ClaimClass::Guarantee,
-                status: ClaimStatus::Structural,
-                vocabulary_section: "§3 (C_lex vs kappa(X))".into(),
-                code_binding: "ArtifactIntegrityWitness::verify".into(),
-                disavowal_note: "Kappa is content identity and provenance; digest distance is not semantic distance.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1089-01".into(),
-                title: "Finite Zeta-Grid Phase Channels as Precomputed Anchors".into(),
-                class: ClaimClass::Assumption,
-                status: ClaimStatus::Assumed,
-                vocabulary_section: "§3 (Gamma = (gamma_0,...,gamma_m-1))".into(),
-                code_binding: "native_geometric::anchors".into(),
-                disavowal_note: "Finite zeta zeros provide fixed structured channels; does not claim proof of Riemann Hypothesis.".into(),
-            },
-            FormalClaim {
-                id: "CLAIM-1089-02".into(),
-                title: "Separation of Geometric Priority from Empirical Quality".into(),
-                class: ClaimClass::EmpiricalCriterion,
-                status: ClaimStatus::Empirical,
-                vocabulary_section: "§1 (Claim Classes), §2 (Claim Status)".into(),
-                code_binding: "native_geometric::m1_profiler".into(),
-                disavowal_note: "Structural priority is distinct from measured predictive advantage. Plausible output is not evidence of human reasoning.".into(),
-            },
-        ];
+        self.claims = [
+            (
+                "serving",
+                "Complete serving operation census",
+                "ServingOperationCensus",
+            ),
+            (
+                "arithmetic",
+                "Exact overflow-checked ring arithmetic",
+                "primary value_types, not legacy guarantees::ZPhi",
+            ),
+            (
+                "fibonacci",
+                "Checked reversible recurrence",
+                "legacy diagnostic only",
+            ),
+            ("bridge", "Typed orientation bridge", "EulerHopfBridge"),
+            (
+                "charts",
+                "Measured chart fidelity and inverse",
+                "ChartAdapter",
+            ),
+            (
+                "icosian",
+                "Fixed coupled icosian representation",
+                "legacy independent pair is insufficient",
+            ),
+            (
+                "artifact",
+                "Artifact bytes and runtime binding",
+                "ArtifactIntegrityWitness",
+            ),
+            (
+                "zeta",
+                "Artifact-bound fixed zeta phases",
+                "native_geometric::anchors",
+            ),
+            (
+                "quality",
+                "Measured capability and laptop cost",
+                "independent behavior and resource receipts",
+            ),
+        ]
+        .into_iter()
+        .map(|(id, title, binding)| FormalClaim {
+            id: id.into(),
+            title: title.into(),
+            class: ClaimClass::Objective,
+            status: ClaimStatus::Unproven,
+            vocabulary_section: "Scope requires independent evidence".into(),
+            code_binding: binding.into(),
+            disavowal_note:
+                "This registry supplies no proof, empirical result or execution witness.".into(),
+        })
+        .collect();
     }
 
     /// Register an individual claim.
@@ -751,7 +672,7 @@ impl FormalClaimDossier {
         self.claims.push(claim);
     }
 
-    /// Audit all registered claims according to formal vocabulary rules.
+    /// Check label/wording consistency only. A valid dossier is not proof of any claim.
     pub fn verify_dossier(&self) -> Result<DossierAuditReport> {
         let prohibited_keywords = [
             "machine-verified",

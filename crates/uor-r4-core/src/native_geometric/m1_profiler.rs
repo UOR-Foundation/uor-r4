@@ -1,21 +1,20 @@
-//! Complete-path Apple Silicon M1 latency, energy, and memory profiling.
-//!
-//! Measures the deployed native serving lifecycle: cold artifact loading,
-//! input ingestion, geometric table lookup, state/operator execution,
-//! token emission, and session persistence, alongside resident RAM,
-//! memory traffic, power/energy models, and sustained thermal stability.
+//! Diagnostic timing of an in-process native model session.
+//! This is not a complete deployed-path or quality-matched M1 benchmark.
+//! Energy, thermals, RSS and hardware identity are unavailable without measurements.
 
 use super::{Control, Error, Model, Result, Session, BOS, EOS};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-/// Individual stage timing breakdown in microseconds for complete-path serving.
+/// Sum of selected measured in-process calls in microseconds; see timing_scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct StageBreakdown {
     pub cold_load_us: u64,
     pub ingest_us: u64,
-    pub geometric_lookup_us: u64,
-    pub operator_execution_us: u64,
+    pub geometric_lookup_us: Option<u64>,
+    pub operator_execution_us: Option<u64>,
+    /// Measured predict-call duration, without an invented lookup/operator split.
+    pub prediction_us: u64,
     pub token_emission_us: u64,
     pub persistence_us: u64,
     pub total_us: u64,
@@ -26,8 +25,7 @@ impl StageBreakdown {
         self.total_us = self
             .cold_load_us
             .saturating_add(self.ingest_us)
-            .saturating_add(self.geometric_lookup_us)
-            .saturating_add(self.operator_execution_us)
+            .saturating_add(self.prediction_us)
             .saturating_add(self.token_emission_us)
             .saturating_add(self.persistence_us);
     }
@@ -77,12 +75,12 @@ impl LatencyDistribution {
 /// Hardware specification and memory footprint accounting on Apple M1.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HardwareMetrics {
-    pub cpu_brand: String,
+    pub cpu_brand: Option<String>,
     pub architecture: String,
     pub logical_cores: usize,
-    pub physical_cores: usize,
-    pub total_memory_bytes: u64,
-    pub resident_memory_bytes: u64,
+    pub physical_cores: Option<usize>,
+    pub total_memory_bytes: Option<u64>,
+    pub resident_memory_bytes: Option<u64>,
     pub ring_storage_bytes: usize,
     pub candidate_storage_bytes: usize,
     pub table_storage_bytes: usize,
@@ -93,7 +91,6 @@ impl HardwareMetrics {
         let logical_cores = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(8);
-        let resident_memory_bytes = get_resident_memory_bytes();
         let ring_storage_bytes = session.ring.len() * std::mem::size_of::<u32>();
         let candidate_storage_bytes =
             model.config.candidate_limit * std::mem::size_of::<super::Candidate>();
@@ -101,12 +98,12 @@ impl HardwareMetrics {
             + model.training.learned_associations * std::mem::size_of::<super::TokenScore>();
 
         Self {
-            cpu_brand: "Apple M1".to_string(),
+            cpu_brand: None,
             architecture: std::env::consts::ARCH.to_string(),
             logical_cores,
-            physical_cores: 8,
-            total_memory_bytes: 17_179_869_184, // 16 GiB unified memory
-            resident_memory_bytes,
+            physical_cores: None,
+            total_memory_bytes: None,
+            resident_memory_bytes: None,
             ring_storage_bytes,
             candidate_storage_bytes,
             table_storage_bytes,
@@ -114,40 +111,30 @@ impl HardwareMetrics {
     }
 }
 
-/// Complete-path Apple Silicon M1 power and energy consumption model.
+/// Missing energy and thermal measurements; no default power assumption.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct M1EnergyModel {
-    /// Active CPU power estimate in milliwatts on Apple M1 (~3500 mW active baseline).
-    pub estimated_power_mw: u64,
+    /// Active CPU power in milliwatts, unavailable without sensor evidence.
+    pub estimated_power_mw: Option<u64>,
     /// Total duration in microseconds.
     pub duration_us: u64,
     /// Energy consumed per generated token in microjoules (µJ).
-    pub energy_per_token_uj: u64,
+    pub energy_per_token_uj: Option<u64>,
     /// Total completed task energy in millijoules (mJ).
-    pub total_energy_mj: u64,
+    pub total_energy_mj: Option<u64>,
     /// Sustained thermal operating condition.
-    pub thermal_status: String,
+    pub thermal_status: Option<String>,
 }
 
 impl M1EnergyModel {
-    pub fn estimate(duration_us: u64, token_count: usize) -> Self {
-        // Apple M1 active core power for integer-table computation is ~3,500 mW.
-        let estimated_power_mw = 3500u64;
-        // Energy in microjoules: P (mW) * t (us) / 1000 = microjoules
-        let total_energy_uj = (estimated_power_mw.saturating_mul(duration_us)) / 1000;
-        let total_energy_mj = total_energy_uj / 1000;
-        let energy_per_token_uj = if token_count > 0 {
-            total_energy_uj / (token_count as u64)
-        } else {
-            0
-        };
-
+    /// No sensor input is available. Preserve elapsed time and report missing data.
+    pub fn estimate(duration_us: u64, _token_count: usize) -> Self {
         Self {
-            estimated_power_mw,
+            estimated_power_mw: None,
             duration_us,
-            energy_per_token_uj,
-            total_energy_mj,
-            thermal_status: "nominal".to_string(),
+            energy_per_token_uj: None,
+            total_energy_mj: None,
+            thermal_status: None,
         }
     }
 }
@@ -175,14 +162,17 @@ pub struct TaskBenchmarkResult {
     pub tokens_per_second: u64,
     pub hardware: HardwareMetrics,
     pub energy: M1EnergyModel,
+    /// Execution emitted tokens; this is not a correctness or quality verdict.
     pub success: bool,
+    pub quality_verified: bool,
+    pub timing_scope: String,
 }
 
-/// Profiler engine executing complete-path lifecycle measurements on M1.
+/// Diagnostic timer, portable to native hosts; not a hardware qualification.
 pub struct M1Profiler;
 
 impl M1Profiler {
-    /// Profiles a complete deployed serving task with submillisecond timing scope.
+    /// Times selected in-process operations without a speed or quality acceptance floor.
     pub fn profile_task(
         model: &Model,
         task: TaskKind,
@@ -216,8 +206,7 @@ impl M1Profiler {
         let mut token_samples = Vec::new();
         let mut generated_tokens = Vec::new();
 
-        let mut total_lookup_us = 0u64;
-        let mut total_operator_us = 0u64;
+        let mut total_prediction_us = 0u64;
         let mut total_emission_us = 0u64;
 
         for _ in 0..max_tokens {
@@ -230,13 +219,7 @@ impl M1Profiler {
             let decision_dur_us = (decision_nanos + 999) / 1000;
             decision_samples.push(decision_dur_us);
 
-            // Attribute 40% to geometric addressing/lookup and 60% to operator/state execution
-            let lookup_nanos = (decision_nanos * 4) / 10;
-            let operator_nanos = decision_nanos.saturating_sub(lookup_nanos);
-            let lookup_portion = (lookup_nanos + 999) / 1000;
-            let operator_portion = (operator_nanos + 999) / 1000;
-            total_lookup_us = total_lookup_us.saturating_add(lookup_portion);
-            total_operator_us = total_operator_us.saturating_add(operator_portion);
+            total_prediction_us = total_prediction_us.saturating_add(decision_dur_us);
 
             // Measure token emission & state update
             let t_emission_start = Instant::now();
@@ -264,8 +247,7 @@ impl M1Profiler {
             token_samples.push((token_nanos + 999) / 1000);
         }
 
-        stages.geometric_lookup_us = total_lookup_us;
-        stages.operator_execution_us = total_operator_us;
+        stages.prediction_us = total_prediction_us;
         stages.token_emission_us = total_emission_us;
 
         // 6. Persistence: serialize session checkpoint
@@ -273,7 +255,7 @@ impl M1Profiler {
         let _checkpoint = session.checkpoint();
         stages.persistence_us = t_persist_start.elapsed().as_micros() as u64;
 
-        // Compute total complete-path time
+        // Sum the selected measured calls; omitted deployment costs remain excluded.
         stages.compute_total();
 
         let decoded_bytes = loaded_model.decode(&generated_tokens)?;
@@ -284,8 +266,7 @@ impl M1Profiler {
         let token_latency = LatencyDistribution::from_samples(token_samples);
 
         let gen_time_us = stages
-            .geometric_lookup_us
-            .saturating_add(stages.operator_execution_us)
+            .prediction_us
             .saturating_add(stages.token_emission_us);
 
         let tokens_per_second = if gen_time_us > 0 {
@@ -309,6 +290,8 @@ impl M1Profiler {
             hardware,
             energy,
             success: output_tokens > 0,
+            quality_verified: false,
+            timing_scope: "In-process serialize/deserialize, ingest, predict, observe and checkpoint calls; excludes file I/O, artifact validation, decoding, UI and persistence writes. No separate lookup/operator timing or energy/thermal measurement.".into(),
         })
     }
 
@@ -375,42 +358,4 @@ impl M1Profiler {
 
         Ok((seq_total_us, par_total_us, deterministic))
     }
-}
-
-#[repr(C)]
-struct RUsage {
-    ru_utime: [i64; 2],
-    ru_stime: [i64; 2],
-    ru_maxrss: i64,
-    ru_ixrss: i64,
-    ru_idrss: i64,
-    ru_isrss: i64,
-    ru_minflt: i64,
-    ru_majflt: i64,
-    ru_nswap: i64,
-    ru_inblock: i64,
-    ru_oublock: i64,
-    ru_msgsnd: i64,
-    ru_msgrcv: i64,
-    ru_nsignals: i64,
-    ru_nvcsw: i64,
-    ru_nivcsw: i64,
-}
-
-extern "C" {
-    fn getrusage(who: i32, usage: *mut RUsage) -> i32;
-}
-
-/// Helper function to retrieve resident set size (RSS) via libc getrusage.
-fn get_resident_memory_bytes() -> u64 {
-    unsafe {
-        let mut usage = std::mem::zeroed::<RUsage>();
-        if getrusage(0, &mut usage) == 0 {
-            #[cfg(target_os = "macos")]
-            return usage.ru_maxrss as u64;
-            #[cfg(not(target_os = "macos"))]
-            return (usage.ru_maxrss as u64).saturating_mul(1024);
-        }
-    }
-    0
 }

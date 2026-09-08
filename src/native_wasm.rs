@@ -8,28 +8,26 @@ use uor_r4_api::native_capability_api::{NativeModel, WasmModelRuntime};
 
 static NATIVE_RUNTIME: OnceLock<Mutex<WasmModelRuntime>> = OnceLock::new();
 
-pub fn get_or_init_runtime(model_bytes: &[u8]) -> Result<&'static Mutex<WasmModelRuntime>, String> {
-    if let Some(rt) = NATIVE_RUNTIME.get() {
-        return Ok(rt);
-    }
-    let model = NativeModel::load_from_bytes(model_bytes)
-        .map_err(|e| format!("Failed to load native geometric model: {e}"))?;
-    let runtime = WasmModelRuntime::new(model);
-    let _ = NATIVE_RUNTIME.set(Mutex::new(runtime));
-    Ok(NATIVE_RUNTIME.get().expect("runtime initialized"))
-}
-
 pub fn get_runtime() -> Result<&'static Mutex<WasmModelRuntime>, String> {
-    if let Some(rt) = NATIVE_RUNTIME.get() {
-        Ok(rt)
-    } else {
-        get_or_init_runtime(&[])
-    }
+    NATIVE_RUNTIME
+        .get()
+        .ok_or_else(|| "No native model loaded; supply a retained artifact first".into())
 }
 
 pub fn init(model_bytes: &[u8]) -> Result<String, String> {
-    let rt = get_or_init_runtime(model_bytes)?;
-    let guard = rt
+    // Validate before replacing the runtime, preserving the previous model on error.
+    let model = NativeModel::load_from_bytes(model_bytes)
+        .map_err(|e| format!("Failed to load native geometric model: {e}"))?;
+    let runtime = WasmModelRuntime::new(model);
+    if let Some(rt) = NATIVE_RUNTIME.get() {
+        *rt.lock()
+            .map_err(|e| format!("Runtime lock poisoned: {e}"))? = runtime;
+    } else {
+        NATIVE_RUNTIME
+            .set(Mutex::new(runtime))
+            .map_err(|_| "Concurrent native model initialization".to_string())?;
+    }
+    let guard = get_runtime()?
         .lock()
         .map_err(|e| format!("Runtime lock poisoned: {e}"))?;
     Ok(guard.wasm_get_capabilities())
@@ -63,6 +61,15 @@ pub fn generate_step(handle: u32, max_tokens: usize) -> Result<String, String> {
     guard
         .wasm_generate_step(handle, max_tokens)
         .map_err(|e| format!("Generation step failed: {e}"))
+}
+
+pub fn finish_generation(handle: u32) -> Result<String, String> {
+    let guard = get_runtime()?
+        .lock()
+        .map_err(|e| format!("Runtime lock poisoned: {e}"))?;
+    guard
+        .wasm_finish_generation(handle)
+        .map_err(|e| format!("Finish generation failed: {e}"))
 }
 
 pub fn cancel(handle: u32) -> Result<(), String> {
@@ -145,6 +152,12 @@ pub fn native_geometric_ingest(handle: u32, text: &str) -> Result<String, JsValu
 #[wasm_bindgen]
 pub fn native_geometric_generate_step(handle: u32, max_tokens: usize) -> Result<String, JsValue> {
     generate_step(handle, max_tokens).map_err(|e| JsValue::from_str(&e))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn native_geometric_finish_generation(handle: u32) -> Result<String, JsValue> {
+    finish_generation(handle).map_err(|e| JsValue::from_str(&e))
 }
 
 #[cfg(target_arch = "wasm32")]

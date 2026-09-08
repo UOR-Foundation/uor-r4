@@ -198,6 +198,19 @@ impl Session {
         self.word_copy.as_ref().and_then(|state| state.pending)
     }
 
+    /// Whether a response-specific core state is active, including after restore.
+    /// Hosts use this to distinguish a new input turn from another prefill chunk.
+    pub fn is_response_active(&self) -> bool {
+        self.values.as_ref().is_some_and(|s| s.active)
+            || self.completion.as_ref().is_some_and(|s| s.active)
+            || self.response_entry.as_ref().is_some_and(|s| s.active)
+            || self
+                .memory
+                .as_ref()
+                .and_then(|s| s.response.as_ref())
+                .is_some_and(|s| s.active)
+    }
+
     fn check_model(&self, model: &Model) -> Result<()> {
         if self.artifact_cid != model.artifact_cid {
             return Err(Error(
@@ -270,12 +283,10 @@ impl Session {
     }
 
     pub fn maybe_transition(&mut self, model: &Model) -> Result<bool> {
-        if self.can_transition() {
-            self.refresh_value_sources(model)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        self.check_model(model)?;
+        // No learned within-response transition policy has been delivered.
+        // Keep explicit refresh available for mechanical experiments only.
+        Ok(false)
     }
 
     fn product(&mut self, model: &Model, left: u16, right: u16) -> u16 {
