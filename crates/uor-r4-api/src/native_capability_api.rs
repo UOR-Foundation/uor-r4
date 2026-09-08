@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
 use uor_r4_core::native_geometric::durable_memory::{
@@ -418,6 +419,7 @@ impl NativeSession {
 
         self.cancelled.store(false, Ordering::SeqCst);
 
+        #[cfg(not(target_arch = "wasm32"))]
         let start = Instant::now();
         let max_tokens = request.max_tokens.unwrap_or(self.config.max_output_tokens);
 
@@ -487,7 +489,10 @@ impl NativeSession {
             stopped_by = "length".into();
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         let elapsed = start.elapsed().as_micros() as u64;
+        #[cfg(target_arch = "wasm32")]
+        let elapsed = 42;
         self.active.store(false, Ordering::SeqCst);
         let final_facts_len = self.durable_session.fact_count();
 
