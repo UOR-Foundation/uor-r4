@@ -1,0 +1,4198 @@
+{
+  "schema": "uor-r4.native-current-query-evidence/1",
+  "at": "2026-09-08T15:07:48.411Z",
+  "source": {
+    "base": "c229e3928aad383043561f29466cb211a75238e5",
+    "driver": {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_current_query.rs",
+      "sha256": "601418b9309e00b0f320db83a41ccb22a7972ec9f646c21a9fdf698bd65ca022",
+      "bytes": 6747
+    },
+    "fit_driver": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit-driver.rs",
+      "sha256": "379a007220fb6a01ba7b4271da12ca7c5a293854d32185b3bec1619262ff6ca7",
+      "bytes": 6640
+    },
+    "first_driver": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/first-fit-driver-with-stress.rs",
+      "sha256": "215424ca25fb2fc57df2ab1abd9a0b65ab8849376439d1ba5d011c9265364943",
+      "bytes": 6249
+    },
+    "runtime_changes": false,
+    "source_freeze": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/source-freeze.json",
+      "sha256": "8ebeed98dd13ae9dc2970fdea108c660b7ee6cc40fbf354f3a0d82831838815c",
+      "bytes": 591
+    },
+    "note": "Final driver differs from second-fit frozen driver only in the fresh branch, adding signed values before selection. Fit path unchanged."
+  },
+  "retention": {
+    "at": "2026-09-08T15:02:50.964Z",
+    "status": "RETAINED_AT_BOUNDED_CURRENT_QUERY_SCOPE",
+    "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+    "sha256": "fe31404930998ff33fc57c463af921b989a5f6140a43ee127cf57a38acc5fe9c",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/current-query-refinement/model.json",
+    "bytes": 11962906,
+    "parent": "79710468",
+    "fresh": 24,
+    "source_evidence": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query",
+    "limitations": [
+      "Same named entities and finite query forms",
+      "No learned within-response transition policy",
+      "General prose and coding unqualified",
+      "New artifact not separately browser-tested; serving/schema unchanged"
+    ]
+  },
+  "artifact": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/current-query-refinement/model.json",
+    "sha256": "fe31404930998ff33fc57c463af921b989a5f6140a43ee127cf57a38acc5fe9c",
+    "bytes": 11962906
+  },
+  "parent": {
+    "cid": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+    "sha256": "d65434912f8b47317ea38ed0c76b6485a7e20c41a20ffab0e2b082621b8be82b"
+  },
+  "fit": {
+    "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+    "block_bytes": 81612,
+    "config": {
+      "learned_features": 768,
+      "max_seconds": 120,
+      "mode": "angular",
+      "passes": 8,
+      "proposals": 24,
+      "seed": 1139
+    },
+    "construction_ms": 631,
+    "dictionary_words": 60,
+    "effective_query_classes": 62,
+    "feature_universe": 667,
+    "features": 667,
+    "fit": {
+      "accepted": [
+        54,
+        0,
+        1
+      ],
+      "final_correct": 255,
+      "final_hinge": 24,
+      "initial_correct": 124,
+      "initial_hinge": 893,
+      "proposals": 105708,
+      "stopped_at_time_limit": true
+    },
+    "frames": 255,
+    "incompatible_feature_classes": 0,
+    "parent": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+    "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+  },
+  "data": {
+    "prior_construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+      "sha256": "bb90bba190718dd028fa207bd6dc8e1ff4bce9380df4ae3df02159960f0544a0",
+      "bytes": 90840
+    },
+    "construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/construction.json",
+      "sha256": "477c523fc8a0887e84461af5a8fb17952f3c17ae4dcbd7c5d44b241b42c25e3b",
+      "bytes": 135756
+    },
+    "open": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/open.json",
+      "sha256": "85a269ef6a95013a00d69fac7d3dbb2da8deb4afb467debcad3345b5a37e0be0",
+      "bytes": 29554
+    },
+    "stress": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-stress/source.json",
+      "sha256": "5eb5c01388741c60cb97d28fe00c32cd1cad84223acf81faebf621ef4a4a89b9",
+      "bytes": 11262
+    },
+    "fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fresh/source.json",
+      "sha256": "9bdbfba7775da7fa4ef2c3cc92b98604c5aa1a7f5d5d2bfaf77f6dfbcdbcb235",
+      "bytes": 15182
+    }
+  },
+  "selection": {
+    "at": "2026-09-08T15:01:22.141Z",
+    "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+    "sha256": "fe31404930998ff33fc57c463af921b989a5f6140a43ee127cf57a38acc5fe9c",
+    "construction": 255,
+    "open": 48,
+    "stress": 16,
+    "preservation": true,
+    "api_semantic_gate": "PASS",
+    "control": {
+      "independent_unchanged": 32,
+      "dependent_changed": 16
+    },
+    "fresh": "NOT_RUN_AT_SELECTION",
+    "scope": "Selected at bounded current-query operand and shared continuation scope; no general language/coding/within-response transition claim"
+  },
+  "fresh_plan": {
+    "at": "2026-09-08T14:59:13.155Z",
+    "cases": 24,
+    "groups": [
+      {
+        "count": 2,
+        "offset": 109
+      },
+      {
+        "count": 2,
+        "offset": -60
+      }
+    ],
+    "source_sha256": "601418b9309e00b0f320db83a41ccb22a7972ec9f646c21a9fdf698bd65ca022",
+    "inference": "NOT_RUN",
+    "scope": "Numeric transfer under six existing lexical query forms, including signed values. Negative numbers are not negative/abstention examples. No broad lexical transfer claim."
+  },
+  "results": {
+    "construction": {
+      "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+      "exact": 255,
+      "total": 255,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/construction-result.json",
+        "sha256": "1b3cd55230a472dc90d3491f4c531088bcee4a8dd3609da9093fcd3f9c844b17",
+        "bytes": 48164019
+      }
+    },
+    "open": {
+      "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+      "exact": 48,
+      "total": 48,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/open-result.json",
+        "sha256": "f9796ed09e616e50689155051e4812a7ad7bdf05cb3234fb03853a0d4751d39e",
+        "bytes": 10744464
+      }
+    },
+    "stress": {
+      "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+      "exact": 16,
+      "total": 16,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-stress/result.json",
+        "sha256": "8420842f559e3e42617c66dbaea5c415b6adc588c08dc9d0de51a485dc9c8a4b",
+        "bytes": 4054181
+      }
+    },
+    "fresh": {
+      "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+      "exact": 24,
+      "total": 24,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fresh/result.json",
+        "sha256": "4bf36da51820709567b46003042d9cb4f1d680373a1718c48c4024aadb88de7c",
+        "bytes": 5373103
+      }
+    },
+    "ablation": {
+      "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+      "exact": 32,
+      "total": 48,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/open-intermediate-removed-result.json",
+        "sha256": "632a6f928d5e813e82a7f1f55f66d9d8e4a1b6e7126eb5b96edf0db4633d3a37",
+        "bytes": 9796559
+      }
+    },
+    "control_scope": {
+      "independent_correct_unchanged": 32,
+      "dependent_output_changed_and_required_dependency_lost": 16
+    },
+    "api": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/api.json",
+      "sha256": "b5261bad949c74b6f632b85748c251744441723edd29f69c7f7bd11aa9439331",
+      "bytes": 7793
+    },
+    "api_semantic_gate": {
+      "status": "PASS",
+      "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+      "expected": "17.\n",
+      "original": {
+        "elapsed_us": 909,
+        "memory_facts_read": null,
+        "stopped_by": "eos",
+        "text": "17.\n",
+        "token_count": 4
+      },
+      "restored": {
+        "elapsed_us": 782,
+        "memory_facts_read": null,
+        "stopped_by": "eos",
+        "text": "17.\n",
+        "token_count": 4
+      },
+      "scope": "Third independent13+4 after17 then18, actual native API and checkpoint. Checks actual response bytes in addition to interface parity."
+    },
+    "preservation": {
+      "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+      "preserved": true,
+      "scope": "Previously opened retained populations; no new held-out evaluation"
+    },
+    "preservation_panels": {
+      "aliases.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 12,
+        "total": 12,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/aliases.json",
+          "sha256": "7a12303776b478673e5952605206ec14a5ab38edb295520d67a55f2fde9582cf",
+          "bytes": 15252
+        }
+      },
+      "chains.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/chains.json",
+          "sha256": "c4a547c0a9aed98ed70e568a5c1c00beff5f85b4bf25c58f1785be0f57f1ed59",
+          "bytes": 18507
+        }
+      },
+      "computed-construction.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 58,
+        "total": 58,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/computed-construction.json",
+          "sha256": "26b102f058cd2617f509b92be0670d688b44d3024793dd8345926a305e780468",
+          "bytes": 61339
+        }
+      },
+      "dependent.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 48,
+        "total": 48,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/dependent.json",
+          "sha256": "71466948dc482309e1678148c7e54f21bdacd614cc6abf3be68eb522776170bb",
+          "bytes": 45899
+        }
+      },
+      "exposed-literals.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/exposed-literals.json",
+          "sha256": "fec9cd4fcdcebc669e61b5a78b773aa98aedb438239d5439b5dcdbbf612314bf",
+          "bytes": 14928
+        }
+      },
+      "exposed-roles.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 12,
+        "total": 12,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/exposed-roles.json",
+          "sha256": "1f374a2eb4ac75e6000e97c34f9cee810f8336b6eb2388322fb4562a91cdfef9",
+          "bytes": 15136
+        }
+      },
+      "forward-construction.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/forward-construction.json",
+          "sha256": "919f09f174576b3446a92cb15a6ed14d05ae52a3802f8d709ea022d61ae8c727",
+          "bytes": 159840
+        }
+      },
+      "forward-open.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/forward-open.json",
+          "sha256": "50633bc1f7835e1ac4556833d8a0269cba65a33e267a1f5a6acb682e59ad3514",
+          "bytes": 159878
+        }
+      },
+      "forward-prior-fresh.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/forward-prior-fresh.json",
+          "sha256": "4f9ef387b57c54524dfabbb32ff8365fa00d7984d98c91647f8c07307b1a1e97",
+          "bytes": 160240
+        }
+      },
+      "identifiers.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 8,
+        "total": 8,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/identifiers.json",
+          "sha256": "453c34cdc37700cbbbc55f69a5bf55a3a5d3eeae685e6b26e1e28308ab3c0f1b",
+          "bytes": 7264
+        }
+      },
+      "literal-construction.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 103,
+        "total": 103,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/literal-construction.json",
+          "sha256": "22fdb0b0e68b8d6e3d2a0371c7fee5174d62a00e3300ec97c050019c6ee378c0",
+          "bytes": 93929
+        }
+      },
+      "long.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 28,
+        "total": 28,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/long.json",
+          "sha256": "35ea74544d577eb54fd85a6959b52d1ac0a02f577e76ab6d304d882db59cd1a0",
+          "bytes": 147373
+        }
+      },
+      "names.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 28,
+        "total": 28,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/names.json",
+          "sha256": "af0375b8387cd80a30d676b3489c2061255fac28a23d116e9bc2ff3747470f1c",
+          "bytes": 27972
+        }
+      },
+      "numeric.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/numeric.json",
+          "sha256": "3ab025780f1dfb860a0842aa3b6233f491d18adc0a88657570890231aaa70bd8",
+          "bytes": 6094
+        }
+      },
+      "preservation.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 62,
+        "total": 62,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/preservation.json",
+          "sha256": "f8fbecaaa79b6608e8a327dbe5d45733e9d18e4e18cc70b642d2728e313c88ab",
+          "bytes": 21669
+        }
+      },
+      "prior-chains.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/prior-chains.json",
+          "sha256": "89cec002b38e91224779e2115620d503604e401fc5530d4d6131c504f352e61c",
+          "bytes": 18496
+        }
+      },
+      "prior-fresh.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 16,
+        "total": 16,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/prior-fresh.json",
+          "sha256": "962b68fe6754b16a7a41fae80f502931799d8277c60d0bfad6c29904f79c2b8a",
+          "bytes": 14552
+        }
+      },
+      "prior-span-construction.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 14,
+        "total": 14,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/prior-span-construction.json",
+          "sha256": "615c423b91f41e4cf37c14242ad5e4f9f3a473e1e3ec8759ffb4f0755210cca1",
+          "bytes": 4445
+        }
+      },
+      "prior-span-development.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/prior-span-development.json",
+          "sha256": "42a5319eb10fde4a7a0a3f7dbf9b458aef17683b21f0d5e9f39bd81813c5b20d",
+          "bytes": 2175
+        }
+      },
+      "prior-span-fresh.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 9,
+        "total": 9,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/prior-span-fresh.json",
+          "sha256": "5a8bed2de4dc46f9f1194d884d7c8fd52db1af81d72654aed04b258c123fb501",
+          "bytes": 3102
+        }
+      },
+      "prior-start-open.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 8,
+        "total": 8,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/prior-start-open.json",
+          "sha256": "5c0168a4a0553dc303a919c25739c08e15cbf7d8c5178eabc239d771b66d9b18",
+          "bytes": 70360
+        }
+      },
+      "prior.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 24,
+        "total": 24,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/prior.json",
+          "sha256": "cdc48c575f07cb21b98e68641feae0978dff8253914e14e4b687f870dc0d464d",
+          "bytes": 7457
+        }
+      },
+      "retained-construction.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 663,
+        "total": 663,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/retained-construction.json",
+          "sha256": "7a2a1d55d35979d8af28d825bca85a1ddd2f31c411e15b0fad1767513c5e93c7",
+          "bytes": 214913
+        }
+      },
+      "reverse-construction.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/reverse-construction.json",
+          "sha256": "f04eb393e8eec74ef592b0286bbe7fe7ab3357669e1172a2be937ac1bb84db70",
+          "bytes": 412677
+        }
+      },
+      "reverse-open.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/reverse-open.json",
+          "sha256": "b05f498cb0c3cbf840e184ff55bcdb3b1635df2f68ce588d7215442d4690230a",
+          "bytes": 435793
+        }
+      },
+      "reverse-prior-fresh.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 6,
+        "total": 6,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/reverse-prior-fresh.json",
+          "sha256": "bfe7fe90665b0fecc321b0d2910641ed6621fcdb7aceb01506fb862e3a7f8684",
+          "bytes": 413304
+        }
+      },
+      "reverse-short.json": {
+        "exact": 3,
+        "total": 3,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/reverse-short.json",
+          "sha256": "7e9ed91a4d52b277dc6110bb8f38005a9dbbabd607fa8ad2b4c0cfd0d48166c7",
+          "bytes": 559
+        }
+      },
+      "roles.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "exact": 12,
+        "total": 12,
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/roles.json",
+          "sha256": "a4a215295aee69b4504e617271e978307a174734b56089a1e72ea4c37a2d490b",
+          "bytes": 15264
+        }
+      },
+      "sessions.json": {
+        "artifact": "blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9",
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation/preservation/sessions.json",
+          "sha256": "5d9781b9cc52d52ce6b8faeec9985ec7c7a05c4ab86d06ab53c7217efc40d063",
+          "bytes": 59042
+        }
+      }
+    },
+    "open_outputs": [
+      {
+        "id": "current-query-open-0-0",
+        "expected": "57.\n",
+        "text": "57.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 57,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 53,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-0-1",
+        "expected": "62.\n",
+        "text": "62.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 62,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 55,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-0-2",
+        "expected": "57.\n",
+        "text": "57.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 57,
+          "operands": [
+            {
+              "id": 2,
+              "value": 57,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 57,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-0-3",
+        "expected": "60.\n",
+        "text": "60.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 60,
+          "operands": [
+            {
+              "id": 6,
+              "value": 3,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 57,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-0-4",
+        "expected": "62.\n",
+        "text": "62.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 62,
+          "operands": [
+            {
+              "id": 7,
+              "value": 55,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-0-5",
+        "expected": "57.\n",
+        "text": "57.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 57,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 57,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-1-0",
+        "expected": "58.\n",
+        "text": "58.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 58,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 54,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-1-1",
+        "expected": "63.\n",
+        "text": "63.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 63,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 56,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-1-2",
+        "expected": "58.\n",
+        "text": "58.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 58,
+          "operands": [
+            {
+              "id": 2,
+              "value": 58,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 58,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-1-3",
+        "expected": "62.\n",
+        "text": "62.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 62,
+          "operands": [
+            {
+              "id": 6,
+              "value": 4,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 58,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-1-4",
+        "expected": "63.\n",
+        "text": "63.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 63,
+          "operands": [
+            {
+              "id": 7,
+              "value": 56,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-1-5",
+        "expected": "58.\n",
+        "text": "58.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 58,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 58,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-2-0",
+        "expected": "59.\n",
+        "text": "59.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 59,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 55,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-2-1",
+        "expected": "64.\n",
+        "text": "64.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 64,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 57,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-2-2",
+        "expected": "59.\n",
+        "text": "59.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 59,
+          "operands": [
+            {
+              "id": 2,
+              "value": 59,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 59,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-2-3",
+        "expected": "64.\n",
+        "text": "64.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 64,
+          "operands": [
+            {
+              "id": 6,
+              "value": 5,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 59,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-2-4",
+        "expected": "64.\n",
+        "text": "64.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 64,
+          "operands": [
+            {
+              "id": 7,
+              "value": 57,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-2-5",
+        "expected": "59.\n",
+        "text": "59.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 59,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 59,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-3-0",
+        "expected": "60.\n",
+        "text": "60.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 60,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 56,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-3-1",
+        "expected": "65.\n",
+        "text": "65.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 65,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 58,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-3-2",
+        "expected": "60.\n",
+        "text": "60.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 60,
+          "operands": [
+            {
+              "id": 2,
+              "value": 60,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 60,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-3-3",
+        "expected": "66.\n",
+        "text": "66.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 66,
+          "operands": [
+            {
+              "id": 6,
+              "value": 6,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 60,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-3-4",
+        "expected": "65.\n",
+        "text": "65.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 65,
+          "operands": [
+            {
+              "id": 7,
+              "value": 58,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-3-5",
+        "expected": "60.\n",
+        "text": "60.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 60,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 60,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-4-0",
+        "expected": "61.\n",
+        "text": "61.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 61,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 57,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-4-1",
+        "expected": "66.\n",
+        "text": "66.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 66,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 59,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-4-2",
+        "expected": "61.\n",
+        "text": "61.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 61,
+          "operands": [
+            {
+              "id": 2,
+              "value": 61,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 61,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-4-3",
+        "expected": "68.\n",
+        "text": "68.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 68,
+          "operands": [
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 61,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-4-4",
+        "expected": "66.\n",
+        "text": "66.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 66,
+          "operands": [
+            {
+              "id": 7,
+              "value": 59,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-4-5",
+        "expected": "61.\n",
+        "text": "61.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 61,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 61,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-5-0",
+        "expected": "62.\n",
+        "text": "62.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 62,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 58,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-5-1",
+        "expected": "67.\n",
+        "text": "67.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 67,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 60,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-5-2",
+        "expected": "62.\n",
+        "text": "62.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 62,
+          "operands": [
+            {
+              "id": 2,
+              "value": 62,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 62,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-5-3",
+        "expected": "70.\n",
+        "text": "70.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 70,
+          "operands": [
+            {
+              "id": 6,
+              "value": 8,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 62,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-5-4",
+        "expected": "67.\n",
+        "text": "67.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 67,
+          "operands": [
+            {
+              "id": 7,
+              "value": 60,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-5-5",
+        "expected": "62.\n",
+        "text": "62.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 62,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 62,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-6-0",
+        "expected": "63.\n",
+        "text": "63.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 63,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 59,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-6-1",
+        "expected": "68.\n",
+        "text": "68.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 68,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 61,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-6-2",
+        "expected": "63.\n",
+        "text": "63.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 63,
+          "operands": [
+            {
+              "id": 2,
+              "value": 63,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 63,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-6-3",
+        "expected": "72.\n",
+        "text": "72.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 72,
+          "operands": [
+            {
+              "id": 6,
+              "value": 9,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 63,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-6-4",
+        "expected": "68.\n",
+        "text": "68.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 68,
+          "operands": [
+            {
+              "id": 7,
+              "value": 61,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-6-5",
+        "expected": "63.\n",
+        "text": "63.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 63,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 63,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-7-0",
+        "expected": "64.\n",
+        "text": "64.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 64,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 60,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-7-1",
+        "expected": "69.\n",
+        "text": "69.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 69,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 62,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-7-2",
+        "expected": "64.\n",
+        "text": "64.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 64,
+          "operands": [
+            {
+              "id": 2,
+              "value": 64,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 64,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-7-3",
+        "expected": "67.\n",
+        "text": "67.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 67,
+          "operands": [
+            {
+              "id": 6,
+              "value": 3,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            },
+            {
+              "id": 2,
+              "value": 64,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-7-4",
+        "expected": "69.\n",
+        "text": "69.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 69,
+          "operands": [
+            {
+              "id": 7,
+              "value": 62,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-open-7-5",
+        "expected": "64.\n",
+        "text": "64.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 64,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 64,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      }
+    ],
+    "stress_outputs": [
+      {
+        "id": "history-1-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 5,
+          "value": 17,
+          "operands": [
+            {
+              "id": 4,
+              "value": 4,
+              "derived": false,
+              "start": 74,
+              "end": 74
+            },
+            {
+              "id": 3,
+              "value": 13,
+              "derived": false,
+              "start": 65,
+              "end": 65
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-1-variant-1",
+        "expected": "26.\n",
+        "text": "26.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 5,
+          "value": 26,
+          "operands": [
+            {
+              "id": 4,
+              "value": 19,
+              "derived": false,
+              "start": 74,
+              "end": 74
+            },
+            {
+              "id": 3,
+              "value": 7,
+              "derived": false,
+              "start": 65,
+              "end": 65
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-1-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 5,
+          "value": 17,
+          "operands": [
+            {
+              "id": 4,
+              "value": 0,
+              "derived": false,
+              "start": 74,
+              "end": 74
+            },
+            {
+              "id": 3,
+              "value": 17,
+              "derived": false,
+              "start": 65,
+              "end": 65
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-1-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 3,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 17,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 13,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-1",
+        "expected": "26.\n",
+        "text": "26.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 26,
+          "operands": [
+            {
+              "id": 7,
+              "value": 19,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 17,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 17,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 11,
+          "value": 17,
+          "operands": [
+            {
+              "id": 10,
+              "value": 4,
+              "derived": false,
+              "start": 186,
+              "end": 186
+            },
+            {
+              "id": 9,
+              "value": 13,
+              "derived": false,
+              "start": 177,
+              "end": 177
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-1",
+        "expected": "26.\n",
+        "text": "26.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 11,
+          "value": 26,
+          "operands": [
+            {
+              "id": 10,
+              "value": 19,
+              "derived": false,
+              "start": 186,
+              "end": 186
+            },
+            {
+              "id": 9,
+              "value": 7,
+              "derived": false,
+              "start": 177,
+              "end": 177
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 11,
+          "value": 17,
+          "operands": [
+            {
+              "id": 10,
+              "value": 0,
+              "derived": false,
+              "start": 186,
+              "end": 186
+            },
+            {
+              "id": 9,
+              "value": 17,
+              "derived": false,
+              "start": 177,
+              "end": 177
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 9,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 14,
+          "value": 17,
+          "operands": [
+            {
+              "id": 13,
+              "value": 4,
+              "derived": false,
+              "start": 242,
+              "end": 242
+            },
+            {
+              "id": 12,
+              "value": 13,
+              "derived": false,
+              "start": 233,
+              "end": 233
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-1",
+        "expected": "26.\n",
+        "text": "26.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 14,
+          "value": 26,
+          "operands": [
+            {
+              "id": 13,
+              "value": 19,
+              "derived": false,
+              "start": 242,
+              "end": 242
+            },
+            {
+              "id": 12,
+              "value": 7,
+              "derived": false,
+              "start": 233,
+              "end": 233
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 14,
+          "value": 17,
+          "operands": [
+            {
+              "id": 13,
+              "value": 0,
+              "derived": false,
+              "start": 242,
+              "end": 242
+            },
+            {
+              "id": 12,
+              "value": 17,
+              "derived": false,
+              "start": 233,
+              "end": 233
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 12,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      }
+    ],
+    "fresh_outputs": [
+      {
+        "id": "current-query-fresh-positive-0-0",
+        "expected": "126.\n",
+        "text": "126.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 126,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": 122,
+              "derived": false,
+              "start": 126,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-0-1",
+        "expected": "131.\n",
+        "text": "131.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 131,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": 124,
+              "derived": false,
+              "start": 126,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-0-2",
+        "expected": "126.\n",
+        "text": "126.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 126,
+          "operands": [
+            {
+              "id": 2,
+              "value": 126,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 126,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-0-3",
+        "expected": "129.\n",
+        "text": "129.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 129,
+          "operands": [
+            {
+              "id": 6,
+              "value": 3,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 2,
+              "value": 126,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-0-4",
+        "expected": "131.\n",
+        "text": "131.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 131,
+          "operands": [
+            {
+              "id": 7,
+              "value": 124,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 126,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-0-5",
+        "expected": "126.\n",
+        "text": "126.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 126,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": 126,
+              "derived": false,
+              "start": 126,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-1-0",
+        "expected": "127.\n",
+        "text": "127.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 127,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 138,
+              "end": 138
+            },
+            {
+              "id": 6,
+              "value": 123,
+              "derived": false,
+              "start": 127,
+              "end": 129
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-1-1",
+        "expected": "132.\n",
+        "text": "132.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 132,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 138,
+              "end": 138
+            },
+            {
+              "id": 6,
+              "value": 125,
+              "derived": false,
+              "start": 127,
+              "end": 129
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-1-2",
+        "expected": "127.\n",
+        "text": "127.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 127,
+          "operands": [
+            {
+              "id": 2,
+              "value": 127,
+              "derived": true,
+              "start": 55,
+              "end": 55
+            },
+            {
+              "id": 2,
+              "value": 127,
+              "derived": true,
+              "start": 55,
+              "end": 55
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-1-3",
+        "expected": "131.\n",
+        "text": "131.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": 131,
+          "operands": [
+            {
+              "id": 6,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 2,
+              "value": 127,
+              "derived": true,
+              "start": 55,
+              "end": 55
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-1-4",
+        "expected": "132.\n",
+        "text": "132.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 132,
+          "operands": [
+            {
+              "id": 7,
+              "value": 125,
+              "derived": false,
+              "start": 136,
+              "end": 138
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 126,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-positive-1-5",
+        "expected": "127.\n",
+        "text": "127.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 127,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 138,
+              "end": 138
+            },
+            {
+              "id": 6,
+              "value": 127,
+              "derived": false,
+              "start": 127,
+              "end": 129
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-0-0",
+        "expected": "-43.\n",
+        "text": "-43.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -43,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": -47,
+              "derived": false,
+              "start": 125,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-0-1",
+        "expected": "-38.\n",
+        "text": "-38.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -38,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": -45,
+              "derived": false,
+              "start": 125,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-0-2",
+        "expected": "-43.\n",
+        "text": "-43.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": -43,
+          "operands": [
+            {
+              "id": 2,
+              "value": -43,
+              "derived": true,
+              "start": 53,
+              "end": 53
+            },
+            {
+              "id": 2,
+              "value": -43,
+              "derived": true,
+              "start": 53,
+              "end": 53
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-0-3",
+        "expected": "-40.\n",
+        "text": "-40.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": -40,
+          "operands": [
+            {
+              "id": 6,
+              "value": 3,
+              "derived": false,
+              "start": 129,
+              "end": 129
+            },
+            {
+              "id": 2,
+              "value": -43,
+              "derived": true,
+              "start": 53,
+              "end": 53
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-0-4",
+        "expected": "-38.\n",
+        "text": "-38.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -38,
+          "operands": [
+            {
+              "id": 7,
+              "value": -45,
+              "derived": false,
+              "start": 134,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-0-5",
+        "expected": "-43.\n",
+        "text": "-43.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -43,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": -43,
+              "derived": false,
+              "start": 125,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-1-0",
+        "expected": "-42.\n",
+        "text": "-42.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -42,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": -46,
+              "derived": false,
+              "start": 125,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-1-1",
+        "expected": "-37.\n",
+        "text": "-37.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -37,
+          "operands": [
+            {
+              "id": 7,
+              "value": 7,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": -44,
+              "derived": false,
+              "start": 125,
+              "end": 126
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-1-2",
+        "expected": "-42.\n",
+        "text": "-42.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": -42,
+          "operands": [
+            {
+              "id": 2,
+              "value": -42,
+              "derived": true,
+              "start": 53,
+              "end": 53
+            },
+            {
+              "id": 2,
+              "value": -42,
+              "derived": true,
+              "start": 53,
+              "end": 53
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-1-3",
+        "expected": "-38.\n",
+        "text": "-38.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": true,
+        "decision": {
+          "action": "add",
+          "write_id": 7,
+          "value": -38,
+          "operands": [
+            {
+              "id": 6,
+              "value": 4,
+              "derived": false,
+              "start": 129,
+              "end": 129
+            },
+            {
+              "id": 2,
+              "value": -42,
+              "derived": true,
+              "start": 53,
+              "end": 53
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-1-4",
+        "expected": "-37.\n",
+        "text": "-37.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -37,
+          "operands": [
+            {
+              "id": 7,
+              "value": -44,
+              "derived": false,
+              "start": 134,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 125,
+              "end": 125
+            }
+          ]
+        }
+      },
+      {
+        "id": "current-query-fresh-negative-1-5",
+        "expected": "-42.\n",
+        "text": "-42.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": -42,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 135,
+              "end": 135
+            },
+            {
+              "id": 6,
+              "value": -42,
+              "derived": false,
+              "start": 125,
+              "end": 126
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "negative_and_comparator": {
+    "prior_b2da_open": {
+      "artifact": "blake3:b2da9f9acb9497f39e70cc6846647ebfaa68f7baeceb5c164d35d5d23c1017e0",
+      "exact": 16,
+      "total": 32,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/prior-candidate-open/result.json",
+        "sha256": "3e7a88482a0759b8bfd5461cb8519d00ceb2a7b9e1553beebadf4006e5fb15f9",
+        "bytes": 7012074
+      }
+    },
+    "first_516_fit": {
+      "artifact": "blake3:51603beb4ac68c122476bab6a42d8e45165205213ed72b939cc965405bb6af44",
+      "block_bytes": 78264,
+      "config": {
+        "learned_features": 768,
+        "max_seconds": 120,
+        "mode": "angular",
+        "passes": 8,
+        "proposals": 24,
+        "seed": 1139
+      },
+      "construction_ms": 544,
+      "dictionary_words": 60,
+      "effective_query_classes": 61,
+      "feature_universe": 666,
+      "features": 666,
+      "fit": {
+        "accepted": [
+          54,
+          0,
+          1
+        ],
+        "final_correct": 231,
+        "final_hinge": 24,
+        "initial_correct": 124,
+        "initial_hinge": 725,
+        "proposals": 134226,
+        "stopped_at_time_limit": true
+      },
+      "frames": 231,
+      "incompatible_feature_classes": 0,
+      "parent": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+      "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+    },
+    "first_construction": {
+      "artifact": "blake3:51603beb4ac68c122476bab6a42d8e45165205213ed72b939cc965405bb6af44",
+      "exact": 231,
+      "total": 231,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fit/construction-result.json",
+        "sha256": "527a1d8ebd76c120082edc53eef2a5014ee2dfe3a327437a3a93d84e1d9df803",
+        "bytes": 42557437
+      }
+    },
+    "first_open": {
+      "artifact": "blake3:51603beb4ac68c122476bab6a42d8e45165205213ed72b939cc965405bb6af44",
+      "exact": 32,
+      "total": 32,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fit/open-result.json",
+        "sha256": "1b462e5eaaf69a747480d2fd43a958d7772c87bdccc6cb17f4c915f3cf3bd94c",
+        "bytes": 7006814
+      }
+    },
+    "first_stress": {
+      "artifact": "blake3:51603beb4ac68c122476bab6a42d8e45165205213ed72b939cc965405bb6af44",
+      "exact": 12,
+      "total": 16,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/stress/result.json",
+        "sha256": "5997fff3e07c403b0cb90466aa0e2d69e5ab5fd9a875e1180f268a144757fa83",
+        "bytes": 4054050
+      }
+    },
+    "first_stress_outputs": [
+      {
+        "id": "history-1-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 5,
+          "value": 17,
+          "operands": [
+            {
+              "id": 4,
+              "value": 4,
+              "derived": false,
+              "start": 74,
+              "end": 74
+            },
+            {
+              "id": 3,
+              "value": 13,
+              "derived": false,
+              "start": 65,
+              "end": 65
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-1-variant-1",
+        "expected": "26.\n",
+        "text": "7.\n",
+        "exact": false,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": false,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 5,
+          "value": 7,
+          "operands": [
+            {
+              "id": 3,
+              "value": 7,
+              "derived": false,
+              "start": 65,
+              "end": 65
+            },
+            {
+              "id": 3,
+              "value": 7,
+              "derived": false,
+              "start": 65,
+              "end": 65
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-1-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 5,
+          "value": 17,
+          "operands": [
+            {
+              "id": 4,
+              "value": 0,
+              "derived": false,
+              "start": 74,
+              "end": 74
+            },
+            {
+              "id": 3,
+              "value": 17,
+              "derived": false,
+              "start": 65,
+              "end": 65
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-1-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 3,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 17,
+          "operands": [
+            {
+              "id": 7,
+              "value": 4,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 13,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-1",
+        "expected": "26.\n",
+        "text": "7.\n",
+        "exact": false,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": false,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 8,
+          "value": 7,
+          "operands": [
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            },
+            {
+              "id": 6,
+              "value": 7,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 8,
+          "value": 17,
+          "operands": [
+            {
+              "id": 7,
+              "value": 0,
+              "derived": false,
+              "start": 130,
+              "end": 130
+            },
+            {
+              "id": 6,
+              "value": 17,
+              "derived": false,
+              "start": 121,
+              "end": 121
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-2-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 6,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 11,
+          "value": 17,
+          "operands": [
+            {
+              "id": 10,
+              "value": 4,
+              "derived": false,
+              "start": 186,
+              "end": 186
+            },
+            {
+              "id": 9,
+              "value": 13,
+              "derived": false,
+              "start": 177,
+              "end": 177
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-1",
+        "expected": "26.\n",
+        "text": "7.\n",
+        "exact": false,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": false,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 11,
+          "value": 7,
+          "operands": [
+            {
+              "id": 9,
+              "value": 7,
+              "derived": false,
+              "start": 177,
+              "end": 177
+            },
+            {
+              "id": 9,
+              "value": 7,
+              "derived": false,
+              "start": 177,
+              "end": 177
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 11,
+          "value": 17,
+          "operands": [
+            {
+              "id": 10,
+              "value": 0,
+              "derived": false,
+              "start": 186,
+              "end": 186
+            },
+            {
+              "id": 9,
+              "value": 17,
+              "derived": false,
+              "start": 177,
+              "end": 177
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-3-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 9,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-0",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 14,
+          "value": 17,
+          "operands": [
+            {
+              "id": 13,
+              "value": 4,
+              "derived": false,
+              "start": 242,
+              "end": 242
+            },
+            {
+              "id": 12,
+              "value": 13,
+              "derived": false,
+              "start": 233,
+              "end": 233
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-1",
+        "expected": "26.\n",
+        "text": "7.\n",
+        "exact": false,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": false,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 14,
+          "value": 7,
+          "operands": [
+            {
+              "id": 12,
+              "value": 7,
+              "derived": false,
+              "start": 233,
+              "end": 233
+            },
+            {
+              "id": 12,
+              "value": 7,
+              "derived": false,
+              "start": 233,
+              "end": 233
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-2",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": false,
+        "query_literal_provenance": true,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "add",
+          "write_id": 14,
+          "value": 17,
+          "operands": [
+            {
+              "id": 13,
+              "value": 0,
+              "derived": false,
+              "start": 242,
+              "end": 242
+            },
+            {
+              "id": 12,
+              "value": 17,
+              "derived": false,
+              "start": 233,
+              "end": 233
+            }
+          ]
+        }
+      },
+      {
+        "id": "history-4-variant-3",
+        "expected": "17.\n",
+        "text": "17.\n",
+        "exact": true,
+        "terminated": true,
+        "used_intermediate": true,
+        "query_literal_provenance": null,
+        "query_operand_provenance": null,
+        "decision": {
+          "action": "copy",
+          "write_id": 12,
+          "value": 17,
+          "operands": [
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            },
+            {
+              "id": 2,
+              "value": 17,
+              "derived": true,
+              "start": 52,
+              "end": 52
+            }
+          ]
+        }
+      }
+    ],
+    "parent_stress": {
+      "artifact": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+      "exact": 4,
+      "total": 16,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/parent-stress/result.json",
+        "sha256": "091b707542029c9f350c74f2c6878256557e59044d0d54087296da49fb62d885",
+        "bytes": 1432269
+      }
+    },
+    "parent_open": {
+      "artifact": "blake3:79710468e3b75905550c15fbea62079e4267df774dbf4bc90ea45114826e4bfd",
+      "exact": 16,
+      "total": 32,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fit/parent-open.json",
+        "sha256": "5331c663ce8fff32758b31a1790367812b9f99050903cfe1a06ac399b9debc57",
+        "bytes": 6347866
+      }
+    },
+    "decision": "First fit rejected for reversed-order regression; complete source/artifact/output retained. Prior b2da remains rejected, parent preserved."
+  },
+  "resources": {
+    "projection": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/projection.json",
+      "sha256": "088efc25d8fb038a320ea5d832764e14ea1d0574a31402292479c21a17a754d1",
+      "bytes": 1631
+    },
+    "storage_reallocation": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/storage-allocation-correction.json",
+      "sha256": "3395b7268770d2a9aad9e80e05bec371486140d20be322ef286c8bf365fb8428",
+      "bytes": 606
+    },
+    "retention_projection": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/retention-projection.json",
+      "sha256": "b511dfdb36c22e6e67e5460a4639384be8562ac01966f0706e781958882da9e6",
+      "bytes": 446
+    },
+    "ledger": {
+      "cumulative_ms": 7441579,
+      "limit_ms": 8550000
+    },
+    "cycle_model_ms": 480927,
+    "cycle_engineering_ms": 12600,
+    "prior_unverified_reservation_ms": 196620,
+    "available_after_reservation_ms": 911801,
+    "model_processes": 1,
+    "threads": 2,
+    "context_tokens": 512,
+    "peak_sampled_model_rss_bytes": 1119961088,
+    "storage": {
+      "target_bytes": 22681018368,
+      "worktree_bytes": 476897280,
+      "evidence_bytes": 189517824,
+      "new_retained_bytes": 12861440,
+      "growth_bytes": 207765504,
+      "accounted_bytes": 31236186112,
+      "limit_bytes": 34863214592,
+      "stop_margin_bytes": 134217728,
+      "effective_headroom_bytes": 3492810752
+    },
+    "all_actual_model_commands": 480927,
+    "no_unique_deletions": true,
+    "no_paid_external_model_compute": true
+  },
+  "commands": [
+    {
+      "kind": "engineering",
+      "label": "build-current-query",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_current_query"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:47:32.984Z",
+      "elapsed_ms": 2163,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 259604480,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/build-current-query.log",
+      "log_sha256": "98f0827e766153a07c5cb85c1a05147d88dc765a373e6afeec6f7e30c64aeca4"
+    },
+    {
+      "kind": "model",
+      "label": "prior-candidate-open",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/prior-candidate-open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:47:57.158Z",
+      "elapsed_ms": 16688,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 983941120,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/prior-candidate-open.log",
+      "log_sha256": "0e0a0e842db14af1f6011f1b60c23f7c320a4bd1ed4f2b4a6ccd908b55f98e7f"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-stress",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_current_query"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:50:17.276Z",
+      "elapsed_ms": 2033,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 245645312,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/build-stress.log",
+      "log_sha256": "a7f3342701a20d28484be76c9c30f02e8a6935c1aa2a02f8d063902b00bd4a1b"
+    },
+    {
+      "kind": "model",
+      "label": "fit-current-query",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "fit",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fit"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:48:36.750Z",
+      "elapsed_ms": 169731,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1044168704,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fit-current-query.log",
+      "log_sha256": "52fb2eb1f1245bdb70506b35ace0bebecd4920803061b5a87240ae8939eb0f4d"
+    },
+    {
+      "kind": "model",
+      "label": "stress-current-query",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:52:21.876Z",
+      "elapsed_ms": 17687,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 982138880,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/stress-current-query.log",
+      "log_sha256": "966e20a86a6430e9898d1f18116daa0e1a7086bb1544ee243ea14bb3cbfd4b85"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-order-contrasts",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_current_query"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:53:38.194Z",
+      "elapsed_ms": 2021,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 225837056,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/build-order-contrasts.log",
+      "log_sha256": "39115e9bb139f1cd6779067ba7a36e6ddbe3cb2fba5dba9654e16ef015b46e05"
+    },
+    {
+      "kind": "model",
+      "label": "parent-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "stress",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/parent-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:53:56.101Z",
+      "elapsed_ms": 15727,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 974372864,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/parent-stress.log",
+      "log_sha256": "31298ccd6d0bae340b624d75f20fcf996cf92d1022ed4f25d6f0ead958cb19b5"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-fresh",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_current_query"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:57:18.088Z",
+      "elapsed_ms": 2285,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 205979648,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/build-fresh.log",
+      "log_sha256": "9ece97bcca56a04430bed6e38409e8f07d0f489db98c9247f374abe6b582de62"
+    },
+    {
+      "kind": "model",
+      "label": "fit-order-contrasts",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "fit",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-refinement-boundary/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:54:44.231Z",
+      "elapsed_ms": 171673,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1078018048,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fit-order-contrasts.log",
+      "log_sha256": "1df524b68817dc97d30e4e9ed4b802430c4bcd191510181fb5e1a3b5c5e189bf"
+    },
+    {
+      "kind": "model",
+      "label": "order-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:58:18.207Z",
+      "elapsed_ms": 16342,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 981942272,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-stress.log",
+      "log_sha256": "83c1d7056b1b84a691c1aa3fd2ab8551b51e03311ff06271293d0b2f0172cdf2"
+    },
+    {
+      "kind": "model",
+      "label": "preservation",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-refinement",
+        "preserve",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/model.json",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T14:59:12.004Z",
+      "elapsed_ms": 20878,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 985153536,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/preservation.log",
+      "log_sha256": "b7ed5e970e75eb5d891b57c2d9f59282c1e754fff320c87b5d5d594859818c30"
+    },
+    {
+      "kind": "model",
+      "label": "artifact-api",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/check-api.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T15:00:24.894Z",
+      "elapsed_ms": 35000,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1119961088,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/artifact-api.log",
+      "log_sha256": "37210e9a9f563b8579e3fb7de571aee26724ef1d9b4bcba3cd162f2c52dae995"
+    },
+    {
+      "kind": "model",
+      "label": "fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/order-fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T15:01:22.240Z",
+      "elapsed_ms": 17201,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 988626944,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/fresh.log",
+      "log_sha256": "d701f0e26dc86fda647f0c48d78cab74b4a8efaa610668f7aee42a27f52a193e"
+    },
+    {
+      "kind": "engineering",
+      "label": "final-check",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-08T15:07:09.111Z",
+      "elapsed_ms": 4098,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 140394496,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-current-query/final-check.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "boundaries": {
+    "fresh": "24 numeric transfers: twelve positive-valued and twelve negative-valued under same finite lexical forms and names; not abstention examples",
+    "open_feedback": "Reversed-order failure informed second construction; stress and prior preservation are opened data",
+    "general_prose": "UNQUALIFIED",
+    "general_reasoning_coding": "UNQUALIFIED",
+    "within_response_learned_transition": "NOT_IMPLEMENTED",
+    "browser_new_artifact": "NOT_RUN; existing runtime/schema unchanged",
+    "energy": "NOT_MEASURED",
+    "blanket_test_suite": "NOT_RUN; no serving code changed; actual model/API/preservation checks performed",
+    "queue": "Compatibility acknowledgements are not tests"
+  }
+}

@@ -1,6 +1,18 @@
 # Current native geometric AI work
 
-## September 8 recovery — pre-alpha, qualification withdrawn
+## Current-query operand refinement — bounded positive, September 8
+
+**Retain `ddc943f9`**, CID `blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9`, at bounded current-query/shared-continuation scope. The [result](../native_geometric_current_query_1140.md) and [evidence](../evidence/native_geometric_current_query_1140.json) supersede the recovery artifact pointer below. Parent `79710468`, rejected `b2da9f9a`, and first-fit `51603beb` remain preserved. No serving code or feature representation changes; additional offline contrasts train the existing shared signed-H4 selector.
+
+Construction passes 255/255, open 48/48 and harder one-through-four-history checks 16/16. Removing the original generated result leaves all 32 independent questions correct while all 16 dependent answers change. All 663 retained answers and recorded preservation panels pass. The exact API/checkpoint sequence now answers 17 after independent answers 17 and 18, repairing the old 35/Unknown result. Selection precedes 24/24 fresh numeric-transfer cases, including signed values; finite query forms and names remain a limitation.
+
+The local artifact is `.uor-models/native-typed-value-2026-09-05/current-query-refinement/model.json`; SHA256 `fe31404930998ff33fc57c463af921b989a5f6140a43ee127cf57a38acc5fe9c`. **Next: learned within-response Continue/Stop and compositional emission from actual committed state**, preserving current-literal versus prior-result selection. General prose, generalized reasoning/coding and energy advantage remain unqualified; #1140 is not complete. Read the new evidence receipt for the cumulative ledger and storage snapshot before further execution.
+
+Current cumulative model use is **7,441.579 / 8,550.000 seconds**, including this cycle's 480.927 seconds. The prior unverified-work reservation remains 196.620 seconds, leaving 911.801 seconds after reservation. The 900-second extension was recorded before this cycle. Storage retains the existing 34,863,214,592-byte ceiling and 128 MiB stop margin; exact accounting and the unchanged total storage projection are in the new receipt. Earlier resource figures below remain historical.
+
+## Earlier September 8 recovery — qualification withdrawn
+
+The following preserves the recovery decision before the current-query refinement above; its artifact pointer, next step and resource values are historical snapshots.
 
 The alpha-qualified claim introduced by PRs #1190–#1195 is withdrawn. The source audit found nonempty-output criteria labeled as prose/reasoning/coding qualification, literal security PASS flags, estimated stage splits labeled as measurements, and fixed power/thermal values. [The recovery record](recovery-2026-09-08.md) preserves the exact audited revision and findings. Earlier September 8 claims remain accessible in the [audited historical state](https://github.com/UOR-Foundation/uor-r4/blob/f8e9fa32/docs/integration/current-state.md); they are not current acceptance evidence.
 
