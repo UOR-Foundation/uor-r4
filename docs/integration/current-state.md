@@ -1,5 +1,28 @@
 # Current native geometric AI work
 
+## Native geometric model execution in GitHub Pages AI Studio — bounded positive, 2026-09-08
+
+**Native geometric model execution in browser WebAssembly (WASM), Web Worker event-loop isolation, and truthful capability studio integration qualified and verified.** The mechanism addresses
+[#1173](https://github.com/UOR-Foundation/uor-r4/issues/1173) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by integrating the native geometric language model (`WasmModelRuntime`) into GitHub Pages AI Studio (`index.html`), establishing client-side execution with zero external network dependencies, zero dense transformer downloads, event-loop isolation via Web Worker (`r4_worker.js`), non-blocking UI responsiveness, cooperative cancellation, session export/import, and truthful capability presentation.
+
+Key results:
+1. Client-side WASM execution: Integrated `WasmModelRuntime` into `uor-r4-wasm-router` root crate facade (`native_wasm.rs`), compiling via `wasm-pack build --target web` and executing entirely within the browser sandbox with zero external API calls or server weights.
+2. Web Worker event-loop isolation: Extended `r4_worker.js` with native geometric runtime initialization, handle-based session generation, non-blocking UI responsiveness, and fallback to main-thread execution when workers are unavailable.
+3. Interactive synthesis engine selection: Added `Native Geometric Language Model (WASM)` as a distinct selection in `#engineSelect`, preventing masquerading as reference backends and preserving legacy R4G1 / TLA envelope integrity without regression.
+4. Truthful capability presentation: Rendered dedicated status card displaying canonical UOR address (`uor:native-geometric/r4/1`), hot-path opcodes (zero matmul, zero float), geometric manifold (`Z[phi]`, $S^3$ Hopf), and Capability Truth Matrix explicitly disavowing unproven open-domain reasoning and frontier capability.
+5. Cooperative cancellation: Implemented cooperative cancellation via `CANCEL_GENERATION` worker messaging and `wasm_cancel` handle invocation, interrupting multi-token generation gracefully without browser UI freezing.
+6. Durable session state portability: Added browser-level session export and import buttons wired to `wasm_export_session` / `wasm_import_session` with JSON file download/upload controls.
+7. Invariant safety & allocations: Verified zero steady-state runtime allocations on the integer serving kernel hot path and absence of forbidden arithmetic or float opcodes.
+
+Open-domain general language generation, broad autonomous reasoning, and frontier capability remain unqualified.
+
+Next: proceed toward Roadmap Position 12 / Issue #965 (complete final alpha qualification, capability scorecard, and release).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,355.418/5,550 seconds,
+leaving 194.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Native capability API and WASM model runtime — bounded positive, 2026-09-08
 
 **Unified native capability API, session management, and filesystem-free WASM model runtime qualified and verified.** The mechanism addresses

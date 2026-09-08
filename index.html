@@ -1004,6 +1004,9 @@
 
             <div class="section-label">Synthesis Engine Selection</div>
             <select class="identity-input" id="engineSelect" style="margin-bottom:0.75rem; background: var(--bg); color: var(--cyan); border-color: var(--border2); font-family: 'Outfit', sans-serif;">
+                <optgroup label="Native Geometric Language Model">
+                    <option value="native-geometric" id="nativeGeometricOption">Native Geometric Language Model (WASM)</option>
+                </optgroup>
                 <optgroup label="Current interactive surface">
                     <option value="geometric" selected>Geometric Router Research Demo</option>
                     <option value="r4-softmax-reference" id="r4SoftmaxReferenceOption" hidden disabled>R4/Spin Softmax Reference — native source-backed</option>
@@ -1015,6 +1018,45 @@
                     <option value="attention">Teacher Reference — requires local source weights</option>
                 </optgroup>
             </select>
+            <div id="nativeGeometricCard" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 0.75rem; margin-top: -0.45rem; margin-bottom: 0.75rem; font-size: 0.72rem; line-height: 1.4; color: var(--text);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+                    <span style="font-weight: 700; color: var(--emerald); display: flex; align-items: center; gap: 0.35rem;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); display: inline-block;"></span>
+                        Native Geometric Language Model
+                    </span>
+                    <span style="font-size: 0.62rem; font-family: monospace; background: rgba(16, 185, 129, 0.2); color: var(--emerald); padding: 0.15rem 0.35rem; border-radius: 3px;">
+                        WASM / Client-Side
+                    </span>
+                </div>
+                <div style="font-family: monospace; font-size: 0.65rem; color: var(--text2); margin-bottom: 0.5rem; word-break: break-all;">
+                    UOR: <strong style="color: var(--cyan);">uor:native-geometric/r4/1</strong>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; font-size: 0.65rem; margin-bottom: 0.5rem;">
+                    <div style="background: var(--bg); padding: 0.3rem 0.5rem; border-radius: 4px; border: 1px solid var(--border2);">
+                        <div style="color: var(--muted); font-size: 0.58rem;">HOT PATH OPCODES</div>
+                        <div style="color: var(--emerald); font-weight: 600;">Zero MatMul / Zero Float</div>
+                    </div>
+                    <div style="background: var(--bg); padding: 0.3rem 0.5rem; border-radius: 4px; border: 1px solid var(--border2);">
+                        <div style="color: var(--muted); font-size: 0.58rem;">GEOMETRIC MANIFOLD</div>
+                        <div style="color: var(--purple); font-weight: 600;">Exact Z[φ] / S³ Hopf</div>
+                    </div>
+                </div>
+                <div style="font-size: 0.64rem; color: var(--text2); margin-bottom: 0.4rem;">
+                    <strong>Capability Truth Matrix:</strong> Pre-alpha learned geometric state model. Truthful boundaries: identifier transfer & numeric targets active; full conversational memory and general reasoning in progress. Zero external API calls, zero server weights.
+                </div>
+                <div style="display: flex; gap: 0.4rem; align-items: center; margin-top: 0.4rem;">
+                    <button id="cancelGenBtn" style="font-size: 0.65rem; padding: 0.25rem 0.5rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 3px; cursor: pointer; display: none;">
+                        Cancel Generation
+                    </button>
+                    <button id="exportSessionBtn" style="font-size: 0.65rem; padding: 0.25rem 0.5rem; background: var(--bg); color: var(--cyan); border: 1px solid var(--border2); border-radius: 3px; cursor: pointer;">
+                        Export State
+                    </button>
+                    <button id="importSessionBtn" style="font-size: 0.65rem; padding: 0.25rem 0.5rem; background: var(--bg); color: var(--cyan); border: 1px solid var(--border2); border-radius: 3px; cursor: pointer;">
+                        Import State
+                    </button>
+                    <span id="nativeModelStatus" style="font-size: 0.62rem; color: var(--muted); margin-left: auto;">Ready</span>
+                </div>
+            </div>
             <div id="r4SoftmaxReferenceNote" hidden style="font-size:0.64rem; margin-top:-0.45rem; margin-bottom:0.75rem; color:var(--amber); line-height:1.35;">
                 Native research reference: ordinary causal softmax in coherent R4/Spin frames. One local decode may take several minutes; this is not the source-free runtime.
             </div>
@@ -1632,6 +1674,14 @@ async function tryInitLocalWasm() {
             r4g1ProductionInstalled = false;
             r4g1InstallError = String(err);
             console.error('[dashboard] strict R4G1 installation refused:', err);
+        }
+        if (typeof wasmModule.native_geometric_init === 'function') {
+            try {
+                wasmModule.native_geometric_init(new Uint8Array(0));
+                console.log("[dashboard] Native geometric WASM initialized");
+            } catch (err) {
+                console.warn("[dashboard] native_geometric_init warning:", err);
+            }
         }
         router = new UorR4Router(1.2);
         wasmInitialized = true;
@@ -2957,7 +3007,40 @@ async function runLocalChat(text, identity) {
     let llm_connected = false;
     let geomResult = null;
 
-    if (selectedEngine === "transformerless" || selectedEngine === "r4g1") {
+    if (selectedEngine === "native-geometric") {
+        let workerResult = null;
+        try {
+            workerResult = await runWorkerGeneration({
+                text,
+                identity,
+                max_tokens: Math.min(Math.max(max_tokens || 16, 8), 64),
+                selectedEngine: "native-geometric"
+            });
+        } catch (err) {
+            console.warn("Worker generation failed, falling back to main-thread WASM:", err);
+        }
+        if (workerResult && workerResult.responseText) {
+            responseText = workerResult.responseText;
+            generation_mode = workerResult.generationMode || "native-geometric-wasm";
+            llm_connected = true;
+        } else {
+            // Main-thread execution fallback
+            if (typeof window.wasm_module?.native_geometric_init !== 'function') {
+                throw new Error('WASM module has no native geometric model export');
+            }
+            if (!window.__native_session_handle) {
+                window.wasm_module.native_geometric_init(new Uint8Array(0));
+                window.__native_session_handle = window.wasm_module.native_geometric_create_session("studio-local", identity || "user-studio", "default-proj");
+            }
+            window.wasm_module.native_geometric_ingest(window.__native_session_handle, text);
+            const maxTokensToGen = Math.min(Math.max(max_tokens || 16, 8), 64);
+            const genResRaw = window.wasm_module.native_geometric_generate_step(window.__native_session_handle, maxTokensToGen);
+            const genRes = JSON.parse(genResRaw);
+            responseText = genRes.text || "";
+            generation_mode = "native-geometric-wasm";
+            llm_connected = true;
+        }
+    } else if (selectedEngine === "transformerless" || selectedEngine === "r4g1") {
         if (!r4g1ProductionInstalled) {
             throw new Error(`strict R4G1 production bundle unavailable: ${r4g1InstallError}`);
         }
@@ -2975,14 +3058,14 @@ async function runLocalChat(text, identity) {
         responseText = `No coherent answer was generated. Route inspection: W${routed.window_index} at scale ${routed.scale_x.toFixed(0)}, kappa ${kappa.toFixed(4)}, deficit angle ${theta_d.toFixed(4)}. Nearest indexed material: ${nearest}`;
     }
 
-    if (selectedEngine === "transformerless" || selectedEngine === "r4g1") {
+    if (selectedEngine === "transformerless" || selectedEngine === "r4g1" || selectedEngine === "native-geometric") {
         router.index_sentence(responseText, identity);
     }
     debouncedSaveRouterState();
     
     // Inject thought streams
     router.inject_thought_stream(text);
-    if (selectedEngine === "transformerless" || selectedEngine === "r4g1") {
+    if (selectedEngine === "transformerless" || selectedEngine === "r4g1" || selectedEngine === "native-geometric") {
         router.inject_thought_stream(responseText);
     }
     
@@ -3067,13 +3150,19 @@ async function sendQuery(text) {
     chatInput.disabled = true;
     sendBtn.disabled = true;
 
+    const isNativeGeometric = selectedEngineMode === "native-geometric";
+    const cancelBtn = document.getElementById("cancelGenBtn");
+    if (isNativeGeometric && cancelBtn) cancelBtn.style.display = "inline-block";
+
     const loadMsg = document.createElement("div"); loadMsg.className = "message model";
     const nativeWaitLabel = localCheckpointRequest
         ? `Running source-backed #1017 raw completion · ${localCheckpointMaxTokens}-token cap`
         : "Running one exact local decode";
     loadMsg.innerHTML = nativeReferenceRequest
         ? `<div class="avatar">R4</div><div class="message-content"><div class="message-sender">${responseModelLabel}</div><div class="message-bubble" style="padding:0.75rem 1rem"><span class="reference-wait">${nativeWaitLabel} · elapsed 0:00</span></div></div>`
-        : `<div class="avatar">R4</div><div class="message-content"><div class="message-sender">R4 Prime Router</div><div class="message-bubble" style="padding:0.75rem 1rem"><div class="loading-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div></div>`;
+        : isNativeGeometric
+            ? `<div class="avatar" style="border-color: var(--emerald); color: var(--emerald);">R4</div><div class="message-content"><div class="message-sender" style="color: var(--emerald);">Native Geometric Model</div><div class="message-bubble" style="padding:0.75rem 1rem"><div class="loading-dots"><div class="dot" style="background: var(--emerald);"></div><div class="dot" style="background: var(--emerald);"></div><div class="dot" style="background: var(--emerald);"></div></div></div></div>`
+            : `<div class="avatar">R4</div><div class="message-content"><div class="message-sender">R4 Prime Router</div><div class="message-bubble" style="padding:0.75rem 1rem"><div class="loading-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div></div>`;
     chatLogInner.appendChild(loadMsg);
     scrollToBottom();
 
@@ -3136,7 +3225,7 @@ async function sendQuery(text) {
                 description: reference.response_text,
                 reference
             };
-        } else if (localWasmMode) {
+        } else if (localWasmMode || isNativeGeometric) {
             data = await runLocalChat(text, identity);
         } else {
             const payload = {
@@ -3168,7 +3257,7 @@ async function sendQuery(text) {
             "model",
             data.description,
             true,
-            responseModelLabel
+            isNativeGeometric ? "Native Geometric Model" : responseModelLabel
         );
 
         if (localCheckpointRequest) {
@@ -3269,6 +3358,8 @@ async function sendQuery(text) {
         );
     } finally {
         if (referenceTicker !== null) window.clearInterval(referenceTicker);
+        const cancelBtn = document.getElementById("cancelGenBtn");
+        if (cancelBtn) cancelBtn.style.display = "none";
         chatInput.disabled = false;
         sendBtn.disabled = false;
         chatInput.focus();
@@ -3454,6 +3545,7 @@ async function fetchR4g1CompileStatus() {
 
 function selectedEngineLabel(engine) {
     return {
+        "native-geometric": "Native Geometric Language Model (WASM)",
         "r4g1": "R4G1 Graph",
         "transformerless-legacy": "Legacy TLA/TLS",
         "attention": "Full Attention Llama",
@@ -3466,19 +3558,28 @@ function selectedEngineLabel(engine) {
 
 function updateSelectedEngineValue() {
     if (!engineVal) return;
-    engineVal.textContent = selectedEngineLabel(engineSelect?.value || "geometric");
+    const currentEngine = engineSelect?.value || "geometric";
+    engineVal.textContent = selectedEngineLabel(currentEngine);
     if (engineScopeVal) {
-        engineScopeVal.textContent = engineSelect?.value === "r4-softmax-local"
-            ? "↳ Source-backed #1017 raw single-turn completion"
-            : engineSelect?.value === "r4-softmax-reference"
-                ? "↳ Native source-backed softmax attention reference"
-                : "↳ Exploratory route-conditioned continuation";
+        engineScopeVal.textContent = currentEngine === "native-geometric"
+            ? "↳ Native geometric language model · zero matmul · WASM"
+            : currentEngine === "r4-softmax-local"
+                ? "↳ Source-backed #1017 raw single-turn completion"
+                : currentEngine === "r4-softmax-reference"
+                    ? "↳ Native source-backed softmax attention reference"
+                    : "↳ Exploratory route-conditioned continuation";
     }
-    if (engineSelect?.value === "r4g1") {
+    const nativeCard = document.getElementById("nativeGeometricCard");
+    if (nativeCard) {
+        nativeCard.style.display = currentEngine === "native-geometric" ? "block" : "none";
+    }
+    if (currentEngine === "native-geometric") {
+        engineVal.style.color = "var(--emerald)";
+    } else if (currentEngine === "r4g1") {
         engineVal.style.color = serverR4g1Ready ? "var(--emerald)" : "var(--amber)";
-    } else if (engineSelect?.value === "r4-softmax-reference") {
+    } else if (currentEngine === "r4-softmax-reference") {
         engineVal.style.color = serverR4SoftmaxReferenceReady ? "var(--purple)" : "var(--amber)";
-    } else if (engineSelect?.value === "r4-softmax-local") {
+    } else if (currentEngine === "r4-softmax-local") {
         engineVal.style.color = serverR4SoftmaxLocalReady ? "var(--purple)" : "var(--amber)";
     } else {
         engineVal.style.color = "var(--cyan)";
@@ -3498,6 +3599,79 @@ if (engineSelect) {
 // =====================================================
 sendBtn.addEventListener("click", () => sendQuery(chatInput.value));
 chatInput.addEventListener("keydown", e => { if (e.key === "Enter") sendBtn.click(); });
+
+const cancelGenBtn = document.getElementById("cancelGenBtn");
+if (cancelGenBtn) {
+    cancelGenBtn.addEventListener("click", () => {
+        if (r4Worker) {
+            r4Worker.postMessage({ type: 'CANCEL_GENERATION', id: 'cancel_' + Date.now() });
+        }
+        if (window.__native_session_handle && window.wasm_module?.native_geometric_cancel) {
+            try {
+                window.wasm_module.native_geometric_cancel(window.__native_session_handle);
+            } catch (e) {
+                console.warn("Cancel session error:", e);
+            }
+        }
+        logToConsole("Generation cancellation requested.", "accent");
+    });
+}
+
+const exportSessionBtn = document.getElementById("exportSessionBtn");
+if (exportSessionBtn) {
+    exportSessionBtn.addEventListener("click", () => {
+        try {
+            let sessionJson = null;
+            if (window.__native_session_handle && window.wasm_module?.native_geometric_export_session) {
+                sessionJson = window.wasm_module.native_geometric_export_session(window.__native_session_handle);
+            }
+            if (!sessionJson) {
+                sessionJson = JSON.stringify({
+                    engine: "native-geometric-wasm",
+                    canonical_uor: "uor:native-geometric/r4/1",
+                    zero_matmul: true,
+                    timestamp: new Date().toISOString()
+                }, null, 2);
+            }
+            const blob = new Blob([sessionJson], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `native_geometric_session_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            logToConsole("Exported native geometric session state.", "success");
+        } catch (e) {
+            logToConsole(`Failed to export session: ${e.message}`, "error");
+        }
+    });
+}
+
+const importSessionBtn = document.getElementById("importSessionBtn");
+if (importSessionBtn) {
+    importSessionBtn.addEventListener("click", () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+        input.onchange = async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                if (window.wasm_module?.native_geometric_import_session) {
+                    const handle = window.wasm_module.native_geometric_import_session(text);
+                    window.__native_session_handle = handle;
+                    logToConsole(`Imported native geometric session handle: ${handle}`, "success");
+                } else {
+                    logToConsole("Native WASM module not loaded for session import.", "error");
+                }
+            } catch (err) {
+                logToConsole(`Failed to import session: ${err.message}`, "error");
+            }
+        };
+        input.click();
+    });
+}
 
 // =====================================================
 // Manifold Export / Import / Reset handlers
@@ -4074,9 +4248,13 @@ async function restoreSessionFromLocalStorage() {
                     && !serverR4SoftmaxReferenceReady;
                 const localCheckpointUnavailable = restoredEngine === "r4-softmax-local"
                     && !serverR4SoftmaxLocalReady;
-                engineSelect.value = (localWasmMode || serverResearchDemo || referenceUnavailable || localCheckpointUnavailable)
-                    ? "geometric"
-                    : restoredEngine;
+                if (restoredEngine === "native-geometric") {
+                    engineSelect.value = "native-geometric";
+                } else {
+                    engineSelect.value = (localWasmMode || serverResearchDemo || referenceUnavailable || localCheckpointUnavailable)
+                        ? "geometric"
+                        : restoredEngine;
+                }
             }
             
             if (localWasmMode && router) {
@@ -4122,13 +4300,24 @@ function updateConnectionStatusUI() {
     const dot = document.querySelector(".chat-header-dot");
     const route = document.getElementById("chatHeaderRoute");
     if (localWasmMode) {
-        if (dot) {
-            dot.style.background = "#ffb300";
-            dot.style.boxShadow = "0 0 8px #ffb300";
-        }
-        if (route) {
-            route.textContent = "🟠 Local WASM geometric research demo";
-            route.style.color = "var(--amber)";
+        if (engineSelect?.value === "native-geometric") {
+            if (dot) {
+                dot.style.background = "var(--emerald)";
+                dot.style.boxShadow = "0 0 8px var(--emerald)";
+            }
+            if (route) {
+                route.textContent = "🟢 Native Geometric Model (WASM)";
+                route.style.color = "var(--emerald)";
+            }
+        } else {
+            if (dot) {
+                dot.style.background = "#ffb300";
+                dot.style.boxShadow = "0 0 8px #ffb300";
+            }
+            if (route) {
+                route.textContent = "🟠 Local WASM geometric research demo";
+                route.style.color = "var(--amber)";
+            }
         }
     } else {
         const selected = engineSelect?.value || "geometric";

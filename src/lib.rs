@@ -26,7 +26,9 @@ pub use uor_r4_router;
 pub use uor_r4_core::*;
 pub use uor_r4_router::*;
 
+pub mod native_wasm;
 pub mod tless_uor;
+pub use native_wasm::*;
 
 /// #839 phase 1 (RF-30): the shared typed selective-prediction surface
 /// vocabulary — deliberately ungated so the WASM boundary and the native
@@ -314,5 +316,32 @@ mod facade_smoke_tests {
         ));
         assert!(dashboard.contains("fetch(serverR4SoftmaxLocalEndpoint"));
         assert!(!worker.contains("r4-softmax-local"));
+    }
+
+    #[test]
+    fn static_wasm_native_geometric_model_is_connected_and_honest() {
+        let caps_json = crate::native_wasm::init(&[]).expect("native geometric WASM init succeeds");
+        assert!(caps_json.contains("native-geometric-language-v1"));
+        assert!(caps_json.contains("uor:native-geometric/r4/1"));
+
+        let handle = crate::native_wasm::create_session("smoke-test", "user-web", "proj-web")
+            .expect("session created");
+        assert!(handle > 0);
+
+        let ingest_res = crate::native_wasm::ingest(handle, "Hello native geometric language")
+            .expect("ingest succeeds");
+        assert!(ingest_res.contains("ingested_bytes"));
+
+        let gen_res = crate::native_wasm::generate_step(handle, 5).expect("generation succeeds");
+        assert!(gen_res.contains("token_count"));
+
+        let dashboard = include_str!("../index.html");
+        let worker = include_str!("../r4_worker.js");
+
+        assert!(dashboard.contains("id=\"nativeGeometricOption\""));
+        assert!(dashboard.contains("native-geometric-wasm"));
+        assert!(worker.contains("native-geometric"));
+        assert!(worker.contains("native_geometric_init"));
+        assert!(worker.contains("native_geometric_create_session"));
     }
 }
