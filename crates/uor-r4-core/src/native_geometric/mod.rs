@@ -49,6 +49,9 @@ pub use recurrent_routing_training::RecurrentRoutingFitReport;
 mod completion_runtime;
 mod completion_training;
 mod completion_types;
+pub mod durable_memory;
+#[cfg(test)]
+mod durable_memory_tests;
 mod memory_runtime;
 mod memory_training;
 mod memory_types;
@@ -91,6 +94,10 @@ pub use response_entry_types::{
     ResponseEntryAction, ResponseEntryDecision, ResponseEntryStateView,
 };
 pub type ResponseEntryWork = CompletionWork;
+pub use durable_memory::{
+    DurableConsolidationReport, DurableFactRecord, DurableMemoryStore, DurableSession,
+    IdentityScope,
+};
 pub use memory_training::{
     MemoryReadDiagnostic, MemoryReadDocumentExposure, MemoryReadDocumentSupervision,
     MemoryReadResponseStateReport, MemoryReadSchedule, MemoryReadStreamProgress,
