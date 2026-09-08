@@ -592,6 +592,35 @@ fn append_word_copy_cases(source: &mut Source) -> ProbeResult<()> {
             source.fit.push(word_copy_case("fit", context, index, name));
         }
     }
+    let city_pairs = [
+        ["Paris", "Tokyo"],
+        ["Rome", "Berlin"],
+        ["Kyoto", "Delhi"],
+        ["Cairo", "Madrid"],
+    ];
+    for (pair, cities) in city_pairs.iter().enumerate() {
+        let [first, distractor, resident] = if pair % 2 == 0 {
+            ["ada", "cyra", "ben"]
+        } else {
+            ["dara", "finn", "eli"]
+        };
+        let first_coins = 11 + pair as i64 * 5;
+        let distractor_coins = 301 + pair as i64;
+        for (variant, city) in cities.iter().enumerate() {
+            source.fit.push(Case {
+                id: format!("word-copy/fit/city-pair-{pair}-var-{variant}"),
+                family: "prose".into(),
+                task: "city_transfer".into(),
+                world: 400_000 + pair * 2 + variant,
+                pair_id: format!("word-copy/fit/city-pair-{pair}"),
+                variant,
+                prompt: format!(
+                    "User: {first} has {first_coins} coins. {distractor} has {distractor_coins} coins.\nUser: {resident} lives in {city}.\nUser: What city does {resident} live in?\nAssistant:"
+                ),
+                response: format!(" {city}.\n"),
+            });
+        }
+    }
     for (pair, names) in [
         ["input", "count"],
         ["payload", "argument"],
@@ -620,7 +649,7 @@ fn append_word_copy_cases(source: &mut Source) -> ProbeResult<()> {
         });
     }
     source.schema = WORD_COPY_SOURCE_SCHEMA.into();
-    source.scope.push_str(" Source /3 preserves every /2 fit and development case and appends 32 construction parameter-name cases, 12 OPEN parameter-transfer cases, and the two already observed city failures. Parameter variants change retained rank, add a misleading comment, or duplicate the spelling; the target alone does not identify which equal-spelling occurrence was selected. Construction names differ from transfer names. These are development feedback, not final held-out qualification. The city responses begin with a space and remain a boundary diagnostic for first-position copying.");
+    source.scope.push_str(" Source /3 preserves every /2 fit and development case and appends 32 construction parameter-name cases, 8 construction city cases, 12 OPEN parameter-transfer cases, and the two already observed city failures. Parameter variants change retained rank, add a misleading comment, or duplicate the spelling; the target alone does not identify which equal-spelling occurrence was selected. Construction names differ from transfer names. These are development feedback, not final held-out qualification. The city responses begin with a space and test the learned lexical-prefix-to-copy transition.");
     Ok(())
 }
 
@@ -1337,7 +1366,7 @@ mod tests {
         let original_development = serde_json::to_vec(&source.development).unwrap();
         append_word_copy_cases(&mut source).unwrap();
         validate_source(&source).unwrap();
-        assert_eq!(source.fit.len(), 224);
+        assert_eq!(source.fit.len(), 232);
         assert_eq!(source.development.len(), 46);
         assert_eq!(
             original_fit,
@@ -1347,12 +1376,19 @@ mod tests {
             original_development,
             serde_json::to_vec(&source.development[..32]).unwrap()
         );
-        let fit_names: BTreeSet<_> = source.fit[192..]
+        let fit_names: BTreeSet<_> = source.fit[192..224]
             .iter()
             .map(|case| case.response.lines().next().unwrap())
             .collect();
         for case in &source.development[32..44] {
             assert!(!fit_names.contains(case.response.lines().next().unwrap()));
+        }
+        let fit_cities: BTreeSet<_> = source.fit[224..]
+            .iter()
+            .map(|case| case.response.trim())
+            .collect();
+        for case in &source.development[44..46] {
+            assert!(!fit_cities.contains(case.response.trim()));
         }
         assert!(append_word_copy_cases(&mut source).is_err());
     }
