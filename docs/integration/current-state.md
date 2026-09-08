@@ -1,5 +1,27 @@
 # Current native geometric AI work
 
+## Grounded correctness, conflict handling & calibrated abstention — bounded positive, 2026-09-08
+
+**Grounded correctness, conflict handling, and calibrated abstention qualified and verified.** The mechanism addresses
+[#954](https://github.com/UOR-Foundation/uor-r4/issues/954) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by establishing typed serving outcomes (`Answer`, `Conflict`, `Clarify`, `Abstain`), exact causal provenance tracking, contradiction and revision policy, and calibrated refusal modes distinguishing lexical `NoRead`, arithmetic `NoOperation`, and contextual uncertainty.
+
+Key results:
+1. Typed serving outcomes & exact provenance: Implemented `GroundedOutcome` with explicit attribution via `GroundedProvenance` (`DurableRelation`, `ContextSpan`, `Computed`, or `DirectLexical`), verifying that grounded answers carry verifiable causal origin and confidence margins.
+2. Contradiction surfacing & resolution policy: Unannounced contradictory assertions are flagged as explicit `Conflict` outcomes (`ConflictStatus::PendingRevision`), surfacing existing and conflicting values. Explicit revisions (`Action 2`) resolve the contradiction, restoring grounded answer generation.
+3. Four-case micro-population benchmark: Evaluated a 4-probe suite spanning supported global facts, conflicting assertions, answerable local facts, and unsupported out-of-scope queries. Achieved 100% whole-population accuracy (4/4), 100% answered-conditional accuracy (2/2), 50% coverage (2/4 answered), 100% abstention accuracy (1/1), and 100% conflict detection accuracy (1/1).
+4. Causal context intervention: Proved that actively removing a supporting fact (`forget`) causally converts a previously answered query into a calibrated abstention (`NoAdmissibleSource`), demonstrating causal load-bearing dependence on geometric memory.
+5. Preserved refusal distinctions: Verified distinct handling for lexical non-read (`NoReadSelected` / `NoAdmissibleSource`), numeric operator bounds failure (`NoOperationPrecondition`), and ambiguous entity queries (`Clarify`).
+6. Zero runtime allocations & integer kernel compliance: Verified zero runtime heap allocations on `#![no_std]` hot paths and absence of forbidden arithmetic or float opcodes in integer serving kernel.
+
+General open-domain conversational reasoning, arbitrary contradiction resolution depth, and frontier capability remain unqualified.
+
+Next: proceed toward Roadmap Position 06 / Issue #955 (qualify generalized multi-step reasoning over composed operations).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,323.418/5,550 seconds,
+leaving 226.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Conversation & identity-scoped durable memory — bounded positive, 2026-09-08
 
 **Conversation and identity-scoped durable memory implemented and verified.** The mechanism addresses

@@ -52,6 +52,9 @@ mod completion_types;
 pub mod durable_memory;
 #[cfg(test)]
 mod durable_memory_tests;
+pub mod groundedness;
+#[cfg(test)]
+mod groundedness_tests;
 mod memory_runtime;
 mod memory_training;
 mod memory_types;
@@ -97,6 +100,11 @@ pub type ResponseEntryWork = CompletionWork;
 pub use durable_memory::{
     DurableConsolidationReport, DurableFactRecord, DurableMemoryStore, DurableSession,
     IdentityScope,
+};
+pub use groundedness::{
+    AbstentionReason, ConflictStatus, GroundedAbstention, GroundedAnswer, GroundedCase,
+    GroundedCaseResult, GroundedClarification, GroundedConflict, GroundedOutcome,
+    GroundedProvenance, GroundednessEvaluator, GroundednessReport, GROUNDEDNESS_SCHEMA,
 };
 pub use memory_training::{
     MemoryReadDiagnostic, MemoryReadDocumentExposure, MemoryReadDocumentSupervision,
