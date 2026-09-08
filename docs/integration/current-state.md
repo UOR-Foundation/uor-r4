@@ -1,5 +1,26 @@
 # Current native geometric AI work
 
+## Scoped serving, geometry, and artifact guarantees — bounded positive, 2026-09-08
+
+**Formal serving operation census, exact Z[phi] arithmetic, paired-H4 inverse witnesses, and theorem-to-code mapping qualified and verified.** The mechanism addresses
+[#964](https://github.com/UOR-Foundation/uor-r4/issues/964) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by establishing formal and runtime guarantees across the native geometric serving lifecycle:
+1. Integer serving operation census (#1087): Instrumented and audited all hot-path operations (`runtime::Session::observe`, `Session::predict`), verifying that hot-path execution is restricted to bitwise operations (`XOR`, `AND`, `OR`, `NOT`), bit shifts and rotates, popcount (`count_ones`), bounds-checked additions and subtractions, integer comparisons, table lookups, and decomposed shift-add products (`shift_add_product`). Strictly enforced zero floating-point opcodes (`f32`, `f64`), zero mathematical matrix products in serving, and zero steady-state heap allocations on the `#[no_std]` path.
+2. Exact quadratic integer ring arithmetic (#1083): Realized `Z[phi]` (`phi^2 = phi + 1`) as exact integer pairs `(a, b) in Z^2` without rounding or float approximations, verifying ring addition, subtraction, multiplication, and algebraic norm `N(a + b*phi) = a^2 + ab - b^2` alongside exact bidirectional Fibonacci recurrence stepping and inverse.
+3. Euler/Hopf bridge and orientation preservation (#1083): Verified the domain-transition boundary `e^(i*pi) + pi^0 =_bridge 0^0`, evaluating `ContinuousNull` (0) and `DiscreteEmptyProduct` (discrete identity 1), non-float signed coordinate orientation (chirality and polarity), and quarter-turn phase shifts replacing tangent division at `cos(theta) = 0`.
+4. Least-cost chart adapters (#1083): Qualified Euclidean `sqrt(2)`, complex/discrete `2i`, and Riemannian `[0, 2]` adapters with verified cost profiles, zero-error integer witnesses, and orientation preservation.
+5. Paired-H4 / Icosian golden folding (#1083): Realized the E8 lattice as the Z-module of quaternions over Z[phi] (`E8 = H4 x H4` shorthand) via golden folding `H4 (+) phi*H4`, with unit icosian quaternions verifying explicit inverse witnesses (`q * q^-1 = 1`).
+6. Artifact integrity & codec separation (#1083): Sealed artifact binding to BLAKE3 CIDs, schema version `uor-r4.native-geometric-language/1`, and canonical UOR model address, strictly distinguishing Lexical Codec `C_lex` (segmentation, reconstruction) from Content Identity `kappa` (canonical byte envelope, integrity, provenance).
+7. Theorem-to-code mapping & formal claim dossier (#1089): Aligned all project statements with `docs/formal_vocabulary.md`, enforcing strict role boundaries (Definition, Objective, Guarantee, Assumption, Empirical Criterion) and claim statuses (Structural, Witnessed, Empirical, Assumed). Verified that finite zeta phases carry Assumption status as precomputed projection anchors (no RH proof claim), structural priority is kept separate from empirical quality, and prohibited phrases ("machine-verified", "exact teacher equivalence") are strictly disavowed.
+
+Open-domain general language, complete formal proof campaigns, and frontier capability remain unqualified.
+
+Next: proceed toward Roadmap Position 10 / Issue #1172 (complete native capability API and WASM model runtime).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,346.418/5,550 seconds,
+leaving 203.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Complete-path Apple Silicon M1 latency, energy, and memory profiling — bounded positive, 2026-09-08
 
 **Complete-path M1 latency, energy, memory traffic, and multi-task quality-cost scaling qualified and verified.** The mechanism addresses
