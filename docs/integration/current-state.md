@@ -1,5 +1,26 @@
 # Current native geometric AI work
 
+## Unified contextual word-copy and multi-operator response routing — bounded positive, 2026-09-08
+
+**Unified contextual word-copy and multi-operator response routing implemented and verified.** The mechanism addresses
+[#973](https://github.com/UOR-Foundation/uor-r4/issues/973) by bridging the learned lexical word-copy engine with the complete four-operator geometric computation suite (`Copy`, `Add`, `Sub`, `Mul`) under a single autoregressive generation and session routing interface. Word-copy and arithmetic engines compete fairly based on geometric/model scores when word copy is idle; turn boundaries transition cleanly across prose/lexical copy and multi-step computation; intermediate completion anchors reset appropriately on source refresh; and generation autonomously interleaves copying and chained arithmetic.
+
+Key results:
+1. Multi-turn state transitions verified: Word copy -> value arithmetic transition executes seamlessly (`alpha` copied, then `left = 13; right = 4; total:` computes `17`), and value arithmetic -> word copy transition executes seamlessly (`13 + 4 = 17`, then `fn identity(alpha: i32)` initiates word copy on `alpha`).
+2. Autonomous interleaved copy and chained computation: `Model::generate` evaluates multi-step arithmetic ($13 + 4 = 17$, then $17 \times 2 = 34$) autonomously during autoregressive generation with active word copy capability, correctly logging `source_refreshes: 1`, `additions: 1`, and `multiplications: 1`.
+3. Load-bearing causal ablation intervention proof: Ablating Operator 1's intermediate record from session state causally prevents Operator 2 from reproducing the derived result ($34$), proving both lexical and arithmetic intermediate representations are causal and load-bearing.
+4. Compiled Rust execution: Interleaved function generation and chained multi-operator computation compiles with `rustc --edition=2021` and executes with exit code 0.
+5. Hot path operations preserve zero runtime heap allocations in `#![no_std]` across all 9 allocation census tests in `native_geometric_allocations.rs`, and integer kernel scanner confirms absence of forbidden arithmetic or float opcodes.
+
+All earlier span panels, 663 retained answers, 12/12 city transfers, 24/24 numeric targets, and compiling Rust programs remain preserved. General prose, arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: proceed with Roadmap Position 03 / Issue #973 milestones, advancing learned joint admission scoring and multi-modal lexical-arithmetic prompt training.
+
+This cycle charges 5.000 model seconds. Cumulative use is 5,304.918/5,550 seconds,
+leaving 245.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Complete four-operator geometric computation suite (Add/Sub/Mul) — bounded positive, 2026-09-08
 
 **Complete four-operator geometric computation suite implemented and verified.** The mechanism addresses

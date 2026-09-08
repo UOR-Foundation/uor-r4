@@ -652,3 +652,5 @@ mod response_entry_training_tests;
 mod role_read_tests;
 #[cfg(test)]
 mod word_copy_tests;
+#[cfg(test)]
+mod word_copy_value_tests;

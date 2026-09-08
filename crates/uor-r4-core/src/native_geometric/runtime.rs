@@ -259,6 +259,9 @@ impl Session {
         if let Some(state) = &mut self.values {
             state.refresh_sources(&mut self.work.values);
         }
+        if let Some(state) = &mut self.completion {
+            state.reset();
+        }
         Ok(())
     }
 
@@ -673,11 +676,14 @@ impl Session {
         // Enter observation clears typed pending state, and restored active
         // entries independently recheck this gate. Boundaries/EOS/cap clear
         // entry activity, so their next prediction uses the ordinary gate.
-        if !self
+        let suppressing_entry = self
             .response_entry
             .as_ref()
             .is_some_and(|entry| entry.active)
-        {
+            && self.word_copy.as_ref().is_none_or(|copy| {
+                copy.progress != WordCopyProgress::Idle || copy.origin.is_some()
+            });
+        if !suppressing_entry {
             if let Some(baseline) = self.candidates.first().copied() {
                 let offer = self
                     .values
