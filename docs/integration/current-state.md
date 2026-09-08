@@ -1,5 +1,28 @@
 # Current native geometric AI work
 
+## Conversation & identity-scoped durable memory — bounded positive, 2026-09-08
+
+**Conversation and identity-scoped durable memory implemented and verified.** The mechanism addresses
+[#962](https://github.com/UOR-Foundation/uor-r4/issues/962) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by establishing learned retention, reading, updating, conflict handling, and correction over the exact versioned relation and memory foundation, partitioned strictly across `IdentityScope { user_id, project_id, session_id }`.
+
+Key results:
+1. Identity-scoped partitioning & cross-identity isolation: `DurableMemoryStore` enforces strict partition boundaries across `(user_id, project_id, session_id)`. Scope B cannot read or be influenced by confidential facts retained in Scope A.
+2. Versioned memory lineage & conflict handling: immutable relation records (`RelationRecord`) preserve `previous` lineage across explicit revisions (`Action 2`) and flag unannounced contradictory assertions as explicit conflicts (`conflict: true`, `Action 1`). Explicit revisions resolve outstanding conflicts.
+3. Pronoun antecedent resolution: multi-turn dialogue tracks active conversational entities, resolving conversational pronouns ("she", "he", "it", "they") to the active antecedent entity during query resolution.
+4. Circular buffer eviction survivability: verified that facts asserted in durable relation memory survive when over 100 tokens are fed into a 32-token context window, inducing >50 evictions from the circular ring buffer without degrading factual retrieval.
+5. Session restart and export/import roundtrip: verified full artifact-bound persistence via `DurableSession::checkpoint` and `DurableSession::from_checkpoint`, as well as `restart()` preserving durable relations across token stream resets.
+6. Bounded consolidation & selective forgetting: verified `forget` clearing specific entities from the active directory and `consolidate` compacting directory slots and pruning dead versions.
+7. Zero runtime allocations & integer kernel compliance: verified across `native_kernel_source_has_no_forbidden_arithmetic_or_float_types` and allocation census tests in `native_geometric_allocations.rs`.
+
+General conversational memory across open heterogeneous dialogue domains, arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: proceed with Roadmap Position 04 / Issue #962 integration with multi-turn prompt conditioning and proceed toward Roadmap Position 05 / Issue #954 (grounded correctness, conflict handling, and abstention).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,318.918/5,550 seconds,
+leaving 231.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Multi-modal heterogeneous curriculum training & continuous general prose expansion — bounded positive, 2026-09-08
 
 **Multi-modal heterogeneous curriculum training and continuous general prose generation verified.** The mechanism addresses
