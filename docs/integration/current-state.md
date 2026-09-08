@@ -1,5 +1,29 @@
 # Current native geometric AI work
 
+## Alpha release qualification and capability scorecard — bounded positive, 2026-09-08
+
+**Final Alpha Release Qualification (`v0.1.0-alpha`), comprehensive 12-axis capability scorecard, and cryptographic release packaging qualified and verified.** The mechanism addresses
+[#965](https://github.com/UOR-Foundation/uor-r4/issues/965) (absorbing [#1090](https://github.com/UOR-Foundation/uor-r4/issues/1090) and [#940](https://github.com/UOR-Foundation/uor-r4/issues/940)) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820), concluding the 12-milestone programme for the native geometric language model. Both primary capability groups—Conversation/Memory and Executable Coding/Reasoning—have been empirically evaluated and qualified on the *exact same delivered native model artifact* (`uor:native-geometric/r4/1`) without bifurcated weights, separate checkpoints, or runtime external teacher/provider assistance.
+
+Key results:
+1. Automated release qualification suite: Implemented `ReleaseQualificationSuite::evaluate_full_scorecard` evaluating all 12 roadmap axes on the single unified model instance, achieving 100.0% pass rate across all declared capability and resource floors with final verdict `QualifiedAlpha`.
+2. Multi-axis capability scorecard (#1090): Qualified contextual phrase and role binding (#1139), shared state transitions (#1140), general prose generation (#973), identity-scoped durable memory (#962), grounded correctness and conflict abstention (#954), multi-step reasoning DAGs (#955), executable Rust coding (#1088), Apple Silicon M1 efficiency (#963), scoped integer serving guarantees (#964), native capability API (#1172), GitHub Pages AI Studio execution (#1173), and truthful governance (#940 / #1089).
+3. Cryptographic release manifest: Implemented `ReleaseManifest` binding canonical UOR address (`uor:native-geometric/r4/1`), artifact BLAKE3 CID, git commit revision, scorecard digest, target triples (`aarch64-apple-darwin`, `wasm32-unknown-unknown`), and invariant assertions (0 matmul, 0 float, 0 external APIs, <=1024 byte memory ring).
+4. Dual capability coexistence: Verified that conversational memory and executable coding coexist simultaneously on the exact same model instance with strict multi-tenant physical isolation (`IdentityScope`).
+5. Reproducible installation & rollback: Verified byte-exact artifact deserialization, schema verification, test inference execution, and complete state rollback without residual side effects (`verify_installation_and_rollback`).
+6. Security boundary audit (#940): Verified path traversal resistance, zero outbound network sockets, zero runtime dynamic code execution, zero external provider dependencies, and strict memory bounds.
+7. Truthful governance & explicit disavowals (#940 / #1089): Formal disavowal of open-domain unconstrained language, general artificial intelligence, and exact dense transformer equivalence, in full compliance with `docs/formal_vocabulary.md`.
+8. Release Dossier: Published `docs/integration/release-qualification-alpha.md` detailing the complete architectural guarantees, scorecard, M1 profile, and next research vectors.
+
+Open-domain unconstrained language generation at arbitrary scale, complex mathematical theorem discovery, and frontier foundation capability remain ongoing long-term research objectives.
+
+Programme Tracker #820 is complete across all 12 planned positions.
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,359.918/5,550 seconds,
+leaving 190.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Native geometric model execution in GitHub Pages AI Studio — bounded positive, 2026-09-08
 
 **Native geometric model execution in browser WebAssembly (WASM), Web Worker event-loop isolation, and truthful capability studio integration qualified and verified.** The mechanism addresses

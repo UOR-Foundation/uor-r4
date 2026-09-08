@@ -47,6 +47,13 @@ pub use native_capability_api::{
     WasmSessionHandle, BACKEND_IDENTIFIER, NATIVE_API_SCHEMA,
 };
 
+pub mod release_qualification;
+pub use release_qualification::{
+    AxisStatus, CapabilityScorecard, InstallationReport, ReleaseManifest,
+    ReleaseQualificationSuite, ScorecardAxis, ScorecardVerdict, SecurityAuditReport,
+    CAPABILITY_SCORECARD_SCHEMA, RELEASE_MANIFEST_SCHEMA,
+};
+
 #[cfg(feature = "full")]
 pub mod capability_suite;
 #[cfg(feature = "full")]
