@@ -1,5 +1,46 @@
 # Current native geometric AI work
 
+## Shared causal state transitions — bounded positive, 2026-09-08
+
+**Causal Add→Add transition implemented and verified.** The mechanism addresses
+[#1140](https://github.com/UOR-Foundation/uor-r4/issues/1140) by establishing
+shared causal state transitions where Operator 2 consumes Operator 1's actual
+committed result and binds Operator 1's `write_id` in its `ValueDerivation.operand_ids`
+(`[write_id_1, next_id]`). Source synchronization (`refresh_sources` and
+`refresh_value_sources`) refreshes the active source view from committed state
+without runtime heap allocations (`#![no_std]`).
+
+Focused unit and integration tests establish:
+1. Operator 1 computes 13 + 4 = 17 and commits its derived record (`write_id`).
+2. Source refresh updates the available source view, resetting `consumed` to false
+   and incrementing `work.source_refreshes`.
+3. Operator 2 evaluates the refreshed source view, selecting Operator 1's committed
+   output as its first operand and combining it with the next operand to compute
+   17 + 5 = 22.
+4. Operator 2's derivation records `operand_ids: [write_id_1, operand_2_id]` and
+   `operand_values: [17, 5]`.
+5. Causal intervention confirms the intermediate state is strictly load-bearing:
+   ablating Operator 1's committed record from state causes Operator 2's prediction
+   to diverge (`d_intervened.value != 22`), proving that independent text emission
+   cannot substitute for exact intermediate state.
+6. Generated chained Rust programs compile with `rustc --edition=2021` and execute
+   successfully with exit code 0.
+7. Hot path predict, observe, and source refresh maintain zero runtime heap allocations
+   in `native_geometric_allocations`.
+
+All earlier span panels, 663 retained answers, 12/12 city transfers, 24/24 numeric
+targets, and 20/20 compiling Rust programs remain preserved. General prose,
+arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: integrate chained composition into the unified response generation loop,
+expand multi-step arithmetic/reasoning benchmarks, and proceed with #973 native
+recovery roadmap.
+
+This cycle charges 124.620 model seconds. Cumulative use is 5,287.918/5,550 seconds,
+leaving 262.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Contextual writer boundaries — bounded positive, 2026-09-07
 
 **Retain `79710468` at contextual writer scope.** The

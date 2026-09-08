@@ -159,6 +159,7 @@ impl ValueState {
         self.pending = None;
         self.emission = None;
         self.consumed = false;
+        self.operations_committed = 0;
         self.active = true;
         self.started_at = self.seen;
         self.sources.clear();
@@ -170,6 +171,14 @@ impl ValueState {
             }
         }
     }
+    pub(super) fn refresh_sources(&mut self, work: &mut ValueWork) {
+        self.sources.clear();
+        self.sources.extend_from_slice(&self.records);
+        self.consumed = false;
+        self.pending = None;
+        self.emission = None;
+        work.source_refreshes = work.source_refreshes.saturating_add(1);
+    }
     pub(super) fn end(&mut self) {
         if self.query_boundary.is_some() {
             self.query_boundary = Some(self.seen);
@@ -178,6 +187,7 @@ impl ValueState {
         self.pending = None;
         self.emission = None;
         self.consumed = false;
+        self.operations_committed = 0;
         self.sources.clear();
         self.query_len = 0;
         self.scanner = super::numeral::Scanner::default();
@@ -522,6 +532,7 @@ impl ValueState {
                 cursor: 1,
             });
             self.consumed = true;
+            self.operations_committed = self.operations_committed.saturating_add(1);
             work.derived_writes = work.derived_writes.saturating_add(1);
         } else if let Some(emission) = &mut self.emission {
             emission.cursor = emission.cursor.saturating_add(1);

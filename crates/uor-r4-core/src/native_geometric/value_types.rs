@@ -56,6 +56,8 @@ pub struct ValueWork {
     pub lexical_byte_comparisons: u64,
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub lexical_writes: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub source_refreshes: u64,
     pub h4_reads: u64,
     pub phase_updates: u64,
     pub numeral_steps: u64,
@@ -64,6 +66,9 @@ pub struct ValueWork {
     pub emission_mismatches: u64,
 }
 fn is_zero_u64(value: &u64) -> bool {
+    *value == 0
+}
+fn is_zero_u8(value: &u8) -> bool {
     *value == 0
 }
 impl ValueWork {
@@ -166,6 +171,8 @@ pub(super) struct ValueState {
     pub phases: [u16; PHASE_CHANNELS],
     pub active: bool,
     pub consumed: bool,
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub operations_committed: u8,
     pub started_at: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_boundary: Option<u64>,
@@ -197,6 +204,7 @@ impl ValueState {
             phases: [0; PHASE_CHANNELS],
             active: false,
             consumed: false,
+            operations_committed: 0,
             started_at: 0,
             query_boundary: model
                 .typed_roles

@@ -254,6 +254,14 @@ impl Session {
         Ok(())
     }
 
+    pub fn refresh_value_sources(&mut self, model: &Model) -> Result<()> {
+        self.check_model(model)?;
+        if let Some(state) = &mut self.values {
+            state.refresh_sources(&mut self.work.values);
+        }
+        Ok(())
+    }
+
     fn product(&mut self, model: &Model, left: u16, right: u16) -> u16 {
         self.work.h4_table_reads = self.work.h4_table_reads.saturating_add(1);
         model.geometry.products[model.geometry.row_bases[usize::from(left)] + usize::from(right)]

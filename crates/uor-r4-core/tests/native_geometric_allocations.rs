@@ -483,6 +483,7 @@ fn typed_value_allocation_census(lexeme_cues: bool) {
                 let prediction = session.predict(&model)?;
                 session.observe(&model, prediction.token)?;
             }
+            session.refresh_value_sources(&model)?;
             session.end_response(&model)?;
         }
         Ok::<_, uor_r4_core::native_geometric::Error>(selected)
@@ -497,6 +498,7 @@ fn typed_value_allocation_census(lexeme_cues: bool) {
     assert!(session.work.values.literal_writes > 16);
     assert!(session.work.values.record_evictions > 0);
     assert!(session.work.values.derived_writes > 0);
+    assert!(session.work.values.source_refreshes > 0);
     assert!(session.work.values.emission_commits > 0);
     assert!(session.work.values.emission_mismatches > 0);
     assert!(session.work.evictions > 0);
