@@ -518,14 +518,15 @@ impl Model {
                 action: 2,
                 correct: d.action.is_none(),
             }];
-            for i in 0..528 {
+            for i in 0..784 {
                 let Some((action, a, b)) = values.proposal(i) else {
                     continue;
                 };
                 let correct = d.action == Some(action)
                     && d.operands.is_some_and(|pair| {
                         ([a.value, b.value] == pair
-                            || (action == ValueAction::Add && [b.value, a.value] == pair))
+                            || ((action == ValueAction::Add || action == ValueAction::Mul)
+                                && [b.value, a.value] == pair))
                             && first.map_or(!a.derived && !b.derived, |first| {
                                 a.id == first.write_id || b.id == first.write_id
                             })

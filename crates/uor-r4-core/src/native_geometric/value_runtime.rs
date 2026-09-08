@@ -203,7 +203,7 @@ impl ValueState {
     }
     pub(super) fn proposal(&self, index: usize) -> Option<(ValueAction, ValueRecord, ValueRecord)> {
         // Fixed address space: low four bits address the first operand;
-        // upper bits select Copy (0), Add (1..=16), or Sub (17..=32).
+        // upper bits select Copy (0), Add (1..=16), Sub (17..=32), or Mul (33..=48).
         let left = index & 15;
         let right = index >> 4;
         let a = *self.sources.get(left)?;
@@ -217,6 +217,10 @@ impl ValueState {
         if right <= 32 {
             let b = *self.sources.get(right - 17)?;
             return (a.id != b.id).then_some((ValueAction::Sub, a, b));
+        }
+        if right <= 48 {
+            let b = *self.sources.get(right - 33)?;
+            return (a.id != b.id).then_some((ValueAction::Mul, a, b));
         }
         None
     }
@@ -235,6 +239,7 @@ impl ValueState {
             ValueAction::Copy => 0,
             ValueAction::Add => 1,
             ValueAction::Sub => 2,
+            ValueAction::Mul => 3,
         };
         let rank_a = self
             .sources
@@ -369,7 +374,7 @@ impl ValueState {
             work.selection_passes = work.selection_passes.saturating_add(1);
             let mut selected = None;
             let mut best = 0_i64;
-            for index in 0..528 {
+            for index in 0..784 {
                 let Some((action, a, b)) = self.proposal(index) else {
                     continue;
                 };
@@ -581,5 +586,59 @@ pub(super) fn execute(action: ValueAction, a: i64, b: i64, work: &mut ValueWork)
                 }
             }
         }
+        ValueAction::Mul => {
+            work.multiplications = work.multiplications.saturating_add(1);
+            match shift_add_product(a, b) {
+                Some(value) => Some(value),
+                None => {
+                    work.overflow_rejections = work.overflow_rejections.saturating_add(1);
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// Exact integer multiplication using integer shifts and additions only,
+/// conforming to the zero-multiply integer kernel constraint.
+pub(super) fn shift_add_product(a: i64, b: i64) -> Option<i64> {
+    if a == 0 || b == 0 {
+        return Some(0);
+    }
+    if a == 1 {
+        return Some(b);
+    }
+    if b == 1 {
+        return Some(a);
+    }
+    let (x, y, negate) = match (a < 0, b < 0) {
+        (false, false) => (a as u64, b as u64, false),
+        (true, false) => (a.unsigned_abs(), b as u64, true),
+        (false, true) => (a as u64, b.unsigned_abs(), true),
+        (true, true) => (a.unsigned_abs(), b.unsigned_abs(), false),
+    };
+    let (mut multiplicand, mut multiplier) = if x < y { (y, x) } else { (x, y) };
+    let mut acc: u64 = 0;
+    while multiplier > 0 {
+        if multiplier & 1 != 0 {
+            acc = acc.checked_add(multiplicand)?;
+        }
+        multiplier >>= 1;
+        if multiplier > 0 {
+            multiplicand = multiplicand.checked_add(multiplicand)?;
+        }
+    }
+    if negate {
+        if acc == (i64::MIN as u64) {
+            Some(i64::MIN)
+        } else if acc <= i64::MAX as u64 {
+            Some(-(acc as i64))
+        } else {
+            None
+        }
+    } else if acc <= i64::MAX as u64 {
+        Some(acc as i64)
+    } else {
+        None
     }
 }

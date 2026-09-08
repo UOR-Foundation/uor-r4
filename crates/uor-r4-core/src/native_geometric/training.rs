@@ -1297,6 +1297,9 @@ fn add_work(total: &mut Work, work: Work) {
     total.values.selection_comparisons += work.values.selection_comparisons;
     total.values.selection_passes += work.values.selection_passes;
     total.values.additions += work.values.additions;
+    total.values.subtractions += work.values.subtractions;
+    total.values.multiplications += work.values.multiplications;
+    total.values.source_refreshes += work.values.source_refreshes;
     total.values.overflow_rejections += work.values.overflow_rejections;
     total.values.feature_lookups += work.values.feature_lookups;
     total.values.feature_comparisons += work.values.feature_comparisons;
@@ -1395,6 +1398,9 @@ mod work_tests {
                 lexical_comparisons: 1,
                 lexical_byte_comparisons: 1,
                 lexical_writes: 1,
+                subtractions: 1,
+                multiplications: 1,
+                source_refreshes: 1,
                 ..ValueWork::default()
             },
             completion: CompletionWork {
