@@ -1235,3 +1235,82 @@ fn native_value_chained_rust_execution() {
     }
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn native_value_autonomous_chained_generation() {
+    let mut model = mechanical_model(ValueAction::Add);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,
+                b: 513, // ranks 2 and 1: 13 + 4
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 1,
+                b: 1, // a.derived is true
+            },
+            weight: 32768,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,
+                b: 1, // ranks 0 (17) and 1 (5): 17 + 5
+            },
+            weight: 1024,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let prompt = "left = 13; mid = 4; right = 5; total:";
+    let generation = model.generate(prompt, 32, Control::Full).unwrap();
+
+    // Verify both operations were autonomously evaluated into value_trace.
+    let root_operations: Vec<_> = generation
+        .value_trace
+        .iter()
+        .filter(|d| d.cursor == 0)
+        .collect();
+    assert_eq!(
+        root_operations.len(),
+        2,
+        "must execute exactly two operations"
+    );
+
+    // Operator 1: 13 + 4 = 17
+    let op1 = root_operations[0];
+    assert_eq!(op1.action, ValueAction::Add);
+    assert_eq!(op1.value, 17);
+    let op1_write_id = op1.write_id;
+
+    // Operator 2: 17 + 5 = 22, chained from Operator 1
+    let op2 = root_operations[1];
+    assert_eq!(op2.action, ValueAction::Add);
+    assert_eq!(op2.value, 22);
+    assert_eq!(op2.operands[0].id, op1_write_id);
+    assert_eq!(op2.operands[0].value, 17);
+    assert!(op2.operands[0].derived);
+    assert_eq!(op2.operands[1].value, 5);
+
+    // Verify source refreshes occurred
+    assert_eq!(generation.work.values.source_refreshes, 1);
+    assert_eq!(generation.work.values.derived_writes, 2);
+
+    // Verify text contains both emitted numbers
+    assert!(
+        generation.text.contains("17") && generation.text.contains("22"),
+        "generated text must contain both intermediate and final values: {:?}",
+        generation.text
+    );
+}

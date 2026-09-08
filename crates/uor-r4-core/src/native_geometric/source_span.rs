@@ -317,6 +317,7 @@ mod tests {
             active: false,
             consumed: false,
             operations_committed: 0,
+            max_operations: 2,
             started_at: 0,
             query_boundary: None,
             queries: [ValueEntry::default(); QUERY],
