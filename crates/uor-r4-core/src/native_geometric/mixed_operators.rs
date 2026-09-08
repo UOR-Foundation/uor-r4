@@ -70,7 +70,7 @@ pub struct MixedOperatorExample {
     pub first: MixedOperatorTarget,
     pub targets: Vec<MixedOperatorTarget>,
 }
-fn exact_frame(
+pub(super) fn exact_frame(
     block: &OperationTransition,
     s: &Session,
     target: &MixedOperatorTarget,
@@ -115,7 +115,7 @@ fn exact_frame(
 /// Learn a rejection margin without changing state, features or serving controls.
 /// When all labelled operations are unavailable, Stop must beat the remaining
 /// substitutes. Positive frames still teach the labelled operation to beat Stop.
-fn rejection_frame(frame: &Frame) -> Option<Frame> {
+pub(super) fn rejection_frame(frame: &Frame) -> Option<Frame> {
     if !frame
         .alternatives
         .iter()
@@ -137,7 +137,10 @@ fn rejection_frame(frame: &Frame) -> Option<Frame> {
             .collect(),
     })
 }
-fn extend_dictionary(block: &mut OperationTransition, docs: &[MixedOperatorExample]) -> Result<()> {
+pub(super) fn extend_dictionary(
+    block: &mut OperationTransition,
+    docs: &[MixedOperatorExample],
+) -> Result<()> {
     let mut words: BTreeSet<Vec<u8>> = block
         .dictionary
         .iter()

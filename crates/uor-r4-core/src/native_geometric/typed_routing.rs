@@ -526,10 +526,19 @@ pub(super) fn score(
     );
     let router = if !context.literal_component
         && context.depths.is_some()
+        && control == Control::ActionBindingDisabled
+    {
+        model
+            .action_emission
+            .as_ref()
+            .map_or(&block.router, |w| &w.previous_roles)
+    } else if !context.literal_component
+        && context.depths.is_some()
         && matches!(
             control,
             Control::MixedOperatorsDisabled | Control::MixedInitialDisabled
-        ) {
+        )
+    {
         model
             .mixed_operators
             .as_ref()

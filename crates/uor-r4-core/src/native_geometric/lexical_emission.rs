@@ -17,7 +17,7 @@ pub(super) struct LexicalEmission {
     pub tokens: Vec<u32>,
 }
 impl LexicalEmission {
-    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+    pub(super) fn validate_shape(&self, model: &Model) -> Result<()> {
         self.router.validate_shape(model, 2, 4)?;
         if model.completion.is_none()
             || self.tokens.is_empty()
@@ -46,6 +46,10 @@ impl LexicalEmission {
         {
             return Err(Error("invalid lexical dictionary".into()));
         }
+        Ok(())
+    }
+    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+        self.validate_shape(model)?;
         let mut parent = model.clone();
         parent.lexical_emission = None;
         parent.refresh_identity()?;
@@ -85,12 +89,13 @@ fn role(values: &ValueState, s: &CompletionState, id: u64) -> u64 {
         0
     }
 }
-fn features(
+pub(super) fn features(
     block: &LexicalEmission,
     s: &CompletionState,
     values: &ValueState,
     token: u32,
     record: Option<ValueRecord>,
+    action_context: bool,
 ) -> ([ValueFeature; 40], usize) {
     // Typed prefix and exact-read digit widths never become lexical positions.
     // Config permits 65536 lexical pieces plus the 258 reserved/byte tokens.
@@ -120,7 +125,18 @@ fn features(
         kind: 0,
         a: (s.lexical_read.map_or(0, |r| role(values, s, r.record_id)) << 36)
             | (previous << 18)
-            | last,
+            | last
+            | (if action_context {
+                match s.anchor.map(|a| a.action) {
+                    Some(ValueAction::Add) => 0,
+                    Some(ValueAction::Copy) => 1,
+                    Some(ValueAction::Sub) => 2,
+                    Some(ValueAction::Mul) => 3,
+                    None => 0,
+                }
+            } else {
+                0
+            } << 56),
         b: choice,
     };
     let mut n = 1;
@@ -147,7 +163,7 @@ fn features(
     }
     (f, n)
 }
-fn prepare(
+pub(super) fn prepare(
     s: &mut CompletionState,
     token: u32,
     read: Option<LexicalRead>,
@@ -177,7 +193,23 @@ pub(super) fn offer(
     control: Control,
     work: &mut CompletionWork,
 ) -> Option<Candidate> {
-    let block = model.lexical_emission.as_ref()?;
+    let block = if control == Control::ActionEmissionDisabled {
+        model
+            .action_emission
+            .as_ref()
+            .map(|w| &w.previous_lexical)
+            .or(model.lexical_emission.as_ref())?
+    } else {
+        model.lexical_emission.as_ref()?
+    };
+    let action_context = model
+        .action_emission
+        .as_ref()
+        .is_some_and(|w| w.context_enabled)
+        && !matches!(
+            control,
+            Control::ActionEmissionDisabled | Control::LexicalActionContextDisabled
+        );
     s.pending_lexical_read = None;
     if matches!(
         control,
@@ -205,7 +237,7 @@ pub(super) fn offer(
         control
     };
     let mut routing = RoutingWork::default();
-    let (f, n) = features(block, s, values, BOS, None);
+    let (f, n) = features(block, s, values, BOS, None, action_context);
     let state = block
         .router
         .encode(model, &f[..n], geometric_control, &mut routing);
@@ -213,7 +245,7 @@ pub(super) fn offer(
     let mut best = block.router.score(model, state, 0, &mut routing);
     let mut selected = None;
     for &token in &block.tokens {
-        let (f, n) = features(block, s, values, token, None);
+        let (f, n) = features(block, s, values, token, None, action_context);
         let state = block
             .router
             .encode(model, &f[..n], geometric_control, &mut routing);
@@ -234,7 +266,7 @@ pub(super) fn offer(
             if s.steps.saturating_add(numeral.len) >= 32 {
                 continue;
             }
-            let (f, n) = features(block, s, values, BOS, Some(*record));
+            let (f, n) = features(block, s, values, BOS, Some(*record), action_context);
             let state = block
                 .router
                 .encode(model, &f[..n], geometric_control, &mut routing);
@@ -328,7 +360,7 @@ fn prefix(model: &Model, s: &mut Session, d: &EmissionExample) -> Result<()> {
     }
     Ok(())
 }
-fn operand(s: &Session, index: u8) -> Result<ValueRecord> {
+pub(super) fn operand(s: &Session, index: u8) -> Result<ValueRecord> {
     let v = s
         .values
         .as_ref()
@@ -354,10 +386,11 @@ fn operand(s: &Session, index: u8) -> Result<ValueRecord> {
         .copied()
         .ok_or_else(|| Error("operand evicted".into()))
 }
-fn frame(
+pub(super) fn frame(
     block: &LexicalEmission,
     s: &Session,
     target: Option<(u32, Option<u64>)>,
+    action_context: bool,
 ) -> Result<Frame> {
     let c = s
         .completion
@@ -368,7 +401,7 @@ fn frame(
         .as_ref()
         .ok_or_else(|| Error("values absent".into()))?;
     let mut alternatives = Vec::new();
-    let (f, n) = features(block, c, v, BOS, None);
+    let (f, n) = features(block, c, v, BOS, None, action_context);
     alternatives.push(Alternative {
         features: f[..n].to_vec(),
         codes: vec![],
@@ -376,7 +409,7 @@ fn frame(
         correct: target.is_none(),
     });
     for &t in &block.tokens {
-        let (f, n) = features(block, c, v, t, None);
+        let (f, n) = features(block, c, v, t, None, action_context);
         alternatives.push(Alternative {
             features: f[..n].to_vec(),
             codes: vec![],
@@ -385,7 +418,15 @@ fn frame(
         });
     }
     for &r in &v.records {
-        let (f, n) = features(block, c, v, BOS, Some(r));
+        let Some(numeral) =
+            super::numeral::Numeral::from_zphi(crate::prime_route_attention::ZPhi::new(r.value, 0))
+        else {
+            continue;
+        };
+        if c.steps.saturating_add(numeral.len) >= 32 {
+            continue;
+        }
+        let (f, n) = features(block, c, v, BOS, Some(r), action_context);
         alternatives.push(Alternative {
             features: f[..n].to_vec(),
             codes: vec![],
@@ -508,7 +549,7 @@ impl Model {
                     match piece {
                         EmissionPiece::Text(text) => {
                             for token in text.bytes().map(|b| u32::from(b) + 2) {
-                                frames.push(frame(&block, &s, Some((token, None)))?);
+                                frames.push(frame(&block, &s, Some((token, None)), false)?);
                                 prepare(
                                     s.completion
                                         .as_mut()
@@ -526,7 +567,12 @@ impl Model {
                                 crate::prime_route_attention::ZPhi::new(r.value, 0),
                             )
                             .ok_or_else(|| Error("numeral invalid".into()))?;
-                            frames.push(frame(&block, &s, Some((numeral.tokens[0], Some(r.id))))?);
+                            frames.push(frame(
+                                &block,
+                                &s,
+                                Some((numeral.tokens[0], Some(r.id))),
+                                false,
+                            )?);
                             let start_at = s
                                 .completion
                                 .as_ref()
@@ -552,11 +598,11 @@ impl Model {
                         }
                     }
                 }
-                frames.push(frame(&block, &s, Some((EOS, None)))?);
+                frames.push(frame(&block, &s, Some((EOS, None)), false)?);
             } else {
                 for _ in 0..32 {
                     if s.completion.as_ref().is_some_and(|c| c.active) {
-                        frames.push(frame(&block, &s, None)?);
+                        frames.push(frame(&block, &s, None, false)?);
                     }
                     let p = s.predict(self)?;
                     s.observe(self, p.token)?;

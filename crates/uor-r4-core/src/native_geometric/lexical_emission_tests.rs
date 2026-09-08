@@ -6,7 +6,7 @@ use super::source_routing::{SourceCode, SourceRouting};
 use super::value_types::ValueFeature;
 use super::*;
 
-fn lexical_model() -> Model {
+pub(super) fn lexical_model() -> Model {
     let mut model = mechanical_model(ValueAction::Add);
     let mut bytes = [0; 32];
     bytes[..4].copy_from_slice(b"copy");
@@ -46,7 +46,7 @@ fn lexical_model() -> Model {
     model
 }
 
-fn copied(model: &Model, value: i64) -> Session {
+pub(super) fn copied(model: &Model, value: i64) -> Session {
     let mut session = model.session(Control::Full).unwrap();
     session.observe(model, BOS).unwrap();
     for token in model.encode(&format!("source {value}; query:")).unwrap() {
