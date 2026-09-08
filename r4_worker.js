@@ -79,6 +79,16 @@ self.onmessage = async function (e) {
                     r4g1InstallError = String(err);
                     console.error('[r4_worker] strict R4G1 installation refused:', err);
                 }
+                // Initialize native geometric language model runtime
+                if (typeof wasmModule.native_geometric_init === 'function') {
+                    try {
+                        const capsJson = wasmModule.native_geometric_init(new Uint8Array());
+                        self.native_capabilities = JSON.parse(capsJson);
+                        console.log('[r4_worker] Native geometric language model runtime initialized');
+                    } catch (nErr) {
+                        console.warn('[r4_worker] Native geometric runtime init warning:', nErr);
+                    }
+                }
                 router = new UorR4Router(1.2);
                 wasmInitialized = true;
                 if (router.get_vocab_size() === 0) {
@@ -112,11 +122,35 @@ self.onmessage = async function (e) {
             }
 
             try {
-                const { text, identity, max_tokens, temperature, gamma, selectedEngine } = payload;
+                const { text, identity, max_tokens, temperature, gamma, selectedEngine, userId, projectId } = payload;
                 let responseText = "";
                 let generationMode = "geometric-local-worker";
+                let nativeMeta = null;
 
-                if (selectedEngine === "transformerless" || selectedEngine === "r4g1") {
+                if (selectedEngine === "native-geometric") {
+                    if (typeof self.wasm_module?.native_geometric_create_session !== 'function') {
+                        throw new Error('WASM module has no native geometric runtime exports');
+                    }
+                    const sessId = `session-${Date.now()}`;
+                    const uId = userId || identity || "default-user";
+                    const pId = projectId || "studio-project";
+                    const handle = self.wasm_module.native_geometric_create_session(sessId, uId, pId);
+                    self.active_native_session = handle;
+
+                    self.wasm_module.native_geometric_ingest(handle, text);
+                    const stepJson = self.wasm_module.native_geometric_generate_step(handle, max_tokens || 32);
+                    const stepResult = JSON.parse(stepJson);
+
+                    responseText = stepResult.text || "Native geometric completion finished.";
+                    generationMode = "native-geometric-wasm";
+                    nativeMeta = {
+                        tokenCount: stepResult.token_count,
+                        stoppedBy: stepResult.stopped_by,
+                        elapsedUs: stepResult.elapsed_us,
+                        memoryFactsRead: stepResult.memory_facts_read,
+                        handle,
+                    };
+                } else if (selectedEngine === "transformerless" || selectedEngine === "r4g1") {
                     if (!r4g1ProductionInstalled) {
                         throw new Error(`strict R4G1 production bundle unavailable: ${r4g1InstallError}`);
                     }
@@ -150,6 +184,7 @@ self.onmessage = async function (e) {
                     id,
                     responseText,
                     generationMode,
+                    nativeMeta,
                     indexedSentences: router.get_total_indexed_sentences()
                 });
             } catch (err) {
@@ -159,6 +194,60 @@ self.onmessage = async function (e) {
                     id,
                     error: String(err)
                 });
+            }
+            break;
+        }
+
+        case 'CANCEL_GENERATION': {
+            if (self.active_native_session && typeof self.wasm_module?.native_geometric_cancel === 'function') {
+                try {
+                    self.wasm_module.native_geometric_cancel(self.active_native_session);
+                } catch (cErr) {
+                    console.warn('[r4_worker] Cancel error:', cErr);
+                }
+            }
+            self.postMessage({ type: 'CANCEL_ACK', id });
+            break;
+        }
+
+        case 'EXPORT_SESSION': {
+            try {
+                const handle = payload?.handle || self.active_native_session;
+                if (!handle || typeof self.wasm_module?.native_geometric_export_session !== 'function') {
+                    throw new Error("No active session to export");
+                }
+                const bytes = self.wasm_module.native_geometric_export_session(handle);
+                self.postMessage({ type: 'SESSION_EXPORTED', id, bytes });
+            } catch (err) {
+                self.postMessage({ type: 'ENGINE_ERROR', id, error: String(err) });
+            }
+            break;
+        }
+
+        case 'IMPORT_SESSION': {
+            try {
+                const handle = payload?.handle || self.active_native_session;
+                const bytes = payload?.bytes;
+                if (!handle || !bytes || typeof self.wasm_module?.native_geometric_import_session !== 'function') {
+                    throw new Error("Invalid session import parameters");
+                }
+                self.wasm_module.native_geometric_import_session(handle, bytes);
+                self.postMessage({ type: 'SESSION_IMPORTED', id });
+            } catch (err) {
+                self.postMessage({ type: 'ENGINE_ERROR', id, error: String(err) });
+            }
+            break;
+        }
+
+        case 'GET_CAPABILITIES': {
+            try {
+                if (typeof self.wasm_module?.native_geometric_capabilities !== 'function') {
+                    throw new Error("Capabilities API not exposed by WASM");
+                }
+                const caps = JSON.parse(self.wasm_module.native_geometric_capabilities());
+                self.postMessage({ type: 'CAPABILITIES_RESULT', id, capabilities: caps });
+            } catch (err) {
+                self.postMessage({ type: 'ENGINE_ERROR', id, error: String(err) });
             }
             break;
         }
