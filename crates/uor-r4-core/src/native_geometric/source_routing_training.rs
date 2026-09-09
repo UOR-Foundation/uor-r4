@@ -857,6 +857,12 @@ impl Model {
             .as_ref()
             .ok_or_else(|| Error("source trace response entry absent".into()))?;
         let eligible = super::word_copy_runtime::eligible(self, entry, values, Control::Full);
+        let historical = super::historical_read::choose(
+            self,
+            values,
+            Control::Full,
+            &mut WordCopyWork::default(),
+        );
         let dependent = super::dependent_read::choose(
             self,
             values,
@@ -974,7 +980,8 @@ impl Model {
             "actual_field_decision":session.field_composition_decision(),
             "current_relation_choice_including_recent":including_recent,
             "current_relation_candidates":relation_candidates,
-            "direct_source_dispatch":eligible && dependent.is_none() && persistent.is_none(),
+            "direct_source_dispatch":eligible && historical.is_none() && dependent.is_none() && persistent.is_none(),
+            "historical_choice":historical,
             "word_copy_eligible":eligible,"dependent_choice":dependent,"persistent_choice":persistent,
             "direct_choice":super::source_routing::choose(self, values, Control::Full, &mut WordCopyWork::default()),
             "candidates":candidates,

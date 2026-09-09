@@ -1,0 +1,360 @@
+//! Learned Base/previous-record selection; source payloads remain exact.
+use super::relation::{RelationRecord, RelationState, RELATION_SOURCE};
+use super::source_routing::SourceRouting;
+use super::value_types::{ValueFeature, ValueState, ValueWork};
+use super::word_copy_types::{WordCopyAddress, WordCopyWork};
+use super::*;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct HistoricalRead {
+    pub router: SourceRouting,
+    pub dictionary: Vec<WordCopyAddress>,
+    #[serde(
+        default = "legacy_query_scope",
+        skip_serializing_if = "is_legacy_query_scope"
+    )]
+    pub query_scope: u8,
+}
+fn legacy_query_scope() -> u8 {
+    1
+}
+fn is_legacy_query_scope(scope: &u8) -> bool {
+    *scope == 1
+}
+
+// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
+/// A selector-local view; source windows, exact identities and record state stay intact.
+pub(super) fn query_view(
+    words: &super::value_lexemes::LexemeState,
+    boundary: Option<u64>,
+    local: bool,
+    work: &mut WordCopyWork,
+) -> super::value_lexemes::LexemeState {
+    let mut view = *words;
+    if local {
+        work.selector.state_copies += 1;
+        if let Some(start) = boundary {
+            view.query_len = 0;
+            for word in &words.queries[..words.query_len] {
+                work.word_record_reads += 1;
+                work.routing.comparisons += 1;
+                if word.end < start {
+                    break;
+                }
+                view.query_len += 1;
+            }
+        }
+    }
+    view
+}
+
+pub(super) fn local_query_scope(model: &Model, control: Control) -> bool {
+    control != Control::HistoricalReadDisabled
+        && model
+            .historical_read
+            .as_ref()
+            .is_some_and(|b| b.query_scope == 2)
+}
+
+pub(super) fn addresses(
+    block: &HistoricalRead,
+    values: &ValueState,
+    work: &mut WordCopyWork,
+) -> [u32; 16] {
+    let mut out = [0; 16];
+    let Some(words) = &values.lexemes else {
+        return out;
+    };
+    let words = query_view(words, values.query_boundary, block.query_scope == 2, work);
+    for (i, word) in words.queries[..words.query_len].iter().enumerate() {
+        work.dictionary_lookups += 1;
+        work.word_record_reads += 1;
+        let found = block.dictionary.binary_search_by(|d| {
+            work.dictionary_comparisons += 1;
+            for j in 0..usize::from(word.len.min(d.len)) {
+                work.dictionary_byte_comparisons += 1;
+                let order = d.bytes[j].cmp(&word.bytes[j]);
+                if !order.is_eq() {
+                    return order;
+                }
+            }
+            d.len.cmp(&word.len)
+        });
+        out[i] = found.map_or(0, |j| block.dictionary[j].prime);
+        work.selector.state_copies += 1;
+    }
+    out
+}
+
+pub(super) fn features(
+    model: &Model,
+    values: &ValueState,
+    current: &RelationRecord,
+    addr: &[u32; 16],
+    local: bool,
+    work: &mut WordCopyWork,
+) -> ([ValueFeature; 96], usize) {
+    let mut out = [ValueFeature::default(); 96];
+    let Some(words) = &values.lexemes else {
+        return (out, 0);
+    };
+    let words = query_view(words, values.query_boundary, local, work);
+    let (base, mut n) =
+        super::relation::read_features(model, current, &words, addr, &mut work.persistent_read);
+    out[..n].copy_from_slice(&base[..n]);
+    let inherited_n = n;
+    // Shared ordered query metadata; no cue word selects a serving branch.
+    for q in 0..words.query_len.min(8) {
+        out[n] = ValueFeature {
+            kind: 6,
+            a: u64::from(addr[q]),
+            b: 0,
+        };
+        n += 1;
+        if q + 1 < words.query_len.min(8) {
+            out[n] = ValueFeature {
+                kind: 7,
+                a: u64::from(addr[q + 1]),
+                b: u64::from(addr[q]),
+            };
+            n += 1;
+        }
+    }
+    work.persistent_read.relations.feature_writes += (n - inherited_n) as u64;
+    (out, n)
+}
+
+/// Structural admission is independent of question spelling and learned scores.
+pub(super) fn previous<'a>(
+    state: &'a RelationState,
+    current: &RelationRecord,
+    work: &mut ValueWork,
+) -> Option<&'a RelationRecord> {
+    let is_current = state.directory.iter().any(|&id| {
+        work.relations.directory_reads += 1;
+        id != 0 && id == current.id
+    });
+    if !is_current
+        || current.id == 0
+        || current.conflict
+        || current.action != 2
+        || current.previous == 0
+        || current.previous >= current.id
+    {
+        return None;
+    }
+    work.relations.record_reads += 1;
+    let previous = state.record(current.previous)?;
+    if previous.conflict || !current.owner.matches(&previous.owner, work) {
+        return None;
+    }
+    Some(previous)
+}
+
+pub(super) fn action_indices(model: &Model) -> Option<(usize, usize)> {
+    let read = super::role_read::head(model)?;
+    let mut defer = None;
+    let mut copy = None;
+    for (i, a) in read.actions.iter().enumerate() {
+        if !a.copy {
+            if defer.replace(i).is_some() {
+                return None;
+            }
+        } else if a.prefix.is_some() && copy.replace(i).is_some() {
+            return None;
+        }
+    }
+    Some((defer?, copy?))
+}
+
+pub(super) fn representable(
+    model: &Model,
+    values: &ValueState,
+    previous: &RelationRecord,
+    action: usize,
+    work: &mut WordCopyWork,
+) -> bool {
+    let source = RELATION_SOURCE + ((previous.id - 1) & 15) as u8;
+    let Some(read) = super::role_read::head(model) else {
+        return false;
+    };
+    let Some(a) = read.actions.get(action) else {
+        return false;
+    };
+    a.copy
+        && super::source_span::len(values, source, 0, work).is_some_and(|len| {
+            usize::from(len) + 1 + usize::from(a.prefix.is_some())
+                <= usize::from(super::response_entry_types::RESPONSE_ENTRY_STEPS)
+        })
+}
+
+/// Base returns None so the complete frozen dispatch remains available.
+pub(super) fn choose(
+    model: &Model,
+    values: &ValueState,
+    control: Control,
+    work: &mut WordCopyWork,
+) -> Option<(u8, usize)> {
+    if matches!(
+        control,
+        Control::HistoricalReadDisabled
+            | Control::LearnedRoutingDisabled
+            | Control::LearnedRoutingSelectionDisabled
+            | Control::H4Disabled
+    ) {
+        return None;
+    }
+    let block = model.historical_read.as_ref()?;
+    let state = values.relations.as_ref()?;
+    let (defer, copy) = action_indices(model)?;
+    let addr = addresses(block, values, work);
+    let mut best_score = block.router.score(
+        model,
+        [model.geometry.identity; 2],
+        defer,
+        &mut work.routing,
+    );
+    let mut best = None;
+    work.routing.predictions += 1;
+    for &id in &state.directory {
+        work.persistent_read.relations.directory_reads += 1;
+        work.persistent_read.relations.record_reads += 1;
+        let Some(current) = state.record(id) else {
+            continue;
+        };
+        let Some(old) = previous(state, current, &mut work.persistent_read) else {
+            continue;
+        };
+        if !representable(model, values, old, copy, work) {
+            continue;
+        }
+        let (f, n) = features(model, values, current, &addr, block.query_scope == 2, work);
+        let roots = block
+            .router
+            .encode(model, &f[..n], control, &mut work.routing);
+        work.routing.sources_examined += 1;
+        let score = block.router.score(model, roots, copy, &mut work.routing);
+        work.routing.comparisons += 1;
+        if score > best_score {
+            best_score = score;
+            best = Some((RELATION_SOURCE + ((old.id - 1) & 15) as u8, copy));
+        }
+    }
+    best
+}
+// NATIVE_GEOMETRIC_INTEGER_KERNEL_END
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn atom(text: &str, end: u64) -> super::super::value_lexemes::WordAtom {
+        let mut a = super::super::value_lexemes::WordAtom {
+            len: text.len() as u8,
+            end,
+            byte_end: end,
+            ..Default::default()
+        };
+        a.bytes[..text.len()].copy_from_slice(text.as_bytes());
+        a
+    }
+    #[test]
+    fn historical_read_query_scope_clips_old_cues_without_mutating_sources() {
+        let mut words = super::super::value_lexemes::LexemeState::default();
+        words.queries[0] = atom("Answer", 24);
+        words.queries[1] = atom("owner", 20);
+        words.queries[2] = atom("Where", 19);
+        words.queries[3] = atom("before", 10);
+        words.query_len = 4;
+        words.recent = words.queries;
+        words.recent_len = 4;
+        let original = words;
+        let local = query_view(&words, Some(19), true, &mut Default::default());
+        assert_eq!(
+            local.query_len, 3,
+            "inclusive boundary retains its exact word"
+        );
+        assert_eq!(local.queries[..local.query_len], words.queries[..3]);
+        assert_eq!(local.recent, words.recent, "source window remains exact");
+        assert_eq!(
+            local.queries, words.queries,
+            "only the selector range is clipped"
+        );
+        assert_eq!(words, original, "caller state is never mutated");
+        assert_eq!(
+            query_view(&words, Some(19), false, &mut Default::default()),
+            words,
+            "legacy law stays exact"
+        );
+        assert_eq!(
+            query_view(&words, None, true, &mut Default::default()),
+            words,
+            "missing legacy boundary stays exact"
+        );
+        assert_eq!(
+            query_view(&words, Some(0), true, &mut Default::default()),
+            words,
+            "first turn stays exact"
+        );
+        assert_eq!(
+            query_view(&words, Some(25), true, &mut Default::default()).query_len,
+            0
+        );
+    }
+
+    fn chain() -> RelationState {
+        let mut s = RelationState::default();
+        for i in 0..3 {
+            s.records[i] = RelationRecord {
+                id: (i + 1) as u64,
+                owner: atom("owner", 10 + i as u64 * 10),
+                value: atom("same", 15 + i as u64 * 10),
+                previous: i as u64,
+                action: if i == 0 { 1 } else { 2 },
+                ..Default::default()
+            };
+        }
+        s.directory[0] = 3;
+        s.next_id = 4;
+        s
+    }
+    #[test]
+    fn historical_read_immediate_previous_retains_occurrence_not_oldest_or_spelling() {
+        let s = chain();
+        let old = previous(&s, &s.records[2], &mut Default::default()).unwrap();
+        assert_eq!(old.id, 2);
+        assert_eq!(old.value.byte_end, 25);
+        assert_ne!(old.value, s.records[0].value);
+        assert_ne!(old.value, s.records[2].value);
+        assert_eq!(old.previous, 1);
+    }
+    #[test]
+    fn historical_read_previous_rejects_broken_forward_self_and_noncurrent_links() {
+        for bad in [0, 3, 4, 99] {
+            let mut s = chain();
+            s.records[2].previous = bad;
+            assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+        }
+        let mut s = chain();
+        s.directory[0] = 2;
+        assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+        s.directory[0] = 3;
+        s.records[1].id = 18;
+        assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+    }
+    #[test]
+    fn historical_read_previous_rejects_conflict_assertion_and_cross_owner() {
+        let mut s = chain();
+        s.records[2].conflict = true;
+        assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+        s.records[2].conflict = false;
+        s.records[1].conflict = true;
+        assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+        s.records[1].conflict = false;
+        s.records[2].action = 1;
+        assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+        s.records[2].action = 2;
+        s.records[1].owner = atom("other", 20);
+        assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+    }
+}

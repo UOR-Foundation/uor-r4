@@ -1,0 +1,1202 @@
+{
+  "schema": "uor-r4.historical-selection/1",
+  "at": "2026-09-09T20:23:39.010Z",
+  "decision": "DO_NOT_PROMOTE_FRESH_TRANSFER_GATE_FAILED",
+  "source_base": "43f3e7056258107aa9fc41e459cc3fb9cb5a0877",
+  "retained_parent": {
+    "cid": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/query-owner/model.json",
+    "bytes": 14421414,
+    "sha256": "f688f842186c64a96d5a12ff9d7a70b6ce133512bf11a550c6eb9453d1b3897c"
+  },
+  "candidate": {
+    "cid": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fit/model.json",
+    "bytes": 14634216,
+    "sha256": "0a4a5c0decdb4cd2d9a127146994773fa661cd83ecdc828ccf19f141f715de64"
+  },
+  "lineage": {
+    "candidate": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "parent": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "parent_bytes_blake3": "28fa1081000ccdceb0da87aa43c26b90c1993b8d607aa40987ec275f8a9de6fc"
+  },
+  "fit": {
+    "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "dictionary_inherited_exactly": true,
+    "documents": 1264,
+    "duplicate_frames": 943,
+    "elapsed_ms": 32932,
+    "feature_universe": 185,
+    "fit": {
+      "accepted": [
+        7,
+        0,
+        1
+      ],
+      "final_correct": 86,
+      "final_hinge": 0,
+      "initial_correct": 77,
+      "initial_hinge": 45,
+      "proposals": 50591,
+      "stopped_at_time_limit": false
+    },
+    "frames": 86,
+    "parent": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "query_scope": 2,
+    "schema": "uor-r4.historical-read-fit/1",
+    "scope": "Offline exact immediate previous-link targets or Base preservation. Only new shared geometric router learned; inherited lexical dictionary, parent and serving payloads unchanged. Free generation and control preservation require separate checks."
+  },
+  "construction": {
+    "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "controls_parent_equal": true,
+    "exact": 53,
+    "inherited": 1211,
+    "preserved": 1211,
+    "selections": 53,
+    "targets": 53,
+    "total": 1264,
+    "parent_exact": 0
+  },
+  "fresh": {
+    "at": "2026-09-09T20:19:24.135Z",
+    "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "total": 92,
+    "targets": 64,
+    "exact": 44,
+    "selections": 64,
+    "parent_exact": 0,
+    "inherited": 28,
+    "preserved": 28,
+    "controls_parent_equal": true,
+    "failures": [
+      {
+        "id": "history/0/true/false/false/0",
+        "actual": " rgoo.\n",
+        "parent": " rgoo holds eddwg.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "history/0/true/false/false/1",
+        "actual": " rgoo.\n",
+        "parent": " Unknown.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "history/0/true/true/false/0",
+        "actual": " rgoo.\n",
+        "parent": " bbew ezye.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "history/0/true/true/false/1",
+        "actual": " rgoo.\n",
+        "parent": " Unknown.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "history/1/true/false/false/0",
+        "actual": " lnjk.\n",
+        "parent": " lnjk holds szlog.\n",
+        "expected": " wgmy lnjk.\n"
+      },
+      {
+        "id": "history/1/true/false/false/1",
+        "actual": " lnjk.\n",
+        "parent": " Unknown.\n",
+        "expected": " wgmy lnjk.\n"
+      },
+      {
+        "id": "history/1/true/true/false/0",
+        "actual": " lnjk.\n",
+        "parent": " ecpo zokh.\n",
+        "expected": " wgmy lnjk.\n"
+      },
+      {
+        "id": "history/1/true/true/false/1",
+        "actual": " lnjk.\n",
+        "parent": " Unknown.\n",
+        "expected": " wgmy lnjk.\n"
+      },
+      {
+        "id": "history/2/true/false/false/0",
+        "actual": " ymts.\n",
+        "parent": " ymts holds jnamb.\n",
+        "expected": " uhnk ymts.\n"
+      },
+      {
+        "id": "history/2/true/false/false/1",
+        "actual": " ymts.\n",
+        "parent": " Unknown.\n",
+        "expected": " uhnk ymts.\n"
+      },
+      {
+        "id": "history/2/true/true/false/0",
+        "actual": " ymts.\n",
+        "parent": " inns njlj.\n",
+        "expected": " uhnk ymts.\n"
+      },
+      {
+        "id": "history/2/true/true/false/1",
+        "actual": " ymts.\n",
+        "parent": " Unknown.\n",
+        "expected": " uhnk ymts.\n"
+      },
+      {
+        "id": "competing/0/0/false/0",
+        "actual": " rgoo.\n",
+        "parent": " lnjk holds szlog.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "competing/0/0/false/1",
+        "actual": " rgoo.\n",
+        "parent": " Unknown.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "competing/0/0/true/0",
+        "actual": " rgoo.\n",
+        "parent": " bbew ezye.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "competing/0/0/true/1",
+        "actual": " rgoo.\n",
+        "parent": " Unknown.\n",
+        "expected": " eoqn rgoo.\n"
+      },
+      {
+        "id": "competing/1/1/false/0",
+        "actual": " lnjk.\n",
+        "parent": " rgoo holds eddwg.\n",
+        "expected": " wgmy lnjk.\n"
+      },
+      {
+        "id": "competing/1/1/false/1",
+        "actual": " lnjk.\n",
+        "parent": " Unknown.\n",
+        "expected": " wgmy lnjk.\n"
+      },
+      {
+        "id": "competing/1/1/true/0",
+        "actual": " lnjk.\n",
+        "parent": " ecpo zokh.\n",
+        "expected": " wgmy lnjk.\n"
+      },
+      {
+        "id": "competing/1/1/true/1",
+        "actual": " lnjk.\n",
+        "parent": " Unknown.\n",
+        "expected": " wgmy lnjk.\n"
+      }
+    ],
+    "artifact_unchanged": true,
+    "scope": "Post-selection new complete owner/value spellings under two familiar previous forms; no refit. Amber Field remains a known third current value."
+  },
+  "writer_diagnosis": [
+    {
+      "id": "history/0/true/false/false/0",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. Where was eddwg before? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/0/true/false/false/1",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. What was the previous location of eddwg? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/0/true/true/false/0",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where was eddwg before? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/0/true/true/false/1",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm What was the previous location of eddwg? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/1/true/false/false/0",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. Where was szlog before? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/1/true/false/false/1",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. What was the previous location of szlog? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/1/true/true/false/0",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where was szlog before? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/1/true/true/false/1",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm What was the previous location of szlog? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/2/true/false/false/0",
+      "prompt": "Record: uhnk ymts holds jnamb. jnamb now in inns njlj. Where was jnamb before? Answer:",
+      "expected": " uhnk ymts.\n",
+      "actual": " ymts.\n",
+      "record": 1,
+      "stored_payload": "ymts",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/2/true/false/false/1",
+      "prompt": "Record: uhnk ymts holds jnamb. jnamb now in inns njlj. What was the previous location of jnamb? Answer:",
+      "expected": " uhnk ymts.\n",
+      "actual": " ymts.\n",
+      "record": 1,
+      "stored_payload": "ymts",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/2/true/true/false/0",
+      "prompt": "Record: uhnk ymts holds jnamb. jnamb now in inns njlj. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where was jnamb before? Answer:",
+      "expected": " uhnk ymts.\n",
+      "actual": " ymts.\n",
+      "record": 1,
+      "stored_payload": "ymts",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "history/2/true/true/false/1",
+      "prompt": "Record: uhnk ymts holds jnamb. jnamb now in inns njlj. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm What was the previous location of jnamb? Answer:",
+      "expected": " uhnk ymts.\n",
+      "actual": " ymts.\n",
+      "record": 1,
+      "stored_payload": "ymts",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/0/0/false/0",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. wgmy lnjk holds szlog. szlog now in ecpo zokh. Where was eddwg before? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/0/0/false/1",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. wgmy lnjk holds szlog. szlog now in ecpo zokh. What was the previous location of eddwg? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/0/0/true/0",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. wgmy lnjk holds szlog. szlog now in ecpo zokh. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where was eddwg before? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/0/0/true/1",
+      "prompt": "Record: eoqn rgoo holds eddwg. eddwg now in bbew ezye. wgmy lnjk holds szlog. szlog now in ecpo zokh. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm What was the previous location of eddwg? Answer:",
+      "expected": " eoqn rgoo.\n",
+      "actual": " rgoo.\n",
+      "record": 1,
+      "stored_payload": "rgoo",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/1/1/false/0",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. eoqn rgoo holds eddwg. eddwg now in bbew ezye. Where was szlog before? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/1/1/false/1",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. eoqn rgoo holds eddwg. eddwg now in bbew ezye. What was the previous location of szlog? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/1/1/true/0",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. eoqn rgoo holds eddwg. eddwg now in bbew ezye. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where was szlog before? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    },
+    {
+      "id": "competing/1/1/true/1",
+      "prompt": "Record: wgmy lnjk holds szlog. szlog now in ecpo zokh. eoqn rgoo holds eddwg. eddwg now in bbew ezye. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm What was the previous location of szlog? Answer:",
+      "expected": " wgmy lnjk.\n",
+      "actual": " lnjk.\n",
+      "record": 1,
+      "stored_payload": "lnjk",
+      "stored_span": null,
+      "selected_previous": true,
+      "writer_state_equal_to_parent": true
+    }
+  ],
+  "retained_query_owner": {
+    "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "controls_parent_equal": true,
+    "exact": 0,
+    "inherited": 72,
+    "preserved": 72,
+    "selections": 0,
+    "targets": 0,
+    "total": 72
+  },
+  "preservation": {
+    "reports": 14,
+    "differences": 0,
+    "histories": 12,
+    "word_exact": 24,
+    "panels": [
+      {
+        "name": "copy-add-evaluate-final",
+        "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+        "completed": 24,
+        "control": "full",
+        "exact": 24,
+        "intervention_exact": null,
+        "scope": "Authored Copy/Add formatting with exact writes, reads and independent next-turn records; not general prose or program synthesis",
+        "total": 24
+      },
+      {
+        "name": "copy-add-stress-final",
+        "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+        "completed": 24,
+        "control": "full",
+        "exact": 24,
+        "intervention_exact": null,
+        "scope": "Authored Copy/Add formatting with exact writes, reads and independent next-turn records; not general prose or program synthesis",
+        "total": 24
+      },
+      {
+        "name": "action-evaluate-final",
+        "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+        "completed": 24,
+        "control": "full",
+        "exact": 24,
+        "scope": "Authored mixed Add/Copy formatting with exact writes, reads and independent next-turn records; not general prose or program synthesis",
+        "total": 24
+      },
+      {
+        "name": "action-stress-final",
+        "artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+        "completed": 24,
+        "control": "full",
+        "exact": 24,
+        "scope": "Authored mixed Add/Copy formatting with exact writes, reads and independent next-turn records; not general prose or program synthesis",
+        "total": 24
+      }
+    ]
+  },
+  "api": {
+    "status": "PASS",
+    "passed": 106,
+    "scope": "Actual native API, checkpoint import and independent sum over supplied cases; no HTTP/browser or general-language qualification."
+  },
+  "tests": [
+    {
+      "label": "test-historical_read_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-test-historical_read_.log",
+        "bytes": 893,
+        "sha256": "224130bdfee5a3bc651d0becbb2576ea4a1a5ab262a993dc9ebe6ab4ba0da03a"
+      }
+    },
+    {
+      "label": "test-current_source_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-test-current_source_.log",
+        "bytes": 849,
+        "sha256": "4d751a2f4328044962115a289756d7495d290c8798a2fc274f5a316fd3468708"
+      }
+    },
+    {
+      "label": "test-writer_role_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-test-writer_role_.log",
+        "bytes": 855,
+        "sha256": "de9ac75c6179824cd7442a6ebe6837d87416250b8974af470990a8e2998982df"
+      }
+    },
+    {
+      "label": "test-writer_choice_",
+      "passed": 9,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-test-writer_choice_.log",
+        "bytes": 1214,
+        "sha256": "bbc60b94c7bf0a5bdd87bdce67272e3e735de5416e09d6edceb7c3acefcac9d2"
+      }
+    },
+    {
+      "label": "test-source_refinement_trace_scores_match_selected_direct_choice",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-test-source_refinement_trace_scores_match_selected_direct_choice.log",
+        "bytes": 229,
+        "sha256": "c8570849d3ce0efd553c0a4e4544a68fc9a56442d88804c84e2d405650fcc0a0"
+      }
+    },
+    {
+      "label": "kernel-source-guard",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-kernel-source-guard.log",
+        "bytes": 189,
+        "sha256": "82f52e3bf9c38f0d7b9b0bb52ac4ce7e021a7a2f1644f4606465e09175e125e6"
+      }
+    },
+    {
+      "label": "actual-historical",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-actual-historical.log",
+        "bytes": 1920,
+        "sha256": "a12c202f2af21cf91d63d62d12332c8c135c2e47da4836ec6ebfc60f76eac881"
+      }
+    },
+    {
+      "label": "legacy-historical",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry-legacy-historical.log",
+        "bytes": 503,
+        "sha256": "bbc0e7919857b1dd8a120a03772e4055565b5b0615b8eae4f7ce4e7947325816"
+      }
+    }
+  ],
+  "resources": {
+    "at": "2026-09-09T20:23:39.006Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/commands.jsonl",
+    "model_ms": 1943224,
+    "engineering_ms": 696050,
+    "ledger": {
+      "cumulative_ms": 34174720,
+      "limit_ms": 36150000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 1778660,
+    "storage_high_water": {
+      "target": 54247424,
+      "worktree": 86016,
+      "evidence": 417976320,
+      "at": "2026-09-09T20:19:19.629Z",
+      "git": 3858432
+    },
+    "retained_copy_bytes": 0,
+    "owner_checkout_copy_bytes": 1048576,
+    "cycle_growth_bytes": 477216768,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 38741913600,
+    "storage_limit_bytes": 39695052800,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 818921472,
+    "peak_model_sampled_rss_bytes": 1871364096,
+    "peak_engineering_sampled_rss_bytes": 2880389120,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "sources": [
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/dependent_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/dependent_read.rs",
+      "bytes": 7085,
+      "sha256": "f054cc0f486e8351392fc09a8ac7b5ebff8095ac15661ab152efa28c149d8be5"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 34115,
+      "sha256": "06f8e840158d726357ba7d9dcfa149b907c568e73a2f220652b6f7a973280cfb"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/role_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/role_read.rs",
+      "bytes": 15003,
+      "sha256": "498c7b4151b3f062dc6f5b09ad123aaa65320cc749b74fae8170084c97b17e86"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 45431,
+      "sha256": "dff09f29aaaf08db8fc184f8f7dfb108d888b04ab07de11bd3e13df1f2921f39"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 63118,
+      "sha256": "525268b02cbfb34743519c532f13fd49d9a27489679f87754fa1388b6f2e0800"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 190878,
+      "sha256": "173e4b588fce62ebc3df93e9ff55830af1ea3e1aabf8d6ed1e04456ed662730b"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/historical_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_read.rs",
+      "bytes": 12059,
+      "sha256": "84d5aaefd4490fdce3888cab6c81581babc6df4ad2962f42f21ebfa489e4551b"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/historical_read_training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_read_training.rs",
+      "bytes": 16418,
+      "sha256": "1a8f53ceaaad318a3d378910718dc0f81652387833d2cb287403cf4d5608d063"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_historical_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_historical_read.rs",
+      "bytes": 14348,
+      "sha256": "400a50eb76eeebf6fa26b497f3532efdd3986f20691b5b2a781e9263607d9b08"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/tests/native_historical_artifact.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_historical_artifact.rs",
+      "bytes": 12615,
+      "sha256": "753beec5abaeab2822895fd919277d51b64ca0945a7051193fc5df2bb1a5828a"
+    },
+    {
+      "repository_path": "crates/uor-r4-api/examples/native_historical_check.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_historical_check.rs",
+      "bytes": 2243,
+      "sha256": "49a59950892033e685aaccc346077c664858ca6b4799e59b5802d07a1fdc095e"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_historical_followup.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_historical_followup.rs",
+      "bytes": 5566,
+      "sha256": "26c97f09a3b86269a47299b752d2059ad6b0514fa0a2156416928964b8fe761e"
+    }
+  ],
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/projection.json",
+      "bytes": 1138,
+      "sha256": "5ce3dda3664c8ec51a5517ea37107835bdfa716526b3965cd64607f2be2e5572"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/construction/receipt.json",
+      "bytes": 508,
+      "sha256": "3c868278c42def386073df43e026c348afa805039107fc5c411ad7c01fcfe686"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/construction/cases.json",
+      "bytes": 269496,
+      "sha256": "6801e0511f7682ed406ee979fac335f9638e906b4bf83e2644413122f000b1f2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/construction/training.json",
+      "bytes": 247008,
+      "sha256": "c905b34b91e9d53d97512525ba56a7a775ffed70be1d9adaa1e197a1fa41cd58"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fit/fit.json",
+      "bytes": 20287,
+      "sha256": "b4fbaeb834607689e4197198fc8ae279d5bff62de7374000540356e887e7ca3c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/development-summary.json",
+      "bytes": 147,
+      "sha256": "00563b9b6d7de8fd65bcb668f20b30b944966eb8c7524204542fdd1e14740c96"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/construction-result/result.json",
+      "bytes": 39550186,
+      "sha256": "7336c9c594432df67612d4c5610ddd8dcd1315be61cc3522992a435cf2f48f88"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/construction-result/lineage.json",
+      "bytes": 259,
+      "sha256": "978c36ba1e7d0dc2fc898810f8ed7698dba5674fa90269c14a6f9734984c9609"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/review.json",
+      "bytes": 3339,
+      "sha256": "cd03d73983e476eea3aab0093d3bc6f45920e249143b42f160ca7f8e94e88806"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/parameter-comparison.json",
+      "bytes": 325,
+      "sha256": "3ce8a79c151062c59d6a6ce02b9f981aaf4ead6bba2ac8deb5c1d2935852ca6c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/followup-summary.json",
+      "bytes": 2134,
+      "sha256": "1b9ec3c58fe5651ad72e3075d3f4a9e36dbba4c09fdd639a2082d6cf97fe6d8e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/writer-diagnosis.json",
+      "bytes": 9822,
+      "sha256": "2e815c1f2b530a1abed9d66795e286326e882e3f55fedf8352b0de65ac002e8d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/selection.json",
+      "bytes": 4837,
+      "sha256": "ac303a6e31ca39934186e08a407eb13a8dd1504fc0763ebc213f66d175e98fa6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fresh-data/cases.json",
+      "bytes": 24735,
+      "sha256": "979198c95a65093b0a12d16036656e67a81288ca1aa72f3d6fa4eb0733b9069f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fresh-data/receipt.json",
+      "bytes": 367,
+      "sha256": "27b20ca41e0df2e40def1f4285c94c2017941dfdb70d370efcb7493783d438c8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fresh-summary.json",
+      "bytes": 3483,
+      "sha256": "de55ea3578babf5fd2fc326d33c359cda97b5f15246c669d4a01434d3291c8d3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fresh-result/result.json",
+      "bytes": 3978031,
+      "sha256": "7c4785ead5327ebf54672fffad8f3e0376637d5f314b68de2bdfae7ae5c605aa"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/preserved-comparison-v2.json",
+      "bytes": 10791,
+      "sha256": "8261d55fe72c527f7ace756b32260683c969792e1401b2c6a4c7ffc13f13b4be"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/history-comparison.json",
+      "bytes": 308,
+      "sha256": "2d5c31c1f6f8c80e6abb9be847182c50b9a788625ccd79cc0eba7d4c192eac56"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/api.json",
+      "bytes": 30501,
+      "sha256": "1ac873c0b34d67e2d021770cc2ef6104cc706ffb8164304e4137526c1526bd47"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/retained-query-owner/result.json",
+      "bytes": 3820894,
+      "sha256": "0331344e1e5a7bbed4bf56a266534b246d3f76d6ba02181c30438dfa5d1d8332"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/word-fresh-retained/full.json",
+      "bytes": 1226810,
+      "sha256": "c7f53335f83301d428663370d72ff67801afe57bc9e9e8dfbfefea3fd15304ad"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/run.mjs",
+      "bytes": 3307,
+      "sha256": "e14ea8a2b99d9a1eb917a27187121a1d576a523ef9721fb124ecf4d94366aed9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/early.mjs",
+      "bytes": 993,
+      "sha256": "3dd63458d1267c2f82608a6644b4d1a63bc8406f01ee859ef62d5aa57fad1fb0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/development.mjs",
+      "bytes": 1605,
+      "sha256": "3470b3a31af78ef0669f89f82ab0a1f22f8bddd36f15b1f1a4d6b03b7f9347a8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/validate.mjs",
+      "bytes": 4876,
+      "sha256": "a506e177ff359855a4f6642430cdccfcdde36f98a6d9b04d1a3ca32e203642db"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/actual-first.mjs",
+      "bytes": 927,
+      "sha256": "478b26c3e5d6f22e67be4dd59d73116d7ba9f5218693a6bd79a49dac2415df0f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/complete-validation.mjs",
+      "bytes": 575,
+      "sha256": "126616793a0bd210b082946d77a68730a43be7abcdb7bed09f7a7a21b054dd8a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fresh.mjs",
+      "bytes": 3597,
+      "sha256": "d57a997f0ed4f81390ce066da22f838fb26a80a00bd7d115a04f811e011f870d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/generated-rust-checks.mjs",
+      "bytes": 1097,
+      "sha256": "7094f046c87738e1e6a6ed186a4c46982623a1f7bade38bf3e8bcaddb68c8520"
+    }
+  ],
+  "root_receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/projection.json",
+      "bytes": 3172,
+      "sha256": "ee868d975d88441f74bf1339d76304134196a8cc23a47147e9dded98ea582caa"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/diagnostic/diagnostic.json",
+      "bytes": 4093116,
+      "sha256": "d119e2fac16ced3ab3fb56f9782ed0ffe95be33313277eea856ef348ea251674"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/rejected-a3-summary.json",
+      "bytes": 8183,
+      "sha256": "bdbfa26fe7057baa93f45a9490253eb6fa5c05c37a8a82e4dbc7cb4b1f66c795"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/commands-at-evidence.jsonl",
+      "bytes": 52106,
+      "sha256": "4a00f26cb36726570da9e2d949e4ef8be6562a2d445dcc3bb42478727dc43451"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/resources-at-evidence.json",
+      "bytes": 1088,
+      "sha256": "cc9103d55d0333a3953880d7fdc8da88add0032e4ade84f6f16e9d36f85b38a2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/fmt-pre-selection.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "rejected_candidates": [
+    {
+      "decision": "REJECT_FOR_CURRENT_FOLLOWUP_REGRESSION",
+      "artifact": "blake3:a3c3093ceeb7f005306c9c230da72567bf1be8523e2129899cf29c3ae112340e",
+      "development": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/development-summary.json",
+      "actual_failure": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/actual-historical.log",
+      "diagnostic": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/followup-diagnostic.json",
+        "bytes": 18190618,
+        "sha256": "101b6fbb7fa6f428a938d785ca540987caba5e041372d8836c392d7483167355"
+      },
+      "rows": [
+        {
+          "case": "reverse",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. Where was selvi before? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Dusk Ridge.\n",
+          "full": " Dusk Ridge.\n",
+          "disabled": " Copper Vale.\n",
+          "full_decision": {
+            "action": "prepare",
+            "at_seen": 112,
+            "cursor": 0,
+            "score": -1026,
+            "source_byte_end": 17,
+            "source_end": 18,
+            "step": 0,
+            "token": 34,
+            "word_index": 32
+          },
+          "disabled_decision": {
+            "action": "prepare",
+            "at_seen": 112,
+            "cursor": 0,
+            "score": -1026,
+            "source_byte_end": 50,
+            "source_end": 41,
+            "span_words": 1,
+            "step": 0,
+            "token": 34,
+            "word_index": 10
+          }
+        },
+        {
+          "case": "reverse",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. What was the previous location of selvi? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Dusk Ridge.\n",
+          "full": " Unknown.\n",
+          "disabled": " Unknown.\n",
+          "full_decision": {
+            "action": "no_read",
+            "at_seen": 122,
+            "cursor": 0,
+            "dependency": [
+              2,
+              0
+            ],
+            "score": -985,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          },
+          "disabled_decision": {
+            "action": "no_read",
+            "at_seen": 122,
+            "cursor": 0,
+            "dependency": [
+              2,
+              0
+            ],
+            "score": -985,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          }
+        },
+        {
+          "case": "evicted",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where was selvi before? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Dusk Ridge.\n",
+          "full": " Dusk Ridge.\n",
+          "disabled": " Copper Vale.\n",
+          "full_decision": {
+            "action": "prepare",
+            "at_seen": 256,
+            "cursor": 0,
+            "score": -954,
+            "source_byte_end": 17,
+            "source_end": 18,
+            "step": 0,
+            "token": 34,
+            "word_index": 32
+          },
+          "disabled_decision": {
+            "action": "prepare",
+            "at_seen": 256,
+            "cursor": 0,
+            "score": -954,
+            "source_byte_end": 50,
+            "source_end": 41,
+            "step": 0,
+            "token": 34,
+            "word_index": 33
+          }
+        },
+        {
+          "case": "evicted",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm What was the previous location of selvi? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Dusk Ridge.\n",
+          "full": " Unknown.\n",
+          "disabled": " Unknown.\n",
+          "full_decision": {
+            "action": "no_read",
+            "at_seen": 266,
+            "cursor": 0,
+            "dependency": [
+              2,
+              0
+            ],
+            "score": -1054,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          },
+          "disabled_decision": {
+            "action": "no_read",
+            "at_seen": 266,
+            "cursor": 0,
+            "dependency": [
+              2,
+              0
+            ],
+            "score": -1054,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          }
+        },
+        {
+          "case": "two_owners",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. Silver Cove holds tilva. tilva now in Birch Grove. Where was selvi before? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Dusk Ridge.\n",
+          "full": " Dusk Ridge.\n",
+          "disabled": " Copper Vale.\n",
+          "full_decision": {
+            "action": "prepare",
+            "at_seen": 153,
+            "cursor": 0,
+            "score": -1079,
+            "source_byte_end": 17,
+            "source_end": 18,
+            "step": 0,
+            "token": 34,
+            "word_index": 32
+          },
+          "disabled_decision": {
+            "action": "prepare",
+            "at_seen": 153,
+            "cursor": 0,
+            "score": -1079,
+            "source_byte_end": 50,
+            "source_end": 41,
+            "step": 0,
+            "token": 34,
+            "word_index": 33
+          }
+        },
+        {
+          "case": "two_owners",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. Silver Cove holds tilva. tilva now in Birch Grove. What was the previous location of selvi? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Dusk Ridge.\n",
+          "full": " Unknown.\n",
+          "disabled": " Unknown.\n",
+          "full_decision": {
+            "action": "no_read",
+            "at_seen": 163,
+            "cursor": 0,
+            "dependency": [
+              2,
+              0
+            ],
+            "score": -1007,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          },
+          "disabled_decision": {
+            "action": "no_read",
+            "at_seen": 163,
+            "cursor": 0,
+            "dependency": [
+              2,
+              0
+            ],
+            "score": -1007,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          }
+        },
+        {
+          "case": "two_revisions",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi now in Amber Field. Where was selvi before? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Copper Vale.\n",
+          "full": " Copper Vale.\n",
+          "disabled": " Amber Field.\n",
+          "full_decision": {
+            "action": "prepare",
+            "at_seen": 134,
+            "cursor": 0,
+            "score": -1164,
+            "source_byte_end": 50,
+            "source_end": 41,
+            "step": 0,
+            "token": 34,
+            "word_index": 33
+          },
+          "disabled_decision": {
+            "action": "prepare",
+            "at_seen": 134,
+            "cursor": 0,
+            "score": -1164,
+            "source_byte_end": 75,
+            "source_end": 61,
+            "span_words": 1,
+            "step": 0,
+            "token": 34,
+            "word_index": 10
+          }
+        },
+        {
+          "case": "two_revisions",
+          "historical_prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi now in Amber Field. What was the previous location of selvi? Answer:",
+          "current_prompt": "Where is selvi? Answer:",
+          "history": " Copper Vale.\n",
+          "full": " Unknown.\n",
+          "disabled": " Unknown.\n",
+          "full_decision": {
+            "action": "no_read",
+            "at_seen": 144,
+            "cursor": 0,
+            "dependency": [
+              3,
+              0
+            ],
+            "score": -1024,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          },
+          "disabled_decision": {
+            "action": "no_read",
+            "at_seen": 144,
+            "cursor": 0,
+            "dependency": [
+              3,
+              0
+            ],
+            "score": -1024,
+            "source_byte_end": 0,
+            "source_end": 0,
+            "step": 0,
+            "token": 432,
+            "word_index": 16
+          }
+        }
+      ],
+      "preserved": true,
+      "fresh_not_drawn": true,
+      "artifact_file": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/fit/model.json",
+        "bytes": 14634200,
+        "sha256": "1c5839fe97afa3971e96797a46bef63d7020d101af7546b47b1bf9651400b3b8"
+      }
+    },
+    {
+      "artifact": {
+        "cid": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fit/model.json",
+        "bytes": 14634216,
+        "sha256": "0a4a5c0decdb4cd2d9a127146994773fa661cd83ecdc828ccf19f141f715de64"
+      },
+      "reason": "20 of 64 fresh historical answers omit the first word, which is already absent from the stored old record.",
+      "gate": "fresh.mjs required zero failures and observed 20. No refit, redraw or promotion followed."
+    }
+  ],
+  "failed_metered_commands": [
+    {
+      "kind": "engineering",
+      "label": "build-example",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_historical_read"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T19:21:39.536Z",
+      "elapsed_ms": 93210,
+      "code": 101,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2261925888,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/build-example.log"
+    },
+    {
+      "kind": "model",
+      "label": "actual-historical",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_HISTORICAL_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_historical_artifact-e9cf0175d3319085",
+        "native_historical_actual_checkpoint_and_identity",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T19:40:53.851Z",
+      "elapsed_ms": 123607,
+      "code": 101,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1822130176,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/actual-historical.log"
+    }
+  ],
+  "limits": [
+    "Two authored immediate-previous question forms; 44/64 fresh complete answers despite 64/64 exact previous-record selections.",
+    "All 20 fresh text failures retain only the terminal old word. Arbitrary historical phrasing and historical owner-first composition remain unqualified.",
+    "The 28 untargeted fresh rows are parent comparisons, not independent correctness labels.",
+    "Full older nested API scope, new HTTP/browser/WASM, allocation and complete-path energy measurements were NOT_RUN."
+  ],
+  "next": "Trace admitted reverse starts and learned scores, then improve same-law reverse phrase-start training on balanced unfamiliar lowercase multiword values, singleton values and introductory phrases. Preserve endpoints, exact identity, current answers and all prior controls; use a new separately frozen final transfer draw. Repair full value storage before initial-versus-previous extension."
+}

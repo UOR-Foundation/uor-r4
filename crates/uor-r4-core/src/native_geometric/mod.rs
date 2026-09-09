@@ -36,6 +36,9 @@ mod action_emission;
 #[cfg(test)]
 mod action_emission_tests;
 mod current_source;
+mod historical_read;
+mod historical_read_training;
+pub use historical_read_training::HistoricalReadExample;
 mod mixed_initial_training;
 mod shared_operator_refinement;
 pub use current_source::{CurrentSourceExample, CurrentSourceTarget};
@@ -269,6 +272,7 @@ pub struct DocumentReceipt {
 pub enum Control {
     /// Diagnostic reachability intervention; the retained default is unchanged.
     CurrentRelationReadAll,
+    HistoricalReadDisabled,
     CurrentSourceDisabled,
     CurrentSourceVersionDisabled,
     WriterRoleDisabled,
@@ -374,6 +378,7 @@ impl Feature {
     fn admitted(self, control: Control) -> bool {
         match control {
             Control::Full
+            | Control::HistoricalReadDisabled
             | Control::CurrentSourceDisabled
             | Control::CurrentSourceVersionDisabled
             | Control::CurrentRelationReadAll
@@ -498,6 +503,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    historical_read: Option<historical_read::HistoricalRead>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     writer_role: Option<writer_role::WriterRole>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     current_source: Option<current_source::CurrentSource>,
@@ -591,6 +598,8 @@ pub struct Model {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ModelWire {
+    #[serde(default)]
+    historical_read: Option<historical_read::HistoricalRead>,
     #[serde(default)]
     writer_role: Option<writer_role::WriterRole>,
     #[serde(default)]
@@ -687,6 +696,7 @@ impl TryFrom<ModelWire> for Model {
         let model = Self {
             writer_role: wire.writer_role,
             current_source: wire.current_source,
+            historical_read: wire.historical_read,
             writer_choice: wire.writer_choice,
             field_composition: wire.field_composition,
             writer_lexical: wire.writer_lexical,

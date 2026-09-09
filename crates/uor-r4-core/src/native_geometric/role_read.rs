@@ -318,9 +318,16 @@ pub(super) fn offer(
     control: Control,
     work: &mut WordCopyWork,
 ) -> Option<Candidate> {
-    let dependent = super::dependent_read::choose(model, values, control, work);
+    let historical = super::historical_read::choose(model, values, control, work);
+    let dependent = if historical.is_none() {
+        super::dependent_read::choose(model, values, control, work)
+    } else {
+        None
+    };
     let dependency = dependent.and_then(|(_, _, ids)| ids);
-    let (source, action_index) = if let Some((source, action, _)) = dependent {
+    let (source, action_index) = if let Some(choice) = historical {
+        choice
+    } else if let Some((source, action, _)) = dependent {
         (source, action)
     } else if let Some(choice) = super::relation::read_choice_with_recent(
         model,
