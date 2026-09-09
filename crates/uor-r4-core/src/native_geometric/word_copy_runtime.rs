@@ -585,47 +585,63 @@ impl WordCopyState {
                         ));
                     }
                     WordCopyProgress::Complete => {
-                        let (features, len) =
-                            self.continuation_features(model, entry, values, control, work);
-                        if len == 0 {
-                            return lexical;
-                        }
-                        let (tokens, count, rows, row_count) = candidate_rows(
-                            &head.continuation_rows,
-                            &head.continuation_postings,
-                            &features[..len],
-                            &mut work.selector,
-                        );
-                        let mut best = None;
-                        let mut best_score = 0;
-                        for token in tokens[..count].iter().copied() {
-                            let increment = score_rows(
-                                &head.continuation_rows,
-                                token,
-                                &rows[..row_count],
-                                &mut work.selector,
-                            );
-                            if increment > best_score
-                                || (increment == best_score
-                                    && increment > 0
-                                    && best.is_some_and(|known| token < known))
-                            {
-                                best = Some(token);
-                                best_score = increment;
-                            }
-                        }
-                        if let Some(token) = best {
+                        if let Some(token) =
+                            super::word_emission::offer(model, self, entry, values, control, work)
+                        {
                             chosen = Some((
                                 index,
                                 length,
                                 token,
-                                baseline.score + best_score,
+                                baseline.score.saturating_add(1),
                                 if token == EOS {
                                     WordCopyAction::Stop
                                 } else {
                                     WordCopyAction::Emit
                                 },
                             ));
+                        } else {
+                            let (features, len) =
+                                self.continuation_features(model, entry, values, control, work);
+                            if len == 0 {
+                                return lexical;
+                            }
+                            let (tokens, count, rows, row_count) = candidate_rows(
+                                &head.continuation_rows,
+                                &head.continuation_postings,
+                                &features[..len],
+                                &mut work.selector,
+                            );
+                            let mut best = None;
+                            let mut best_score = 0;
+                            for token in tokens[..count].iter().copied() {
+                                let increment = score_rows(
+                                    &head.continuation_rows,
+                                    token,
+                                    &rows[..row_count],
+                                    &mut work.selector,
+                                );
+                                if increment > best_score
+                                    || (increment == best_score
+                                        && increment > 0
+                                        && best.is_some_and(|known| token < known))
+                                {
+                                    best = Some(token);
+                                    best_score = increment;
+                                }
+                            }
+                            if let Some(token) = best {
+                                chosen = Some((
+                                    index,
+                                    length,
+                                    token,
+                                    baseline.score + best_score,
+                                    if token == EOS {
+                                        WordCopyAction::Stop
+                                    } else {
+                                        WordCopyAction::Emit
+                                    },
+                                ));
+                            }
                         }
                     }
                     _ => {}

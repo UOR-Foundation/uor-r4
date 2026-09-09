@@ -86,6 +86,19 @@ fn rejection(bytes: &[u8]) -> (bool, Option<String>) {
     }
 }
 
+// The word witness restores lexical emission and separately enforces exact
+// inherited lexical parameters. Existing legal bias mutations fail that guard;
+// other component mutations remain in the reconstructed parent and fail there.
+fn word_boundary<'a>(present: bool, pointer: &str, nested: &'a str) -> &'a str {
+    if !present {
+        nested
+    } else if pointer.starts_with("/lexical_emission/") {
+        "word emission frozen lexical parameters differ"
+    } else {
+        "word emission frozen parent differs"
+    }
+}
+
 fn run(
     path: &Path,
     expected_cid: &str,
@@ -218,6 +231,7 @@ fn run(
     )?;
 
     let document: Value = serde_json::from_slice(&bytes)?;
+    let word_parent = document.get("word_emission").is_some_and(Value::is_object);
     let shared_parent = document
         .get("shared_operator_refinement")
         .is_some_and(Value::is_object);
@@ -436,11 +450,16 @@ fn run(
             record(
                 checks,
                 name,
-                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains(word_boundary(word_parent, pointer, boundary))),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(word_parent, pointer, boundary),"error":error}),
             )?;
         }
-        let parent_boundary = if shared_parent {
+        let parent_boundary = if word_parent {
+            "word emission frozen parent differs"
+        } else if shared_parent {
             "shared operator frozen parent differs"
         } else if action_parent {
             "action emission frozen parent differs"
@@ -595,14 +614,19 @@ fn run(
             record(
                 checks,
                 name,
-                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains(word_boundary(word_parent, pointer, boundary))),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
         changed["composed_output"]["parent_artifact"] = json!(wrong_parent);
-        let parent_boundary = if shared_parent {
+        let parent_boundary = if word_parent {
+            "word emission frozen parent differs"
+        } else if shared_parent {
             "shared operator frozen parent differs"
         } else if action_parent {
             "action emission frozen parent differs"
@@ -762,13 +786,18 @@ fn run(
             record(
                 checks,
                 name,
-                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains(word_boundary(word_parent, pointer, boundary))),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
-        let parent_boundary = if shared_parent {
+        let parent_boundary = if word_parent {
+            "word emission frozen parent differs"
+        } else if shared_parent {
             "shared operator frozen parent differs"
         } else if action_parent {
             "action emission frozen parent differs"
@@ -944,8 +973,11 @@ fn run(
             record(
                 checks,
                 name,
-                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains(word_boundary(word_parent, pointer, boundary))),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
@@ -956,7 +988,9 @@ fn run(
             "action_wrong_parent_cid_rejected",
             rejected
                 && error.as_deref().is_some_and(|e| {
-                    e.contains(if shared_parent {
+                    e.contains(if word_parent {
+                        "word emission frozen parent differs"
+                    } else if shared_parent {
                         "shared operator frozen parent differs"
                     } else {
                         "action emission frozen parent differs"
@@ -974,7 +1008,9 @@ fn run(
             "action_context_flag_identity_rejected",
             rejected
                 && error.as_deref().is_some_and(|e| {
-                    e.contains(if shared_parent {
+                    e.contains(if word_parent {
+                        "word emission frozen parent differs"
+                    } else if shared_parent {
                         "shared operator frozen parent differs"
                     } else {
                         "action emission identity differs"
@@ -1077,8 +1113,11 @@ fn run(
             record(
                 checks,
                 name,
-                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains(word_boundary(word_parent, pointer, boundary))),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(word_parent, pointer, boundary),"error":error}),
             )?;
         }
         for (name, pointer, boundary) in [
@@ -1105,8 +1144,11 @@ fn run(
             record(
                 checks,
                 name,
-                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
-                json!({"field":pointer,"old":old,"expected_boundary":boundary,"error":error}),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains(word_boundary(word_parent, pointer, boundary))),
+                json!({"field":pointer,"old":old,"expected_boundary":word_boundary(word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
@@ -1117,9 +1159,13 @@ fn run(
             checks,
             "shared_wrong_parent_cid_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("shared operator frozen parent differs")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(word_boundary(
+                        word_parent,
+                        "/shared_operator_refinement/parent_artifact",
+                        "shared operator frozen parent differs",
+                    ))
+                }),
             json!({"error":error}),
         )?;
         let mut changed = document.clone();
@@ -1132,9 +1178,13 @@ fn run(
             checks,
             "shared_stage_flag_identity_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("shared operator identity differs")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(word_boundary(
+                        word_parent,
+                        "/shared_operator_refinement/continuation_fitted",
+                        "shared operator identity differs",
+                    ))
+                }),
             json!({"error":error}),
         )?;
         let mut changed = document.clone();
@@ -1151,6 +1201,167 @@ fn run(
         )?;
     } else {
         checks.push(json!({"name":"shared_operator_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no shared_operator_refinement witness"}));
+    }
+    if let Some(witness) = document.get("word_emission").filter(|v| v.is_object()) {
+        for (label, prompt, target) in [
+            ("span_place", "User: tilva lives in Ash Court.\nUser: Where is tilva?\nExplain in a sentence. Assistant:", " Ash Court is the place.\n"),
+            ("span_stop", "User: tilva lives in Ash Court.\nUser: Where is tilva?\nExplain the stop in a sentence. Assistant:", " Ash Court is the stop.\n"),
+            ("word_place", "Record: velra in Lodov. Where is velra? Explain in a sentence. Answer:", " Lodov is the place.\n"),
+        ] {
+            let config = SessionConfig { session_id: format!("word-emission-{label}"), ..SessionConfig::default() };
+            let mut direct = model.session(Control::Full)?;
+            let mut api = api_model.create_session(config.clone())?;
+            compare_turn(&model, &mut direct, &mut api, prompt, target, &format!("word_emission_{label}_api_direct_parity"), checks)?;
+            let exported = api.export_state()?;
+            let mut imported = api_model.create_session(config)?;
+            imported.import_state(&exported)?;
+            direct = model.restore_session(&direct.checkpoint()?)?;
+            record(checks, &format!("word_emission_{label}_checkpoint_import"), imported.identity_scope() == api.identity_scope(),
+                json!({"checkpoint_bytes":exported.len(),"scope":imported.identity_scope(),"development_case":true}))?;
+            compare_turn(&model, &mut direct, &mut imported, SUM_13, "17.\n", &format!("word_emission_{label}_checkpoint_next_independent_sum"), checks)?;
+        }
+        let expected_parent =
+            "blake3:2dc63b2c7b7073155fd3c5a8c743eaaace66f409483d86dd390966d4f9fc03f6";
+        record(
+            checks,
+            "word_emission_parent_reconstruction_and_roundtrip",
+            witness.get("parent_artifact").and_then(Value::as_str) == Some(expected_parent),
+            json!({"parent_artifact":witness["parent_artifact"],"expected_parent":expected_parent,"current_artifact":expected_cid,
+                "validated_by":["NativeModel::load_from_bytes","artifact_load_save_roundtrip"],
+                "boundary":"Loader restores the complete previous lexical component and validates the frozen parent recursively; no separate extracted parent is claimed."}),
+        )?;
+        for (name, pointer, boundary) in [
+            (
+                "word_previous_lexical_parameters_rejected",
+                "/word_emission/previous_lexical/router/biases/0",
+                "word emission frozen lexical parameters differ",
+            ),
+            (
+                "word_current_lexical_frozen_parameters_rejected",
+                "/lexical_emission/router/biases/0",
+                "word emission frozen lexical parameters differ",
+            ),
+        ] {
+            let mut changed = document.clone();
+            let bias = changed
+                .pointer_mut(pointer)
+                .ok_or("word-emission router bias absent")?;
+            let old = bias
+                .as_i64()
+                .ok_or("word-emission bias is not an integer")?;
+            if !(-32..=32).contains(&old) {
+                return Err("word-emission bias outside documented range".into());
+            }
+            let new = if old == 32 { old - 1 } else { old + 1 };
+            *bias = json!(new);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+            )?;
+        }
+        // Change a legal new word-only root, keeping inherited roots exact,
+        // to isolate current identity from the frozen-parameter guard.
+        let mut changed = document.clone();
+        let codes = changed
+            .pointer_mut("/lexical_emission/router/codes")
+            .and_then(Value::as_array_mut)
+            .ok_or("lexical codes absent")?;
+        let (index, code) = codes
+            .iter_mut()
+            .enumerate()
+            .find(|(_, code)| {
+                code["feature"]["kind"]
+                    .as_u64()
+                    .is_some_and(|k| matches!(k, 0 | 3))
+                    && code["feature"]["a"].as_u64().is_some_and(|a| a >> 56 == 16)
+            })
+            .ok_or("new word-only lexical code absent")?;
+        let root = code
+            .pointer_mut("/roots/0")
+            .ok_or("word-only root absent")?;
+        let old = root.as_u64().ok_or("word-only root is not unsigned")?;
+        if old >= 120 {
+            return Err("word-only root outside H4 range".into());
+        }
+        let new = if old == 119 { 0 } else { old + 1 };
+        *root = json!(new);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "word_new_root_identity_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("word emission identity differs")),
+            json!({"code_index":index,"old":old,"new":new,"expected_boundary":"word emission identity differs","error":error}),
+        )?;
+        let mut changed = document.clone();
+        let tokens = changed["word_emission"]["tokens"]
+            .as_array_mut()
+            .ok_or("word-emission tokens absent")?;
+        tokens.push(
+            tokens
+                .first()
+                .ok_or("word-emission token population empty")?
+                .clone(),
+        );
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "word_duplicate_token_shape_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("invalid word emission tokens")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        let prime = changed
+            .pointer_mut("/word_emission/dictionary/0/prime")
+            .ok_or("word-emission dictionary prime absent")?;
+        let old = prime
+            .as_u64()
+            .ok_or("word-emission dictionary prime is not unsigned")?;
+        *prime = json!(old.checked_add(1).ok_or("word-emission prime overflow")?);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "word_dictionary_prime_shape_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("invalid word emission dictionary")),
+            json!({"old":old,"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["word_emission"]["parent_artifact"] = json!(format!("blake3:{}", "0".repeat(64)));
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "word_wrong_parent_cid_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("word emission frozen parent differs")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["word_emission"]["unexpected_witness_field"] = json!(true);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "word_unknown_witness_field_rejected",
+            rejected
+                && error.as_deref().is_some_and(|e| {
+                    e.contains("unknown field") && e.contains("unexpected_witness_field")
+                }),
+            json!({"error":error}),
+        )?;
+    } else {
+        checks.push(json!({"name":"word_emission_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no word_emission witness"}));
     }
     if document
         .get("typed_role_refinement")

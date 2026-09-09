@@ -37,8 +37,14 @@ impl Default for SourceRoutingConfig {
 }
 impl SourceRoutingConfig {
     pub(super) fn validate(&self) -> Result<()> {
+        self.validate_with_feature_limit(768)
+    }
+    pub(super) fn validate_word_emission(&self) -> Result<()> {
+        self.validate_with_feature_limit(4096)
+    }
+    fn validate_with_feature_limit(&self, limit: usize) -> Result<()> {
         // Literal and derived-value routing share a bounded feature vocabulary.
-        if !(1..=768).contains(&self.learned_features)
+        if !(1..=limit).contains(&self.learned_features)
             || !(1..=8).contains(&self.passes)
             || !(1..=120).contains(&self.proposals)
             || !(1..=120).contains(&self.max_seconds)
@@ -69,7 +75,13 @@ impl SourceRouting {
         actions: usize,
         feature_kinds: u8,
     ) -> Result<()> {
-        self.config.validate()?;
+        // Only the outer completed-word adapter authorizes a larger lexical
+        // vocabulary; other fit APIs retain their768-feature input bound.
+        if feature_kinds == 4 && model.word_emission.is_some() {
+            self.config.validate_word_emission()?;
+        } else {
+            self.config.validate()?;
+        }
         if self.schema != "uor-r4.geometric-source-routing/1"
             || self.codes.is_empty()
             || self.codes.len() > self.config.learned_features
@@ -567,6 +579,165 @@ pub(super) fn learn_code_subset(
     }
     Ok(learn_impl(model, block, frames, start, Some(mutable)))
 }
+/// Offline pair-coordinate search over the existing exact objective. A pair
+/// couples a shared candidate code with a code exclusive to a contrasting
+/// correct frame. Neither intermediate one-coordinate move is committed.
+pub(super) fn learn_code_pairs(
+    model: &Model,
+    block: &mut SourceRouting,
+    frames: &mut [Frame],
+    start: Instant,
+    mutable: &[bool],
+) -> Result<serde_json::Value> {
+    block.config.validate_word_emission()?;
+    if mutable.len() != block.codes.len() {
+        return Err(Error("mutable source-code mask length differs".into()));
+    }
+    if frames.is_empty() || frames.len() > 4096 {
+        return Err(Error("invalid source pair frame bounds".into()));
+    }
+    for frame in frames.iter_mut() {
+        for alternative in &mut frame.alternatives {
+            alternative.codes = alternative
+                .features
+                .iter()
+                .filter_map(|f| block.codes.binary_search_by_key(f, |c| c.feature).ok())
+                .collect();
+        }
+    }
+    let initial = objective(model, block, frames);
+    let correct: Vec<_> = frames
+        .iter()
+        .map(|f| objective(model, block, std::slice::from_ref(f)).correct == 1)
+        .collect();
+    let mut pairs = BTreeSet::new();
+    'selection: for (frame_index, frame) in frames.iter().enumerate() {
+        if correct[frame_index] {
+            continue;
+        }
+        for positive in frame.alternatives.iter().filter(|a| a.correct) {
+            let Some(prefix) = positive.features.iter().find(|f| f.kind == 0) else {
+                continue;
+            };
+            for (other_index, other) in frames.iter().enumerate() {
+                if !correct[other_index] {
+                    continue;
+                }
+                for contrast in other.alternatives.iter().filter(|a| {
+                    !a.correct
+                        && a.action == positive.action
+                        && a.features.iter().find(|f| f.kind == 0) == Some(prefix)
+                }) {
+                    for &shared in &positive.codes {
+                        if !mutable[shared] || !contrast.codes.contains(&shared) {
+                            continue;
+                        }
+                        for &exclusive in &contrast.codes {
+                            if !mutable[exclusive]
+                                || positive.codes.contains(&exclusive)
+                                || block.codes[shared].feature.b != block.codes[exclusive].feature.b
+                            {
+                                continue;
+                            }
+                            pairs.insert((shared.min(exclusive), shared.max(exclusive)));
+                            if pairs.len() == 64 {
+                                break 'selection;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let pairs: Vec<_> = pairs.into_iter().collect();
+    let initial_roots: Vec<_> = block.codes.iter().map(|c| c.roots).collect();
+    let mut best = initial;
+    let mut rng = block.config.seed;
+    let mut proposals = 0_u64;
+    let mut tested = BTreeSet::new();
+    let mut accepted = Vec::new();
+    let mut stopped = false;
+    let mut completed_passes = 0;
+    'passes: for pass in 0..block.config.passes {
+        for (pair_index, &(first, second)) in pairs.iter().enumerate() {
+            for lane in 0..LANES {
+                let mut kept = (
+                    block.codes[first].roots[lane],
+                    block.codes[second].roots[lane],
+                );
+                let left = pair_root_candidates(kept.0, block.config.proposals, &mut rng);
+                let right = pair_root_candidates(kept.1, block.config.proposals, &mut rng);
+                for &a in &left {
+                    for &b in &right {
+                        if start.elapsed().as_secs() >= block.config.max_seconds {
+                            block.codes[first].roots[lane] = kept.0;
+                            block.codes[second].roots[lane] = kept.1;
+                            stopped = true;
+                            break 'passes;
+                        }
+                        if (a, b) == kept {
+                            continue;
+                        }
+                        tested.insert((pair_index, lane));
+                        block.codes[first].roots[lane] = a;
+                        block.codes[second].roots[lane] = b;
+                        let score = objective(model, block, frames);
+                        proposals += 1;
+                        if score.improves(best) {
+                            accepted.push(serde_json::json!({"pair":pair_index,"lane":lane,"before_roots":[kept.0,kept.1],"after_roots":[a,b],"before_correct":best.correct,"after_correct":score.correct,"before_hinge":best.hinge,"after_hinge":score.hinge}));
+                            kept = (a, b);
+                            best = score;
+                        }
+                        // Restore both coordinates together after every trial,
+                        // including rejected moves and the next timer check.
+                        block.codes[first].roots[lane] = kept.0;
+                        block.codes[second].roots[lane] = kept.1;
+                        if best.correct == frames.len() && best.hinge == 0 {
+                            break 'passes;
+                        }
+                    }
+                }
+            }
+        }
+        completed_passes = pass + 1;
+    }
+    let pair_ids: Vec<_> = pairs.iter().map(|&(a,b)| {
+        let feature = |index:usize| {
+            let f=block.codes[index].feature;
+            serde_json::json!({"index":index,"kind":f.kind,"a_hex":format!("0x{:016x}",f.a),"b_hex":format!("0x{:016x}",f.b)})
+        };
+        serde_json::json!([feature(a),feature(b)])
+    }).collect();
+    let changed_codes = block
+        .codes
+        .iter()
+        .zip(&initial_roots)
+        .filter(|(c, r)| c.roots != **r)
+        .count();
+    let frozen_changed = block
+        .codes
+        .iter()
+        .zip(&initial_roots)
+        .zip(mutable)
+        .filter(|((c, r), allowed)| !**allowed && c.roots != **r)
+        .count();
+    Ok(
+        serde_json::json!({"method":"paired_new_code_roots","initial_correct":initial.correct,"final_correct":best.correct,"initial_hinge":initial.hinge,"final_hinge":best.hinge,"proposals":proposals,"accepted":accepted.len(),"accepted_updates":accepted,"pairs":pair_ids,"pair_limit":64,"tested_pair_lanes":tested.len(),"changed_codes":changed_codes,"frozen_codes_changed":frozen_changed,"candidate_roots_per_coordinate":block.config.proposals,"completed_passes":completed_passes,"stopped_at_time_limit":stopped,"scope":"Offline two-coordinate proposals; full exact geometric frame objective; only masked code roots may change. No serving change."}),
+    )
+}
+fn pair_root_candidates(current: u16, limit: usize, rng: &mut u64) -> Vec<u16> {
+    let mut roots: Vec<u16> = (0..120).collect();
+    for i in (1..roots.len()).rev() {
+        let j = (super::learned_routing_training::next_random(rng) % (i as u64 + 1)) as usize;
+        roots.swap(i, j);
+    }
+    roots.truncate(limit.min(120));
+    if !roots.contains(&current) && !roots.is_empty() {
+        roots[0] = current;
+    }
+    roots
+}
+
 fn learn_impl(
     model: &Model,
     block: &mut SourceRouting,
@@ -753,5 +924,43 @@ impl Model {
             "candidates":candidates,
             "scope":"Allocating offline inspection; counterfactual direct candidates are marked when upstream dispatch bypasses this router."
         }))
+    }
+}
+
+#[cfg(test)]
+mod pair_tests {
+    use super::*;
+    #[test]
+    fn native_source_pair_candidates_are_unique_bounded_and_include_current() {
+        for limit in [1, 2, 8, 120] {
+            let mut rng = 973;
+            let roots = pair_root_candidates(119, limit, &mut rng);
+            assert_eq!(roots.len(), limit);
+            assert_eq!(roots.iter().copied().collect::<BTreeSet<_>>().len(), limit);
+            assert!(roots.contains(&119));
+            assert!(roots.iter().all(|r| *r < 120));
+        }
+    }
+    #[test]
+    fn native_source_pair_mask_guard_and_frozen_roots_leave_block_exact() {
+        let model = super::super::lexical_emission_tests::lexical_model();
+        let mut block = model.lexical_emission.as_ref().unwrap().router.clone();
+        let before = block.clone();
+        let mut frames = vec![Frame {
+            alternatives: vec![Alternative {
+                features: vec![block.codes[0].feature],
+                codes: vec![],
+                action: 0,
+                correct: true,
+            }],
+        }];
+        assert!(learn_code_pairs(&model, &mut block, &mut frames, Instant::now(), &[]).is_err());
+        assert_eq!(block, before);
+        let frozen = vec![false; block.codes.len()];
+        let report =
+            learn_code_pairs(&model, &mut block, &mut frames, Instant::now(), &frozen).unwrap();
+        assert_eq!(report["proposals"], 0);
+        assert_eq!(report["frozen_codes_changed"], 0);
+        assert_eq!(block, before);
     }
 }

@@ -1,0 +1,1331 @@
+{
+  "schema": "uor-r4.native-word-emission-result/1",
+  "decision": "RETAIN_BOUNDED_WORD_SENTENCE",
+  "issue": "#973 remains OPEN; sustained general prose acceptance is not met",
+  "artifact": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving-pairs/model.json",
+    "bytes": 13233012,
+    "sha256": "a98846a05dbc88d6419e1320b289ef07d5b3136677b2542a7ffc5abded479cc3",
+    "cid": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+    "retained_path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/word-sentence/model.json"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/copy-add/model.json",
+    "bytes": 13132214,
+    "sha256": "bec859344be857eced857adf6ee360bccbacc81d91282de7eed31bb4aa0e5233",
+    "cid": "blake3:2dc63b2c7b7073155fd3c5a8c743eaaace66f409483d86dd390966d4f9fc03f6"
+  },
+  "scope": "Two authored value-first sentence endings from exact completed words/spans; learned Base/defer preserves inherited plain and Rust continuations. Twenty fresh fixed-form fact/name/value transfers and four fresh fixed-form Rust identifier returns. No arbitrary prose or program-synthesis qualification.",
+  "source_base": "5f123e28da0ce18c7a4b89fb3e6a8041a0fdd4ec",
+  "source_freeze": {
+    "at": "2026-09-09T02:34:17.786Z",
+    "base": "5f123e28da0ce18c7a4b89fb3e6a8041a0fdd4ec",
+    "files": [
+      {
+        "path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+        "bytes": 63944,
+        "sha256": "4a0e4cfc334518fe05da741a08ce8a02050d03ea0e1c9f25103817529c8df392"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/lexical_emission.rs",
+        "bytes": 29111,
+        "sha256": "ecc2e2aff9361262135f50f0e291ee0aa0c271de5c450b492ccdc6389af585bb"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+        "bytes": 30265,
+        "sha256": "96879eb40fb1d1c66de650023913946f2bcc300919bb94c13d7586aee55a0865"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+        "bytes": 41030,
+        "sha256": "eeb29325469ccb706505f14103d3745cba3cd54438eb2453ae444919bab755a7"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/training.rs",
+        "bytes": 61566,
+        "sha256": "84fafc5953f5cc63d092331d0933268ba5c3f70200d978df44385545f75831e1"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/word_copy_runtime.rs",
+        "bytes": 38783,
+        "sha256": "ce49f99f626e5884924cf008ccad319b66a9d759307b993cc422203a6b07585b"
+      },
+      {
+        "path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+        "bytes": 137470,
+        "sha256": "d6022f2a8f224c0b9b76deef5a06a8741bbf3fdfa941271454263cc7e8dbbdb3"
+      },
+      {
+        "path": "crates/uor-r4-core/examples/native_word_emission_history.rs",
+        "bytes": 15654,
+        "sha256": "f83000a2af6b260ef886e361fe0ee9bd17f7d24d9cc362daac2c51d67a5f4f02"
+      },
+      {
+        "path": "crates/uor-r4-core/examples/native_word_sentence.rs",
+        "bytes": 35357,
+        "sha256": "5421efb3701784199f3dc89a1ee7e87e25ac6e40446a8cd5d5d82b6380a8ae54"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/word_emission.rs",
+        "bytes": 38782,
+        "sha256": "fe4b12cca716df365fad098c5a1f020f78d9d6f9d95642dae6a2f50c3ba23027"
+      }
+    ]
+  },
+  "source_history": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-source.json",
+      "bytes": 1898,
+      "sha256": "8f58d6f55e0a00b8d1cd6e9071459ad083a226a83e6b76a801e450d365bd24cf"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/source-pairs/manifest.json",
+      "bytes": 1813,
+      "sha256": "4ea70626fc502df8c34603e9d53cd49de6b22cf8ceae8c14b802c3de9136ea41"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/source-preserving/manifest.json",
+      "bytes": 570,
+      "sha256": "114908e035f5e292324a56b4cdbcc99d2b04e96587a5f86cc7300d860edb54a8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/pre-fresh-source.json",
+      "bytes": 2034,
+      "sha256": "6b14f74238e37d65acc41f3aeee0ea38898a2cdf022ec01b88e2385a2e7fbb93"
+    }
+  ],
+  "mechanism": {
+    "runtime": "Existing shared signed-H4 lexical selector consumes validated completed WordCopy context, exact query prime addresses and actual prior suffix bytes. Byte/EOS and Base/defer choices; bounded integer/table execution, no matrix products, transformer, provider or sentence template.",
+    "training": "Rust supervised query-presence association plus bounded paired-coordinate refinement. Original660 numeric lexical codes frozen; all other inherited model blocks reconstruct exact2dc63b2c parent.",
+    "format": "Artifact-bound optional word_emission witness, parent data/config/parameters and source hashes; old candidates load and serialize exactly.",
+    "limits": {
+      "context_tokens": 512,
+      "output_tokens": 96,
+      "word_entry_steps": 32,
+      "input_bytes_max": 4096,
+      "construction_cases": 132,
+      "construction_frame_cap": 4096,
+      "feature_cap": 4096
+    },
+    "geometry_scope": "Matched transform erasure reduces open correctness28/28 to6/28; signed-H4 transforms and geometric ranks implement the shared selector. No independent rank ablation was run. Prime identity supplies exact addresses, not semantic distance. Existing zeta, paired-H4/exact Z[phi] and orientation remain artifact-bound. No broad comparative geometry or energy advantage established."
+  },
+  "results": {
+    "construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving-pairs/full.json",
+      "bytes": 5951429,
+      "sha256": "97d5bd6e36287e7d1785379db85be33d2b09fa878c0d324f1d115868969ac224",
+      "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "exact": 132,
+      "total": 132,
+      "completed": 132
+    },
+    "open": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/open-final/full.json",
+      "bytes": 1507425,
+      "sha256": "c30fa1a7809e12ef945ce9ed32857626a1186098844e7b57d1649f19f404a689",
+      "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "exact": 28,
+      "total": 28,
+      "completed": 28
+    },
+    "controls": [
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/open-final/previous-emitter.json",
+        "bytes": 1202989,
+        "sha256": "df92d5851ba3a3293c6c163b5e7fbd638928db6e11c7182296740cf9aa456ea2",
+        "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+        "exact": 6,
+        "total": 28,
+        "completed": 28,
+        "scope": "previous-emitter"
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/open-final/context-disabled.json",
+        "bytes": 1203046,
+        "sha256": "f4cae421900078e8b1daf968b917553ba3d0b1c153869682d5a530cee45bd66b",
+        "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+        "exact": 6,
+        "total": 28,
+        "completed": 28,
+        "scope": "context-disabled"
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/open-final/geometry-disabled.json",
+        "bytes": 1203321,
+        "sha256": "a00deaff1c2507302c84578a26ef07b306e0c8d8f72052bc9a4d6d47c9f67263",
+        "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+        "exact": 6,
+        "total": 28,
+        "completed": 28,
+        "scope": "geometry-disabled"
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/open-final/prefix-context-disabled.json",
+        "bytes": 1507458,
+        "sha256": "2b05abd443e75733459998b417f4b0387388f3007e50c864cc2352ae85d8816c",
+        "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+        "exact": 28,
+        "total": 28,
+        "completed": 28,
+        "scope": "N/A: optional prefix-qualified law is false in retained artifact"
+      }
+    ],
+    "fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-final/full.json",
+      "bytes": 1263258,
+      "sha256": "fe6fea37a692b4249464c6afd93e0bc31831e9387f1b5ed1078720bec95d5159",
+      "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "exact": 24,
+      "total": 24,
+      "completed": 24
+    },
+    "abstention": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/abstention-final/full.json",
+      "bytes": 366338,
+      "sha256": "4b57c231fcab1f296a1bc8643a1a1b3ef18ffc8171d1d57ed415d5dff1e972dd",
+      "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "exact": 6,
+      "total": 10,
+      "completed": 10
+    },
+    "over_limit": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/over-limit-final/full.json",
+      "bytes": 213017,
+      "sha256": "dc97f25f1f302804e8e32663b69c65eca51bce36aaebf5de8f389dffc17a1ead",
+      "artifact": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "exact": 0,
+      "total": 2,
+      "completed": 2
+    },
+    "history": {
+      "passed": true,
+      "total": 12,
+      "parent": "blake3:2dc63b2c7b7073155fd3c5a8c743eaaace66f409483d86dd390966d4f9fc03f6",
+      "candidate": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "raw_candidate_historical_query_score": 8,
+      "raw_parent_historical_query_score": 6,
+      "scope": "Actual output plus exact identities and checkpoints; changed queries compared with matched parent queries. Extra instruction-induced records compared separately with unmodified history; all record fields including causal pose/phase state equal the matched parent. Base/defer retains original punctuation token identities.",
+      "rows": [
+        {
+          "id": "forward-open.json/turn-1/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "forward-open.json/turn-1/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "forward-open.json/turn-1/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "forward-open.json/turn-4/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "forward-open.json/turn-4/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "forward-open.json/turn-4/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "reverse-open.json/turn-1/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "reverse-open.json/turn-1/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "reverse-open.json/turn-1/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "reverse-open.json/turn-4/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "reverse-open.json/turn-4/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "reverse-open.json/turn-4/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": true,
+          "learned_stop": false
+        }
+      ]
+    },
+    "prior_reports": {
+      "at": "2026-09-09T02:17:15.127Z",
+      "scope": "Actual bytes, EOS, correctness, action/value/record/read identities and applicable dependency fields; timings/scores excluded. Already-incorrect interventions remain negative evidence.",
+      "reports": [
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-operations/result.json",
+            "sha256": "86535ce5f5fe99bf658b8f592baf080dbb9565048921d2443bcc32b1e7a6dc5b"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-operations/result.json",
+            "sha256": "2d4902a53063ad75b21a2505b99a6f40827d6327d5e4c21613dd8bf4c86f8f91"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-operations/disabled.json",
+            "sha256": "ed9d0aa4713ad2dc8552c219d421a7c0adcaf0419c46d2e8c227c2397ee000db"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-operations/disabled.json",
+            "sha256": "3835d83eda921a608e850318db11128f56ad9ac2b03c36165223a7f152a46bef"
+          },
+          "total": 24,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-operations/intermediate-disabled.json",
+            "sha256": "cfa87aeb814d77fcdc23a638875a7cfb50b72a554388d2ae59b2fa83b8ef0b33"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-operations/intermediate-disabled.json",
+            "sha256": "b2e1680dbf087c58a72c8291f625ecff2f53564e53772dfec81303c2d1921545"
+          },
+          "total": 24,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-lexical-controls/result.json",
+            "sha256": "b409149180541125d8f453a9549bdd79e7e69c5e0a3a5ac0c528e5fa8240139f"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/result.json",
+            "sha256": "8c0a669ea8ec42fe560d2928402cb1931d58dc84a27e1b0ef79a0bbe7a106176"
+          },
+          "total": 18,
+          "exact": 18,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-lexical-controls/disabled.json",
+            "sha256": "46cd5725fdf59e1deda31f57b9be9d4e4663a40711a2eb2fc91c7eadd17565be"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/disabled.json",
+            "sha256": "237976ea8c6b666b928ae74ea328be835b54e92769a7e7eaef4371ce37538e0f"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-lexical-controls/read-disabled.json",
+            "sha256": "c083ca66e35cb1d3d7e26182204480d047d3cb5e9fa57d64972847e9319d60e5"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/read-disabled.json",
+            "sha256": "573c2cc3c8b76f548e4b7e35f98b1c377dcb990a815e958cc4387322ed9f0420"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-lexical-controls/geometry-disabled.json",
+            "sha256": "46cd5725fdf59e1deda31f57b9be9d4e4663a40711a2eb2fc91c7eadd17565be"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/geometry-disabled.json",
+            "sha256": "237976ea8c6b666b928ae74ea328be835b54e92769a7e7eaef4371ce37538e0f"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-current-evaluate/result.json",
+            "sha256": "418cd4b36137bafd823bc736560b657888d62340e15201353d88b9e334750b5a"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-current-evaluate/result.json",
+            "sha256": "fceb7b339924977e87f7d3db0045da863b1d0209304e48fdba6d2fe65a011b72"
+          },
+          "total": 48,
+          "exact": 48,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-current-controls/result.json",
+            "sha256": "94fc3b51c000d6261726e3f8e16c3293f63c693597c17ed50950bf2922239e3a"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-current-controls/result.json",
+            "sha256": "670577349b4ed509b0f9b5e83ee5c6895e6f9aa66f92f607491c12ac65e601c3"
+          },
+          "total": 48,
+          "exact": 32,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-current-stress/result.json",
+            "sha256": "60cc7e6ac3ab043ce7a95c97858033a062ad855cb1d1f0e92d6c294b28a3a7b7"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-current-stress/result.json",
+            "sha256": "cdb5b74bf37cdeaf59ebef79326a6b5ad1f9b6040c7a0c1db0ed64f39dba24b1"
+          },
+          "total": 16,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-instruction-evaluate/result.json",
+            "sha256": "653e5b4941335f08e12f490f9ff2ada17e443553c6be87cb1ab19aa8210d4015"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-evaluate/result.json",
+            "sha256": "14f56b06e0b0fdebd10a3897cc4ce3aa5ed628032e32aa7eda6cdf0ba50def94"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-instruction-stress/result.json",
+            "sha256": "13f64cb7584caaf659ba0d5b80fb71ec78850d5e8fcf097e689444ce7465007d"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-stress/result.json",
+            "sha256": "c76357202ba7a6b96b16539b72e185fcfc6d541e88709a0b07a16e2e27610b77"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-instruction-fresh/result.json",
+            "sha256": "ce2f5363989b662ee5ee07a19ea0f725c8ef85335a05de0fce5e69c8574a5f7d"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-fresh/result.json",
+            "sha256": "1d5af6230689f7dc9a1af31fd817063af2ee91653355cc235ddadf440c1ac79f"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/prior-instruction-evaluate/disabled.json",
+            "sha256": "c8a562152adb4d71e17239e870590586a795eac199c167e16b3033336d9705ca"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-evaluate/disabled.json",
+            "sha256": "1e638ebc05c6aba6878ee3442c2d7c9cedd7f4ea4bb1bc4960beffe53428303e"
+          },
+          "total": 24,
+          "exact": 8,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        }
+      ],
+      "differences": []
+    },
+    "retained_construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/preserve/preservation/retained-construction.json",
+      "bytes": 214913,
+      "sha256": "b10fa89e185b93b3533aa48f7c32750bef37fed1eb93d3beb40968a95fafa1d1",
+      "exact": 663,
+      "total": 663
+    },
+    "api": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/api-preserving.json",
+      "bytes": 78619,
+      "sha256": "5289a1dfc2f7abfad0c6127ac3f41b022e7f0b82b7682fe403797bc466026d49",
+      "checks": 134,
+      "passed": 134
+    },
+    "focused_tests": {
+      "passed": true,
+      "total": 26,
+      "tests": [
+        "native_geometric::word_emission::tests::native_word_emission_balanced_vocabulary_uses_presence_and_class_sizes",
+        "native_geometric::word_emission::tests::native_word_emission_context_erasure_removes_prefix_and_query_features",
+        "native_geometric::word_emission::tests::native_word_emission_inheritance_label_preserves_previous_receipt_serialization",
+        "native_geometric::word_emission::tests::native_word_emission_larger_fit_window_keeps_legacy_config_bound",
+        "native_geometric::word_emission::tests::native_word_emission_namespace_preserves_candidate_and_query_order",
+        "native_geometric::word_emission::tests::native_word_emission_prefix_query_fields_preserve_candidate_and_legacy_context",
+        "native_geometric::source_routing_training::pair_tests::native_source_pair_candidates_are_unique_bounded_and_include_current",
+        "native_geometric::source_routing_training::pair_tests::native_source_pair_mask_guard_and_frozen_roots_leave_block_exact",
+        "native_geometric::lexical_emission_tests::native_lexical_read_checkpoint_rejects_forged_payload_cursor_and_transients",
+        "native_geometric::lexical_emission_tests::native_lexical_read_disabled_control_stops_a_restored_partial_read",
+        "native_geometric::lexical_emission_tests::native_lexical_read_old_artifact_rejects_even_null_read_field",
+        "native_geometric::lexical_emission_tests::native_lexical_read_prediction_is_idempotent_and_mismatch_clears_cursor",
+        "native_geometric::lexical_emission_tests::native_lexical_read_preserves_selected_identity_among_equal_values",
+        "native_geometric::lexical_emission_tests::native_lexical_read_signed_multidigit_cursor_restores_without_value_writes",
+        "native_geometric::action_emission_tests::native_action_emission_conflict_check_keeps_jointly_acceptable_alternatives",
+        "native_geometric::action_emission_tests::native_action_emission_erasure_changes_only_action_context_and_preserves_cursor",
+        "native_geometric::action_emission_tests::native_action_emission_subset_fit_rejects_mask_and_freezes_inherited_parameters",
+        "native_geometric::action_emission_tests::native_action_emission_tags_preserve_legacy_add_and_exact_read_roles",
+        "native_geometric::word_copy_tests::native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry",
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "native_word_sentence_actual_checkpoint_and_allocation",
+        "native_lexical_emission_actual_checkpoint_and_allocation",
+        "native_composed_output_actual_checkpoint_and_allocation",
+        "native_mixed_operators_actual_checkpoint_and_allocation",
+        "native_action_emission_actual_checkpoint_and_allocation",
+        "native_copy_add_actual_checkpoint_and_allocation"
+      ],
+      "labels": [
+        "test-native_word_emission_-preserving",
+        "test-native_source_pair_-preserving",
+        "test-native_lexical_read_-preserving",
+        "test-native_action_emission_-preserving",
+        "test-native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry-preserving",
+        "kernel-source-guard-preserving",
+        "allocation-word_sentence-final",
+        "allocation-lexical_emission-final",
+        "allocation-composed_output-final",
+        "allocation-mixed_operators-final",
+        "allocation-action_emission-final",
+        "allocation-copy_add-final"
+      ],
+      "prior_failure": {
+        "label": "allocation-word_sentence-preserving",
+        "scope": "Incorrect assertion assigned completed-copy suffix mismatch to WordCopy; ResponseEntry owns that mismatch. Test corrected to require pending proposals, no commits, exact source preservation and actual ResponseEntry mismatch/base step. Runtime and model unchanged."
+      }
+    },
+    "generated_rust": {
+      "fresh": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-fresh/receipt.json",
+        "bytes": 1522,
+        "sha256": "acb4907e8c9c791c25421d2b327bdd0be091fb2ff1d85e852e15c5f7be7578c2",
+        "cases": 4,
+        "assertions": 8,
+        "build": {
+          "kind": "engineering",
+          "label": "rust-fresh-build",
+          "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+          "args": [
+            "--edition=2021",
+            "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-fresh/generated_checks.rs",
+            "-o",
+            "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-fresh/generated_checks"
+          ],
+          "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+          "started": "2026-09-09T02:35:07.993Z",
+          "elapsed_ms": 578,
+          "code": 0,
+          "signal": null,
+          "stopped": null,
+          "peak_sampled_process_tree_rss_bytes": null,
+          "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-fresh-build.log"
+        },
+        "execution": {
+          "kind": "model",
+          "label": "rust-fresh-execute",
+          "cmd": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-fresh/generated_checks",
+          "args": [],
+          "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+          "started": "2026-09-09T02:35:08.628Z",
+          "elapsed_ms": 161,
+          "code": 0,
+          "signal": null,
+          "stopped": null,
+          "peak_sampled_process_tree_rss_bytes": null,
+          "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-fresh-execute.log"
+        }
+      },
+      "copy_add": [
+        {
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-evaluate/source-receipt.json",
+            "bytes": 439,
+            "sha256": "f052de27123ace6fb5949d8ee9540d8f21ee6b1a2e36e7dc7e06b3568e16071e"
+          },
+          "build": {
+            "kind": "engineering",
+            "label": "rust-evaluate-build",
+            "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+            "args": [
+              "--edition=2021",
+              "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-evaluate/generated_checks.rs",
+              "-o",
+              "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-evaluate/generated_checks"
+            ],
+            "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+            "started": "2026-09-09T02:30:42.156Z",
+            "elapsed_ms": 497,
+            "code": 0,
+            "signal": null,
+            "stopped": null,
+            "peak_sampled_process_tree_rss_bytes": null,
+            "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-evaluate-build.log"
+          },
+          "execution": {
+            "kind": "model",
+            "label": "rust-evaluate-execute",
+            "cmd": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-evaluate/generated_checks",
+            "args": [],
+            "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+            "started": "2026-09-09T02:30:42.700Z",
+            "elapsed_ms": 159,
+            "code": 0,
+            "signal": null,
+            "stopped": null,
+            "peak_sampled_process_tree_rss_bytes": null,
+            "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-evaluate-execute.log"
+          }
+        },
+        {
+          "receipt": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-stress/source-receipt.json",
+            "bytes": 437,
+            "sha256": "7079bcc938424b91a25324447e761590c95465b27b28d309e25cacf1bd8231bf"
+          },
+          "build": {
+            "kind": "engineering",
+            "label": "rust-stress-build",
+            "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+            "args": [
+              "--edition=2021",
+              "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-stress/generated_checks.rs",
+              "-o",
+              "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-stress/generated_checks"
+            ],
+            "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+            "started": "2026-09-09T02:30:43.084Z",
+            "elapsed_ms": 111,
+            "code": 0,
+            "signal": null,
+            "stopped": null,
+            "peak_sampled_process_tree_rss_bytes": null,
+            "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-stress-build.log"
+          },
+          "execution": {
+            "kind": "model",
+            "label": "rust-stress-execute",
+            "cmd": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-stress/generated_checks",
+            "args": [],
+            "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+            "started": "2026-09-09T02:30:43.243Z",
+            "elapsed_ms": 55,
+            "code": 0,
+            "signal": null,
+            "stopped": null,
+            "peak_sampled_process_tree_rss_bytes": null,
+            "logs": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-stress-execute.log"
+          }
+        }
+      ]
+    }
+  },
+  "negatives": [
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit/model.json",
+        "bytes": 13230296,
+        "sha256": "209bc4f1e35fc3268c67eb2547d86b88f8bc5e1cb4d79ae52f996e395573560b",
+        "cid": "blake3:e0994c5b99eb8434a7981ef5b5c8afc99b05ea650c4407630a5adde02c9b7466"
+      },
+      "outcome": "26/30 construction; full-query identity dependence",
+      "fit": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit/fit.json",
+        "bytes": 12542,
+        "sha256": "3fa8dabb1df61e317fba3cd3b948e0b4906336ab01c972a6b756a20e13e15ab7"
+      },
+      "actual": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit/full.json",
+        "bytes": 1607395,
+        "sha256": "86ec6f0c7f2cb6958466a55afd5219671b3fdbbb960bbdae9941a535c8e075a7",
+        "artifact": "blake3:e0994c5b99eb8434a7981ef5b5c8afc99b05ea650c4407630a5adde02c9b7466",
+        "exact": 26,
+        "total": 30,
+        "completed": 30
+      },
+      "identity": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/identity-fit.json",
+        "bytes": 303,
+        "sha256": "0a9ee0e01a7fe21e2222eef71e4fbd506e929b100a1bc35cdffda1a019030e03"
+      }
+    },
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-resumed/model.json",
+        "bytes": 13230295,
+        "sha256": "753ba87eb4ae9a98d71af0738e4e3991bfdec9e73a7e1ae8193ccfc6d2835b33",
+        "cid": "blake3:826fc1f29567d7226dddc72db353364cef6d27d6dbcf372bf5fab4d1bb838ce6"
+      },
+      "outcome": "26/30 construction and9/28 open; one plain regression and three nonterminations",
+      "fit": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-resumed/fit.json",
+        "bytes": 12755,
+        "sha256": "5fc687279483dc7011a9eea9622c3241e71c847523d4aafa5f6b32415233f3f7"
+      },
+      "actual": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-resumed/full.json",
+        "bytes": 1607395,
+        "sha256": "49290e23d1d0c9e22066f1b002c84bee5274c5dc0ea40ef50982f635070a02b6",
+        "artifact": "blake3:826fc1f29567d7226dddc72db353364cef6d27d6dbcf372bf5fab4d1bb838ce6",
+        "exact": 26,
+        "total": 30,
+        "completed": 30
+      },
+      "identity": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/identity-fit-resumed.json",
+        "bytes": 311,
+        "sha256": "6251e853d50a62c21179b91c7d6fb1adbbaeccc1e72321a56eb93f29611ed678"
+      }
+    },
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-balanced/model.json",
+        "bytes": 13210101,
+        "sha256": "06900178ef52c4ac68638a73fb3de3a290cbda51956372cc4bd39f27d8862ea8",
+        "cid": "blake3:f8d5ba387dca81b632d8dc60fca83989e034bafe8b5813b0d3050b8654e4ab64"
+      },
+      "outcome": "12/30 construction;32/34 unique frames, coordinate plateau",
+      "fit": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-balanced/fit.json",
+        "bytes": 10011,
+        "sha256": "a5a5e36300451f0d71f1a72ed44152286cb79996daf498feb2555aa7a5e79e7c"
+      },
+      "actual": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-balanced/full.json",
+        "bytes": 1676115,
+        "sha256": "7b3544d9675dbb58f1a154af1a410ffac4280924f400b93115aacaf1bf691118",
+        "artifact": "blake3:f8d5ba387dca81b632d8dc60fca83989e034bafe8b5813b0d3050b8654e4ab64",
+        "exact": 12,
+        "total": 30,
+        "completed": 30
+      },
+      "identity": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/identity-fit-balanced.json",
+        "bytes": 312,
+        "sha256": "0244d855b1cf375202e88270374341b8c6a54a306304230fadc004338f5ecf67"
+      }
+    },
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-contextual/model.json",
+        "bytes": 13320929,
+        "sha256": "af7eaa1221a3983081f6406bd7386b879973cee6bcc13dc0218d16384adbb152",
+        "cid": "blake3:ba2398a240c024fea586de2dfa573dc1fe9077f5c547cbe80973e8f943011c9a"
+      },
+      "outcome": "12/30 construction; larger query-prefix serving law did not resolve plateau",
+      "fit": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-contextual/fit.json",
+        "bytes": 10103,
+        "sha256": "b83c3ea6616c2115bef80948f2464fc52a86a61ce0e3d1d61c8cd8b488c85938"
+      },
+      "actual": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-contextual/full.json",
+        "bytes": 1676147,
+        "sha256": "c94c37bb7a87b0d7bb511f69a881391103390a7a61c00c6d5ec76b7fdd99b912",
+        "artifact": "blake3:ba2398a240c024fea586de2dfa573dc1fe9077f5c547cbe80973e8f943011c9a",
+        "exact": 12,
+        "total": 30,
+        "completed": 30
+      },
+      "identity": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/identity-fit-contextual.json",
+        "bytes": 314,
+        "sha256": "4d6b6a7ca74d7f955a0346713877aabd2d73b4414a0ca460ee3ae30665a2a00f"
+      }
+    },
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-pairs/model.json",
+        "bytes": 13210099,
+        "sha256": "d18fa645277bb578995b0a8e12240102bdef601af2abd5d41f54e026b16ea21d",
+        "cid": "blake3:9e8d9cfb97523cd4d9ed7b72c2354133070202f9667bf47e539d8a4acf07ca01"
+      },
+      "outcome": "30/30 construction and28/28 open but563/663 retained construction and two ledger regressions; rejected",
+      "fit": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-pairs/fit.json",
+        "bytes": 12188,
+        "sha256": "6d6606fe18fc7242f1f3c26bdd4a5b8c4b4d96796193653a73e412d79628d6b7"
+      },
+      "actual": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-pairs/full.json",
+        "bytes": 1610391,
+        "sha256": "f8af687f5b9a6d63965b54f672cef990567aa9061957a2a2ca490fca87c998b3",
+        "artifact": "blake3:9e8d9cfb97523cd4d9ed7b72c2354133070202f9667bf47e539d8a4acf07ca01",
+        "exact": 30,
+        "total": 30,
+        "completed": 30
+      },
+      "identity": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/identity-fit-pairs.json",
+        "bytes": 309,
+        "sha256": "70231d6441208192413fa93b5792bda1f1d4898b20a9d307100ebf64f483e989"
+      }
+    },
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving/model.json",
+        "bytes": 13233012,
+        "sha256": "c908863bc7f3ec71fc5ccf56765d32a8d3fa867b43613faf4a20b6594f65d90b",
+        "cid": "blake3:50734c5c25eab239c694f8f405ba025ca419ccaeb170a80fe2da8a24aa94e16e"
+      },
+      "outcome": "130/132 construction; two ledger regressions remain",
+      "fit": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving/fit.json",
+        "bytes": 60809,
+        "sha256": "d1573646e1c63940c5146db41c638bbb9170494b031124ccbd32e282ffd8acba"
+      },
+      "actual": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving/full.json",
+        "bytes": 5980105,
+        "sha256": "ca071d48f619625a58fee83a3d13ac4efe97e8dfc814f4b1d2b7b47e3b1eca0e",
+        "artifact": "blake3:50734c5c25eab239c694f8f405ba025ca419ccaeb170a80fe2da8a24aa94e16e",
+        "exact": 130,
+        "total": 132,
+        "completed": 132
+      },
+      "identity": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/identity-fit-preserving.json",
+        "bytes": 314,
+        "sha256": "e8bb4bca83bcfabcf693f287c1bf171e0e5fd2f9a79615c7cb5aac9351a1ba95"
+      }
+    }
+  ],
+  "remaining_failures": [
+    "Frozen original owner-first sentence diagnostic: all12 requested sentences failed despite correct source copies. Newvalue-first targets do not regrade or repair this population.",
+    "Four absent-owner stop requests already select wrong facts on parent; retained candidate formats those wrong sources. Allsix prior correctUnknown answers preserved.",
+    "Four history instruction-suffix variants add an extra relation compared with unmodified history; matched parent does the same. Matched12case fullrecord/source/version/checkpoint equality passes; originalquery score remains8/12.",
+    "Both33step sentence targets overflow existing32step entry cap and produce trailing text; one failsEOS at96tokens, one eventually stops with wrongextra text."
+  ],
+  "verification_failure": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/allocation-word_sentence-preserving.log",
+    "bytes": 551,
+    "sha256": "c659d7eedb583856ab94eeece5c0ff1c36162fbd489cff4d470dcc96638cc0b1",
+    "kind": "Incorrect test counter ownership",
+    "correction": "Actual pending suffix mismatch belongs to ResponseEntry after copyComplete. Corrected test requires no commits, entry mismatch/base accounting, consumed pending state and unchanged exact committed copy. Runtime and candidate unchanged; corrected actual allocation test passed."
+  },
+  "unqualified": [
+    "general prose",
+    "arbitrary instruction wording",
+    "general reasoning",
+    "Rust synthesis",
+    "alpha",
+    "frontier capability",
+    "complete-path energy advantage"
+  ],
+  "not_run": [
+    "new-artifact browser",
+    "new-artifact WASM",
+    "new-artifact HTTP",
+    "blanket full test suite",
+    "Clippy"
+  ],
+  "next": "Diagnose instruction-versus-fact role binding in nonnumeric query/read/write contexts, using absent-owner stop and instruction-induced relation negatives while preserving exact source identities and the shared emitter. Learn at the observed boundary; do not add a parser or blindly expand capacity.",
+  "resources": {
+    "at": "2026-09-09T02:36:48.055Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/commands.jsonl",
+    "model_ms": 2663365,
+    "engineering_ms": 1255643,
+    "ledger": {
+      "cumulative_ms": 19111726,
+      "limit_ms": 20550000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 1241654,
+    "storage_high_water": {
+      "target": 37961728,
+      "worktree": 221184,
+      "evidence": 400371712,
+      "at": "2026-09-09T02:35:03.751Z",
+      "git": 0
+    },
+    "retained_copy_bytes": 13697024,
+    "cycle_growth_bytes": 452251648,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 35638030336,
+    "storage_limit_bytes": 37010698240,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 1238450176,
+    "peak_model_sampled_rss_bytes": 2472624128,
+    "peak_engineering_sampled_rss_bytes": 2598682624,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "projection": {
+    "at": "2026-09-09T00:19:54.470Z",
+    "reason": "Trace and repair nonnumeric fact sentence emission at the actual shared geometric source/lexical seam; preserve accepted numeric composition and all source/abstention controls.",
+    "authorization": "Owner next-step request and standing local resource-extension authorization",
+    "ledger_before": {
+      "cumulative_ms": 16448361,
+      "limit_ms": 17250000
+    },
+    "increment_ms": 2400000,
+    "updated_limit_ms": 20550000,
+    "cycle_model_ms": 3600000,
+    "cycle_engineering_ms": 1800000,
+    "phase_breakdown_ms": {
+      "diagnosis": 120000,
+      "preparation_fit": 1200000,
+      "controls_preservation": 720000,
+      "interfaces": 480000,
+      "fresh": 60000,
+      "retries_checkpoint": 120000
+    },
+    "prior_unverified_reservation_ms": 196620,
+    "context_tokens": 512,
+    "output_tokens": 96,
+    "input_window_bytes_max": 4096,
+    "construction_frames_max": 4096,
+    "construction_cases_max": 256,
+    "open_cases_max": 256,
+    "fresh_cases_max": 32,
+    "threads": 2,
+    "model_processes": 1,
+    "peak_model_rss_bytes": 4294967296,
+    "peak_build_rss_bytes": 6442450944,
+    "new_storage_bytes": 1610612736,
+    "storage_breakdown": {
+      "build": 805306368,
+      "artifacts_checkpoints": 134217728,
+      "reports_temporary": 654311424,
+      "metadata": 16777216
+    },
+    "storage_limit_bytes": 37010698240,
+    "stop_margin_bytes": 134217728,
+    "accounted_before_bytes": 35169001472,
+    "baselines": {
+      "target": 2724093952,
+      "worktree": 478490624,
+      "evidence": 0,
+      "git": 1007837184
+    },
+    "worktree": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+    "branch": "codex/nonnumeric-shared-emission",
+    "source_base": "5f123e28da0ce18c7a4b89fb3e6a8041a0fdd4ec",
+    "artifact": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/copy-add/model.json",
+      "bytes": 13132214,
+      "sha256": "bec859344be857eced857adf6ee360bccbacc81d91282de7eed31bb4aa0e5233",
+      "cid": "blake3:2dc63b2c7b7073155fd3c5a8c743eaaace66f409483d86dd390966d4f9fc03f6"
+    },
+    "prior_receipt": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/resources.json",
+    "unique_deletions": false,
+    "paid_external_compute": false,
+    "representation_allowance": {
+      "at": "2026-09-09T00:32:07.954Z",
+      "reason": "Typed word-context roots require complete new features while preserving660 numeric roots; no context pruning or numeric retraining.",
+      "word_fit_feature_cap": 4096,
+      "previous_fit_cap": 768,
+      "increment_features": 3328,
+      "incremental_artifact_upper_bound_bytes": 2097152,
+      "within_existing_artifacts_checkpoints_bytes": 134217728,
+      "new_resource_increment_bytes": 0,
+      "cumulative_time_limit_ms": 19650000,
+      "shared_storage_limit_bytes": 37010698240,
+      "stop_margin_bytes": 134217728
+    },
+    "historical_context_replay": {
+      "at": "2026-09-09T01:03:32.989Z",
+      "cases": 12,
+      "turns_max": 5,
+      "padding_tokens_per_turn": 1056,
+      "retained_context_tokens": 512,
+      "input_bytes_per_turn_max": 4096,
+      "output_tokens": 96,
+      "reason": "Retained same-value version and conflict contexts need their original ingestion history; this is not a larger retained context or training population.",
+      "within_cycle_model_ms": 2700000,
+      "new_resource_increment": 0
+    },
+    "pair_fit_projection": {
+      "at": "2026-09-09T01:22:49.430Z",
+      "reason": "Single-coordinate objective plateau persists with invariant vocabulary and added prefix interaction; test complementary parameter updates while preserving the smaller serving representation.",
+      "start_artifact": "blake3:f8d5ba387dca81b632d8dc60fca83989e034bafe8b5813b0d3050b8654e4ab64",
+      "data": "data/construction.json",
+      "pair_limit": 64,
+      "roots_per_coordinate_max": 120,
+      "learner_ms_max": 120000,
+      "preparation_and_actual_evaluation_ms_max": 120000,
+      "threads": 2,
+      "model_processes": 1,
+      "peak_rss_bytes": 4294967296,
+      "incremental_artifact_bytes_max": 2097152,
+      "within_existing_cycle_model_ms": 2700000,
+      "new_time_increment_ms": 0,
+      "new_storage_increment_bytes": 0
+    },
+    "preservation_refinement_projection": {
+      "at": "2026-09-09T01:50:30.220Z",
+      "reason": "Rejected9e8 overrides100 retained Rust continuations and2ledger answers; learn existing Base/defer action from exact original-parent tokens while retaining sentence emission.",
+      "start_artifact": "blake3:9e8d9cfb97523cd4d9ed7b72c2354133070202f9667bf47e539d8a4acf07ca01",
+      "construction_cases": 132,
+      "previous_case_cap": 128,
+      "new_case_cap": 256,
+      "case_increment": 128,
+      "frames_max": 4096,
+      "context_tokens": 512,
+      "output_tokens": 96,
+      "learner_ms_max_per_fit": 120000,
+      "fit_plus_pair_and_evaluation_projection_ms": 360000,
+      "remaining_checks_projection_ms": 1000000,
+      "build_projection_ms": 240000,
+      "threads": 2,
+      "model_processes": 1,
+      "peak_model_rss_bytes": 4294967296,
+      "peak_build_rss_bytes": 6442450944,
+      "new_artifacts_upper_bound_bytes": 33554432,
+      "within_cycle_model_ms": 2700000,
+      "within_cycle_engineering_ms": 1800000,
+      "new_time_increment_ms": 0,
+      "new_storage_increment_bytes": 0,
+      "cumulative_limit_ms": 19650000,
+      "storage_limit_bytes": 37010698240,
+      "stop_margin_bytes": 134217728
+    },
+    "preservation_delivery_extension": {
+      "at": "2026-09-09T02:00:49.484Z",
+      "reason": "Real563/663regression required Base/defer learning and two additional fits; complete newcandidate preservation, API/allocation, fresh transfer and protected delivery without dropping rejected work.",
+      "ledger_before": {
+        "cumulative_ms": 17854659,
+        "limit_ms": 19650000
+      },
+      "cycle_model_before_ms": 2700000,
+      "cycle_model_increment_ms": 900000,
+      "cycle_model_updated_ms": 3600000,
+      "cumulative_increment_ms": 900000,
+      "cumulative_updated_limit_ms": 20550000,
+      "complete_remaining_projection_ms": {
+        "open_abstention_history_limit": 160000,
+        "retained_numeric_and_prior_panels": 950000,
+        "api": 360000,
+        "focused_allocations": 180000,
+        "fresh_identity_rust": 200000,
+        "retry_checkpoint": 180000
+      },
+      "engineering_remaining_projection_ms": 300000,
+      "threads": 2,
+      "model_processes": 1,
+      "context_tokens": 512,
+      "output_tokens": 96,
+      "construction_cases_max": 256,
+      "frames_max": 4096,
+      "peak_model_rss_bytes": 4294967296,
+      "peak_build_rss_bytes": 6442450944,
+      "remaining_storage_projection_bytes": 536870912,
+      "new_storage_increment_bytes": 0,
+      "cycle_storage_limit_bytes": 1610612736,
+      "shared_storage_limit_bytes": 37010698240,
+      "stop_margin_bytes": 134217728,
+      "prior_reservation_ms": 196620,
+      "authorization": "Standing local extension; no deletion or paid compute"
+    },
+    "retained_copy_projection": {
+      "at": "2026-09-09T02:35:37.053Z",
+      "reason": "All selection, preservation, API/allocation and fresh generated Rust checks passed; retain qualified artifact without duplicating negative checkpoints.",
+      "new_retained_bytes_max": 13421772,
+      "within_artifact_allowance": 134217728,
+      "new_limit_increment": 0,
+      "cumulative_time_limit_ms": 20550000,
+      "storage_limit_bytes": 37010698240,
+      "stop_margin_bytes": 134217728
+    }
+  },
+  "local_evidence_root": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence",
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/diagnostic/full.json",
+      "bytes": 677958,
+      "sha256": "307eb5a188dbc695f8343d2316e2153c33612d8499fd4155a07355b8a4766ff0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/target-policy.json",
+      "bytes": 353,
+      "sha256": "6be7e59ce1b402f20a5951209c1a89422ad74e191566912f75a74e155b6177b6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/construction.json",
+      "bytes": 9713,
+      "sha256": "f794734c15640b34e6ca0deee7e00f8a4df73c40ef0e0c7ff1a0ea1bbc6dfa86"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/open.json",
+      "bytes": 9421,
+      "sha256": "ed2e23fb46aab0f29ab398c3fde626cad0b827d6d1f46b76eb90daad39743bc2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/abstention.json",
+      "bytes": 2990,
+      "sha256": "0d129233c6b111f22ed0382d5c7a703343b47be6008ea9cc05096f29a93cf139"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/over-limit.json",
+      "bytes": 773,
+      "sha256": "d5e7544150321b9ad03b072fd2b48cac15a632c852327529d269776caf71e5ca"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data-preserving/cases.json",
+      "bytes": 68744,
+      "sha256": "8c953908d402d145ea0a1b790fe4cda151e9cb9977c537b8d41d9ef8ce394242"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data-preserving/receipt.json",
+      "bytes": 1075,
+      "sha256": "3057b84905aba453959ae87ac1b02ac6b7ea97a98bfde47b5b186962e624c654"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving-pairs/training.json",
+      "bytes": 33957,
+      "sha256": "066986cc42f780dae8965b192f4cadc3e2da002a893355fb778ca7b902c24236"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving-pairs/fit.json",
+      "bytes": 62412,
+      "sha256": "7eec1f1740c479e182b0be5ca60a86e5ba594596e21360ad9477b0f175c34bab"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fit-preserving-pairs/full.json",
+      "bytes": 5951429,
+      "sha256": "97d5bd6e36287e7d1785379db85be33d2b09fa878c0d324f1d115868969ac224"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/open-final-identity.json",
+      "bytes": 8600,
+      "sha256": "02686be5cfb01f2376700cc69080d628680e8b8d1696c4176626d9bdc4b5dc9f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/history-comparison-final.json",
+      "bytes": 4719,
+      "sha256": "df6b073b50f60cca5cfcd0fe8b181cd29a9295b1ae6f13399c10406e2c4b93f6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/preserved-comparison-v2.json",
+      "bytes": 10497,
+      "sha256": "1f1da250cb380ea8e47e6cd08bc7fc6dbaabaaa25ca65efb4eba5d04e0cec20b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/abstention-final-identity.json",
+      "bytes": 3438,
+      "sha256": "6690bd1f01515b8fceed7dcca326bc7af27b00844aa3984e02501601c7b87b62"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/pair-rejection.json",
+      "bytes": 614,
+      "sha256": "713b5ee4733f1b7c4aab9bc18fa00d4d0e87f26233ed130e65075a55dbacce3b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rejected-emission-boundary.json",
+      "bytes": 692,
+      "sha256": "605de053bd17693d109d5c478323d13692e0530996de580677085a1adec9c766"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/query-association-diagnostic.json",
+      "bytes": 3890,
+      "sha256": "5416063d43ea95b8026ab7de0a31efeb624623a8ccce66cf0675f9d3995886e0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-plan.json",
+      "bytes": 1258,
+      "sha256": "7e21a69e1a6bb38f49304811236e274e3b36303799791937dd63e4140736f3ce"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/selection.json",
+      "bytes": 2425,
+      "sha256": "909808d27fa0064a02fa57385008214e7359e3d2d710b468c9c122434abd7a76"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-data/cases.json",
+      "bytes": 7722,
+      "sha256": "b5fbd60c841e3172947d8eab0f51aac2eec8f575baaee4c3c6975b79801c2158"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-data/draw.json",
+      "bytes": 543,
+      "sha256": "98d54c3f8af9d6e1c7aef9b146e95f8b4ab292ea811569004e02bf1adda1d6a8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-data/disjointness.json",
+      "bytes": 526,
+      "sha256": "f03204178145fdbad59adad979d1815dafaa976e402c17f5be0d381ffb650325"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-final-identity.json",
+      "bytes": 7563,
+      "sha256": "e10c010e2c11f5b4c24024d1c61ef00012f46dc825649bf116354f054240bc2d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/identity-fit-preserving-pairs.json",
+      "bytes": 320,
+      "sha256": "8ef34ba4395477d23c4322515395b7dd70db72146b6115880e4ce25aff99b5fa"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/preserve/result.json",
+      "bytes": 193,
+      "sha256": "f478955b1c5fb0f62b37cb40527333c291c54f15f5d505a85d0e1c3153380b56"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-evaluate/source-receipt.json",
+      "bytes": 439,
+      "sha256": "f052de27123ace6fb5949d8ee9540d8f21ee6b1a2e36e7dc7e06b3568e16071e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-stress/source-receipt.json",
+      "bytes": 437,
+      "sha256": "7079bcc938424b91a25324447e761590c95465b27b28d309e25cacf1bd8231bf"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/rust-fresh/receipt.json",
+      "bytes": 1522,
+      "sha256": "acb4907e8c9c791c25421d2b327bdd0be091fb2ff1d85e852e15c5f7be7578c2"
+    }
+  ],
+  "commands": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/commands.jsonl",
+    "bytes": 75026,
+    "sha256": "1d6e18b84e06e2bb2bf39a0b73c3fc3b60ab0f9298bb42cf1b447dc10bebaec2"
+  },
+  "toolchain": {
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6\n",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)\n",
+    "cargo_lock": {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/Cargo.lock",
+      "bytes": 58336,
+      "sha256": "7337e6b47e5f7a8d4589164cb6ad23637e3d1b5413b462716cfdc1ab72d2558c"
+    },
+    "binaries": [
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+        "bytes": 3554448,
+        "sha256": "248b57469cee3f6296f31582e812dd0bc18e8b99650802b41e7c2e41f458cbac"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_word_emission_history",
+        "bytes": 3134032,
+        "sha256": "3914e68dd9b5b2516f76011ec676a67c727c3add9434f564f930208112f1a411"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_artifact_recovery_check",
+        "bytes": 3316320,
+        "sha256": "52b7be7b251119f0ddb62b44882a185ddb2e88947e1db1b524a888f44d5f1c72"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+        "bytes": 3624000,
+        "sha256": "ef85c11def3e695c9d87701c9fe52a12532ec28d2c462d23e39b56ce091de6c1"
+      }
+    ]
+  }
+}
