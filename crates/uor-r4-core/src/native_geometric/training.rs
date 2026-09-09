@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            shared_operator_refinement: None,
             action_emission: None,
             mixed_operators: None,
             composed_output: None,
@@ -562,6 +563,9 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.shared_operator_refinement {
+            return witness.validate(self);
+        }
         if let Some(witness) = &self.action_emission {
             return witness.validate(self);
         }

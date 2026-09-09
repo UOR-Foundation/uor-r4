@@ -526,6 +526,14 @@ pub(super) fn score(
     );
     let router = if !context.literal_component
         && context.depths.is_some()
+        && control == Control::SharedOperatorBindingDisabled
+    {
+        model
+            .shared_operator_refinement
+            .as_ref()
+            .map_or(&block.router, |w| &w.previous_roles)
+    } else if !context.literal_component
+        && context.depths.is_some()
         && control == Control::ActionBindingDisabled
     {
         model

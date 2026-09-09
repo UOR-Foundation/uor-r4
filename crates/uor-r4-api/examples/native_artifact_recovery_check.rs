@@ -218,6 +218,9 @@ fn run(
     )?;
 
     let document: Value = serde_json::from_slice(&bytes)?;
+    let shared_parent = document
+        .get("shared_operator_refinement")
+        .is_some_and(Value::is_object);
     let action_parent = document
         .get("action_emission")
         .is_some_and(Value::is_object);
@@ -394,7 +397,15 @@ fn run(
                 "instruction binding identity differs",
             ),
         ] {
-            let boundary = if action_parent {
+            let boundary = if shared_parent {
+                if pointer.starts_with("/operation_transition/")
+                    || pointer.starts_with("/typed_roles/")
+                {
+                    "shared operator identity differs"
+                } else {
+                    "shared operator frozen parent differs"
+                }
+            } else if action_parent {
                 if pointer.starts_with("/operation_transition/")
                     || pointer.starts_with("/typed_roles/")
                 {
@@ -429,7 +440,9 @@ fn run(
                 json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
             )?;
         }
-        let parent_boundary = if action_parent {
+        let parent_boundary = if shared_parent {
+            "shared operator frozen parent differs"
+        } else if action_parent {
             "action emission frozen parent differs"
         } else if mixed_parent {
             "mixed operators frozen parent differs"
@@ -541,7 +554,15 @@ fn run(
                 "composed output identity differs",
             ),
         ] {
-            let boundary = if action_parent {
+            let boundary = if shared_parent {
+                if pointer.starts_with("/operation_transition/")
+                    || pointer.starts_with("/typed_roles/")
+                {
+                    "shared operator identity differs"
+                } else {
+                    "shared operator frozen parent differs"
+                }
+            } else if action_parent {
                 if pointer.starts_with("/operation_transition/")
                     || pointer.starts_with("/typed_roles/")
                 {
@@ -581,7 +602,9 @@ fn run(
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
         changed["composed_output"]["parent_artifact"] = json!(wrong_parent);
-        let parent_boundary = if action_parent {
+        let parent_boundary = if shared_parent {
+            "shared operator frozen parent differs"
+        } else if action_parent {
             "action emission frozen parent differs"
         } else if mixed_parent {
             "mixed operators frozen parent differs"
@@ -706,7 +729,15 @@ fn run(
                 "mixed operators identity differs",
             ),
         ] {
-            let boundary = if action_parent {
+            let boundary = if shared_parent {
+                if pointer.starts_with("/operation_transition/")
+                    || pointer.starts_with("/typed_roles/")
+                {
+                    "shared operator identity differs"
+                } else {
+                    "shared operator frozen parent differs"
+                }
+            } else if action_parent {
                 if pointer.starts_with("/operation_transition/")
                     || pointer.starts_with("/typed_roles/")
                 {
@@ -737,7 +768,9 @@ fn run(
         }
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
-        let parent_boundary = if action_parent {
+        let parent_boundary = if shared_parent {
+            "shared operator frozen parent differs"
+        } else if action_parent {
             "action emission frozen parent differs"
         } else {
             "mixed operators frozen parent differs"
@@ -884,6 +917,17 @@ fn run(
                 "action emission identity differs",
             ),
         ] {
+            let boundary = if shared_parent {
+                if pointer.starts_with("/operation_transition/")
+                    || pointer.starts_with("/typed_roles/")
+                {
+                    "shared operator identity differs"
+                } else {
+                    "shared operator frozen parent differs"
+                }
+            } else {
+                boundary
+            };
             let mut changed = document.clone();
             let bias = changed
                 .pointer_mut(pointer)
@@ -911,9 +955,13 @@ fn run(
             checks,
             "action_wrong_parent_cid_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("action emission frozen parent differs")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(if shared_parent {
+                        "shared operator frozen parent differs"
+                    } else {
+                        "action emission frozen parent differs"
+                    })
+                }),
             json!({"error":error}),
         )?;
         let mut changed = document.clone();
@@ -925,9 +973,13 @@ fn run(
             checks,
             "action_context_flag_identity_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("action emission identity differs")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(if shared_parent {
+                        "shared operator frozen parent differs"
+                    } else {
+                        "action emission identity differs"
+                    })
+                }),
             json!({"error":error}),
         )?;
         let mut changed = document.clone();
@@ -944,6 +996,161 @@ fn run(
         )?;
     } else {
         checks.push(json!({"name":"action_emission_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no action_emission witness"}));
+    }
+    if let Some(witness) = document
+        .get("shared_operator_refinement")
+        .filter(|v| v.is_object())
+    {
+        // The stage flag records completed fitting, never behavior quality.
+        // Every independently specified target below must still be generated.
+        if witness.get("continuation_fitted").and_then(Value::as_bool) == Some(true) {
+            for (label, request, target) in [
+                ("sentence_original_add_extra", "Copy the original total. Add the extra to the copied result. Explain in a sentence.", "17 is 17.\n20 is 3 plus 17.\n"),
+                ("sentence_extra_add_original", "Copy the extra. Add the original total to the copied result. Explain in a sentence.", "3 is 3.\n20 is 17 plus 3.\n"),
+                ("rust_original_add_extra", "Copy the original total. Add the extra to the copied result. Write a Rust equality.", "17 == 17\n20 == 3 + 17\n"),
+                ("rust_extra_add_original", "Copy the extra. Add the original total to the copied result. Write a Rust equality.", "3 == 3\n20 == 17 + 3\n"),
+            ] {
+                let config = SessionConfig { session_id: format!("copy-add-{label}"), ..SessionConfig::default() };
+                let mut direct = model.session(Control::Full)?;
+                let mut api = api_model.create_session(config.clone())?;
+                compare_turn(&model, &mut direct, &mut api, SUM_13, "17.\n", &format!("copy_add_{label}_actual_history"), checks)?;
+                api.import_state(&api.export_state()?)?;
+                direct = model.restore_session(&direct.checkpoint()?)?;
+                let prompt = format!("User: There are 3 extra coins. {request}\nAssistant:");
+                compare_turn(&model, &mut direct, &mut api, &prompt, target, &format!("copy_add_{label}_api_direct_parity_after_history_checkpoint"), checks)?;
+                let exported = api.export_state()?;
+                let mut imported = api_model.create_session(config)?;
+                imported.import_state(&exported)?;
+                direct = model.restore_session(&direct.checkpoint()?)?;
+                record(checks, &format!("copy_add_{label}_checkpoint_import"), imported.identity_scope() == api.identity_scope(),
+                    json!({"checkpoint_bytes":exported.len(),"scope":imported.identity_scope(),"development_case":true}))?;
+                compare_turn(&model, &mut direct, &mut imported, SUM_13, "17.\n", &format!("copy_add_{label}_checkpoint_next_independent_sum"), checks)?;
+            }
+        } else {
+            checks.push(json!({"name":"copy_add_behavior","status":"NOT_APPLICABLE","reason":"continuation_fitted is false; staged binding checkpoint has no fitted continuation"}));
+        }
+        let expected_parent =
+            "blake3:5ed24f4e7487b6f9cb7fb762fc8bcc9092152f40cb756d864a82880d08ca867d";
+        record(
+            checks,
+            "shared_operator_parent_reconstruction_and_roundtrip",
+            witness.get("parent_artifact").and_then(Value::as_str) == Some(expected_parent),
+            json!({"parent_artifact":witness["parent_artifact"],"expected_parent":expected_parent,"current_artifact":expected_cid,
+                "validated_by":["NativeModel::load_from_bytes","artifact_load_save_roundtrip"],
+                "boundary":"Loader restores full previous operation transition, including dictionary and limit, and shared role router, then validates the frozen parent recursively; no separate extracted parent is claimed."}),
+        )?;
+        for (name, pointer, boundary) in [
+            (
+                "shared_previous_roles_frozen_parent_rejected",
+                "/shared_operator_refinement/previous_roles/biases/0",
+                "shared operator frozen parent differs",
+            ),
+            (
+                "shared_current_roles_identity_rejected",
+                "/typed_roles/router/biases/0",
+                "shared operator identity differs",
+            ),
+            (
+                "shared_previous_operation_frozen_parent_rejected",
+                "/shared_operator_refinement/previous_operation/router/biases/0",
+                "shared operator frozen parent differs",
+            ),
+            (
+                "shared_current_operation_identity_rejected",
+                "/operation_transition/router/biases/0",
+                "shared operator identity differs",
+            ),
+        ] {
+            let mut changed = document.clone();
+            let bias = changed
+                .pointer_mut(pointer)
+                .ok_or("shared router bias absent")?;
+            let old = bias
+                .as_i64()
+                .ok_or("shared router bias is not an integer")?;
+            if !(-32..=32).contains(&old) {
+                return Err("shared router bias outside documented range".into());
+            }
+            let new = if old == 32 { old - 1 } else { old + 1 };
+            *bias = json!(new);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+            )?;
+        }
+        for (name, pointer, boundary) in [
+            (
+                "shared_previous_dictionary_frozen_parent_rejected",
+                "/shared_operator_refinement/previous_operation/dictionary/0/prime",
+                "shared operator frozen parent differs",
+            ),
+            (
+                "shared_current_dictionary_shape_rejected",
+                "/operation_transition/dictionary/0/prime",
+                "invalid operation transition dictionary",
+            ),
+        ] {
+            let mut changed = document.clone();
+            let prime = changed
+                .pointer_mut(pointer)
+                .ok_or("shared operation prime absent")?;
+            let old = prime
+                .as_u64()
+                .ok_or("shared operation prime is not unsigned")?;
+            *prime = json!(old.checked_add(1).ok_or("prime overflow")?);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+                json!({"field":pointer,"old":old,"expected_boundary":boundary,"error":error}),
+            )?;
+        }
+        let mut changed = document.clone();
+        changed["shared_operator_refinement"]["parent_artifact"] =
+            json!(format!("blake3:{}", "0".repeat(64)));
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "shared_wrong_parent_cid_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("shared operator frozen parent differs")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["shared_operator_refinement"]["continuation_fitted"] = json!(!witness
+            ["continuation_fitted"]
+            .as_bool()
+            .ok_or("shared continuation stage flag absent")?);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "shared_stage_flag_identity_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("shared operator identity differs")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["shared_operator_refinement"]["unexpected_witness_field"] = json!(true);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "shared_unknown_witness_field_rejected",
+            rejected
+                && error.as_deref().is_some_and(|e| {
+                    e.contains("unknown field") && e.contains("unexpected_witness_field")
+                }),
+            json!({"error":error}),
+        )?;
+    } else {
+        checks.push(json!({"name":"shared_operator_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no shared_operator_refinement witness"}));
     }
     if document
         .get("typed_role_refinement")

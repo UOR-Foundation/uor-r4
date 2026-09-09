@@ -222,7 +222,13 @@ pub(super) fn offer(
     control: Control,
     work: &mut ValueWork,
 ) -> Option<Candidate> {
-    let block = if control == Control::ActionTransitionDisabled {
+    let block = if control == Control::SharedOperatorTransitionDisabled {
+        model
+            .shared_operator_refinement
+            .as_ref()
+            .map(|w| &w.previous_operation)
+            .or(model.operation_transition.as_ref())?
+    } else if control == Control::ActionTransitionDisabled {
         model
             .action_emission
             .as_ref()
