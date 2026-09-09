@@ -37,7 +37,9 @@ mod action_emission;
 mod action_emission_tests;
 mod mixed_initial_training;
 mod shared_operator_refinement;
+mod writer_choice;
 mod writer_lexical;
+pub use writer_choice::{WriterChoiceExample, WriterChoiceOverride, WriterChoiceTarget};
 pub use writer_lexical::WriterLexicalExample;
 mod source_role_refinement;
 pub use source_role_refinement::{SourceRoleRefinementExample, SourceRoleTarget};
@@ -262,6 +264,8 @@ pub struct DocumentReceipt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Control {
+    WriterChoiceDisabled,
+    WriterChoiceBoundaryDisabled,
     FieldCompositionDisabled,
     FieldCompositionContextDisabled,
     FieldCompositionGeometryDisabled,
@@ -361,6 +365,8 @@ impl Feature {
     fn admitted(self, control: Control) -> bool {
         match control {
             Control::Full
+            | Control::WriterChoiceDisabled
+            | Control::WriterChoiceBoundaryDisabled
             | Control::FieldCompositionDisabled
             | Control::FieldCompositionContextDisabled
             | Control::FieldCompositionGeometryDisabled
@@ -478,6 +484,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    writer_choice: Option<writer_choice::WriterChoice>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     field_composition: Option<field_composition::FieldComposition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     writer_lexical: Option<writer_lexical::WriterLexical>,
@@ -566,6 +574,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    writer_choice: Option<writer_choice::WriterChoice>,
+    #[serde(default)]
     field_composition: Option<field_composition::FieldComposition>,
     #[serde(default)]
     writer_lexical: Option<writer_lexical::WriterLexical>,
@@ -653,6 +663,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            writer_choice: wire.writer_choice,
             field_composition: wire.field_composition,
             writer_lexical: wire.writer_lexical,
             source_role_refinement: wire.source_role_refinement,

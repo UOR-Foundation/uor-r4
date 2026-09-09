@@ -127,8 +127,388 @@ fn writer_boundary(present: bool, nested: &str) -> &str {
     }
 }
 
+fn writer_choice_checks(
+    api_model: &NativeModel,
+    document: &Value,
+    checks: &mut Vec<Value>,
+) -> CheckResult<Option<Model>> {
+    let Some(witness) = document.get("writer_choice").filter(|v| v.is_object()) else {
+        checks.push(json!({"name":"writer_choice_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no writer_choice witness"}));
+        return Ok(None);
+    };
+    let model = api_model.inner_model();
+    let parent = model.without_writer_choice()?;
+    let parent_bytes = parent.to_bytes()?;
+    let parent_document: Value = serde_json::from_slice(&parent_bytes)?;
+    let expected_parent = "blake3:d1b0985fb8af0528dae6a7c684e1c76be3634099c868a7f9a3b09454cb68d1c0";
+    let mut candidate_base = document.clone();
+    let mut parent_base = parent_document.clone();
+    for key in ["writer_choice", "artifact_cid", "uor_model_address"] {
+        candidate_base
+            .as_object_mut()
+            .ok_or("candidate is not an object")?
+            .remove(key);
+        parent_base
+            .as_object_mut()
+            .ok_or("parent is not an object")?
+            .remove(key);
+    }
+    record(
+        checks,
+        "writer_choice_exact_parent_and_frozen_components",
+        witness["parent_artifact"] == expected_parent
+            && parent.artifact_cid() == expected_parent
+            && candidate_base == parent_base,
+        json!({"candidate_artifact":model.artifact_cid(),"parent_artifact":parent.artifact_cid(),
+            "parent_bytes":parent_bytes.len(),"parent_bytes_blake3":blake3::hash(&parent_bytes).to_hex().to_string(),
+            "boundary":"Only the optional writer-choice residual and derived identities differ; all inherited writer, cache, field-composition and geometric components match the recursively validated parent."}),
+    )?;
+    for (label, padding) in [
+        ("recent", String::new()),
+        ("evicted", "oak ash elm ".repeat(40)),
+    ] {
+        let prompt = format!("Record: selvi in Dusk Ridge. selvi now in Copper Vale. {padding}Where is selvi? Name the owner first. Answer:");
+        let config = SessionConfig {
+            session_id: format!("writer-choice-{label}"),
+            ..SessionConfig::default()
+        };
+        let mut direct = model.session(Control::Full)?;
+        let mut api = api_model.create_session(config.clone())?;
+        compare_turn(
+            &model,
+            &mut direct,
+            &mut api,
+            &prompt,
+            " selvi is in Copper Vale.\n",
+            &format!("writer_choice_{label}_revision_api_direct_parity"),
+            checks,
+        )?;
+        let checkpoint: Value = serde_json::from_slice(&direct.checkpoint()?)?;
+        let relations = &checkpoint["values"]["relations"];
+        let records = relations["records"]
+            .as_array()
+            .ok_or("revision records absent")?;
+        let old = records
+            .iter()
+            .find(|r| r["id"] == 1)
+            .ok_or("old revision record absent")?;
+        let new = records
+            .iter()
+            .find(|r| r["id"] == 2)
+            .ok_or("new revision record absent")?;
+        let atom = |v: &Value| -> CheckResult<String> {
+            let len = v["len"].as_u64().ok_or("atom length absent")? as usize;
+            let all = v["bytes"].as_array().ok_or("atom bytes absent")?;
+            let bytes = all
+                .get(..len)
+                .ok_or("atom length overflow")?
+                .iter()
+                .map(|b| {
+                    b.as_u64()
+                        .and_then(|n| u8::try_from(n).ok())
+                        .ok_or("atom byte invalid")
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(String::from_utf8(bytes)?)
+        };
+        let directory: Vec<_> = relations["directory"]
+            .as_array()
+            .ok_or("revision directory absent")?
+            .iter()
+            .filter_map(|id| id.as_u64().filter(|id| *id != 0))
+            .collect();
+        record(
+            checks,
+            &format!("writer_choice_{label}_exact_revision_records"),
+            records
+                .iter()
+                .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0))
+                .count()
+                == 2
+                && atom(&old["owner"])? == "selvi"
+                && atom(&old["span"])? == "Dusk Ridge"
+                && old["action"] == 1
+                && old["previous"] == 0
+                && atom(&new["owner"])? == "selvi"
+                && atom(&new["span"])? == "Copper Vale"
+                && new["action"] == 2
+                && new["previous"] == 1
+                && directory == vec![2],
+            json!({"relations":relations}),
+        )?;
+        let exported = api.export_state()?;
+        let mut imported = api_model.create_session(config)?;
+        imported.import_state(&exported)?;
+        record(
+            checks,
+            &format!("writer_choice_{label}_checkpoint_import"),
+            imported.identity_scope() == api.identity_scope(),
+            json!({"checkpoint_bytes":exported.len(),"scope":imported.identity_scope()}),
+        )?;
+        compare_turn(
+            &model,
+            &mut direct,
+            &mut imported,
+            SUM_14,
+            "18.\n",
+            &format!("writer_choice_{label}_independent_next_sum"),
+            checks,
+        )?;
+    }
+    let mut direct = model.session(Control::Full)?;
+    let mut api = api_model.create_session(SessionConfig::default())?;
+    compare_turn(
+        &model,
+        &mut direct,
+        &mut api,
+        "Record: now in Copper Vale. Where is now? Name the owner first. Answer:",
+        " now is in Copper Vale.\n",
+        "writer_choice_literal_now_owner_api_direct_parity",
+        checks,
+    )?;
+    let config = SessionConfig {
+        session_id: "writer-choice-dependent-revision".into(),
+        ..SessionConfig::default()
+    };
+    let mut direct = model.session(Control::Full)?;
+    let mut api = api_model.create_session(config.clone())?;
+    compare_turn(&model, &mut direct, &mut api,
+        "casket in elvin. elvin in Bremen. Now elvin in Zurich. Question: Where is the location of casket? Answer:",
+        " Zurich.\n", "writer_choice_dependent_revision_api_direct_parity", checks)?;
+    let checkpoint: Value = serde_json::from_slice(&direct.checkpoint()?)?;
+    let relations = &checkpoint["values"]["relations"];
+    let atom = |v: &Value| -> CheckResult<String> {
+        let len = v["len"].as_u64().ok_or("dependent atom length absent")? as usize;
+        let all = v["bytes"].as_array().ok_or("dependent atom bytes absent")?;
+        let bytes = all
+            .get(..len)
+            .ok_or("dependent atom length overflow")?
+            .iter()
+            .map(|b| {
+                b.as_u64()
+                    .and_then(|n| u8::try_from(n).ok())
+                    .ok_or("dependent atom byte invalid")
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(String::from_utf8(bytes)?)
+    };
+    let mut actual_records = Vec::new();
+    for r in relations["records"]
+        .as_array()
+        .ok_or("dependent records absent")?
+    {
+        if r["id"].as_u64().is_some_and(|id| id != 0) {
+            actual_records.push(json!({"id":r["id"],"owner":atom(&r["owner"])?
+                ,"value":atom(&r["value"])? ,"action":r["action"],"previous":r["previous"],"conflict":r["conflict"]}));
+        }
+    }
+    let directory: Vec<_> = relations["directory"]
+        .as_array()
+        .ok_or("dependent directory absent")?
+        .iter()
+        .filter_map(|id| id.as_u64().filter(|id| *id != 0))
+        .collect();
+    record(
+        checks,
+        "writer_choice_dependent_revision_exact_records",
+        json!(actual_records)
+            == json!([
+                {"id":1,"owner":"casket","value":"elvin","action":1,"previous":0,"conflict":false},
+                {"id":2,"owner":"elvin","value":"Bremen","action":1,"previous":0,"conflict":false},
+                {"id":3,"owner":"elvin","value":"Zurich","action":2,"previous":2,"conflict":false},
+            ])
+            && directory == vec![1, 3],
+        json!({"records":actual_records,"directory":directory}),
+    )?;
+    let exported = api.export_state()?;
+    let mut imported = api_model.create_session(config)?;
+    imported.import_state(&exported)?;
+    record(
+        checks,
+        "writer_choice_dependent_revision_checkpoint_import",
+        imported.identity_scope() == api.identity_scope(),
+        json!({"checkpoint_bytes":exported.len(),"scope":imported.identity_scope()}),
+    )?;
+    compare_turn(
+        &model,
+        &mut direct,
+        &mut imported,
+        SUM_14,
+        "18.\n",
+        "writer_choice_dependent_revision_independent_next_sum",
+        checks,
+    )?;
+    let mut chunked = api_model.create_session(SessionConfig::default())?;
+    chunked.ingest("Record: selvi in Dusk Ridge. selvi n")?;
+    let checkpoint = chunked.export_state()?;
+    chunked.import_state(&checkpoint)?;
+    chunked.ingest("ow in Copper Vale. Where is selvi? Name the owner first. Answer:")?;
+    let actual = chunked.complete(CompletionRequest::new(""))?;
+    record(
+        checks,
+        "writer_choice_revision_chunked_prefill_import",
+        actual.text == " selvi is in Copper Vale.\n" && actual.stopped_by == "eos",
+        json!({"checkpoint_bytes":checkpoint.len(),"actual":actual}),
+    )?;
+    let mut changed = document.clone();
+    for (name, pointer, new, boundary) in [
+        (
+            "writer_choice_positive_coefficient_rejected",
+            "/writer_choice/rows/0/weight",
+            json!(1),
+            "invalid writer choice residual rows",
+        ),
+        (
+            "writer_choice_invalid_feature_rejected",
+            "/writer_choice/rows/0/feature/kind",
+            json!(0),
+            "invalid writer choice residual rows",
+        ),
+        (
+            "writer_choice_unknown_prime_rejected",
+            "/writer_choice/rows/0/feature/a",
+            json!(u64::MAX),
+            "invalid writer choice residual rows",
+        ),
+        (
+            "writer_choice_invalid_configuration_rejected",
+            "/writer_choice/max_seconds",
+            json!(0),
+            "invalid writer choice configuration",
+        ),
+        (
+            "writer_choice_empty_receipts_rejected",
+            "/writer_choice/training",
+            json!([]),
+            "invalid writer choice training receipts",
+        ),
+    ] {
+        let mut changed = document.clone();
+        let field = changed
+            .pointer_mut(pointer)
+            .ok_or("writer choice mutation field absent")?;
+        let old = field.clone();
+        *field = new.clone();
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            name,
+            rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+            json!({"field":pointer,"old":old,"new":new,"error":error}),
+        )?;
+    }
+    let gap = changed
+        .pointer_mut("/writer_choice/rows/0/feature/b")
+        .ok_or("writer choice feature gap absent")?;
+    let old = gap
+        .as_u64()
+        .ok_or("writer choice feature gap not integer")?;
+    let layout = witness
+        .get("feature_layout")
+        .and_then(Value::as_u64)
+        .unwrap_or(1);
+    let gap_shift = match layout {
+        1 => 0,
+        2 => 4,
+        _ => return Err("unknown writer choice layout in supplied artifact".into()),
+    };
+    let new = (old & !(1023_u64 << gap_shift)) | (1023_u64 << gap_shift);
+    *gap = json!(new);
+    let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+    record(
+        checks,
+        "writer_choice_invalid_exterior_gap_rejected",
+        rejected
+            && error
+                .as_deref()
+                .is_some_and(|e| e.contains("invalid writer choice residual rows")),
+        json!({"layout":layout,"old":old,"new":new,"error":error}),
+    )?;
+    if layout == 2 {
+        for distance in [0_u64, 8] {
+            let mut changed = document.clone();
+            let field = changed
+                .pointer_mut("/writer_choice/rows/0/feature/b")
+                .ok_or("writer choice feature distance absent")?;
+            let old = field.as_u64().ok_or("writer choice distance not integer")?;
+            let new = (old & !15_u64) | distance;
+            *field = json!(new);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                &format!("writer_choice_invalid_distance_{distance}_rejected"),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains("invalid writer choice residual rows")),
+                json!({"layout":layout,"old":old,"new":new,"distance":distance,"error":error}),
+            )?;
+        }
+    } else {
+        checks.push(json!({"name":"writer_choice_distance_checks","status":"NOT_APPLICABLE","reason":"layout1 has no distance field"}));
+    }
+    let mut changed = document.clone();
+    changed["writer_choice"]["feature_layout"] = json!(3);
+    let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+    record(
+        checks,
+        "writer_choice_unknown_layout_rejected",
+        rejected,
+        json!({"layout":3,"error":error}),
+    )?;
+    let mut changed = document.clone();
+    let weight = changed
+        .pointer_mut("/writer_choice/rows/0/weight")
+        .ok_or("writer choice residual absent")?;
+    let old = weight
+        .as_i64()
+        .ok_or("writer choice residual not integer")?;
+    if !(-1_000_000..=0).contains(&old) {
+        return Err("writer choice residual outside range".into());
+    }
+    let new = if old == -1_000_000 { old + 1 } else { old - 1 };
+    *weight = json!(new);
+    let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+    record(
+        checks,
+        "writer_choice_valid_residual_identity_rejected",
+        rejected
+            && error
+                .as_deref()
+                .is_some_and(|e| e.contains("writer choice identity differs")),
+        json!({"old":old,"new":new,"error":error}),
+    )?;
+    let mut changed = document.clone();
+    changed["writer_choice"]["parent_artifact"] = json!(format!("blake3:{}", "0".repeat(64)));
+    let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+    record(
+        checks,
+        "writer_choice_wrong_parent_rejected",
+        rejected,
+        json!({"error":error}),
+    )?;
+    let mut changed = document.clone();
+    changed["writer_choice"]["unexpected_witness_field"] = json!(true);
+    let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+    record(
+        checks,
+        "writer_choice_unknown_witness_field_rejected",
+        rejected,
+        json!({"error":error}),
+    )?;
+    record(
+        checks,
+        "writer_choice_nested_field_corruption_target",
+        true,
+        json!({"candidate_artifact":model.artifact_cid(),"corruption_target_artifact":parent.artifact_cid(),
+            "scope":"Historical field-composition corruption checks use the exact reconstructed field parent. All direct/API generated behavior continues to execute the supplied writer-choice candidate."}),
+    )?;
+    Ok(Some(parent))
+}
+
 fn field_composition_checks(
     api_model: &NativeModel,
+    mechanical_model: &Model,
     document: &Value,
     checks: &mut Vec<Value>,
 ) -> CheckResult<Option<Model>> {
@@ -137,7 +517,7 @@ fn field_composition_checks(
         return Ok(None);
     };
     let model = api_model.inner_model();
-    let parent = model.without_field_composition()?;
+    let parent = mechanical_model.without_field_composition()?;
     let parent_bytes = parent.to_bytes()?;
     let parent_document: Value = serde_json::from_slice(&parent_bytes)?;
     let expected_parent = "blake3:169f23efd1babd314deed5cd523953179d94a8eb9dbf6e930892e57080a85828";
@@ -165,9 +545,9 @@ fn field_composition_checks(
             && parent.artifact_cid() == expected_parent
             && witness["previous_lexical"] == parent_document["lexical_emission"]
             && candidate_base == parent_base,
-        json!({"candidate_artifact":model.artifact_cid(),"parent_artifact":parent.artifact_cid(),
+        json!({"candidate_artifact":model.artifact_cid(),"mechanical_artifact":mechanical_model.artifact_cid(),"parent_artifact":parent.artifact_cid(),
             "parent_bytes":parent_bytes.len(),"parent_bytes_blake3":blake3::hash(&parent_bytes).to_hex().to_string(),
-            "boundary":"All candidate fields except extension, shared lexical emission and derived identities equal the recursively validated parent; previous lexical selector is restored exactly."}),
+            "boundary":"All mechanical field-artifact fields except extension, shared lexical emission and derived identities equal the recursively validated parent; previous lexical selector is restored exactly. Generation continues on the supplied candidate."}),
     )?;
     let config = SessionConfig {
         session_id: "field-composition-check".into(),
@@ -246,7 +626,7 @@ fn field_composition_checks(
             checks,
             name,
             rejected,
-            json!({"artifact":model.artifact_cid(),"field":pointer,"old":old,"new":new,"error":error}),
+            json!({"artifact":mechanical_model.artifact_cid(),"field":pointer,"old":old,"new":new,"error":error}),
         )?;
     }
     let mut changed = document.clone();
@@ -262,7 +642,7 @@ fn field_composition_checks(
         checks,
         "field_composition_previous_selector_rejected",
         rejected,
-        json!({"artifact":model.artifact_cid(),"field":pointer,"old":old,"new":new,"error":error}),
+        json!({"artifact":mechanical_model.artifact_cid(),"field":pointer,"old":old,"new":new,"error":error}),
     )?;
     let mut changed = document.clone();
     changed["field_composition"]["unexpected_witness_field"] = json!(true);
@@ -271,14 +651,14 @@ fn field_composition_checks(
         checks,
         "field_composition_unknown_witness_field_rejected",
         rejected,
-        json!({"artifact":model.artifact_cid(),"error":error}),
+        json!({"artifact":mechanical_model.artifact_cid(),"error":error}),
     )?;
     record(
         checks,
         "historical_nested_corruption_target",
         true,
         json!({"candidate_artifact":model.artifact_cid(),"corruption_target_artifact":parent.artifact_cid(),
-            "scope":"The following historical nested-witness corruption checks mutate the exact reconstructed writer parent. All API and direct generated behavior continues to execute the supplied field-composition candidate. The candidate outer witness and identity are checked separately above."}),
+            "scope":"The following historical nested-witness corruption checks mutate the exact reconstructed writer parent. All API and direct generated behavior continues to execute the supplied candidate. Outer witnesses and candidate identity are checked separately above."}),
     )?;
     Ok(Some(parent))
 }
@@ -415,11 +795,19 @@ fn run(
     )?;
 
     let candidate_document: Value = serde_json::from_slice(&bytes)?;
-    let nested_parent = field_composition_checks(&api_model, &candidate_document, checks)?;
-    let document: Value = if let Some(parent) = nested_parent.as_ref() {
+    let field_parent = writer_choice_checks(&api_model, &candidate_document, checks)?;
+    let field_document: Value = if let Some(parent) = field_parent.as_ref() {
         serde_json::from_slice(&parent.to_bytes()?)?
     } else {
         candidate_document
+    };
+    let mechanical_model = field_parent.as_ref().unwrap_or(&model);
+    let nested_parent =
+        field_composition_checks(&api_model, mechanical_model, &field_document, checks)?;
+    let document: Value = if let Some(parent) = nested_parent.as_ref() {
+        serde_json::from_slice(&parent.to_bytes()?)?
+    } else {
+        field_document
     };
     let writer_parent = document.get("writer_lexical").is_some_and(Value::is_object);
     let source_role_parent = document

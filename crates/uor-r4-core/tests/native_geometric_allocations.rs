@@ -297,6 +297,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native contextual writer choice",
+            region(
+                include_str!("../src/native_geometric/writer_choice.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native runtime", kernel),
         ("native Feature helpers", features),
         ("native memory runtime", memory),
@@ -3528,4 +3537,153 @@ fn native_field_composition_actual_checkpoint_and_allocation() {
     assert_eq!(mismatch_checks, 1);
     times.sort_unstable();
     println!("actual field composition artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; active_field_positions={active_field_positions}; malformed_anchor_history_checks={malformed_checks}; mismatch_recovery_checks={mismatch_checks}; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/decode/report and mismatch recovery generation excluded; no energy claim)", model.artifact_cid(), times[times.len()/2], times[times.len()-1]);
+}
+
+/// Actual writer-choice artifact. Input checkpoints must preserve a revision's
+/// exact owner and version link without globally excluding the lexical owner now.
+#[test]
+#[ignore = "requires R4_WRITER_CHOICE_MODEL; charged actual-model development cases"]
+fn native_writer_choice_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Model, Session};
+    fn state(session: &Session) -> serde_json::Value {
+        serde_json::from_slice(&session.checkpoint().unwrap()).unwrap()
+    }
+    fn same(left: &Session, right: &Session) {
+        let mut left = state(left);
+        let mut right = state(right);
+        left.as_object_mut().unwrap().remove("work");
+        right.as_object_mut().unwrap().remove("work");
+        assert_eq!(left, right, "writer choice full causal checkpoint state");
+    }
+    fn atom(atom: &serde_json::Value) -> Vec<u8> {
+        let len = atom["len"].as_u64().unwrap() as usize;
+        atom["bytes"].as_array().unwrap()[..len]
+            .iter()
+            .map(|b| b.as_u64().unwrap() as u8)
+            .collect()
+    }
+    let bytes = std::fs::read(std::env::var("R4_WRITER_CHOICE_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["writer_choice"].is_object());
+    let mut input_positions = 0usize;
+    let mut output_positions = 0usize;
+    let mut times = Vec::new();
+    for (label, prompt, target, revision) in [
+        ("revision", "Record: selvi in Dusk Ridge. selvi now in Copper Vale. Where is selvi? Name the owner first. Answer:", " selvi is in Copper Vale.\n", true),
+        ("literal_now", "Record: now in Copper Vale. Where is now? Name the owner first. Answer:", " now is in Copper Vale.\n", false),
+        ("dependent_revision", "casket in elvin. elvin in Bremen. Now elvin in Zurich. Question: Where is the location of casket? Answer:", " Zurich.\n", false),
+    ] {
+        let mut session = model.session(Control::Full).unwrap();
+        session.observe(&model, BOS).unwrap();
+        let mut turns = vec![(prompt, target)];
+        if revision || label == "dependent_revision" {
+            turns.push(("User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:", "18.\n"));
+        }
+        for (turn_index, (prompt, target)) in turns.into_iter().enumerate() {
+            if session.needs_input_boundary() { session.end_response(&model).unwrap(); }
+            let tokens = model.encode(prompt).unwrap();
+            ALLOCATIONS.with(|v| v.set(0));
+            BYTES.with(|v| v.set(0));
+            for token in tokens {
+                let mut restored = model.restore_session(&session.checkpoint().unwrap()).unwrap();
+                MEASURING.with(|v| v.set(true));
+                session.observe(&model, token).unwrap();
+                MEASURING.with(|v| v.set(false));
+                restored.observe(&model, token).unwrap();
+                same(&session, &restored);
+                input_positions += 1;
+            }
+            let mut restored = model.restore_session(&session.checkpoint().unwrap()).unwrap();
+            MEASURING.with(|v| v.set(true));
+            session.begin_response(&model).unwrap();
+            MEASURING.with(|v| v.set(false));
+            restored.begin_response(&model).unwrap();
+            same(&session, &restored);
+            let initial = state(&session);
+            let relations = &initial["values"]["relations"];
+            if turn_index == 0 {
+                let records: Vec<_> = relations["records"].as_array().unwrap().iter()
+                    .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0)).collect();
+                let current: Vec<_> = relations["directory"].as_array().unwrap().iter()
+                    .filter_map(|id| id.as_u64().filter(|id| *id != 0)).collect();
+                if revision {
+                    assert_eq!(records.len(), 2);
+                    let old = records.iter().find(|r| r["id"] == 1).unwrap();
+                    let new = records.iter().find(|r| r["id"] == 2).unwrap();
+                    assert_eq!(atom(&old["owner"]), b"selvi");
+                    assert_eq!(atom(&old["span"]), b"Dusk Ridge");
+                    assert_eq!(old["action"], 1);
+                    assert_eq!(old["previous"], 0);
+                    assert_eq!(atom(&new["owner"]), b"selvi");
+                    assert_eq!(atom(&new["span"]), b"Copper Vale");
+                    assert_eq!(new["action"], 2);
+                    assert_eq!(new["previous"], 1);
+                    assert_eq!(current, vec![2]);
+                } else if label == "dependent_revision" {
+                    assert_eq!(records.len(), 3);
+                    let first = records.iter().find(|r| r["id"] == 1).unwrap();
+                    let old = records.iter().find(|r| r["id"] == 2).unwrap();
+                    let new = records.iter().find(|r| r["id"] == 3).unwrap();
+                    assert_eq!(atom(&first["owner"]), b"casket");
+                    assert_eq!(atom(&first["value"]), b"elvin");
+                    assert_eq!(first["action"], 1);
+                    assert_eq!(first["previous"], 0);
+                    assert_eq!(atom(&old["owner"]), b"elvin");
+                    assert_eq!(atom(&old["value"]), b"Bremen");
+                    assert_eq!(old["action"], 1);
+                    assert_eq!(old["previous"], 0);
+                    assert_eq!(atom(&new["owner"]), b"elvin");
+                    assert_eq!(atom(&new["value"]), b"Zurich");
+                    assert_eq!(new["action"], 2);
+                    assert_eq!(new["previous"], 2);
+                    assert_eq!(current, vec![1, 3]);
+                } else {
+                    assert_eq!(records.len(), 1);
+                    assert_eq!(atom(&records[0]["owner"]), b"now");
+                    assert_eq!(atom(&records[0]["span"]), b"Copper Vale");
+                    assert_eq!(records[0]["action"], 1);
+                    assert_eq!(records[0]["previous"], 0);
+                    assert_eq!(current, vec![1]);
+                }
+            }
+            let mut output = [EOS; 96];
+            let mut used = 0;
+            let mut saw_dependency = false;
+            loop {
+                let checkpoint = session.checkpoint().unwrap();
+                let mut restored = model.restore_session(&checkpoint).unwrap();
+                let predicted = restored.predict(&model).unwrap();
+                assert_eq!(restored.predict(&model).unwrap(), predicted);
+                MEASURING.with(|v| v.set(true));
+                let start = std::time::Instant::now();
+                let actual = session.predict(&model).unwrap();
+                saw_dependency |= session.word_copy_decision()
+                    .is_some_and(|decision| decision.dependency == Some([1, 3]));
+                session.observe(&model, actual.token).unwrap();
+                let elapsed = start.elapsed().as_nanos();
+                MEASURING.with(|v| v.set(false));
+                assert_eq!(actual, predicted);
+                restored.observe(&model, predicted.token).unwrap();
+                same(&session, &restored);
+                assert_eq!(state(&session)["values"]["relations"], *relations);
+                output[used] = actual.token;
+                used += 1;
+                output_positions += 1;
+                times.push(elapsed);
+                if actual.token == EOS || used == output.len() { break; }
+            }
+            assert_eq!(output[used - 1], EOS);
+            assert_eq!(model.decode(&output[..used]).unwrap(), target.as_bytes());
+            if label == "dependent_revision" && turn_index == 0 {
+                assert!(saw_dependency, "answer must use the legitimate revised dependency [1,3]");
+            }
+            assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+            println!("actual writer choice case={label}; turn={turn_index}; output={target:?}; exact records/version directory; allocations=0 bytes=0 for ingestion/begin/predict/observe");
+        }
+    }
+    times.sort_unstable();
+    println!("actual writer choice artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
 }
