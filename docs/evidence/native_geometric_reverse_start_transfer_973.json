@@ -1,0 +1,2348 @@
+{
+  "schema": "uor-r4.reverse-start-transfer-evidence/1",
+  "at": "2026-09-09T21:17:31.395Z",
+  "issue": 973,
+  "decision": "BOUNDED_POSITIVE_RETAIN_57cee4c4",
+  "artifact": {
+    "cid": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4",
+    "bytes": 14856195,
+    "sha256": "44a975349d3fc1d0e5326d6ecae79fcc3b72eb869093800d91e387bb2f7015f9",
+    "previous_codes": 100,
+    "active_codes": 100,
+    "changed": [
+      {
+        "feature": {
+          "kind": 0,
+          "a": 1,
+          "b": 0
+        },
+        "roots": [
+          66,
+          71
+        ]
+      },
+      {
+        "feature": {
+          "kind": 0,
+          "a": 2,
+          "b": 0
+        },
+        "roots": [
+          86,
+          119
+        ]
+      }
+    ],
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-start-transfer/model.json"
+  },
+  "parent": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+  "previous_retained": "4d81c3b0",
+  "selection": {
+    "at": "2026-09-09T21:15:15.122Z",
+    "decision": "DESIGN_SELECTED_BEFORE_FRESH_DRAW",
+    "artifact": {
+      "cid": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4",
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+      "bytes": 14856195,
+      "sha256": "44a975349d3fc1d0e5326d6ecae79fcc3b72eb869093800d91e387bb2f7015f9"
+    },
+    "sources": [
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+        "bytes": 34658,
+        "sha256": "ca3063bf13cf257cf4c913ad3934acfe40790c0fbb3d0165911bb632f35d72c0"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/relation_span.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/relation_span.rs",
+        "bytes": 22735,
+        "sha256": "1ec69b7079598d87968752d9b242e16854d18b48641ce03011387774cf1b2db5"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/relation_start.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/relation_start.rs",
+        "bytes": 13909,
+        "sha256": "8a0b9271bb0ed0741a04486f188f1c2c94e6dd6d278f4d745efc40af295f58a7"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+        "bytes": 63281,
+        "sha256": "8c025b9965771a1dd79333030749a8c7bf7a3c693e200243452cb93126696db1"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/relation_start_refinement.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/relation_start_refinement.rs",
+        "bytes": 21737,
+        "sha256": "7aa4faf78394394de176f1c010b826ea58ea06e9eb8b3d6901761ed5a759cc0b"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/examples/native_reverse_start_transfer.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_reverse_start_transfer.rs",
+        "bytes": 17656,
+        "sha256": "29387053074133592f56b943fcf01aec9a8e2b3d17dffd0249dbd1827baf390d"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/tests/native_reverse_start_artifact.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_reverse_start_artifact.rs",
+        "bytes": 14607,
+        "sha256": "e52dca11aadccc45e27d7023133c8a5d7d2abb2db34aa9662c35ef7b1b43cc09"
+      },
+      {
+        "repository_path": "crates/uor-r4-api/examples/native_historical_check.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_historical_check.rs",
+        "bytes": 2243,
+        "sha256": "49a59950892033e685aaccc346077c664858ca6b4799e59b5802d07a1fdc095e"
+      }
+    ],
+    "fresh_not_yet_drawn": true,
+    "no_refit": true,
+    "gate": {
+      "complete_answers": 216,
+      "complete_old_spans": 216,
+      "exact_historical_selections": 144,
+      "disabled_parent_equal": 216
+    },
+    "scope": "Fresh complete spellings in authored forms; not unseen syntax or general language."
+  },
+  "fit": {
+    "artifact": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4",
+    "documents": 1300,
+    "duplicate_frames": 231,
+    "elapsed_ms": 32697,
+    "events": 245,
+    "features": 100,
+    "fit": {
+      "accepted": [
+        2,
+        0,
+        0
+      ],
+      "final_correct": 14,
+      "final_hinge": 0,
+      "initial_correct": 12,
+      "initial_hinge": 7,
+      "proposals": 25452,
+      "stopped_at_time_limit": false
+    },
+    "frames": 14,
+    "parent_artifact": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "schema": "uor-r4.relation-start-refinement/1",
+    "scope": "Only existing reverse-start code roots learned from exact start labels or actual parent-winner preservation. Admission, dictionary, feature law and all other parent parameters frozen; free behavior requires separate evaluation."
+  },
+  "construction": {
+    "artifact": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4",
+    "controls_parent_equal": true,
+    "exact": 89,
+    "historical_targets": 53,
+    "inherited": 1264,
+    "parent": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "preserved": 1264,
+    "selections": 53,
+    "targets": 89,
+    "total": 1300,
+    "writer_exact": 89
+  },
+  "prior_negative_replay": {
+    "total": 92,
+    "historical_exact": 64,
+    "historical_selections": 64,
+    "untargeted": 28,
+    "outputs_stops_decisions_and_all_other_state_exact": true,
+    "intentional_complete_span_repairs": [
+      {
+        "id": "current/0/true/false/false",
+        "record": 1,
+        "owner": "eddwg",
+        "terminal": "rgoo",
+        "before": null,
+        "after": "eoqn rgoo"
+      },
+      {
+        "id": "current/0/true/false/true",
+        "record": 1,
+        "owner": "eddwg",
+        "terminal": "rgoo",
+        "before": null,
+        "after": "eoqn rgoo"
+      },
+      {
+        "id": "current/0/true/true/false",
+        "record": 1,
+        "owner": "eddwg",
+        "terminal": "rgoo",
+        "before": null,
+        "after": "eoqn rgoo"
+      },
+      {
+        "id": "current/0/true/true/true",
+        "record": 1,
+        "owner": "eddwg",
+        "terminal": "rgoo",
+        "before": null,
+        "after": "eoqn rgoo"
+      },
+      {
+        "id": "current/1/true/false/false",
+        "record": 1,
+        "owner": "szlog",
+        "terminal": "lnjk",
+        "before": null,
+        "after": "wgmy lnjk"
+      },
+      {
+        "id": "current/1/true/false/true",
+        "record": 1,
+        "owner": "szlog",
+        "terminal": "lnjk",
+        "before": null,
+        "after": "wgmy lnjk"
+      },
+      {
+        "id": "current/1/true/true/false",
+        "record": 1,
+        "owner": "szlog",
+        "terminal": "lnjk",
+        "before": null,
+        "after": "wgmy lnjk"
+      },
+      {
+        "id": "current/1/true/true/true",
+        "record": 1,
+        "owner": "szlog",
+        "terminal": "lnjk",
+        "before": null,
+        "after": "wgmy lnjk"
+      },
+      {
+        "id": "current/2/true/false/false",
+        "record": 1,
+        "owner": "jnamb",
+        "terminal": "ymts",
+        "before": null,
+        "after": "uhnk ymts"
+      },
+      {
+        "id": "current/2/true/false/true",
+        "record": 1,
+        "owner": "jnamb",
+        "terminal": "ymts",
+        "before": null,
+        "after": "uhnk ymts"
+      },
+      {
+        "id": "current/2/true/true/false",
+        "record": 1,
+        "owner": "jnamb",
+        "terminal": "ymts",
+        "before": null,
+        "after": "uhnk ymts"
+      },
+      {
+        "id": "current/2/true/true/true",
+        "record": 1,
+        "owner": "jnamb",
+        "terminal": "ymts",
+        "before": null,
+        "after": "uhnk ymts"
+      },
+      {
+        "id": "absent/0/0",
+        "record": 1,
+        "owner": "eddwg",
+        "terminal": "rgoo",
+        "before": null,
+        "after": "eoqn rgoo"
+      },
+      {
+        "id": "absent/0/1",
+        "record": 1,
+        "owner": "eddwg",
+        "terminal": "rgoo",
+        "before": null,
+        "after": "eoqn rgoo"
+      },
+      {
+        "id": "absent/1/0",
+        "record": 1,
+        "owner": "szlog",
+        "terminal": "lnjk",
+        "before": null,
+        "after": "wgmy lnjk"
+      },
+      {
+        "id": "absent/1/1",
+        "record": 1,
+        "owner": "szlog",
+        "terminal": "lnjk",
+        "before": null,
+        "after": "wgmy lnjk"
+      }
+    ],
+    "controls_parent_equal": true,
+    "scope": "This previously opened negative panel is diagnostic, not final held-out evaluation. Original raw exact-state tally remains36/92; only the 16 source-verified old-span repairs differ among28 untargeted cases."
+  },
+  "fresh": {
+    "artifact": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4",
+    "controls_parent_equal": true,
+    "exact": 216,
+    "historical_targets": 144,
+    "inherited": 0,
+    "parent": "blake3:f76e745256c4589ab1e6180e065e047e8be06bb1e13eddb811bc598737cb3a8f",
+    "preserved": 0,
+    "selections": 144,
+    "targets": 216,
+    "total": 216,
+    "writer_exact": 216,
+    "parent_exact": 192,
+    "failures": [],
+    "cases": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-data/cases.json",
+      "bytes": 64801,
+      "sha256": "1c9da34916f710a6f8023764918adf46489908f0f438f308ab4c29c7cfe288f8"
+    },
+    "result": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-result/result.json",
+      "bytes": 8291056,
+      "sha256": "94470d3fb2887b5f84b7a8b5c1616dd683cbf800cd737f780ddc9f4e7470045b"
+    }
+  },
+  "tests": [
+    {
+      "label": "test-relation_start_refinement_",
+      "passed": 3,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-relation_start_refinement_.log",
+        "bytes": 526,
+        "sha256": "e2a5fa18977bc3e3c072e53718ce9de6d723c97a4d73c305be5784bf5f2fca57"
+      }
+    },
+    {
+      "label": "test-historical_read_",
+      "passed": 6,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-historical_read_.log",
+        "bytes": 893,
+        "sha256": "5d4a6fde87271afeab3dd0c75368a553159fe641260b46d5fbfcfb243d0bf5a8"
+      }
+    },
+    {
+      "label": "test-current_source_",
+      "passed": 6,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-current_source_.log",
+        "bytes": 849,
+        "sha256": "efac692a35e678241a0a3352ddabd80cdba9b54033002e4a802fcb7ad9ae456b"
+      }
+    },
+    {
+      "label": "test-writer_role_",
+      "passed": 6,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-writer_role_.log",
+        "bytes": 855,
+        "sha256": "fdc2a182f5442888215dc0f1aafc1967b9a50b656b8dd5830f480f0b9a9346d6"
+      }
+    },
+    {
+      "label": "test-writer_choice_",
+      "passed": 9,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-writer_choice_.log",
+        "bytes": 1214,
+        "sha256": "b79f0b653966a4179cdf2c21418b3ca7a4e50d23587351c25bedfb72ec3d23df"
+      }
+    },
+    {
+      "label": "test-source_refinement_trace_scores_match_selected_direct_choice",
+      "passed": 1,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-source_refinement_trace_scores_match_selected_direct_choice.log",
+        "bytes": 229,
+        "sha256": "1074bbeb27ad4d6b5e30184729f0403d100833f5e2d830f649c505d1d0be6afd"
+      }
+    },
+    {
+      "label": "kernel-source-guard",
+      "passed": 1,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/kernel-source-guard.log",
+        "bytes": 189,
+        "sha256": "92e8490f08cef48507b5c7e2848eabcb39c243eca45f5dead0176276803bcc9c"
+      }
+    },
+    {
+      "label": "actual-reverse-start",
+      "passed": 1,
+      "log": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/actual-reverse-start.log",
+        "bytes": 1856,
+        "sha256": "6e757628fd2700c6c1f98264a24d50557dde4223dd5cfe1fe60df79a7a4bd6b9"
+      }
+    }
+  ],
+  "test_count": 33,
+  "api": [
+    {
+      "checks": 106,
+      "report": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/api.json",
+        "bytes": 31450,
+        "sha256": "404b4637daa80a0ebbb923c20039366587ee2dd5a2975efe693833e7b28f82e7"
+      }
+    },
+    {
+      "checks": 288,
+      "report": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/api-fresh.json",
+        "bytes": 77308,
+        "sha256": "281eb517e7535ab3f49769437d92b653bcafbb6d134f9ad624ceb8e006577113"
+      }
+    }
+  ],
+  "api_count": 394,
+  "preserved_reports": {
+    "at": "2026-09-09T21:04:01.911Z",
+    "scope": "Actual bytes, EOS, correctness, action/value/record/read identities and applicable dependency fields; timings/scores excluded. Already-incorrect interventions remain negative evidence.",
+    "reports": [
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-operations/result.json",
+          "sha256": "56631562b5971a1de34cf180a7c4b6634e199a78d292d379cbc6e644b3376849"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-operations/result.json",
+          "sha256": "7fca020e33e3c71205fc28a524bb59c0f8e19230d9d561e0c7b40d442902d4eb"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-operations/disabled.json",
+          "sha256": "13cac4f535b30d12a052de03fb97beb3a68b35b61b252805b4192416ec67846c"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-operations/disabled.json",
+          "sha256": "21cd2cc399d3f6c25a1fca0fe0ba752ab900348170be36cf2458beec17b5f5dc"
+        },
+        "total": 24,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-operations/intermediate-disabled.json",
+          "sha256": "e0fc6005f65c57dfb8999656b746af757ae12f4164c9e3307de5f4fea302da0e"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-operations/intermediate-disabled.json",
+          "sha256": "f096dc398f952689ac1f499cfb96815d1418c084af900ee470d3d8314dda7d22"
+        },
+        "total": 24,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-lexical-controls/result.json",
+          "sha256": "e656cf602db1ccae7e3e9e7952e370ca66234a36bf178d617b362192962ff616"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-lexical-controls/result.json",
+          "sha256": "99fce3b8c5c8aab0bc51875f734a7386240031b4d1a1fa2b30b0dff55fe2fded"
+        },
+        "total": 18,
+        "exact": 18,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-lexical-controls/disabled.json",
+          "sha256": "3ec98eaec72c9210d4676af6adec47d756baf10701f0484e0a7336c895c390f0"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-lexical-controls/disabled.json",
+          "sha256": "a46647c8c50070499c392820cb6c87bc67dc71127014bab81ec29cd2102a14ca"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-lexical-controls/read-disabled.json",
+          "sha256": "e34f098027bbaae6882756c7f1300273bb5ff2a8f72c475330f1cccaf39b21b7"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-lexical-controls/read-disabled.json",
+          "sha256": "2ad8c5132459512878f7480aacd4a112f21c593bb74f2adece895bd61c1dcfd3"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-lexical-controls/geometry-disabled.json",
+          "sha256": "3ec98eaec72c9210d4676af6adec47d756baf10701f0484e0a7336c895c390f0"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-lexical-controls/geometry-disabled.json",
+          "sha256": "a46647c8c50070499c392820cb6c87bc67dc71127014bab81ec29cd2102a14ca"
+        },
+        "total": 18,
+        "exact": 6,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-current-evaluate/result.json",
+          "sha256": "2620c69ba87f29c88da7537227d4eb0fe526dc8af485fc3ae8ae2cac0bd09d6a"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-current-evaluate/result.json",
+          "sha256": "b1732d0cc4ee7cc7191a6a1e4f06dd3bd442d14cd577b831e0b6a4f843835eb5"
+        },
+        "total": 48,
+        "exact": 48,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-current-controls/result.json",
+          "sha256": "d3c1d9e6ddc9dd2cc8b87457697e397997fc4fa7fe4c12bf4046d6f2b20d51d5"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-current-controls/result.json",
+          "sha256": "acf36f428298d55b16556f3a9c5c6a9dc4ec0d43128c1aa8ff9f759ae83f95e2"
+        },
+        "total": 48,
+        "exact": 32,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-current-stress/result.json",
+          "sha256": "55ef3bcf43d47fce0bbe746484abf1fcc6952f7aedd812334f25abd49779b17e"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-current-stress/result.json",
+          "sha256": "73ebc645de9bee3b190009f75f89ea16ce3667e0d58af91b41a343eee6e3f42d"
+        },
+        "total": 16,
+        "exact": 16,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-instruction-evaluate/result.json",
+          "sha256": "136b7b235b6fcee4ab02e30428574d0f895bef578bda20f376fc2772b8a39c45"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-instruction-evaluate/result.json",
+          "sha256": "312046f0a807efe6c64f66ef5c48496035ed30662c90d8c9f04603e27f9d5a08"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-instruction-stress/result.json",
+          "sha256": "c157187e621480a340736b7b36baf43d4736507bd47e196078f558944f2f12dd"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-instruction-stress/result.json",
+          "sha256": "ade4618ce41c2f948a9cca064fafeb36e3584be50bd85408b22ade0bc8eb7823"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-instruction-fresh/result.json",
+          "sha256": "6abdf8038c68f94ceb433720c84e181022e9bad561abd75b3d8980d45b18af76"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-instruction-fresh/result.json",
+          "sha256": "ce81e889328e37dbcbd4f0d6dc53bc0b98cd7feacfe6a95860615c21057d5598"
+        },
+        "total": 24,
+        "exact": 24,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      },
+      {
+        "parent": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validation-final/prior-instruction-evaluate/disabled.json",
+          "sha256": "fe59e41bcd6c10c165d623d7387cc3d489984567798d95dbe28e006ea595d1ac"
+        },
+        "candidate": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-instruction-evaluate/disabled.json",
+          "sha256": "420adbe3a4830f60c2b595657fb53087bba6650499f59dd78689253871965005"
+        },
+        "total": 24,
+        "exact": 8,
+        "all_actual_outputs_and_decision_identities_equal": true,
+        "changed_previously_incorrect_rows": 0,
+        "all_previously_correct_rows_exactly_preserved": true
+      }
+    ],
+    "differences": []
+  },
+  "history": {
+    "total": 12,
+    "exact": 12,
+    "parent": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/history/full.json",
+    "candidate": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/history/full.json",
+    "outputs_records_versions_sources_equal": true
+  },
+  "query_owner": {
+    "comparison": {
+      "total": 72,
+      "exact_answers": 72,
+      "exact_outputs_stops_decisions_and_all_other_state": 72,
+      "raw_complete_state_equal": 0,
+      "old_value_label_receipt": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-data/receipt.json",
+      "intentional_complete_span_repairs": [
+        {
+          "id": "query-owner/0/0/0/0/false",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/0/1/false",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/0/2/false",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/0/0/true",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/0/1/true",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/0/2/true",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/1/0/false",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/1/1/false",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/1/2/false",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/1/0/true",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/1/1/true",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/0/1/2/true",
+          "record": 1,
+          "owner": "pwcxf",
+          "terminal": "aeiv",
+          "before": null,
+          "after": "jdsq aeiv"
+        },
+        {
+          "id": "query-owner/0/1/0/0/false",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/0/1/false",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/0/2/false",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/0/0/true",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/0/1/true",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/0/2/true",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/1/0/false",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/1/1/false",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/1/2/false",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/1/0/true",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/1/1/true",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/0/1/1/2/true",
+          "record": 1,
+          "owner": "zyhts",
+          "terminal": "lffv",
+          "before": null,
+          "after": "gvug lffv"
+        },
+        {
+          "id": "query-owner/1/0/0/0/false",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/0/1/false",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/0/2/false",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/0/0/true",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/0/1/true",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/0/2/true",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/1/0/false",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/1/1/false",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/1/2/false",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/1/0/true",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/1/1/true",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/0/1/2/true",
+          "record": 1,
+          "owner": "ltpxk",
+          "terminal": "jhye",
+          "before": null,
+          "after": "vbjj jhye"
+        },
+        {
+          "id": "query-owner/1/1/0/0/false",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/0/1/false",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/0/2/false",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/0/0/true",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/0/1/true",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/0/2/true",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/1/0/false",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/1/1/false",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/1/2/false",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/1/0/true",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/1/1/true",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/1/1/1/2/true",
+          "record": 1,
+          "owner": "ekzwa",
+          "terminal": "vmlm",
+          "before": null,
+          "after": "wlas vmlm"
+        },
+        {
+          "id": "query-owner/2/0/0/0/false",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/0/1/false",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/0/2/false",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/0/0/true",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/0/1/true",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/0/2/true",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/1/0/false",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/1/1/false",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/1/2/false",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/1/0/true",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/1/1/true",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/0/1/2/true",
+          "record": 1,
+          "owner": "ogyfn",
+          "terminal": "qusx",
+          "before": null,
+          "after": "unkz qusx"
+        },
+        {
+          "id": "query-owner/2/1/0/0/false",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/0/1/false",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/0/2/false",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/0/0/true",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/0/1/true",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/0/2/true",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/1/0/false",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/1/1/false",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/1/2/false",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/1/0/true",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/1/1/true",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        },
+        {
+          "id": "query-owner/2/1/1/2/true",
+          "record": 1,
+          "owner": "oqnwq",
+          "terminal": "vevl",
+          "before": null,
+          "after": "spbn vevl"
+        }
+      ],
+      "scope": "All72 current query responses and source decisions preserved. Their first reverse fact gains a complete old span, bound to original frozen owner/old-value receipt and exact prompt bytes. Raw full-state equality0/72 remains visible; no model refit."
+    },
+    "raw_report": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/retained-query-owner/result.json",
+      "bytes": 4030608,
+      "sha256": "50301a773d0829b7485942d211e06fc4d9ca45a3c024321f1178abb61cef4dbc"
+    }
+  },
+  "word_rust": {
+    "exact": 24,
+    "total": 24,
+    "report": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/word-fresh-retained/full.json",
+      "bytes": 1226810,
+      "sha256": "ab92f1870989ee727b29692bc3266f737c2eac32615a8cfe29091825b1df692f"
+    }
+  },
+  "actions": [
+    {
+      "name": "copy-add-evaluate",
+      "exact": 24,
+      "total": 24,
+      "report": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-evaluate-final/result.json",
+        "bytes": 9284307,
+        "sha256": "113c0f9ce67de88873e00d83447d1b3c5501a338831684ff8f8223189de1d060"
+      }
+    },
+    {
+      "name": "copy-add-stress",
+      "exact": 24,
+      "total": 24,
+      "report": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-stress-final/result.json",
+        "bytes": 9331288,
+        "sha256": "1645e9285d5a1c5053a78aac35f404e3b21878b669f8993da4de27f13c89db5d"
+      }
+    },
+    {
+      "name": "action-evaluate",
+      "exact": 24,
+      "total": 24,
+      "report": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/action-evaluate-final/result.json",
+        "bytes": 654185,
+        "sha256": "9b8a121f8687f3675e909c08ac5edc91e20960ce689e4b8142b9f0c9a2ef2704"
+      }
+    },
+    {
+      "name": "action-stress",
+      "exact": 24,
+      "total": 24,
+      "report": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/action-stress-final/result.json",
+        "bytes": 654448,
+        "sha256": "f64409b9487eb4c2fc99fd3af167bab27452605f1d67f4de6002cb26481c840f"
+      }
+    }
+  ],
+  "resources": {
+    "at": "2026-09-09T21:17:31.105Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/commands.jsonl",
+    "model_ms": 1281365,
+    "engineering_ms": 338895,
+    "ledger": {
+      "cumulative_ms": 35456085,
+      "limit_ms": 38250000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 2597295,
+    "storage_high_water": {
+      "target": 37765120,
+      "worktree": 61440,
+      "evidence": 247148544,
+      "at": "2026-09-09T21:16:56.708Z",
+      "git": 8192
+    },
+    "retained_copy_bytes": 14864384,
+    "owner_checkout_copy_bytes": 0,
+    "cycle_growth_bytes": 299847680,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 39059120128,
+    "storage_limit_bytes": 40231923712,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 1038585856,
+    "peak_model_sampled_rss_bytes": 1878605824,
+    "peak_engineering_sampled_rss_bytes": 2661089280,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "commands": [
+    {
+      "kind": "engineering",
+      "label": "build-reverse-start",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_reverse_start_transfer"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:44:00.565Z",
+      "elapsed_ms": 92103,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2217213952,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/build-reverse-start.log"
+    },
+    {
+      "kind": "model",
+      "label": "diagnose",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "diagnose",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/diagnostic"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:45:40.944Z",
+      "elapsed_ms": 30554,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1142374400,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/diagnose.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-evaluator",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_reverse_start_transfer"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:46:21.353Z",
+      "elapsed_ms": 1917,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 233324544,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/build-evaluator.log"
+    },
+    {
+      "kind": "model",
+      "label": "prepare",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "prepare",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:46:35.889Z",
+      "elapsed_ms": 30272,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1168539648,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prepare.log"
+    },
+    {
+      "kind": "model",
+      "label": "fit",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "fit",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction/training.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:47:13.040Z",
+      "elapsed_ms": 93098,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1351221248,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit.log"
+    },
+    {
+      "kind": "model",
+      "label": "construction",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction-result"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:49:02.003Z",
+      "elapsed_ms": 72142,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1330675712,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-tests",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "--test",
+        "native_reverse_start_artifact",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run",
+        "--message-format=json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:50:34.429Z",
+      "elapsed_ms": 81874,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2352578560,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/build-tests.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-api",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-api",
+        "--example",
+        "native_historical_check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:51:56.358Z",
+      "elapsed_ms": 143355,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2661089280,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/build-api.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-window-guard",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_reverse_start_transfer"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:54:39.432Z",
+      "elapsed_ms": 2041,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 367755264,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/build-window-guard.log"
+    },
+    {
+      "kind": "model",
+      "label": "construction-window-guard",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:54:41.519Z",
+      "elapsed_ms": 71364,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1442234368,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction-window-guard.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-negative-transfer",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-selection/retry/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-negative-transfer"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:55:53.158Z",
+      "elapsed_ms": 63137,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1327366144,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-negative-transfer.log"
+    },
+    {
+      "kind": "model",
+      "label": "reconcile-prior-negative",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/reconcile-prior-negative.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:58:23.216Z",
+      "elapsed_ms": 69,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/reconcile-prior-negative.log"
+    },
+    {
+      "kind": "model",
+      "label": "reconcile-prior-negative-retry",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/reconcile-prior-negative.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:58:45.924Z",
+      "elapsed_ms": 83,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/reconcile-prior-negative-retry.log"
+    },
+    {
+      "kind": "model",
+      "label": "candidate-trace",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "diagnose",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/candidate-trace"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:58:57.961Z",
+      "elapsed_ms": 32249,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1207615488,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/candidate-trace.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-preservation-examples",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_operation_transition",
+        "--example",
+        "native_lexical_emission",
+        "--example",
+        "native_current_query",
+        "--example",
+        "native_instruction_binding",
+        "--example",
+        "native_word_sentence",
+        "--example",
+        "native_word_emission_history",
+        "--example",
+        "native_copy_add",
+        "--example",
+        "native_action_emission"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:59:30.306Z",
+      "elapsed_ms": 12860,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 525352960,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/build-preservation-examples.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-operations",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_operation_transition",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-operations"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T20:59:43.213Z",
+      "elapsed_ms": 33487,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1210073088,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-operations.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-lexical-controls",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_lexical_emission",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-lexical-controls"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:00:16.748Z",
+      "elapsed_ms": 32176,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1164050432,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-lexical-controls.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-current-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-current-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:00:48.970Z",
+      "elapsed_ms": 31919,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1152794624,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-current-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-current-controls",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "controls",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-current-controls"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:01:20.949Z",
+      "elapsed_ms": 31734,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1168474112,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-current-controls.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-current-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-current-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:01:52.731Z",
+      "elapsed_ms": 32049,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1132707840,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-current-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-instruction-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-instruction-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:02:24.832Z",
+      "elapsed_ms": 32420,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1210793984,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-instruction-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-instruction-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-instruction-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:02:57.300Z",
+      "elapsed_ms": 32182,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1211154432,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-instruction-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "prior-instruction-fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/validation-final/prior-instruction-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:03:29.529Z",
+      "elapsed_ms": 32155,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1177124864,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/prior-instruction-fresh.log"
+    },
+    {
+      "kind": "model",
+      "label": "compare-preserved",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/compare-preserved.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:04:01.730Z",
+      "elapsed_ms": 188,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/compare-preserved.log"
+    },
+    {
+      "kind": "model",
+      "label": "word-fresh-retained",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/word-fresh-retained"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:04:01.961Z",
+      "elapsed_ms": 32872,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1256325120,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/word-fresh-retained.log"
+    },
+    {
+      "kind": "model",
+      "label": "history",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_emission_history",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/preserve/preservation",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/history"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:04:34.886Z",
+      "elapsed_ms": 34242,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1220214784,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/history.log"
+    },
+    {
+      "kind": "model",
+      "label": "copy-add-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-evaluate-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:05:09.193Z",
+      "elapsed_ms": 50137,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1160560640,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "action-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/action-evaluate-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:05:59.426Z",
+      "elapsed_ms": 49948,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1249181696,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/action-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "copy-add-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-stress-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:06:49.426Z",
+      "elapsed_ms": 50566,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1172144128,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "action-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/action-stress-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:07:40.086Z",
+      "elapsed_ms": 49245,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1254064128,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/action-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-relation_start_refinement_",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "relation_start_refinement_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:29.383Z",
+      "elapsed_ms": 272,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-relation_start_refinement_.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-historical_read_",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "historical_read_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:29.725Z",
+      "elapsed_ms": 7,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-historical_read_.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-current_source_",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "current_source_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:29.776Z",
+      "elapsed_ms": 7,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-current_source_.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-writer_role_",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "writer_role_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:29.826Z",
+      "elapsed_ms": 7,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-writer_role_.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-writer_choice_",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "writer_choice_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:29.878Z",
+      "elapsed_ms": 7,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-writer_choice_.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-source_refinement_trace_scores_match_selected_direct_choice",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "source_refinement_trace_scores_match_selected_direct_choice",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:29.929Z",
+      "elapsed_ms": 1069,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 17776640,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/test-source_refinement_trace_scores_match_selected_direct_choice.log"
+    },
+    {
+      "kind": "model",
+      "label": "kernel-source-guard",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "--exact",
+        "--nocapture"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:31.043Z",
+      "elapsed_ms": 141,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/kernel-source-guard.log"
+    },
+    {
+      "kind": "model",
+      "label": "actual-reverse-start",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_REVERSE_START_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_reverse_start_artifact-333e29e8b25e7562",
+        "native_reverse_start_actual_checkpoint_and_identity",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:08:31.241Z",
+      "elapsed_ms": 161613,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1878605824,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/actual-reverse-start.log"
+    },
+    {
+      "kind": "model",
+      "label": "api-historical",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_check",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/construction/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/api.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:11:12.906Z",
+      "elapsed_ms": 32905,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1165492224,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/api-historical.log"
+    },
+    {
+      "kind": "model",
+      "label": "retained-query-owner",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/retained-query-owner"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:11:45.857Z",
+      "elapsed_ms": 63135,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1322090496,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/retained-query-owner.log"
+    },
+    {
+      "kind": "model",
+      "label": "reconcile-query-owner",
+      "cmd": "node",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/reconcile-query-owner.mjs"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:25.129Z",
+      "elapsed_ms": 106,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/reconcile-query-owner.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-extract-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-evaluate-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:46.948Z",
+      "elapsed_ms": 168,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-extract-evaluate.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-compile-evaluate",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-evaluate/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-evaluate/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:47.160Z",
+      "elapsed_ms": 543,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-compile-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-execute-evaluate",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-evaluate/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:47.749Z",
+      "elapsed_ms": 56,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-execute-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-extract-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/copy-add-stress-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:47.854Z",
+      "elapsed_ms": 95,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-extract-stress.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-compile-stress",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-stress/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-stress/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:47.993Z",
+      "elapsed_ms": 105,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-compile-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-execute-stress",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-stress/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:48.143Z",
+      "elapsed_ms": 62,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-execute-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-extract-retained",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/word-fresh-retained/full.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-retained"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:48.255Z",
+      "elapsed_ms": 19,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-extract-retained.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-compile-retained",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-retained/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-retained/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:48.317Z",
+      "elapsed_ms": 120,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-compile-retained.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-execute-retained",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-retained/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:48.482Z",
+      "elapsed_ms": 58,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/rust-execute-retained.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "fmt-selection",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:14:55.089Z",
+      "elapsed_ms": 3977,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 151191552,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fmt-selection.log"
+    },
+    {
+      "kind": "model",
+      "label": "fresh-draw",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-data"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:15:15.259Z",
+      "elapsed_ms": 6,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-draw.log"
+    },
+    {
+      "kind": "model",
+      "label": "fresh-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_reverse_start_transfer",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-result"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:15:15.311Z",
+      "elapsed_ms": 71149,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1342898176,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "api-fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_check",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/api-fresh.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T21:16:26.573Z",
+      "elapsed_ms": 32195,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1180581888,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-reverse-start-transfer/api-fresh.log"
+    }
+  ],
+  "orchestration_failures": [
+    {
+      "at": "2026-09-09T20:58:46.002Z",
+      "command": "finish-development.mjs",
+      "exit": 1,
+      "assertion": "all untargeted prior-negative rows parent_equal",
+      "cause": "16 old-span repairs intentionally change state on current/absent questions with the same reversed facts; outputs/EOS/decisions unchanged.",
+      "correction": "Separate exact source-verified old-span repairs; preserve all other state. No fit or model change; fresh gate unchanged."
+    },
+    {
+      "at": "2026-09-09T21:14:25.229Z",
+      "command": "validate.mjs",
+      "exit": 1,
+      "assertion": "preserved ===72",
+      "cause": "All72 current-query cases include the same incomplete first reverse span; candidate repairs it while preserving all answers/source decisions and other state.",
+      "resolution": "Metadata comparison uses original frozen old-value receipt plus exact source bytes. No model change or new data draw."
+    }
+  ],
+  "not_run": [
+    "blanket full suite",
+    "new-artifact browser/WASM/HTTP",
+    "allocation instrumentation for this refinement",
+    "complete-path energy measurement",
+    "general prose/reasoning/program synthesis",
+    "initial versus immediate-previous selection",
+    "historical owner-first composition"
+  ],
+  "next": "Version-aware owner/value compositional emission over an explicitly selected historical record; preserve current-record safeguards and learn lexical continuation through the shared operator. Inspect actual generation first."
+}

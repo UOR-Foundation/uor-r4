@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            relation_start_refinement: None,
             writer_role: None,
             current_source: None,
             historical_read: None,
@@ -571,6 +572,9 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.relation_start_refinement {
+            return witness.validate(self);
+        }
         if let Some(block) = &self.historical_read {
             self.without_historical_read()?;
             block.validate(self)?;

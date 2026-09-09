@@ -114,6 +114,8 @@ mod relation;
 mod relation_admission;
 mod relation_span;
 mod relation_start;
+mod relation_start_refinement;
+pub use relation_start_refinement::{RelationStartExample, RelationStartOverride};
 mod relation_start_training;
 #[cfg(test)]
 mod relation_tests;
@@ -273,6 +275,7 @@ pub enum Control {
     /// Diagnostic reachability intervention; the retained default is unchanged.
     CurrentRelationReadAll,
     HistoricalReadDisabled,
+    RelationStartRefinementDisabled,
     CurrentSourceDisabled,
     CurrentSourceVersionDisabled,
     WriterRoleDisabled,
@@ -379,6 +382,7 @@ impl Feature {
         match control {
             Control::Full
             | Control::HistoricalReadDisabled
+            | Control::RelationStartRefinementDisabled
             | Control::CurrentSourceDisabled
             | Control::CurrentSourceVersionDisabled
             | Control::CurrentRelationReadAll
@@ -503,6 +507,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_start_refinement: Option<relation_start_refinement::RelationStartRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     historical_read: Option<historical_read::HistoricalRead>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     writer_role: Option<writer_role::WriterRole>,
@@ -599,6 +605,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    relation_start_refinement: Option<relation_start_refinement::RelationStartRefinement>,
+    #[serde(default)]
     historical_read: Option<historical_read::HistoricalRead>,
     #[serde(default)]
     writer_role: Option<writer_role::WriterRole>,
@@ -694,6 +702,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            relation_start_refinement: wire.relation_start_refinement,
             writer_role: wire.writer_role,
             current_source: wire.current_source,
             historical_read: wire.historical_read,
