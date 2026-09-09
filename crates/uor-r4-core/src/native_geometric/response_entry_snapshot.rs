@@ -205,7 +205,15 @@ impl Session {
                     .word_copy
                     .as_ref()
                     .is_some_and(|copy| copy.origin.is_some() || copy.read_commit.is_some());
+                // The field adapter's mandatory validator independently
+                // replays its full prefix. A Base choice still runs the old
+                // copy validator, so an extension cannot bypass both proofs.
+                let field_origin = self
+                    .field_composition
+                    .as_ref()
+                    .is_some_and(|fields| fields.anchor.is_some());
                 if !copy_origin
+                    && !field_origin
                     && (!selection.is_some_and(|candidate| {
                         token_at(anchor.at_seen).is_ok_and(|token| token == candidate.token)
                     }) || !origin
