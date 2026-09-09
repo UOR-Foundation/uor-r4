@@ -910,6 +910,12 @@ impl Model {
                 self.source_context.is_some(),
                 &mut work,
             );
+            // Same candidate and current router, before appending the version
+            // hints. This isolates their ordered transport without reconstructing
+            // a different model or changing the actual dispatch/session state.
+            let pre_hint_feature_count = n;
+            let pre_hint_state =
+                block.encode(self, &features[..n], Control::Full, &mut work.routing);
             let (hints, hn) =
                 super::current_source::hints(self, values, &ctx, index, Control::Full, &mut work);
             let mut features = features[..n].to_vec();
@@ -926,8 +932,14 @@ impl Model {
                     })
                     .collect();
             let mut scores = Vec::new();
+            let mut pre_hint_scores = Vec::new();
             for action in 0..read.actions.len() {
                 if super::source_routing::allowed(self, values, source, action) {
+                    pre_hint_scores.push(serde_json::json!({
+                        "action":action,"copy":read.actions[action].copy,
+                        "prefix":read.actions[action].prefix,
+                        "score":block.score(self, pre_hint_state, action, &mut work.routing)
+                    }));
                     scores.push(serde_json::json!({
                         "action":action,"copy":read.actions[action].copy,
                         "prefix":read.actions[action].prefix,
@@ -948,6 +960,10 @@ impl Model {
                 "address":if index < words.query_len {ctx.addresses[index]} else {0},
                 "source_end":word.map(|w| w.end),"source_byte_end":word.map(|w| w.byte_end),
                 "features":&features[..n],"current_source_hints":&hints[..hn],"mapped_codes":mapped,"state":state,"scores":scores,
+                "pre_current_source_hint_feature_count":pre_hint_feature_count,
+                "pre_current_source_hint_features":&features[..pre_hint_feature_count],
+                "pre_current_source_hint_state":pre_hint_state,
+                "pre_current_source_hint_scores":pre_hint_scores,
                 "exact_value_memberships":memberships
             }));
         }
@@ -962,6 +978,13 @@ impl Model {
             "word_copy_eligible":eligible,"dependent_choice":dependent,"persistent_choice":persistent,
             "direct_choice":super::source_routing::choose(self, values, Control::Full, &mut WordCopyWork::default()),
             "candidates":candidates,
+            "hint_comparison":{
+                "control":Control::Full,"feature_control":feature_control,
+                "current_source_parent":self.current_source.as_ref().map(|w|w.parent_artifact.as_str()),
+                "geometry_identity":self.geometry.identity,
+                "source_config":block.config,
+                "scope":"Before/after uses the same current router, ordered inherited feature prefix, candidate and allowed actions. Full state appends current_source_hints in recorded order. The prefix state is not a separate parent-session replay; neither score is calibrated probability, nor does hint transport imply a monotone version bonus."
+            },
             "scope":"Allocating offline inspection; counterfactual direct candidates are marked when upstream dispatch bypasses this router."
         }))
     }

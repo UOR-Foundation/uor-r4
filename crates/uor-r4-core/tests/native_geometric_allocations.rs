@@ -4053,3 +4053,165 @@ fn native_writer_role_actual_checkpoint_and_allocation() {
     times.sort_unstable();
     println!("actual writer-role artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
 }
+
+/// Opt-in two-owner source discrimination on the actual candidate; earlier
+/// current-source artifacts are not subjected to this new acceptance panel.
+#[test]
+#[ignore = "requires R4_QUERY_OWNER_MODEL; charged actual-model query-owner cases"]
+fn native_query_owner_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Model, Session};
+    fn state(s: &Session) -> serde_json::Value {
+        serde_json::from_slice(&s.checkpoint().unwrap()).unwrap()
+    }
+    fn same(a: &Session, b: &Session) {
+        let mut a = state(a);
+        let mut b = state(b);
+        a.as_object_mut().unwrap().remove("work");
+        b.as_object_mut().unwrap().remove("work");
+        assert_eq!(a, b, "query-owner full causal checkpoint state");
+    }
+    fn atom(v: &serde_json::Value) -> Vec<u8> {
+        v["bytes"].as_array().unwrap()[..v["len"].as_u64().unwrap() as usize]
+            .iter()
+            .map(|n| n.as_u64().unwrap() as u8)
+            .collect()
+    }
+    let bytes = std::fs::read(std::env::var("R4_QUERY_OWNER_MODEL").unwrap()).unwrap();
+    let start = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = start.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["current_source"].is_object() && wire["writer_role"].is_object());
+    drop(wire);
+    drop(bytes);
+    let mut input_positions = 0;
+    let mut output_positions = 0;
+    let mut times = Vec::new();
+    for swapped in [false, true] {
+        let chains = if swapped {
+            [
+                ("tilva", "Silver Cove", "Birch Grove"),
+                ("selvi", "Dusk Ridge", "Copper Vale"),
+            ]
+        } else {
+            [
+                ("selvi", "Dusk Ridge", "Copper Vale"),
+                ("tilva", "Silver Cove", "Birch Grove"),
+            ]
+        };
+        let facts = format!(
+            "Record: {} holds {}. {} now in {}. {} holds {}. {} now in {}.",
+            chains[0].1,
+            chains[0].0,
+            chains[0].0,
+            chains[0].2,
+            chains[1].1,
+            chains[1].0,
+            chains[1].0,
+            chains[1].2
+        );
+        for (chain, (owner, _, value)) in chains.iter().enumerate() {
+            let prompt = format!("{facts} Where is {owner}?  Answer:");
+            let target = format!(" {value}.\n");
+            let mut s = model.session(Control::Full).unwrap();
+            s.observe(&model, BOS).unwrap();
+            let tokens = model.encode(&prompt).unwrap();
+            assert!(tokens.len() <= 512);
+            ALLOCATIONS.with(|v| v.set(0));
+            BYTES.with(|v| v.set(0));
+            for token in tokens {
+                let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+                MEASURING.with(|v| v.set(true));
+                s.observe(&model, token).unwrap();
+                MEASURING.with(|v| v.set(false));
+                restored.observe(&model, token).unwrap();
+                same(&s, &restored);
+                input_positions += 1;
+            }
+            let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+            MEASURING.with(|v| v.set(true));
+            s.begin_response(&model).unwrap();
+            MEASURING.with(|v| v.set(false));
+            restored.begin_response(&model).unwrap();
+            same(&s, &restored);
+            let initial = state(&s);
+            let relations = &initial["values"]["relations"];
+            let records: Vec<_> = relations["records"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0))
+                .collect();
+            assert_eq!(records.len(), 4);
+            for (i, (o, old, new)) in chains.iter().enumerate() {
+                for (offset, span) in [(1, *old), (2, *new)] {
+                    let id = (i as u64) * 2 + offset;
+                    let r = records.iter().find(|r| r["id"] == id).unwrap();
+                    assert_eq!(atom(&r["owner"]), o.as_bytes());
+                    assert_eq!(atom(&r["span"]), span.as_bytes());
+                    assert_eq!(r["action"], offset);
+                    assert_eq!(r["previous"], if offset == 1 { 0 } else { id - 1 });
+                    assert_eq!(r["conflict"], false);
+                }
+            }
+            let directory: Vec<_> = relations["directory"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|n| n.as_u64().filter(|n| *n != 0))
+                .collect();
+            assert_eq!(directory, vec![2, 4]);
+            let current_id = (chain as u64) * 2 + 2;
+            let current = records.iter().find(|r| r["id"] == current_id).unwrap();
+            let endpoint = current["value"]["end"].as_u64().unwrap();
+            let byte_endpoint = current["value"]["byte_end"].as_u64().unwrap();
+            let mut selected = false;
+            let mut out = [EOS; 96];
+            let mut used = 0;
+            loop {
+                let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+                let predicted = restored.predict(&model).unwrap();
+                assert_eq!(restored.predict(&model).unwrap(), predicted);
+                MEASURING.with(|v| v.set(true));
+                let start = std::time::Instant::now();
+                let actual = s.predict(&model).unwrap();
+                let word = s.word_copy_decision();
+                let field = s.field_composition_decision();
+                s.observe(&model, actual.token).unwrap();
+                let elapsed = start.elapsed().as_nanos();
+                MEASURING.with(|v| v.set(false));
+                selected |= word.is_some_and(|d| {
+                    matches!(d.action, WordCopyAction::Prepare | WordCopyAction::Read)
+                        && d.source_end == endpoint
+                        && d.source_byte_end == byte_endpoint
+                }) || field.is_some_and(|d| {
+                    d.field != 0
+                        && d.anchor.relation_id == current_id
+                        && d.anchor.source_end == endpoint
+                        && d.anchor.source_byte_end == byte_endpoint
+                });
+                assert_eq!(actual, predicted);
+                restored.observe(&model, predicted.token).unwrap();
+                same(&s, &restored);
+                assert_eq!(state(&s)["values"]["relations"], *relations);
+                out[used] = actual.token;
+                used += 1;
+                output_positions += 1;
+                times.push(elapsed);
+                if actual.token == EOS || used == out.len() {
+                    break;
+                }
+            }
+            assert_eq!(out[used - 1], EOS);
+            assert_eq!(model.decode(&out[..used]).unwrap(), target.as_bytes());
+            assert!(
+                selected,
+                "actual answer must select queried owner's current endpoint"
+            );
+            assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+            println!("query-owner swapped={swapped} queried={owner} current_record={current_id} output={target:?}; allocations=0 bytes=0");
+        }
+    }
+    times.sort_unstable();
+    println!("actual query-owner artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
+}

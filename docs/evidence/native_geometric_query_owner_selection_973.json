@@ -1,0 +1,1168 @@
+{
+  "schema": "uor-r4.query-owner-selection/1",
+  "at": "2026-09-09T17:53:16.525Z",
+  "decision": "RETAIN_BOUNDED_POSITIVE",
+  "source_base": "08ef863be35edd79a84839b334aff20047b3ae8a",
+  "artifact": {
+    "cid": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/query-owner/model.json",
+    "bytes": 14421414,
+    "sha256": "f688f842186c64a96d5a12ff9d7a70b6ce133512bf11a550c6eb9453d1b3897c"
+  },
+  "retained_baseline": {
+    "cid": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/current-source-writer/model.json",
+    "bytes": 14418256,
+    "sha256": "07e279fa62f05b736fe87b3d2a7e44c3158dfdbd789339213b66f5da68c76a59"
+  },
+  "fitting_parent": {
+    "cid": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-role/model.json",
+    "bytes": 14127792,
+    "sha256": "7bb912761e09a34edf40731038f700ad90c1aad53188da0967910382fc280d46"
+  },
+  "lineage": {
+    "candidate": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "parent": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "parent_bytes_blake3": "ce6192c0da5afaae7d28146dacc7c64611e5b9c702d3d7c653520559f3658b4a"
+  },
+  "unselected": {
+    "cid": "blake3:39575f74b5408e037815ed730b6b670a83f97d574e55f4b72987385771f0c6a1",
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fit-retry/model.json",
+    "bytes": 14421414,
+    "sha256": "ee9bdd6ff824f926aa6ac78014f9e46fdfcb73cd9f80de2a0a6cd0539b9e8966",
+    "scope": "79/80 because preparation mislabels four direct owner-first cases as older-parent preservation; actual82/82 answers. Not an observed model-quality regression."
+  },
+  "preparation_failure": {
+    "at": "2026-09-09T17:15:52.706Z",
+    "label": "fit",
+    "elapsed_ms": 56192,
+    "status": "FAILED_PREPARATION_NO_CANDIDATE",
+    "error": "current source revision target bypassed: query-owner/0/0/0/1/false (persistent)",
+    "reason": "Recent owner-first first-chain forms already use persistent reader; direct-current target is inapplicable.",
+    "correction": "Preserve all owner-first forms. Only recent plain questions receive current-source targets. Retain all24 expected output checks and original input/failed receipts.",
+    "no_serving_change": true
+  },
+  "diagnostic": {
+    "total": 24,
+    "exact": 22,
+    "including_recent_exact": 24,
+    "failures": [
+      {
+        "id": "query-owner/0/0/0/0/false",
+        "expected": " Copper Vale.\n",
+        "actual": " Cove holds tilva.\n",
+        "including_recent": " Copper Vale.\n",
+        "persistent": [
+          33,
+          2
+        ]
+      },
+      {
+        "id": "query-owner/0/1/1/0/false",
+        "expected": " Birch Grove.\n",
+        "actual": " Ridge holds selvi.\n",
+        "including_recent": " Birch Grove.\n",
+        "persistent": [
+          33,
+          2
+        ]
+      }
+    ]
+  },
+  "transform_difference": {
+    "baseline": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "candidate": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "baseline_codes": 286,
+    "candidate_codes": 286,
+    "changed": [
+      {
+        "feature": {
+          "kind": 30,
+          "a": 1,
+          "b": 223
+        },
+        "before": [
+          78,
+          119
+        ],
+        "after": [
+          75,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "kind": 30,
+          "a": 1,
+          "b": 983547510786
+        },
+        "before": [
+          82,
+          119
+        ],
+        "after": [
+          117,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "kind": 30,
+          "a": 2,
+          "b": 983547510786
+        },
+        "before": [
+          75,
+          119
+        ],
+        "after": [
+          119,
+          119
+        ]
+      }
+    ],
+    "scope": "Same existing feature vocabulary; root changes only. Raw artifact bytes are never rewritten by metadata tooling."
+  },
+  "fit": {
+    "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "changed_codes": [
+      {
+        "feature": {
+          "a": 1,
+          "b": 2,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 223,
+          "kind": 30
+        },
+        "roots": [
+          75,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 307,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 21474836787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 30064771379,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 47244640563,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 81604378931,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 133143986483,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 588410519809,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 588410519919,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547510784,
+          "kind": 30
+        },
+        "roots": [
+          27,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547510786,
+          "kind": 30
+        },
+        "roots": [
+          117,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547510787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547511007,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 1808181231713,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 2,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 223,
+          "kind": 30
+        },
+        "roots": [
+          1,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 307,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 21474836787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 30064771379,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 47244640563,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 81604378931,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 133143986483,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 588410519809,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 588410519919,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547510784,
+          "kind": 30
+        },
+        "roots": [
+          91,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547510786,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547510787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547511007,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 1808181231713,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      }
+    ],
+    "documents": 1196,
+    "elapsed_ms": 60265,
+    "fit": {
+      "accepted": [
+        10,
+        0,
+        0
+      ],
+      "final_correct": 80,
+      "final_hinge": 0,
+      "initial_correct": 75,
+      "initial_hinge": 15,
+      "proposals": 7607,
+      "stopped_at_time_limit": false
+    },
+    "frames": 80,
+    "mutable_codes": 30,
+    "namespace": 30,
+    "parent_artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "prompt_bytes": 119406,
+    "schema": "uor-r4.current-source-fit/1",
+    "scope": "Offline exact parent source/action preservation or unique frozen learned current-revision read; only new version-context roots learned. Both sources remain admitted; free generation is separate."
+  },
+  "construction": {
+    "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "total": 1196,
+    "labelled": 82,
+    "exact": 82,
+    "current_targets": 14,
+    "current_exact": 14,
+    "current_selections": 14,
+    "inherited": 1182,
+    "preserved": 1182,
+    "controls": 28,
+    "controls_restore_parent": true
+  },
+  "retained_construction": {
+    "parent": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "candidate": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "total": 1172,
+    "exact": 1172,
+    "scope": "Actual output/EOS, first source/field identity and initial/final relations; scores excluded."
+  },
+  "reader_stress": {
+    "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "total": 16,
+    "labelled": 16,
+    "exact": 16,
+    "current_targets": 0,
+    "current_exact": 0,
+    "current_selections": 0,
+    "inherited": 0,
+    "preserved": 0,
+    "controls": 0,
+    "controls_restore_parent": null
+  },
+  "writer_panels": [
+    {
+      "panel": "writer-construction",
+      "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+      "total": 1093,
+      "labelled": 172,
+      "exact": 172,
+      "inherited": 1057,
+      "preserved": 1057,
+      "record_targets": 96,
+      "records_correct": 96,
+      "controls": 72,
+      "controls_restore_parent": true
+    },
+    {
+      "panel": "writer-stress",
+      "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+      "total": 19,
+      "labelled": 16,
+      "exact": 16,
+      "inherited": 3,
+      "preserved": 3,
+      "record_targets": 16,
+      "records_correct": 16,
+      "controls": 32,
+      "controls_restore_parent": true
+    },
+    {
+      "panel": "writer-fresh-retained",
+      "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+      "total": 24,
+      "labelled": 24,
+      "exact": 24,
+      "inherited": 0,
+      "preserved": 0,
+      "record_targets": 24,
+      "records_correct": 24,
+      "controls": 48,
+      "controls_restore_parent": true
+    }
+  ],
+  "retained_reader_fresh": {
+    "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "total": 24,
+    "labelled": 18,
+    "exact": 18,
+    "current_targets": 9,
+    "current_exact": 9,
+    "current_selections": 9,
+    "inherited": 15,
+    "preserved": 15,
+    "controls": 18,
+    "controls_restore_parent": true
+  },
+  "fresh": {
+    "at": "2026-09-09T17:38:28.690Z",
+    "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+    "baseline": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "total": 72,
+    "labelled": 72,
+    "exact": 72,
+    "baseline_exact": 66,
+    "current_targets": 36,
+    "current_exact": 36,
+    "current_selections": 36,
+    "inherited": 36,
+    "preserved": 36,
+    "controls": 72,
+    "controls_restore_parent": true,
+    "prior_correct_exactly_preserved": 66,
+    "regressions": [],
+    "failures": [],
+    "artifact_unchanged": true,
+    "scope": "Fresh whole spellings under familiar two-owner/order/forms; no refit, no general-language claim."
+  },
+  "api": {
+    "status": "PASS",
+    "passed": 63,
+    "not_run": [
+      {
+        "name": "nested_writer_role_removal_controls",
+        "reason": "Removing only the inner writer leaves the outer reader active; bare-parent equivalence is not expected. Current-source controls check the integrated boundary.",
+        "status": "NOT_RUN"
+      }
+    ],
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/api.json",
+      "bytes": 193692,
+      "sha256": "c8da75c8e0e270f16d3aff195620abcf191f7f773bd8dfffb2843233a2348dd5"
+    }
+  },
+  "tests": [
+    {
+      "label": "test-current_source_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/test-current_source_.log",
+        "bytes": 849,
+        "sha256": "ba253aaa52c7a8c82b0d46268f0ad0b0a9bfde701a38a87f3d643da10d04f0b5"
+      }
+    },
+    {
+      "label": "test-writer_role_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/test-writer_role_.log",
+        "bytes": 855,
+        "sha256": "93274720693e99326700f6b45de806bb43b9e511669f4ea5c79e5abada8cae03"
+      }
+    },
+    {
+      "label": "test-writer_choice_",
+      "passed": 9,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/test-writer_choice_.log",
+        "bytes": 1214,
+        "sha256": "d9642c9008bfde136d98ab3f7eda3a6e47a794191a0d39a2cb8b5f19a455d36e"
+      }
+    },
+    {
+      "label": "test-source_refinement_trace_scores_match_selected_direct_choice",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/test-source_refinement_trace_scores_match_selected_direct_choice.log",
+        "bytes": 229,
+        "sha256": "ca69b295c9afa0723417daef90998e961912d29c39be0ae68ed605fe84aad627"
+      }
+    },
+    {
+      "label": "kernel-source-guard",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/kernel-source-guard.log",
+        "bytes": 189,
+        "sha256": "92e8490f08cef48507b5c7e2848eabcb39c243eca45f5dead0176276803bcc9c"
+      }
+    },
+    {
+      "label": "allocation-current-source",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/allocation-current-source.log",
+        "bytes": 1590,
+        "sha256": "1dcf63867f09b9d3efe2bb64c6c4a23bebfb766c87d25e467dac2c7aaa4d06be"
+      }
+    },
+    {
+      "label": "allocation-query-owner",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/allocation-query-owner.log",
+        "bytes": 931,
+        "sha256": "71eecac6266092e5b5b10df5acec7e9b8a20d9d6c8d9b7fcce1e5e41c2e40e8e"
+      }
+    }
+  ],
+  "preservation": {
+    "semantic_reports": 14,
+    "changed_rows": 0,
+    "histories": {
+      "total": 12,
+      "exact": 12,
+      "parent": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/history/full.json",
+      "candidate": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/history/full.json",
+      "outputs_records_versions_sources_equal": true
+    },
+    "word_exact": 24,
+    "panels": [
+      {
+        "panel": "copy-add-evaluate-final",
+        "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+        "total": 24,
+        "exact": 24,
+        "controls": 0,
+        "controls_restore_parent": null
+      },
+      {
+        "panel": "copy-add-stress-final",
+        "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+        "total": 24,
+        "exact": 24,
+        "controls": 0,
+        "controls_restore_parent": null
+      },
+      {
+        "panel": "action-evaluate-final",
+        "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+        "total": 24,
+        "exact": 24,
+        "controls": 0,
+        "controls_restore_parent": null
+      },
+      {
+        "panel": "action-stress-final",
+        "artifact": "blake3:4d81c3b003499648e47248fb8d5d4a50622f6cc0fbad83f0baad2f6cf25b3fac",
+        "total": 24,
+        "exact": 24,
+        "controls": 0,
+        "controls_restore_parent": null
+      }
+    ]
+  },
+  "generated_rust": [
+    {
+      "label": "rust-extract-evaluate",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-extract-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-evaluate",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-compile-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-evaluate",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-execute-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-extract-stress",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-extract-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-stress",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-compile-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-stress",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-execute-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-extract-retained",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-extract-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-retained",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-compile-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-retained",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/rust-execute-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "verify-parent-byte-hash",
+      "code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/verify-parent-byte-hash.log",
+        "bytes": 108,
+        "sha256": "462de521e3d3f11aab00ed36e38b409f9e2621bcd85f228a272b0e0951e76953"
+      }
+    }
+  ],
+  "resources": {
+    "at": "2026-09-09T17:53:16.519Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/commands.jsonl",
+    "model_ms": 1726541,
+    "engineering_ms": 321781,
+    "ledger": {
+      "cumulative_ms": 32231496,
+      "limit_ms": 34050000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 1621884,
+    "storage_high_water": {
+      "target": 22089728,
+      "worktree": 28672,
+      "evidence": 294469632,
+      "at": "2026-09-09T17:52:28.687Z",
+      "git": 12288
+    },
+    "retained_copy_bytes": 14426112,
+    "owner_checkout_copy_bytes": 1048576,
+    "cycle_growth_bytes": 332075008,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 38246420480,
+    "storage_limit_bytes": 39158181888,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 777543680,
+    "peak_model_sampled_rss_bytes": 2354724864,
+    "peak_engineering_sampled_rss_bytes": 2720006144,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "resources_snapshot": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/resources-at-evidence.json",
+    "bytes": 1095,
+    "sha256": "c78aeb39b2c8e30b800c0785c776957dbb075c71af891fc52b2a34672adb5459"
+  },
+  "sources": [
+    {
+      "repository_path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "bytes": 137066,
+      "sha256": "5fb98ead186e33e5fc5fa38df853197a1a6f344e0a0142fd34b537b1ec429a95"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_current_version_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_current_version_read.rs",
+      "bytes": 27644,
+      "sha256": "f3bd147c6e90104cb5b81eb12933a4203f54ec3685aadabaee0f113082e5b701"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_refinement_tests.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_refinement_tests.rs",
+      "bytes": 5667,
+      "sha256": "07dbdf5c230517c30d184171d25b657785bba4c69680c3745120020e365c24c8"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 45188,
+      "sha256": "c0e07724a95018a87e50dac49b7583ba43332b0bddf4733b2fef8415f3094426"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 190563,
+      "sha256": "423f6967aa4d55bfe5706b987b1c73d80146294f64af2a6cf368baae582b33c9"
+    }
+  ],
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/ranking-repair.json",
+      "bytes": 66723,
+      "sha256": "39a1ac7099a23795ea409915d536ed0c57dc34eb6e82c87f984bb1df20c1cd5c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/projection.json",
+      "bytes": 3041,
+      "sha256": "0324b243fd4f2f5010cd199fb02a943862887db3aaf0be8ae5ac1c9de60beda6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/design-decision.json",
+      "bytes": 1255,
+      "sha256": "6f2d75e192fe1627c16507d662f310863541dd5b64598c966ec06d95c27b87fb"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/diagnostic-baseline/diagnostic.json",
+      "bytes": 1212650,
+      "sha256": "3dc9adead1e42786234ef0ac71acfefe5a8833d1429c95e9185e6b364a9d227e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/diagnostic-owner/diagnostic.json",
+      "bytes": 2236974,
+      "sha256": "9de17bb8892efb49b229b7f529c8300b5801ad904e36d8230042bfa5bfcf353e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/diagnostic-summary.json",
+      "bytes": 541,
+      "sha256": "efb43b42d365e4de2919e4b0a305838ddec38bd0285ec587f9200c8a3b1343a5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/owner-data/cases.json",
+      "bytes": 8181,
+      "sha256": "26f31c10936aad48d1f7dbbd6229274b6776843b251f80de2e930eb1070c34ec"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/owner-data/receipt.json",
+      "bytes": 327,
+      "sha256": "c40f62b76e76b883dc6ba6c15b93fa60b5f25cf7a33459c2dd0a182f82863193"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fit.log",
+      "bytes": 96,
+      "sha256": "405399e3f420590457a616df7302ffd4330185e9cc065b0f3481968f762ba531"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/preparation-failure.json",
+      "bytes": 554,
+      "sha256": "ec333567b9fdab556b4ddc369922922addae453967fed36894b6aec850a82704"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/owner-data-retry/cases.json",
+      "bytes": 8181,
+      "sha256": "4a301649af94509679dc04170430913f3affd9c3a5217abfd5d11eb39d3e7f9d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/construction-retry/training.json",
+      "bytes": 227637,
+      "sha256": "d11568345974c63ab558d851f10f603728d0d1987fd037cf80dd51059c12ef7d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fit-retry/fit.json",
+      "bytes": 327891,
+      "sha256": "5957c1350c567af5ea8cff2c45bce5688684f3dc579f2c470d36ae5fc2dc5b76"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fit-retry/model.json",
+      "bytes": 14421414,
+      "sha256": "ee9bdd6ff824f926aa6ac78014f9e46fdfcb73cd9f80de2a0a6cd0539b9e8966"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/candidate-construction/result.json",
+      "bytes": 36777189,
+      "sha256": "8e2d708be56ec83d553123d971dd0fb47649e1f076a056f678e40eb44bd5fcf8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/label-alignment.json",
+      "bytes": 691,
+      "sha256": "5b9da174e0c3f3fb18c8e6f4c797fcc094e8ef72eab6ba0c9caa4cdccf568c7a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/construction-final/cases.json",
+      "bytes": 269815,
+      "sha256": "a5d0f526cbc0460606d929512ca7d17bd50bf5a3db5dda84e4c0a1a615804983"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/construction-final/training.json",
+      "bytes": 227669,
+      "sha256": "136bc42cac349172f6b6ce1e05b4dc322cd719b755f1e1ae055171f1dbc8631a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/construction-final/receipt.json",
+      "bytes": 955,
+      "sha256": "37bbf7e1741a261add8fb986dc4af3496289ace64320fc4df56cd0e8e7019a23"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fit-final/fit.json",
+      "bytes": 327924,
+      "sha256": "8d705d2053da4d5472e8ea9ba914449efd6a0cc099baea69a4d8c92b6e4688e0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/transform-difference.json",
+      "bytes": 980,
+      "sha256": "d350f432a6af6cbd73ba47b8c8516bead7ae53aa4bff1c0f3a6f5858c34ca902"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/construction-result/result.json",
+      "bytes": 37011817,
+      "sha256": "78fc6b0f1f52da09d7496e69e7407782f783cf6523ac586f3aba7491fbda4667"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/construction-result/lineage.json",
+      "bytes": 259,
+      "sha256": "ef3b66dbe1fce4d40fcac5b3deb623052dd7e07bbc59f5e507ae269213cd1646"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/prior-construction-comparison.json",
+      "bytes": 320,
+      "sha256": "af282c902a22ecf26db0aeff255a9baf09bdf1d7a9bcf6744b09380a4afd8fed"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/stress-result/result.json",
+      "bytes": 831756,
+      "sha256": "c9bce252fb929155d7544a58eb382316daca696622b7083b26a50a5c1bf53e8a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/writer-construction/result.json",
+      "bytes": 35388663,
+      "sha256": "91a6dc50f061f270ef0073b3f28fdff14efb7e9746913926c64c996c5bc3457f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/writer-stress/result.json",
+      "bytes": 1434013,
+      "sha256": "6e8a2ae5871c046b70d402a48444acd1a7c93243cd722fa11711f06cae016f5b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/writer-fresh-retained/result.json",
+      "bytes": 2427407,
+      "sha256": "7d4fc1ae1035aaf4eece1eedb7aeb2c744c0ceb49d78ee63096b765f3b484ae5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/reader-fresh-retained/result.json",
+      "bytes": 1163212,
+      "sha256": "ee642d58f3f7d5933d70869c8326a7db0c82b292b48a2b5d5b8989704b415a5c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/candidate-trace/source-traces.json",
+      "bytes": 823197,
+      "sha256": "495d11a90158f98a63a74ff6f1a7c4a0e6cbc2719fe4b26014b702bbab000f57"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/selection.json",
+      "bytes": 2972,
+      "sha256": "72b7e616e1ade1ac7e9cb607ee79b215328356a0e1abf179b6290b5861652102"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-data/cases.json",
+      "bytes": 23893,
+      "sha256": "d1cdb393eb0449e7c565cce61b5434020053b26082fcd59f384bab8bd8dbd07b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-data/receipt.json",
+      "bytes": 459,
+      "sha256": "640c6ddeb4136778d6794d79382164e0c0894bbebae8496230715019fbf27bd8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-baseline/result.json",
+      "bytes": 5721051,
+      "sha256": "f60437d75db12cfcc78b8b5b382c9917b010571d1edc3444c1e8ead7c8f6011f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-result/result.json",
+      "bytes": 5721003,
+      "sha256": "0ca6ff39121eacf68e1742c956bd045240e393eccd6f6acafe9da644eb14580c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-result/lineage.json",
+      "bytes": 259,
+      "sha256": "ef3b66dbe1fce4d40fcac5b3deb623052dd7e07bbc59f5e507ae269213cd1646"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fresh-summary.json",
+      "bytes": 676,
+      "sha256": "c1c2ff676012b2b7b503de4d2284031b4179e64dd8cb3bda856e001b89a12436"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/preserved-comparison-v2.json",
+      "bytes": 10791,
+      "sha256": "0ab110c26d481157acc9410fa1bcf2c563523576d31e48fb1017527308dd86d7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/history-comparison.json",
+      "bytes": 308,
+      "sha256": "6bd6404437f093e8955ca9c65aa3a10f6ba0e11e4aa2cab4cebe7b5c19392ec2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/history/full.json",
+      "bytes": 1264210,
+      "sha256": "68ed4fb5520967ae93598cbc607add0212e26aba1697f9472772ad50f7d991b6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/word-fresh-retained/full.json",
+      "bytes": 1226743,
+      "sha256": "7d72ca6a4aecf77456474bb95ff5f5d99a2813422100be2b85bb04e15123baae"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/copy-add-evaluate-final/result.json",
+      "bytes": 9284307,
+      "sha256": "f6d07cf1bf360f610aab8054b6b9c10ece7b0c2711ebfc47e865760af15c7e61"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/copy-add-stress-final/result.json",
+      "bytes": 9331288,
+      "sha256": "27a3634d4bdbc0350935dcb0693098543560c0ccee3e84b9d00a5c06042ec819"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/action-evaluate-final/result.json",
+      "bytes": 654185,
+      "sha256": "f4403c0018aa8c8f3c6871117e6be710722bdd6d43dbecfea8cd9c88a27e80ae"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/action-stress-final/result.json",
+      "bytes": 654448,
+      "sha256": "124ce647f0f92f8368bb5ba0f0be1212dfbbfa7b14bac26673d59b86bbbca5f5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/api.json",
+      "bytes": 193692,
+      "sha256": "c8da75c8e0e270f16d3aff195620abcf191f7f773bd8dfffb2843233a2348dd5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/binaries.json",
+      "bytes": 2563,
+      "sha256": "a1d521684e8ad34d796c23dcf254a67c0ef7c4ed09e805795a309eb429fa4d6b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/review-notes.json",
+      "bytes": 1623,
+      "sha256": "32a5682e37d518f876df89877908184b46d848caacd773825f79bd9b8d754bda"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/retained-copy.json",
+      "bytes": 617,
+      "sha256": "03ecbed73290a3eafab6d5ad48ffe1f75abc4208ab5b0d9164eb0b87640a8c87"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/owner-checkout-copy.json",
+      "bytes": 164,
+      "sha256": "66fb0e2ad9d75e3056b2fa5f6fcc354eb08f8edf749880982a39be707ace1e11"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/commands-at-evidence.jsonl",
+      "bytes": 40953,
+      "sha256": "d4a4ac9c6a7f9d0035431af7ce42b245c65f208f5650c109b742978cafb104e5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/run.mjs",
+      "bytes": 3275,
+      "sha256": "809802cf05c8deb9c0f0b8603940975615bd9f3e267966b1b6bdaa626d4ea666"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/fit-check-final.mjs",
+      "bytes": 3253,
+      "sha256": "6451e56af76366698d2f8ad8b7f441f4ab54e19695c8c25f96568839899b28a5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/select-fresh.mjs",
+      "bytes": 4178,
+      "sha256": "cbc15ba0a6cc17922ec3581becd65b73395a2f3fb88e66cb83929e969e3a2d13"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/validate-selected.mjs",
+      "bytes": 4442,
+      "sha256": "c754550483c415b3874c4643c3655cfbd5085c0c9954aadbb083ba2aa2c58451"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-query-owner-selection/generated-rust-checks.mjs",
+      "bytes": 2238,
+      "sha256": "0e7f2e6d6e27b51ec772a888571df23c2fcab5790f32d12abbca0f730c68e0cb"
+    }
+  ],
+  "limits": [
+    "Two removal-control names both remove current-source contribution and compare to231d;7f is separate baseline.",
+    "Authored forms and fresh whole spellings do not qualify arbitrary wording/entities or general prose.",
+    "Full historical API, blanket suite, new browser/WASM/HTTP and complete-path energy NOT_RUN."
+  ],
+  "next": "Learn explicit requested historical-version selection and emission while preserving current answers, exact owner/occurrence/previous links and prior controls. #973 remains open."
+}
