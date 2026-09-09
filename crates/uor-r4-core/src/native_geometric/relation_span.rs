@@ -253,7 +253,9 @@ impl RelationState {
         if value != 0 {
             let span = model.relation_reverse_spans.as_ref().and_then(|_| {
                 let admitted = reverse_candidates(model, words, owner, value, action, work);
-                super::relation_start::select(model, words, owner, value, &admitted, action, work)
+                super::relation_start::select(
+                    model, words, owner, value, &admitted, action, control, work,
+                )
             });
             self.commit_span(words.recent[owner], words.recent[value], span, action, work);
             return;

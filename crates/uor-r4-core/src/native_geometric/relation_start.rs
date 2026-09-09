@@ -238,9 +238,19 @@ pub(super) fn select(
     endpoint: usize,
     candidates: &ReverseCandidates,
     action: u8,
+    control: Control,
     work: &mut ValueWork,
 ) -> Option<RelationSpan> {
-    let Some(block) = &model.relation_start else {
+    let selected_router = if control == Control::RelationStartRefinementDisabled {
+        model
+            .relation_start_refinement
+            .as_ref()
+            .map(|w| &w.previous)
+            .or(model.relation_start.as_ref())
+    } else {
+        model.relation_start.as_ref()
+    };
+    let Some(block) = selected_router else {
         return candidates.rows[candidates.len - 1].span;
     };
     let mut best = None;
