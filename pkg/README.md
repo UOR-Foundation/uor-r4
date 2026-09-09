@@ -24,7 +24,7 @@ The architecture uses prime-addressed ordered context, fixed zeta-zero phases, R
 
 ## Where the project goes next
 
-The [action-conditioned emission refinement](docs/native_geometric_action_emission_1140.md) retains 5ed24f4e over preserved parent 9ab64902. Shared learned signed-H4 selection now emits formatted Add followed by Copy of the latest result or original total, preserving exact record identities and earlier correct behavior. Construction, open, reversed/equal-value and post-selection numeric/name panels pass; native API passes 91 checks and 42 actual generated Rust equalities compile and execute. These finite forms do not qualify general prose or Rust program synthesis. Next diagnose the opposite Copy→Add order with a changed copied-record dependency, then refine the shared mechanism at the observed failure.
+The [shared Copy→Add result](docs/native_geometric_copy_add_1140.md) completes the bounded two-operation composition milestone. Learned signed-H4 selection composes Copy and Add with exact changed record dependencies, generated sentence/Rust-equality output, preserved earlier behavior and native API checks. The lexical emitter and fixed geometry remain intact. General prose and program synthesis are still unqualified. Next connect exact nonnumeric word/phrase records to the shared linguistic learner under #973, beginning with actual sentence-request diagnostics.
 
 [The canonical plan](docs/integration/project-track.md) owns order and acceptance. [ROADMAP.md](ROADMAP.md) provides the issue navigation; [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) is the live programme tracker. Priorities guide development, while actual evidence and dependencies determine the next useful step.
 
