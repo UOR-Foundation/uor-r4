@@ -19,10 +19,20 @@ pub(super) fn addresses(
     values: &ValueState,
     work: &mut WordCopyWork,
 ) -> [u32; 16] {
+    addresses_scoped(block, values, false, work)
+}
+
+fn addresses_scoped(
+    block: &DependentRead,
+    values: &ValueState,
+    local: bool,
+    work: &mut WordCopyWork,
+) -> [u32; 16] {
     let mut out = [0; 16];
     let Some(words) = &values.lexemes else {
         return out;
     };
+    let words = super::historical_read::query_view(words, values.query_boundary, local, work);
     for (i, word) in words.queries[..words.query_len].iter().enumerate() {
         work.dictionary_lookups += 1;
         work.word_record_reads += 1;
@@ -50,12 +60,24 @@ pub(super) fn features(
     addr: &[u32; 16],
     work: &mut WordCopyWork,
 ) -> ([ValueFeature; 96], usize) {
+    features_scoped(model, values, record, addr, false, work)
+}
+
+fn features_scoped(
+    model: &Model,
+    values: &ValueState,
+    record: &RelationRecord,
+    addr: &[u32; 16],
+    local: bool,
+    work: &mut WordCopyWork,
+) -> ([ValueFeature; 96], usize) {
     let mut out = [ValueFeature::default(); 96];
     let Some(words) = &values.lexemes else {
         return (out, 0);
     };
+    let words = super::historical_read::query_view(words, values.query_boundary, local, work);
     let (base, mut n) =
-        super::relation::read_features(model, record, words, addr, &mut work.persistent_read);
+        super::relation::read_features(model, record, &words, addr, &mut work.persistent_read);
     out[..n].copy_from_slice(&base[..n]);
     // Ordered query words remain exact dictionary keys, never hash distances.
     // These are learned context features, not an interpreted grammar or cue list.
@@ -137,7 +159,8 @@ pub(super) fn choose(
     let read = super::role_read::head(model)?;
     let state = values.relations.as_ref()?;
     let defer = read.actions.iter().position(|a| !a.copy)?;
-    let addr = addresses(block, values, work);
+    let local = super::historical_read::local_query_scope(model, control);
+    let addr = addresses_scoped(block, values, local, work);
     let mut best_score = block.router.score(
         model,
         [model.geometry.identity; 2],
@@ -152,7 +175,7 @@ pub(super) fn choose(
         let Some(record) = state.record(id) else {
             continue;
         };
-        let (f, n) = features(model, values, record, &addr, work);
+        let (f, n) = features_scoped(model, values, record, &addr, local, work);
         let roots = block
             .router
             .encode(model, &f[..n], control, &mut work.routing);

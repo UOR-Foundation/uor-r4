@@ -176,6 +176,7 @@ impl Trainer {
         let mut template = Model {
             writer_role: None,
             current_source: None,
+            historical_read: None,
             writer_choice: None,
             field_composition: None,
             writer_lexical: None,
@@ -570,6 +571,18 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(block) = &self.historical_read {
+            self.without_historical_read()?;
+            block.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("historical read identity differs".into()));
+            }
+            return Ok(());
+        }
         // The source refinement restores its previous router before validating
         // inner witnesses, including the frozen contextual writer-role parent.
         if let Some(witness) = &self.current_source {
