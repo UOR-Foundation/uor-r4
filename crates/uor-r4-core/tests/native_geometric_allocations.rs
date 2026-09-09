@@ -298,6 +298,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             .1,
         ),
         (
+            "native historical owner/value field admission",
+            region(
+                include_str!("../src/native_geometric/historical_field_composition.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
+        (
             "native contextual writer choice",
             region(
                 include_str!("../src/native_geometric/writer_choice.rs"),

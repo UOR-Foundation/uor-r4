@@ -36,6 +36,7 @@ mod action_emission;
 #[cfg(test)]
 mod action_emission_tests;
 mod current_source;
+mod historical_field_composition;
 mod historical_read;
 mod historical_read_training;
 pub use historical_read_training::HistoricalReadExample;
@@ -275,6 +276,7 @@ pub enum Control {
     /// Diagnostic reachability intervention; the retained default is unchanged.
     CurrentRelationReadAll,
     HistoricalReadDisabled,
+    HistoricalFieldCompositionDisabled,
     RelationStartRefinementDisabled,
     CurrentSourceDisabled,
     CurrentSourceVersionDisabled,
@@ -382,6 +384,7 @@ impl Feature {
         match control {
             Control::Full
             | Control::HistoricalReadDisabled
+            | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled
             | Control::CurrentSourceDisabled
             | Control::CurrentSourceVersionDisabled
@@ -507,6 +510,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    historical_field_composition: Option<historical_field_composition::HistoricalFieldComposition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_start_refinement: Option<relation_start_refinement::RelationStartRefinement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     historical_read: Option<historical_read::HistoricalRead>,
@@ -605,6 +610,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    historical_field_composition: Option<historical_field_composition::HistoricalFieldComposition>,
+    #[serde(default)]
     relation_start_refinement: Option<relation_start_refinement::RelationStartRefinement>,
     #[serde(default)]
     historical_read: Option<historical_read::HistoricalRead>,
@@ -702,6 +709,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            historical_field_composition: wire.historical_field_composition,
             relation_start_refinement: wire.relation_start_refinement,
             writer_role: wire.writer_role,
             current_source: wire.current_source,

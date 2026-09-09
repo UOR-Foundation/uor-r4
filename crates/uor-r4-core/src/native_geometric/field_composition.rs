@@ -108,6 +108,8 @@ pub struct FieldAnchor {
     pub source: u8,
     pub span_words: u8,
     pub relation_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_revision: Option<u64>,
     pub source_end: u64,
     pub source_byte_end: u64,
     pub boundary_seen: u64,
@@ -146,8 +148,8 @@ pub(super) struct FieldState {
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
 const FIELD_TAG: u64 = 17_u64 << 56;
 const PREFIX: u32 = 131072;
-const OWNER_CHOICE: u32 = 131073;
-const VALUE_CHOICE: u32 = 131074;
+pub(super) const OWNER_CHOICE: u32 = 131073;
+pub(super) const VALUE_CHOICE: u32 = 131074;
 fn field_feature(f: ValueFeature) -> bool {
     matches!(f.kind, 0 | 3) && f.a >> 56 == 17
 }
@@ -169,15 +171,25 @@ fn enabled(control: Control) -> bool {
             | Control::MemoryDisabled
     )
 }
-fn record<'a>(
+pub(super) fn record<'a>(
     values: &'a ValueState,
     anchor: FieldAnchor,
+    work: &mut WordCopyWork,
 ) -> Option<&'a super::relation::RelationRecord> {
     let relations = values.relations.as_ref()?;
-    if !relations.directory.contains(&anchor.relation_id) {
+    let r = relations.record(anchor.relation_id)?;
+    if let Some(id) = anchor.current_revision {
+        work.persistent_read.relations.record_reads += 2;
+        let current = relations.record(id)?;
+        if super::historical_read::previous(relations, current, &mut work.persistent_read)?.id
+            != anchor.relation_id
+            || anchor.source != super::relation::RELATION_SOURCE + ((r.id - 1) & 15) as u8
+        {
+            return None;
+        }
+    } else if !relations.directory.contains(&anchor.relation_id) {
         return None;
     }
-    let r = relations.record(anchor.relation_id)?;
     let source = super::relation::source(values, anchor.source)?;
     if r.conflict
         || source.end != anchor.source_end
@@ -228,6 +240,7 @@ pub(super) fn initial_anchor(
         source: decision.word_index,
         span_words: decision.span_words,
         relation_id: r.id,
+        current_revision: None,
         source_end: source.end,
         source_byte_end: source.byte_end,
         boundary_seen: entry.boundary?.at_seen,
@@ -249,27 +262,27 @@ pub(super) fn initial_anchor(
     }
     Some(anchor)
 }
-fn field_len(
+pub(super) fn field_len(
     values: &ValueState,
     anchor: FieldAnchor,
     field: u8,
     work: &mut WordCopyWork,
 ) -> Option<u8> {
-    let r = record(values, anchor)?;
+    let r = record(values, anchor, work)?;
     match field {
         1 => Some(r.owner.len),
         2 => super::source_span::len(values, anchor.source, anchor.span_words, work),
         _ => None,
     }
 }
-fn field_byte(
+pub(super) fn field_byte(
     values: &ValueState,
     anchor: FieldAnchor,
     field: u8,
     cursor: u8,
     work: &mut WordCopyWork,
 ) -> Option<u8> {
-    let r = record(values, anchor)?;
+    let r = record(values, anchor, work)?;
     match field {
         1 => (cursor < r.owner.len).then(|| r.owner.bytes[usize::from(cursor)]),
         2 => super::source_span::byte(values, anchor.source, anchor.span_words, cursor, work),
@@ -283,6 +296,25 @@ fn features(
     choice: u32,
     erase: bool,
 ) -> ([ValueFeature; 40], usize) {
+    features_tag(block, state, values, choice, erase, FIELD_TAG)
+}
+pub(super) fn historical_features(
+    block: &FieldComposition,
+    state: &FieldState,
+    values: &ValueState,
+    choice: u32,
+    erase: bool,
+) -> ([ValueFeature; 40], usize) {
+    features_tag(block, state, values, choice, erase, 18_u64 << 56)
+}
+fn features_tag(
+    block: &FieldComposition,
+    state: &FieldState,
+    values: &ValueState,
+    choice: u32,
+    erase: bool,
+    tag: u64,
+) -> ([ValueFeature; 40], usize) {
     let mut f = [ValueFeature::default(); 40];
     if erase {
         return (f, 0);
@@ -295,7 +327,7 @@ fn features(
     let prefix = prefix_identity(previous2, previous, last);
     f[0] = ValueFeature {
         kind: 0,
-        a: FIELD_TAG | prefix,
+        a: tag | prefix,
         b: u64::from(choice),
     };
     let mut n = 1;
@@ -315,7 +347,7 @@ fn features(
                     kind: 3,
                     // Prime32 and choice18 occupy50 bits below the type tag.
                     // The other word retains all three18-bit prefix symbols.
-                    a: FIELD_TAG | (u64::from(d.prime) << 18) | u64::from(choice),
+                    a: tag | (u64::from(d.prime) << 18) | u64::from(choice),
                     b: prefix,
                 };
                 n += 1;
@@ -324,7 +356,7 @@ fn features(
     }
     (f, n)
 }
-fn prepare(
+pub(super) fn prepare(
     state: &mut FieldState,
     copy: &mut WordCopyState,
     entry: &mut ResponseEntryState,
@@ -390,10 +422,31 @@ pub(super) fn offer(
         {
             return None;
         }
-        record(values, anchor)?;
+        if anchor.current_revision.is_some()
+            && (model.historical_field_composition.is_none()
+                || control == Control::HistoricalFieldCompositionDisabled)
+        {
+            return None;
+        }
+        record(values, anchor, work)?;
         anchor
     } else {
-        initial_anchor(copy, entry, values, baseline, work)?
+        initial_anchor(copy, entry, values, baseline, work).or_else(|| {
+            if model.historical_field_composition.is_none()
+                || control == Control::HistoricalFieldCompositionDisabled
+            {
+                return None;
+            }
+            super::historical_field_composition::initial_anchor(
+                model, copy, entry, values, baseline, control, work,
+            )
+        })?
+    };
+    let historical = anchor.current_revision.is_some();
+    let tokens = if historical {
+        &model.historical_field_composition.as_ref()?.tokens
+    } else {
+        &block.tokens
     };
     if let Some(read) = state.read {
         if control == Control::FieldCompositionReadDisabled {
@@ -423,8 +476,14 @@ pub(super) fn offer(
     let (mut best, token) = super::lexical_emission::token_choice(
         model,
         router,
-        &block.tokens,
-        |t| features(block, state, values, t, erased),
+        tokens,
+        |t| {
+            if historical {
+                historical_features(block, state, values, t, erased)
+            } else {
+                features(block, state, values, t, erased)
+            }
+        },
         geometry,
         &mut work.routing,
         &mut work.selector,
@@ -438,7 +497,11 @@ pub(super) fn offer(
             if entry.steps.saturating_add(length) >= 32 {
                 continue;
             }
-            let (f, n) = features(block, state, values, choice, erased);
+            let (f, n) = if historical {
+                historical_features(block, state, values, choice, erased)
+            } else {
+                features(block, state, values, choice, erased)
+            };
             let encoded = router.encode(model, &f[..n], geometry, &mut work.routing);
             let score = router.score(model, encoded, 1, &mut work.routing);
             work.selector.candidate_evaluations =
@@ -484,7 +547,7 @@ impl FieldState {
             d.token == token
                 && d.at_seen.checked_add(1) == Some(values.seen)
                 && d.step.checked_add(1) == Some(entry.steps)
-                && record(values, d.anchor).is_some()
+                && record(values, d.anchor, work).is_some()
         });
         let Some(d) = matched else {
             if prior_active {
@@ -767,7 +830,8 @@ impl Model {
                 .values
                 .as_ref()
                 .ok_or_else(|| Error("field values absent".into()))?;
-            let r = record(values, anchor).ok_or_else(|| Error("field record absent".into()))?;
+            let r = record(values, anchor, &mut s.work.word_copy)
+                .ok_or_else(|| Error("field record absent".into()))?;
             if &r.owner.bytes[..usize::from(r.owner.len)] != d.owner.as_bytes() {
                 return Err(Error(format!("field selected owner differs: {}", d.id)));
             }
@@ -1052,6 +1116,53 @@ mod tests {
         )
     }
     #[test]
+    fn native_historical_field_proof_is_optional_and_revalidated_with_work() {
+        let (mut values, copy, entry, base) = fixture();
+        let mut work = WordCopyWork::default();
+        let mut anchor = initial_anchor(&copy, &entry, &values, base, &mut work).unwrap();
+        let legacy = serde_json::to_value(anchor).unwrap();
+        assert!(legacy.get("current_revision").is_none());
+        assert_eq!(
+            serde_json::from_value::<FieldAnchor>(legacy).unwrap(),
+            anchor
+        );
+        let relations = values.relations.as_mut().unwrap();
+        let mut current = relations.records[0];
+        current.id = 2;
+        current.previous = 1;
+        current.action = 2;
+        current.value.end = 30;
+        current.value.byte_end = 30;
+        relations.records[1] = current;
+        relations.directory[0] = 2;
+        relations.next_id = 3;
+        assert!(record(&values, anchor, &mut work).is_none());
+        anchor.source = RELATION_SOURCE;
+        anchor.current_revision = Some(2);
+        let before = work.persistent_read.relations.directory_reads;
+        assert_eq!(record(&values, anchor, &mut work).unwrap().id, 1);
+        assert!(work.persistent_read.relations.directory_reads > before);
+        assert_eq!(field_byte(&values, anchor, 1, 0, &mut work), Some(b's'));
+        assert_eq!(field_byte(&values, anchor, 2, 0, &mut work), Some(b'D'));
+        let mut wrong = anchor;
+        wrong.current_revision = Some(1);
+        assert!(record(&values, wrong, &mut work).is_none());
+        let mut wrong = anchor;
+        wrong.current_revision = None;
+        assert!(record(&values, wrong, &mut work).is_none());
+        let mut wrong = anchor;
+        wrong.source = 0;
+        assert!(record(&values, wrong, &mut work).is_none());
+        values.relations.as_mut().unwrap().records[1].previous = 0;
+        assert!(record(&values, anchor, &mut work).is_none());
+        values.relations.as_mut().unwrap().records[1].previous = 1;
+        values.relations.as_mut().unwrap().records[1].conflict = true;
+        assert!(record(&values, anchor, &mut work).is_none());
+        values.relations.as_mut().unwrap().records[1].conflict = false;
+        values.relations.as_mut().unwrap().records[1].owner.bytes[0] = b'x';
+        assert!(record(&values, anchor, &mut work).is_none());
+    }
+    #[test]
     fn native_field_composition_binds_occurrence_and_current_version_not_spelling() {
         let (mut values, copy, entry, base) = fixture();
         let mut work = WordCopyWork::default();
@@ -1061,10 +1172,10 @@ mod tests {
         assert_eq!(field_byte(&values, a, 2, 0, &mut work), Some(b'D'));
         values.lexemes.as_mut().unwrap().queries[0].byte_end += 1;
         assert!(initial_anchor(&copy, &entry, &values, base, &mut work).is_none());
-        assert!(record(&values, a).is_none());
+        assert!(record(&values, a, &mut work).is_none());
         values.lexemes.as_mut().unwrap().queries[0].byte_end -= 1;
         values.relations.as_mut().unwrap().directory[0] = 0;
-        assert!(record(&values, a).is_none());
+        assert!(record(&values, a, &mut work).is_none());
     }
     #[test]
     fn native_field_composition_rejects_ambiguity_conflict_dependency_and_changed_winner() {
