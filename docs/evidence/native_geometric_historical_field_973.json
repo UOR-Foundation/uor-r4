@@ -1,0 +1,980 @@
+{
+  "schema": "uor-r4.native-historical-field-composition/1",
+  "at": "2026-09-09T22:18:09.427Z",
+  "issue": 973,
+  "status": "BOUNDED_PASS_RETAIN",
+  "source_base": "f064d0f8f535f2f01a7f08637e762a13b58f9be4",
+  "artifact": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/historical-field/model.json",
+    "bytes": 15224162,
+    "sha256": "607e196b880a1bba8b1a1aa1a38224a18ea181ac8ca7138f9ad550ec9bad9cde",
+    "cid": "blake3:8cacb2fe0fbd4a79a8be629096b73458ea5bbd23c3dc84fa871a283437b7df81"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-start-transfer/model.json",
+    "bytes": 14856195,
+    "sha256": "44a975349d3fc1d0e5326d6ecae79fcc3b72eb869093800d91e387bb2f7015f9",
+    "cid": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4"
+  },
+  "selection": {
+    "at": "2026-09-09T22:13:17.097Z",
+    "decision": "DESIGN_SELECTED_BEFORE_FRESH_DRAW",
+    "artifact": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/fit/model.json",
+      "bytes": 15224162,
+      "sha256": "607e196b880a1bba8b1a1aa1a38224a18ea181ac8ca7138f9ad550ec9bad9cde",
+      "cid": "blake3:8cacb2fe0fbd4a79a8be629096b73458ea5bbd23c3dc84fa871a283437b7df81"
+    },
+    "sources": [
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_field_composition.rs",
+        "bytes": 23881,
+        "sha256": "6c376ebc108e8686c1ae1eebbe88aefabb8522623885684a42655a01776ea09a",
+        "repository_path": "crates/uor-r4-core/src/native_geometric/historical_field_composition.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/field_composition.rs",
+        "bytes": 49351,
+        "sha256": "ab60e9cbf99d5c0cb441f193deaca51c79d419f0b5aea4eab94f0420495041fe",
+        "repository_path": "crates/uor-r4-core/src/native_geometric/field_composition.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+        "bytes": 35152,
+        "sha256": "68e790c19e974a6557e31c32480e0958199b037b6d27b98c90580d0aba972249",
+        "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+        "bytes": 63450,
+        "sha256": "e8a8e91dbecbdec4f3adf92c242e7b88e60337fa5925d345d87d111b0b9ea7a4",
+        "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/field_composition_snapshot.rs",
+        "bytes": 6481,
+        "sha256": "14b05a1b218e098ec66794020f1982447a1f813ce78804c141f09e49aec3a725",
+        "repository_path": "crates/uor-r4-core/src/native_geometric/field_composition_snapshot.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+        "bytes": 45431,
+        "sha256": "dff09f29aaaf08db8fc184f8f7dfb108d888b04ab07de11bd3e13df1f2921f39",
+        "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_historical_field.rs",
+        "bytes": 15730,
+        "sha256": "534fc681df821c3da2977134ce36a9d2161734cdb7c680aad0013b61876056c1",
+        "repository_path": "crates/uor-r4-core/examples/native_historical_field.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_historical_field_artifact.rs",
+        "bytes": 12165,
+        "sha256": "eb233111d8799baa02c437322c887dc94fd705e56bbcc5eb473e42ec1c4fd423",
+        "repository_path": "crates/uor-r4-core/tests/native_historical_field_artifact.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+        "bytes": 191217,
+        "sha256": "a007c687b30a1900f0858f9928bf600a0b1f0bb1bc265f5485eb106fe875cc02",
+        "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_historical_check.rs",
+        "bytes": 2243,
+        "sha256": "49a59950892033e685aaccc346077c664858ca6b4799e59b5802d07a1fdc095e",
+        "repository_path": "crates/uor-r4-api/examples/native_historical_check.rs"
+      }
+    ],
+    "construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/construction/cases.json",
+      "bytes": 36729,
+      "sha256": "21cd24d95e537c71c9a39c7871db084646532cdacaaab314c1f59ad6b29bbdec"
+    },
+    "gate": {
+      "at": "2026-09-09T21:42:19.922Z",
+      "parent": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4",
+      "design": "Historical field composition only for actual selected immediate predecessor; shared lexical geometric continuation",
+      "construction": "All new target answers/EOS and exact predecessor/current proof; all inherited parent outputs/EOS/decisions/relation states exact; removal control exact parent",
+      "preservation": "1300 retained construction and216 historical fresh and72 query-owner full comparisons; prior14 behavior/control reports;12 histories;24 word/Rust cases;24 each Copy/Add and action ordinary/stress; native API; actual-artifact checkpoint and integrity checks; kernel guard; generated Rust compiled/executed",
+      "fresh": "Draw three new owner/value tuples after source/candidate selection. Same authored forms. All targets exact full sentence/EOS/selected old proof, all untargeted parent comparisons exact, disabled matches parent. No refit or redraw after final draw.",
+      "scope": "Long previous-location plus owner-first is a preserved upstream negative. Finite authored behavior only; no general language, alpha or energy claim."
+    },
+    "focused_tests": 39,
+    "fresh_not_yet_drawn": true,
+    "no_refit_or_redraw": true,
+    "planned_fresh": {
+      "cases": 171,
+      "targets": 48,
+      "preserved": 123
+    },
+    "scope": "New spellings in fixed authored forms; no general-language qualification."
+  },
+  "construction": {
+    "artifact": "blake3:8cacb2fe0fbd4a79a8be629096b73458ea5bbd23c3dc84fa871a283437b7df81",
+    "disabled_parent_equal": 32,
+    "exact": 32,
+    "inherited": 83,
+    "preserved": 83,
+    "selected": 32,
+    "targets": 32,
+    "total": 115,
+    "target_records_unchanged": 32,
+    "parent_target_exact": 0,
+    "checkpoint_positions": 872,
+    "interventions": {
+      "historical_field_composition_disabled": 0,
+      "field_composition_context_disabled": 0,
+      "field_composition_geometry_disabled": 0,
+      "field_composition_read_disabled": 0
+    }
+  },
+  "fresh": {
+    "artifact": "blake3:8cacb2fe0fbd4a79a8be629096b73458ea5bbd23c3dc84fa871a283437b7df81",
+    "disabled_parent_equal": 48,
+    "exact": 48,
+    "inherited": 123,
+    "preserved": 123,
+    "selected": 48,
+    "targets": 48,
+    "total": 171,
+    "parent_target_exact": 0,
+    "records_unchanged": 48,
+    "checkpoint_positions": 1248,
+    "interventions": {
+      "historical_field_composition_disabled": 0,
+      "field_composition_context_disabled": 0,
+      "field_composition_geometry_disabled": 0,
+      "field_composition_read_disabled": 0
+    },
+    "artifact_unchanged": true,
+    "no_refit_no_redraw": true,
+    "examples": [
+      {
+        "prompt": "Record: nznit in wmji qfmo. nznit now in gcje flmb. Where was nznit before? Name the owner first. Answer:",
+        "output": " nznit was in wmji qfmo.\n",
+        "selected": {
+          "boundary_seen": 93,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        }
+      },
+      {
+        "prompt": "Record: nznit in wmji qfmo. nznit now in gcje flmb. Where was nznit before? State the owner first. Answer:",
+        "output": " nznit was in wmji qfmo.\n",
+        "selected": {
+          "boundary_seen": 94,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        }
+      }
+    ]
+  },
+  "fit": {
+    "artifact": "blake3:8cacb2fe0fbd4a79a8be629096b73458ea5bbd23c3dc84fa871a283437b7df81",
+    "dictionary_inherited_exactly": true,
+    "documents": 115,
+    "elapsed_ms": 40676,
+    "features": 2989,
+    "fit": {
+      "accepted": [
+        64,
+        0,
+        0
+      ],
+      "final_correct": 31,
+      "final_hinge": 0,
+      "initial_correct": 3,
+      "initial_hinge": 140,
+      "proposals": 1988092,
+      "stopped_at_time_limit": false
+    },
+    "frames": 31,
+    "ineligible_inherited_documents": [
+      "preserve/0/false/false/false/3",
+      "preserve/0/false/false/false/4",
+      "preserve/0/false/false/true/3",
+      "preserve/0/false/false/true/4",
+      "preserve/0/false/true/false/3",
+      "preserve/0/false/true/false/4",
+      "preserve/0/false/true/true/3",
+      "preserve/0/false/true/true/4",
+      "preserve/0/true/false/false/3",
+      "preserve/0/true/false/false/4",
+      "preserve/0/true/false/true/3",
+      "preserve/0/true/false/true/4",
+      "preserve/0/true/true/false/3",
+      "preserve/0/true/true/false/4",
+      "preserve/0/true/true/true/3",
+      "preserve/0/true/true/true/4",
+      "preserve/1/false/false/false/3",
+      "preserve/1/false/false/false/4",
+      "preserve/1/false/false/true/3",
+      "preserve/1/false/false/true/4",
+      "preserve/1/false/true/false/3",
+      "preserve/1/false/true/false/4",
+      "preserve/1/false/true/true/3",
+      "preserve/1/false/true/true/4",
+      "preserve/1/true/false/false/3",
+      "preserve/1/true/false/false/4",
+      "preserve/1/true/false/true/3",
+      "preserve/1/true/false/true/4",
+      "preserve/1/true/true/false/3",
+      "preserve/1/true/true/false/4",
+      "preserve/1/true/true/true/3",
+      "preserve/1/true/true/true/4",
+      "unsupported/0",
+      "unsupported/1",
+      "unsupported/2"
+    ],
+    "inherited_initial_frames": 48,
+    "mutable_features": 1044,
+    "parent": "blake3:57cee4c41e776a6d99c8617cfa89972eae668e428ae46f313515b98606a3aec4",
+    "presented_frames": 496,
+    "schema": "uor-r4.historical-field-fit/1",
+    "scope": "Only tag18 shared lexical roots learned. Exact selected immediate previous source supplies fields; typed pieces offline only; no model free-generation qualification by fit.",
+    "selected_relations": [
+      {
+        "anchor": {
+          "boundary_seen": 96,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/0/false/false/false/0",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 97,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/0/false/false/false/1",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 117,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 47,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/false/false/true/0",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 118,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 47,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/false/false/true/1",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 240,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/0/false/true/false/0",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 241,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/0/false/true/false/1",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 261,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 47,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/false/true/true/0",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 262,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 47,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/false/true/true/1",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 96,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 17,
+          "source_end": 18,
+          "span_words": 0
+        },
+        "id": "target/0/true/false/false/0",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 97,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 17,
+          "source_end": 18,
+          "span_words": 0
+        },
+        "id": "target/0/true/false/false/1",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 117,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 50,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/true/false/true/0",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 118,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 50,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/true/false/true/1",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 240,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 17,
+          "source_end": 18,
+          "span_words": 0
+        },
+        "id": "target/0/true/true/false/0",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 241,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 17,
+          "source_end": 18,
+          "span_words": 0
+        },
+        "id": "target/0/true/true/false/1",
+        "owner": "selvi",
+        "value": "Dusk Ridge"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 261,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 50,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/true/true/true/0",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 262,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 50,
+          "source_end": 41,
+          "span_words": 0
+        },
+        "id": "target/0/true/true/true/1",
+        "owner": "selvi",
+        "value": "Copper Vale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 95,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/1/false/false/false/0",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 96,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/1/false/false/false/1",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 116,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 45,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/false/false/true/0",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 117,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 45,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/false/false/true/1",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 239,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/1/false/true/false/0",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 240,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 20,
+          "source_end": 19,
+          "span_words": 0
+        },
+        "id": "target/1/false/true/false/1",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 260,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 45,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/false/true/true/0",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 261,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 45,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/false/true/true/1",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 95,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 16,
+          "source_end": 17,
+          "span_words": 0
+        },
+        "id": "target/1/true/false/false/0",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 96,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 16,
+          "source_end": 17,
+          "span_words": 0
+        },
+        "id": "target/1/true/false/false/1",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 116,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 48,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/true/false/true/0",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 117,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 48,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/true/false/true/1",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 239,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 16,
+          "source_end": 17,
+          "span_words": 0
+        },
+        "id": "target/1/true/true/false/0",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 240,
+          "current_revision": 2,
+          "relation_id": 1,
+          "source": 32,
+          "source_byte_end": 16,
+          "source_end": 17,
+          "span_words": 0
+        },
+        "id": "target/1/true/true/false/1",
+        "owner": "tilva",
+        "value": "moss dale"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 260,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 48,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/true/true/true/0",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      },
+      {
+        "anchor": {
+          "boundary_seen": 261,
+          "current_revision": 3,
+          "relation_id": 2,
+          "source": 33,
+          "source_byte_end": 48,
+          "source_end": 39,
+          "span_words": 0
+        },
+        "id": "target/1/true/true/true/1",
+        "owner": "tilva",
+        "value": "Birch Grove"
+      }
+    ]
+  },
+  "preservation": {
+    "retained_construction": 1300,
+    "query_owner": 72,
+    "historical_transfer": 216,
+    "older_reports": 14,
+    "checked_report_differences": 0,
+    "histories": 12,
+    "word_rust_cases": 24,
+    "copy_add": {
+      "ordinary": 24,
+      "stress": 24
+    },
+    "action": {
+      "ordinary": 24,
+      "stress": 24
+    },
+    "comparison_scope": "Actual output/EOS, first source/field decision excluding scores, initial/final relation states; 14 older reports retain their own action/read/operand/dependency comparisons including negative controls."
+  },
+  "verification": {
+    "focused_tests": 39,
+    "library_tests": 37,
+    "integer_kernel_source_guard": true,
+    "actual_artifact_test": true,
+    "input_checkpoint_positions": 1904,
+    "output_checkpoint_positions": 474,
+    "active_proof_contexts": 8,
+    "malformed_active_checkpoint_rejections": 24,
+    "malformed_artifact_rejections": 2,
+    "disabled_parent_causal_state_comparisons": 8,
+    "api_checks": 266,
+    "generated_rust_compiled_executed": true
+  },
+  "resources": {
+    "at": "2026-09-09T22:16:18.456Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/commands.jsonl",
+    "model_ms": 1249244,
+    "engineering_ms": 369199,
+    "ledger": {
+      "cumulative_ms": 36705329,
+      "limit_ms": 39450000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 2548051,
+    "storage_high_water": {
+      "target": 37720064,
+      "worktree": 73728,
+      "evidence": 219729920,
+      "at": "2026-09-09T22:15:51.004Z",
+      "git": 0
+    },
+    "retained_copy_bytes": 15224832,
+    "owner_checkout_copy_bytes": 0,
+    "cycle_growth_bytes": 272748544,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 39349628928,
+    "storage_limit_bytes": 40500359168,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 1016512512,
+    "peak_model_sampled_rss_bytes": 1452933120,
+    "peak_engineering_sampled_rss_bytes": 2720645120,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/projection.json",
+      "bytes": 2190,
+      "sha256": "35a76cd6760e7a9df4b098182e71df48bcdfa4fadc5864752523d1cdc112a6b3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/candidate.json",
+      "bytes": 3243,
+      "sha256": "a3edf0d3524c636b8103f22214e3580aa405b497c99c9ad9edef542fc1b16f49"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/diagnostic.json",
+      "bytes": 357162,
+      "sha256": "60ba109401de58426c12872d922b183b3db69f58150c99e2e33b49c57ac30fc7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/construction/receipt.json",
+      "bytes": 269,
+      "sha256": "ebb38b0007c95788d02545e5ab480f465f03294a8a72575d0156a0f194a35ee9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/construction/training.json",
+      "bytes": 39104,
+      "sha256": "910aad37c210eb0843d98e2b11d29d93df98cfa66056bc033a2a25d023f2da49"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/fit/fit.json",
+      "bytes": 8412,
+      "sha256": "3502db627f6717d547c73e50652f1cc74d02cf67da1eddf6c728f9dc21da65d4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/construction-result/result.json",
+      "bytes": 7855611,
+      "sha256": "7ecfde06c294baad71c2a9cb41a5441c286a2d152e62485909c4881465481b8f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/construction-summary.json",
+      "bytes": 525,
+      "sha256": "011251e3780c9b05b142d48675e04a49f8d6539a3ed12840e74d5c1e271e9266"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/selection.json",
+      "bytes": 5591,
+      "sha256": "afcf226c7dc3f234626cc24dbded566015b76651d1a1291f8ff0416e8eff16c3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/fresh-data/receipt.json",
+      "bytes": 297,
+      "sha256": "e02e25f4c2245abc1e17cb01f5e6c2372b86ef39f6a0f4932cbbe27b7484a1cf"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/fresh-data/cases.json",
+      "bytes": 54141,
+      "sha256": "d7ccca58769b689303d2ceb083fa5c346730b844f13806aa3e554fa4bafedf28"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/fresh-result/result.json",
+      "bytes": 11732235,
+      "sha256": "df594cf020fb18a680797f3911c6c6eae6520cef32e41abe5f2cf2d26c850fe9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/fresh-summary.json",
+      "bytes": 1404,
+      "sha256": "694ef8410aab7b203466fd9dd8c5be32cc3e3f5637bf7c8f987b1dc2e753cd1e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/promotion.json",
+      "bytes": 3211,
+      "sha256": "c95c601c8461ef719a469e5911bce7511c708bafb111840a5041417ef3fb2fdd"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/preserved-long-query-negative.json",
+      "bytes": 5920,
+      "sha256": "dd08c2928e4faeac3b1d53efdd502330dfc76045ad28c66822789d9ed4d29569"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/preserved-comparison-v2.json",
+      "bytes": 10833,
+      "sha256": "190d2c01c091733318c2e2b729b7961efdd4f189e4fcdc198b5fe3ac3ee13c20"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/history-comparison.json",
+      "bytes": 311,
+      "sha256": "c6abd392bab9e18f7d73a1608cb78e78523b5ac953ac1cb1c3fa49b0f85b103b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/retained-construction/result.json",
+      "bytes": 40658881,
+      "sha256": "1a1c3a7986ebca0ab0eae592829b14a839f1a0fd1b4d9e150affb82f06124ce2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/retained-query-owner/result.json",
+      "bytes": 4233593,
+      "sha256": "5d7dd54a2a6c8da12e6de28bfb4538b44bcb1599ab39ea3b599af58721aaa764"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/retained-historical-fresh/result.json",
+      "bytes": 8332094,
+      "sha256": "e11297121e97db028227ca9da47bffca3a5f7934a877415622d3e80b8c11cf5e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/api.json",
+      "bytes": 19687,
+      "sha256": "f8a8399697a30f4a51354f602ec1dd75ec5bcc13a89bd927f2a4e030fe9e31a9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/api-retained.json",
+      "bytes": 31450,
+      "sha256": "fb080659f3fa20aaa1b7705695fa02fdb6de3239372aa38c08e9dcf713a2f40d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/api-fresh.json",
+      "bytes": 29207,
+      "sha256": "486aecbb7fca3d404b7b2227414eaece0b3fa02725ff9d987717e492e1894121"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/actual-historical-field.log",
+      "bytes": 1677,
+      "sha256": "3eeb447f5c89562d053ae87be3946656b1e05ab2908809e5ae684961b0e754a5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/kernel-source-guard.log",
+      "bytes": 189,
+      "sha256": "92e8490f08cef48507b5c7e2848eabcb39c243eca45f5dead0176276803bcc9c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/rust-evaluate/generated_checks.rs",
+      "bytes": 298,
+      "sha256": "4468b542fab726d1fcb7306da5e90c0648c4151e18084af587a3e8e4054ac047"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/rust-stress/generated_checks.rs",
+      "bytes": 306,
+      "sha256": "00bf710ca15f6998122d9eb1eb8508d2332fc7c20eeb078c0b8c62defc246d89"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/rust-retained/generated_checks.rs",
+      "bytes": 706,
+      "sha256": "33c92444345b4ace529ebd15686d7ee448379194ad441adb5c80aa486af9d6e5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-field-composition/commands.jsonl",
+      "bytes": 35779,
+      "sha256": "96e8036714ca011b0ee609f6b399f8eba911a3a758126a33e941ec07abb91e6e"
+    }
+  ],
+  "sources": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_field_composition.rs",
+      "bytes": 23881,
+      "sha256": "6c376ebc108e8686c1ae1eebbe88aefabb8522623885684a42655a01776ea09a",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/historical_field_composition.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/field_composition.rs",
+      "bytes": 49351,
+      "sha256": "ab60e9cbf99d5c0cb441f193deaca51c79d419f0b5aea4eab94f0420495041fe",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/field_composition.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 35152,
+      "sha256": "68e790c19e974a6557e31c32480e0958199b037b6d27b98c90580d0aba972249",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 63450,
+      "sha256": "e8a8e91dbecbdec4f3adf92c242e7b88e60337fa5925d345d87d111b0b9ea7a4",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/field_composition_snapshot.rs",
+      "bytes": 6481,
+      "sha256": "14b05a1b218e098ec66794020f1982447a1f813ce78804c141f09e49aec3a725",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/field_composition_snapshot.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 45431,
+      "sha256": "dff09f29aaaf08db8fc184f8f7dfb108d888b04ab07de11bd3e13df1f2921f39",
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_historical_field.rs",
+      "bytes": 15730,
+      "sha256": "534fc681df821c3da2977134ce36a9d2161734cdb7c680aad0013b61876056c1",
+      "repository_path": "crates/uor-r4-core/examples/native_historical_field.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_historical_field_artifact.rs",
+      "bytes": 12165,
+      "sha256": "eb233111d8799baa02c437322c887dc94fd705e56bbcc5eb473e42ec1c4fd423",
+      "repository_path": "crates/uor-r4-core/tests/native_historical_field_artifact.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 191217,
+      "sha256": "a007c687b30a1900f0858f9928bf600a0b1f0bb1bc265f5485eb106fe875cc02",
+      "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_historical_check.rs",
+      "bytes": 2243,
+      "sha256": "49a59950892033e685aaccc346077c664858ca6b4799e59b5802d07a1fdc095e",
+      "repository_path": "crates/uor-r4-api/examples/native_historical_check.rs"
+    }
+  ],
+  "limitations": {
+    "full_suite": "NOT_RUN",
+    "browser_wasm_http": "NOT_RUN",
+    "allocation_instrumentation": "NOT_RUN",
+    "complete_path_energy": "NOT_RUN",
+    "general_prose_reasoning_program_synthesis_alpha_frontier": "UNQUALIFIED",
+    "long_previous_location_owner_first": "PRESERVED_UPSTREAM_NEGATIVE",
+    "response_entry_steps": 32,
+    "fresh_scope": "Fresh spellings in fixed authored forms; no refit or redraw."
+  },
+  "next": "Capture actual query words/primes and historical/dependent scores for longer previous-location owner-first queries, test eight-word exposure hypothesis, then repair bounded contextual historical intent/owner binding while preserving this artifact."
+}
