@@ -62,7 +62,9 @@ impl SourceRouting {
         self.validate_shape(
             model,
             read.actions.len(),
-            if self.config.role_context_only {
+            if model.current_source.is_some() {
+                31
+            } else if self.config.role_context_only {
                 20
             } else {
                 30
@@ -862,6 +864,29 @@ impl Model {
             &mut WordCopyWork::default(),
         );
         let persistent = super::relation::read_choice(self, values, &mut ValueWork::default());
+        let including_recent =
+            super::relation::read_choice_with_recent(self, values, true, &mut ValueWork::default());
+        let mut relation_candidates = Vec::new();
+        if let (Some(relations), Some(head)) = (&values.relations, super::relation::head(self)) {
+            let mut work = ValueWork::default();
+            let addr =
+                super::relation::addresses(self, &words.queries[..words.query_len], &mut work);
+            for id in relations.directory {
+                let Some(record) = relations.record(id) else {
+                    continue;
+                };
+                let (features, n) =
+                    super::relation::read_features(self, record, words, &addr, &mut work);
+                let scores: Vec<_> = read.actions.iter().enumerate().map(|(action, a)| {
+                    serde_json::json!({"action":action,"copy":a.copy,"prefix":a.prefix,
+                        "score":super::relation::score(&head.reader,&features[..n],(action+1) as u8,&mut work)})
+                }).collect();
+                relation_candidates.push(
+                    serde_json::json!({"record":record,"features":&features[..n],"scores":scores,
+                    "exact_value_recent":words.queries[..words.query_len].contains(&record.value)}),
+                );
+            }
+        }
         let feature_control = if block.config.role_context_only {
             Control::WordCopyGeometryDisabled
         } else {
@@ -885,6 +910,11 @@ impl Model {
                 self.source_context.is_some(),
                 &mut work,
             );
+            let (hints, hn) =
+                super::current_source::hints(self, values, &ctx, index, Control::Full, &mut work);
+            let mut features = features[..n].to_vec();
+            features.extend_from_slice(&hints[..hn]);
+            let n = features.len();
             let state = block.encode(self, &features[..n], Control::Full, &mut work.routing);
             let mapped: Vec<_> =
                 features[..n]
@@ -906,18 +936,28 @@ impl Model {
                 }
             }
             let word = (index < words.query_len).then(|| &words.queries[index]);
+            let memberships: Vec<_> = values.relations.iter().flat_map(|relations| {
+                relations.records.iter().filter(move |r|r.id!=0 && word==Some(&r.value)).map(move |r| {
+                    serde_json::json!({"record_id":r.id,"current":relations.directory.contains(&r.id),
+                        "conflict":r.conflict,"previous":r.previous,"action":r.action})
+                })
+            }).collect();
             candidates.push(serde_json::json!({
                 "source":source,
                 "word":word.map(|w| String::from_utf8_lossy(&w.bytes[..usize::from(w.len)]).into_owned()),
                 "address":if index < words.query_len {ctx.addresses[index]} else {0},
                 "source_end":word.map(|w| w.end),"source_byte_end":word.map(|w| w.byte_end),
-                "features":&features[..n],"mapped_codes":mapped,"state":state,"scores":scores
+                "features":&features[..n],"current_source_hints":&hints[..hn],"mapped_codes":mapped,"state":state,"scores":scores,
+                "exact_value_memberships":memberships
             }));
         }
         Ok(serde_json::json!({
             "schema":"uor-r4.source-routing-trace/1", "artifact":self.artifact_cid(),
             "prompt":prompt,"prediction_token":prediction.token,
             "actual_word_copy_decision":session.word_copy_decision(),
+            "actual_field_decision":session.field_composition_decision(),
+            "current_relation_choice_including_recent":including_recent,
+            "current_relation_candidates":relation_candidates,
             "direct_source_dispatch":eligible && dependent.is_none() && persistent.is_none(),
             "word_copy_eligible":eligible,"dependent_choice":dependent,"persistent_choice":persistent,
             "direct_choice":super::source_routing::choose(self, values, Control::Full, &mut WordCopyWork::default()),

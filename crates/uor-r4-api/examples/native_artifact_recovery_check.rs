@@ -127,8 +127,272 @@ fn writer_boundary(present: bool, nested: &str) -> &str {
     }
 }
 
+fn current_source_checks(
+    api_model: &NativeModel,
+    document: &Value,
+    checks: &mut Vec<Value>,
+) -> CheckResult<Option<Model>> {
+    let Some(witness) = document.get("current_source").filter(|v| v.is_object()) else {
+        checks.push(json!({"name":"current_source_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no current_source witness"}));
+        return Ok(None);
+    };
+    let model = api_model.inner_model();
+    let parent = model.without_current_source()?;
+    let parent_bytes = parent.to_bytes()?;
+    let parent_document: Value = serde_json::from_slice(&parent_bytes)?;
+    let expected_parent = "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778";
+    let frozen = document
+        .as_object()
+        .ok_or("candidate object absent")?
+        .iter()
+        .filter(|(key, _)| {
+            ![
+                "current_source",
+                "source_routing",
+                "artifact_cid",
+                "uor_model_address",
+            ]
+            .contains(&key.as_str())
+        })
+        .all(|(key, value)| parent_document.get(key) == Some(value));
+    record(
+        checks,
+        "current_source_exact_parent_and_frozen_components",
+        witness["parent_artifact"] == expected_parent
+            && parent.artifact_cid() == expected_parent
+            && witness["previous"] == parent_document["source_routing"]
+            && frozen,
+        json!({"candidate_artifact":model.artifact_cid(),"parent_artifact":parent.artifact_cid(),
+            "parent_bytes":parent_bytes.len(),"parent_bytes_blake3":blake3::hash(&parent_bytes).to_hex().to_string(),
+            "scope":"Only source-routing extension and derived identities differ; full frozen parent validates recursively. Old source parameters are separately guarded by the outer witness."}),
+    )?;
+    drop(parent_document);
+    drop(parent_bytes);
+    for (label, instruction, target) in [
+        (
+            "owner_first",
+            "Name the owner first.",
+            " selvi is in Copper Vale.\n",
+        ),
+        ("value_first", "", " Copper Vale.\n"),
+    ] {
+        let prompt = format!("Record: Dusk Ridge holds selvi. selvi now in Copper Vale. Where is selvi? {instruction} Answer:");
+        let config = SessionConfig {
+            session_id: format!("current-source-{label}"),
+            ..SessionConfig::default()
+        };
+        let mut direct = model.session(Control::Full)?;
+        let mut api = api_model.create_session(config.clone())?;
+        direct.observe(&model, BOS)?;
+        for token in model.encode(&prompt)? {
+            direct.observe(&model, token)?;
+        }
+        direct.begin_response(&model)?;
+        let initial: Value = serde_json::from_slice(&direct.checkpoint()?)?;
+        let mut tokens = Vec::new();
+        let mut fields = Vec::new();
+        let mut stopped = false;
+        for _ in 0..LIMIT {
+            let p = direct.predict(&model)?;
+            if let Some(field) = direct
+                .field_composition_decision()
+                .filter(|d| d.field != 0 && d.cursor == 0)
+            {
+                fields.push(field);
+            }
+            direct.observe(&model, p.token)?;
+            if p.token == EOS {
+                stopped = true;
+                break;
+            }
+            tokens.push(p.token);
+        }
+        let bytes = model.decode(&tokens)?;
+        let response = api.complete(CompletionRequest {
+            prompt: prompt.clone(),
+            max_tokens: Some(LIMIT),
+            temperature: Some(0.0),
+            stop_sequences: vec![],
+        })?;
+        record(
+            checks,
+            &format!("current_source_{label}_api_direct_parity"),
+            stopped
+                && bytes == target.as_bytes()
+                && response.text.as_bytes() == bytes
+                && response.stopped_by == "eos"
+                && response.token_count == tokens.len(),
+            json!({"prompt":prompt,"target":target,"api":response,"field_reads":fields}),
+        )?;
+        let final_state: Value = serde_json::from_slice(&direct.checkpoint()?)?;
+        let relation = &initial["values"]["relations"];
+        let records = relation["records"]
+            .as_array()
+            .ok_or("current-source records absent")?;
+        let previous = records
+            .iter()
+            .find(|r| r["id"] == 1)
+            .ok_or("current-source previous absent")?;
+        let current = records
+            .iter()
+            .find(|r| r["id"] == 2)
+            .ok_or("current-source revision absent")?;
+        let atom = |v: &Value| -> Option<Vec<u8>> {
+            v["bytes"]
+                .as_array()?
+                .get(..v["len"].as_u64()? as usize)?
+                .iter()
+                .map(|b| b.as_u64().and_then(|n| u8::try_from(n).ok()))
+                .collect()
+        };
+        let directory: Vec<_> = relation["directory"]
+            .as_array()
+            .ok_or("current directory absent")?
+            .iter()
+            .filter_map(|id| id.as_u64().filter(|id| *id != 0))
+            .collect();
+        record(
+            checks,
+            &format!("current_source_{label}_committed_version_and_read"),
+            records
+                .iter()
+                .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0))
+                .count()
+                == 2
+                && atom(&previous["owner"]).as_deref() == Some(b"selvi")
+                && atom(&previous["span"]).as_deref() == Some(b"Dusk Ridge")
+                && atom(&current["owner"]).as_deref() == Some(b"selvi")
+                && atom(&current["span"]).as_deref() == Some(b"Copper Vale")
+                && previous["action"] == 1
+                && previous["previous"] == 0
+                && current["action"] == 2
+                && current["previous"] == 1
+                && directory == vec![2]
+                && initial["values"]["relations"] == final_state["values"]["relations"]
+                && (label != "owner_first"
+                    || (fields.iter().any(|d| d.field == 1)
+                        && fields.iter().any(|d| d.field == 2)
+                        && fields.iter().all(|d| d.anchor.relation_id == 2))),
+            json!({"relations":relation,"field_reads":fields}),
+        )?;
+        let checkpoint = api.export_state()?;
+        let mut imported = api_model.create_session(config)?;
+        imported.import_state(&checkpoint)?;
+        record(
+            checks,
+            &format!("current_source_{label}_checkpoint_import"),
+            imported.identity_scope() == api.identity_scope(),
+            json!({"bytes":checkpoint.len()}),
+        )?;
+        compare_turn(
+            &model,
+            &mut direct,
+            &mut imported,
+            SUM_14,
+            "18.\n",
+            &format!("current_source_{label}_independent_sum"),
+            checks,
+        )?;
+        if label == "owner_first" {
+            let mut reference = parent.session(Control::Full)?;
+            let expected = direct_turn(&parent, &mut reference, &prompt)?;
+            for (name, control) in [
+                ("disabled", Control::CurrentSourceDisabled),
+                ("version_erased", Control::CurrentSourceVersionDisabled),
+            ] {
+                let mut session = model.session(control)?;
+                let actual = direct_turn(&model, &mut session, &prompt)?;
+                record(
+                    checks,
+                    &format!("current_source_{name}_restores_parent"),
+                    actual == expected,
+                    json!({"prompt":prompt,"actual":actual,"parent":expected,
+                        "scope":"Exact parent-output preservation under intervention, not a new correctness claim."}),
+                )?;
+            }
+        }
+    }
+    for (label, query) in [
+        ("historical", "Where was selvi before? Answer:"),
+        ("raw", "Copy Dusk Ridge. Answer:"),
+    ] {
+        let prompt = format!("Record: Dusk Ridge holds selvi. selvi now in Copper Vale. {query}");
+        let expected = direct_turn(&parent, &mut parent.session(Control::Full)?, &prompt)?;
+        let actual = direct_turn(&model, &mut model.session(Control::Full)?, &prompt)?;
+        let response = api_model
+            .create_session(SessionConfig::default())?
+            .complete(CompletionRequest {
+                prompt: prompt.clone(),
+                max_tokens: Some(LIMIT),
+                temperature: Some(0.0),
+                stop_sequences: vec![],
+            })?;
+        record(
+            checks,
+            &format!("current_source_{label}_parent_preservation"),
+            actual == expected
+                && json!(response.text.as_bytes()) == expected["bytes"]
+                && json!(response.stopped_by) == expected["stopped_by"]
+                && json!(response.token_count) == expected["token_count"],
+            json!({"prompt":prompt,"parent":expected,"actual":actual,"api":response,"scope":"Unqualified parent preservation, not correctness for historical/raw language."}),
+        )?;
+    }
+    let codes = document["source_routing"]["codes"]
+        .as_array()
+        .ok_or("source-routing codes absent")?;
+    let new_index = codes
+        .iter()
+        .position(|row| row["feature"]["kind"] == 30)
+        .ok_or("current-source feature absent")?;
+    for (name, pointer, new) in [
+        (
+            "current_source_wrong_parent_rejected",
+            "/current_source/parent_artifact".to_owned(),
+            json!(format!("blake3:{}", "0".repeat(64))),
+        ),
+        (
+            "current_source_forbidden_new_class_rejected",
+            format!("/source_routing/codes/{new_index}/feature/a"),
+            json!(0),
+        ),
+        (
+            "current_source_changed_old_bias_rejected",
+            "/source_routing/biases/0".to_owned(),
+            {
+                let old = document["source_routing"]["biases"][0]
+                    .as_i64()
+                    .ok_or("source-routing old bias absent")?;
+                json!(if old == 32 { old - 1 } else { old + 1 })
+            },
+        ),
+    ] {
+        let mut changed = document.clone();
+        let field = changed
+            .pointer_mut(&pointer)
+            .ok_or("current-source mutation absent")?;
+        let old = field.clone();
+        *field = new.clone();
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            name,
+            rejected,
+            json!({"field":pointer,"old":old,"new":new,"error":error}),
+        )?;
+    }
+    record(
+        checks,
+        "current_source_nested_writer_corruption_target",
+        true,
+        json!({"candidate_artifact":model.artifact_cid(),"mechanical_artifact":parent.artifact_cid(),
+            "scope":"Historical writer-choice and deeper witness checks use stripped parents. Every API/direct generated answer still executes the supplied current-source candidate."}),
+    )?;
+    Ok(Some(parent))
+}
+
 fn writer_choice_checks(
     api_model: &NativeModel,
+    mechanical_model: &Model,
     document: &Value,
     checks: &mut Vec<Value>,
 ) -> CheckResult<Option<Model>> {
@@ -137,7 +401,7 @@ fn writer_choice_checks(
         return Ok(None);
     };
     let model = api_model.inner_model();
-    let parent = model.without_writer_choice()?;
+    let parent = mechanical_model.without_writer_choice()?;
     let parent_bytes = parent.to_bytes()?;
     let parent_document: Value = serde_json::from_slice(&parent_bytes)?;
     let expected_parent = "blake3:d1b0985fb8af0528dae6a7c684e1c76be3634099c868a7f9a3b09454cb68d1c0";
@@ -159,9 +423,9 @@ fn writer_choice_checks(
         witness["parent_artifact"] == expected_parent
             && parent.artifact_cid() == expected_parent
             && candidate_base == parent_base,
-        json!({"candidate_artifact":model.artifact_cid(),"parent_artifact":parent.artifact_cid(),
+        json!({"candidate_artifact":model.artifact_cid(),"mechanical_artifact":mechanical_model.artifact_cid(),"parent_artifact":parent.artifact_cid(),
             "parent_bytes":parent_bytes.len(),"parent_bytes_blake3":blake3::hash(&parent_bytes).to_hex().to_string(),
-            "boundary":"Only the optional writer-choice residual and derived identities differ; all inherited writer, cache, field-composition and geometric components match the recursively validated parent."}),
+            "boundary":"Only the optional writer-choice residual and derived identities of the mechanical writer artifact differ; all inherited writer, cache, field-composition and geometric components match its recursively validated parent. Generation continues on the supplied candidate."}),
     )?;
     for (label, padding) in [
         ("recent", String::new()),
@@ -668,6 +932,7 @@ fn run(
     expected_cid: &str,
     checks: &mut Vec<Value>,
     identity: &mut Value,
+    current_source_only: bool,
 ) -> CheckResult<()> {
     let bytes = std::fs::read(path)?;
     let api_model = NativeModel::load_from_bytes(&bytes)?;
@@ -795,17 +1060,39 @@ fn run(
     )?;
 
     let candidate_document: Value = serde_json::from_slice(&bytes)?;
-    let field_parent = writer_choice_checks(&api_model, &candidate_document, checks)?;
-    let field_document: Value = if let Some(parent) = field_parent.as_ref() {
-        serde_json::from_slice(&parent.to_bytes()?)?
+    let current_parent = current_source_checks(&api_model, &candidate_document, checks)?;
+    if current_source_only {
+        if current_parent.is_none() {
+            return Err("current-source scope requires a current_source artifact".into());
+        }
+        return Ok(());
+    }
+    let writer_document: Value = if let Some(parent) = current_parent.as_ref() {
+        let document = serde_json::from_slice(&parent.to_bytes()?)?;
+        drop(candidate_document);
+        document
     } else {
         candidate_document
+    };
+    let mechanical_model = current_parent.as_ref().unwrap_or(&model);
+    let field_parent =
+        writer_choice_checks(&api_model, mechanical_model, &writer_document, checks)?;
+    drop(current_parent);
+    let field_document: Value = if let Some(parent) = field_parent.as_ref() {
+        let document = serde_json::from_slice(&parent.to_bytes()?)?;
+        drop(writer_document);
+        document
+    } else {
+        writer_document
     };
     let mechanical_model = field_parent.as_ref().unwrap_or(&model);
     let nested_parent =
         field_composition_checks(&api_model, mechanical_model, &field_document, checks)?;
+    drop(field_parent);
     let document: Value = if let Some(parent) = nested_parent.as_ref() {
-        serde_json::from_slice(&parent.to_bytes()?)?
+        let document = serde_json::from_slice(&parent.to_bytes()?)?;
+        drop(field_document);
+        document
     } else {
         field_document
     };
@@ -2416,16 +2703,27 @@ fn run(
 
 fn main() -> CheckResult<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.len() != 3 {
-        return Err("usage: native_artifact_recovery_check MODEL EXPECTED_CID OUTPUT_JSON".into());
+    if !(args.len() == 3 || (args.len() == 4 && args[3] == "current-source")) {
+        return Err(
+            "usage: native_artifact_recovery_check MODEL EXPECTED_CID OUTPUT_JSON [current-source]"
+                .into(),
+        );
     }
     let mut checks = Vec::new();
     let mut identity = Value::Null;
-    let result = run(Path::new(&args[0]), &args[1], &mut checks, &mut identity);
+    let current_source_only = args.len() == 4;
+    let result = run(
+        Path::new(&args[0]),
+        &args[1],
+        &mut checks,
+        &mut identity,
+        current_source_only,
+    );
     let report = json!({
         "schema":"uor-r4.native-artifact-recovery-check/1",
         "status":if result.is_ok() {"PASS"} else {"FAIL"},
         "scope":"Artifact integrity and actual narrow interface behavior only; no general capability, alpha, energy, or performance qualification.",
+        "selected_checks":if current_source_only {"base interface and current-source refinement; deeper historical checks NOT_RUN"} else {"complete recovery runner"},
         "identity":identity,"checks":checks,
         "error":result.as_ref().err().map(|e|e.to_string()),
     });

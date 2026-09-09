@@ -125,7 +125,13 @@ pub(super) fn choose(
     control: Control,
     work: &mut WordCopyWork,
 ) -> Option<(u8, usize, i64)> {
-    let block = if control == Control::SourceRoleRefinementDisabled {
+    let block = if control == Control::CurrentSourceDisabled {
+        model
+            .current_source
+            .as_ref()
+            .map(|w| &w.previous)
+            .or(model.source_routing.as_ref())?
+    } else if control == Control::SourceRoleRefinementDisabled {
         model
             .source_role_refinement
             .as_ref()
@@ -170,7 +176,12 @@ pub(super) fn choose(
             retained,
             work,
         );
-        let state = block.encode(model, &features[..n], control, &mut work.routing);
+        let (hints, hn) = super::current_source::hints(model, values, &ctx, index, control, work);
+        let mut combined =
+            [super::value_types::ValueFeature::default(); role_read::READ_FEATURES + 8];
+        combined[..n].copy_from_slice(&features[..n]);
+        combined[n..n + hn].copy_from_slice(&hints[..hn]);
+        let state = block.encode(model, &combined[..n + hn], control, &mut work.routing);
         work.routing.sources_examined = work.routing.sources_examined.saturating_add(1);
         work.word_candidates = work
             .word_candidates
