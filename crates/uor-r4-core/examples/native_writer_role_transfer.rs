@@ -192,9 +192,17 @@ fn records_match(r: &Value, t: &TargetRecord) -> Result<bool> {
     }
     Ok(false)
 }
-fn evaluate(m: &Model, cases: &[Case], out: &Path, controls: bool) -> Result<()> {
+fn evaluate(m: &Model, cases: &[Case], out: &Path, controls: bool, reader: bool) -> Result<()> {
     fs::create_dir_all(out)?;
-    let parent = m.without_writer_role()?;
+    let parent = if reader {
+        let wire: Value = serde_json::from_slice(&m.to_bytes()?)?;
+        if !wire["current_source"].is_object() {
+            return Err("evaluate-reader requires current_source witness".into());
+        }
+        m.without_current_source()?
+    } else {
+        m.without_writer_role()?
+    };
     save(
         &out.join("lineage.json"),
         &json!({"candidate":m.artifact_cid(),"parent":parent.artifact_cid(),"parent_bytes_blake3":blake3::hash(&parent.to_bytes()?).to_hex().to_string()}),
@@ -259,10 +267,17 @@ fn evaluate(m: &Model, cases: &[Case], out: &Path, controls: bool) -> Result<()>
         }
         let mut interventions = Vec::new();
         if controls && !c.inherit {
-            for control in [
-                Control::WriterRoleDisabled,
-                Control::WriterRoleContextDisabled,
-            ] {
+            for control in if reader {
+                [
+                    Control::CurrentSourceDisabled,
+                    Control::CurrentSourceVersionDisabled,
+                ]
+            } else {
+                [
+                    Control::WriterRoleDisabled,
+                    Control::WriterRoleContextDisabled,
+                ]
+            } {
                 let result = generate(m, &c.example.prompt, control, false)?;
                 let parent_equal = result["text"] == prior["text"]
                     && result["eos"] == prior["eos"]
@@ -583,9 +598,9 @@ fn main() -> Result<()> {
                     .collect::<std::result::Result<Vec<_>, _>>()?,
             )
         }
-        "evaluate" | "controls" => {
+        "evaluate" | "controls" | "evaluate-reader" => {
             let cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[3])?)?;
-            evaluate(&m, &cases, out, true)
+            evaluate(&m, &cases, out, true, a[1] == "evaluate-reader")
         }
         _ => Err("unknown mode".into()),
     }

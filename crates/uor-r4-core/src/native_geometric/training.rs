@@ -570,10 +570,12 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
-        if let Some(witness) = &self.writer_role {
+        // The source refinement restores its previous router before validating
+        // inner witnesses, including the frozen contextual writer-role parent.
+        if let Some(witness) = &self.current_source {
             return witness.validate(self);
         }
-        if let Some(witness) = &self.current_source {
+        if let Some(witness) = &self.writer_role {
             return witness.validate(self);
         }
         if let Some(witness) = &self.writer_choice {

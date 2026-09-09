@@ -1,0 +1,995 @@
+{
+  "schema": "uor-r4.current-source-writer-integration/1",
+  "at": "2026-09-09T16:57:27.243Z",
+  "decision": "RETAIN_BOUNDED_POSITIVE",
+  "artifact": {
+    "cid": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/current-source-writer/model.json",
+    "bytes": 14418256,
+    "sha256": "07e279fa62f05b736fe87b3d2a7e44c3158dfdbd789339213b66f5da68c76a59"
+  },
+  "parent": {
+    "cid": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-role/model.json",
+    "bytes": 14127792,
+    "sha256": "7bb912761e09a34edf40731038f700ad90c1aad53188da0967910382fc280d46"
+  },
+  "rejected": {
+    "cid": "blake3:4f12bf789a26384ef57f942a1d2620fcda5e258621bdbe6dd1fdb47f904ca3f0",
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fit/model.json",
+    "bytes": 14415556,
+    "sha256": "afe3dd9fd7f150b8991d694e9f2d89f5e9d66ab840e2e8895b60136e82fcbae4",
+    "reason": "Two prior sentence-leading Now answers regress to Dusk Ridge; exact writer records unchanged."
+  },
+  "source_base": "a9e9205ee77f2a4bd9449a771f40788ba50538a5",
+  "fit": {
+    "artifact": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "changed_codes": [
+      {
+        "feature": {
+          "a": 1,
+          "b": 2,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 223,
+          "kind": 30
+        },
+        "roots": [
+          78,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 307,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 21474836787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 30064771379,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 47244640563,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 81604378931,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 133143986483,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 588410519809,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 588410519919,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547510784,
+          "kind": 30
+        },
+        "roots": [
+          27,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547510786,
+          "kind": 30
+        },
+        "roots": [
+          82,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547510787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 983547511007,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 1,
+          "b": 1808181231713,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 2,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 223,
+          "kind": 30
+        },
+        "roots": [
+          1,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 307,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 21474836787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 30064771379,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 47244640563,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 81604378931,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 133143986483,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 588410519809,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 588410519919,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547510784,
+          "kind": 30
+        },
+        "roots": [
+          91,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547510786,
+          "kind": 30
+        },
+        "roots": [
+          75,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547510787,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 983547511007,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "a": 2,
+          "b": 1808181231713,
+          "kind": 30
+        },
+        "roots": [
+          119,
+          119
+        ]
+      }
+    ],
+    "documents": 1172,
+    "elapsed_ms": 61253,
+    "fit": {
+      "accepted": [
+        7,
+        0,
+        0
+      ],
+      "final_correct": 77,
+      "final_hinge": 0,
+      "initial_correct": 75,
+      "initial_hinge": 9,
+      "proposals": 7612,
+      "stopped_at_time_limit": false
+    },
+    "frames": 77,
+    "mutable_codes": 30,
+    "namespace": 30,
+    "parent_artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "prompt_bytes": 114142,
+    "schema": "uor-r4.current-source-fit/1",
+    "scope": "Offline exact parent source/action preservation or unique frozen learned current-revision read; only new version-context roots learned. Both sources remain admitted; free generation is separate."
+  },
+  "construction": {
+    "artifact": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "total": 1172,
+    "labelled": 58,
+    "exact": 58,
+    "current_targets": 6,
+    "current_exact": 6,
+    "current_selections": 6,
+    "inherited": 1166,
+    "preserved": 1166,
+    "controls": 12,
+    "controls_restore_parent": true
+  },
+  "reader_stress": {
+    "artifact": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "total": 16,
+    "labelled": 16,
+    "exact": 15,
+    "current_targets": 0,
+    "current_exact": 0,
+    "current_selections": 0,
+    "inherited": 0,
+    "preserved": 0,
+    "controls": 0,
+    "controls_restore_parent": true
+  },
+  "writer_preservation": [
+    {
+      "panel": "writer-construction-retry",
+      "artifact": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+      "total": 1093,
+      "labelled": 172,
+      "exact": 172,
+      "inherited": 1057,
+      "preserved": 1057,
+      "record_targets": 96,
+      "records_correct": 96,
+      "controls": 72,
+      "controls_restore_parent": true
+    },
+    {
+      "panel": "writer-stress-retry",
+      "artifact": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+      "total": 19,
+      "labelled": 16,
+      "exact": 16,
+      "inherited": 3,
+      "preserved": 3,
+      "record_targets": 16,
+      "records_correct": 16,
+      "controls": 32,
+      "controls_restore_parent": true
+    },
+    {
+      "panel": "writer-fresh-retained-retry",
+      "artifact": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+      "total": 24,
+      "labelled": 24,
+      "exact": 24,
+      "inherited": 0,
+      "preserved": 0,
+      "record_targets": 24,
+      "records_correct": 24,
+      "controls": 48,
+      "controls_restore_parent": true
+    }
+  ],
+  "fresh": {
+    "artifact": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "total": 24,
+    "labelled": 18,
+    "exact": 18,
+    "current_targets": 9,
+    "current_exact": 9,
+    "current_selections": 9,
+    "inherited": 15,
+    "preserved": 15,
+    "parent_exact": 9,
+    "controls": 18,
+    "controls_restore_parent": true,
+    "failures": []
+  },
+  "controls_scope": "CurrentSourceDisabled and CurrentSourceVersionDisabled remove the same version hints; inner writer-only ablations against bare6f are NOT_RUN on the combined artifact.",
+  "lineage": {
+    "candidate": "blake3:7f70029e62906da5873b577c5ec1e39fdc273dafa79fa82b1cf522f3e504b4fc",
+    "parent": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "parent_bytes_blake3": "ce6192c0da5afaae7d28146dacc7c64611e5b9c702d3d7c653520559f3658b4a"
+  },
+  "preservation": {
+    "semantic_reports": 14,
+    "changed_rows": 0,
+    "histories": {
+      "total": 12,
+      "exact": 12,
+      "parent": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/history/full.json",
+      "candidate": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/history/full.json",
+      "outputs_records_versions_sources_equal": true
+    },
+    "word_retained": {
+      "exact": 24,
+      "total": 24
+    },
+    "panels": [
+      {
+        "panel": "copy-add-evaluate-final",
+        "exact": 24,
+        "total": 24
+      },
+      {
+        "panel": "copy-add-stress-final",
+        "exact": 24,
+        "total": 24
+      },
+      {
+        "panel": "action-evaluate-final",
+        "exact": 24,
+        "total": 24
+      },
+      {
+        "panel": "action-stress-final",
+        "exact": 24,
+        "total": 24
+      }
+    ]
+  },
+  "api": {
+    "status": "PASS",
+    "selected_checks": "base interface, current-source refinement and applicable nested writer-role checks; deeper historical checks NOT_RUN",
+    "total": 48,
+    "passed": 47,
+    "not_run": [
+      {
+        "name": "nested_writer_role_removal_controls",
+        "reason": "Removing only the inner writer leaves the outer reader active; bare-parent equivalence is not expected. Current-source controls check the integrated boundary.",
+        "status": "NOT_RUN"
+      }
+    ],
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/api.json",
+      "bytes": 176017,
+      "sha256": "a0db59bf52e4d830032643909c4e723be6bdd522d2fb0bb4bb042e71c2ee57da"
+    }
+  },
+  "tests": [
+    {
+      "label": "test-current_source_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/test-current_source_.log",
+        "bytes": 849,
+        "sha256": "ba253aaa52c7a8c82b0d46268f0ad0b0a9bfde701a38a87f3d643da10d04f0b5"
+      }
+    },
+    {
+      "label": "test-writer_role_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/test-writer_role_.log",
+        "bytes": 855,
+        "sha256": "93274720693e99326700f6b45de806bb43b9e511669f4ea5c79e5abada8cae03"
+      }
+    },
+    {
+      "label": "test-writer_choice_",
+      "passed": 9,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/test-writer_choice_.log",
+        "bytes": 1214,
+        "sha256": "d9642c9008bfde136d98ab3f7eda3a6e47a794191a0d39a2cb8b5f19a455d36e"
+      }
+    },
+    {
+      "label": "kernel-source-guard",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/kernel-source-guard.log",
+        "bytes": 189,
+        "sha256": "9b316022e0bc7257db4495673ceb87db975b850869b17f6cd200b788de3e1717"
+      }
+    },
+    {
+      "label": "allocation-current-source",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/allocation-current-source.log",
+        "bytes": 1590,
+        "sha256": "cffe33ef24e2c2297fab16fd876e518f07c6425305f1fe0d7fcf0493f2c9b9c5"
+      }
+    }
+  ],
+  "generated_rust": [
+    {
+      "label": "rust-extract-evaluate",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-extract-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-evaluate",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-compile-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-evaluate",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-execute-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-extract-stress",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-extract-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-stress",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-compile-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-stress",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-execute-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-extract-retained",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-extract-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-retained",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-compile-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-retained",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/rust-execute-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "verify-parent-byte-hash",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/verify-parent-byte-hash.log",
+        "bytes": 108,
+        "sha256": "462de521e3d3f11aab00ed36e38b409f9e2621bcd85f228a272b0e0951e76953"
+      }
+    }
+  ],
+  "resources": {
+    "at": "2026-09-09T16:57:27.234Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/commands.jsonl",
+    "model_ms": 1651375,
+    "engineering_ms": 343092,
+    "ledger": {
+      "cumulative_ms": 30504955,
+      "limit_ms": 32250000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 1548425,
+    "storage_high_water": {
+      "target": 24514560,
+      "worktree": 16384,
+      "evidence": 316534784,
+      "at": "2026-09-09T16:56:54.810Z",
+      "git": 0
+    },
+    "retained_copy_bytes": 14426112,
+    "owner_checkout_copy_bytes": 1048576,
+    "cycle_growth_bytes": 356540416,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 37896278016,
+    "storage_limit_bytes": 39158181888,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 1127686144,
+    "peak_model_sampled_rss_bytes": 2311503872,
+    "peak_engineering_sampled_rss_bytes": 2552152064,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "resources_snapshot": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/resources-at-evidence.json",
+    "bytes": 1102,
+    "sha256": "240aa5f18a7d4998407f83532e9d55394c1aab8fbd68f12d2d7bc2cb26bbab2d"
+  },
+  "sources": [
+    {
+      "repository_path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "bytes": 131140,
+      "sha256": "1290e9ec7a9ec7b3fc4775433a1573eedc54687f4a2dcbde52503bb8384da375"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_current_version_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_current_version_read.rs",
+      "bytes": 21493,
+      "sha256": "64d624aa7e2d9b9e214a96d5057eb35d959ec50ee115098d762f33589539263c"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_writer_role_transfer.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_writer_role_transfer.rs",
+      "bytes": 24553,
+      "sha256": "536e093ac6fd7124abb0e77e9c86050247da4f0f0294eb6bcc478790b1643e29"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/current_source.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/current_source.rs",
+      "bytes": 31132,
+      "sha256": "865dd7a50d2d44b7df60ade2f5b7ea76257f8d97458288e587feb9b31cfd6a5e"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 62586,
+      "sha256": "95ece462509905105d2ca3bbc6fe6f3794b8a2097d1db1b226670145d5b01c19"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 182863,
+      "sha256": "457752c02a9be8b0a75f65244a132f858de56caac997ede818640eb230354152"
+    }
+  ],
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/pre-retention-verification.json",
+      "bytes": 1272,
+      "sha256": "006f6edbf458669a46fb0d8bf42e801d72f08127193cb3dcd69bd3243f0ed446"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/projection-initial.json",
+      "bytes": 3070,
+      "sha256": "83e198ca5a7197f330c63b271396ee37cd19ec762b093f4aa863edd59a81558e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/projection.json",
+      "bytes": 3525,
+      "sha256": "ad288239d945115e33e551550a7b8148efd9df50b1ec1400a9131c4e178e5fb1"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/commands-at-evidence.jsonl",
+      "bytes": 40077,
+      "sha256": "e8264b0748ed2c1c7cf086260fec1bcdc0600e190ee751f74685267b8a9dd827"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/selection.json",
+      "bytes": 3207,
+      "sha256": "86b746e58b13520caaf04d6f0010ab8894af19c52ba5a330bcc8cbbdb9ce61ad"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/diagnostic.log",
+      "bytes": 1019,
+      "sha256": "da9edf47436c3e929e12df8a0a2a2026976119e6dd2ef444a0a59d968c760f05"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/diagnostic-rebuilt/diagnostic.json",
+      "bytes": 3487500,
+      "sha256": "39749bada79cc4e9817b3647ccbff3edf674cea5ff52c7942ec80937fb20dd3f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/diagnostic-summary.json",
+      "bytes": 4349,
+      "sha256": "2028c811838b37ace4fb054c5a7633729cc31440ccc67fd0b099af26241d0b8c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fit/fit.json",
+      "bytes": 317351,
+      "sha256": "a712349a20fcd79c6347675e31e578c6d1fedf473d8e35d6f049b55a833d1a7c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fit/model.json",
+      "bytes": 14415556,
+      "sha256": "afe3dd9fd7f150b8991d694e9f2d89f5e9d66ab840e2e8895b60136e82fcbae4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/candidate-rejected-initial.json",
+      "bytes": 1173961,
+      "sha256": "15eb9d923f051ff381adf0663a0dfa1d2c8c61e984ba56bf4084396a65b0fd50"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/construction-result/result.json",
+      "bytes": 34386204,
+      "sha256": "9605c434745a83423021fb4451c26fafd2cb26d07410ab712abb8ead0434c1aa"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/stress-result/result.json",
+      "bytes": 831756,
+      "sha256": "abc74a28c15aa2239d7bd75ea606fd465678901c26f1e1a6b62d223032e116bf"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/writer-stress/result.json",
+      "bytes": 1433972,
+      "sha256": "338f4645340c359f40f006ca3f3a7628adfd8c54c014ba216c21a96afc1fa4eb"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/construction-retry/receipt.json",
+      "bytes": 519,
+      "sha256": "ed049f8d0c20890480e7248e44117127dcea38287ec11310e3d0014b22c485c0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/construction-retry/cases.json",
+      "bytes": 261635,
+      "sha256": "1d5ff5ca2afdfafb5b61efbd25816ae0c80642e7dc9ede822b2d659e39604e8f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/construction-retry/training.json",
+      "bytes": 220745,
+      "sha256": "0d2fb1b900e22ccae65cfa80dbab0d572700a3ccc2b628f1dcdf949d7b9f3cb3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fit-retry/fit.json",
+      "bytes": 322194,
+      "sha256": "519bf987948dfa283642b1ea738eea33a287081dc115e1662c4ee331483dbcd4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/construction-result-retry/result.json",
+      "bytes": 35126650,
+      "sha256": "7b9a808914a0bbaaa0a45f4eec49661d34ffe88c05e936b5316789ec9713984d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/construction-result-retry/lineage.json",
+      "bytes": 259,
+      "sha256": "b3ed3e9717e926f64fa51a6a3f15383f3f3293e912b85966e68bc8dc0676a89d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/stress-result-retry/result.json",
+      "bytes": 831762,
+      "sha256": "ec958a77543c2542e23bb10b02253273d3928160ca24b526b229f107b723277d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/stress-summary-retry.json",
+      "bytes": 845,
+      "sha256": "c64f0f21ef7d01d87c38ffd48dcd419ea749d745020614b824308c5b08bf48e9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/candidate-retry-stress.json",
+      "bytes": 429261,
+      "sha256": "eb191829da5e36adc4c6feef9e4aa8d937b6ffd8fd0d8943c6d161ca2d99a296"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/writer-construction-retry/result.json",
+      "bytes": 35388663,
+      "sha256": "8b8db0f2a6271ac35beda62f725c7880152a9c02bdc81340511437fdbef131e0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/writer-stress-retry/result.json",
+      "bytes": 1434013,
+      "sha256": "1392647f83238a8dd4dc1c42dca1d5640f65318284ec989383ee5d115c520f37"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/writer-fresh-retained-retry/result.json",
+      "bytes": 2427407,
+      "sha256": "1e3a5b97cff2797bbe8c3af23576e9c5ef64171f705201cb84a98b1407218fb1"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fresh-data/cases.json",
+      "bytes": 6022,
+      "sha256": "df8dd9c860c5e67affb89c366cbc71bac36c67791ac07536f76c0f86cb941b35"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fresh-data/receipt.json",
+      "bytes": 348,
+      "sha256": "62c6290812cbc40bf7cc9a0129924f90b2caf831c5ed43e633944682123ddad8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fresh-result/result.json",
+      "bytes": 1163212,
+      "sha256": "8f2d0cd7e1b9da01dc499ca7eb0d669b4967d5612d0f4cd507fef56e744982de"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fresh-result/lineage.json",
+      "bytes": 259,
+      "sha256": "b3ed3e9717e926f64fa51a6a3f15383f3f3293e912b85966e68bc8dc0676a89d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/fresh-summary.json",
+      "bytes": 342,
+      "sha256": "c2daa0443d776751f2ea184e34309255b8e7d30fca4351676862bc72aba206f6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/preserved-comparison-v2.json",
+      "bytes": 10777,
+      "sha256": "764c7c8d6a0f069a70b1d9ad448eabce8b6457b78c9f9a031cad1f16bd8767a9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/history-comparison.json",
+      "bytes": 307,
+      "sha256": "07a5a4e73706e8a92774487ba2648a97318e1c55003d07de14b9590801afc3f7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/history/full.json",
+      "bytes": 1264210,
+      "sha256": "a0a4fc1a109e573fdee67b5ad4e2fb9634578f4a3ae4fff93c79d341642c7da7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/word-fresh-retained/full.json",
+      "bytes": 1226743,
+      "sha256": "e282bd12714e903355626e5f696ea77dd0db35ddc96e10868cefeb3ab4ae949b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/copy-add-evaluate-final/result.json",
+      "bytes": 9284307,
+      "sha256": "2157a67a5a2df9bacd195cf96bd891a8b0df2d200ee4a16e83b3c47ade99d23b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/copy-add-stress-final/result.json",
+      "bytes": 9331288,
+      "sha256": "4ed80869c9ecc8454a3e0920635cee091cec15fa8841e8aaa2dd5551dc9cfbbe"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/action-evaluate-final/result.json",
+      "bytes": 654185,
+      "sha256": "9ba90a715da318d277c62e5155f71213ba09174424c6165a2e9a18cda493cf7c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/action-stress-final/result.json",
+      "bytes": 654448,
+      "sha256": "a0dcad4e435abd5dd658bed8ad7bc54054ee0e437f568539d48af601ab4401d4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/api.json",
+      "bytes": 176017,
+      "sha256": "a0db59bf52e4d830032643909c4e723be6bdd522d2fb0bb4bb042e71c2ee57da"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/review-notes.json",
+      "bytes": 2764,
+      "sha256": "3653b29c66be09268755c2820ba32fd84de9aefa42368ffe5d67d138c825cdfe"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/retained-copy.json",
+      "bytes": 596,
+      "sha256": "c245811e54e6505445c203e20b23a6d539d82b5617aa395f3c0baa6070fb71a9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/owner-checkout-copy.json",
+      "bytes": 155,
+      "sha256": "871a40d5940688c5741ebac8efc8c4ecad16b73e42ef99d078c7e8bbcb75ed76"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/run.mjs",
+      "bytes": 3280,
+      "sha256": "6d392f7526607b03280ca14e2b1abb64e4fc7f3ec1c5775dfd0f7d549ee5bb05"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/retry-develop.mjs",
+      "bytes": 2139,
+      "sha256": "d4b2675196ebf3ddef8bb98466dfb212cbad5d9391371860bb6b7d9e9ca219e1"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/validate-selected.mjs",
+      "bytes": 4196,
+      "sha256": "0b1f7c867e78b00908c731b818a113bfa9c55e6390108fd6a0008f0563a816e6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/select-fresh.mjs",
+      "bytes": 3382,
+      "sha256": "a4708fdceb5424d85b6b9d69de68e2b944a7b448d8f2409b488392426ba32c9a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/compare-preserved.mjs",
+      "bytes": 3271,
+      "sha256": "baef423398c9510f111a8361c3fceec366a1b0c864e7e2dc5f1c230faa88756f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-source-integration/generated-rust-checks.mjs",
+      "bytes": 2243,
+      "sha256": "5dad7400a537a3323b1b5e3b3de1a81bc3df72946b3b0c5fe3d067051660cd74"
+    }
+  ],
+  "not_run": [
+    "complete historical API runner",
+    "blanket full suite",
+    "new-artifact browser/WASM/HTTP",
+    "general prose/reasoning/program synthesis qualification",
+    "complete-path energy measurement",
+    "inner writer-only ablations against bare6f on combined reader"
+  ],
+  "next": "Repair query-owner source discrimination across two competing revision chains, starting from the unchanged two-owners-first plain recent failure; preserve current answers and exact occurrence/version identity, then address explicit historical references."
+}

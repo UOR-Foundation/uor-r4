@@ -419,8 +419,53 @@ fn evaluate(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
     );
     Ok(())
 }
+fn extend_preservation(base: &Path, writer: &Path, out: &Path) -> Result<()> {
+    fs::create_dir(out)?;
+    let mut cases: Vec<Case> = serde_json::from_slice(&fs::read(base)?)?;
+    let prior: Vec<Value> = serde_json::from_slice(&fs::read(writer)?)?;
+    for row in prior {
+        cases.push(Case {
+            id: format!(
+                "writer-stress/{}",
+                row["example"]["id"].as_str().ok_or("writer id")?
+            ),
+            prompt: row["example"]["prompt"]
+                .as_str()
+                .ok_or("writer prompt")?
+                .into(),
+            expected: row["expected"].as_str().map(String::from),
+            target_current: false,
+            inherit: true,
+        });
+    }
+    if cases.len() > 1200 {
+        return Err("extended population exceeds bound".into());
+    }
+    let docs: Vec<_> = cases
+        .iter()
+        .map(|c| CurrentSourceExample {
+            id: c.id.clone(),
+            prompt: c.prompt.clone(),
+            target: if c.target_current {
+                CurrentSourceTarget::CurrentRevision
+            } else {
+                CurrentSourceTarget::Preserve
+            },
+        })
+        .collect();
+    save(&out.join("cases.json"), &cases)?;
+    save(&out.join("training.json"), &docs)?;
+    save(
+        &out.join("receipt.json"),
+        &json!({"base":base,"base_blake3":blake3::hash(&fs::read(base)?).to_hex().to_string(),"writer":writer,"writer_blake3":blake3::hash(&fs::read(writer)?).to_hex().to_string(),"documents":cases.len(),"scope":"Retained writer stress added as exact parent source/action preservation; no answer bytes enter fitting."}),
+    )
+}
+
 fn main() -> Result<()> {
     let a: Vec<_> = std::env::args().collect();
+    if a.len() == 5 && a[1] == "extend-preservation" {
+        return extend_preservation(Path::new(&a[2]), Path::new(&a[3]), Path::new(&a[4]));
+    }
     if a.len() == 3 && a[1] == "prepare" {
         return prepare(Path::new(&a[2]));
     }
