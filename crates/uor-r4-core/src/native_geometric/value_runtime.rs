@@ -63,12 +63,27 @@ impl ValueState {
         self.append_record(record, work);
         work.literal_writes = work.literal_writes.saturating_add(1);
     }
-    pub(super) fn observe_relation(&mut self, model: &Model, work: &mut ValueWork) {
+    pub(super) fn observe_relation_with_control(
+        &mut self,
+        model: &Model,
+        control: Control,
+        work: &mut ValueWork,
+    ) {
         if let (Some(state), Some(words)) = (&mut self.relations, &self.lexemes) {
-            state.observe(model, words, work);
+            state.observe_with_control(model, words, control, work);
         }
     }
+    #[cfg(test)]
     pub(super) fn observe(&mut self, model: &Model, token: u32, work: &mut ValueWork) {
+        self.observe_with_control(model, token, Control::Full, work);
+    }
+    pub(super) fn observe_with_control(
+        &mut self,
+        model: &Model,
+        token: u32,
+        control: Control,
+        work: &mut ValueWork,
+    ) {
         let sequence = self.seen;
         if self.active {
             self.commit(token, work);
@@ -105,7 +120,7 @@ impl ValueState {
             if let Some(words) = &mut self.lexemes {
                 words.finish(work);
             }
-            self.observe_relation(model, work);
+            self.observe_relation_with_control(model, control, work);
             if let Some(literal) = self.scanner.finish() {
                 self.literal(literal, work);
             }
@@ -126,7 +141,7 @@ impl ValueState {
             if let Some(words) = &mut self.lexemes {
                 words.feed(value, self.recent[(self.recent_cursor + 31) & 31], work);
             }
-            self.observe_relation(model, work);
+            self.observe_relation_with_control(model, control, work);
             let was_open = self.scanner.snapshot_needs_suffix();
             let literal = self.scanner.feed(value, sequence);
             if let Some(literal) = literal {

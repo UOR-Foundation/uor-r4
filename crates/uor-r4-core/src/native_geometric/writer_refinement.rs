@@ -440,6 +440,7 @@ fn trace_writer_window(
     model: &Model,
     words: &[super::value_lexemes::WordAtom],
 ) -> Result<serde_json::Value> {
+    let words = &words[..words.len().min(8)];
     let head =
         super::relation::head(model).ok_or_else(|| Error("writer trace head absent".into()))?;
     let context = model
@@ -457,6 +458,10 @@ fn trace_writer_window(
     let addresses = super::relation::writer_addresses(model, words, &mut work);
     let boundaries = super::relation::boundary_context(model)
         .then(|| super::relation::boundary_metadata(words, &mut work));
+    let lexical = model.writer_lexical.as_ref();
+    let lexical_addresses =
+        lexical.map(|block| super::writer_lexical::addresses(&block.dictionary, words, &mut work));
+    let mut chosen_lexical_key = None;
     let mut best_score = 0_i64;
     let mut best = None;
     let mut best_keys = Vec::new();
@@ -477,20 +482,40 @@ fn trace_writer_window(
                 boundaries.as_ref(),
                 &mut work,
             );
+            let lexical_feature = lexical_addresses
+                .as_ref()
+                .map(|a| super::writer_lexical::feature(a, words.len(), owner, value));
             if owner == 2 && value == 0 {
                 owner_two_value_zero = serde_json::json!({"owner":trace_atom(&words[owner]),
                     "value":trace_atom(&words[value]),"features":&features[..len],
+                    "lexical_feature":lexical_feature,"lexical_assert_key":lexical_feature.map(|f|super::relation::key(f,1)),
                     "assert_keys":features[..len].iter().map(|f|super::relation::key(*f,1)).collect::<Vec<_>>()});
             }
             for action in 1..=3 {
-                let score =
+                let parent_score =
                     super::relation::score(coefficients, &features[..len], action, &mut work);
+                let residual_score =
+                    lexical
+                        .zip(lexical_addresses.as_ref())
+                        .map_or(0, |(block, addr)| {
+                            super::writer_lexical::score(
+                                block,
+                                addr,
+                                words.len(),
+                                owner,
+                                value,
+                                action,
+                                &mut work,
+                            )
+                        });
+                let score = parent_score + residual_score;
                 alternatives.push(
-                    serde_json::json!({"owner":owner,"value":value,"action":action,"score":score}),
+                    serde_json::json!({"owner":owner,"value":value,"action":action,"score":score,"parent_score":parent_score,"residual_score":residual_score,"lexical_feature":lexical_feature,"lexical_key":lexical_feature.map(|f|super::relation::key(f,action))}),
                 );
                 if score > best_score {
                     best_score = score;
                     best = Some((owner, value, action));
+                    chosen_lexical_key = lexical_feature.map(|f| super::relation::key(f, action));
                     best_keys = features[..len]
                         .iter()
                         .map(|f| super::relation::key(*f, action))
@@ -507,7 +532,7 @@ fn trace_writer_window(
         serde_json::json!({"words":words.iter().map(trace_atom).collect::<Vec<_>>(),
         "addresses":&addresses[..words.len()],"boundaries":boundaries,
         "no_write_score":0,"uncached_proposal":best,"uncached_score":best_score,
-        "chosen_keys":best_keys,"alternatives":alternatives,"cache_gated_proposal":gated,
+        "chosen_keys":best_keys,"chosen_lexical_key":chosen_lexical_key,"lexical_addresses":lexical_addresses,"alternatives":alternatives,"cache_gated_proposal":gated,
         "cache_probe_skips":probe_work.relations.admission_skips,
         "cache_probe_fallbacks":probe_work.relations.admission_fallbacks,
         "owner2_value0":owner_two_value_zero,

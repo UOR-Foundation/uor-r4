@@ -421,6 +421,14 @@ pub(super) fn write_choice(
     words: &[WordAtom],
     work: &mut ValueWork,
 ) -> Option<(usize, usize, u8)> {
+    write_choice_with_control(model, words, Control::Full, work)
+}
+pub(super) fn write_choice_with_control(
+    model: &Model,
+    words: &[WordAtom],
+    control: Control,
+    work: &mut ValueWork,
+) -> Option<(usize, usize, u8)> {
     let h = head(model)?;
     let words = &words[..words.len().min(8)];
     let addr = writer_addresses(model, words, work);
@@ -437,17 +445,8 @@ pub(super) fn write_choice(
     if gate.is_some_and(|gate| super::relation_admission::skip(model, gate, words, &addr, work)) {
         return None;
     }
-    write_choice_from_addresses(model, words, &addr, work)
-}
-
-pub(super) fn write_choice_from_addresses(
-    model: &Model,
-    words: &[WordAtom],
-    addr: &[u32; 16],
-    work: &mut ValueWork,
-) -> Option<(usize, usize, u8)> {
     let boundaries = boundary_context(model).then(|| boundary_metadata(words, work));
-    write_choice_from_metadata(model, words, addr, boundaries.as_ref(), work)
+    write_choice_from_metadata_control(model, words, &addr, boundaries.as_ref(), control, work)
 }
 
 /// Cache certification supplies its exact captured metadata explicitly. Dummy
@@ -459,7 +458,24 @@ pub(super) fn write_choice_from_metadata(
     boundaries: Option<&[u16; 8]>,
     work: &mut ValueWork,
 ) -> Option<(usize, usize, u8)> {
+    write_choice_from_metadata_control(model, words, addr, boundaries, Control::Full, work)
+}
+fn write_choice_from_metadata_control(
+    model: &Model,
+    words: &[WordAtom],
+    addr: &[u32; 16],
+    boundaries: Option<&[u16; 8]>,
+    control: Control,
+    work: &mut ValueWork,
+) -> Option<(usize, usize, u8)> {
+    let words = &words[..words.len().min(8)];
     let h = head(model)?;
+    let lexical = model
+        .writer_lexical
+        .as_ref()
+        .filter(|_| control != Control::WriterLexicalDisabled);
+    let lexical_addr =
+        lexical.map(|block| super::writer_lexical::addresses(&block.dictionary, words, work));
     let context = model
         .relation_writer
         .as_ref()
@@ -480,7 +496,18 @@ pub(super) fn write_choice_from_metadata(
                     .relation_writer
                     .as_ref()
                     .map_or(h.writer.as_slice(), |w| w.rows.as_slice());
-                let s = score(rows, &f[..n], action, work);
+                let mut s = score(rows, &f[..n], action, work);
+                if let Some((block, addr)) = lexical.zip(lexical_addr.as_ref()) {
+                    s += super::writer_lexical::score(
+                        block,
+                        addr,
+                        words.len(),
+                        owner,
+                        value,
+                        action,
+                        work,
+                    );
+                }
                 work.relations.candidates = work.relations.candidates.saturating_add(1);
                 if s > best_score {
                     best_score = s;
@@ -583,17 +610,25 @@ impl RelationState {
             .saturating_add(u64::from(action == 2));
         work.relations.conflicts = work.relations.conflicts.saturating_add(u64::from(conflict));
     }
-    pub(super) fn observe(&mut self, model: &Model, words: &LexemeState, work: &mut ValueWork) {
+    pub(super) fn observe_with_control(
+        &mut self,
+        model: &Model,
+        words: &LexemeState,
+        control: Control,
+        work: &mut ValueWork,
+    ) {
         if words.recent_len == 0 || self.last_word_end == Some(words.recent[0].byte_end) {
             return;
         }
         self.last_word_end = Some(words.recent[0].byte_end);
         work.relations.word_boundaries = work.relations.word_boundaries.saturating_add(1);
         if model.relation_spans.is_some() {
-            self.observe_span(model, words, work);
+            self.observe_span_with_control(model, words, control, work);
             return;
         }
-        if let Some((o, v, a)) = write_choice(model, &words.recent[..words.recent_len], work) {
+        if let Some((o, v, a)) =
+            write_choice_with_control(model, &words.recent[..words.recent_len], control, work)
+        {
             self.commit(words.recent[o], words.recent[v], a, work);
         } else {
             work.relations.no_writes = work.relations.no_writes.saturating_add(1);

@@ -37,6 +37,8 @@ mod action_emission;
 mod action_emission_tests;
 mod mixed_initial_training;
 mod shared_operator_refinement;
+mod writer_lexical;
+pub use writer_lexical::WriterLexicalExample;
 mod source_role_refinement;
 pub use source_role_refinement::{SourceRoleRefinementExample, SourceRoleTarget};
 mod word_emission;
@@ -260,6 +262,8 @@ pub enum Control {
     SourceSpanContextDisabled,
     /// Keep next-word identity but remove its pair with the original source cue.
     SourceSpanPairDisabled,
+    /// Disable the nonpositive lexical residual; retain the parent writer/cache.
+    WriterLexicalDisabled,
     /// Restore the parent source router while retaining the current context law.
     SourceRoleRefinementDisabled,
     /// Restore the exact source router and feature law preceding context retention.
@@ -351,6 +355,7 @@ impl Feature {
             | Control::SourceSpanDisabled
             | Control::SourceSpanContextDisabled
             | Control::SourceSpanPairDisabled
+            | Control::WriterLexicalDisabled
             | Control::SourceRoleRefinementDisabled
             | Control::SourceContextDisabled
             | Control::SourceContextWindowOnly
@@ -460,6 +465,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    writer_lexical: Option<writer_lexical::WriterLexical>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     source_role_refinement: Option<source_role_refinement::SourceRoleRefinement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     word_emission: Option<word_emission::WordEmission>,
@@ -544,6 +551,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    writer_lexical: Option<writer_lexical::WriterLexical>,
+    #[serde(default)]
     source_role_refinement: Option<source_role_refinement::SourceRoleRefinement>,
     #[serde(default)]
     word_emission: Option<word_emission::WordEmission>,
@@ -627,6 +636,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            writer_lexical: wire.writer_lexical,
             source_role_refinement: wire.source_role_refinement,
             word_emission: wire.word_emission,
             shared_operator_refinement: wire.shared_operator_refinement,
