@@ -326,6 +326,10 @@ fn diagnostic_main() -> Result<()> {
     )?;
     for (label, control) in [
         ("full", Control::Full),
+        (
+            "previous-source-roles",
+            Control::SourceRoleRefinementDisabled,
+        ),
         ("word-copy-disabled", Control::WordCopyDisabled),
     ] {
         let mut rows = Vec::new();
@@ -476,6 +480,10 @@ fn evaluate_cases(model: &Model, cases: &[Case], out: &Path, controls: bool) -> 
     fs::create_dir_all(out)?;
     let all = [
         ("full", Control::Full),
+        (
+            "previous-source-roles",
+            Control::SourceRoleRefinementDisabled,
+        ),
         ("previous-emitter", Control::WordEmissionDisabled),
         ("context-disabled", Control::WordEmissionContextDisabled),
         ("geometry-disabled", Control::WordEmissionGeometryDisabled),
@@ -484,7 +492,7 @@ fn evaluate_cases(model: &Model, cases: &[Case], out: &Path, controls: bool) -> 
             Control::WordEmissionPrefixContextDisabled,
         ),
     ];
-    for (label, control) in all.into_iter().take(if controls { 5 } else { 1 }) {
+    for (label, control) in all.into_iter().take(if controls { 6 } else { 1 }) {
         let mut rows = Vec::new();
         for c in cases {
             rows.push(generate(model, c, control)?);

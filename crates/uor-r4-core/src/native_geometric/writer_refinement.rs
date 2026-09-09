@@ -414,6 +414,213 @@ impl Model {
     }
 }
 
+/// Compact source-only diagnostic projection; this does not alter model state.
+fn trace_atom(word: &super::value_lexemes::WordAtom) -> serde_json::Value {
+    serde_json::json!({"text":String::from_utf8_lossy(&word.bytes[..usize::from(word.len)]),
+        "bytes":&word.bytes[..usize::from(word.len)],"len":word.len,"end":word.end,
+        "byte_end":word.byte_end,"leading_gap":word.leading_gap,"pose":word.pose,"phases":word.phases})
+}
+
+fn trace_relations(state: &super::relation::RelationState) -> serde_json::Value {
+    let records: Vec<_> = state.records.iter().filter(|r| r.id != 0).map(|r| {
+        serde_json::json!({"id":r.id,"previous":r.previous,"action":r.action,"conflict":r.conflict,
+            "owner":trace_atom(&r.owner),"value":trace_atom(&r.value),
+            "span":r.span.map(|span|serde_json::json!({"bytes":&span.bytes[..usize::from(span.len)],
+                "len":span.len,"extra_words":span.extra_words,"terminal":trace_atom(&span.terminal),
+                "start":span.start.as_ref().map(trace_atom)}))})
+    }).collect();
+    serde_json::json!({"records":records,"directory":state.directory,"next_id":state.next_id,
+        "last_word_end":state.last_word_end,"pending":state.pending.map(|p|serde_json::json!({
+            "owner":trace_atom(&p.owner),"value":trace_atom(&p.value),"action":p.action,
+            "span":p.span.map(|span|serde_json::json!({"bytes":&span.bytes[..usize::from(span.len)],
+                "len":span.len,"extra_words":span.extra_words,"terminal":trace_atom(&span.terminal)}))}))})
+}
+
+fn trace_writer_window(
+    model: &Model,
+    words: &[super::value_lexemes::WordAtom],
+) -> Result<serde_json::Value> {
+    let head =
+        super::relation::head(model).ok_or_else(|| Error("writer trace head absent".into()))?;
+    let context = model
+        .relation_writer
+        .as_ref()
+        .map(|w| w.role_context.as_slice())
+        .or_else(|| {
+            (head.schema == "uor-r4.exact-relation/2").then_some(head.role_context.as_slice())
+        });
+    let coefficients = model
+        .relation_writer
+        .as_ref()
+        .map_or(head.writer.as_slice(), |w| w.rows.as_slice());
+    let mut work = ValueWork::default();
+    let addresses = super::relation::writer_addresses(model, words, &mut work);
+    let boundaries = super::relation::boundary_context(model)
+        .then(|| super::relation::boundary_metadata(words, &mut work));
+    let mut best_score = 0_i64;
+    let mut best = None;
+    let mut best_keys = Vec::new();
+    let mut owner_two_value_zero = serde_json::Value::Null;
+    let mut alternatives = Vec::new();
+    for owner in 0..words.len() {
+        for value in 0..words.len() {
+            if owner == value || (owner != 0 && value != 0) {
+                continue;
+            }
+            let (features, len) = super::relation::write_features_with_metadata(
+                model,
+                words,
+                &addresses,
+                owner,
+                value,
+                context,
+                boundaries.as_ref(),
+                &mut work,
+            );
+            if owner == 2 && value == 0 {
+                owner_two_value_zero = serde_json::json!({"owner":trace_atom(&words[owner]),
+                    "value":trace_atom(&words[value]),"features":&features[..len],
+                    "assert_keys":features[..len].iter().map(|f|super::relation::key(*f,1)).collect::<Vec<_>>()});
+            }
+            for action in 1..=3 {
+                let score =
+                    super::relation::score(coefficients, &features[..len], action, &mut work);
+                alternatives.push(
+                    serde_json::json!({"owner":owner,"value":value,"action":action,"score":score}),
+                );
+                if score > best_score {
+                    best_score = score;
+                    best = Some((owner, value, action));
+                    best_keys = features[..len]
+                        .iter()
+                        .map(|f| super::relation::key(*f, action))
+                        .collect();
+                }
+            }
+        }
+    }
+    let mut probe_work = ValueWork::default();
+    let gated = super::relation::write_choice(model, words, &mut probe_work);
+    let encoded = serde_json::to_vec(&owner_two_value_zero["assert_keys"])
+        .map_err(|e| Error(e.to_string()))?;
+    Ok(
+        serde_json::json!({"words":words.iter().map(trace_atom).collect::<Vec<_>>(),
+        "addresses":&addresses[..words.len()],"boundaries":boundaries,
+        "no_write_score":0,"uncached_proposal":best,"uncached_score":best_score,
+        "chosen_keys":best_keys,"alternatives":alternatives,"cache_gated_proposal":gated,
+        "cache_probe_skips":probe_work.relations.admission_skips,
+        "cache_probe_fallbacks":probe_work.relations.admission_fallbacks,
+        "owner2_value0":owner_two_value_zero,
+        "owner2_value0_assert_keys_blake3":blake3::hash(&encoded).to_hex().to_string(),
+        "scope":"Read-only rescoring of the actual completed-word window. A pending span can prevent this proposal from being called by serving; actual token-level state and counters are separate."}),
+    )
+}
+
+impl Model {
+    /// Bounded offline trace of actual prompt ingestion, with no answer labels,
+    /// teacher values, model mutation or serving-law changes.
+    pub fn relation_writer_trace(&self, prompt: &str) -> Result<serde_json::Value> {
+        if prompt.is_empty() || prompt.len() > 4096 {
+            return Err(Error("writer trace prompt bound is1..4096 bytes".into()));
+        }
+        let tokens = self.encode(prompt)?;
+        let mut session = self.session(Control::Full)?;
+        session.observe(self, BOS)?;
+        let mut rows = Vec::new();
+        let mut events = Vec::new();
+        for (token_index, token) in tokens
+            .iter()
+            .copied()
+            .map(Some)
+            .chain(std::iter::once(None))
+            .enumerate()
+        {
+            let before_values = session
+                .values
+                .as_ref()
+                .ok_or_else(|| Error("writer trace values absent".into()))?;
+            let before_words = *before_values
+                .lexemes
+                .as_ref()
+                .ok_or_else(|| Error("writer trace lexemes absent".into()))?;
+            let before = before_values
+                .relations
+                .as_ref()
+                .ok_or_else(|| Error("writer trace relations absent".into()))?
+                .clone();
+            let before_work = session.work.values.relations;
+            match token {
+                Some(token) => session.observe(self, token)?,
+                None => session.begin_response(self)?,
+            }
+            let values = session
+                .values
+                .as_ref()
+                .ok_or_else(|| Error("writer trace values lost".into()))?;
+            let words = values
+                .lexemes
+                .as_ref()
+                .ok_or_else(|| Error("writer trace lexemes lost".into()))?;
+            let after = values
+                .relations
+                .as_ref()
+                .ok_or_else(|| Error("writer trace relations lost".into()))?;
+            let after_work = session.work.values.relations;
+            let last = (before_words.recent_len > 0).then_some(before_words.recent[0].byte_end);
+            let completed: Vec<_> = words.recent[..words.recent_len]
+                .iter()
+                .filter(|w| last.is_none_or(|end| w.byte_end > end))
+                .rev()
+                .copied()
+                .collect();
+            let boundaries = after_work
+                .word_boundaries
+                .saturating_sub(before_work.word_boundaries);
+            if boundaries != completed.len() as u64 {
+                return Err(Error(
+                    "writer trace token exceeded retained completed-word window".into(),
+                ));
+            }
+            if rows.len() + completed.len() > 128 {
+                return Err(Error("writer trace completed-word row cap128".into()));
+            }
+            let event_id = events.len();
+            if !completed.is_empty() || &before != after || token.is_none() {
+                events.push(serde_json::json!({"event_id":event_id,"token_index":token_index,"token":token,
+                    "token_bytes":token.map(|id|self.decode(&[id])).transpose()?,
+                    "source_bytes_before":before_words.source_bytes_seen,"source_bytes_after":words.source_bytes_seen,
+                    "begin_response":token.is_none(),"completed_words":completed.len(),
+                    "before":trace_relations(&before),"after":trace_relations(after),
+                    "actual_counter_delta":{"word_boundaries":boundaries,
+                        "candidates":after_work.candidates.saturating_sub(before_work.candidates),
+                        "admission_queries":after_work.admission_queries.saturating_sub(before_work.admission_queries),
+                        "admission_skips":after_work.admission_skips.saturating_sub(before_work.admission_skips),
+                        "admission_fallbacks":after_work.admission_fallbacks.saturating_sub(before_work.admission_fallbacks),
+                        "no_writes":after_work.no_writes.saturating_sub(before_work.no_writes),
+                        "record_writes":after_work.record_writes.saturating_sub(before_work.record_writes)},
+                    "scope":"Actual input-token state change; for multiword tokenizer pieces this delta is not attributed to an individual completed word."}));
+            }
+            let mut window = before_words.recent[..before_words.recent_len].to_vec();
+            for word in completed {
+                window.insert(0, word);
+                window.truncate(8);
+                rows.push(
+                    serde_json::json!({"event_id":event_id,"token_index":token_index,"token":token,
+                    "begin_response":token.is_none(),"completed_word":trace_atom(&word),
+                    "writer":trace_writer_window(self,&window)?}),
+                );
+            }
+        }
+        Ok(
+            serde_json::json!({"schema":"uor-r4.relation-writer-trace/1","artifact":self.artifact_cid(),
+            "prompt":prompt,"prompt_blake3":blake3::hash(prompt.as_bytes()).to_hex().to_string(),
+            "input_tokens":tokens,"rows":rows,"events":events,
+            "limits":{"prompt_bytes":4096,"completed_word_rows":128,"writer_words":8},
+            "scope":"Offline actual Session prompt observation through begin_response, with compact token-level state changes and exact read-only proposal rescoring per completed-word window. No generated response, labels, teacher values or serving changes."}),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::relation_training::Alternative;

@@ -125,7 +125,13 @@ pub(super) fn choose(
     control: Control,
     work: &mut WordCopyWork,
 ) -> Option<(u8, usize, i64)> {
-    let block = if control == Control::SourceContextDisabled {
+    let block = if control == Control::SourceRoleRefinementDisabled {
+        model
+            .source_role_refinement
+            .as_ref()
+            .map(|w| &w.previous)
+            .or(model.source_routing.as_ref())?
+    } else if control == Control::SourceContextDisabled {
         model
             .source_context
             .as_ref()
