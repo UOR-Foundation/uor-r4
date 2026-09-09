@@ -474,8 +474,20 @@ fn write_choice_from_metadata_control(
         .writer_lexical
         .as_ref()
         .filter(|_| control != Control::WriterLexicalDisabled);
-    let lexical_addr =
-        lexical.map(|block| super::writer_lexical::addresses(&block.dictionary, words, work));
+    let choice = model
+        .writer_choice
+        .as_ref()
+        .filter(|_| control != Control::WriterChoiceDisabled);
+    let lexical_addr = model
+        .writer_lexical
+        .as_ref()
+        .filter(|_| lexical.is_some() || choice.is_some())
+        .map(|block| super::writer_lexical::addresses(&block.dictionary, words, work));
+    let choice_boundaries = choice.map(|_| {
+        boundaries
+            .copied()
+            .unwrap_or_else(|| boundary_metadata(words, work))
+    });
     let context = model
         .relation_writer
         .as_ref()
@@ -491,6 +503,21 @@ fn write_choice_from_metadata_control(
             let (f, n) = write_features_with_metadata(
                 model, words, addr, owner, value, context, boundaries, work,
             );
+            let choice_feature =
+                lexical_addr
+                    .as_ref()
+                    .zip(choice_boundaries.as_ref())
+                    .map(|(addr, gaps)| {
+                        super::writer_choice::feature(
+                            addr,
+                            words.len(),
+                            owner,
+                            value,
+                            gaps,
+                            control == Control::WriterChoiceBoundaryDisabled,
+                            model.writer_choice.as_ref().map_or(1, |w| w.feature_layout),
+                        )
+                    });
             for action in 1..=3 {
                 let rows = model
                     .relation_writer
@@ -507,6 +534,9 @@ fn write_choice_from_metadata_control(
                         action,
                         work,
                     );
+                }
+                if let Some((block, feature)) = choice.zip(choice_feature) {
+                    s += super::writer_choice::score(block, feature, action, work);
                 }
                 work.relations.candidates = work.relations.candidates.saturating_add(1);
                 if s > best_score {

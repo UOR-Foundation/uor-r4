@@ -190,7 +190,7 @@ fn correctness(frames: &[Frame], weights: &BTreeMap<ValueFeature, i32>) -> usize
         .filter(|f| winner(f, weights) == f.target)
         .count()
 }
-fn visit_words(
+pub(super) fn visit_words(
     model: &Model,
     prompt: &str,
     mut capture: impl FnMut(&LexemeState) -> Result<()>,
