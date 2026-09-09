@@ -119,6 +119,28 @@ fn source_refinement_trace_scores_match_selected_direct_choice() {
     let score = selected[2].as_i64().unwrap();
     let mut first_best = None;
     for candidate in trace["candidates"].as_array().unwrap() {
+        assert!(candidate["current_source_hints"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            candidate["pre_current_source_hint_state"],
+            candidate["state"]
+        );
+        assert_eq!(
+            candidate["pre_current_source_hint_scores"],
+            candidate["scores"]
+        );
+        assert_eq!(
+            candidate["pre_current_source_hint_features"],
+            candidate["features"]
+        );
+        assert_eq!(
+            candidate["pre_current_source_hint_feature_count"]
+                .as_u64()
+                .unwrap(),
+            candidate["features"].as_array().unwrap().len() as u64
+        );
         for scored in candidate["scores"].as_array().unwrap() {
             let value = scored["score"].as_i64().unwrap();
             if first_best.is_none_or(|(_, _, prior)| value > prior) {

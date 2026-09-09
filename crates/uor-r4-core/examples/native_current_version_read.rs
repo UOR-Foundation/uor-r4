@@ -461,8 +461,143 @@ fn extend_preservation(base: &Path, writer: &Path, out: &Path) -> Result<()> {
     )
 }
 
+fn owner_pairs(out: &Path, fresh_draw: bool) -> Result<()> {
+    fs::create_dir(out)?;
+    let time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let mut pairs = vec![[
+        ["selvi".into(), "Dusk Ridge".into(), "Copper Vale".into()],
+        ["tilva".into(), "Silver Cove".into(), "Birch Grove".into()],
+    ]];
+    if fresh_draw {
+        pairs.clear();
+        for pair in 0..3 {
+            let mut owners = Vec::new();
+            for owner in 0..2 {
+                let h = blake3::hash(format!("query-owner:{time}:{pair}:{owner}").as_bytes());
+                let b = h.as_bytes();
+                let word = |start: usize, len: usize| {
+                    (start..start + len)
+                        .map(|j| (b'a' + b[j] % 26) as char)
+                        .collect::<String>()
+                };
+                owners.push([
+                    word(0, 5),
+                    format!("{} {}", word(5, 4), word(9, 4)),
+                    format!("{} {}", word(13, 4), word(17, 4)),
+                ]);
+            }
+            pairs.push([owners.remove(0), owners.remove(0)]);
+        }
+    }
+    let mut cases = Vec::new();
+    for (pair, owners) in pairs.iter().enumerate() {
+        for order in 0..2 {
+            let fact = |i: usize| {
+                let [owner, old, new] = &owners[i];
+                format!("{old} holds {owner}. {owner} now in {new}.")
+            };
+            let facts = format!("Record: {} {}", fact(order), fact(1 - order));
+            for (query, [owner, _, new]) in owners.iter().enumerate() {
+                for (evicted, padding) in
+                    [(false, String::new()), (true, "oak ash elm ".repeat(12))]
+                {
+                    for (form, instruction) in
+                        ["", "Name the owner first.", "State the owner first."]
+                            .into_iter()
+                            .enumerate()
+                    {
+                        cases.push(Case {
+                            id: format!("query-owner/{pair}/{order}/{query}/{form}/{evicted}"),
+                            prompt: format!(
+                                "{facts} {padding}Where is {owner}? {instruction} Answer:"
+                            ),
+                            expected: Some(if form == 0 {
+                                format!(" {new}.\n")
+                            } else {
+                                format!(" {owner} is in {new}.\n")
+                            }),
+                            target_current: !evicted,
+                            inherit: evicted,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    save(&out.join("cases.json"), &cases)?;
+    save(
+        &out.join("receipt.json"),
+        &json!({"fresh_draw":fresh_draw,"draw_unix_ns":time,"pairs":pairs,"cases":cases.len(),"scope":"Two competing exact revision chains, swapped order and query owner, familiar plain/Name/State forms, recent/evicted context. Expected bytes remain evaluation-only."}),
+    )
+}
+
+fn extend_owner_cases(base: &Path, additions: &Path, diagnostic: &Path, out: &Path) -> Result<()> {
+    fs::create_dir(out)?;
+    let mut cases: Vec<Case> = serde_json::from_slice(&fs::read(base)?)?;
+    let mut added: Vec<Case> = serde_json::from_slice(&fs::read(additions)?)?;
+    let trace: Value = serde_json::from_slice(&fs::read(diagnostic)?)?;
+    let rows = trace["rows"]
+        .as_array()
+        .ok_or("owner diagnostic rows absent")?;
+    for case in &mut added {
+        let matching: Vec<_> = rows.iter().filter(|r| r["id"] == case.id).collect();
+        if matching.len() != 1 {
+            return Err("owner diagnostic identity missing or repeated".into());
+        }
+        let row = matching[0];
+        if row["prompt"] != case.prompt || row["expected"] != json!(case.expected) {
+            return Err("owner diagnostic prompt or expected metadata differs".into());
+        }
+        // Train the observed direct boundary; preserve routes that bypass it.
+        case.target_current = row["trace"]["direct_source_dispatch"]
+            .as_bool()
+            .ok_or("owner diagnostic dispatch absent")?;
+        case.inherit = !case.target_current;
+        if case.inherit
+            && (row["parent"]["text"] != json!(case.expected) || row["parent"]["eos"] != true)
+        {
+            return Err("bypassed owner case is not an already correct preservation".into());
+        }
+    }
+    cases.extend(added);
+    if cases.len() > 1200 {
+        return Err("extended population exceeds bound".into());
+    }
+    let docs: Vec<_> = cases
+        .iter()
+        .map(|c| CurrentSourceExample {
+            id: c.id.clone(),
+            prompt: c.prompt.clone(),
+            target: if c.target_current {
+                CurrentSourceTarget::CurrentRevision
+            } else {
+                CurrentSourceTarget::Preserve
+            },
+        })
+        .collect();
+    save(&out.join("cases.json"), &cases)?;
+    save(&out.join("training.json"), &docs)?;
+    save(
+        &out.join("receipt.json"),
+        &json!({"base":base,"base_blake3":blake3::hash(&fs::read(base)?).to_hex().to_string(),"additions":additions,"additions_blake3":blake3::hash(&fs::read(additions)?).to_hex().to_string(),"diagnostic":diagnostic,"diagnostic_blake3":blake3::hash(&fs::read(diagnostic)?).to_hex().to_string(),"diagnostic_artifact":trace["artifact"],"documents":cases.len(),"current_targets":cases.iter().filter(|c|c.target_current).count(),"scope":"Prior current targets/preservation plus competing-owner targets at the captured direct dispatch boundary, from the unique frozen learned persistent reader. Expected output bytes do not enter fitting."}),
+    )
+}
+
 fn main() -> Result<()> {
     let a: Vec<_> = std::env::args().collect();
+    if a.len() == 3 && (a[1] == "owner-pairs" || a[1] == "owner-fresh") {
+        return owner_pairs(Path::new(&a[2]), a[1] == "owner-fresh");
+    }
+    if a.len() == 6 && a[1] == "extend-owner-cases" {
+        return extend_owner_cases(
+            Path::new(&a[2]),
+            Path::new(&a[3]),
+            Path::new(&a[4]),
+            Path::new(&a[5]),
+        );
+    }
     if a.len() == 5 && a[1] == "extend-preservation" {
         return extend_preservation(Path::new(&a[2]), Path::new(&a[3]), Path::new(&a[4]));
     }

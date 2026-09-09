@@ -664,6 +664,129 @@ fn current_source_checks(
     Ok(Some(parent))
 }
 
+// Opt-in authored query-owner cases; serving receives only the prompt.
+fn query_owner_checks(api_model: &NativeModel, checks: &mut Vec<Value>) -> CheckResult<()> {
+    let model = api_model.inner_model();
+    let atom = |v: &Value| -> Option<String> {
+        let bytes = v["bytes"]
+            .as_array()?
+            .get(..v["len"].as_u64()? as usize)?
+            .iter()
+            .map(|n| n.as_u64().and_then(|n| u8::try_from(n).ok()))
+            .collect::<Option<Vec<_>>>()?;
+        String::from_utf8(bytes).ok()
+    };
+    for swapped in [false, true] {
+        let chains = if swapped {
+            [
+                ("tilva", "Silver Cove", "Birch Grove"),
+                ("selvi", "Dusk Ridge", "Copper Vale"),
+            ]
+        } else {
+            [
+                ("selvi", "Dusk Ridge", "Copper Vale"),
+                ("tilva", "Silver Cove", "Birch Grove"),
+            ]
+        };
+        let facts = format!(
+            "Record: {} holds {}. {} now in {}. {} holds {}. {} now in {}.",
+            chains[0].1,
+            chains[0].0,
+            chains[0].0,
+            chains[0].2,
+            chains[1].1,
+            chains[1].0,
+            chains[1].0,
+            chains[1].2
+        );
+        for (chain, (owner, _, value)) in chains.iter().enumerate() {
+            for owner_first in [false, true] {
+                let instruction = if owner_first {
+                    "Name the owner first."
+                } else {
+                    ""
+                };
+                let prompt = format!("{facts} Where is {owner}? {instruction} Answer:");
+                let target = if owner_first {
+                    format!(" {owner} is in {value}.\n")
+                } else {
+                    format!(" {value}.\n")
+                };
+                let mut direct = model.session(Control::Full)?;
+                direct.observe(&model, BOS)?;
+                for token in model.encode(&prompt)? {
+                    direct.observe(&model, token)?;
+                }
+                direct.begin_response(&model)?;
+                let initial: Value = serde_json::from_slice(&direct.checkpoint()?)?;
+                let relations = &initial["values"]["relations"];
+                let records: Vec<_> = relations["records"]
+                    .as_array()
+                    .ok_or("query-owner records absent")?
+                    .iter()
+                    .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0))
+                    .collect();
+                let mut expected_records = Vec::new();
+                for (i, (o, old, new)) in chains.iter().enumerate() {
+                    let id = (i as u64) * 2 + 1;
+                    expected_records.push(json!({"id":id,"owner":o,"span":old,"action":1,"previous":0,"conflict":false}));
+                    expected_records.push(json!({"id":id+1,"owner":o,"span":new,"action":2,"previous":id,"conflict":false}));
+                }
+                let actual_records: Vec<_> = records.iter().map(|r| json!({"id":r["id"],"owner":atom(&r["owner"]),"span":atom(&r["span"]),"action":r["action"],"previous":r["previous"],"conflict":r["conflict"]})).collect();
+                let directory: Vec<_> = relations["directory"]
+                    .as_array()
+                    .ok_or("query-owner directory absent")?
+                    .iter()
+                    .filter_map(|x| x.as_u64().filter(|x| *x != 0))
+                    .collect();
+                let mut tokens = Vec::new();
+                let mut stopped = false;
+                for _ in 0..LIMIT {
+                    let p = direct.predict(&model)?;
+                    direct.observe(&model, p.token)?;
+                    if p.token == EOS {
+                        stopped = true;
+                        break;
+                    }
+                    tokens.push(p.token);
+                }
+                let after: Value = serde_json::from_slice(&direct.checkpoint()?)?;
+                let text = String::from_utf8(model.decode(&tokens)?)?;
+                let mut api = api_model.create_session(SessionConfig::default())?;
+                let response = api.complete(CompletionRequest::new(&prompt))?;
+                let name = format!(
+                    "query_owner_swapped_{swapped}_chain_{chain}_owner_first_{owner_first}"
+                );
+                record(
+                    checks,
+                    &name,
+                    stopped
+                        && text == target
+                        && response.text == target
+                        && response.stopped_by == "eos"
+                        && response.token_count == tokens.len()
+                        && actual_records == expected_records
+                        && directory == vec![2, 4]
+                        && after["values"]["relations"] == *relations,
+                    json!({"prompt":prompt,"target":target,"direct":text,"api":response,"records":actual_records,"directory":directory,"records_unchanged":after["values"]["relations"]==*relations}),
+                )?;
+                let checkpoint = api.export_state()?;
+                api.import_state(&checkpoint)?;
+                compare_turn(
+                    &model,
+                    &mut direct,
+                    &mut api,
+                    SUM_14,
+                    "18.\n",
+                    &format!("{name}_checkpoint_independent_sum"),
+                    checks,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn writer_choice_checks(
     api_model: &NativeModel,
     mechanical_model: &Model,
@@ -1208,6 +1331,7 @@ fn run(
     identity: &mut Value,
     current_source_only: bool,
     writer_role_only: bool,
+    query_owner_only: bool,
 ) -> CheckResult<()> {
     let bytes = std::fs::read(path)?;
     let api_model = NativeModel::load_from_bytes(&bytes)?;
@@ -1358,9 +1482,12 @@ fn run(
         }
         return Ok(());
     }
-    if current_source_only {
+    if current_source_only || query_owner_only {
         if current_parent.is_none() {
             return Err("current-source scope requires a current_source artifact".into());
+        }
+        if query_owner_only {
+            query_owner_checks(&api_model, checks)?;
         }
         return Ok(());
     }
@@ -3006,10 +3133,11 @@ fn run(
 fn main() -> CheckResult<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if !(args.len() == 3
-        || (args.len() == 4 && ["current-source", "writer-role"].contains(&args[3].as_str())))
+        || (args.len() == 4
+            && ["current-source", "writer-role", "query-owner"].contains(&args[3].as_str())))
     {
         return Err(
-            "usage: native_artifact_recovery_check MODEL EXPECTED_CID OUTPUT_JSON [current-source|writer-role]"
+            "usage: native_artifact_recovery_check MODEL EXPECTED_CID OUTPUT_JSON [current-source|writer-role|query-owner]"
                 .into(),
         );
     }
@@ -3017,6 +3145,7 @@ fn main() -> CheckResult<()> {
     let mut identity = Value::Null;
     let current_source_only = args.get(3).is_some_and(|s| s == "current-source");
     let writer_role_only = args.get(3).is_some_and(|s| s == "writer-role");
+    let query_owner_only = args.get(3).is_some_and(|s| s == "query-owner");
     let result = run(
         Path::new(&args[0]),
         &args[1],
@@ -3024,12 +3153,13 @@ fn main() -> CheckResult<()> {
         &mut identity,
         current_source_only,
         writer_role_only,
+        query_owner_only,
     );
     let report = json!({
         "schema":"uor-r4.native-artifact-recovery-check/1",
         "status":if result.is_ok() {"PASS"} else {"FAIL"},
         "scope":"Artifact integrity and actual narrow interface behavior only; no general capability, alpha, energy, or performance qualification.",
-        "selected_checks":if current_source_only {"base interface, current-source refinement and applicable nested writer-role checks; deeper historical checks NOT_RUN"} else if writer_role_only {"base interface and writer-role refinement; deeper historical checks NOT_RUN"} else {"complete recovery runner"},
+        "selected_checks":if query_owner_only {"base interface, current-source, nested writer-role and authored query-owner checks; deeper historical checks NOT_RUN"} else if current_source_only {"base interface, current-source refinement and applicable nested writer-role checks; deeper historical checks NOT_RUN"} else if writer_role_only {"base interface and writer-role refinement; deeper historical checks NOT_RUN"} else {"complete recovery runner"},
         "identity":identity,"checks":checks,
         "error":result.as_ref().err().map(|e|e.to_string()),
     });
