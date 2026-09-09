@@ -478,12 +478,16 @@ fn write_choice_from_metadata_control(
         .writer_choice
         .as_ref()
         .filter(|_| control != Control::WriterChoiceDisabled);
+    let role = model
+        .writer_role
+        .as_ref()
+        .filter(|_| super::writer_role::enabled(control));
     let lexical_addr = model
         .writer_lexical
         .as_ref()
-        .filter(|_| lexical.is_some() || choice.is_some())
+        .filter(|_| lexical.is_some() || choice.is_some() || role.is_some())
         .map(|block| super::writer_lexical::addresses(&block.dictionary, words, work));
-    let choice_boundaries = choice.map(|_| {
+    let choice_boundaries = (choice.is_some() || role.is_some()).then(|| {
         boundaries
             .copied()
             .unwrap_or_else(|| boundary_metadata(words, work))
@@ -518,6 +522,21 @@ fn write_choice_from_metadata_control(
                             model.writer_choice.as_ref().map_or(1, |w| w.feature_layout),
                         )
                     });
+            let role_feature = lexical_addr
+                .as_ref()
+                .zip(choice_boundaries.as_ref())
+                .filter(|_| role.is_some())
+                .map(|(addr, gaps)| {
+                    super::writer_role::feature(super::writer_choice::feature(
+                        addr,
+                        words.len(),
+                        owner,
+                        value,
+                        gaps,
+                        false,
+                        2,
+                    ))
+                });
             for action in 1..=3 {
                 let rows = model
                     .relation_writer
@@ -537,6 +556,9 @@ fn write_choice_from_metadata_control(
                 }
                 if let Some((block, feature)) = choice.zip(choice_feature) {
                     s += super::writer_choice::score(block, feature, action, work);
+                }
+                if let Some((block, feature)) = role.zip(role_feature) {
+                    s += super::writer_role::score(block, feature, action, work);
                 }
                 work.relations.candidates = work.relations.candidates.saturating_add(1);
                 if s > best_score {

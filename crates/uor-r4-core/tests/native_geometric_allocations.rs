@@ -315,6 +315,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native shared writer-role correction",
+            region(
+                include_str!("../src/native_geometric/writer_role.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native runtime", kernel),
         ("native Feature helpers", features),
         ("native memory runtime", memory),
@@ -3913,4 +3922,100 @@ fn native_current_source_actual_checkpoint_and_allocation() {
     }
     times.sort_unstable();
     println!("actual current source artifact={}; load_ns={load_ns}; parent_restore_ns={parent_restore_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; historical_raw_controls=2; disabled_controls=2; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/parent restore/control generation/encode/session/BOS/end-response/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
+}
+
+/// Actual shared writer-role artifact: two revisions retain both prior versions,
+/// and a literal factual owner now must remain available.
+#[test]
+#[ignore = "requires R4_WRITER_ROLE_MODEL; charged actual-model development cases"]
+fn native_writer_role_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Model, Session};
+    fn state(s: &Session) -> serde_json::Value {
+        serde_json::from_slice(&s.checkpoint().unwrap()).unwrap()
+    }
+    fn same(a: &Session, b: &Session) {
+        let mut a = state(a);
+        let mut b = state(b);
+        a.as_object_mut().unwrap().remove("work");
+        b.as_object_mut().unwrap().remove("work");
+        assert_eq!(a, b, "writer-role full causal checkpoint state");
+    }
+    fn atom(v: &serde_json::Value) -> Vec<u8> {
+        v["bytes"].as_array().unwrap()[..v["len"].as_u64().unwrap() as usize]
+            .iter()
+            .map(|b| b.as_u64().unwrap() as u8)
+            .collect()
+    }
+    let bytes = std::fs::read(std::env::var("R4_WRITER_ROLE_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["writer_role"].is_object());
+    drop(wire);
+    drop(bytes);
+    let mut input_positions = 0;
+    let mut output_positions = 0;
+    let mut times = Vec::new();
+    for (label, prompt, target, revisions) in [
+        ("two_revisions", "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi now in Amber Field. Where is selvi? Name the owner first. Answer:", " selvi is in Amber Field.\n", true),
+        ("literal_now", "Record: now in Amber Field. Where is now? Name the owner first. Answer:", " now is in Amber Field.\n", false),
+    ] {
+        let mut session = model.session(Control::Full).unwrap(); session.observe(&model, BOS).unwrap();
+        let mut turns = vec![(prompt, target)];
+        if revisions { turns.push(("User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:", "18.\n")); }
+        for (turn, (prompt, target)) in turns.into_iter().enumerate() {
+            if session.needs_input_boundary() { session.end_response(&model).unwrap(); }
+            let tokens = model.encode(prompt).unwrap(); assert!(tokens.len() <= 512);
+            ALLOCATIONS.with(|v| v.set(0)); BYTES.with(|v| v.set(0));
+            for token in tokens {
+                let mut restored = model.restore_session(&session.checkpoint().unwrap()).unwrap();
+                MEASURING.with(|v| v.set(true)); session.observe(&model, token).unwrap(); MEASURING.with(|v| v.set(false));
+                restored.observe(&model, token).unwrap(); same(&session, &restored); input_positions += 1;
+            }
+            let mut restored = model.restore_session(&session.checkpoint().unwrap()).unwrap();
+            MEASURING.with(|v| v.set(true)); session.begin_response(&model).unwrap(); MEASURING.with(|v| v.set(false));
+            restored.begin_response(&model).unwrap(); same(&session, &restored);
+            let initial = state(&session); let relations = &initial["values"]["relations"];
+            let records: Vec<_> = relations["records"].as_array().unwrap().iter().filter(|r| r["id"].as_u64().is_some_and(|id| id != 0)).collect();
+            let current: Vec<_> = relations["directory"].as_array().unwrap().iter().filter_map(|v| v.as_u64().filter(|id| *id != 0)).collect();
+            if turn == 0 {
+                if revisions {
+                    assert_eq!(records.len(), 3); assert_eq!(current, vec![3]);
+                    for (id, span, action, previous) in [(1, b"Dusk Ridge".as_slice(), 1, 0), (2, b"Copper Vale".as_slice(), 2, 1), (3, b"Amber Field".as_slice(), 2, 2)] {
+                        let record = records.iter().find(|r| r["id"] == id).unwrap();
+                        assert_eq!(atom(&record["owner"]), b"selvi"); assert_eq!(atom(&record["span"]), span);
+                        assert_eq!(record["action"], action); assert_eq!(record["previous"], previous); assert_eq!(record["conflict"], false);
+                    }
+                } else {
+                    assert_eq!(records.len(), 1); assert_eq!(current, vec![1]);
+                    assert_eq!(atom(&records[0]["owner"]), b"now"); assert_eq!(atom(&records[0]["span"]), b"Amber Field");
+                    assert_eq!(records[0]["action"], 1); assert_eq!(records[0]["previous"], 0); assert_eq!(records[0]["conflict"], false);
+                }
+            }
+            let mut output = [EOS; 96]; let mut used = 0;
+            let mut owner_read = false; let mut value_read = false;
+            loop {
+                let mut restored = model.restore_session(&session.checkpoint().unwrap()).unwrap();
+                let predicted = restored.predict(&model).unwrap(); assert_eq!(restored.predict(&model).unwrap(), predicted);
+                MEASURING.with(|v| v.set(true)); let start = std::time::Instant::now();
+                let actual = session.predict(&model).unwrap(); let decision = session.field_composition_decision();
+                session.observe(&model, actual.token).unwrap(); let elapsed = start.elapsed().as_nanos(); MEASURING.with(|v| v.set(false));
+                if let Some(d) = decision.filter(|d| d.field != 0) {
+                    assert_eq!(d.anchor.relation_id, if revisions {3} else {1});
+                    owner_read |= d.field == 1; value_read |= d.field == 2;
+                }
+                assert_eq!(actual, predicted); restored.observe(&model, predicted.token).unwrap(); same(&session, &restored);
+                assert_eq!(state(&session)["values"]["relations"], *relations);
+                output[used] = actual.token; used += 1; output_positions += 1; times.push(elapsed);
+                if actual.token == EOS || used == output.len() { break; }
+            }
+            assert_eq!(output[used - 1], EOS); assert_eq!(model.decode(&output[..used]).unwrap(), target.as_bytes());
+            if turn == 0 { assert!(owner_read && value_read); }
+            assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+            println!("actual writer-role case={label}; turn={turn}; target={target:?}; exact current chain and observed field reads; allocations=0 bytes=0");
+        }
+    }
+    times.sort_unstable();
+    println!("actual writer-role artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
 }

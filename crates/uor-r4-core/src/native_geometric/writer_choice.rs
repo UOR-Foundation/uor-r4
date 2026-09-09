@@ -177,17 +177,17 @@ pub struct WriterChoiceExample {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Alternative {
-    baseline: i64,
-    key: Option<ValueFeature>,
+pub(super) struct Alternative {
+    pub(super) baseline: i64,
+    pub(super) key: Option<ValueFeature>,
 }
 #[derive(Debug, Clone)]
-struct Frame {
-    alternatives: Vec<Alternative>,
-    target: usize,
-    id: String,
-    end: u64,
-    overridden: bool,
+pub(super) struct Frame {
+    pub(super) alternatives: Vec<Alternative>,
+    pub(super) target: usize,
+    pub(super) id: String,
+    pub(super) end: u64,
+    pub(super) overridden: bool,
 }
 fn scores(frame: &Frame, weights: &BTreeMap<ValueFeature, i32>) -> Vec<i64> {
     frame
@@ -201,7 +201,7 @@ fn scores(frame: &Frame, weights: &BTreeMap<ValueFeature, i32>) -> Vec<i64> {
         })
         .collect()
 }
-fn winner(frame: &Frame, weights: &BTreeMap<ValueFeature, i32>) -> usize {
+pub(super) fn winner(frame: &Frame, weights: &BTreeMap<ValueFeature, i32>) -> usize {
     let mut best = 0;
     let mut selected = 0;
     for (i, a) in frame.alternatives.iter().enumerate().skip(1) {
@@ -222,7 +222,7 @@ fn correctness(frames: &[Frame], weights: &BTreeMap<ValueFeature, i32>) -> usize
         .filter(|f| winner(f, weights) == f.target)
         .count()
 }
-fn bind_target(
+pub(super) fn bind_target(
     words: &[WordAtom],
     label: &WriterChoiceOverride,
 ) -> Result<Option<(usize, usize, u8)>> {
@@ -357,7 +357,7 @@ fn frame(
 /// Greatest (least suppressive) feasible weights under w<=0. Each correction
 /// imposes only the minimum integer separation required by the first-max law.
 /// A target falling below NoWrite cannot be repaired by further suppression.
-fn learn(
+pub(super) fn learn(
     frames: &[Frame],
     epochs: usize,
     start: Instant,
