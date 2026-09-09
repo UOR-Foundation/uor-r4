@@ -1,0 +1,2076 @@
+{
+  "schema": "uor-r4.native-source-role-result/1",
+  "decision": "RETAIN_BOUNDED_SOURCE_RECENCY_CORRECTION",
+  "issue": "#973 remains OPEN; sustained general prose is unqualified",
+  "artifact": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fit/model.json",
+    "cid": "blake3:82662f856908e548a9cccbb78809daf4821d243781ad497b661f5ee6d94c2032",
+    "sha256": "70a5f8867d00a358b2d64556be1ea038c844c7926dfb6388ab01ceb5746ba0ae",
+    "bytes": 13432797,
+    "parent_restoration_exact": true,
+    "changed_codes": [
+      {
+        "a_hex": "000000000000000a",
+        "after": [
+          119,
+          119
+        ],
+        "b_hex": "0000000000000000",
+        "before": [
+          86,
+          119
+        ],
+        "kind": 6
+      }
+    ],
+    "retained_path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-role-refinement/model.json"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/word-sentence/model.json",
+    "cid": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+    "sha256": "a98846a05dbc88d6419e1320b289ef07d5b3136677b2542a7ffc5abded479cc3",
+    "bytes": 13233012
+  },
+  "source": {
+    "at": "2026-09-09T03:40:47.663Z",
+    "base": "860f6171d4d7408acc401b18e2ebc73aec3cdb7b",
+    "files": [
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_instruction_fact.rs",
+        "bytes": 14897,
+        "sha256": "072f34caa969ead0004999053e7759dea01132558c1351c89a5aeb9cec723836"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_role_refinement.rs",
+        "bytes": 15329,
+        "sha256": "4326c64d5ca754866897c2d02a5371535fc3530463b42bd7b3efe327023b28fc"
+      }
+    ],
+    "binaries": [
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_fact",
+        "bytes": 2932912,
+        "sha256": "a9d20fb95ec5a7b40709ce3f981093df0d30fae14e21f82afec873aea4c61b2f"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+        "bytes": 3618512,
+        "sha256": "44e694ec9f6b12fec6549655fd4a9387bff2c7639bd2a09a85ddd292e2f9544c"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_artifact_recovery_check",
+        "bytes": 3411072,
+        "sha256": "78cd636ddac5437d78cc110ea1b5f2c4b0a164177e83dd05352c317f83e92971"
+      }
+    ]
+  },
+  "validation_source": {
+    "at": "2026-09-09T03:36:16.366Z",
+    "base": "860f6171d4d7408acc401b18e2ebc73aec3cdb7b",
+    "files": [
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+        "bytes": 75596,
+        "sha256": "f8c03557dcd605bd8bcab872fcb4095118ce386d506d5ecfd191170fccffe9cc"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_word_sentence.rs",
+        "bytes": 35540,
+        "sha256": "84ad477639c1008ecccd8bfd608fab645ac69f13f22a9c68642cc94d6dc98716"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+        "bytes": 30856,
+        "sha256": "06f9b877e9d34f8bf8a575f4e04a4a77aeca527410e9f62e39c1ff1d954068b4"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing.rs",
+        "bytes": 7364,
+        "sha256": "0e038605e6438c371c30ed2153d2907a8facd118507f098551b0224d70a9d20c"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+        "bytes": 61723,
+        "sha256": "3eb15338bfd05e29a7ce6eb55b040e6bf94a7187fde78bf453cc183f66b970a5"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/writer_refinement.rs",
+        "bytes": 32862,
+        "sha256": "fff1975f6ec3b02f2da5746592264a7748dd723b4f03c106839c75d8ad0f66ea"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_instruction_fact.rs",
+        "bytes": 14897,
+        "sha256": "072f34caa969ead0004999053e7759dea01132558c1351c89a5aeb9cec723836"
+      },
+      {
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_role_refinement.rs",
+        "bytes": 15329,
+        "sha256": "4326c64d5ca754866897c2d02a5371535fc3530463b42bd7b3efe327023b28fc"
+      }
+    ],
+    "binaries": [
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_fact",
+        "bytes": 2932912,
+        "sha256": "a9d20fb95ec5a7b40709ce3f981093df0d30fae14e21f82afec873aea4c61b2f"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+        "bytes": 3618512,
+        "sha256": "571796c5fa07f49a1f488ad8fa583a6220fceb4122fd16b06196c9007dc9c6cd"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/target/release/examples/native_artifact_recovery_check",
+        "bytes": 3411072,
+        "sha256": "78cd636ddac5437d78cc110ea1b5f2c4b0a164177e83dd05352c317f83e92971"
+      }
+    ]
+  },
+  "verification_corrections": {
+    "initial_control_run": "The first position run omitted the new parent-router control in its old evaluator. Corrected driver was rebuilt and final controls executed.",
+    "formatting": "Final fmt check found only tuple layout in evaluator control list; rustfmt correction and affected driver rebuild executed, with failed receipt and all charges preserved."
+  },
+  "scope": "One existing recency transform neutralized through bounded offline signed-H4 refinement; complete fixed-form answers and prior behavior verified. Writer instruction/fact representation collision remains unresolved.",
+  "mechanism": {
+    "mutable": "Existing parent kind6 nonidentity roots only; one changed code at position10 [86,119] -> [119,119]",
+    "frozen": "All other source codes and metadata, candidate admission/order, exact occurrence copying, writer, lexical emitter, numeric operators, geometry and remaining parent model fields",
+    "training": {
+      "documents": 761,
+      "frames": 505,
+      "skipped": 256,
+      "fit": {
+        "accepted": [
+          1,
+          0,
+          0
+        ],
+        "final_correct": 505,
+        "final_hinge": 0,
+        "initial_correct": 497,
+        "initial_hinge": 8,
+        "proposals": 479,
+        "stopped_at_time_limit": false
+      },
+      "changed_codes": [
+        {
+          "a_hex": "000000000000000a",
+          "after": [
+            119,
+            119
+          ],
+          "b_hex": "0000000000000000",
+          "before": [
+            86,
+            119
+          ],
+          "kind": 6
+        }
+      ]
+    },
+    "serving": "Existing bounded signed-H4 table routing and exact copying/NoRead; no mathematical matrix products, transformer, provider, phrase gate or new decoder",
+    "geometry_claim": "Measured intervention identifies a harmful learned recency transform. It does not establish independent semantic, zeta, H4 or energy advantage."
+  },
+  "results": {
+    "positions": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/position-comparison.json",
+      "bytes": 301743,
+      "sha256": "4a260b1204b1fb59aa10096cbd1e077dce259c70e1a0d601a2d8af8ce48cf6d0",
+      "passed": true,
+      "positions": {
+        "parent": 32,
+        "candidate": 40,
+        "total": 40,
+        "rows": [
+          {
+            "id": "position/0/plain/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/plain/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Cedar.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/place-prefix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/place-prefix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar is the place.\n",
+            "candidate_output": " Cedar is the place.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/place-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/place-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar is the place.\n",
+            "candidate_output": " Cedar is the place.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/stop-prefix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Cedar is the stop.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/0/stop-prefix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar is the stop.\n",
+            "candidate_output": " Cedar is the stop.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/stop-suffix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Cedar is the stop.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/0/stop-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar is the stop.\n",
+            "candidate_output": " Cedar is the stop.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral6-prefix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/0/neutral6-prefix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Cedar.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral6-suffix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/0/neutral6-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Cedar.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral4-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral4-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Cedar.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral8-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral8-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Cedar.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral2-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/0/neutral2-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Cedar.\n",
+            "candidate_output": " Cedar.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/plain/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/plain/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Amber.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/place-prefix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/place-prefix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber is the place.\n",
+            "candidate_output": " Amber is the place.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/place-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/place-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber is the place.\n",
+            "candidate_output": " Amber is the place.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/stop-prefix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Amber is the stop.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/1/stop-prefix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber is the stop.\n",
+            "candidate_output": " Amber is the stop.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/stop-suffix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Amber is the stop.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/1/stop-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber is the stop.\n",
+            "candidate_output": " Amber is the stop.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral6-prefix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/1/neutral6-prefix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Amber.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral6-suffix/absent",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": null,
+            "absent_commits_no_source": true
+          },
+          {
+            "id": "position/1/neutral6-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Amber.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral4-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral4-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Amber.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral8-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral8-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Amber.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral2-suffix/absent",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          },
+          {
+            "id": "position/1/neutral2-suffix/present",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Amber.\n",
+            "candidate_output": " Amber.\n",
+            "parent_eos": true,
+            "candidate_eos": true,
+            "previous_correct_identity_preserved": true,
+            "absent_commits_no_source": null
+          }
+        ]
+      },
+      "original_abstention": {
+        "parent": 6,
+        "candidate": 10,
+        "total": 10,
+        "rows": [
+          {
+            "id": "absent/0/plain",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/0/place-prefix",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/0/place-suffix",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/0/stop-prefix",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Lodov is the stop.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/0/stop-suffix",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Lodov is the stop.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/1/plain",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/1/place-prefix",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/1/place-suffix",
+            "parent_correct": true,
+            "candidate_correct": true,
+            "parent_output": " Unknown.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/1/stop-prefix",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Talven is the stop.\n",
+            "candidate_output": " Unknown.\n"
+          },
+          {
+            "id": "absent/1/stop-suffix",
+            "parent_correct": false,
+            "candidate_correct": true,
+            "parent_output": " Talven is the stop.\n",
+            "candidate_output": " Unknown.\n"
+          }
+        ]
+      },
+      "scope": "Complete bytes/EOS, actual parent-router intervention, previous correct source identities preserved, corrected absent-owner cases commit no source."
+    },
+    "fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fresh-result.json",
+      "bytes": 97816,
+      "sha256": "24ac7113913040685075a6d1c1dad63e1701320f14f37089c05dca464073f5d2",
+      "candidate": 32,
+      "total": 32,
+      "parent_control": 20,
+      "rows": [
+        {
+          "id": "fresh-position/0/plain/absent",
+          "prompt": "Record: dtsr in Efgh. Where is tnvf? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/0/plain/present",
+          "prompt": "Record: tnvf in Efgh. Where is tnvf? Answer:",
+          "expected": " Efgh.\n",
+          "text": " Efgh.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/0/stop-prefix/absent",
+          "prompt": "Record: dtsr in Efgh. Explain the stop in a sentence. Where is tnvf? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/0/stop-prefix/present",
+          "prompt": "Record: tnvf in Efgh. Explain the stop in a sentence. Where is tnvf? Answer:",
+          "expected": " Efgh is the stop.\n",
+          "text": " Efgh is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/0/stop-suffix/absent",
+          "prompt": "Record: dtsr in Efgh. Where is tnvf? Explain the stop in a sentence. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/0/stop-suffix/present",
+          "prompt": "Record: tnvf in Efgh. Where is tnvf? Explain the stop in a sentence. Answer:",
+          "expected": " Efgh is the stop.\n",
+          "text": " Efgh is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/0/neutral6-suffix/absent",
+          "prompt": "Record: dtsr in Efgh. Where is tnvf? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/0/neutral6-suffix/present",
+          "prompt": "Record: tnvf in Efgh. Where is tnvf? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Efgh.\n",
+          "text": " Efgh.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/plain/absent",
+          "prompt": "Record: tzmk in Dgjf. Where is duqf? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/plain/present",
+          "prompt": "Record: duqf in Dgjf. Where is duqf? Answer:",
+          "expected": " Dgjf.\n",
+          "text": " Dgjf.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/stop-prefix/absent",
+          "prompt": "Record: tzmk in Dgjf. Explain the stop in a sentence. Where is duqf? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/stop-prefix/present",
+          "prompt": "Record: duqf in Dgjf. Explain the stop in a sentence. Where is duqf? Answer:",
+          "expected": " Dgjf is the stop.\n",
+          "text": " Dgjf is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/stop-suffix/absent",
+          "prompt": "Record: tzmk in Dgjf. Where is duqf? Explain the stop in a sentence. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/stop-suffix/present",
+          "prompt": "Record: duqf in Dgjf. Where is duqf? Explain the stop in a sentence. Answer:",
+          "expected": " Dgjf is the stop.\n",
+          "text": " Dgjf is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/neutral6-suffix/absent",
+          "prompt": "Record: tzmk in Dgjf. Where is duqf? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/1/neutral6-suffix/present",
+          "prompt": "Record: duqf in Dgjf. Where is duqf? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Dgjf.\n",
+          "text": " Dgjf.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/plain/absent",
+          "prompt": "Record: skgu in Chrg. Where is rnjk? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/plain/present",
+          "prompt": "Record: rnjk in Chrg. Where is rnjk? Answer:",
+          "expected": " Chrg.\n",
+          "text": " Chrg.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/stop-prefix/absent",
+          "prompt": "Record: skgu in Chrg. Explain the stop in a sentence. Where is rnjk? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/stop-prefix/present",
+          "prompt": "Record: rnjk in Chrg. Explain the stop in a sentence. Where is rnjk? Answer:",
+          "expected": " Chrg is the stop.\n",
+          "text": " Chrg is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/stop-suffix/absent",
+          "prompt": "Record: skgu in Chrg. Where is rnjk? Explain the stop in a sentence. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/stop-suffix/present",
+          "prompt": "Record: rnjk in Chrg. Where is rnjk? Explain the stop in a sentence. Answer:",
+          "expected": " Chrg is the stop.\n",
+          "text": " Chrg is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/neutral6-suffix/absent",
+          "prompt": "Record: skgu in Chrg. Where is rnjk? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/2/neutral6-suffix/present",
+          "prompt": "Record: rnjk in Chrg. Where is rnjk? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Chrg.\n",
+          "text": " Chrg.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/plain/absent",
+          "prompt": "Record: exse in Elkt. Where is cgiv? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/plain/present",
+          "prompt": "Record: cgiv in Elkt. Where is cgiv? Answer:",
+          "expected": " Elkt.\n",
+          "text": " Elkt.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/stop-prefix/absent",
+          "prompt": "Record: exse in Elkt. Explain the stop in a sentence. Where is cgiv? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/stop-prefix/present",
+          "prompt": "Record: cgiv in Elkt. Explain the stop in a sentence. Where is cgiv? Answer:",
+          "expected": " Elkt is the stop.\n",
+          "text": " Elkt is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/stop-suffix/absent",
+          "prompt": "Record: exse in Elkt. Where is cgiv? Explain the stop in a sentence. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/stop-suffix/present",
+          "prompt": "Record: cgiv in Elkt. Where is cgiv? Explain the stop in a sentence. Answer:",
+          "expected": " Elkt is the stop.\n",
+          "text": " Elkt is the stop.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/neutral6-suffix/absent",
+          "prompt": "Record: exse in Elkt. Where is cgiv? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        },
+        {
+          "id": "fresh-position/3/neutral6-suffix/present",
+          "prompt": "Record: cgiv in Elkt. Where is cgiv? farnel vopra duskin zemer pelka norvi. Answer:",
+          "expected": " Elkt.\n",
+          "text": " Elkt.\n",
+          "eos": true,
+          "exact": true,
+          "verification_error": null
+        }
+      ],
+      "post_selection": true,
+      "retuning": false
+    },
+    "fresh_identity": {
+      "passed": true,
+      "total": 32,
+      "parent_correct": 20,
+      "candidate_correct": 32,
+      "rows": [
+        {
+          "id": "fresh-position/0/plain/absent",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Unknown.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/0/plain/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Efgh.\n",
+          "candidate_output": " Efgh.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/0/stop-prefix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Efgh is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/0/stop-prefix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Efgh is the stop.\n",
+          "candidate_output": " Efgh is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/0/stop-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Efgh is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/0/stop-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Efgh is the stop.\n",
+          "candidate_output": " Efgh is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/0/neutral6-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Efgh.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/0/neutral6-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Efgh.\n",
+          "candidate_output": " Efgh.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/1/plain/absent",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Unknown.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/1/plain/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Dgjf.\n",
+          "candidate_output": " Dgjf.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/1/stop-prefix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Dgjf is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/1/stop-prefix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Dgjf is the stop.\n",
+          "candidate_output": " Dgjf is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/1/stop-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Dgjf is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/1/stop-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Dgjf is the stop.\n",
+          "candidate_output": " Dgjf is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/1/neutral6-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Dgjf.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/1/neutral6-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Dgjf.\n",
+          "candidate_output": " Dgjf.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/2/plain/absent",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Unknown.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/2/plain/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Chrg.\n",
+          "candidate_output": " Chrg.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/2/stop-prefix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Chrg is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/2/stop-prefix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Chrg is the stop.\n",
+          "candidate_output": " Chrg is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/2/stop-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Chrg is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/2/stop-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Chrg is the stop.\n",
+          "candidate_output": " Chrg is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/2/neutral6-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Chrg.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/2/neutral6-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Chrg.\n",
+          "candidate_output": " Chrg.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/3/plain/absent",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Unknown.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/3/plain/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Elkt.\n",
+          "candidate_output": " Elkt.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/3/stop-prefix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Elkt is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/3/stop-prefix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Elkt is the stop.\n",
+          "candidate_output": " Elkt is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/3/stop-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Elkt is the stop.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/3/stop-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Elkt is the stop.\n",
+          "candidate_output": " Elkt is the stop.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        },
+        {
+          "id": "fresh-position/3/neutral6-suffix/absent",
+          "parent_correct": false,
+          "candidate_correct": true,
+          "parent_output": " Elkt.\n",
+          "candidate_output": " Unknown.\n",
+          "previous_correct_identity_preserved": null,
+          "absent_commits_no_source": true
+        },
+        {
+          "id": "fresh-position/3/neutral6-suffix/present",
+          "parent_correct": true,
+          "candidate_correct": true,
+          "parent_output": " Elkt.\n",
+          "candidate_output": " Elkt.\n",
+          "previous_correct_identity_preserved": true,
+          "absent_commits_no_source": null
+        }
+      ]
+    },
+    "word_construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/word-construction/full.json",
+      "bytes": 5951429,
+      "sha256": "47527d375134a9f8426ec85abeaac578ab88f43d5a5c0cd9698bfaf47c8a752f",
+      "exact": 132,
+      "total": 132,
+      "completed": 132
+    },
+    "word_open": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/open-final/full.json",
+      "bytes": 1507425,
+      "sha256": "e09f12690067646313489481adcc2c8f5bef4996f2c9f0276841bb08e477cab9",
+      "exact": 28,
+      "total": 28,
+      "completed": 28
+    },
+    "word_controls": {
+      "passed": true,
+      "reports": [
+        {
+          "control": "previous-emitter",
+          "exact": 6,
+          "total": 28,
+          "parent_bytes_eos_source_identities_equal": true
+        },
+        {
+          "control": "context-disabled",
+          "exact": 6,
+          "total": 28,
+          "parent_bytes_eos_source_identities_equal": true
+        },
+        {
+          "control": "geometry-disabled",
+          "exact": 6,
+          "total": 28,
+          "parent_bytes_eos_source_identities_equal": true
+        },
+        {
+          "control": "prefix-context-disabled",
+          "exact": 28,
+          "total": 28,
+          "parent_bytes_eos_source_identities_equal": true
+        }
+      ]
+    },
+    "previous_word_fresh": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/word-fresh-retained/full.json",
+      "bytes": 1263258,
+      "sha256": "302d9378479667767ed65623e634017f4311a370a7c4ec1678fdbc9bf8241cf6",
+      "exact": 24,
+      "total": 24,
+      "completed": 24
+    },
+    "retained_construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/preserve/preservation/retained-construction.json",
+      "bytes": 214913,
+      "sha256": "397fa84a5a1fe52488060794f7a6ce474fc00107d7c40aab5b2ef57b167b3aa2",
+      "exact": 663,
+      "total": 663
+    },
+    "prior_reports": {
+      "at": "2026-09-09T03:26:31.172Z",
+      "scope": "Actual bytes, EOS, correctness, action/value/record/read identities and applicable dependency fields; timings/scores excluded. Already-incorrect interventions remain negative evidence.",
+      "reports": [
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-operations/result.json",
+            "sha256": "2d4902a53063ad75b21a2505b99a6f40827d6327d5e4c21613dd8bf4c86f8f91"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-operations/result.json",
+            "sha256": "9fadcdd0f9a1bf59877a954ae6142002a4ca561a923e7404c5d11c60971c8f09"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-operations/disabled.json",
+            "sha256": "3835d83eda921a608e850318db11128f56ad9ac2b03c36165223a7f152a46bef"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-operations/disabled.json",
+            "sha256": "09a81b2957e7928e361a0f9b1ff34846cc637208556df479b54db68d83c0b8c6"
+          },
+          "total": 24,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-operations/intermediate-disabled.json",
+            "sha256": "b2e1680dbf087c58a72c8291f625ecff2f53564e53772dfec81303c2d1921545"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-operations/intermediate-disabled.json",
+            "sha256": "22ba87594d6da088ba8e824b19df6d3e173d02c1446dda53ed57af098eb29251"
+          },
+          "total": 24,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/result.json",
+            "sha256": "8c0a669ea8ec42fe560d2928402cb1931d58dc84a27e1b0ef79a0bbe7a106176"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/result.json",
+            "sha256": "011744b1645e8923e430ad04ee39211e6ff23971dd88d6c3335bf569c0f15c19"
+          },
+          "total": 18,
+          "exact": 18,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/disabled.json",
+            "sha256": "237976ea8c6b666b928ae74ea328be835b54e92769a7e7eaef4371ce37538e0f"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/disabled.json",
+            "sha256": "10ec36b86569c11f29274fae521928c4ece8f8f58914c39fa2a47abb4666d4e2"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/read-disabled.json",
+            "sha256": "573c2cc3c8b76f548e4b7e35f98b1c377dcb990a815e958cc4387322ed9f0420"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/read-disabled.json",
+            "sha256": "a1ff195d14bb82b29f834e47e2ee10ff6b43174e7aeb38e48e67e1d585c7e02b"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-lexical-controls/geometry-disabled.json",
+            "sha256": "237976ea8c6b666b928ae74ea328be835b54e92769a7e7eaef4371ce37538e0f"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/geometry-disabled.json",
+            "sha256": "10ec36b86569c11f29274fae521928c4ece8f8f58914c39fa2a47abb4666d4e2"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-current-evaluate/result.json",
+            "sha256": "fceb7b339924977e87f7d3db0045da863b1d0209304e48fdba6d2fe65a011b72"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-current-evaluate/result.json",
+            "sha256": "25ef6b8d7c42a82ededfd8ac3918b9c6e4b13a0e83c5415f04f796f6e15458be"
+          },
+          "total": 48,
+          "exact": 48,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-current-controls/result.json",
+            "sha256": "670577349b4ed509b0f9b5e83ee5c6895e6f9aa66f92f607491c12ac65e601c3"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-current-controls/result.json",
+            "sha256": "7ec8d1ee332f960d2b8e8699fc5525205e536d52bb91e8ed6321d4d6361820fc"
+          },
+          "total": 48,
+          "exact": 32,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-current-stress/result.json",
+            "sha256": "cdb5b74bf37cdeaf59ebef79326a6b5ad1f9b6040c7a0c1db0ed64f39dba24b1"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-current-stress/result.json",
+            "sha256": "9ab232a2ae8c312b9dc2640ef18959bc4250ae76069e54c1eaccd01465d3f49e"
+          },
+          "total": 16,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-evaluate/result.json",
+            "sha256": "14f56b06e0b0fdebd10a3897cc4ce3aa5ed628032e32aa7eda6cdf0ba50def94"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-evaluate/result.json",
+            "sha256": "bca77faab5e83adc24b9383e73a4f110baf5d16ef10a745f37139c71abee2bba"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-stress/result.json",
+            "sha256": "c76357202ba7a6b96b16539b72e185fcfc6d541e88709a0b07a16e2e27610b77"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-stress/result.json",
+            "sha256": "94e488ec7c7cfdfb3366f299fde7baeea996f44e16bc14bf154b41e1725adb82"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-fresh/result.json",
+            "sha256": "1d5af6230689f7dc9a1af31fd817063af2ee91653355cc235ddadf440c1ac79f"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-fresh/result.json",
+            "sha256": "ff6dcba9080cd9cc0e0fcde7dcbe6b370b41b3890b171231c990968edfcf2717"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/validation-preserving/prior-instruction-evaluate/disabled.json",
+            "sha256": "1e638ebc05c6aba6878ee3442c2d7c9cedd7f4ea4bb1bc4960beffe53428303e"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-evaluate/disabled.json",
+            "sha256": "b831c5cd824bd4303fa6ad1e5aaf97e5d56fd3bed95f9d9116f6afcacf1f45e2"
+          },
+          "total": 24,
+          "exact": 8,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        }
+      ],
+      "differences": []
+    },
+    "history": {
+      "passed": true,
+      "total": 12,
+      "parent": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "candidate": "blake3:82662f856908e548a9cccbb78809daf4821d243781ad497b661f5ee6d94c2032",
+      "raw_candidate_historical_query_score": 8,
+      "raw_parent_historical_query_score": 8,
+      "scope": "Actual output plus exact identities and checkpoints; changed queries compared with matched parent queries. Extra instruction-induced records compared separately with unmodified history; all record fields including causal pose/phase state equal the matched parent. Base/defer retains original punctuation token identities.",
+      "rows": [
+        {
+          "id": "forward-open.json/turn-1/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "forward-open.json/turn-1/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "forward-open.json/turn-1/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "forward-open.json/turn-4/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "forward-open.json/turn-4/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "forward-open.json/turn-4/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "reverse-open.json/turn-1/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "reverse-open.json/turn-1/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "reverse-open.json/turn-1/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": false,
+          "learned_stop": true
+        },
+        {
+          "id": "reverse-open.json/turn-4/plain",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "reverse-open.json/turn-4/place-prefix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": true,
+          "base_eos": true,
+          "learned_stop": false
+        },
+        {
+          "id": "reverse-open.json/turn-4/place-suffix",
+          "exact_output_and_eos": true,
+          "matched_parent_record_identities_and_directory": true,
+          "geometric_state_equal": true,
+          "source_commitment_equal": true,
+          "versions_match_unmodified_history": false,
+          "base_eos": true,
+          "learned_stop": false
+        }
+      ]
+    },
+    "api": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/api-preserving.json",
+      "bytes": 97890,
+      "sha256": "4b3236379a9036c7746e1fe81d999ceb2820934bcb4cd713c76ac209717435e3",
+      "status": "PASS",
+      "checks": 166,
+      "passed": 166
+    },
+    "focused": {
+      "passed": true,
+      "total": 29,
+      "tests": [
+        "native_geometric::source_role_refinement::tests::source_role_configuration_is_scoped_and_bounded",
+        "native_geometric::source_role_refinement::tests::source_role_frozen_fields_allow_only_existing_recency_roots",
+        "native_geometric::source_role_refinement::tests::source_role_targets_have_no_implicit_training_stage",
+        "native_geometric::word_emission::tests::native_word_emission_balanced_vocabulary_uses_presence_and_class_sizes",
+        "native_geometric::word_emission::tests::native_word_emission_context_erasure_removes_prefix_and_query_features",
+        "native_geometric::word_emission::tests::native_word_emission_inheritance_label_preserves_previous_receipt_serialization",
+        "native_geometric::word_emission::tests::native_word_emission_larger_fit_window_keeps_legacy_config_bound",
+        "native_geometric::word_emission::tests::native_word_emission_namespace_preserves_candidate_and_query_order",
+        "native_geometric::word_emission::tests::native_word_emission_prefix_query_fields_preserve_candidate_and_legacy_context",
+        "native_geometric::source_routing_training::pair_tests::native_source_pair_candidates_are_unique_bounded_and_include_current",
+        "native_geometric::source_routing_training::pair_tests::native_source_pair_mask_guard_and_frozen_roots_leave_block_exact",
+        "native_geometric::lexical_emission_tests::native_lexical_read_checkpoint_rejects_forged_payload_cursor_and_transients",
+        "native_geometric::lexical_emission_tests::native_lexical_read_disabled_control_stops_a_restored_partial_read",
+        "native_geometric::lexical_emission_tests::native_lexical_read_old_artifact_rejects_even_null_read_field",
+        "native_geometric::lexical_emission_tests::native_lexical_read_prediction_is_idempotent_and_mismatch_clears_cursor",
+        "native_geometric::lexical_emission_tests::native_lexical_read_preserves_selected_identity_among_equal_values",
+        "native_geometric::lexical_emission_tests::native_lexical_read_signed_multidigit_cursor_restores_without_value_writes",
+        "native_geometric::action_emission_tests::native_action_emission_conflict_check_keeps_jointly_acceptable_alternatives",
+        "native_geometric::action_emission_tests::native_action_emission_erasure_changes_only_action_context_and_preserves_cursor",
+        "native_geometric::action_emission_tests::native_action_emission_subset_fit_rejects_mask_and_freezes_inherited_parameters",
+        "native_geometric::action_emission_tests::native_action_emission_tags_preserve_legacy_add_and_exact_read_roles",
+        "native_geometric::word_copy_tests::native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry",
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "native_word_sentence_actual_checkpoint_and_allocation",
+        "native_lexical_emission_actual_checkpoint_and_allocation",
+        "native_composed_output_actual_checkpoint_and_allocation",
+        "native_mixed_operators_actual_checkpoint_and_allocation",
+        "native_action_emission_actual_checkpoint_and_allocation",
+        "native_copy_add_actual_checkpoint_and_allocation"
+      ],
+      "labels": [
+        "test-source_role_-preserving",
+        "test-native_word_emission_-preserving",
+        "test-native_source_pair_-preserving",
+        "test-native_lexical_read_-preserving",
+        "test-native_action_emission_-preserving",
+        "test-native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry-preserving",
+        "kernel-source-guard-preserving",
+        "allocation-word_sentence-preserving",
+        "allocation-lexical_emission-preserving",
+        "allocation-composed_output-preserving",
+        "allocation-mixed_operators-preserving",
+        "allocation-action_emission-preserving",
+        "allocation-copy_add-preserving"
+      ]
+    },
+    "runtime_cost": {
+      "source": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/allocation-word_sentence-preserving.log",
+      "artifact_load_ns": 25061242959,
+      "warm_predict_observe_median_ns": 144083,
+      "warm_predict_observe_max_ns": 245625,
+      "development_cases": 3,
+      "checkpoint_positions": 73,
+      "allocations": 0,
+      "allocated_bytes": 0,
+      "measured_operations": "ingestion, begin_response, predict, observe",
+      "warm_timing_excludes": [
+        "load",
+        "encode",
+        "session creation",
+        "BOS",
+        "checkpoint",
+        "JSON",
+        "decode",
+        "report"
+      ],
+      "scope": "Single focused optimized word-emission test on this machine; no general latency, energy or throughput claim"
+    },
+    "over_limit": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/over-limit-final/full.json",
+      "bytes": 213017,
+      "sha256": "0c80231e7f9c166504f588b0266273ff163fd8cb37246dfeac2d4fb605bc9d2a",
+      "exact": 0,
+      "total": 2,
+      "completed": 2
+    },
+    "negative_comparison": {
+      "status": "PRESERVED_NEGATIVE",
+      "rows": [
+        {
+          "id": "open/5/place-prefix",
+          "exact": false,
+          "eos": false,
+          "verification_error": "response exceeded96 tokens",
+          "actual_output": " Quiet River Bank is the place.\n.\nUser: Update:: What color is What city does not give a color is 168 168 is What city does not give a What city does not give a 168 is a What is What What city does not give a a give a 168 What city does not give a is What city does a is What city does a",
+          "expected": " Quiet River Bank is the place.\n",
+          "parent_bytes_eos_sources_equal": true
+        },
+        {
+          "id": "open/5/place-suffix",
+          "exact": false,
+          "eos": true,
+          "verification_error": null,
+          "actual_output": " Quiet River Bank is the place.\n. 168 168....... 168.. 168.. 168......\n",
+          "expected": " Quiet River Bank is the place.\n",
+          "parent_bytes_eos_sources_equal": true
+        }
+      ],
+      "scope": "Two existing33step targets still exceed32step response-entry lifetime; prior wrong bytes/EOS/source identities unchanged."
+    },
+    "generated_rust": {
+      "copy_add": [
+        {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/rust-evaluate/source-receipt.json",
+          "bytes": 442,
+          "sha256": "a99685eb8f0a91669f3dc16481077a706b11e170bae7ab00a60013be3d565130"
+        },
+        {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/rust-stress/source-receipt.json",
+          "bytes": 440,
+          "sha256": "1e8ca265dc3bd92dee3b7430cfa889b45387de49041fff3ac9f08e7b47200ba6"
+        }
+      ],
+      "identifier_returns": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/rust-retained/receipt.json",
+        "bytes": 1533,
+        "sha256": "5c5e621dd60d3fd9c3b1a78857fb06281f20e2d1caa738ee7c81edff1e570b03"
+      }
+    }
+  },
+  "writer_collision": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/writer-collision/comparison.json",
+    "bytes": 36097,
+    "sha256": "7f2cc6344830927ce9d611ce9992a94d3fae0ca9dceff3a157b032bbda14fde0",
+    "feature_keys": 21,
+    "feature_hash": "875abdee54cf2b7b71c669e3bace99ba25ad14ba54111d749023ebde1b82d066",
+    "resolved": false,
+    "next": "Add a bounded learned contextual lexical/role distinction to shared writer features, then measure actual write/NoWrite commitments while preserving exact identities and all earlier behavior."
+  },
+  "remaining": [
+    "Instruction-induced relation writes remain unchanged",
+    "Original twelve owner-first sentence requests remain unrepaired",
+    "Two33-step targets overflow32-step response entry; trailing output/nontermination remains negative"
+  ],
+  "unqualified": [
+    "general prose",
+    "arbitrary instruction understanding",
+    "general reasoning",
+    "Rust synthesis",
+    "alpha",
+    "frontier capability",
+    "complete-path energy advantage"
+  ],
+  "not_run": [
+    "new-artifact browser",
+    "new-artifact WASM",
+    "new-artifact HTTP",
+    "blanket full suite",
+    "Clippy"
+  ],
+  "resources": {
+    "at": "2026-09-09T03:40:47.564Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/commands.jsonl",
+    "model_ms": 1372133,
+    "engineering_ms": 497487,
+    "ledger": {
+      "cumulative_ms": 20483859,
+      "limit_ms": 22350000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 1669521,
+    "storage_high_water": {
+      "target": 32202752,
+      "worktree": 172032,
+      "evidence": 202678272,
+      "at": "2026-09-09T03:34:25.233Z",
+      "git": 1462272
+    },
+    "retained_copy_bytes": 13828096,
+    "cycle_growth_bytes": 250343424,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 35905552384,
+    "storage_limit_bytes": 37010698240,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 970928128,
+    "peak_model_sampled_rss_bytes": 2775465984,
+    "peak_engineering_sampled_rss_bytes": 2372124672,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "projection": {
+    "at": "2026-09-09T02:44:02.505Z",
+    "authorization": "Owner next-step request and standing local-extension authorization",
+    "reason": "Trace instruction-versus-fact role selection and relation writes; implement the smallest causal Rust repair and verify preserved shared word/numeric generation.",
+    "ledger_before": {
+      "cumulative_ms": 19111726,
+      "limit_ms": 20550000
+    },
+    "increment_ms": 1800000,
+    "updated_limit_ms": 22350000,
+    "cycle_model_ms": 2700000,
+    "cycle_engineering_ms": 1200000,
+    "phase_breakdown_ms": {
+      "diagnostic": 180000,
+      "preparation_fit": 900000,
+      "controls_preservation": 850000,
+      "api_allocations": 400000,
+      "fresh": 90000,
+      "retry_checkpoint": 280000
+    },
+    "engineering_breakdown_ms": {
+      "build": 850000,
+      "focused": 200000,
+      "delivery_checks": 150000
+    },
+    "prior_unverified_reservation_ms": 196620,
+    "context_tokens": 512,
+    "output_tokens": 96,
+    "input_window_bytes_max": 4096,
+    "history_turns_max": 5,
+    "construction_cases_max": 768,
+    "construction_frames_max": 8192,
+    "features_max": 4096,
+    "fit_wall_ms_max": 180000,
+    "fresh_cases_max": 32,
+    "threads": 2,
+    "model_processes": 1,
+    "peak_model_rss_bytes": 4294967296,
+    "peak_build_rss_bytes": 6442450944,
+    "new_storage_bytes": 1073741824,
+    "storage_breakdown": {
+      "build": 536870912,
+      "artifacts_checkpoints": 100663296,
+      "reports_temporary": 419430400,
+      "metadata": 16777216
+    },
+    "storage_limit_bytes": 37010698240,
+    "stop_margin_bytes": 134217728,
+    "accounted_before_bytes": 35638431744,
+    "baselines": {
+      "target": 2740137984,
+      "worktree": 478711808,
+      "git": 1008218112,
+      "evidence": 0
+    },
+    "worktree": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+    "branch": "codex/instruction-fact-binding",
+    "source_base": "860f6171d4d7408acc401b18e2ebc73aec3cdb7b",
+    "artifact": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/word-sentence/model.json",
+      "cid": "blake3:91ede422c51a2e80aa0dc4f579a005d94a60e8023a0960d7d891f98cc7e7db9b",
+      "sha256": "a98846a05dbc88d6419e1320b289ef07d5b3136677b2542a7ffc5abded479cc3",
+      "bytes": 13233012
+    },
+    "prior_receipt": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/resources.json",
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "phase_reallocation": {
+    "at": "2026-09-09T03:26:20.906Z",
+    "reason": "The single-code fit used substantially less than its preparation/fit allowance; preserve all earlier actual panels, controls and source-identity comparisons before admission. Reallocate unused fit allowance before the remaining preservation commands.",
+    "previous": {
+      "diagnostic": 180000,
+      "preparation_fit": 900000,
+      "controls_preservation": 850000,
+      "api_allocations": 400000,
+      "fresh": 90000,
+      "retry_checkpoint": 280000
+    },
+    "updated": {
+      "diagnostic": 180000,
+      "preparation_fit": 600000,
+      "controls_preservation": 1150000,
+      "api_allocations": 400000,
+      "fresh": 90000,
+      "retry_checkpoint": 280000
+    },
+    "transferred_ms": 300000,
+    "cycle_model_ms": 2700000,
+    "updated_cumulative_limit_ms": 22350000,
+    "new_storage_bytes": 1073741824,
+    "storage_limit_bytes": 37010698240,
+    "stop_margin_bytes": 134217728,
+    "total_or_cumulative_extension": false
+  },
+  "local_evidence_root": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact",
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/diagnostic/summary.json",
+      "bytes": 17417,
+      "sha256": "1fead4fbb5cc17daef582a318ae8bdb55ed4c4f1c1bf609a967fe914cb3964e0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/positions-parent/result.json",
+      "bytes": 566312,
+      "sha256": "5bc43861ed08504f37ed7a0a0a3534f2f4658245b4db33e318dce521a5c42434"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/position-comparison.json",
+      "bytes": 301743,
+      "sha256": "4a260b1204b1fb59aa10096cbd1e077dce259c70e1a0d601a2d8af8ce48cf6d0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/data/receipt.json",
+      "bytes": 829,
+      "sha256": "7bbf325fb16dae01bc09a91e7cc256c84e9734cec34362a09e50f9012e70bd01"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/data/training.json",
+      "bytes": 114282,
+      "sha256": "56dfacb8651d38ef7900b20233fe29690cd30bf7f856a416f56f77e6d5c2a6dc"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fit/fit.json",
+      "bytes": 84043,
+      "sha256": "59b4d72b0e9a79e0959b2f6468887b095729d1a12d4dd53a6707fb862de689f4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fit-source.json",
+      "bytes": 1653,
+      "sha256": "e11a55c675da2462f5eb4f1dbc3b2ff82d4594c4003ebd6f659fc2554450ceab"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/candidate-identity.json",
+      "bytes": 548,
+      "sha256": "d540b1ba9807d6c090d0ba261a866f32871b0218e42b9935900c0c1530596536"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/selection.json",
+      "bytes": 915,
+      "sha256": "8361c4c5222c555db295325401064ae85ac9b7182e7d74570e685d472afd3aba"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fresh-data/receipt.json",
+      "bytes": 1074,
+      "sha256": "7f2da01ad2acf9f9f196c08ea692d9a3d0cb91a163f54334fb84f58d64e7d2a7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fresh-data/cases.json",
+      "bytes": 10289,
+      "sha256": "b5be5fd3d92e0706ff72d6dcef367c94f8319025d37d23e5ed270a17afca7196"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fresh-data/disjointness.json",
+      "bytes": 868,
+      "sha256": "5d1ca992a85593ac7345be5e60fd66f61746b65b55d9ba148a30c598773b03f2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/fresh-result.json",
+      "bytes": 97816,
+      "sha256": "24ac7113913040685075a6d1c1dad63e1701320f14f37089c05dca464073f5d2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/focused-results.json",
+      "bytes": 3742,
+      "sha256": "920ea206242e87776da4bcaf78728b5fed3c55044b2d93d8b3ae91b60263d5f8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/commands.jsonl",
+      "bytes": 48973,
+      "sha256": "30807e20965100dd2c4f392894a4c4e8df05b8062081d187186a3b37c10fb074"
+    }
+  ]
+}

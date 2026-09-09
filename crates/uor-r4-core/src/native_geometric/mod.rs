@@ -37,6 +37,8 @@ mod action_emission;
 mod action_emission_tests;
 mod mixed_initial_training;
 mod shared_operator_refinement;
+mod source_role_refinement;
+pub use source_role_refinement::{SourceRoleRefinementExample, SourceRoleTarget};
 mod word_emission;
 pub use action_emission::{ActionEmissionExample, ActionEmissionSegment};
 pub use word_emission::WordEmissionExample;
@@ -258,6 +260,8 @@ pub enum Control {
     SourceSpanContextDisabled,
     /// Keep next-word identity but remove its pair with the original source cue.
     SourceSpanPairDisabled,
+    /// Restore the parent source router while retaining the current context law.
+    SourceRoleRefinementDisabled,
     /// Restore the exact source router and feature law preceding context retention.
     SourceContextDisabled,
     /// Keep the fitted router but remove retained predecessors from its features.
@@ -347,6 +351,7 @@ impl Feature {
             | Control::SourceSpanDisabled
             | Control::SourceSpanContextDisabled
             | Control::SourceSpanPairDisabled
+            | Control::SourceRoleRefinementDisabled
             | Control::SourceContextDisabled
             | Control::SourceContextWindowOnly
             | Control::JointAdmissionDisabled
@@ -455,6 +460,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_role_refinement: Option<source_role_refinement::SourceRoleRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     word_emission: Option<word_emission::WordEmission>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     shared_operator_refinement: Option<shared_operator_refinement::SharedOperatorRefinement>,
@@ -537,6 +544,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    source_role_refinement: Option<source_role_refinement::SourceRoleRefinement>,
+    #[serde(default)]
     word_emission: Option<word_emission::WordEmission>,
     #[serde(default)]
     shared_operator_refinement: Option<shared_operator_refinement::SharedOperatorRefinement>,
@@ -618,6 +627,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            source_role_refinement: wire.source_role_refinement,
             word_emission: wire.word_emission,
             shared_operator_refinement: wire.shared_operator_refinement,
             action_emission: wire.action_emission,
