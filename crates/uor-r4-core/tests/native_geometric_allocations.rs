@@ -3752,13 +3752,14 @@ fn native_current_source_actual_checkpoint_and_allocation() {
     let load_ns = load.elapsed().as_nanos();
     let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(wire["current_source"].is_object());
+    let integrated_writer = wire["writer_role"].is_object();
     drop(wire);
     drop(bytes);
     let mut input_positions = 0;
     let mut output_positions = 0;
     let mut times = Vec::new();
     let facts = "Record: Dusk Ridge holds selvi. selvi now in Copper Vale.";
-    for (label, padding, instruction, target) in [
+    let mut cases = vec![
         (
             "owner",
             String::new(),
@@ -3772,8 +3773,37 @@ fn native_current_source_actual_checkpoint_and_allocation() {
             "Name the owner first.",
             " selvi is in Copper Vale.\n",
         ),
-    ] {
-        let prompt = format!("{facts} {padding}Where is selvi? {instruction} Answer:");
+    ];
+    if integrated_writer {
+        cases.extend([
+            (
+                "latest_amber",
+                String::new(),
+                "Name the owner first.",
+                " selvi is in Amber Field.\n",
+            ),
+            (
+                "latest_known_prime",
+                String::new(),
+                "Name the owner first.",
+                " selvi is in Ash Court.\n",
+            ),
+            (
+                "literal_now",
+                String::new(),
+                "Name the owner first.",
+                " now is in Amber Field.\n",
+            ),
+        ]);
+    }
+    for (label, padding, instruction, target) in cases {
+        let (case_facts, owner, last_value, current_id) = match label {
+            "latest_amber" => ("Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "Amber Field", 3),
+            "latest_known_prime" => ("Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi now in Ash Court.", "selvi", "Ash Court", 3),
+            "literal_now" => ("Record: now in Amber Field.", "now", "Amber Field", 1),
+            _ => (facts, "selvi", "Copper Vale", 2),
+        };
+        let prompt = format!("{case_facts} {padding}Where is {owner}? {instruction} Answer:");
         let mut session = model.session(Control::Full).unwrap();
         session.observe(&model, BOS).unwrap();
         let mut turns = vec![(prompt, target)];
@@ -3810,31 +3840,35 @@ fn native_current_source_actual_checkpoint_and_allocation() {
             let initial = state(&session);
             let relations = &initial["values"]["relations"];
             let records = relations["records"].as_array().unwrap();
-            let old = records.iter().find(|r| r["id"] == 1).unwrap();
-            let current = records.iter().find(|r| r["id"] == 2).unwrap();
+            let current = records.iter().find(|r| r["id"] == current_id).unwrap();
             if turn == 0 {
-                assert_eq!(
-                    records
-                        .iter()
-                        .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0))
-                        .count(),
-                    2
-                );
-                assert_eq!(atom(&old["owner"]), b"selvi");
-                assert_eq!(atom(&old["span"]), b"Dusk Ridge");
-                assert_eq!(old["action"], 1);
-                assert_eq!(old["previous"], 0);
-                assert_eq!(atom(&current["owner"]), b"selvi");
-                assert_eq!(atom(&current["span"]), b"Copper Vale");
-                assert_eq!(current["action"], 2);
-                assert_eq!(current["previous"], 1);
+                let active: Vec<_> = records
+                    .iter()
+                    .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0))
+                    .collect();
+                assert_eq!(active.len(), current_id as usize);
+                for id in 1..=current_id {
+                    let r = active.iter().find(|r| r["id"] == id).unwrap();
+                    let span = if id == current_id {
+                        last_value
+                    } else if id == 1 {
+                        "Dusk Ridge"
+                    } else {
+                        "Copper Vale"
+                    };
+                    assert_eq!(atom(&r["owner"]), owner.as_bytes());
+                    assert_eq!(atom(&r["span"]), span.as_bytes());
+                    assert_eq!(r["action"], if id == 1 { 1 } else { 2 });
+                    assert_eq!(r["previous"], id - 1);
+                    assert_eq!(r["conflict"], false);
+                }
                 let directory: Vec<_> = relations["directory"]
                     .as_array()
                     .unwrap()
                     .iter()
                     .filter_map(|v| v.as_u64().filter(|id| *id != 0))
                     .collect();
-                assert_eq!(directory, vec![2]);
+                assert_eq!(directory, vec![current_id]);
             }
             let endpoint = current["value"]["end"].as_u64().unwrap();
             let byte_endpoint = current["value"]["byte_end"].as_u64().unwrap();
@@ -3858,7 +3892,7 @@ fn native_current_source_actual_checkpoint_and_allocation() {
                 let elapsed = start.elapsed().as_nanos();
                 MEASURING.with(|v| v.set(false));
                 if let Some(d) = field.filter(|d| d.field != 0) {
-                    assert_eq!(d.anchor.relation_id, 2);
+                    assert_eq!(d.anchor.relation_id, current_id);
                     assert_eq!(d.anchor.source_end, endpoint);
                     assert_eq!(d.anchor.source_byte_end, byte_endpoint);
                     owner_read |= d.field == 1;

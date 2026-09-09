@@ -274,6 +274,19 @@ fn frozen_equal(current: &SourceRouting, previous: &SourceRouting) -> bool {
     restored == *previous
 }
 impl CurrentSource {
+    /// Restore all inner witnesses unchanged, including any writer-role block.
+    /// This must precede their validation because they bind the original router.
+    fn parent(&self, model: &Model) -> Result<Model> {
+        let mut parent = model.clone();
+        parent.current_source = None;
+        parent.source_routing = Some(self.previous.clone());
+        parent.refresh_identity()?;
+        if parent.artifact_cid() != self.parent_artifact {
+            return Err(Error("current source frozen parent differs".into()));
+        }
+        parent.validate()?;
+        Ok(parent)
+    }
     pub(super) fn validate(&self, model: &Model) -> Result<()> {
         validate_config(&self.config)?;
         if self.training.is_empty()
@@ -292,14 +305,7 @@ impl CurrentSource {
             return Err(Error("invalid current source receipts".into()));
         }
         // Restore the entire retained model before checking the new parameters.
-        let mut parent = model.clone();
-        parent.current_source = None;
-        parent.source_routing = Some(self.previous.clone());
-        parent.refresh_identity()?;
-        if parent.artifact_cid() != self.parent_artifact {
-            return Err(Error("current source frozen parent differs".into()));
-        }
-        parent.validate()?;
+        self.parent(model)?;
         let current = model
             .source_routing
             .as_ref()
@@ -345,15 +351,7 @@ impl Model {
         let Some(w) = &self.current_source else {
             return Ok(self.clone());
         };
-        let mut parent = self.clone();
-        parent.current_source = None;
-        parent.source_routing = Some(w.previous.clone());
-        parent.refresh_identity()?;
-        if parent.artifact_cid() != w.parent_artifact {
-            return Err(Error("current source parent differs".into()));
-        }
-        parent.validate()?;
-        Ok(parent)
+        w.parent(self)
     }
     /// Exact parent source/action preservation or an existing learned current revision read.
     pub fn fit_current_source(
@@ -746,6 +744,35 @@ mod tests {
         let mut occupied = old.clone();
         occupied.codes[0].feature.kind = 30;
         assert!(!frozen_equal(&occupied, &occupied));
+    }
+    #[test]
+    fn current_source_witness_preserves_parent_router_and_wire_shape() {
+        let parent = router();
+        let witness = CurrentSource {
+            parent_artifact: "blake3:retained-writer-role-parent".into(),
+            previous: parent.clone(),
+            config: SourceRoutingConfig::default(),
+            training: vec![DocumentReceipt {
+                id: "labelled-document".into(),
+                bytes: 123,
+                text_cid: "blake3:labelled-document".into(),
+            }],
+        };
+        let bytes = serde_json::to_vec(&witness).unwrap();
+        let decoded: CurrentSource = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(decoded, witness);
+        assert_eq!(serde_json::to_vec(&decoded).unwrap(), bytes);
+        assert_eq!(decoded.previous, parent);
+        let mut value = serde_json::to_value(&witness).unwrap();
+        let fields = value.as_object().unwrap();
+        assert_eq!(fields.len(), 4);
+        for name in ["parent_artifact", "previous", "config", "training"] {
+            assert!(fields.contains_key(name));
+        }
+        // Inner writer state belongs to Model and its exact parent commitment,
+        // never to a second replacement copy hidden inside this witness.
+        value["writer_role"] = serde_json::json!({"rows": []});
+        assert!(serde_json::from_value::<CurrentSource>(value).is_err());
     }
     #[test]
     fn current_source_targets_and_configuration_are_explicit_and_bounded() {

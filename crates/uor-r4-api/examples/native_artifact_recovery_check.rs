@@ -129,6 +129,7 @@ fn writer_boundary(present: bool, nested: &str) -> &str {
 
 fn writer_role_checks(
     api_model: &NativeModel,
+    mechanical_model: &Model,
     document: &Value,
     checks: &mut Vec<Value>,
 ) -> CheckResult<Option<Model>> {
@@ -137,7 +138,7 @@ fn writer_role_checks(
         return Ok(None);
     };
     let model = api_model.inner_model();
-    let parent = model.without_writer_role()?;
+    let parent = mechanical_model.without_writer_role()?;
     let parent_bytes = parent.to_bytes()?;
     let parent_document: Value = serde_json::from_slice(&parent_bytes)?;
     let expected_parent = "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778";
@@ -253,6 +254,10 @@ fn writer_role_checks(
                 "writer_role_independent_next_sum",
                 checks,
             )?;
+            if model.artifact_cid() != mechanical_model.artifact_cid() {
+                checks.push(json!({"name":"nested_writer_role_removal_controls","status":"NOT_RUN","reason":"Removing only the inner writer leaves the outer reader active; bare-parent equivalence is not expected. Current-source controls check the integrated boundary."}));
+                continue;
+            }
             let expected = direct_turn(&parent, &mut parent.session(Control::Full)?, &prompt)?;
             for (name, control) in [
                 ("disabled", Control::WriterRoleDisabled),
@@ -352,7 +357,11 @@ fn current_source_checks(
     let parent = model.without_current_source()?;
     let parent_bytes = parent.to_bytes()?;
     let parent_document: Value = serde_json::from_slice(&parent_bytes)?;
-    let expected_parent = "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778";
+    let expected_parent = if document["writer_role"].is_object() {
+        "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa"
+    } else {
+        "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778"
+    };
     let frozen = document
         .as_object()
         .ok_or("candidate object absent")?
@@ -568,6 +577,16 @@ fn current_source_checks(
             json!(0),
         ),
         (
+            "current_source_changed_previous_router_rejected",
+            "/current_source/previous/biases/0".to_owned(),
+            {
+                let old = document["current_source"]["previous"]["biases"][0]
+                    .as_i64()
+                    .ok_or("previous source bias absent")?;
+                json!(if old == 32 { old - 1 } else { old + 1 })
+            },
+        ),
+        (
             "current_source_changed_old_bias_rejected",
             "/source_routing/biases/0".to_owned(),
             {
@@ -591,6 +610,49 @@ fn current_source_checks(
             rejected,
             json!({"field":pointer,"old":old,"new":new,"error":error}),
         )?;
+    }
+    if document["writer_role"].is_object() {
+        let rows = document["writer_role"]["rows"]
+            .as_array()
+            .ok_or("nested writer-role rows absent")?;
+        let (index, weight) = rows
+            .iter()
+            .enumerate()
+            .find_map(|(i, row)| {
+                row["weight"]
+                    .as_i64()
+                    .filter(|w| *w > -1_000_000 && *w <= 0)
+                    .map(|w| (i, w))
+            })
+            .ok_or("nested writer-role row cannot be decremented within its valid domain")?;
+        for (name, pointer, new) in [
+            (
+                "current_source_changed_inner_valid_writer_weight_rejected",
+                format!("/writer_role/rows/{index}/weight"),
+                json!(weight - 1),
+            ),
+            (
+                "current_source_changed_inner_writer_parent_rejected",
+                "/writer_role/parent_artifact".to_owned(),
+                json!(format!("blake3:{}", "0".repeat(64))),
+            ),
+        ] {
+            let mut changed = document.clone();
+            let field = changed
+                .pointer_mut(&pointer)
+                .ok_or("nested writer mutation absent")?;
+            let old = field.clone();
+            *field = new.clone();
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            let expected_error = "current source frozen parent differs";
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(expected_error)),
+                json!({"field":pointer,"old":old,"new":new,"error":error,"expected_error":expected_error,
+                    "scope":"Full integrated candidate mutation; the outer reader commitment rejects changed inner writer state before inner validation."}),
+            )?;
+        }
     }
     record(
         checks,
@@ -1273,14 +1335,29 @@ fn run(
     )?;
 
     let candidate_document: Value = serde_json::from_slice(&bytes)?;
-    let role_parent = writer_role_checks(&api_model, &candidate_document, checks)?;
+    let current_parent = if writer_role_only {
+        None
+    } else {
+        current_source_checks(&api_model, &candidate_document, checks)?
+    };
+    let role_document: Option<Value> = if let Some(parent) = &current_parent {
+        Some(serde_json::from_slice(&parent.to_bytes()?)?)
+    } else {
+        None
+    };
+    let role_parent = writer_role_checks(
+        &api_model,
+        current_parent.as_ref().unwrap_or(&model),
+        role_document.as_ref().unwrap_or(&candidate_document),
+        checks,
+    )?;
+    drop(role_document);
     if writer_role_only {
         if role_parent.is_none() {
             return Err("writer-role scope requires a writer_role artifact".into());
         }
         return Ok(());
     }
-    let current_parent = current_source_checks(&api_model, &candidate_document, checks)?;
     if current_source_only {
         if current_parent.is_none() {
             return Err("current-source scope requires a current_source artifact".into());
@@ -2952,7 +3029,7 @@ fn main() -> CheckResult<()> {
         "schema":"uor-r4.native-artifact-recovery-check/1",
         "status":if result.is_ok() {"PASS"} else {"FAIL"},
         "scope":"Artifact integrity and actual narrow interface behavior only; no general capability, alpha, energy, or performance qualification.",
-        "selected_checks":if current_source_only {"base interface and current-source refinement; deeper historical checks NOT_RUN"} else if writer_role_only {"base interface and writer-role refinement; deeper historical checks NOT_RUN"} else {"complete recovery runner"},
+        "selected_checks":if current_source_only {"base interface, current-source refinement and applicable nested writer-role checks; deeper historical checks NOT_RUN"} else if writer_role_only {"base interface and writer-role refinement; deeper historical checks NOT_RUN"} else {"complete recovery runner"},
         "identity":identity,"checks":checks,
         "error":result.as_ref().err().map(|e|e.to_string()),
     });
