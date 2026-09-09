@@ -41,6 +41,7 @@ mod shared_operator_refinement;
 pub use current_source::{CurrentSourceExample, CurrentSourceTarget};
 mod writer_choice;
 mod writer_lexical;
+mod writer_role;
 pub use writer_choice::{WriterChoiceExample, WriterChoiceOverride, WriterChoiceTarget};
 pub use writer_lexical::WriterLexicalExample;
 mod source_role_refinement;
@@ -270,6 +271,8 @@ pub enum Control {
     CurrentRelationReadAll,
     CurrentSourceDisabled,
     CurrentSourceVersionDisabled,
+    WriterRoleDisabled,
+    WriterRoleContextDisabled,
     WriterChoiceDisabled,
     WriterChoiceBoundaryDisabled,
     FieldCompositionDisabled,
@@ -374,6 +377,8 @@ impl Feature {
             | Control::CurrentSourceDisabled
             | Control::CurrentSourceVersionDisabled
             | Control::CurrentRelationReadAll
+            | Control::WriterRoleDisabled
+            | Control::WriterRoleContextDisabled
             | Control::WriterChoiceDisabled
             | Control::WriterChoiceBoundaryDisabled
             | Control::FieldCompositionDisabled
@@ -493,6 +498,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    writer_role: Option<writer_role::WriterRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     current_source: Option<current_source::CurrentSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     writer_choice: Option<writer_choice::WriterChoice>,
@@ -585,6 +592,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    writer_role: Option<writer_role::WriterRole>,
+    #[serde(default)]
     current_source: Option<current_source::CurrentSource>,
     #[serde(default)]
     writer_choice: Option<writer_choice::WriterChoice>,
@@ -676,6 +685,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            writer_role: wire.writer_role,
             current_source: wire.current_source,
             writer_choice: wire.writer_choice,
             field_composition: wire.field_composition,

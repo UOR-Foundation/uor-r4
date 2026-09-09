@@ -127,6 +127,218 @@ fn writer_boundary(present: bool, nested: &str) -> &str {
     }
 }
 
+fn writer_role_checks(
+    api_model: &NativeModel,
+    document: &Value,
+    checks: &mut Vec<Value>,
+) -> CheckResult<Option<Model>> {
+    let Some(witness) = document.get("writer_role").filter(|v| v.is_object()) else {
+        checks.push(json!({"name":"writer_role_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no writer_role witness"}));
+        return Ok(None);
+    };
+    let model = api_model.inner_model();
+    let parent = model.without_writer_role()?;
+    let parent_bytes = parent.to_bytes()?;
+    let parent_document: Value = serde_json::from_slice(&parent_bytes)?;
+    let expected_parent = "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778";
+    let frozen = document
+        .as_object()
+        .ok_or("writer-role candidate object absent")?
+        .iter()
+        .filter(|(k, _)| {
+            !["writer_role", "artifact_cid", "uor_model_address"].contains(&k.as_str())
+        })
+        .all(|(k, v)| parent_document.get(k) == Some(v));
+    record(
+        checks,
+        "writer_role_exact_frozen_parent",
+        witness["parent_artifact"] == expected_parent
+            && parent.artifact_cid() == expected_parent
+            && frozen,
+        json!({"candidate_artifact":model.artifact_cid(),"parent_artifact":parent.artifact_cid(),"parent_bytes":parent_bytes.len(),
+            "parent_bytes_blake3":blake3::hash(&parent_bytes).to_hex().to_string(),"scope":"Only optional writer_role and derived identities differ; full parent validates recursively."}),
+    )?;
+    drop(parent_bytes);
+    drop(parent_document);
+    let facts =
+        "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi now in Amber Field.";
+    for (label, padding, instruction, target) in [
+        (
+            "owner",
+            String::new(),
+            "Name the owner first.",
+            " selvi is in Amber Field.\n",
+        ),
+        ("plain", String::new(), "", " Amber Field.\n"),
+        (
+            "evicted",
+            "oak ash elm ".repeat(12),
+            "Name the owner first.",
+            " selvi is in Amber Field.\n",
+        ),
+    ] {
+        let prompt = format!("{facts} {padding}Where is selvi? {instruction} Answer:");
+        let config = SessionConfig {
+            session_id: format!("writer-role-{label}"),
+            ..SessionConfig::default()
+        };
+        let mut direct = model.session(Control::Full)?;
+        let mut api = api_model.create_session(config.clone())?;
+        compare_turn(
+            &model,
+            &mut direct,
+            &mut api,
+            &prompt,
+            target,
+            &format!("writer_role_{label}_api_direct_parity"),
+            checks,
+        )?;
+        let checkpoint: Value = serde_json::from_slice(&direct.checkpoint()?)?;
+        let relations = &checkpoint["values"]["relations"];
+        let atom = |v: &Value| -> Option<String> {
+            let bytes = v["bytes"]
+                .as_array()?
+                .get(..v["len"].as_u64()? as usize)?
+                .iter()
+                .map(|b| b.as_u64().and_then(|n| u8::try_from(n).ok()))
+                .collect::<Option<Vec<_>>>()?;
+            String::from_utf8(bytes).ok()
+        };
+        let mut actual_records = Vec::new();
+        for r in relations["records"]
+            .as_array()
+            .ok_or("writer-role records absent")?
+        {
+            if r["id"].as_u64().is_some_and(|id| id != 0) {
+                actual_records.push(
+                    json!({"id":r["id"],"owner":atom(&r["owner"]),"span":atom(&r["span"]),
+                    "action":r["action"],"previous":r["previous"],"conflict":r["conflict"]}),
+                );
+            }
+        }
+        let directory: Vec<_> = relations["directory"]
+            .as_array()
+            .ok_or("writer-role directory absent")?
+            .iter()
+            .filter_map(|v| v.as_u64().filter(|id| *id != 0))
+            .collect();
+        record(
+            checks,
+            &format!("writer_role_{label}_exact_revision_chain"),
+            json!(actual_records)
+                == json!([
+                    {"id":1,"owner":"selvi","span":"Dusk Ridge","action":1,"previous":0,"conflict":false},
+                    {"id":2,"owner":"selvi","span":"Copper Vale","action":2,"previous":1,"conflict":false},
+                    {"id":3,"owner":"selvi","span":"Amber Field","action":2,"previous":2,"conflict":false},
+                ])
+                && directory == vec![3],
+            json!({"records":actual_records,"directory":directory}),
+        )?;
+        let exported = api.export_state()?;
+        let mut imported = api_model.create_session(config)?;
+        imported.import_state(&exported)?;
+        record(
+            checks,
+            &format!("writer_role_{label}_checkpoint_import"),
+            imported.identity_scope() == api.identity_scope(),
+            json!({"checkpoint_bytes":exported.len()}),
+        )?;
+        if label == "owner" {
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut imported,
+                SUM_14,
+                "18.\n",
+                "writer_role_independent_next_sum",
+                checks,
+            )?;
+            let expected = direct_turn(&parent, &mut parent.session(Control::Full)?, &prompt)?;
+            for (name, control) in [
+                ("disabled", Control::WriterRoleDisabled),
+                ("context_disabled", Control::WriterRoleContextDisabled),
+            ] {
+                let actual = direct_turn(&model, &mut model.session(control)?, &prompt)?;
+                record(
+                    checks,
+                    &format!("writer_role_{name}_restores_parent"),
+                    actual == expected,
+                    json!({"parent":expected,"actual":actual,"scope":"Parent reproduction, including its wrong output, is a causal control only."}),
+                )?;
+            }
+        }
+    }
+    let mut direct = model.session(Control::Full)?;
+    let mut api = api_model.create_session(SessionConfig::default())?;
+    compare_turn(
+        &model,
+        &mut direct,
+        &mut api,
+        "Record: now in Amber Field. Where is now? Name the owner first. Answer:",
+        " now is in Amber Field.\n",
+        "writer_role_literal_now_owner",
+        checks,
+    )?;
+    let mut chunked = api_model.create_session(SessionConfig::default())?;
+    chunked.ingest("Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi n")?;
+    let checkpoint = chunked.export_state()?;
+    chunked.import_state(&checkpoint)?;
+    chunked.ingest("ow in Amber Field. Where is selvi? Name the owner first. Answer:")?;
+    let actual = chunked.complete(CompletionRequest::new(""))?;
+    record(
+        checks,
+        "writer_role_chunked_prefill_import",
+        actual.text == " selvi is in Amber Field.\n" && actual.stopped_by == "eos",
+        json!({"checkpoint_bytes":checkpoint.len(),"actual":actual}),
+    )?;
+    let omitted_value = document
+        .pointer("/writer_role/rows/0/feature/a")
+        .and_then(Value::as_u64)
+        .ok_or("writer-role row absent")?;
+    for (name, pointer, new, expected_error) in [
+        (
+            "writer_role_wrong_parent_rejected",
+            "/writer_role/parent_artifact",
+            json!(format!("blake3:{}", "0".repeat(64))),
+            "writer role frozen parent differs",
+        ),
+        (
+            "writer_role_positive_weight_rejected",
+            "/writer_role/rows/0/weight",
+            json!(1),
+            "invalid writer role residual rows",
+        ),
+        (
+            "writer_role_value_prime_field_rejected",
+            "/writer_role/rows/0/feature/a",
+            json!(omitted_value | 1),
+            "invalid writer role residual rows",
+        ),
+    ] {
+        let mut changed = document.clone();
+        let field = changed
+            .pointer_mut(pointer)
+            .ok_or("writer-role mutation field absent")?;
+        let old = field.clone();
+        *field = new.clone();
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            name,
+            rejected && error.as_deref().is_some_and(|e| e.contains(expected_error)),
+            json!({"field":pointer,"old":old,"new":new,"error":error,"expected_error":expected_error}),
+        )?;
+    }
+    record(
+        checks,
+        "writer_role_nested_writer_choice_scope",
+        true,
+        json!({"candidate_artifact":model.artifact_cid(),"mechanical_artifact":parent.artifact_cid(),
+            "scope":"Historical writer-choice and deeper corruption checks strip writer_role first. Actual API/direct generation stays on the supplied candidate."}),
+    )?;
+    Ok(Some(parent))
+}
+
 fn current_source_checks(
     api_model: &NativeModel,
     document: &Value,
@@ -933,6 +1145,7 @@ fn run(
     checks: &mut Vec<Value>,
     identity: &mut Value,
     current_source_only: bool,
+    writer_role_only: bool,
 ) -> CheckResult<()> {
     let bytes = std::fs::read(path)?;
     let api_model = NativeModel::load_from_bytes(&bytes)?;
@@ -1060,6 +1273,13 @@ fn run(
     )?;
 
     let candidate_document: Value = serde_json::from_slice(&bytes)?;
+    let role_parent = writer_role_checks(&api_model, &candidate_document, checks)?;
+    if writer_role_only {
+        if role_parent.is_none() {
+            return Err("writer-role scope requires a writer_role artifact".into());
+        }
+        return Ok(());
+    }
     let current_parent = current_source_checks(&api_model, &candidate_document, checks)?;
     if current_source_only {
         if current_parent.is_none() {
@@ -1067,17 +1287,22 @@ fn run(
         }
         return Ok(());
     }
-    let writer_document: Value = if let Some(parent) = current_parent.as_ref() {
-        let document = serde_json::from_slice(&parent.to_bytes()?)?;
-        drop(candidate_document);
-        document
-    } else {
-        candidate_document
-    };
-    let mechanical_model = current_parent.as_ref().unwrap_or(&model);
+    let writer_document: Value =
+        if let Some(parent) = role_parent.as_ref().or(current_parent.as_ref()) {
+            let document = serde_json::from_slice(&parent.to_bytes()?)?;
+            drop(candidate_document);
+            document
+        } else {
+            candidate_document
+        };
+    let mechanical_model = role_parent
+        .as_ref()
+        .or(current_parent.as_ref())
+        .unwrap_or(&model);
     let field_parent =
         writer_choice_checks(&api_model, mechanical_model, &writer_document, checks)?;
     drop(current_parent);
+    drop(role_parent);
     let field_document: Value = if let Some(parent) = field_parent.as_ref() {
         let document = serde_json::from_slice(&parent.to_bytes()?)?;
         drop(writer_document);
@@ -2703,27 +2928,31 @@ fn run(
 
 fn main() -> CheckResult<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if !(args.len() == 3 || (args.len() == 4 && args[3] == "current-source")) {
+    if !(args.len() == 3
+        || (args.len() == 4 && ["current-source", "writer-role"].contains(&args[3].as_str())))
+    {
         return Err(
-            "usage: native_artifact_recovery_check MODEL EXPECTED_CID OUTPUT_JSON [current-source]"
+            "usage: native_artifact_recovery_check MODEL EXPECTED_CID OUTPUT_JSON [current-source|writer-role]"
                 .into(),
         );
     }
     let mut checks = Vec::new();
     let mut identity = Value::Null;
-    let current_source_only = args.len() == 4;
+    let current_source_only = args.get(3).is_some_and(|s| s == "current-source");
+    let writer_role_only = args.get(3).is_some_and(|s| s == "writer-role");
     let result = run(
         Path::new(&args[0]),
         &args[1],
         &mut checks,
         &mut identity,
         current_source_only,
+        writer_role_only,
     );
     let report = json!({
         "schema":"uor-r4.native-artifact-recovery-check/1",
         "status":if result.is_ok() {"PASS"} else {"FAIL"},
         "scope":"Artifact integrity and actual narrow interface behavior only; no general capability, alpha, energy, or performance qualification.",
-        "selected_checks":if current_source_only {"base interface and current-source refinement; deeper historical checks NOT_RUN"} else {"complete recovery runner"},
+        "selected_checks":if current_source_only {"base interface and current-source refinement; deeper historical checks NOT_RUN"} else if writer_role_only {"base interface and writer-role refinement; deeper historical checks NOT_RUN"} else {"complete recovery runner"},
         "identity":identity,"checks":checks,
         "error":result.as_ref().err().map(|e|e.to_string()),
     });

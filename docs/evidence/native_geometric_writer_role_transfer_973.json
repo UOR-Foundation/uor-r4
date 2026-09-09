@@ -1,0 +1,777 @@
+{
+  "schema": "uor-r4.writer-role-transfer-result/1",
+  "at": "2026-09-09T16:04:43.122Z",
+  "decision": "RETAIN_BOUNDED_POSITIVE",
+  "artifact": {
+    "cid": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-role/model.json",
+    "bytes": 14127792,
+    "sha256": "7bb912761e09a34edf40731038f700ad90c1aad53188da0967910382fc280d46"
+  },
+  "fit_artifact": {
+    "cid": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/fit/model.json",
+    "bytes": 14127792,
+    "sha256": "7bb912761e09a34edf40731038f700ad90c1aad53188da0967910382fc280d46"
+  },
+  "parent": {
+    "cid": "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/owner-revision/model.json",
+    "bytes": 13966704,
+    "sha256": "416fda343c34c68c3aa73a6ca82ae672c93f7a5383f9872b9ead2534fd22cab5"
+  },
+  "source_base": "7459c008aca3ccbc1fba2b2128c512e22cc2a257",
+  "fit": {
+    "artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "cache_preservation": "all new coefficients nonpositive; every parent certified NoWrite remains NoWrite",
+    "dictionary_reused": true,
+    "documents": 1093,
+    "elapsed_ms": 29170,
+    "epochs": 32,
+    "feature_kind": 17,
+    "feature_law": "existing full lexical key plus10-bit earlier-endpoint exterior descriptor and4-bit directed endpoint separation; kind17 with only candidate value-prime omitted; no dictionary change",
+    "fit": {
+      "completed_epochs": 1,
+      "elapsed_ms": 969,
+      "failed_frames": [],
+      "final_correct": 4207,
+      "frames": 4207,
+      "impossible_constraints": [],
+      "initial_correct": 4201,
+      "learning_rule": "minimum negative winner-key correction under exact first-maximum tie order; parent scores frozen",
+      "stopped_at_time_limit": false,
+      "updates": 3
+    },
+    "frames": 4207,
+    "labelled_boundaries": 36,
+    "max_seconds": 180,
+    "parent_artifact": "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778",
+    "parent_components_frozen": true,
+    "preparation_ms": 966,
+    "presented_boundaries": 17336,
+    "rows": 3,
+    "schema": "uor-r4.writer-role-fit/1",
+    "scope": "Offline exact endpoint/action overrides; all other completed-word windows preserve parent winner; actual span commits and free generation require separate evaluation"
+  },
+  "construction": {
+    "artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "new_targets": 36,
+    "new_exact": 36,
+    "new_records_correct": 36,
+    "parent_exact": 6,
+    "inherited": 1057,
+    "preserved": 1057,
+    "old_labelled": 136,
+    "control_comparisons": 72,
+    "controls_restore_parent": true,
+    "new_directory_values": [
+      "[3]"
+    ]
+  },
+  "stress": {
+    "artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "exact": 16,
+    "labelled": 16,
+    "records_correct": 16,
+    "record_targets": 16,
+    "inherited": 3,
+    "preserved": 3,
+    "parent_exact": 10,
+    "controls": 32,
+    "controls_restore_parent": true
+  },
+  "source_panel": {
+    "artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "labelled": 40,
+    "exact": 36,
+    "parent_exact": 33,
+    "inherited": 18,
+    "preserved": 18,
+    "regressions": [],
+    "negatives": [
+      {
+        "id": "source-probe/open/0/revision-reverse/plain/false",
+        "prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. Where is selvi? Answer:",
+        "expected": " Copper Vale.\n",
+        "actual": " Ridge holds selvi.\n",
+        "parent": " Ridge holds selvi.\n",
+        "parent_equal": true,
+        "first_decision": {
+          "field": null,
+          "word_copy": {
+            "action": "prepare",
+            "at_seen": 70,
+            "cursor": 0,
+            "score": -853,
+            "source_byte_end": 17,
+            "source_end": 18,
+            "span_words": 2,
+            "step": 0,
+            "token": 34,
+            "word_index": 11
+          }
+        }
+      },
+      {
+        "id": "source-probe/open/0/revision-reverse/owner/false",
+        "prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. Where is selvi? Name the owner first. Answer:",
+        "expected": " selvi is in Copper Vale.\n",
+        "actual": " Ridge holds selvi.\n",
+        "parent": " Ridge holds selvi.\n",
+        "parent_equal": true,
+        "first_decision": {
+          "field": null,
+          "word_copy": {
+            "action": "prepare",
+            "at_seen": 89,
+            "cursor": 0,
+            "score": -975,
+            "source_byte_end": 17,
+            "source_end": 18,
+            "span_words": 2,
+            "step": 0,
+            "token": 34,
+            "word_index": 15
+          }
+        }
+      },
+      {
+        "id": "source-probe/open/1/revision-reverse/plain/false",
+        "prompt": "Record: Silver Cove holds tilva. tilva now in Birch Grove. Where is tilva? Answer:",
+        "expected": " Birch Grove.\n",
+        "actual": " Cove holds tilva.\n",
+        "parent": " Cove holds tilva.\n",
+        "parent_equal": true,
+        "first_decision": {
+          "field": null,
+          "word_copy": {
+            "action": "prepare",
+            "at_seen": 71,
+            "cursor": 0,
+            "score": -740,
+            "source_byte_end": 18,
+            "source_end": 19,
+            "span_words": 2,
+            "step": 0,
+            "token": 34,
+            "word_index": 11
+          }
+        }
+      },
+      {
+        "id": "source-probe/open/1/revision-reverse/owner/false",
+        "prompt": "Record: Silver Cove holds tilva. tilva now in Birch Grove. Where is tilva? Name the owner first. Answer:",
+        "expected": " tilva is in Birch Grove.\n",
+        "actual": " Cove holds tilva.\n",
+        "parent": " Cove holds tilva.\n",
+        "parent_equal": true,
+        "first_decision": {
+          "field": null,
+          "word_copy": {
+            "action": "prepare",
+            "at_seen": 90,
+            "cursor": 0,
+            "score": -951,
+            "source_byte_end": 18,
+            "source_end": 19,
+            "span_words": 2,
+            "step": 0,
+            "token": 34,
+            "word_index": 15
+          }
+        }
+      }
+    ]
+  },
+  "fresh": {
+    "artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "total": 24,
+    "labelled": 24,
+    "exact": 24,
+    "record_targets": 24,
+    "records_correct": 24,
+    "parent_exact": 15,
+    "controls": 48,
+    "controls_restore_parent": true,
+    "known_value": {
+      "total": 12,
+      "exact": 12,
+      "records": 12,
+      "parent_exact": 3
+    },
+    "unknown_value": {
+      "total": 12,
+      "exact": 12,
+      "records": 12,
+      "parent_exact": 12
+    }
+  },
+  "fresh_draw": {
+    "artifact": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "cases": 24,
+    "draw_unix_ns": 1788969814823490000,
+    "drawn": [
+      {
+        "known_value": "Ash Court",
+        "owner": "vsozg",
+        "unknown_value": "hihem"
+      },
+      {
+        "known_value": "Cedar Gate",
+        "owner": "awnbc",
+        "unknown_value": "dttel"
+      },
+      {
+        "known_value": "Cloud Cove",
+        "owner": "eygnq",
+        "unknown_value": "dmzvc"
+      }
+    ],
+    "known_value_primes": [
+      {
+        "prime": 5,
+        "tail": "Court",
+        "word": "Ash"
+      },
+      {
+        "prime": 23,
+        "tail": "Gate",
+        "word": "Cedar"
+      },
+      {
+        "prime": 29,
+        "tail": "Cove",
+        "word": "Cloud"
+      }
+    ],
+    "scope": "Post-selection new whole prompts/owner spellings with both inherited nonzero value primes and unseen values. Familiar forms; no general language claim; do not refit."
+  },
+  "controls_scope": "WriterRoleDisabled and WriterRoleContextDisabled perform the same removal; comparisons are not independent context-channel ablations.",
+  "lineage": {
+    "candidate": "blake3:231d6950b93db3be52d4ce1df7f20c5dabd0329c2183d228e39c8f271f603dfa",
+    "parent": "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778",
+    "parent_bytes_blake3": "dcfff92075c67e2526d40a1f30c45d60e931c06787fe8f9255366450fc9a63d7"
+  },
+  "preservation": {
+    "semantic_reports": 14,
+    "changed_rows": 0,
+    "histories": {
+      "total": 12,
+      "exact": 12,
+      "parent": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-owner-revision/history-final/full.json",
+      "candidate": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/history/full.json",
+      "outputs_records_versions_sources_equal": true
+    },
+    "word_retained": {
+      "exact": 24,
+      "total": 24
+    },
+    "panels": [
+      {
+        "panel": "copy-add-evaluate-final",
+        "exact": 24,
+        "total": 24
+      },
+      {
+        "panel": "copy-add-stress-final",
+        "exact": 24,
+        "total": 24
+      },
+      {
+        "panel": "action-evaluate-final",
+        "exact": 24,
+        "total": 24
+      },
+      {
+        "panel": "action-stress-final",
+        "exact": 24,
+        "total": 24
+      }
+    ]
+  },
+  "api": {
+    "status": "PASS",
+    "selected_checks": "base interface and writer-role refinement; deeper historical checks NOT_RUN",
+    "checks": 29,
+    "passed": 29,
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/api.json",
+      "bytes": 20305,
+      "sha256": "c1481af8c77694987bb028a106008d870be4c80a671e00a4fe214ef58646c5f8"
+    }
+  },
+  "tests": [
+    {
+      "label": "test-writer_role_",
+      "passed": 6,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/test-writer_role_.log",
+        "bytes": 855,
+        "sha256": "5332a5f2ae9fee7fb1a3ff454b39b982212ad9727ea81cff1d6ff652e00a223b"
+      }
+    },
+    {
+      "label": "test-writer_choice_",
+      "passed": 9,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/test-writer_choice_.log",
+        "bytes": 1214,
+        "sha256": "1d5d991f4aba94a5a24c6e0b07856f58a5e45f89623e5b2d592474435abbb019"
+      }
+    },
+    {
+      "label": "kernel-source-guard",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/kernel-source-guard.log",
+        "bytes": 189,
+        "sha256": "65c8b67f0d969d26abbc0b72c246dbaf3bce047b527f0e57973901208a280ec8"
+      }
+    },
+    {
+      "label": "allocation-writer-role",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/allocation-writer-role.log",
+        "bytes": 962,
+        "sha256": "a125ad68163e5dcbf3e65bbb0df50d99faa5098da1f0f652d82861af8745069a"
+      }
+    }
+  ],
+  "generated_rust": [
+    {
+      "label": "rust-extract-evaluate",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-extract-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-evaluate",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-compile-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-evaluate",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-execute-evaluate.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-extract-stress",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-extract-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-stress",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-compile-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-stress",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-execute-stress.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-extract-retained",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-extract-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-compile-retained",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-compile-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "rust-execute-retained",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/rust-execute-retained.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "verify-parent-byte-hash",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/verify-parent-byte-hash.log",
+        "bytes": 108,
+        "sha256": "8eabb9ec0edac5bee43041d906605d7f3beeca32434507a09abc2d3ab0f3250f"
+      }
+    }
+  ],
+  "resources": {
+    "at": "2026-09-09T16:04:43.115Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/commands.jsonl",
+    "model_ms": 1053360,
+    "engineering_ms": 350487,
+    "ledger": {
+      "cumulative_ms": 28853580,
+      "limit_ms": 31350000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 2299800,
+    "storage_high_water": {
+      "target": 27447296,
+      "worktree": 86016,
+      "evidence": 195452928,
+      "at": "2026-09-09T16:04:25.064Z",
+      "git": 0
+    },
+    "retained_copy_bytes": 14135296,
+    "owner_checkout_copy_bytes": 1048576,
+    "cycle_growth_bytes": 238170112,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 37521444864,
+    "storage_limit_bytes": 39158181888,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 1502519296,
+    "peak_model_sampled_rss_bytes": 1870397440,
+    "peak_engineering_sampled_rss_bytes": 2544353280,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "resources_snapshot": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/resources-at-evidence.json",
+    "bytes": 1090,
+    "sha256": "490d5f5ee77b0f6267637ad99351fb3e1750f65f0ef9468c9c05d710ff8e52e0"
+  },
+  "sources": [
+    {
+      "repository_path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "bytes": 127867,
+      "sha256": "50ac993446b89356152ef4a302deab679b2d037b8f5e4ee321dac36f8b96603b"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 33673,
+      "sha256": "57678e535e6efc41f93ce7379a3955737c1e0861f763db03da1a605b8747b943"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/relation.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/relation.rs",
+      "bytes": 33069,
+      "sha256": "538c2c10a64508a2f10d9c3dad166932b6edaa71a99f56b7f88ac8e2159044f7"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 62426,
+      "sha256": "ed655b5e720cd0c739bc58f3d06cd7c2c8eaa03700ce43d3ae331c25b5649962"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/writer_choice.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/writer_choice.rs",
+      "bytes": 34445,
+      "sha256": "9b7ff8ef6f4561170cffb934e537092c74c94eaf4ba7507a0a8af32d4528edfc"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/writer_refinement.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/writer_refinement.rs",
+      "bytes": 37073,
+      "sha256": "558548f00b6f21f022bb71d278aebb2617d12dfe53b515d76f65a704adcac8cd"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 181418,
+      "sha256": "441400074f09e36be948a28a061a299fe5024e59c91092d47cba7c56a3162217"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/writer_role.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/writer_role.rs",
+      "bytes": 22040,
+      "sha256": "2c48e6d7272ff13d97f20c1b29cd59c473a1501d09d7fe40884c93e812463fb5"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_writer_role_transfer.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_writer_role_transfer.rs",
+      "bytes": 23987,
+      "sha256": "4c3858e299a9d8d76b0d3cec7cd0d977a4635f0db2f70896722f98db9f76a25a"
+    }
+  ],
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/projection.json",
+      "bytes": 2991,
+      "sha256": "3839379526e9ccb097ea30f3dd9673a403dd21e688076110c02a3b76119b3b6d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/selection.json",
+      "bytes": 5469,
+      "sha256": "810fdcd50c92c84794ec69be8b23ae15ed0ce164d97049968fa383613001cca8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/fit/fit.json",
+      "bytes": 161966,
+      "sha256": "df9fa8da9662c3ca5a83f18a6b9df996e80fab6cffb0f4d27de1588718c4d641"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/diagnostic/result.json",
+      "bytes": 2421969,
+      "sha256": "bf48f0e7118065f2328daf1506a9ed8a32187f074f5160dcc2c08703e739cc3b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/diagnostic-summary.json",
+      "bytes": 2192,
+      "sha256": "daaf5de422830aeb49d9f17a679bfd08adb95e1aeb42d6d159ae3c7b0077107c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/diagnostic-candidate/result.json",
+      "bytes": 3148464,
+      "sha256": "008c3b7cb2c43cbf10897d9ae44bc90cfd3b98e8827ee8640f7b61a1621eeb71"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/diagnostic-comparison.json",
+      "bytes": 24883,
+      "sha256": "c8f2672dbae10441cbc789c401305e4a2f2d6a5b0d7d5b7fcf87e56b0f9d64c2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/construction/cases.json",
+      "bytes": 391788,
+      "sha256": "60a675052e3e28d6e439b9db2bb9414bc13db3ef1b154857d321f7652cd16dee"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/construction/training.json",
+      "bytes": 191667,
+      "sha256": "93455e70f0c45795e7e29474e6845a4412575488c7b63de83024aa946bfe092c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/construction-result/result.json",
+      "bytes": 35388369,
+      "sha256": "08116500f9d53968629a77d8a01637077ad94967b3588156b120be01baeb5b4b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/construction-result/lineage.json",
+      "bytes": 259,
+      "sha256": "61e87335846ca111c01c82aa64e1cd97ad3a3b37d573ba942aacda83666d1173"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/construction-summary.json",
+      "bytes": 353,
+      "sha256": "ebe0755273a418af81c24f5d2ccf8938915fd3cdfaa69ed3606a663453d7d6dd"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/stress-data/cases.json",
+      "bytes": 7414,
+      "sha256": "e6c99471d42ec9c309f591e1159a20a68840944369a114a44e9c52605422e354"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/stress-result/result.json",
+      "bytes": 1433877,
+      "sha256": "974965d37a41fc0fe04eb996671197cc122fd4087fe2cd4273e9ebc302e8b058"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/stress-summary.json",
+      "bytes": 284,
+      "sha256": "b34a0579e54e0a14dc99aa225f9ca934a60152b17e207e2b206febdf36976212"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/source-probe-data/cases.json",
+      "bytes": 22073,
+      "sha256": "39e0c4e055faa9c2d9b4a8e3df43b421240c50cdc9e245a20dd624020fa12bdd"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/source-probe-result/result.json",
+      "bytes": 3995743,
+      "sha256": "8a6a08aa1338a55143e342b06de251958fbdbb984ea9e9cd351b1df5ddc516d7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/source-probe-summary.json",
+      "bytes": 3004,
+      "sha256": "392dce44259b08130fd530d88931cc94879169af36f7e7da6b91dac8d3d836ac"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/fresh-data/cases.json",
+      "bytes": 13969,
+      "sha256": "0fe82fca059097ca15239729785f8dd264729691b84e7e5967f4b48c329257c9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/fresh-data/receipt.json",
+      "bytes": 671,
+      "sha256": "6f9a3be3290cea963b85bf5723e0260c96fc7485b367ac1c6d6bd065094a00c4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/fresh-result/result.json",
+      "bytes": 2427281,
+      "sha256": "dcfbd2c9e52b84774a1ecb21388c3b779a678b686111ef5fad4ca0098e834739"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/fresh-result/lineage.json",
+      "bytes": 259,
+      "sha256": "61e87335846ca111c01c82aa64e1cd97ad3a3b37d573ba942aacda83666d1173"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/fresh-summary.json",
+      "bytes": 464,
+      "sha256": "ce24166e1bf473d89309a6c750842dbfc20912529918837d4e763d01c0d54c87"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/preserved-comparison-v2.json",
+      "bytes": 10609,
+      "sha256": "cd3baf3537ae310b2e89ba612acf3ffe1823b7ed324787a0dab4e98598c8956d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/history-comparison.json",
+      "bytes": 301,
+      "sha256": "e29c8dfae03f4cb2a6536563bc65826bf382322ab4f3fce55e2b530be6b91a9e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/history/full.json",
+      "bytes": 1264210,
+      "sha256": "668babfc0a3ad8a5748c3bba52991d34355d89246735ae05fac4f49c7471e52b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/word-fresh-retained/full.json",
+      "bytes": 1226672,
+      "sha256": "58dfdcfcdb6c3f13beb29b697fd147bc714a613ba0984ded8e12d65749f31111"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/copy-add-evaluate-final/result.json",
+      "bytes": 9284307,
+      "sha256": "008f10e7ac59ea5f62f0de6fed0085feae1962a2f196136ee8cd99344d0c83e6"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/copy-add-stress-final/result.json",
+      "bytes": 9331288,
+      "sha256": "0e8bc08282c1710b3706ab08feaf89fd0ecba189525ba67142a68db74b74c2cf"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/action-evaluate-final/result.json",
+      "bytes": 654185,
+      "sha256": "f42c252457e3bcabed50c764b3b9dc46e6debc19ba4461d79a13a3d610ae1a50"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/action-stress-final/result.json",
+      "bytes": 654448,
+      "sha256": "3965e913c299753cb00c8c79061a50bdedb615f12fd919f9e8510b05654fe695"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/api.json",
+      "bytes": 20305,
+      "sha256": "c1481af8c77694987bb028a106008d870be4c80a671e00a4fe214ef58646c5f8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/review-notes.json",
+      "bytes": 1251,
+      "sha256": "a7a6b3670f555ca52192676c5fca7f4956ec7218e60b08ddfe5f9d6bf6b5e8fb"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/retained-copy.json",
+      "bytes": 591,
+      "sha256": "94eba1c42968e0bf3c53e57f330135ffb378f3cc532f668ffe48df0d860e173b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/owner-checkout-copy.json",
+      "bytes": 168,
+      "sha256": "7a62df7dd4ee1378491d3e87eb1b3ea2602c91b93b067ed295dc564e9fa9231c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/commands-at-evidence.jsonl",
+      "bytes": 33624,
+      "sha256": "ab17549a13f02fbffe477aa10b72fc4a2f6e3ce9e771ef652f7b15a0bcdbaa4d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/run.mjs",
+      "bytes": 3274,
+      "sha256": "3d6d0d24b58d7c5b28b6a985bafd58338885521492c7e9e61a907751d68c2cb3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/validate-selected.mjs",
+      "bytes": 4103,
+      "sha256": "f759f986c8de83f32d7a7f3f9524eaafeb3bb43b705a89481cab6c263aa4817c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/select-and-fresh.mjs",
+      "bytes": 3909,
+      "sha256": "81d470dbc0f1bf2c35fa0a3e5ddbdbd05b7ecb9bea1e635dacb79c7e440b27e8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/compare-preserved.mjs",
+      "bytes": 3259,
+      "sha256": "1b3bd08d5921c2af68d3dea4613acbf6f253f4528686c81c604b690e7a60d847"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/generated-rust-checks.mjs",
+      "bytes": 2240,
+      "sha256": "cb5462752c7d405107504c0bb576c9b00b2a395ba56ac2641eaf62884c9ac4f1"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/commands-at-delivery-checks.jsonl",
+      "bytes": 34496,
+      "sha256": "ff531fcf36bffd63f07ed1fd53f18a2efbb3349fb1a95fe6d76ff34cc7dd5716"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/final-evidence-review.json",
+      "bytes": 890,
+      "sha256": "b6e04fe1e62ecb1c8ad438234464360f3de2f1c2a72877f23e7d3ec16847acce"
+    }
+  ],
+  "not_run": [
+    "complete historical API recovery runner",
+    "blanket full test suite",
+    "new-artifact browser/WASM/HTTP",
+    "general prose/reasoning/program-synthesis qualification",
+    "complete-path energy measurement",
+    "combined current_source and writer_role artifact"
+  ],
+  "limitations": [
+    "Fresh transfer uses familiar forms, known value primes and random five-letter owner/value spellings.",
+    "Four recent reverse-first-fact source-selection negatives remain.",
+    "No new H4 transforms were trained; this correction shares scalar role weights over the retained geometric writer."
+  ],
+  "next": "Integrate query-conditioned current-versus-historical source selection with the now-correct writer state; preserve exact requested occurrence, multi-revision chains, conflicts and abstention.",
+  "delivery_checks": [
+    {
+      "label": "delivery-format",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/delivery-format.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "label": "delivery-claim-wording",
+      "exit_code": 0,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-role-transfer/delivery-claim-wording.log",
+        "bytes": 83,
+        "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+      }
+    }
+  ]
+}
