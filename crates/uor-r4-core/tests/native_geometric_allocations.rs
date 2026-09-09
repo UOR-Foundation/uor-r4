@@ -279,6 +279,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native writer lexical residual",
+            region(
+                include_str!("../src/native_geometric/writer_lexical.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native runtime", kernel),
         ("native Feature helpers", features),
         ("native memory runtime", memory),
@@ -3172,4 +3181,159 @@ fn native_word_sentence_actual_checkpoint_and_allocation() {
     }
     times.sort_unstable();
     println!("actual word-sentence artifact={}; load_ns={load_ns}; development_cases=3; checkpoint_positions={positions}; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
+}
+
+/// Actual writer context intervention. Compare committed relations and input
+/// checkpoint causality; generated text below is reported, not a prose target.
+#[test]
+#[ignore = "requires R4_WRITER_LEXICAL_MODEL; charged actual-model development cases"]
+fn native_writer_lexical_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::Model;
+    fn state(s: &uor_r4_core::native_geometric::Session) -> serde_json::Value {
+        serde_json::from_slice(&s.checkpoint().unwrap()).unwrap()
+    }
+    fn atom_text(atom: &serde_json::Value) -> String {
+        let len = atom["len"].as_u64().unwrap() as usize;
+        let bytes = atom["bytes"].as_array().unwrap();
+        String::from_utf8(
+            bytes[..len]
+                .iter()
+                .map(|b| b.as_u64().unwrap() as u8)
+                .collect(),
+        )
+        .unwrap()
+    }
+    fn same_state(left: &serde_json::Value, right: &serde_json::Value) {
+        for key in ["values", "response_entry", "word_copy", "completion"] {
+            assert_eq!(left[key], right[key], "writer checkpoint committed {key}");
+        }
+    }
+    let bytes = std::fs::read(std::env::var("R4_WRITER_LEXICAL_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        wire["writer_lexical"].is_object(),
+        "requires actual writer lexical artifact"
+    );
+    let mut input_positions = 0usize;
+    let mut output_positions = 0usize;
+    for (label, prompt, fact) in [
+        (
+            "instruction",
+            "Where is selvi? Explain in a sentence. Answer:",
+            false,
+        ),
+        ("fact", "Where is selvi? velra in Dusk Ridge. Answer:", true),
+    ] {
+        let tokens = model.encode(prompt).unwrap();
+        let mut session = model.session(Control::Full).unwrap();
+        session.observe(&model, BOS).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        for token in tokens {
+            let mut restored = model
+                .restore_session(&session.checkpoint().unwrap())
+                .unwrap();
+            MEASURING.with(|v| v.set(true));
+            session.observe(&model, token).unwrap();
+            MEASURING.with(|v| v.set(false));
+            restored.observe(&model, token).unwrap();
+            same_state(&state(&session), &state(&restored));
+            input_positions += 1;
+        }
+        let mut restored = model
+            .restore_session(&session.checkpoint().unwrap())
+            .unwrap();
+        MEASURING.with(|v| v.set(true));
+        session.begin_response(&model).unwrap();
+        MEASURING.with(|v| v.set(false));
+        restored.begin_response(&model).unwrap();
+        let initial = state(&session);
+        same_state(&initial, &state(&restored));
+        let records: Vec<_> = initial["values"]["relations"]["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r["id"].as_u64().is_some_and(|id| id != 0))
+            .collect();
+        assert!(
+            records.iter().all(|r| atom_text(&r["owner"]) != "Explain"),
+            "an instruction must not assert Explain as a fact owner"
+        );
+        if fact {
+            let matches: Vec<_> = records
+                .iter()
+                .filter(|r| {
+                    atom_text(&r["owner"]) == "velra"
+                        && atom_text(&r["value"]) == "Dusk"
+                        && atom_text(&r["span"]) == "Dusk Ridge"
+                })
+                .collect();
+            assert_eq!(
+                matches.len(),
+                1,
+                "the matched fact must retain its exact owner/value/span"
+            );
+        }
+        let mut output = [EOS; 96];
+        let mut used = 0usize;
+        loop {
+            let mut restored = model
+                .restore_session(&session.checkpoint().unwrap())
+                .unwrap();
+            let prediction = restored.predict(&model).unwrap();
+            let decisions = (
+                restored.word_copy_decision(),
+                restored.response_entry_decision(),
+                restored.value_decision(),
+                restored.completion_decision(),
+            );
+            assert_eq!(restored.predict(&model).unwrap(), prediction);
+            assert_eq!(
+                (
+                    restored.word_copy_decision(),
+                    restored.response_entry_decision(),
+                    restored.value_decision(),
+                    restored.completion_decision()
+                ),
+                decisions
+            );
+            MEASURING.with(|v| v.set(true));
+            let actual = session.predict(&model).unwrap();
+            let actual_decisions = (
+                session.word_copy_decision(),
+                session.response_entry_decision(),
+                session.value_decision(),
+                session.completion_decision(),
+            );
+            session.observe(&model, actual.token).unwrap();
+            MEASURING.with(|v| v.set(false));
+            assert_eq!(actual, prediction);
+            assert_eq!(actual_decisions, decisions);
+            restored.observe(&model, prediction.token).unwrap();
+            let current = state(&session);
+            same_state(&current, &state(&restored));
+            assert_eq!(
+                current["values"]["relations"]["records"],
+                initial["values"]["relations"]["records"],
+                "response emission must preserve the observed input relation records"
+            );
+            output[used] = actual.token;
+            used += 1;
+            output_positions += 1;
+            if actual.token == EOS || used == output.len() {
+                break;
+            }
+        }
+        assert_eq!(
+            output[used - 1],
+            EOS,
+            "writer interface response must terminate within bounded check"
+        );
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        println!("actual writer lexical case={label}; input_records={}; actual_text={:?}; allocations=0 bytes=0 for observe/begin/predict/observe; no authored prose-output claim",records.len(),String::from_utf8(model.decode(&output[..used]).unwrap()).unwrap());
+    }
+    println!("actual writer lexical artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; exact input-owner/value/span and pertoken committed-state checks; allocations=0 bytes=0 (load/encode/session/BOS/checkpoint/JSON/decode/report excluded)",model.artifact_cid());
 }

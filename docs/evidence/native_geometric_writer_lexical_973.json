@@ -1,0 +1,2964 @@
+{
+  "schema": "uor-r4.writer-lexical-evidence/1",
+  "at": "2026-09-09T04:55:00.375Z",
+  "status": "RETAINED_BOUNDED_WRITER_CORRECTION",
+  "artifact": {
+    "cid": "blake3:169f23efd1babd314deed5cd523953179d94a8eb9dbf6e930892e57080a85828",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-lexical/model.json",
+    "bytes": 13552256,
+    "sha256": "3594003cc8265a31f5fe512ab38cd68289f5255769f30cf254f1fc7028e00260"
+  },
+  "parent": {
+    "cid": "blake3:82662f856908e548a9cccbb78809daf4821d243781ad497b661f5ee6d94c2032",
+    "sha256": "70a5f8867d00a358b2d64556be1ea038c844c7926dfb6388ab01ceb5746ba0ae",
+    "byte_exact_reconstruction": true
+  },
+  "implementation": {
+    "description": "One learned nonpositive contextual endpoint-prime lookup; complete writer/cache/geometry/source/emission/numeric parent frozen.",
+    "dictionary_size": 128,
+    "feature_kind": 15,
+    "rows": [
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 0
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 8589934592
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 98784247808
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 261993005056
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 287762808832
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 468151435264
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 1979979923456
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 2237677961216
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 2452426326016
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 2521145802752
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 2572685410304
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 2778843840512
+        },
+        "weight": -8
+      },
+      {
+        "feature": {
+          "kind": 47,
+          "a": 201863463061,
+          "b": 2933462663168
+        },
+        "weight": -8
+      }
+    ],
+    "coefficients_only_nonpositive": true,
+    "frozen": {
+      "parent": "blake3:82662f856908e548a9cccbb78809daf4821d243781ad497b661f5ee6d94c2032",
+      "candidate": "blake3:169f23efd1babd314deed5cd523953179d94a8eb9dbf6e930892e57080a85828",
+      "changed_keys": [
+        "writer_lexical",
+        "artifact_cid",
+        "uor_model_address"
+      ],
+      "all_other_parent_fields_exact": true,
+      "old_writer_dictionary_rows_geometry_cache_exact": true,
+      "geometry_exact": true
+    },
+    "source_files": [
+      {
+        "path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+        "sha256": "4a419d7239272dccb85f19f8eaf4dec323b2e68eed8e24a2cf882a5163122334"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+        "sha256": "5b11e9de6411cf4f74f703e2f36bec64f0667a5ebb17fe95078795ec8f9f4e45"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/relation.rs",
+        "sha256": "18a91e8caf436aa9212203fef692bf93300def0dc9bd1af3e507409956f72297"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/relation_span.rs",
+        "sha256": "6f1aae7fe4c90b1564ed5faeb4716924c1ecc0649c16954fea87eefa7dcb231c"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/runtime.rs",
+        "sha256": "3edcdfdbd506eb80aba3d432048614d7131f987d0b60accaee46ae9f4c225bd8"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/training.rs",
+        "sha256": "3332b082219183aa35da91a52e7333c5a00e543bac078a14149e384a94bcc013"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/value_runtime.rs",
+        "sha256": "bce4923f9e6f34bcd054c62f6aa73745ac1eb988bba16bdc396da176dbabb9bf"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/writer_refinement.rs",
+        "sha256": "89bbe21e26cdff70f9f6f557889b367b74649c30688e6d4b9158aa9d1f95e180"
+      },
+      {
+        "path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+        "sha256": "f3ce4eafa4b6fc12eabe85b1e49676714b5d90e377302a1ebd8b14ae2fd33138"
+      },
+      {
+        "path": "crates/uor-r4-core/examples/native_writer_lexical.rs",
+        "sha256": "f348348db8de354971fc50a74fa86da77f9e01f5b9e9964307c69fba91c96958"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/writer_lexical.rs",
+        "sha256": "798c59d2730bd21ff04c53019b8f1f24dc310b96d620ceb6f27fa6c900b47858"
+      }
+    ]
+  },
+  "fit": {
+    "documents": 825,
+    "presented_boundaries": 12008,
+    "suppressed_boundaries": 456,
+    "frames": 3518,
+    "initial_correct": 3482,
+    "final_correct": 3518,
+    "epochs": 1,
+    "updates": 13,
+    "dictionary_total": 136,
+    "stopped_at_time_limit": false,
+    "raw": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/fit.json",
+      "bytes": 46034,
+      "sha256": "3cb7500c79f611339bad67f80b6113b9aab171f92cd66f28c4c864043329113e"
+    }
+  },
+  "behavior": {
+    "writer_construction": {
+      "passed": 825,
+      "total": 825,
+      "scope": "Writer record correction and exact parent-output preservation, not independent response correctness"
+    },
+    "balanced_open": {
+      "passed": 64,
+      "total": 64,
+      "included_in_construction": true
+    },
+    "collision": [
+      {
+        "id": "instruction",
+        "prompt": "Where is selvi? Explain in a sentence. Answer:",
+        "original_key_hash": "875abdee54cf2b7b71c669e3bace99ba25ad14ba54111d749023ebde1b82d066",
+        "lexical_feature": {
+          "a": 201863463061,
+          "b": 2521145802752,
+          "kind": 15
+        },
+        "parent_score": 2,
+        "residual_score": -8,
+        "total": -6,
+        "choice": null
+      },
+      {
+        "id": "fact",
+        "prompt": "Where is selvi? velra in Dusk Ridge. Answer:",
+        "original_key_hash": "875abdee54cf2b7b71c669e3bace99ba25ad14ba54111d749023ebde1b82d066",
+        "lexical_feature": {
+          "a": 2933462663211,
+          "b": 2521145802752,
+          "kind": 15
+        },
+        "parent_score": 2,
+        "residual_score": 0,
+        "total": 2,
+        "choice": [
+          2,
+          0,
+          1
+        ]
+      }
+    ],
+    "history": {
+      "parent": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/history-final/full.json",
+      "candidate": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/history-final/full.json",
+      "parent_exact": 8,
+      "candidate_exact": 12,
+      "total": 12,
+      "removed_instruction_records": 4,
+      "rows": [
+        {
+          "id": "forward-open.json/turn-1/plain",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "forward-open.json/turn-1/place-prefix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "forward-open.json/turn-1/place-suffix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 1,
+          "versions_match_original": true
+        },
+        {
+          "id": "forward-open.json/turn-4/plain",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "forward-open.json/turn-4/place-prefix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "forward-open.json/turn-4/place-suffix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 1,
+          "versions_match_original": true
+        },
+        {
+          "id": "reverse-open.json/turn-1/plain",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "reverse-open.json/turn-1/place-prefix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "reverse-open.json/turn-1/place-suffix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 1,
+          "versions_match_original": true
+        },
+        {
+          "id": "reverse-open.json/turn-4/plain",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "reverse-open.json/turn-4/place-prefix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 0,
+          "versions_match_original": true
+        },
+        {
+          "id": "reverse-open.json/turn-4/place-suffix",
+          "actual_output_and_source_equal": true,
+          "legitimate_records_exact": true,
+          "removed_instruction_records": 1,
+          "versions_match_original": true
+        }
+      ]
+    },
+    "retained_answers": {
+      "exact": 663,
+      "total": 663
+    },
+    "word_open": {
+      "exact": 28,
+      "total": 28
+    },
+    "word_construction": {
+      "exact": 132,
+      "total": 132
+    },
+    "prior_word_identity_transfer": {
+      "exact": 24,
+      "total": 24
+    },
+    "source_positions": {
+      "exact": 40,
+      "total": 40
+    },
+    "original_abstention": {
+      "exact": 10,
+      "total": 10
+    },
+    "earlier_semantic_reports": {
+      "at": "2026-09-09T04:40:20.489Z",
+      "scope": "Actual bytes, EOS, correctness, action/value/record/read identities and applicable dependency fields; timings/scores excluded. Already-incorrect interventions remain negative evidence.",
+      "reports": [
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-operations/result.json",
+            "sha256": "9fadcdd0f9a1bf59877a954ae6142002a4ca561a923e7404c5d11c60971c8f09"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-operations/result.json",
+            "sha256": "bf82653ba4338fbf07024bbea62f743f95f2c6a7b77e82edf1a8b8f801b41588"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-operations/disabled.json",
+            "sha256": "09a81b2957e7928e361a0f9b1ff34846cc637208556df479b54db68d83c0b8c6"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-operations/disabled.json",
+            "sha256": "c601b92a02fb32af1c396a24fd4101572a0351ff5fbf5508060021cb585900e3"
+          },
+          "total": 24,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-operations/intermediate-disabled.json",
+            "sha256": "22ba87594d6da088ba8e824b19df6d3e173d02c1446dda53ed57af098eb29251"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-operations/intermediate-disabled.json",
+            "sha256": "69a9aea708963d987b7d93e7304a3c77a937bb07d2f37e5d3cbb6ef51d2d6211"
+          },
+          "total": 24,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/result.json",
+            "sha256": "011744b1645e8923e430ad04ee39211e6ff23971dd88d6c3335bf569c0f15c19"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-controls/result.json",
+            "sha256": "1882d9e61c00bc880d24ee1006d664fbef0382513eff01b89e0004d28adeed1f"
+          },
+          "total": 18,
+          "exact": 18,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/disabled.json",
+            "sha256": "10ec36b86569c11f29274fae521928c4ece8f8f58914c39fa2a47abb4666d4e2"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-controls/disabled.json",
+            "sha256": "36e63fea5d22af57bff9ce273b064fabe1319bb2a90a2d2e344bdfc78a33cd48"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/read-disabled.json",
+            "sha256": "a1ff195d14bb82b29f834e47e2ee10ff6b43174e7aeb38e48e67e1d585c7e02b"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-controls/read-disabled.json",
+            "sha256": "621ef66a9df35e27da3e9bddb68ab0f903179263b56d404617f3ce8aa41f9b58"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-lexical-controls/geometry-disabled.json",
+            "sha256": "10ec36b86569c11f29274fae521928c4ece8f8f58914c39fa2a47abb4666d4e2"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-controls/geometry-disabled.json",
+            "sha256": "36e63fea5d22af57bff9ce273b064fabe1319bb2a90a2d2e344bdfc78a33cd48"
+          },
+          "total": 18,
+          "exact": 6,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-current-evaluate/result.json",
+            "sha256": "25ef6b8d7c42a82ededfd8ac3918b9c6e4b13a0e83c5415f04f796f6e15458be"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-current-evaluate/result.json",
+            "sha256": "994e48a69b3f54e74e9894736d65f2d4691d7e72b767cd4542c2a91f8a95835e"
+          },
+          "total": 48,
+          "exact": 48,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-current-controls/result.json",
+            "sha256": "7ec8d1ee332f960d2b8e8699fc5525205e536d52bb91e8ed6321d4d6361820fc"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-current-controls/result.json",
+            "sha256": "82032a669a37ee9d8fa8551b8491be0b3437d76c895123e9fe023e06e480da79"
+          },
+          "total": 48,
+          "exact": 32,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-current-stress/result.json",
+            "sha256": "9ab232a2ae8c312b9dc2640ef18959bc4250ae76069e54c1eaccd01465d3f49e"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-current-stress/result.json",
+            "sha256": "bcbad0a6d3060463e05ff47d08073cc5706f614b9d547f6cb44e32f74a511b52"
+          },
+          "total": 16,
+          "exact": 16,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-evaluate/result.json",
+            "sha256": "bca77faab5e83adc24b9383e73a4f110baf5d16ef10a745f37139c71abee2bba"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-instruction-evaluate/result.json",
+            "sha256": "bce9fe12cd15e3b626f8119c20b7d07fd44e3d7ff426d5407afc8635bf2e3c44"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-stress/result.json",
+            "sha256": "94e488ec7c7cfdfb3366f299fde7baeea996f44e16bc14bf154b41e1725adb82"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-instruction-stress/result.json",
+            "sha256": "e6c52c07c826ad0f76ef697d37fec8a2185b42907b6f7342152a45aed34d55a4"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-fresh/result.json",
+            "sha256": "ff6dcba9080cd9cc0e0fcde7dcbe6b370b41b3890b171231c990968edfcf2717"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-instruction-fresh/result.json",
+            "sha256": "1c374a5f765e894ea6345ed499c7eac9bf817753a940a4cfbba6b5a2c22fbccc"
+          },
+          "total": 24,
+          "exact": 24,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        },
+        {
+          "parent": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/validation-preserving/prior-instruction-evaluate/disabled.json",
+            "sha256": "b831c5cd824bd4303fa6ad1e5aaf97e5d56fd3bed95f9d9116f6afcacf1f45e2"
+          },
+          "candidate": {
+            "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-instruction-evaluate/disabled.json",
+            "sha256": "b31737aaee71ae4aa6e8464a96c9e3c0824fa895bffddda0d0500ed648b743b0"
+          },
+          "total": 24,
+          "exact": 8,
+          "all_actual_outputs_and_decision_identities_equal": true,
+          "changed_previously_incorrect_rows": 0,
+          "all_previously_correct_rows_exactly_preserved": true
+        }
+      ],
+      "differences": []
+    },
+    "fresh": {
+      "passed": 32,
+      "total": 32,
+      "new_prompt_identity_cases": 26,
+      "repeated_factual_cue_controls": 6,
+      "independent_correct_answer_claim": false,
+      "scope": "Writer correction and exact parent-output preservation under fixed forms; two newly drawn owner/value groups; fixed cue facts deliberately retained."
+    },
+    "api": {
+      "status": "PASS",
+      "passed": 176,
+      "total": 176,
+      "checks": [
+        {
+          "name": "expected_artifact_identity",
+          "status": "PASS"
+        },
+        {
+          "name": "artifact_serialization_byte_exact",
+          "status": "PASS"
+        },
+        {
+          "name": "artifact_load_save_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "name": "quiet_river_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "first_turn_sum_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "second_turn_new_inputs_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "checkpoint_same_identity_import",
+          "status": "PASS"
+        },
+        {
+          "name": "checkpoint_next_response_byte_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "checkpoint_cross_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "chunked_prefill_checkpoint_preserves_literal",
+          "status": "PASS"
+        },
+        {
+          "name": "transition_history_api",
+          "status": "PASS"
+        },
+        {
+          "name": "same_query_add_add_api_after_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "lexical_sentence_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "lexical_sentence_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "lexical_sentence_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "lexical_rust_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "lexical_rust_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "lexical_rust_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_binding_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_sentence_prefix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_sentence_prefix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_sentence_prefix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_sentence_suffix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_sentence_suffix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_sentence_suffix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_rust_prefix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_rust_prefix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_rust_prefix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_rust_suffix_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_rust_suffix_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_rust_suffix_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_previous_literals_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_previous_admission_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_current_literals_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "instruction_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_sentence_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_sentence_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_sentence_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_sentence_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_rust_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_rust_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_rust_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_rust_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_previous_operation_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_current_operation_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "composed_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_latest_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_latest_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_latest_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_latest_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_original_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_original_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_original_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_copy_original_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_operators_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_previous_operation_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_current_operation_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_previous_roles_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_current_roles_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_latest_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_latest_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_latest_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_latest_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_original_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_original_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_original_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "action_sentence_copy_original_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_latest_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_latest_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_latest_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_latest_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_original_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_original_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_original_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "action_rust_copy_original_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "action_emission_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "name": "action_previous_lexical_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_current_lexical_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_previous_roles_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_current_roles_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_previous_operation_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_current_operation_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_context_flag_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "action_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_original_add_extra_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_original_add_extra_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_original_add_extra_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_original_add_extra_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_extra_add_original_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_extra_add_original_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_extra_add_original_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_sentence_extra_add_original_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_original_add_extra_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_original_add_extra_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_original_add_extra_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_original_add_extra_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_extra_add_original_actual_history",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_extra_add_original_api_direct_parity_after_history_checkpoint",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_extra_add_original_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "copy_add_rust_extra_add_original_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_operator_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_previous_roles_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_current_roles_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_previous_operation_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_current_operation_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_previous_dictionary_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_current_dictionary_shape_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_stage_flag_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "shared_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_span_place_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_span_place_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_span_place_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_span_stop_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_span_stop_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_span_stop_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_word_place_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_word_place_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_word_place_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "word_emission_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "name": "word_previous_lexical_parameters_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "word_current_lexical_frozen_parameters_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "word_new_root_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "word_duplicate_token_shape_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "word_dictionary_prime_shape_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "word_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "word_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-prefix-absent_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-prefix-absent_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-prefix-absent_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-prefix-present_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-prefix-present_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-prefix-present_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-suffix-absent_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-suffix-absent_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-suffix-absent_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-suffix-present_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-suffix-present_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_lodov-suffix-present_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-prefix-absent_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-prefix-absent_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-prefix-absent_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-prefix-present_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-prefix-present_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-prefix-present_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-suffix-absent_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-suffix-absent_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-suffix-absent_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-suffix-present_api_direct_parity",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-suffix-present_checkpoint_import",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_talven-suffix-present_checkpoint_next_independent_sum",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_parent_reconstruction_and_roundtrip",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_previous_router_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_current_bias_frozen_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_recency_root_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_wrong_parent_cid_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_invalid_configuration_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_empty_receipts_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "source_role_unknown_witness_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_exact_parent_and_cache_restoration",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_valid_residual_identity_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_positive_coefficient_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_unsupported_row_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_unknown_row_prime_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_dictionary_prime_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_configuration_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_wrong_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_empty_receipts_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "writer_lexical_unknown_field_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "changed_previous_router_frozen_parent_rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "wrong_refinement_parent_cid_rejected",
+          "status": "PASS"
+        }
+      ]
+    },
+    "focused": {
+      "passed": true,
+      "total": 32,
+      "tests": [
+        "native_geometric::writer_lexical::tests::writer_lexical_endpoint_context_is_ordered_and_lossless",
+        "native_geometric::writer_lexical::tests::writer_lexical_nonpositive_scores_preserve_no_write",
+        "native_geometric::source_role_refinement::tests::source_role_configuration_is_scoped_and_bounded",
+        "native_geometric::source_role_refinement::tests::source_role_frozen_fields_allow_only_existing_recency_roots",
+        "native_geometric::source_role_refinement::tests::source_role_targets_have_no_implicit_training_stage",
+        "native_geometric::word_emission::tests::native_word_emission_balanced_vocabulary_uses_presence_and_class_sizes",
+        "native_geometric::word_emission::tests::native_word_emission_context_erasure_removes_prefix_and_query_features",
+        "native_geometric::word_emission::tests::native_word_emission_inheritance_label_preserves_previous_receipt_serialization",
+        "native_geometric::word_emission::tests::native_word_emission_larger_fit_window_keeps_legacy_config_bound",
+        "native_geometric::word_emission::tests::native_word_emission_namespace_preserves_candidate_and_query_order",
+        "native_geometric::word_emission::tests::native_word_emission_prefix_query_fields_preserve_candidate_and_legacy_context",
+        "native_geometric::source_routing_training::pair_tests::native_source_pair_candidates_are_unique_bounded_and_include_current",
+        "native_geometric::source_routing_training::pair_tests::native_source_pair_mask_guard_and_frozen_roots_leave_block_exact",
+        "native_geometric::lexical_emission_tests::native_lexical_read_checkpoint_rejects_forged_payload_cursor_and_transients",
+        "native_geometric::lexical_emission_tests::native_lexical_read_disabled_control_stops_a_restored_partial_read",
+        "native_geometric::lexical_emission_tests::native_lexical_read_old_artifact_rejects_even_null_read_field",
+        "native_geometric::lexical_emission_tests::native_lexical_read_prediction_is_idempotent_and_mismatch_clears_cursor",
+        "native_geometric::lexical_emission_tests::native_lexical_read_preserves_selected_identity_among_equal_values",
+        "native_geometric::lexical_emission_tests::native_lexical_read_signed_multidigit_cursor_restores_without_value_writes",
+        "native_geometric::action_emission_tests::native_action_emission_conflict_check_keeps_jointly_acceptable_alternatives",
+        "native_geometric::action_emission_tests::native_action_emission_erasure_changes_only_action_context_and_preserves_cursor",
+        "native_geometric::action_emission_tests::native_action_emission_subset_fit_rejects_mask_and_freezes_inherited_parameters",
+        "native_geometric::action_emission_tests::native_action_emission_tags_preserve_legacy_add_and_exact_read_roles",
+        "native_geometric::word_copy_tests::native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry",
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "native_writer_lexical_actual_checkpoint_and_allocation",
+        "native_word_sentence_actual_checkpoint_and_allocation",
+        "native_lexical_emission_actual_checkpoint_and_allocation",
+        "native_composed_output_actual_checkpoint_and_allocation",
+        "native_mixed_operators_actual_checkpoint_and_allocation",
+        "native_action_emission_actual_checkpoint_and_allocation",
+        "native_copy_add_actual_checkpoint_and_allocation"
+      ],
+      "labels": [
+        "test-writer_lexical_-preserving",
+        "test-source_role_-preserving",
+        "test-native_word_emission_-preserving",
+        "test-native_source_pair_-preserving",
+        "test-native_lexical_read_-preserving",
+        "test-native_action_emission_-preserving",
+        "test-native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry-preserving",
+        "kernel-source-guard-preserving",
+        "allocation-writer_lexical-preserving",
+        "allocation-word_sentence-preserving",
+        "allocation-lexical_emission-preserving",
+        "allocation-composed_output-preserving",
+        "allocation-mixed_operators-preserving",
+        "allocation-action_emission-preserving",
+        "allocation-copy_add-preserving"
+      ]
+    }
+  },
+  "limits": {
+    "known_generation_negative": "Record: Explain in a sentence. Where is Explain? Answer: retains correct Explain→a sentence record but both models emit: a sentence . The conversation does not give ae.",
+    "overflow": "Two existing 33-step targets remain 0/2 under the 32-step entry cap; exact wrong text/EOS behavior retained.",
+    "not_established": [
+      "general prose",
+      "general instruction understanding",
+      "general reasoning",
+      "Rust synthesis",
+      "alpha",
+      "frontier capability",
+      "complete-path energy savings"
+    ],
+    "not_run": [
+      "new-artifact browser",
+      "WASM",
+      "HTTP",
+      "blanket full suite",
+      "Clippy"
+    ]
+  },
+  "resources": {
+    "at": "2026-09-09T04:55:00.277Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/commands.jsonl",
+    "model_ms": 1748183,
+    "engineering_ms": 552355,
+    "ledger": {
+      "cumulative_ms": 22232042,
+      "limit_ms": 25050000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 2621338,
+    "storage_high_water": {
+      "target": 228483072,
+      "worktree": 196608,
+      "evidence": 243388416,
+      "git": 49152,
+      "at": "2026-09-09T04:52:14.353Z"
+    },
+    "retained_copy_bytes": 13885440,
+    "cycle_growth_bytes": 486002688,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 36408483840,
+    "storage_limit_bytes": 39158181888,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 2615480320,
+    "peak_model_sampled_rss_bytes": 3041673216,
+    "peak_engineering_sampled_rss_bytes": 2557296640,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "projection": {
+    "at": "2026-09-09T04:01:27.904Z",
+    "authorization": "Owner next-step request and standing necessary local resource extensions",
+    "reason": "Resolve measured writer endpoint feature collision with a learned nonpositive contextual lexical residual; preserve geometric parent and validate real writes and generation.",
+    "ledger_before": {
+      "cumulative_ms": 20483859,
+      "limit_ms": 22350000
+    },
+    "increment_ms": 2700000,
+    "updated_limit_ms": 25050000,
+    "cycle_model_ms": 3600000,
+    "cycle_engineering_ms": 1500000,
+    "phase_breakdown_ms": {
+      "diagnostic": 300000,
+      "preparation_fit": 600000,
+      "controls_preservation": 1300000,
+      "api_allocations": 900000,
+      "retry_checkpoint": 350000,
+      "fresh": 150000
+    },
+    "engineering_breakdown_ms": {
+      "build": 1050000,
+      "focused": 300000,
+      "delivery_checks": 150000
+    },
+    "prior_unverified_reservation_ms": 196620,
+    "context_tokens": 512,
+    "output_tokens": 96,
+    "input_window_bytes_max": 4096,
+    "history_turns_max": 5,
+    "construction_cases_max": 1024,
+    "construction_frames_max": 8192,
+    "lexical_dictionary_max": 128,
+    "residual_rows_max": 16384,
+    "fit_wall_ms_max": 120000,
+    "fresh_cases_max": 32,
+    "threads": 2,
+    "model_processes": 1,
+    "peak_model_rss_bytes": 4294967296,
+    "peak_build_rss_bytes": 6442450944,
+    "new_storage_bytes": 1610612736,
+    "storage_breakdown": {
+      "build": 805306368,
+      "artifacts_checkpoints": 201326592,
+      "reports_temporary": 587202560,
+      "metadata": 16777216
+    },
+    "storage_limit_before_bytes": 37010698240,
+    "storage_increment_bytes": 2147483648,
+    "storage_limit_bytes": 39158181888,
+    "stop_margin_bytes": 134217728,
+    "accounted_before_bytes": 35905703936,
+    "baselines": {
+      "target": 2746986496,
+      "worktree": 478871552,
+      "git": 1011003392,
+      "evidence": 0
+    },
+    "worktree": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+    "branch": "codex/writer-lexical-context",
+    "source_base": "29e10e1f77381a08bf42731eb90a2a97c713b125",
+    "artifact": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-role-refinement/model.json",
+      "cid": "blake3:82662f856908e548a9cccbb78809daf4821d243781ad497b661f5ee6d94c2032",
+      "sha256": "70a5f8867d00a358b2d64556be1ea038c844c7926dfb6388ab01ceb5746ba0ae",
+      "bytes": 13432797
+    },
+    "prior_receipt": "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/resources.json",
+    "unique_deletions": false,
+    "paid_external_compute": false,
+    "inherited_history": {
+      "max_turns": 5,
+      "padding_tokens_per_turn": 1056,
+      "total_input_tokens_max": 8192,
+      "reason": "Replay existing exact-version/conflict history contract; bounded model state remains unchanged."
+    },
+    "phase_allocation_note": "Before execution: postselection candidate/restored-parent validation includes artifact load, allocate150 seconds by moving100 seconds from preservation; total unchanged.",
+    "phase_adjustment_api": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/phase-adjustment-api.json"
+  },
+  "reports": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/receipt.json",
+      "bytes": 520,
+      "sha256": "a8065f37cce8fe54013116ba07cee496381b92e63943f2aa71ecf11afb6c081e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/writer-construction/result.json",
+      "bytes": 754313,
+      "sha256": "803c8cbe180fcdfdb4d04069fdd329165700c3f46cb7abe78317e5c04ee6b026"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/collision-comparison.json",
+      "bytes": 773,
+      "sha256": "3cad28889b133a23f9d99101c08cade86bb725920e07f11120c0b4105c985ade"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/parent-fields.json",
+      "bytes": 396,
+      "sha256": "0e3bc77e5c1e8e48d20e94b0062ab75b55ed98da2414bfb3271752f8efa23272"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/open/result.json",
+      "bytes": 147468,
+      "sha256": "dc4ddb9b8db529352318173c70ec123bb0841bfe5ff980f8040525dcbfaf9a44"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/history-comparison.json",
+      "bytes": 3068,
+      "sha256": "0029d9b3655574878ed8a05ad9c6791db577cd58532a7d56301d88275b605749"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/preserve/result.json",
+      "bytes": 193,
+      "sha256": "483bb362901d01cf0b02b031449a479bcecf37787d6c1b43fbd00e5825dd2db5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/preserve/preservation/retained-construction.json",
+      "bytes": 214913,
+      "sha256": "bc42caaa40049f9a9d60e7ae82b11ef77ed79c2f70be350522bd2626de9b0a51"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/open-final/full.json",
+      "bytes": 1461456,
+      "sha256": "57eb0dc2678848ab56df01a2d625c6381e1c9c22ba48ae9176919740a1524c34"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/word-construction/full.json",
+      "bytes": 5896287,
+      "sha256": "5a9e84372c4ed443f9c7fdb165484e8cbd5ad0e5cda2e67d361bc4fa9088fbd7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/word-fresh-retained/full.json",
+      "bytes": 1226562,
+      "sha256": "68f81d4837f5d4c6c9d882059cb7bfa88701258dc596dc1c14db962f672636f3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/positions-final/full.json",
+      "bytes": 1374868,
+      "sha256": "3ef32750deac41c6051c3b8264ffb06877c173876162caaacd83fabf95282e76"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/abstention-final/full.json",
+      "bytes": 265031,
+      "sha256": "65fc38f82042f9e21ad75ae02958c6f66871a74b354fc19b86b0260de210d2c3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/over-limit-final/full.json",
+      "bytes": 203807,
+      "sha256": "583230bfedb8b88511985331164fd5e981300d60c9a3c40f9c25b0573cb30c26"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserved-comparison-v2.json",
+      "bytes": 10693,
+      "sha256": "bf3f24ff36aa2a47f942fdcc6a86148b9eb5ca4325c31d8f5010894cb6c960ee"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/api-preserving.json",
+      "bytes": 100394,
+      "sha256": "fa145bea8e61d7c0b3967eb609da983507a8c039f03eda8f27576c0c2c42633f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/focused-results.json",
+      "bytes": 4091,
+      "sha256": "f0e18732ad75251b9306ab6613edc7c539cba852d60b6005fa0ab01f32b0a614"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fresh/result.json",
+      "bytes": 73626,
+      "sha256": "0c1a4e1a058419cfc85b8bdc975382fedf0aa0a1efdf12bcf34606f3ddbccc1d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fresh-scope.json",
+      "bytes": 298,
+      "sha256": "acc7486479c1d59b0ff5f29a6f5038dd65464c0b7e02455ee35650fe0fa51884"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/selection.json",
+      "bytes": 388,
+      "sha256": "c7b1f061f673e6e454324fb6fb5622a8478731c95128e0d527b21905c8a4c514"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/resources.json",
+      "bytes": 1044,
+      "sha256": "f838ff93aa196efcc68477d9f666a74dd54ccd1cebf33b293ac6c11d06d5c830"
+    }
+  ],
+  "commands": [
+    {
+      "kind": "engineering",
+      "label": "build-core-initial",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:09:01.762Z",
+      "elapsed_ms": 99444,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2143043584,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/build-core-initial.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "format-initial",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:11:27.590Z",
+      "elapsed_ms": 3770,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 148373504,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/format-initial.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-writer-initial",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_writer_lexical"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:11:31.408Z",
+      "elapsed_ms": 92722,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1954299904,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/build-writer-initial.log"
+    },
+    {
+      "kind": "model",
+      "label": "prepare-initial",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "prepare",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/data/training.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/data"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:14:22.875Z",
+      "elapsed_ms": 169,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/prepare-initial.log"
+    },
+    {
+      "kind": "model",
+      "label": "fit-initial",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "fit",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-role-refinement/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/data/training.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit",
+        "16",
+        "120"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:14:23.097Z",
+      "elapsed_ms": 101059,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1167458304,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit-initial.log"
+    },
+    {
+      "kind": "model",
+      "label": "collision-initial",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/data/collision.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/collision"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:16:04.203Z",
+      "elapsed_ms": 50703,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1181892608,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/collision-initial.log"
+    },
+    {
+      "kind": "model",
+      "label": "open-initial",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/data/open.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:16:54.952Z",
+      "elapsed_ms": 56817,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1183055872,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/open-initial.log"
+    },
+    {
+      "kind": "model",
+      "label": "trace-initial",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "trace",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/data/collision.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/trace"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:17:51.827Z",
+      "elapsed_ms": 25547,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1070874624,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/trace-initial.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "format-validation",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:18:49.140Z",
+      "elapsed_ms": 4029,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 146112512,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/format-validation.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-validation",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_writer_lexical",
+        "--example",
+        "native_instruction_fact",
+        "--example",
+        "native_word_sentence",
+        "--example",
+        "native_word_emission_history",
+        "--example",
+        "native_geometric_value_probe",
+        "--example",
+        "native_mixed_operators",
+        "--example",
+        "native_composed_output",
+        "--example",
+        "native_instruction_binding",
+        "--example",
+        "native_operation_transition",
+        "--example",
+        "native_lexical_emission",
+        "--example",
+        "native_current_query",
+        "--example",
+        "native_copy_add",
+        "--example",
+        "native_action_emission"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:18:53.220Z",
+      "elapsed_ms": 120153,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2140618752,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/build-validation.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-api",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-api",
+        "--example",
+        "native_artifact_recovery_check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:20:53.429Z",
+      "elapsed_ms": 149848,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2557296640,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/build-api.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-tests",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run",
+        "--message-format=json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:23:23.338Z",
+      "elapsed_ms": 77151,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 2253783040,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/build-tests.log"
+    },
+    {
+      "kind": "model",
+      "label": "writer-construction-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/writer-construction"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:26:10.534Z",
+      "elapsed_ms": 104993,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1188577280,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/writer-construction-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "open-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "controls",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/open.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/open-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:27:55.665Z",
+      "elapsed_ms": 32940,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1063239680,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/open-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "preservation-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-refinement",
+        "preserve",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/preserve"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:28:28.723Z",
+      "elapsed_ms": 30180,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1061240832,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preservation-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "history-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_emission_history",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/preserve/preservation",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/history-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:28:58.954Z",
+      "elapsed_ms": 28509,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1062813696,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/history-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "copy-add-evaluate-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/copy-add-evaluate-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:29:27.516Z",
+      "elapsed_ms": 44751,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1065402368,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/copy-add-evaluate-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "action-evaluate-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/action-evaluate-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:30:12.368Z",
+      "elapsed_ms": 44722,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1065287680,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/action-evaluate-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "copy-add-stress-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/copy-add-stress-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:30:57.139Z",
+      "elapsed_ms": 45247,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1070759936,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/copy-add-stress-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "action-stress-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_action_emission",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/action-stress-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:31:42.500Z",
+      "elapsed_ms": 43989,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1073971200,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/action-stress-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-mixed-open",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_mixed_operators",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/mixed-open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:32:26.586Z",
+      "elapsed_ms": 28212,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1062830080,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-mixed-open.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-mixed-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_mixed_operators",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/mixed-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:32:54.855Z",
+      "elapsed_ms": 26091,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1079279616,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-mixed-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-open",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_composed_output",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/open"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:33:20.997Z",
+      "elapsed_ms": 43091,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1065385984,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-open.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_composed_output",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:34:04.136Z",
+      "elapsed_ms": 28401,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1071988736,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-preservation-replay",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_composed_output",
+      "args": [
+        "replay-preservation",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/preservation-replay",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-composed-output/preservation-construction-boundary.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:34:32.580Z",
+      "elapsed_ms": 31424,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1073709056,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-preservation-replay.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-lexical-fit-variable",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/fit-variable/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-fit-variable"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:35:04.058Z",
+      "elapsed_ms": 26646,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1104429056,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-lexical-fit-variable.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-lexical-open-variable",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/open-variable/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-open-variable"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:35:30.749Z",
+      "elapsed_ms": 26267,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1069301760,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-lexical-open-variable.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-lexical-stress-variable",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/stress-variable/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-stress-variable"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:35:57.066Z",
+      "elapsed_ms": 26198,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1069645824,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-lexical-stress-variable.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-lexical-fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "preserve-lexical",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/fresh/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:36:23.314Z",
+      "elapsed_ms": 26414,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1068892160,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-lexical-fresh.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-operations",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_operation_transition",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-operations"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:36:49.782Z",
+      "elapsed_ms": 26462,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1069350912,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-operations.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-lexical-controls",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_lexical_emission",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-lexical-controls"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:37:16.297Z",
+      "elapsed_ms": 26482,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1071939584,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-lexical-controls.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-current-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-current-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:37:42.834Z",
+      "elapsed_ms": 26084,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1062469632,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-current-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-current-controls",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "controls",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-current-controls"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:38:08.979Z",
+      "elapsed_ms": 25888,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1071284224,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-current-controls.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-current-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_current_query",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-current-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:38:34.914Z",
+      "elapsed_ms": 25920,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1066123264,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-current-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-instruction-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-instruction-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:39:00.890Z",
+      "elapsed_ms": 26470,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1070219264,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-instruction-evaluate.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-instruction-stress",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-instruction-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:39:27.413Z",
+      "elapsed_ms": 26490,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1064828928,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-instruction-stress.log"
+    },
+    {
+      "kind": "model",
+      "label": "preserve2-prior-instruction-fresh",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_instruction_binding",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/validation-preserving/prior-instruction-fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:39:53.954Z",
+      "elapsed_ms": 26288,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1070841856,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/preserve2-prior-instruction-fresh.log"
+    },
+    {
+      "kind": "model",
+      "label": "api-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_artifact_recovery_check",
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "blake3:169f23efd1babd314deed5cd523953179d94a8eb9dbf6e930892e57080a85828",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/api-preserving.json"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:40:20.600Z",
+      "elapsed_ms": 283254,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 3041673216,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/api-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "positions-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "controls",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-instruction-fact/data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/positions-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:45:03.972Z",
+      "elapsed_ms": 31375,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1065959424,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/positions-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "word-construction",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data-preserving/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/word-construction"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:45:35.399Z",
+      "elapsed_ms": 31726,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1060945920,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/word-construction.log"
+    },
+    {
+      "kind": "model",
+      "label": "word-fresh-retained",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/word-fresh-retained"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:46:07.274Z",
+      "elapsed_ms": 26552,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1076510720,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/word-fresh-retained.log"
+    },
+    {
+      "kind": "model",
+      "label": "abstention-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/abstention.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/abstention-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:46:33.876Z",
+      "elapsed_ms": 25635,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1072398336,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/abstention-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "over-limit-final",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/data/over-limit.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/over-limit-final"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:46:59.557Z",
+      "elapsed_ms": 25726,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1064632320,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/over-limit-final.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-evaluate-source",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/copy-add-evaluate-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-evaluate"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:25.553Z",
+      "elapsed_ms": 97,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-evaluate-source.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-evaluate-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-evaluate/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-evaluate/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:25.695Z",
+      "elapsed_ms": 567,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-evaluate-build.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-evaluate-execute",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-evaluate/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:26.306Z",
+      "elapsed_ms": 169,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-evaluate-execute.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-stress-source",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_copy_add",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/copy-add-stress-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-stress"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:26.543Z",
+      "elapsed_ms": 95,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-stress-source.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-stress-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-stress/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-stress/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:26.684Z",
+      "elapsed_ms": 101,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-stress-build.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-stress-execute",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-stress/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:26.831Z",
+      "elapsed_ms": 62,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-stress-execute.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-retained-source",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_word_sentence",
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/word-fresh-retained/full.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-retained"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:26.943Z",
+      "elapsed_ms": 17,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-retained-source.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "rust-retained-build",
+      "cmd": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-retained/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-retained/generated_checks"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:27.007Z",
+      "elapsed_ms": 124,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-retained-build.log"
+    },
+    {
+      "kind": "model",
+      "label": "rust-retained-execute",
+      "cmd": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-retained/generated_checks",
+      "args": [],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:27.179Z",
+      "elapsed_ms": 74,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/rust-retained-execute.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-writer_lexical_-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "writer_lexical_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:27.352Z",
+      "elapsed_ms": 203,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/test-writer_lexical_-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-source_role_-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "source_role_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:27.625Z",
+      "elapsed_ms": 8,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/test-source_role_-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-native_word_emission_-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_word_emission_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:27.680Z",
+      "elapsed_ms": 7,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/test-native_word_emission_-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-native_source_pair_-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_source_pair_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:27.735Z",
+      "elapsed_ms": 192,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/test-native_source_pair_-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-native_lexical_read_-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_lexical_read_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:27.974Z",
+      "elapsed_ms": 980,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/test-native_lexical_read_-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-native_action_emission_-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_action_emission_",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:29.003Z",
+      "elapsed_ms": 526,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/test-native_action_emission_-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "test-native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+      "args": [
+        "native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:29.575Z",
+      "elapsed_ms": 374,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/test-native_word_copy_snapshot_preserves_an_active_inherited_lexical_entry-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "kernel-source-guard-preserving",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "--exact",
+        "--nocapture"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:29.995Z",
+      "elapsed_ms": 143,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/kernel-source-guard-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-writer_lexical-preserving",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_WRITER_LEXICAL_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_writer_lexical_actual_checkpoint_and_allocation",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:30.194Z",
+      "elapsed_ms": 25874,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 368836608,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/allocation-writer_lexical-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-word_sentence-preserving",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_WORD_SENTENCE_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_word_sentence_actual_checkpoint_and_allocation",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:47:56.114Z",
+      "elapsed_ms": 26521,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 367853568,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/allocation-word_sentence-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-lexical_emission-preserving",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_LEXICAL_EMISSION_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_lexical_emission_actual_checkpoint_and_allocation",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:48:22.684Z",
+      "elapsed_ms": 26450,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 623181824,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/allocation-lexical_emission-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-composed_output-preserving",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_COMPOSED_OUTPUT_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_composed_output_actual_checkpoint_and_allocation",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:48:49.180Z",
+      "elapsed_ms": 26680,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 369999872,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/allocation-composed_output-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-mixed_operators-preserving",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_MIXED_OPERATORS_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_mixed_operators_actual_checkpoint_and_allocation",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:49:15.909Z",
+      "elapsed_ms": 26241,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 620298240,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/allocation-mixed_operators-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-action_emission-preserving",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_ACTION_EMISSION_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_action_emission_actual_checkpoint_and_allocation",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:49:42.197Z",
+      "elapsed_ms": 26628,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 623755264,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/allocation-action_emission-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "allocation-copy_add-preserving",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "R4_COPY_ADD_MODEL=/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/uor-r4/target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_copy_add_actual_checkpoint_and_allocation",
+        "--exact",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:50:08.875Z",
+      "elapsed_ms": 26692,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 614236160,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/allocation-copy_add-preserving.log"
+    },
+    {
+      "kind": "model",
+      "label": "fresh-prepare",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fresh-data"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:51:24.152Z",
+      "elapsed_ms": 10,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fresh-prepare.log"
+    },
+    {
+      "kind": "model",
+      "label": "fresh-evaluate",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_writer_lexical",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fit/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fresh"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:51:24.208Z",
+      "elapsed_ms": 53418,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 1166524416,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fresh-evaluate.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "fmt-final",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:53:45.885Z",
+      "elapsed_ms": 4171,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": 147341312,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/fmt-final.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "claim-wording-final",
+      "cmd": "/usr/bin/python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "cwd": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4",
+      "started": "2026-09-09T04:53:50.106Z",
+      "elapsed_ms": 275,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-writer-lexical/claim-wording-final.log"
+    }
+  ],
+  "next": "Diagnose and learn compositional owner/connective/value/stop field choice over an exact selected relation, with explicit owner-first requests and preserved value-first behavior."
+}

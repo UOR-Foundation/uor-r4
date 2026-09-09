@@ -226,10 +226,11 @@ impl RelationState {
         }
     }
 
-    pub(super) fn observe_span(
+    pub(super) fn observe_span_with_control(
         &mut self,
         model: &Model,
         words: &LexemeState,
+        control: Control,
         work: &mut ValueWork,
     ) {
         if let Some(pending) = &mut self.pending {
@@ -238,9 +239,12 @@ impl RelationState {
             }
             self.finish_span(work);
         }
-        let Some((owner, value, action)) =
-            relation::write_choice(model, &words.recent[..words.recent_len], work)
-        else {
+        let Some((owner, value, action)) = relation::write_choice_with_control(
+            model,
+            &words.recent[..words.recent_len],
+            control,
+            work,
+        ) else {
             work.relations.no_writes = work.relations.no_writes.saturating_add(1);
             return;
         };

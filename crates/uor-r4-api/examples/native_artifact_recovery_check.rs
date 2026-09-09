@@ -89,8 +89,16 @@ fn rejection(bytes: &[u8]) -> (bool, Option<String>) {
 // The word witness restores lexical emission and separately enforces exact
 // inherited lexical parameters. Existing legal bias mutations fail that guard;
 // other component mutations remain in the reconstructed parent and fail there.
-fn word_boundary<'a>(source_role: bool, present: bool, pointer: &str, nested: &'a str) -> &'a str {
-    if source_role {
+fn word_boundary<'a>(
+    writer: bool,
+    source_role: bool,
+    present: bool,
+    pointer: &str,
+    nested: &'a str,
+) -> &'a str {
+    if writer {
+        "writer lexical frozen parent differs"
+    } else if source_role {
         "source role refinement frozen parent differs"
     } else if !present {
         nested
@@ -101,9 +109,19 @@ fn word_boundary<'a>(source_role: bool, present: bool, pointer: &str, nested: &'
     }
 }
 
-fn source_role_boundary(present: bool, nested: &str) -> &str {
-    if present {
+fn source_role_boundary(writer: bool, present: bool, nested: &str) -> &str {
+    if writer {
+        "writer lexical frozen parent differs"
+    } else if present {
         "source role refinement frozen parent differs"
+    } else {
+        nested
+    }
+}
+
+fn writer_boundary(present: bool, nested: &str) -> &str {
+    if present {
+        "writer lexical frozen parent differs"
     } else {
         nested
     }
@@ -241,6 +259,7 @@ fn run(
     )?;
 
     let document: Value = serde_json::from_slice(&bytes)?;
+    let writer_parent = document.get("writer_lexical").is_some_and(Value::is_object);
     let source_role_parent = document
         .get("source_role_refinement")
         .is_some_and(Value::is_object);
@@ -466,16 +485,19 @@ fn run(
                 rejected
                     && error.as_deref().is_some_and(|e| {
                         e.contains(word_boundary(
+                            writer_parent,
                             source_role_parent,
                             word_parent,
                             pointer,
                             boundary,
                         ))
                     }),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(source_role_parent, word_parent, pointer, boundary),"error":error}),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(writer_parent, source_role_parent, word_parent, pointer, boundary),"error":error}),
             )?;
         }
-        let parent_boundary = if source_role_parent {
+        let parent_boundary = if writer_parent {
+            "writer lexical frozen parent differs"
+        } else if source_role_parent {
             "source role refinement frozen parent differs"
         } else if word_parent {
             "word emission frozen parent differs"
@@ -637,19 +659,22 @@ fn run(
                 rejected
                     && error.as_deref().is_some_and(|e| {
                         e.contains(word_boundary(
+                            writer_parent,
                             source_role_parent,
                             word_parent,
                             pointer,
                             boundary,
                         ))
                     }),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(source_role_parent, word_parent, pointer, boundary),"error":error}),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(writer_parent, source_role_parent, word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
         changed["composed_output"]["parent_artifact"] = json!(wrong_parent);
-        let parent_boundary = if source_role_parent {
+        let parent_boundary = if writer_parent {
+            "writer lexical frozen parent differs"
+        } else if source_role_parent {
             "source role refinement frozen parent differs"
         } else if word_parent {
             "word emission frozen parent differs"
@@ -816,18 +841,21 @@ fn run(
                 rejected
                     && error.as_deref().is_some_and(|e| {
                         e.contains(word_boundary(
+                            writer_parent,
                             source_role_parent,
                             word_parent,
                             pointer,
                             boundary,
                         ))
                     }),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(source_role_parent, word_parent, pointer, boundary),"error":error}),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(writer_parent, source_role_parent, word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
-        let parent_boundary = if source_role_parent {
+        let parent_boundary = if writer_parent {
+            "writer lexical frozen parent differs"
+        } else if source_role_parent {
             "source role refinement frozen parent differs"
         } else if word_parent {
             "word emission frozen parent differs"
@@ -1010,13 +1038,14 @@ fn run(
                 rejected
                     && error.as_deref().is_some_and(|e| {
                         e.contains(word_boundary(
+                            writer_parent,
                             source_role_parent,
                             word_parent,
                             pointer,
                             boundary,
                         ))
                     }),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(source_role_parent, word_parent, pointer, boundary),"error":error}),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(writer_parent, source_role_parent, word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
@@ -1027,7 +1056,9 @@ fn run(
             "action_wrong_parent_cid_rejected",
             rejected
                 && error.as_deref().is_some_and(|e| {
-                    e.contains(if source_role_parent {
+                    e.contains(if writer_parent {
+                        "writer lexical frozen parent differs"
+                    } else if source_role_parent {
                         "source role refinement frozen parent differs"
                     } else if word_parent {
                         "word emission frozen parent differs"
@@ -1049,7 +1080,9 @@ fn run(
             "action_context_flag_identity_rejected",
             rejected
                 && error.as_deref().is_some_and(|e| {
-                    e.contains(if source_role_parent {
+                    e.contains(if writer_parent {
+                        "writer lexical frozen parent differs"
+                    } else if source_role_parent {
                         "source role refinement frozen parent differs"
                     } else if word_parent {
                         "word emission frozen parent differs"
@@ -1159,13 +1192,14 @@ fn run(
                 rejected
                     && error.as_deref().is_some_and(|e| {
                         e.contains(word_boundary(
+                            writer_parent,
                             source_role_parent,
                             word_parent,
                             pointer,
                             boundary,
                         ))
                     }),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(source_role_parent, word_parent, pointer, boundary),"error":error}),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":word_boundary(writer_parent, source_role_parent, word_parent, pointer, boundary),"error":error}),
             )?;
         }
         for (name, pointer, boundary) in [
@@ -1195,13 +1229,14 @@ fn run(
                 rejected
                     && error.as_deref().is_some_and(|e| {
                         e.contains(word_boundary(
+                            writer_parent,
                             source_role_parent,
                             word_parent,
                             pointer,
                             boundary,
                         ))
                     }),
-                json!({"field":pointer,"old":old,"expected_boundary":word_boundary(source_role_parent, word_parent, pointer, boundary),"error":error}),
+                json!({"field":pointer,"old":old,"expected_boundary":word_boundary(writer_parent, source_role_parent, word_parent, pointer, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
@@ -1214,6 +1249,7 @@ fn run(
             rejected
                 && error.as_deref().is_some_and(|e| {
                     e.contains(word_boundary(
+                        writer_parent,
                         source_role_parent,
                         word_parent,
                         "/shared_operator_refinement/parent_artifact",
@@ -1234,6 +1270,7 @@ fn run(
             rejected
                 && error.as_deref().is_some_and(|e| {
                     e.contains(word_boundary(
+                        writer_parent,
                         source_role_parent,
                         word_parent,
                         "/shared_operator_refinement/continuation_fitted",
@@ -1315,9 +1352,13 @@ fn run(
                 name,
                 rejected
                     && error.as_deref().is_some_and(|e| {
-                        e.contains(source_role_boundary(source_role_parent, boundary))
+                        e.contains(source_role_boundary(
+                            writer_parent,
+                            source_role_parent,
+                            boundary,
+                        ))
                     }),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":source_role_boundary(source_role_parent, boundary),"error":error}),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":source_role_boundary(writer_parent, source_role_parent, boundary),"error":error}),
             )?;
         }
         // Change a legal new word-only root, keeping inherited roots exact,
@@ -1353,11 +1394,12 @@ fn run(
             rejected
                 && error.as_deref().is_some_and(|e| {
                     e.contains(source_role_boundary(
+                        writer_parent,
                         source_role_parent,
                         "word emission identity differs",
                     ))
                 }),
-            json!({"code_index":index,"old":old,"new":new,"expected_boundary":source_role_boundary(source_role_parent, "word emission identity differs"),"error":error}),
+            json!({"code_index":index,"old":old,"new":new,"expected_boundary":source_role_boundary(writer_parent, source_role_parent, "word emission identity differs"),"error":error}),
         )?;
         let mut changed = document.clone();
         let tokens = changed["word_emission"]["tokens"]
@@ -1376,6 +1418,7 @@ fn run(
             rejected
                 && error.as_deref().is_some_and(|e| {
                     e.contains(source_role_boundary(
+                        writer_parent,
                         source_role_parent,
                         "invalid word emission tokens",
                     ))
@@ -1397,6 +1440,7 @@ fn run(
             rejected
                 && error.as_deref().is_some_and(|e| {
                     e.contains(source_role_boundary(
+                        writer_parent,
                         source_role_parent,
                         "invalid word emission dictionary",
                     ))
@@ -1412,6 +1456,7 @@ fn run(
             rejected
                 && error.as_deref().is_some_and(|e| {
                     e.contains(source_role_boundary(
+                        writer_parent,
                         source_role_parent,
                         "word emission frozen parent differs",
                     ))
@@ -1530,8 +1575,11 @@ fn run(
             record(
                 checks,
                 name,
-                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
-                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+                rejected
+                    && error
+                        .as_deref()
+                        .is_some_and(|e| e.contains(writer_boundary(writer_parent, boundary))),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":writer_boundary(writer_parent, boundary),"error":error}),
             )?;
         }
         let mut changed = document.clone();
@@ -1571,9 +1619,12 @@ fn run(
             checks,
             "source_role_recency_root_identity_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("source role refinement identity differs")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(writer_boundary(
+                        writer_parent,
+                        "source role refinement identity differs",
+                    ))
+                }),
             json!({"code_index":index,"old":old,"new":new,"error":error}),
         )?;
         let mut changed = document.clone();
@@ -1584,9 +1635,12 @@ fn run(
             checks,
             "source_role_wrong_parent_cid_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("source role refinement frozen parent differs")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(writer_boundary(
+                        writer_parent,
+                        "source role refinement frozen parent differs",
+                    ))
+                }),
             json!({"error":error}),
         )?;
         let mut changed = document.clone();
@@ -1596,9 +1650,12 @@ fn run(
             checks,
             "source_role_invalid_configuration_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("invalid source role refinement configuration")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(writer_boundary(
+                        writer_parent,
+                        "invalid source role refinement configuration",
+                    ))
+                }),
             json!({"error":error}),
         )?;
         let mut changed = document.clone();
@@ -1608,9 +1665,12 @@ fn run(
             checks,
             "source_role_empty_receipts_rejected",
             rejected
-                && error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("invalid source role refinement receipts")),
+                && error.as_deref().is_some_and(|e| {
+                    e.contains(writer_boundary(
+                        writer_parent,
+                        "invalid source role refinement receipts",
+                    ))
+                }),
             json!({"error":error}),
         )?;
         let mut changed = document.clone();
@@ -1627,6 +1687,129 @@ fn run(
         )?;
     } else {
         checks.push(json!({"name":"source_role_refinement_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no source_role_refinement witness"}));
+    }
+    if let Some(witness) = document.get("writer_lexical").filter(|v| v.is_object()) {
+        let expected_parent =
+            "blake3:82662f856908e548a9cccbb78809daf4821d243781ad497b661f5ee6d94c2032";
+        let restored_parent = model.without_writer_lexical()?;
+        let parent_document: Value = serde_json::from_slice(&restored_parent.to_bytes()?)?;
+        record(
+            checks,
+            "writer_lexical_exact_parent_and_cache_restoration",
+            witness["parent_artifact"] == expected_parent
+                && restored_parent.artifact_cid() == expected_parent
+                && parent_document["relation_writer"] == document["relation_writer"]
+                && parent_document["relation_writer_refinement"]
+                    == document["relation_writer_refinement"],
+            json!({"expected_parent":expected_parent,"restored_parent":restored_parent.artifact_cid(),
+                "boundary":"The full reconstructed parent validates recursively; original writer and its cache remain unchanged and certified at that exact parent."}),
+        )?;
+        let mut changed = document.clone();
+        let coefficient = changed
+            .pointer_mut("/writer_lexical/rows/0/weight")
+            .ok_or("writer lexical learned row absent")?;
+        let old = coefficient
+            .as_i64()
+            .ok_or("writer lexical weight is not integer")?;
+        if !(-1000000..=0).contains(&old) {
+            return Err("writer lexical coefficient outside declared range".into());
+        }
+        let new = if old == -1000000 { old + 1 } else { old - 1 };
+        *coefficient = json!(new);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "writer_lexical_valid_residual_identity_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("writer lexical identity differs")),
+            json!({"old":old,"new":new,"error":error}),
+        )?;
+        for (name, pointer, new, boundary) in [
+            (
+                "writer_lexical_positive_coefficient_rejected",
+                "/writer_lexical/rows/0/weight",
+                1_u64,
+                "invalid writer lexical residual rows",
+            ),
+            (
+                "writer_lexical_unsupported_row_rejected",
+                "/writer_lexical/rows/0/feature/kind",
+                0,
+                "invalid writer lexical residual rows",
+            ),
+            (
+                "writer_lexical_unknown_row_prime_rejected",
+                "/writer_lexical/rows/0/feature/a",
+                u64::MAX,
+                "invalid writer lexical residual rows",
+            ),
+            (
+                "writer_lexical_dictionary_prime_rejected",
+                "/writer_lexical/dictionary/0/prime",
+                0,
+                "invalid writer lexical dictionary",
+            ),
+            (
+                "writer_lexical_configuration_rejected",
+                "/writer_lexical/max_seconds",
+                0,
+                "invalid writer lexical configuration",
+            ),
+        ] {
+            let mut changed = document.clone();
+            let field = changed
+                .pointer_mut(pointer)
+                .ok_or("writer lexical mutation field absent")?;
+            let old = field.clone();
+            *field = json!(new);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+            )?;
+        }
+        let mut changed = document.clone();
+        changed["writer_lexical"]["parent_artifact"] = json!(format!("blake3:{}", "0".repeat(64)));
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "writer_lexical_wrong_parent_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("writer lexical frozen parent differs")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["writer_lexical"]["training"] = json!([]);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "writer_lexical_empty_receipts_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("invalid writer lexical receipts")),
+            json!({"error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["writer_lexical"]["unexpected_witness_field"] = json!(true);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "writer_lexical_unknown_field_rejected",
+            rejected
+                && error.as_deref().is_some_and(|e| {
+                    e.contains("unknown field") && e.contains("unexpected_witness_field")
+                }),
+            json!({"error":error}),
+        )?;
+    } else {
+        checks.push(json!({"name":"writer_lexical_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no writer_lexical witness"}));
     }
     if document
         .get("typed_role_refinement")

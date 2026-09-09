@@ -245,7 +245,7 @@ impl Session {
             if let Some(block) = &model.operation_transition {
                 state.max_operations = block.max_operations;
             }
-            state.observe_relation(model, &mut self.work.values);
+            state.observe_relation_with_control(model, self.control, &mut self.work.values);
             if let Some(relations) = &mut state.relations {
                 relations.finish_span(&mut self.work.values);
             }
@@ -389,7 +389,7 @@ impl Session {
                 .pending
                 .as_ref()
                 .map(super::completion_types::CompletionSeed::from);
-            state.observe(model, token, &mut self.work.values);
+            state.observe_with_control(model, token, self.control, &mut self.work.values);
             if let Some(entry) = &mut self.response_entry {
                 entry.observe(
                     model,
