@@ -270,6 +270,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native completed-word lexical emission",
+            region(
+                include_str!("../src/native_geometric/word_emission.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native runtime", kernel),
         ("native Feature helpers", features),
         ("native memory runtime", memory),
@@ -2921,4 +2930,246 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(scope: &str) {
     }
     times.sort_unstable();
     println!("actual {scope} artifact={}; load_ns={load_ns}; development_cases={case_count}; checkpoint_positions={positions}; two typed writes and exact occurrence/read checks per requested response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
+}
+
+/// Actual development artifact: source copying must finish before the shared
+/// learned lexical selector emits the sentence suffix. Targets are assertions,
+/// never observations supplied to the serving session.
+#[test]
+#[ignore = "requires R4_WORD_SENTENCE_MODEL; charged actual-model development cases"]
+fn native_word_sentence_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_WORD_SENTENCE_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        wire["word_emission"].is_object(),
+        "requires the learned word-emission artifact"
+    );
+    let cases = [
+        ("span_place", "User: tilva lives in Ash Court.\nUser: Where is tilva?\nExplain in a sentence. Assistant:",
+         " Ash Court", " Ash Court is the place.\n"),
+        ("span_stop", "User: tilva lives in Ash Court.\nUser: Where is tilva?\nExplain the stop in a sentence. Assistant:",
+         " Ash Court", " Ash Court is the stop.\n"),
+        ("word_place", "Record: velra in Lodov. Where is velra? Explain in a sentence. Answer:",
+         " Lodov", " Lodov is the place.\n"),
+    ];
+    let mut times = Vec::new();
+    let mut positions = 0usize;
+    for (label, prompt, copied_prefix, target) in cases {
+        let tokens = model.encode(prompt).unwrap();
+        let mut session = model.session(Control::Full).unwrap();
+        session.observe(&model, BOS).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        for token in tokens {
+            session.observe(&model, token).unwrap();
+        }
+        session.begin_response(&model).unwrap();
+        MEASURING.with(|v| v.set(false));
+        let before_writes = session.work.values.derived_writes;
+        let mut output = [EOS; 96];
+        let mut used = 0usize;
+        let mut copied_boundary: Option<serde_json::Value> = None;
+        let mut suffix_positions = 0usize;
+        let case_start = positions;
+        loop {
+            let checkpoint = session.checkpoint().unwrap();
+            let before: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+            let mut restored = model.restore_session(&checkpoint).unwrap();
+            let predicted = restored.predict(&model).unwrap();
+            let word = restored.word_copy_decision();
+            let completion = restored.completion_decision();
+            let value = restored.value_decision();
+            let entry = restored.response_entry_decision();
+            assert_eq!(restored.predict(&model).unwrap(), predicted);
+            assert_eq!(restored.word_copy_decision(), word);
+            assert_eq!(restored.completion_decision(), completion);
+            assert_eq!(restored.value_decision(), value);
+            assert_eq!(restored.response_entry_decision(), entry);
+            let routing_before = session.work.word_copy.routing;
+            let candidate_evaluations_before =
+                session.work.word_copy.selector.candidate_evaluations;
+            MEASURING.with(|v| v.set(true));
+            let start = std::time::Instant::now();
+            let actual = session.predict(&model).unwrap();
+            let actual_word = session.word_copy_decision();
+            let actual_completion = session.completion_decision();
+            let actual_value = session.value_decision();
+            let actual_entry = session.response_entry_decision();
+            session.observe(&model, actual.token).unwrap();
+            let elapsed = start.elapsed().as_nanos();
+            MEASURING.with(|v| v.set(false));
+            assert_eq!(actual, predicted);
+            assert_eq!(actual_word, word);
+            assert_eq!(actual_completion, completion);
+            assert_eq!(actual_value, value);
+            assert_eq!(actual_entry, entry);
+            assert!(
+                actual_value.is_none(),
+                "word suffix must not invent a numeric write"
+            );
+            restored.observe(&model, predicted.token).unwrap();
+            let after: serde_json::Value =
+                serde_json::from_slice(&session.checkpoint().unwrap()).unwrap();
+            let restored_after: serde_json::Value =
+                serde_json::from_slice(&restored.checkpoint().unwrap()).unwrap();
+            for key in ["values", "word_copy", "response_entry", "completion"] {
+                assert_eq!(after[key], restored_after[key], "{label}: committed {key}");
+            }
+            assert_eq!(after["completion"]["active"], false);
+            assert!(after["completion"]["anchor"].is_null());
+            assert!(after["completion"]["lexical_read"].is_null());
+            if before["word_copy"]["progress"] == "complete" {
+                if suffix_positions == 0 {
+                    for field in ["source_end", "source_byte_end", "relation_id"] {
+                        let mut changed = before.clone();
+                        let old = changed["word_copy"]["read_commit"][field]
+                            .as_u64()
+                            .unwrap_or(0);
+                        changed["word_copy"]["read_commit"][field] = serde_json::json!(old + 1);
+                        assert!(
+                            model
+                                .restore_session(&serde_json::to_vec(&changed).unwrap())
+                                .is_err(),
+                            "{label}: changed committed {field} must be rejected"
+                        );
+                    }
+                    let mut changed = before.clone();
+                    let span = changed["word_copy"]["span_words"].as_u64().unwrap_or(0);
+                    changed["word_copy"]["span_words"] = serde_json::json!(span + 1);
+                    assert!(
+                        model
+                            .restore_session(&serde_json::to_vec(&changed).unwrap())
+                            .is_err(),
+                        "{label}: changed span extent must be rejected"
+                    );
+                    let mut mismatch = model.restore_session(&checkpoint).unwrap();
+                    let proposal = mismatch.predict(&model).unwrap();
+                    let pending_word = mismatch
+                        .word_copy_decision()
+                        .expect("selected suffix copy decision");
+                    let pending_entry = mismatch
+                        .response_entry_decision()
+                        .expect("selected suffix entry decision");
+                    assert_eq!(pending_word.token, proposal.token);
+                    assert_eq!(pending_entry.token, proposal.token);
+                    assert!(matches!(
+                        pending_word.action,
+                        WordCopyAction::Emit | WordCopyAction::Stop
+                    ));
+                    let copy_work = mismatch.work.word_copy.selector;
+                    let entry_work = mismatch.work.response_entry;
+                    let wrong = if proposal.token == 2 { 3 } else { 2 };
+                    mismatch.observe(&model, wrong).unwrap();
+                    // The source copy is already complete. ResponseEntry owns
+                    // non-EOS lexical mismatches; WordCopy's mismatch counter
+                    // counts aborted in-progress copies (or EOS/reset cases).
+                    // Reject the pending suffix without fabricating a commit,
+                    // retaining the exact source for the observed Base step.
+                    assert_eq!(mismatch.work.word_copy.selector.commits, copy_work.commits);
+                    assert_eq!(
+                        mismatch.work.word_copy.selector.mismatches,
+                        copy_work.mismatches
+                    );
+                    assert_eq!(mismatch.work.response_entry.commits, entry_work.commits);
+                    assert_eq!(
+                        mismatch.work.response_entry.mismatches,
+                        entry_work.mismatches + 1
+                    );
+                    assert_eq!(
+                        mismatch.work.response_entry.base_steps,
+                        entry_work.base_steps + 1
+                    );
+                    assert!(mismatch.word_copy_decision().is_none());
+                    assert!(mismatch.response_entry_decision().is_none());
+                    let mismatched_state: serde_json::Value =
+                        serde_json::from_slice(&mismatch.checkpoint().unwrap()).unwrap();
+                    assert_eq!(mismatched_state["response_entry"]["last_action"], "base");
+                    assert_eq!(mismatched_state["response_entry"]["last"], wrong);
+                    assert_eq!(
+                        mismatched_state["response_entry"]["steps"],
+                        pending_entry.step + 1
+                    );
+                    assert_eq!(mismatched_state["word_copy"], before["word_copy"]);
+                }
+                let boundary = copied_boundary
+                    .as_ref()
+                    .expect("observed copied prefix before suffix");
+                for key in ["origin", "read_commit", "span_words"] {
+                    assert_eq!(
+                        before["word_copy"][key], boundary[key],
+                        "{label}: exact copied source {key}"
+                    );
+                }
+                assert!(
+                    matches!(
+                        actual_word.map(|w| w.action),
+                        Some(WordCopyAction::Emit | WordCopyAction::Stop)
+                    ),
+                    "completed word/span suffix remains an observed WordCopy lexical decision"
+                );
+                assert!(
+                    session.work.word_copy.routing.code_reads > routing_before.code_reads,
+                    "completed-copy suffix must execute learned geometric lexical codes"
+                );
+                assert!(
+                    session.work.word_copy.selector.candidate_evaluations
+                        > candidate_evaluations_before,
+                    "completed-copy suffix must evaluate shared lexical candidates"
+                );
+                suffix_positions += 1;
+            }
+            output[used] = actual.token;
+            used += 1;
+            if copied_boundary.is_none() && after["word_copy"]["progress"] == "complete" {
+                assert_eq!(
+                    model.decode(&output[..used]).unwrap(),
+                    copied_prefix.as_bytes(),
+                    "the lexical bridge begins only after the actual copied word/span"
+                );
+                let source = &after["word_copy"];
+                assert!(source["origin"].as_u64().is_some());
+                assert!(source["read_commit"]["source"].as_u64().is_some());
+                assert!(source["read_commit"]["source_end"]
+                    .as_u64()
+                    .is_some_and(|v| v > 0));
+                assert!(source["read_commit"]["source_byte_end"]
+                    .as_u64()
+                    .is_some_and(|v| v > 0));
+                let decision = actual_word.expect("final copied byte has an exact source decision");
+                assert_eq!(source["origin"], decision.word_index);
+                assert_eq!(source["read_commit"]["source_end"], decision.source_end);
+                assert_eq!(
+                    source["read_commit"]["source_byte_end"],
+                    decision.source_byte_end
+                );
+                copied_boundary = Some(source.clone());
+            }
+            positions += 1;
+            times.push(elapsed);
+            if actual.token == EOS || used == output.len() {
+                break;
+            }
+        }
+        assert_eq!(output[used - 1], EOS, "{label}: bounded learned stop");
+        assert_eq!(
+            model.decode(&output[..used]).unwrap(),
+            target.as_bytes(),
+            "{label}: generated bytes"
+        );
+        assert!(copied_boundary.is_some());
+        assert!(
+            suffix_positions > 1,
+            "must exercise learned suffix and EOS after completed copy"
+        );
+        assert_eq!(session.work.values.derived_writes, before_writes);
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        println!("actual word-sentence case={label}; checkpoint_positions={}; suffix_positions={suffix_positions}; exact completed source identity; no numeric derived writes; allocations=0 bytes=0 for measured ingestion/begin/predict/observe",positions-case_start);
+    }
+    times.sort_unstable();
+    println!("actual word-sentence artifact={}; load_ns={load_ns}; development_cases=3; checkpoint_positions={positions}; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
 }

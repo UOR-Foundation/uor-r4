@@ -185,6 +185,34 @@ pub(super) fn prepare(
     s.pending_lexical_read = read;
     Some(Candidate { token, score })
 }
+/// One shared Base/byte selector for completed typed contexts. Candidate
+/// admission and feature construction belong to the context adapter.
+pub(super) fn token_choice(
+    model: &Model,
+    router: &SourceRouting,
+    tokens: &[u32],
+    mut features: impl FnMut(u32) -> ([ValueFeature; 40], usize),
+    control: Control,
+    routing: &mut RoutingWork,
+    work: &mut CompletionWork,
+) -> (i64, Option<u32>) {
+    let (f, n) = features(BOS);
+    let state = router.encode(model, &f[..n], control, routing);
+    work.candidate_evaluations = work.candidate_evaluations.saturating_add(1);
+    let mut best = router.score(model, state, 0, routing);
+    let mut selected = None;
+    for &token in tokens {
+        let (f, n) = features(token);
+        let state = router.encode(model, &f[..n], control, routing);
+        work.candidate_evaluations = work.candidate_evaluations.saturating_add(1);
+        let score = router.score(model, state, 1, routing);
+        if score > best {
+            best = score;
+            selected = Some(token);
+        }
+    }
+    (best, selected)
+}
 pub(super) fn offer(
     model: &Model,
     s: &mut CompletionState,
@@ -237,25 +265,16 @@ pub(super) fn offer(
         control
     };
     let mut routing = RoutingWork::default();
-    let (f, n) = features(block, s, values, BOS, None, action_context);
-    let state = block
-        .router
-        .encode(model, &f[..n], geometric_control, &mut routing);
-    work.candidate_evaluations = work.candidate_evaluations.saturating_add(1);
-    let mut best = block.router.score(model, state, 0, &mut routing);
-    let mut selected = None;
-    for &token in &block.tokens {
-        let (f, n) = features(block, s, values, token, None, action_context);
-        let state = block
-            .router
-            .encode(model, &f[..n], geometric_control, &mut routing);
-        work.candidate_evaluations = work.candidate_evaluations.saturating_add(1);
-        let score = block.router.score(model, state, 1, &mut routing);
-        if score > best {
-            best = score;
-            selected = Some((token, None));
-        }
-    }
+    let (mut best, selected) = token_choice(
+        model,
+        &block.router,
+        &block.tokens,
+        |token| features(block, s, values, token, None, action_context),
+        geometric_control,
+        &mut routing,
+        work,
+    );
+    let mut selected = selected.map(|token| (token, None));
     if control != Control::LexicalRecordReadDisabled {
         for record in &values.records {
             let Some(numeral) = super::numeral::Numeral::from_zphi(

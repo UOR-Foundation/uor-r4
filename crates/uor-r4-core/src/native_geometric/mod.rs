@@ -37,7 +37,9 @@ mod action_emission;
 mod action_emission_tests;
 mod mixed_initial_training;
 mod shared_operator_refinement;
+mod word_emission;
 pub use action_emission::{ActionEmissionExample, ActionEmissionSegment};
+pub use word_emission::WordEmissionExample;
 mod mixed_operators;
 pub use mixed_operators::{MixedOperatorExample, MixedOperatorTarget};
 mod composed_output;
@@ -267,6 +269,10 @@ pub enum Control {
     MixedOperatorsDisabled,
     MixedInitialDisabled,
     MixedTransitionDisabled,
+    WordEmissionDisabled,
+    WordEmissionContextDisabled,
+    WordEmissionPrefixContextDisabled,
+    WordEmissionGeometryDisabled,
     SharedOperatorBindingDisabled,
     SharedOperatorTransitionDisabled,
     ActionTransitionDisabled,
@@ -345,6 +351,10 @@ impl Feature {
             | Control::SourceContextWindowOnly
             | Control::JointAdmissionDisabled
             | Control::OperationTransitionIntermediateDisabled
+            | Control::WordEmissionDisabled
+            | Control::WordEmissionContextDisabled
+            | Control::WordEmissionPrefixContextDisabled
+            | Control::WordEmissionGeometryDisabled
             | Control::SharedOperatorBindingDisabled
             | Control::SharedOperatorTransitionDisabled
             | Control::ActionTransitionDisabled
@@ -445,6 +455,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    word_emission: Option<word_emission::WordEmission>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     shared_operator_refinement: Option<shared_operator_refinement::SharedOperatorRefinement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     action_emission: Option<action_emission::ActionEmission>,
@@ -525,6 +537,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    word_emission: Option<word_emission::WordEmission>,
+    #[serde(default)]
     shared_operator_refinement: Option<shared_operator_refinement::SharedOperatorRefinement>,
     #[serde(default)]
     action_emission: Option<action_emission::ActionEmission>,
@@ -604,6 +618,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            word_emission: wire.word_emission,
             shared_operator_refinement: wire.shared_operator_refinement,
             action_emission: wire.action_emission,
             mixed_operators: wire.mixed_operators,

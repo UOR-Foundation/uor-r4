@@ -24,7 +24,7 @@ The architecture uses prime-addressed ordered context, fixed zeta-zero phases, R
 
 ## Where the project goes next
 
-The [shared Copy→Add result](docs/native_geometric_copy_add_1140.md) completes the bounded two-operation composition milestone. Learned signed-H4 selection composes Copy and Add with exact changed record dependencies, generated sentence/Rust-equality output, preserved earlier behavior and native API checks. The lexical emitter and fixed geometry remain intact. General prose and program synthesis are still unqualified. Next connect exact nonnumeric word/phrase records to the shared linguistic learner under #973, beginning with actual sentence-request diagnostics.
+The [shared nonnumeric emission result](docs/native_geometric_word_emission_973.md) connects exact completed words/spans to the existing signed-H4 lexical selector. Learned sentence endings and Base/defer choices preserve earlier numeric composition and Rust returns, with actual generated behavior, API and allocation checks. General prose and program synthesis remain unqualified. Next under #973 diagnose instruction-versus-fact role binding: some absent-owner stop requests still select unrelated facts, and suffix instructions can introduce an extra relation.
 
 [The canonical plan](docs/integration/project-track.md) owns order and acceptance. [ROADMAP.md](ROADMAP.md) provides the issue navigation; [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) is the live programme tracker. Priorities guide development, while actual evidence and dependencies determine the next useful step.
 
