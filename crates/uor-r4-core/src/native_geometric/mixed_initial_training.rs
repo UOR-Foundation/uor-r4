@@ -157,7 +157,8 @@ impl Model {
         config.validate()?;
         if docs.is_empty()
             || docs.len() > 128
-            || preservation.len() > 512
+            // Offline contextual preservation window; runtime context is unchanged.
+            || preservation.len() > 640
             || prompts.len() > 768
             || docs.iter().any(|d| {
                 !matches!(d.first.action, ValueAction::Copy | ValueAction::Add)

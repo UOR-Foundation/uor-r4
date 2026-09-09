@@ -2647,9 +2647,16 @@ fn native_action_emission_actual_checkpoint_and_allocation() {
     actual_composed_or_mixed_checkpoint_and_allocation("action");
 }
 
+#[test]
+#[ignore = "requires R4_COPY_ADD_MODEL; charged actual-model development cases"]
+fn native_copy_add_actual_checkpoint_and_allocation() {
+    actual_composed_or_mixed_checkpoint_and_allocation("copy_add");
+}
+
 fn actual_composed_or_mixed_checkpoint_and_allocation(scope: &str) {
     use uor_r4_core::native_geometric::{Model, ValueAction};
     let (artifact_env, witness) = match scope {
+        "copy_add" => ("R4_COPY_ADD_MODEL", "shared_operator_refinement"),
         "action" => ("R4_ACTION_EMISSION_MODEL", "action_emission"),
         "mixed" => ("R4_MIXED_OPERATORS_MODEL", "mixed_operators"),
         "composed" => ("R4_COMPOSED_OUTPUT_MODEL", "composed_output"),
@@ -2664,6 +2671,10 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(scope: &str) {
     if scope == "action" {
         assert_eq!(wire[witness]["context_enabled"], true);
     }
+    if scope == "copy_add" {
+        assert_eq!(wire[witness]["continuation_fitted"], true,
+            "Copy-Add behavior requires a completed continuation fit, not a staged binding checkpoint");
+    }
     let history = "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
     let mut times = Vec::new();
     let mut positions = 0;
@@ -2674,7 +2685,20 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(scope: &str) {
     let no_reads: &[(u64, u64)] = &[];
     let latest_reads: &[(u64, u64)] = &[(4, 3), (4, 2), (5, 4)];
     let original_reads: &[(u64, u64)] = &[(4, 3), (4, 2), (5, 2)];
-    let cases = if scope == "action" {
+    let copy_original_reads: &[(u64, u64)] = &[(4, 2), (5, 3), (5, 4)];
+    let copy_extra_reads: &[(u64, u64)] = &[(4, 3), (5, 2), (5, 4)];
+    let cases = if scope == "copy_add" {
+        vec![
+            ("sentence_original_add_extra", "Copy the original total. Add the extra to the copied result. Explain in a sentence.",
+             "17 is 17.\n20 is 3 plus 17.\n", ValueAction::Add, 20, [3, 4], copy_original_reads),
+            ("sentence_extra_add_original", "Copy the extra. Add the original total to the copied result. Explain in a sentence.",
+             "3 is 3.\n20 is 17 plus 3.\n", ValueAction::Add, 20, [2, 4], copy_extra_reads),
+            ("rust_original_add_extra", "Copy the original total. Add the extra to the copied result. Write a Rust equality.",
+             "17 == 17\n20 == 3 + 17\n", ValueAction::Add, 20, [3, 4], copy_original_reads),
+            ("rust_extra_add_original", "Copy the extra. Add the original total to the copied result. Write a Rust equality.",
+             "3 == 3\n20 == 17 + 3\n", ValueAction::Add, 20, [2, 4], copy_extra_reads),
+        ]
+    } else if scope == "action" {
         vec![
             (
                 "sentence_copy_latest",
@@ -2761,14 +2785,27 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(scope: &str) {
         cases
     {
         let case_positions_start = positions;
-        let query = format!("User: There are 3 extra coins. Add the extra coins to the original total.{request}\nAssistant:");
+        let query = if scope == "copy_add" {
+            format!("User: There are 3 extra coins. {request}\nAssistant:")
+        } else {
+            format!("User: There are 3 extra coins. Add the extra coins to the original total.{request}\nAssistant:")
+        };
+        let (first_action, first_value, first_operands) = if scope == "copy_add" {
+            match second_operands {
+                [3, 4] => (ValueAction::Copy, 17, [2, 2]),
+                [2, 4] => (ValueAction::Copy, 3, [3, 3]),
+                _ => panic!("unknown authored Copy-Add case"),
+            }
+        } else {
+            (ValueAction::Add, 20, [3, 2])
+        };
         let mut session = model.session(Control::Full).unwrap();
         session.observe(&model, BOS).unwrap();
         let mut turns = vec![
             (history, "17.\n", false, 2),
             (query.as_str(), expected, true, 0),
         ];
-        if scope == "action" {
+        if matches!(scope, "action" | "copy_add") {
             turns.push((history, "17.\n", false, 8));
         }
         for (prompt, expected, composed, independent_id) in turns {
@@ -2856,7 +2893,7 @@ fn actual_composed_or_mixed_checkpoint_and_allocation(scope: &str) {
                 assert_eq!(session.work.values.derived_writes - before_writes, 2);
                 assert_eq!(writes.len(), 2);
                 for (write, action, id, value, operands) in [
-                    (&writes[0], ValueAction::Add, 4, 20, [3, 2]),
+                    (&writes[0], first_action, 4, first_value, first_operands),
                     (&writes[1], second_action, 5, second_value, second_operands),
                 ] {
                     assert_eq!(write.action, action);

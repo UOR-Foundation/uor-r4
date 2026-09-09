@@ -36,6 +36,7 @@ mod action_emission;
 #[cfg(test)]
 mod action_emission_tests;
 mod mixed_initial_training;
+mod shared_operator_refinement;
 pub use action_emission::{ActionEmissionExample, ActionEmissionSegment};
 mod mixed_operators;
 pub use mixed_operators::{MixedOperatorExample, MixedOperatorTarget};
@@ -266,6 +267,8 @@ pub enum Control {
     MixedOperatorsDisabled,
     MixedInitialDisabled,
     MixedTransitionDisabled,
+    SharedOperatorBindingDisabled,
+    SharedOperatorTransitionDisabled,
     ActionTransitionDisabled,
     ActionBindingDisabled,
     ActionEmissionDisabled,
@@ -342,6 +345,8 @@ impl Feature {
             | Control::SourceContextWindowOnly
             | Control::JointAdmissionDisabled
             | Control::OperationTransitionIntermediateDisabled
+            | Control::SharedOperatorBindingDisabled
+            | Control::SharedOperatorTransitionDisabled
             | Control::ActionTransitionDisabled
             | Control::ActionBindingDisabled
             | Control::ActionEmissionDisabled
@@ -440,6 +445,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    shared_operator_refinement: Option<shared_operator_refinement::SharedOperatorRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     action_emission: Option<action_emission::ActionEmission>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mixed_operators: Option<mixed_operators::MixedOperators>,
@@ -518,6 +525,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    shared_operator_refinement: Option<shared_operator_refinement::SharedOperatorRefinement>,
+    #[serde(default)]
     action_emission: Option<action_emission::ActionEmission>,
     #[serde(default)]
     mixed_operators: Option<mixed_operators::MixedOperators>,
@@ -595,6 +604,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            shared_operator_refinement: wire.shared_operator_refinement,
             action_emission: wire.action_emission,
             mixed_operators: wire.mixed_operators,
             composed_output: wire.composed_output,
