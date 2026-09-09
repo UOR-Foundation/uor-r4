@@ -288,6 +288,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native owner/value field composition",
+            region(
+                include_str!("../src/native_geometric/field_composition.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native runtime", kernel),
         ("native Feature helpers", features),
         ("native memory runtime", memory),
@@ -3336,4 +3345,187 @@ fn native_writer_lexical_actual_checkpoint_and_allocation() {
         println!("actual writer lexical case={label}; input_records={}; actual_text={:?}; allocations=0 bytes=0 for observe/begin/predict/observe; no authored prose-output claim",records.len(),String::from_utf8(model.decode(&output[..used]).unwrap()).unwrap());
     }
     println!("actual writer lexical artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; exact input-owner/value/span and pertoken committed-state checks; allocations=0 bytes=0 (load/encode/session/BOS/checkpoint/JSON/decode/report excluded)",model.artifact_cid());
+}
+
+/// Actual field-selection artifact: checkpoints span every observed input and
+/// generated output token, including an independent arithmetic turn afterwards.
+#[test]
+#[ignore = "requires R4_FIELD_COMPOSITION_MODEL; charged actual-model development cases"]
+fn native_field_composition_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Model, Session};
+    fn state(session: &Session) -> serde_json::Value {
+        serde_json::from_slice(&session.checkpoint().unwrap()).unwrap()
+    }
+    fn same_committed_state(left: &Session, right: &Session) {
+        let mut left = state(left);
+        let mut right = state(right);
+        // Diagnostic scoring work can differ after repeated predict. Every
+        // persisted causal/field/memory state remains part of this comparison.
+        left.as_object_mut().unwrap().remove("work");
+        right.as_object_mut().unwrap().remove("work");
+        assert_eq!(left, right, "complete committed checkpoint state");
+    }
+    let bytes = std::fs::read(std::env::var("R4_FIELD_COMPOSITION_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["field_composition"].is_object());
+    let mut session = model.session(Control::Full).unwrap();
+    session.observe(&model, BOS).unwrap();
+    let mut input_positions = 0usize;
+    let mut output_positions = 0usize;
+    let mut active_field_positions = 0usize;
+    let mut malformed_checks = 0usize;
+    let mut mismatch_checks = 0usize;
+    let default_fields = state(&session)["field_composition"].clone();
+    let mut times = Vec::new();
+    for (label, prompt, target) in [
+        (
+            "owner_value",
+            "Record: selvi in Dusk Ridge. Where is selvi? Name the owner first. Answer:",
+            " selvi is in Dusk Ridge.\n",
+        ),
+        (
+            "independent_sum",
+            "User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+            "18.\n",
+        ),
+    ] {
+        let tokens = model.encode(prompt).unwrap();
+        if session.needs_input_boundary() {
+            session.end_response(&model).unwrap();
+        }
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        for token in tokens {
+            let mut restored = model.restore_session(&session.checkpoint().unwrap()).unwrap();
+            MEASURING.with(|v| v.set(true));
+            session.observe(&model, token).unwrap();
+            MEASURING.with(|v| v.set(false));
+            restored.observe(&model, token).unwrap();
+            same_committed_state(&session, &restored);
+            input_positions += 1;
+        }
+        let mut restored = model.restore_session(&session.checkpoint().unwrap()).unwrap();
+        MEASURING.with(|v| v.set(true));
+        session.begin_response(&model).unwrap();
+        MEASURING.with(|v| v.set(false));
+        restored.begin_response(&model).unwrap();
+        same_committed_state(&session, &restored);
+        let records = state(&session)["values"]["relations"]["records"].clone();
+        let mut output = [EOS; 96];
+        let mut used = 0usize;
+        loop {
+            let checkpoint = session.checkpoint().unwrap();
+            let before: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+            let mut restored = model.restore_session(&checkpoint).unwrap();
+            let prediction = restored.predict(&model).unwrap();
+            let mut after_predict = state(&restored);
+            after_predict.as_object_mut().unwrap().remove("work");
+            assert_eq!(restored.predict(&model).unwrap(), prediction);
+            let mut after_repeated_predict = state(&restored);
+            after_repeated_predict.as_object_mut().unwrap().remove("work");
+            assert_eq!(after_repeated_predict, after_predict, "repeated predict preserves committed state");
+            if before["field_composition"]["anchor"].is_object() {
+                active_field_positions += 1;
+                if malformed_checks == 0 {
+                    for pointer in [
+                        "/field_composition/anchor/relation_id",
+                        "/field_composition/anchor/source_end",
+                        "/field_composition/anchor/source_byte_end",
+                        "/field_composition/previous2",
+                    ] {
+                        let mut changed = before.clone();
+                        let field = changed.pointer_mut(pointer).expect("field anchor member");
+                        *field = serde_json::json!(field.as_u64().unwrap() + 1);
+                        assert!(model.restore_session(&serde_json::to_vec(&changed).unwrap()).is_err(),
+                            "altered field anchor must be rejected: {pointer}");
+                        malformed_checks += 1;
+                    }
+                }
+            }
+            if mismatch_checks == 0
+                && before["field_composition"]["read"]["field"] == 1
+                && before["field_composition"]["read"]["cursor"]
+                    .as_u64()
+                    .is_some_and(|cursor| cursor > 0)
+            {
+                // Fork an actual partially emitted owner. The wrong observed
+                // byte must abort the pending field, not advance its cursor.
+                let mut mismatched = model.restore_session(&checkpoint).unwrap();
+                MEASURING.with(|v| v.set(true));
+                let proposal = mismatched.predict(&model).unwrap();
+                let wrong = if proposal.token == u32::from(b'x') + 2 {
+                    u32::from(b'y') + 2
+                } else {
+                    u32::from(b'x') + 2
+                };
+                mismatched.observe(&model, wrong).unwrap();
+                MEASURING.with(|v| v.set(false));
+                let aborted = state(&mismatched);
+                assert_eq!(aborted["field_composition"], default_fields);
+                assert_eq!(aborted["response_entry"]["active"], false);
+                assert_eq!(aborted["response_entry"]["steps"], 0);
+                assert!(aborted["response_entry"]["boundary"].is_null());
+                assert_eq!(aborted["response_entry"]["last_action"], "base");
+                assert_eq!(aborted["response_entry"]["last"], wrong);
+                assert_eq!(aborted["values"]["relations"]["records"], records);
+                assert!(mismatched.field_composition_decision().is_none());
+                assert!(mismatched.response_entry_decision().is_none());
+                let mut resumed = model
+                    .restore_session(&mismatched.checkpoint().unwrap())
+                    .unwrap();
+                same_committed_state(&mismatched, &resumed);
+                if resumed.needs_input_boundary() {
+                    resumed.end_response(&model).unwrap();
+                }
+                for token in model.encode("User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:").unwrap() {
+                    resumed.observe(&model, token).unwrap();
+                }
+                resumed.begin_response(&model).unwrap();
+                let mut next = [EOS; 96];
+                let mut next_used = 0usize;
+                while next_used < next.len() {
+                    let token = resumed.predict(&model).unwrap().token;
+                    resumed.observe(&model, token).unwrap();
+                    next[next_used] = token;
+                    next_used += 1;
+                    if token == EOS { break; }
+                }
+                assert_eq!(next[next_used - 1], EOS);
+                assert_eq!(model.decode(&next[..next_used]).unwrap(), b"18.\n");
+                mismatch_checks += 1;
+                println!("actual field mismatch: observed partial-owner byte {wrong} instead of {}; default field/reset entry and checkpoint restoration preserved; independent next sum=18; mismatched predict/observe included in allocation census, recovery generation excluded", proposal.token);
+            }
+            MEASURING.with(|v| v.set(true));
+            let started = std::time::Instant::now();
+            let actual = session.predict(&model).unwrap();
+            session.observe(&model, actual.token).unwrap();
+            let elapsed = started.elapsed().as_nanos();
+            MEASURING.with(|v| v.set(false));
+            assert_eq!(actual, prediction);
+            restored.observe(&model, prediction.token).unwrap();
+            same_committed_state(&session, &restored);
+            assert_eq!(state(&session)["values"]["relations"]["records"], records,
+                "field emission preserves exact input records");
+            output[used] = actual.token;
+            used += 1;
+            output_positions += 1;
+            times.push(elapsed);
+            if actual.token == EOS || used == output.len() { break; }
+        }
+        assert_eq!(output[used - 1], EOS, "{label}: bounded generated stop");
+        assert_eq!(model.decode(&output[..used]).unwrap(), target.as_bytes(), "{label}");
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        println!("actual field composition case={label}; output={target:?}; allocations=0 bytes=0 for ingestion/begin/predict/observe");
+    }
+    assert!(
+        active_field_positions > 1,
+        "exercise committed field sequencing"
+    );
+    assert_eq!(malformed_checks, 4);
+    assert_eq!(mismatch_checks, 1);
+    times.sort_unstable();
+    println!("actual field composition artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; active_field_positions={active_field_positions}; malformed_anchor_history_checks={malformed_checks}; mismatch_recovery_checks={mismatch_checks}; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/end-response/checkpoint/JSON/decode/report and mismatch recovery generation excluded; no energy claim)", model.artifact_cid(), times[times.len()/2], times[times.len()-1]);
 }

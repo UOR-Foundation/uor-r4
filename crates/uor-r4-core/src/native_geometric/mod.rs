@@ -41,8 +41,13 @@ mod writer_lexical;
 pub use writer_lexical::WriterLexicalExample;
 mod source_role_refinement;
 pub use source_role_refinement::{SourceRoleRefinementExample, SourceRoleTarget};
+mod field_composition;
+mod field_composition_snapshot;
 mod word_emission;
 pub use action_emission::{ActionEmissionExample, ActionEmissionSegment};
+pub use field_composition::{
+    FieldAnchor, FieldCompositionExample, FieldDecision, FieldPiece, FieldRead,
+};
 pub use word_emission::WordEmissionExample;
 mod mixed_operators;
 pub use mixed_operators::{MixedOperatorExample, MixedOperatorTarget};
@@ -257,6 +262,10 @@ pub struct DocumentReceipt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Control {
+    FieldCompositionDisabled,
+    FieldCompositionContextDisabled,
+    FieldCompositionGeometryDisabled,
+    FieldCompositionReadDisabled,
     SourceSpanDisabled,
     /// Remove following source identity from the fitted extent operator.
     SourceSpanContextDisabled,
@@ -352,6 +361,10 @@ impl Feature {
     fn admitted(self, control: Control) -> bool {
         match control {
             Control::Full
+            | Control::FieldCompositionDisabled
+            | Control::FieldCompositionContextDisabled
+            | Control::FieldCompositionGeometryDisabled
+            | Control::FieldCompositionReadDisabled
             | Control::SourceSpanDisabled
             | Control::SourceSpanContextDisabled
             | Control::SourceSpanPairDisabled
@@ -465,6 +478,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    field_composition: Option<field_composition::FieldComposition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     writer_lexical: Option<writer_lexical::WriterLexical>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source_role_refinement: Option<source_role_refinement::SourceRoleRefinement>,
@@ -551,6 +566,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    field_composition: Option<field_composition::FieldComposition>,
+    #[serde(default)]
     writer_lexical: Option<writer_lexical::WriterLexical>,
     #[serde(default)]
     source_role_refinement: Option<source_role_refinement::SourceRoleRefinement>,
@@ -636,6 +653,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            field_composition: wire.field_composition,
             writer_lexical: wire.writer_lexical,
             source_role_refinement: wire.source_role_refinement,
             word_emission: wire.word_emission,

@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            field_composition: None,
             writer_lexical: None,
             source_role_refinement: None,
             word_emission: None,
@@ -566,6 +567,9 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.field_composition {
+            return witness.validate(self);
+        }
         if let Some(witness) = &self.writer_lexical {
             return witness.validate(self);
         }

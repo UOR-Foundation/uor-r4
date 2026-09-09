@@ -42,6 +42,7 @@ pub struct StateView {
 
 #[derive(Debug, Clone)]
 pub struct Session {
+    pub(super) field_composition: Option<super::field_composition::FieldState>,
     pub(super) routing_decision: Option<super::RoutingDecision>,
     pub(super) word_copy: Option<super::word_copy_types::WordCopyState>,
     pub(super) response_entry: Option<super::response_entry_types::ResponseEntryState>,
@@ -74,6 +75,7 @@ impl Session {
             .capacity()
             .saturating_mul(std::mem::size_of::<Candidate>());
         Self {
+            field_composition: model.field_composition.as_ref().map(|_| Default::default()),
             routing_decision: None,
             word_copy: model
                 .response_entry
@@ -194,6 +196,10 @@ impl Session {
         self.response_entry.as_ref().and_then(|state| state.pending)
     }
 
+    pub fn field_composition_decision(&self) -> Option<super::FieldDecision> {
+        self.field_composition.as_ref().and_then(|s| s.pending)
+    }
+
     pub fn word_copy_decision(&self) -> Option<super::WordCopyDecision> {
         self.word_copy.as_ref().and_then(|state| state.pending)
     }
@@ -234,6 +240,9 @@ impl Session {
 
     pub fn begin_response(&mut self, model: &Model) -> Result<()> {
         self.check_model(model)?;
+        if let Some(field) = &mut self.field_composition {
+            *field = Default::default();
+        }
         if let Some(copy) = &mut self.word_copy {
             copy.reset();
         }
@@ -264,6 +273,9 @@ impl Session {
 
     pub fn end_response(&mut self, model: &Model) -> Result<()> {
         self.check_model(model)?;
+        if let Some(field) = &mut self.field_composition {
+            *field = Default::default();
+        }
         if let Some(copy) = &mut self.word_copy {
             copy.reset();
         }
@@ -398,6 +410,9 @@ impl Session {
                     self.control,
                     &mut self.work.response_entry,
                 );
+                if let Some(fields) = &mut self.field_composition {
+                    fields.observe(model, entry, state, token, &mut self.work.word_copy);
+                }
                 if let Some(copy) = &mut self.word_copy {
                     copy.observe(entry, state, token, &mut self.work.word_copy);
                 }
@@ -830,6 +845,26 @@ impl Session {
                 self.offer_memory(model, candidate);
             }
         }
+        if let (Some(fields), Some(copy), Some(entry), Some(values)) = (
+            &mut self.field_composition,
+            &mut self.word_copy,
+            &mut self.response_entry,
+            &self.values,
+        ) {
+            if let Some(candidate) = super::field_composition::offer(
+                model,
+                fields,
+                copy,
+                entry,
+                values,
+                best,
+                self.control,
+                &mut self.work.word_copy,
+            ) {
+                best = candidate;
+                self.offer_memory(model, candidate);
+            }
+        }
         if let Some(state) = &mut self.memory {
             state.select_response(model, best, &mut self.work);
         }
@@ -843,6 +878,9 @@ impl Session {
             state.selected(best);
         }
         if let Some(state) = &mut self.word_copy {
+            state.selected(best);
+        }
+        if let Some(state) = &mut self.field_composition {
             state.selected(best);
         }
         Ok(Prediction {
