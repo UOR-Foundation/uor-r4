@@ -1,5 +1,17 @@
 # Current native geometric AI work
 
+## Current-version read experiment — rejected, September 9
+
+**Retain `6f5ab4f3`**, the owner/revision artifact below. The [current-version result](../native_geometric_current_version_read_973.md) and [evidence](../evidence/native_geometric_current_version_read_973.json) preserve rejected candidate `aa1bc159`. Its optional signed-H4 source refinement uses exact current/ancestor occurrence links and lexical-prime query context while freezing the parent. Construction improves all six targeted responses and preserves 1,111 inherited comparisons, but structural stress loses a previously correct answer: after two stated revisions the parent emits Amber Field while the candidate emits Copper Vale. Both stored the last fact incorrectly as owner `now`; the candidate trusts a stale selvi directory entry. Stress improves in aggregate (12/16 versus 9/16), which does not offset that regression. No candidate is promoted and no fresh draw was run.
+
+Five focused unit tests, the kernel source guard, one actual allocation/checkpoint test and 27 scoped native API checks pass. These do not override failed behavioral admission. The full historical API/replay campaign and new browser/WASM/HTTP are NOT_RUN. General prose/reasoning, alpha/frontier and complete-path energy claims remain unqualified.
+
+**Next: repair contextual binding of the latest owner/revision in consecutive facts before trusting current-version membership for source selection.** Preserve the existing correct recent answer, exact historical occurrence identity, literal-now owners, conflicts and valid dependent revisions. The optional rejected reader is retained for matched followup, not activated on the accepted model.
+
+Cumulative model usage is **27800.220 / 31350.000 seconds**; this cycle used 461.293 model and 460.572 engineering-command seconds. The +3,000-second standing-authorized extension was recorded before use; the 196.620-second reservation and 128 MiB storage margin remain. At the immutable evidence snapshot, accounted storage is 37265051648 / 39158181888 bytes. The linked evidence owns the complete projection, command charges, failed runs, artifact hashes and receipt paths. No unique deletion or external paid compute occurred.
+
+All older result and next-action sections below are historical snapshots.
+
 ## Contextual owner and revision commits — bounded positive, September 9
 
 **Retain `6f5ab4f3`**, CID `blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778`. The [owner/revision result](../native_geometric_owner_revision_973.md) and [evidence](../evidence/native_geometric_owner_revision_973.json) supersede the pointer below. A learned nonpositive residual conditions the existing writer on lexical-prime context, the exact exterior gap and the parent's directed endpoint separation. All parent geometry, dictionary, writer/cache, source and emission routing, field composition and numeric operators remain frozen. Serving retains bounded integer/table geometry with no mathematical matrix products, transformer, provider, phrase parser, global word exclusion or query-owner substitution.

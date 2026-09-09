@@ -322,9 +322,12 @@ pub(super) fn offer(
     let dependency = dependent.and_then(|(_, _, ids)| ids);
     let (source, action_index) = if let Some((source, action, _)) = dependent {
         (source, action)
-    } else if let Some(choice) =
-        super::relation::read_choice(model, values, &mut work.persistent_read)
-    {
+    } else if let Some(choice) = super::relation::read_choice_with_recent(
+        model,
+        values,
+        control == Control::CurrentRelationReadAll,
+        &mut work.persistent_read,
+    ) {
         choice
     } else {
         let (source, action, _) = choose(model, values, control, work)?;

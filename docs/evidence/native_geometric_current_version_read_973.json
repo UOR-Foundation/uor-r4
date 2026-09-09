@@ -1,0 +1,379 @@
+{
+  "schema": "uor-r4.current-version-read-result/1",
+  "at": "2026-09-09T15:19:19.049Z",
+  "decision": "REJECTED_REGRESSION",
+  "retained_parent": {
+    "cid": "blake3:6f5ab4f3e5cad068d72f72795fead8fb1b371c009e5935448c8c20df0794d778",
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/owner-revision/model.json",
+    "bytes": 13966704,
+    "sha256": "416fda343c34c68c3aa73a6ca82ae672c93f7a5383f9872b9ead2534fd22cab5"
+  },
+  "rejected_candidate": {
+    "cid": "blake3:aa1bc15919868a2a6c31e23593f77047d7b26b86ab3de217b1a445c37d31395f",
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/fit/model.json",
+    "bytes": 14239933,
+    "sha256": "72965f76d118cfe73ceef31eac850ec3b9d52ec7e929c0f68da5632007a4c022"
+  },
+  "fit": {
+    "documents": 1117,
+    "frames": 70,
+    "mutable_codes": 28,
+    "nonidentity_new_codes": 2,
+    "result": {
+      "accepted": [
+        3,
+        0,
+        0
+      ],
+      "final_correct": 70,
+      "final_hinge": 0,
+      "initial_correct": 68,
+      "initial_hinge": 5,
+      "proposals": 7092,
+      "stopped_at_time_limit": false
+    }
+  },
+  "construction": {
+    "artifact": "blake3:aa1bc15919868a2a6c31e23593f77047d7b26b86ab3de217b1a445c37d31395f",
+    "total": 1117,
+    "current_targets": 6,
+    "current_exact": 6,
+    "current_selections": 6,
+    "legacy_metric_correction": "current_commits in the original result is a pre-observation selection count; driver renamed current_selections before subsequent runs",
+    "inherited": 1111,
+    "preserved": 1111,
+    "control_comparisons": 12,
+    "controls_parent_equal": true,
+    "negative_rows": [
+      {
+        "id": "open/1/revision-forward/owner/false",
+        "prompt": "Record: tilva in Silver Cove. tilva now in Birch Grove. Where is tilva? Name the owner first. Answer:",
+        "parent": " now is in Birch Grove.\n",
+        "actual": " now is in Birch Grove.\n",
+        "parent_equal": true
+      },
+      {
+        "id": "open/1/revision-forward/plain/true",
+        "prompt": "Record: tilva in Silver Cove. tilva now in Birch Grove. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where is tilva? Answer:",
+        "parent": " Silver Cove.\n",
+        "actual": " Silver Cove.\n",
+        "parent_equal": true
+      },
+      {
+        "id": "open/1/revision-forward/owner/true",
+        "prompt": "Record: tilva in Silver Cove. tilva now in Birch Grove. oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm oak ash elm Where is tilva? Name the owner first. Answer:",
+        "parent": " tilva is in Silver Cove.\n",
+        "actual": " tilva is in Silver Cove.\n",
+        "parent_equal": true
+      }
+    ]
+  },
+  "stress": {
+    "total": 16,
+    "exact": 12,
+    "parent_exact": 9,
+    "regressions": [
+      {
+        "id": "stress/chain/0/false",
+        "prompt": "Record: Dusk Ridge holds selvi. selvi now in Copper Vale. selvi now in Amber Field. Where is selvi?  Answer:",
+        "expected": " Amber Field.\n",
+        "parent": {
+          "text": " Amber Field.\n",
+          "eos": true
+        },
+        "candidate": {
+          "text": " Copper Vale.\n",
+          "eos": true,
+          "selected_current_revision": true
+        },
+        "records": [
+          {
+            "id": 1,
+            "owner": "selvi",
+            "value": "Ridge",
+            "action": 1,
+            "previous": 0,
+            "conflict": false,
+            "owner_end": 25,
+            "value_end": 18
+          },
+          {
+            "id": 2,
+            "owner": "selvi",
+            "value": "Copper",
+            "action": 2,
+            "previous": 1,
+            "conflict": false,
+            "owner_end": 32,
+            "value_end": 41
+          },
+          {
+            "id": 3,
+            "owner": "now",
+            "value": "Amber",
+            "action": 1,
+            "previous": 0,
+            "conflict": false,
+            "owner_end": 54,
+            "value_end": 61
+          }
+        ],
+        "directory": [
+          2,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "complete_states": "Hash-bound local stress-result/result.json and candidate-decision.json"
+      }
+    ],
+    "stored_records_unchanged": true
+  },
+  "api": {
+    "status": "PASS",
+    "selected_checks": "base interface and current-source refinement; deeper historical checks NOT_RUN",
+    "checks": 27,
+    "passed": 27,
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/api-focused.json",
+      "bytes": 163887,
+      "sha256": "e2265056b22b6869a62ed282c3a39f5aaf2f665ac976eecb1aba32537648a069"
+    }
+  },
+  "tests": [
+    {
+      "label": "focused-current-source",
+      "passed": 5,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/focused-current-source.log",
+        "bytes": 734,
+        "sha256": "a39230e7ca5da079ff38eb7442aa0ab6195418c94a65ea167f9a151f207c7746"
+      }
+    },
+    {
+      "label": "focused-kernel",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/focused-kernel.log",
+        "bytes": 189,
+        "sha256": "d91378629aded1479f88558da37f71cc0041116a0934b35a497874fba1f81b8a"
+      }
+    },
+    {
+      "label": "focused-allocation",
+      "passed": 1,
+      "receipt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/focused-allocation.log",
+        "bytes": 1162,
+        "sha256": "0df0378bb390d7d738cca661b0377b71d493235dd0f2c96bdca74a432cf3980d"
+      }
+    }
+  ],
+  "resources_snapshot": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/resources-at-evidence.json",
+    "bytes": 1080,
+    "sha256": "eb5856faaf67d30cc97c3d2d767348648fede8ca6e570a9b2d31534c4816b66c"
+  },
+  "resources": {
+    "at": "2026-09-09T15:19:07.837Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/commands.jsonl",
+    "model_ms": 461293,
+    "engineering_ms": 460572,
+    "ledger": {
+      "cumulative_ms": 27800220,
+      "limit_ms": 31350000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 3353160,
+    "storage_high_water": {
+      "target": 30904320,
+      "worktree": 77824,
+      "evidence": 53075968,
+      "at": "2026-09-09T15:18:17.172Z",
+      "git": 0
+    },
+    "retained_copy_bytes": 0,
+    "owner_checkout_copy_bytes": 1048576,
+    "cycle_growth_bytes": 85106688,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 37265051648,
+    "storage_limit_bytes": 39158181888,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 1758912512,
+    "peak_model_sampled_rss_bytes": 1967177728,
+    "peak_engineering_sampled_rss_bytes": 2674032640,
+    "unique_deletions": false,
+    "paid_external_compute": false
+  },
+  "source_base": "af799c96430065806a2258f9e03af1a641a221c0",
+  "sources": [
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/current_source.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/current_source.rs",
+      "bytes": 29796,
+      "sha256": "65ef8789c504e866034415f4cc9e9bc37cbe3625a0d667bd09b560b4d1e6ce19"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing.rs",
+      "bytes": 7902,
+      "sha256": "5e2894c2b36f944d5a299ebe1cfe19a34cc7af529b007cc921ff0549a811c5db"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 43439,
+      "sha256": "afe05a0c0318d2a41e9b0e57579ee7d8740f0cd4759804cfdb3101d1dc01f874"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/relation.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/relation.rs",
+      "bytes": 32189,
+      "sha256": "658d93b8f9f488e02bea77953a51e62dc0507b04d31eecccdcabcbe755c1097f"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/role_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/role_read.rs",
+      "bytes": 14793,
+      "sha256": "30012320ee1606bb2e1960e0cb920899e78be90f3d23488836f578bf3122c47f"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 33282,
+      "sha256": "31f1a5e72e66bfa1ffd3b04cc21207032204b7dabf355d8dc49a32ebd1e68348"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 62291,
+      "sha256": "5d14ef613c66c276ba58e2554306a6ad8fde1eae7d89a1cf9965ad74661f452b"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_current_version_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_current_version_read.rs",
+      "bytes": 19692,
+      "sha256": "1c8ca0492db21826a45b1bbc1741c29a067e8e3639cc4ce783b8ea6abfcde2ed"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 174305,
+      "sha256": "f427ec44d816d07f5b68d9dfa977ed7617ec2386a09c11e265171e50b2bf3c1b"
+    },
+    {
+      "repository_path": "crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-api/examples/native_artifact_recovery_check.rs",
+      "bytes": 118380,
+      "sha256": "d9e2a2242fb59d99d2a88e3462c06b7d3cf7f584f9cca9249bd7e1d6da11807b"
+    }
+  ],
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/projection.json",
+      "bytes": 3459,
+      "sha256": "a098c8707a7f476f0f7f5871eff138f13fcec2a9124fb0479e7c6200a8e7d640"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/projection-initial.json",
+      "bytes": 2781,
+      "sha256": "0a4790a36ab7d6e718956a40ab1a08f96ce698aadd0482bb1a12b81ad9d9bebd"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/commands.jsonl",
+      "bytes": 15551,
+      "sha256": "2973796a6703654a42b10729837b4e8b3797c96f9d28e28569ea868f4cd818ff"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/candidate-decision.json",
+      "bytes": 348767,
+      "sha256": "ba6e24a1dd722e4c6999059344c05543a1226073a1bdc4c2c9d311f3df2fc7f5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/conclusion-scope.json",
+      "bytes": 580,
+      "sha256": "a6c1a012704ee10833871b6730e1ec048762915023d9c254b10a743c7d10902d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/open-summary.json",
+      "bytes": 8659,
+      "sha256": "e7b5dc61460e79c26b9e80b6c7b2c080dc8a4bcbe0a439747dd3a4c91b662b8f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/open-diagnostic-bounded/diagnostic.json",
+      "bytes": 3470204,
+      "sha256": "60e7ff834cee1830a02e3ee0cb11dd05075c5f6a8355b68e6048fef5396e043b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/construction/training.json",
+      "bytes": 197377,
+      "sha256": "8d68d143bdc54a2ef82c4c6a186335081562ed477b2a35bfa1f99cf7bbc9c20e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/construction/cases.json",
+      "bytes": 236109,
+      "sha256": "c11b792829c05b329c05bbd72a0a4f91c7407f74e97ec1990d2bbe6b610fe1c2"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/construction-result/result.json",
+      "bytes": 32625265,
+      "sha256": "cf8785adca07f35e0b399aa9227ee9aae2888d375897747ec3c02966c9f833eb"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/construction-result/lineage.json",
+      "bytes": 259,
+      "sha256": "e2323eea743d34e6a930ac4bdf30d5871c8357700ad05c691952385d1f6196d1"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/fit/fit.json",
+      "bytes": 287229,
+      "sha256": "3a616a854ac27d0f480d36642feec7174ae247736ec66f72c69724f9a6e45b8a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/stress-data/cases.json",
+      "bytes": 5233,
+      "sha256": "2b448a4c3e1942b4caf0e5f0c65926d63ed0b7d41ff33f5ed1bf109963ed25d4"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/stress-result/result.json",
+      "bytes": 831762,
+      "sha256": "006b23c9e1e559924ef9de276c70d24e33651641cc079e4d7f9936ab56173d04"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/review-current-source.json",
+      "bytes": 396,
+      "sha256": "6bf975a10443556e40768575964d730e9099eced642f00e6635ee381c921e7b1"
+    }
+  ],
+  "not_run": [
+    "post-selection fresh draw (candidate rejected)",
+    "full historical API recovery runner",
+    "prepared broader historical replay and allocation campaign",
+    "new-artifact browser/WASM/HTTP",
+    "general prose/reasoning or energy qualification"
+  ],
+  "next": "Repair contextual owner/revision binding for the newest fact in consecutive revisions before learning to trust current-version directory membership.",
+  "writer_diagnostic_lead": {
+    "status": "STATIC_ARTIFACT_DIAGNOSTIC_LEAD",
+    "receipt": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-version-read/writer-gap-inspection.json",
+      "bytes": 6061,
+      "sha256": "8bb73dea97e669e73d10ce0ff308d42854292898864bd51d1b482d42cad65657"
+    },
+    "observation": "Amber prime2 lacks the otherwise matching wrong-now Assert correction present for unknown0 and Copper31. This is a parameter-coverage difference, not measured scorer causality.",
+    "next": "Capture actual competing owner/action scores at the completed Amber boundary; compare same prefix with Copper and an unknown spelling before choosing a transferable role correction or balanced training crossings."
+  }
+}

@@ -35,8 +35,10 @@ mod action_binding;
 mod action_emission;
 #[cfg(test)]
 mod action_emission_tests;
+mod current_source;
 mod mixed_initial_training;
 mod shared_operator_refinement;
+pub use current_source::{CurrentSourceExample, CurrentSourceTarget};
 mod writer_choice;
 mod writer_lexical;
 pub use writer_choice::{WriterChoiceExample, WriterChoiceOverride, WriterChoiceTarget};
@@ -264,6 +266,10 @@ pub struct DocumentReceipt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Control {
+    /// Diagnostic reachability intervention; the retained default is unchanged.
+    CurrentRelationReadAll,
+    CurrentSourceDisabled,
+    CurrentSourceVersionDisabled,
     WriterChoiceDisabled,
     WriterChoiceBoundaryDisabled,
     FieldCompositionDisabled,
@@ -365,6 +371,9 @@ impl Feature {
     fn admitted(self, control: Control) -> bool {
         match control {
             Control::Full
+            | Control::CurrentSourceDisabled
+            | Control::CurrentSourceVersionDisabled
+            | Control::CurrentRelationReadAll
             | Control::WriterChoiceDisabled
             | Control::WriterChoiceBoundaryDisabled
             | Control::FieldCompositionDisabled
@@ -484,6 +493,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    current_source: Option<current_source::CurrentSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     writer_choice: Option<writer_choice::WriterChoice>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     field_composition: Option<field_composition::FieldComposition>,
@@ -574,6 +585,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    current_source: Option<current_source::CurrentSource>,
+    #[serde(default)]
     writer_choice: Option<writer_choice::WriterChoice>,
     #[serde(default)]
     field_composition: Option<field_composition::FieldComposition>,
@@ -663,6 +676,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            current_source: wire.current_source,
             writer_choice: wire.writer_choice,
             field_composition: wire.field_composition,
             writer_lexical: wire.writer_lexical,

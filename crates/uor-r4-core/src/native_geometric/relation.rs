@@ -708,6 +708,17 @@ pub(super) fn read_choice(
     values: &ValueState,
     work: &mut ValueWork,
 ) -> Option<(u8, usize)> {
+    read_choice_with_recent(model, values, false, work)
+}
+
+/// The allocating diagnostic can expose current records normally deferred to
+/// recent routing. This switch alone does not change serving dispatch.
+pub(super) fn read_choice_with_recent(
+    model: &Model,
+    values: &ValueState,
+    include_recent: bool,
+    work: &mut ValueWork,
+) -> Option<(u8, usize)> {
     let h = head(model)?;
     let state = values.relations.as_ref()?;
     let words = values.lexemes.as_ref()?;
@@ -721,7 +732,8 @@ pub(super) fn read_choice(
             continue;
         };
         work.relations.record_reads = work.relations.record_reads.saturating_add(1);
-        if !(model.relation_start.is_some() && record.owner.byte_end > record.value.byte_end)
+        if !include_recent
+            && !(model.relation_start.is_some() && record.owner.byte_end > record.value.byte_end)
             && record.span.as_ref().is_none_or(|span| span.start.is_none())
             && words.queries[..words.query_len].iter().any(|w| {
                 work.relations.source_presence_checks =
