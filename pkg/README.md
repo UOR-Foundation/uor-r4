@@ -24,7 +24,7 @@ The architecture uses prime-addressed ordered context, fixed zeta-zero phases, R
 
 ## Where the project goes next
 
-The [shared nonnumeric emission result](docs/native_geometric_word_emission_973.md) connects exact completed words/spans to the existing signed-H4 lexical selector. Learned sentence endings and Base/defer choices preserve earlier numeric composition and Rust returns, with actual generated behavior, API and allocation checks. General prose and program synthesis remain unqualified. Next under #973 diagnose instruction-versus-fact role binding: some absent-owner stop requests still select unrelated facts, and suffix instructions can introduce an extra relation.
+The [shared nonnumeric emission result](docs/native_geometric_word_emission_973.md) connects exact completed words/spans to the existing signed-H4 lexical selector. Learned sentence endings and Base/defer choices preserve earlier numeric composition and Rust returns, with actual generated behavior, API and allocation checks. General prose and program synthesis remain unqualified. The [source-role result](docs/native_geometric_source_roles_973.md) corrects a learned recency bias behind the tested absent-owner failures. Next under #973 distinguish instructions from facts in the shared writer: an exact feature collision currently makes those two roles indistinguishable at one write proposal.
 
 [The canonical plan](docs/integration/project-track.md) owns order and acceptance. [ROADMAP.md](ROADMAP.md) provides the issue navigation; [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) is the live programme tracker. Priorities guide development, while actual evidence and dependencies determine the next useful step.
 
