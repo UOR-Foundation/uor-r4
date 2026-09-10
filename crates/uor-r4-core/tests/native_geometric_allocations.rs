@@ -410,6 +410,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native current query handoff",
+            region(
+                include_str!("../src/native_geometric/current_query_handoff.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),

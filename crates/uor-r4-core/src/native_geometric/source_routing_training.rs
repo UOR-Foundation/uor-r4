@@ -863,6 +863,12 @@ impl Model {
             Control::Full,
             &mut WordCopyWork::default(),
         );
+        let current_handoff = super::current_query_handoff::choose(
+            self,
+            values,
+            Control::Full,
+            &mut WordCopyWork::default(),
+        );
         let dependent = super::dependent_read::choose(
             self,
             values,
@@ -980,7 +986,8 @@ impl Model {
             "actual_field_decision":session.field_composition_decision(),
             "current_relation_choice_including_recent":including_recent,
             "current_relation_candidates":relation_candidates,
-            "direct_source_dispatch":eligible && historical.is_none() && dependent.is_none() && persistent.is_none(),
+            "current_query_handoff_choice":current_handoff,
+            "direct_source_dispatch":eligible && historical.is_none() && current_handoff.is_none() && dependent.is_none() && persistent.is_none(),
             "historical_choice":historical,
             "word_copy_eligible":eligible,"dependent_choice":dependent,"persistent_choice":persistent,
             "direct_choice":super::source_routing::choose(self, values, Control::Full, &mut WordCopyWork::default()),
