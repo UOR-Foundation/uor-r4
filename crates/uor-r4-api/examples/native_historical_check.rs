@@ -7,6 +7,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     if a.len() != 4 {
         return Err("usage: native_historical_check MODEL CASES REPORT".into());
     }
+    // The report file is reserved exclusively before the model is loaded or anything
+    // is generated: an existing report fails here and keeps its bytes.
+    let mut report = fs::File::create_new(&a[3]).map_err(|e| {
+        format!(
+            "report file {} was not created exclusively ({e}); choose a new attempt path instead of reusing or overwriting an existing report",
+            a[3]
+        )
+    })?;
     let bytes = fs::read(&a[1])?;
     let model = NativeModel::load_from_bytes(&bytes)?;
     let cases: Vec<Value> = serde_json::from_slice(&fs::read(&a[2])?)?;
@@ -44,8 +52,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     let passed = !checks.is_empty() && checks.iter().all(|c| c["passed"] == true);
-    // The report file is created exclusively: an existing report is never overwritten.
-    let mut report = fs::File::create_new(&a[3])?;
     std::io::Write::write_all(
         &mut report,
         &serde_json::to_vec(

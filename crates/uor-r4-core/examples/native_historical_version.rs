@@ -7,6 +7,7 @@ use std::{
     io::{BufWriter, Read, Write},
     path::Path,
 };
+use uor_r4_core::answer_oracle::{self, Intent};
 use uor_r4_core::native_geometric::{
     Control, HistoricalVersionExample, Model, RoutingMode, SourceRoutingConfig, BOS, EOS,
 };
@@ -151,6 +152,36 @@ struct Case {
     /// after earlier turns (the head's immediate previous record or the head).
     #[serde(default)]
     follow_up: Option<u64>,
+    /// Frozen accepted complete answers, authored from the typed intent at preparation
+    /// and shared with the native API check; membership only, never derived from output.
+    #[serde(default)]
+    accepted: Vec<String>,
+}
+/// The request's typed intent, from the case's exact labels.
+fn intent(c: &Case) -> Intent {
+    if c.abstain {
+        Intent::Abstain
+    } else if let Some(record) = c.follow_up {
+        if Some(record) == c.current_record {
+            Intent::Current
+        } else {
+            Intent::Previous
+        }
+    } else {
+        Intent::Initial
+    }
+}
+/// The frozen accepted list, or the same typed list for case files authored before
+/// `accepted` existed (a plain request is one whose expected text is the bare value).
+fn accepted_answers(c: &Case) -> Vec<String> {
+    if !c.accepted.is_empty() {
+        return c.accepted.clone();
+    }
+    let plain = c
+        .expected
+        .as_ref()
+        .is_some_and(|e| *e == format!(" {}.\n", c.value));
+    answer_oracle::accepted(intent(c), plain, &c.owner, &c.value)
 }
 struct Owner {
     name: String,
@@ -247,6 +278,12 @@ fn push_targets_depth(
                 abstain: false,
                 history: Vec::new(),
                 follow_up: None,
+                accepted: answer_oracle::accepted(
+                    Intent::Initial,
+                    style.is_empty(),
+                    owner,
+                    initial,
+                ),
             });
         }
     }
@@ -273,18 +310,29 @@ fn push_follow_ups(
                 expected: String,
                 history: Vec<String>,
                 record: u64,
-                value: &str| Case {
-        id: format!("follow/{id}/{name}"),
-        prompt,
-        expected: Some(expected),
-        current_record: Some(head),
-        target_record: None,
-        depth: None,
-        owner: owner.into(),
-        value: value.into(),
-        abstain: false,
-        history,
-        follow_up: Some(record),
+                value: &str| {
+        // The typed intent authors the frozen accepted list: a previous request
+        // never accepts a present-tense statement of its old value.
+        let plain = !expected.contains(" was in ") && !expected.contains(" is in ");
+        let kind = if record == head {
+            Intent::Current
+        } else {
+            Intent::Previous
+        };
+        Case {
+            id: format!("follow/{id}/{name}"),
+            prompt,
+            expected: Some(expected),
+            current_record: Some(head),
+            target_record: None,
+            depth: None,
+            owner: owner.into(),
+            value: value.into(),
+            abstain: false,
+            history,
+            follow_up: Some(record),
+            accepted: answer_oracle::accepted(kind, plain, owner, value),
+        }
     };
     for s in [1usize, 2] {
         cases.push(case(
@@ -345,6 +393,7 @@ fn push_abstain(
                 abstain: true,
                 history: Vec::new(),
                 follow_up: None,
+                accepted: answer_oracle::accepted(Intent::Abstain, style.is_empty(), owner, ""),
             });
         }
     }
@@ -372,6 +421,7 @@ fn push_preserve(
             abstain: false,
             history: Vec::new(),
             follow_up: None,
+            accepted: Vec::new(),
         });
     }
 }
@@ -412,6 +462,7 @@ fn push_absent(cases: &mut Vec<Case>, id: &str, facts: &str, absent: &str) {
             abstain: false,
             history: Vec::new(),
             follow_up: None,
+            accepted: Vec::new(),
         });
     }
 }
@@ -626,6 +677,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         abstain: false,
                         history: Vec::new(),
                         follow_up: None,
+                        accepted: Vec::new(),
                     });
                 }
             }
@@ -685,6 +737,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         abstain: false,
                         history: Vec::new(),
                         follow_up: None,
+                        accepted: Vec::new(),
                     });
                 }
             }
@@ -713,6 +766,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                             abstain: true,
                             history: Vec::new(),
                             follow_up: None,
+                            accepted: Vec::new(),
                         });
                     }
                 }
@@ -770,6 +824,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                     abstain: true,
                     history: Vec::new(),
                     follow_up: None,
+                    accepted: Vec::new(),
                 });
             }
         }
@@ -846,6 +901,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 abstain: false,
                 history: Vec::new(),
                 follow_up: None,
+                accepted: Vec::new(),
             });
         }
         let conflict = format!(
@@ -868,6 +924,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 abstain: false,
                 history: Vec::new(),
                 follow_up: None,
+                accepted: Vec::new(),
             });
         }
         let (v0, v1, v2) = (&owner.values[0], &owner.values[1], &owner.values[2]);
@@ -881,7 +938,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
         .iter()
         .enumerate()
         {
-            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None });
+            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None, accepted: Vec::new() });
         }
         // The intent word as an owner name: its own root is still the exact answer.
         let facts = format!("Record: initial in {v0}. initial now in {v1}. initial now in {v2}.");
@@ -1036,6 +1093,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                     abstain: false,
                     history: Vec::new(),
                     follow_up: None,
+                    accepted: Vec::new(),
                 });
             }
         }
@@ -1189,7 +1247,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
                     continue;
                 }
                 seen.insert(prompt.clone(), cases.len());
-                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None });
+                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None, accepted: Vec::new() });
             }
         }
     }
@@ -1392,23 +1450,16 @@ fn exact_primary(c: &Case, actual: &Value) -> bool {
         && actual["initial_relations"] == actual["final_relations"]
 }
 fn exact(c: &Case, actual: &Value) -> bool {
-    if c.abstain {
-        return exact_primary(c, actual);
-    }
-    let owner_form = format!(" {} was in {}.\n", c.owner, c.value);
-    let current_form = format!(" {} is in {}.\n", c.owner, c.value);
-    let plain = c
-        .expected
-        .as_ref()
-        .is_some_and(|e| *e == format!(" {}.\n", c.value));
-    (c.expected.as_ref().is_some_and(|e| actual["text"] == *e)
-        || (plain && actual["text"] == owner_form)
-        || (plain && c.follow_up.is_some() && actual["text"] == current_form))
+    // Membership in the frozen, typed accepted list shared with the API check;
+    // no alternative is derived from the response.
+    actual["text"]
+        .as_str()
+        .is_some_and(|t| answer_oracle::accepts(&accepted_answers(c), t))
         && actual["eos"] == true
         && actual["initial_relations"] == actual["final_relations"]
 }
 fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
-    uor_r4_core::report_output::claim(out)?;
+    // `out` is claimed by main before the model is loaded.
     let mut rows = Vec::new();
     let (mut targets, mut offered, mut exact_count) = (0, 0, 0);
     for c in cases.iter().filter(|c| c.target_record.is_some()) {
@@ -1438,7 +1489,7 @@ fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
     Ok(())
 }
 fn probe(model: &Model, out: &Path) -> Result<()> {
-    uor_r4_core::report_output::claim(out)?;
+    // `out` is claimed by main before the model is loaded.
     let has_witness =
         model.without_historical_version_intent()?.artifact_cid() != model.artifact_cid();
     let mut rows = Vec::new();
@@ -1520,7 +1571,7 @@ fn evaluate(
     out: &Path,
     controls: bool,
 ) -> Result<()> {
-    uor_r4_core::report_output::claim(out)?;
+    // `out` is claimed by main before the model is loaded.
     let mut rows = BufWriter::new(fs::File::create_new(out.join("rows.jsonl"))?);
     let mut written = 0usize;
     let (
@@ -1665,8 +1716,50 @@ fn main() -> Result<()> {
         return prepare(Path::new(&a[2]), a[1] == "fresh");
     }
     if a.len() == 4 && a[1] == "probe" {
+        // Every destination is reserved before the model is loaded or anything is generated.
+        let out = Path::new(&a[3]);
+        uor_r4_core::report_output::claim(out)?;
         let model = Model::from_bytes(&fs::read(&a[2])?)?;
-        return probe(&model, Path::new(&a[3]));
+        return probe(&model, out);
+    }
+    if a.len() == 3 && a[1] == "verify" {
+        // Complete sealed file set: listed hashes and no unlisted files.
+        uor_r4_core::report_output::verify(Path::new(&a[2]))?;
+        println!("{}", json!({"verified":a[2]}));
+        return Ok(());
+    }
+    if a.len() == 4 && a[1] == "api-cases" {
+        // Derived API inputs live in their own claimed attempt, bound to the source
+        // case file (and its sealed manifest when present); the source root is not touched.
+        let out = Path::new(&a[3]);
+        uor_r4_core::report_output::claim(out)?;
+        let source = Path::new(&a[2]);
+        let bytes = fs::read(source)?;
+        let cases: Vec<Case> = serde_json::from_slice(&bytes)?;
+        let api: Vec<Value> = cases
+            .iter()
+            .filter(|c| c.current_record.is_some())
+            .map(|c| {
+                let mut v = serde_json::to_value(c).unwrap_or(Value::Null);
+                v["accepted"] = json!(accepted_answers(c));
+                v["intent"] = json!(intent(c));
+                v
+            })
+            .collect();
+        save(&out.join("api-cases.json"), &api)?;
+        let manifest = source
+            .parent()
+            .map(|d| d.join("manifest.json"))
+            .filter(|m| m.is_file());
+        save(
+            &out.join("source.json"),
+            &json!({"schema":"uor-r4.api-cases-source/1","source":source,"source_blake3":blake3::hash(&bytes).to_hex().to_string(),"source_bytes":bytes.len(),
+                "source_manifest":manifest.as_ref().map(|m| json!({"path":m,"blake3":fs::read(m).map(|b| blake3::hash(&b).to_hex().to_string()).unwrap_or_default()})),
+                "cases":api.len(),"rule":"accepted lists come from the typed intent frozen at preparation; the API check judges membership only"}),
+        )?;
+        println!("{}", json!({"api_cases":api.len(),"out":out}));
+        uor_r4_core::report_output::seal(out)?;
+        return Ok(());
     }
     if a.len() == 3 && a[1] == "seal" {
         // Seal a completed report directory produced by any driver.
@@ -1676,11 +1769,11 @@ fn main() -> Result<()> {
     }
     if a.len() == 4 && a[1] == "promote" {
         // The same learned witness under the versioned chain contract; no refit.
+        let out = Path::new(&a[3]);
+        uor_r4_core::report_output::claim(out)?;
         let bytes = fs::read(&a[2])?;
         let model = Model::from_bytes(&bytes)?;
         let candidate = model.with_reassertion_links()?;
-        let out = Path::new(&a[3]);
-        uor_r4_core::report_output::claim(out)?;
         fs::write(out.join("model.json"), candidate.to_bytes()?)?;
         save(
             &out.join("promote.json"),
@@ -1695,11 +1788,11 @@ fn main() -> Result<()> {
     }
     if a.len() == 6 && a[1] == "compare" {
         // Actual outputs of this artifact against another artifact on the same prompts.
+        let out = Path::new(&a[5]);
+        uor_r4_core::report_output::claim(out)?;
         let model = Model::from_bytes(&fs::read(&a[2])?)?;
         let other = Model::from_bytes(&fs::read(&a[3])?)?;
         let cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[4])?)?;
-        let out = Path::new(&a[5]);
-        uor_r4_core::report_output::claim(out)?;
         let mut rows = BufWriter::new(fs::File::create_new(out.join("rows.jsonl"))?);
         let (mut equal, mut differing) = (0, Vec::new());
         for c in &cases {
@@ -1729,17 +1822,17 @@ fn main() -> Result<()> {
     if a.len() != 5
         || !["diagnose", "fit", "refit", "evaluate", "preserve"].contains(&a[1].as_str())
     {
-        return Err("usage: prepare/fresh OUT | probe MODEL OUT | promote MODEL OUT | seal DIR | diagnose MODEL CASES OUT | fit/refit MODEL TRAIN OUT | evaluate/preserve MODEL CASES OUT | compare MODEL OTHER CASES OUT".into());
+        return Err("usage: prepare/fresh OUT | probe MODEL OUT | promote MODEL OUT | seal DIR | verify DIR | api-cases CASES OUT | diagnose MODEL CASES OUT | fit/refit MODEL TRAIN OUT | evaluate/preserve MODEL CASES OUT | compare MODEL OTHER CASES OUT".into());
     }
+    let out = Path::new(&a[4]);
+    uor_r4_core::report_output::claim(out)?;
     let bytes = fs::read(&a[2])?;
     let model = Model::from_bytes(&bytes)?;
     if model.to_bytes()? != bytes {
         return Err("supplied artifact byte roundtrip differs".into());
     }
-    let out = Path::new(&a[4]);
     if a[1] == "fit" || a[1] == "refit" {
         let docs: Vec<HistoricalVersionExample> = serde_json::from_slice(&fs::read(&a[3])?)?;
-        uor_r4_core::report_output::claim(out)?;
         let config = SourceRoutingConfig {
             learned_features: 768,
             passes: 8,
@@ -1774,6 +1867,7 @@ fn main() -> Result<()> {
             c.expected = None;
             c.abstain = false;
             c.follow_up = None;
+            c.accepted.clear();
         }
     }
     if a[1] == "diagnose" {

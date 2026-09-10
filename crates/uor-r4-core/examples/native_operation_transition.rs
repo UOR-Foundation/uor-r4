@@ -32,9 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "usage: native_operation_transition <diagnose|fit|evaluate|fresh> MODEL OUT".into(),
         );
     }
-    let model = Model::from_bytes(&fs::read(&args[2])?)?;
+    // The destination is reserved before the model is loaded or anything is generated.
     let out = Path::new(&args[3]);
     uor_r4_core::report_output::claim(out)?;
+    let model = Model::from_bytes(&fs::read(&args[2])?)?;
     let docs = if args[1] == "fresh" {
         {
             let mut v = cases("fresh-positive", 4, 109);

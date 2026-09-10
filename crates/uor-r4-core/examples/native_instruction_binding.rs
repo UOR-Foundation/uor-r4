@@ -81,9 +81,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         return Err("usage: native_instruction_binding <fit|evaluate|fresh|stress|preserve-lexical> MODEL PRESERVED_RESULT OUT".into());
     }
-    let model = Model::from_bytes(&fs::read(&a[2])?)?;
+    // The destination is reserved before the model is loaded or anything is generated.
     let out = Path::new(&a[4]);
     uor_r4_core::report_output::claim(out)?;
+    let model = Model::from_bytes(&fs::read(&a[2])?)?;
     if a[1] == "preserve-lexical" {
         let baseline: serde_json::Value = serde_json::from_slice(&fs::read(&a[3])?)?;
         let wire: serde_json::Value = serde_json::from_slice(&model.to_bytes()?)?;

@@ -790,10 +790,11 @@ fn main() -> Result<()> {
     ) {
         return Err("unknown word sentence mode".into());
     }
-    let parent = Model::from_bytes(&fs::read(&a[2])?)?;
-    let cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[3])?)?;
+    // The destination is reserved before the model is loaded or anything is generated.
     let out = Path::new(&a[4]);
     uor_r4_core::report_output::claim(out)?;
+    let parent = Model::from_bytes(&fs::read(&a[2])?)?;
+    let cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[3])?)?;
     if cases.is_empty() || cases.len() > 256 {
         return Err("case limit".into());
     }
