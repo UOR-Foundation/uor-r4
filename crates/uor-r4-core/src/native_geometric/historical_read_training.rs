@@ -108,6 +108,110 @@ impl HistoricalRead {
 }
 
 impl Model {
+    /// Host-only trace using the exact serving feature, admission and score laws.
+    pub fn historical_query_trace(&self, prompt: &str) -> Result<serde_json::Value> {
+        if prompt.is_empty() || prompt.len() > 65536 {
+            return Err(Error("historical trace input bound".into()));
+        }
+        let mut session = self.session(Control::Full)?;
+        session.observe(self, BOS)?;
+        for token in self.encode(prompt)? {
+            session.observe(self, token)?;
+        }
+        session.begin_response(self)?;
+        session.predict(self)?;
+        let values = session
+            .values
+            .as_ref()
+            .ok_or_else(|| Error("trace values absent".into()))?;
+        let block = historical_read::head(self, Control::Full)
+            .ok_or_else(|| Error("trace historical reader absent".into()))?;
+        let window = historical_read::effective_window(self, Control::Full);
+        let state = values
+            .relations
+            .as_ref()
+            .ok_or_else(|| Error("trace relations absent".into()))?;
+        let words = values
+            .lexemes
+            .as_ref()
+            .ok_or_else(|| Error("trace words absent".into()))?;
+        let words = historical_read::query_view(
+            words,
+            values.query_boundary,
+            block.query_scope == 2,
+            &mut Default::default(),
+        );
+        let addr = historical_read::addresses(block, values, &mut Default::default());
+        let (defer, copy) = historical_read::action_indices(self)
+            .ok_or_else(|| Error("trace actions absent".into()))?;
+        let captured: Vec<_> = words.queries[..words.query_len].iter().enumerate().map(|(q,w)| serde_json::json!({"reverse_index":q,"word":String::from_utf8_lossy(&w.bytes[..usize::from(w.len)]),"prime":addr[q],"end":w.end,"explicit_historical_feature":q<window})).collect();
+        let mut candidates = Vec::new();
+        for &id in &state.directory {
+            let Some(current) = state.record(id) else {
+                continue;
+            };
+            let Some(old) = historical_read::previous(state, current, &mut Default::default())
+            else {
+                continue;
+            };
+            let (f, n) = historical_read::features_with_window(
+                self,
+                values,
+                current,
+                &addr,
+                block.query_scope == 2,
+                window,
+                &mut Default::default(),
+            );
+            let roots = block
+                .router
+                .encode(self, &f[..n], Control::Full, &mut Default::default());
+            let codes: Vec<_> = f[..n]
+                .iter()
+                .map(|feature| {
+                    block
+                        .router
+                        .codes
+                        .binary_search_by_key(feature, |c| c.feature)
+                        .ok()
+                        .map(|i| &block.router.codes[i])
+                })
+                .collect();
+            candidates.push(serde_json::json!({"current":id,"previous":old.id,"owner":String::from_utf8_lossy(&current.owner.bytes[..usize::from(current.owner.len)]),"representable":historical_read::representable(self,values,old,copy,&mut Default::default()),"features":f[..n],"codes":codes,"roots":roots,"score":block.router.score(self,roots,copy,&mut Default::default())}));
+        }
+        let mut dependent = serde_json::Value::Null;
+        if let Some(d) = &self.dependent_read {
+            let local = historical_read::local_query_scope(self, Control::Full);
+            let addr =
+                super::dependent_read::addresses_scoped(d, values, local, &mut Default::default());
+            let mut rows = Vec::new();
+            for &id in &state.directory {
+                let Some(record) = state.record(id) else {
+                    continue;
+                };
+                let (f, n) = super::dependent_read::features_scoped(
+                    self,
+                    values,
+                    record,
+                    &addr,
+                    local,
+                    &mut Default::default(),
+                );
+                let roots = d
+                    .router
+                    .encode(self, &f[..n], Control::Full, &mut Default::default());
+                let scores: Vec<_> = (0..d.router.landmarks.len())
+                    .map(|a| d.router.score(self, roots, a, &mut Default::default()))
+                    .collect();
+                rows.push(serde_json::json!({"record":id,"features":f[..n],"roots":roots,"action_scores":scores}));
+            }
+            dependent = serde_json::json!({"base_score":d.router.score(self,[self.geometry.identity;2],defer,&mut Default::default()),"candidates":rows,"choice":super::dependent_read::choose(self,values,Control::Full,&mut Default::default())});
+        }
+        Ok(
+            serde_json::json!({"artifact":self.artifact_cid(),"query_boundary":values.query_boundary,"historical_window":window,"captured":captured,"base_score":block.router.score(self,[self.geometry.identity;2],defer,&mut Default::default()),"copy_action":copy,"candidates":candidates,"choice":historical_read::choose(self,values,Control::Full,&mut Default::default()),"dependent":dependent,"first_decision":session.word_copy_decision()}),
+        )
+    }
+
     pub fn without_historical_read(&self) -> Result<Model> {
         let Some(block) = &self.historical_read else {
             return Ok(self.clone());
