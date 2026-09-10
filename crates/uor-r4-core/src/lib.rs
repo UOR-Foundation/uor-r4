@@ -5,6 +5,8 @@
 #[cfg(feature = "learned-reference")]
 pub mod learned_reference;
 
+/// Typed, frozen accepted-answer lists shared by every offline evaluator.
+pub mod answer_oracle;
 /// Exclusive report directories and sealed manifests for experiment drivers.
 pub mod report_output;
 

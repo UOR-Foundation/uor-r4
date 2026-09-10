@@ -1,0 +1,574 @@
+{
+  "schema": "uor-r4.repair-safeguards-result/1",
+  "at": "2026-09-10T19:10:45.073981+00:00",
+  "status": "SAFEGUARDS_DELIVERED_NO_MODEL_CHANGE",
+  "issue": 973,
+  "source_base": "ce6046b58b5a668e15f542c8f46b8243099e9938",
+  "retained_artifact_unchanged": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reassertion-chain-repair/model.json",
+    "bytes": 17326536,
+    "sha256": "f17a46e6aea16134f866c68167e2008efcae8b18bf021c39662cfaec61d50698"
+  },
+  "review": {
+    "root": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-claude-repair-review",
+    "readme": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-claude-repair-review/README.md",
+      "bytes": 15063,
+      "sha256": "9b894ccd4d2a39a136c021179ea0c23f400d1122bda95a61f86832662ccf2748"
+    },
+    "resources": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-claude-repair-review/resources.json",
+      "bytes": 5863,
+      "sha256": "382e4c34bc344dd9f2dc8a70a7acd072775c3e49e7f5ad7fc5879d8d7348f869"
+    }
+  },
+  "corrections": {
+    "destinations_before_model_work": {
+      "unit": {
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/report-output-unit-tests.log",
+          "bytes": 310,
+          "sha256": "42c7f63599775389933ed3c000c63aaabdc24e27c703d83eea684a9217618ee8"
+        },
+        "passed": 2
+      },
+      "real_driver_check": {
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/driver-destination-check.log",
+          "bytes": 312,
+          "sha256": "2dd23c1fae64dbd72c36d58acc7d808b112e7f7c9aab13d6f387dc6810504a5d"
+        },
+        "passed": 1
+      },
+      "drivers_checked": 15,
+      "api_report_file_checked": true
+    },
+    "derived_inputs_and_complete_file_set": {
+      "api_cases_attempt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/api-cases-fresh-2-3/source.json",
+        "bytes": 585,
+        "sha256": "a05c62a7cf16c3d46b28a66f93611f19e62938f57328208b0b4a41f653acbd19"
+      },
+      "verify_new_attempt": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/verify-api-cases-fresh-2-3.log",
+        "bytes": 107,
+        "sha256": "9357db6ad35fa99fab02c16c4ab95e7b251bffb8ba7833954429c5d0c399b1f0"
+      },
+      "verify_old_root_expected_failure": {
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/verify-old-root-fresh-2-3.log",
+          "bytes": 100,
+          "sha256": "47f6efee2df233417b0eeadb3ed50cd18c92e5189a731c0ef084859d0f8e35ce"
+        },
+        "text": "Error: Custom { kind: InvalidData, error: \"sealed directory holds unlisted files: api-cases.json\" }"
+      },
+      "verify_sealed_root_pass": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/verify-old-root-fit3.log",
+        "bytes": 114,
+        "sha256": "b834d3f41e8561d3d3c49d568c9a96194fb9e50b285dc12074be8be7764ffb93"
+      },
+      "scope_correction": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-reassertion-chain-repair/sealed-roots-scope-correction.json",
+        "bytes": 3627,
+        "sha256": "0fdf63d3d806fb902efdfac8fa476c55884ac83f09efeb6c300d53f010457f4e"
+      }
+    },
+    "typed_answer_oracle": {
+      "unit": {
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/answer-oracle-unit-tests.log",
+          "bytes": 304,
+          "sha256": "a5bb2b5af0ad725e2464fd3d9bb39de4e0050550ebd66ebec2d447a71352c28f"
+        },
+        "passed": 2
+      },
+      "fresh_reevaluation": {
+        "receipt": {
+          "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/reeval-fresh-2-3/summary.json",
+          "bytes": 1011,
+          "sha256": "5504cb7ce6403eac6ac9178bf22f519af458467eb53f5a2f6739224611538e82"
+        },
+        "artifact": "blake3:90ebd8434ce14a74763cf2e31f9c14128e7a9b977258e90833ddc1a2e76382a6",
+        "targets": 976,
+        "exact_and_selected": 976,
+        "primary_text_exact_and_selected": 864,
+        "abstain_exact": 132,
+        "follow_up_exact_and_selected": 154,
+        "follow_up_targets": 154,
+        "inherited": 892,
+        "preserved": 892,
+        "disabled_parent_equal": 976,
+        "equals_original_fresh_summary": true
+      }
+    },
+    "wrapper_accounting": {
+      "missing_executable_probe": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/wrapper-missing-executable-probe.log",
+        "bytes": 63,
+        "sha256": "43d1ea0606c6820e19e5d0ba56effb9c46be497880c7310ab8f0c9c541c08c5a"
+      },
+      "reconciliation": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/reconciliation-22ms.json",
+        "bytes": 1638,
+        "sha256": "073f78bc706ae149a486174c01d2635ebcd19df42847380cd652290f3e6aa71c"
+      },
+      "wrapper": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/run.mjs",
+        "bytes": 6104,
+        "sha256": "8ae20a1cb30ebeafa7d41ab9246676554d60438ca76d7d2599a2f3a05a595fbc"
+      }
+    }
+  },
+  "resources": {
+    "at": "2026-09-10T19:10:45.073981+00:00",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/commands.jsonl",
+    "model_ms": 208147,
+    "engineering_ms": 330967,
+    "reconciliation_ms_included": 22,
+    "stopped_or_failed_commands": [
+      {
+        "label": "wrapper-missing-executable-probe",
+        "code": null,
+        "stopped": "missing executable: /nonexistent/path/to/binary",
+        "elapsed_ms": 1
+      },
+      {
+        "label": "check-safeguards",
+        "code": 101,
+        "stopped": null,
+        "elapsed_ms": 30145
+      },
+      {
+        "label": "verify-old-root-fresh-2-3",
+        "code": 1,
+        "stopped": null,
+        "elapsed_ms": 9
+      }
+    ],
+    "expected_negative_commands": [
+      "wrapper-missing-executable-probe",
+      "verify-old-root-fresh-2-3"
+    ],
+    "ledger": {
+      "cumulative_ms": 61729427,
+      "limit_ms": 62950000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 1023953,
+    "storage_high_water": {
+      "target": 26312704,
+      "worktree": 24576,
+      "evidence": 285491200,
+      "at": "2026-09-10T19:09:46.599Z",
+      "git": 12288
+    },
+    "cycle_growth_bytes": 311840768,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 53246824448,
+    "storage_limit_bytes": 54190567424,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 809525248,
+    "peak_model_sampled_rss_bytes": 1409187840,
+    "peak_engineering_sampled_rss_bytes": 2993717248,
+    "unique_deletions": false,
+    "paid_external_compute": false,
+    "training": false,
+    "model_extension_ms": 0,
+    "storage_extension_bytes": 0
+  },
+  "projection": {
+    "schema": "uor-r4.cycle-projection/1",
+    "at": "2026-09-10T18:54:33Z",
+    "status": "ACTIVE",
+    "lead": "Claude Code (claude-fable-5-1)",
+    "source_base": "ce6046b58b5a668e15f542c8f46b8243099e9938",
+    "objective": "Safeguard corrections from the independent review of PR #1223: reserve report destinations before model loading in every driver with a real-driver collision check; keep derived API inputs out of sealed roots with a complete-file-set verifier and a scope note for the five unlisted files; typed follow-up answer oracle shared by both evaluators with a negative check; one idempotent wrapper finalizer with a missing-executable check and the 22 ms reconciliation appended once. No training, no model campaign; focused checks only.",
+    "ledger_before": {
+      "cumulative_ms": 61521280,
+      "limit_ms": 62950000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_before_ms": 1232100,
+    "inherited_reconciliation_ms": 22,
+    "model_extension_ms": 0,
+    "ledger_limit_after_ms": 62950000,
+    "cycle_model_ms": 400000,
+    "cycle_engineering_ms": 1800000,
+    "phase_model_ms": {
+      "reconciliation": 22,
+      "focused_unit_and_driver_checks": 100000,
+      "actual_artifact_and_allocation": 300000
+    },
+    "wall_clock_ceiling_ms": 7200000,
+    "context_tokens": 512,
+    "output_tokens": 96,
+    "input_bytes": 4096,
+    "model_processes": 1,
+    "threads": 2,
+    "model_ram_bytes": 4294967296,
+    "build_ram_bytes": 6442450944,
+    "new_storage_bytes": 536870912,
+    "new_storage_breakdown": {
+      "reused_worktree_growth_only": 0,
+      "build_reports_logs": 536870912
+    },
+    "inherited_final_accounted_bytes": 52918206464,
+    "accounted_before_bytes": 52918206464,
+    "prior_resource_receipt": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-claude-repair-review/resources.json",
+    "storage_limit_before_bytes": 54190567424,
+    "storage_extension_bytes": 0,
+    "storage_limit_bytes": 54190567424,
+    "stop_margin_bytes": 134217728,
+    "metadata_reserve_bytes": 16777216,
+    "free_bytes_at_projection": 26447536128,
+    "baselines": {
+      "target": 3341099008,
+      "worktree": 1225474048,
+      "git": 1035661312,
+      "evidence": 0
+    },
+    "worktree": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+    "branch": "codex/repair-safeguards",
+    "evidence_root": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards",
+    "checkpoint_policy": "Exclusive report directories; every command charged once through the corrected wrapper; failures preserved.",
+    "preservation": "No model file, artifact pointer or prior evidence changes; old manifests preserved and corrected by appended scope note.",
+    "wrapper": "run.mjs rewritten with one idempotent finalizer and a missing-executable check; verified by a missing-executable probe before use for charged work.",
+    "headroom_check_bytes": 584495104
+  },
+  "commands": [
+    {
+      "kind": "model",
+      "label": "wrapper-missing-executable-probe",
+      "cmd": "/nonexistent/path/to/binary",
+      "args": [
+        "--flag"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T18:55:18.803Z",
+      "elapsed_ms": 1,
+      "code": null,
+      "signal": null,
+      "stopped": "missing executable: /nonexistent/path/to/binary",
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/wrapper-missing-executable-probe.log"
+    },
+    {
+      "kind": "model",
+      "label": "reconcile-1223-spawn-failures",
+      "cmd": null,
+      "args": [],
+      "cwd": null,
+      "started": "2026-09-10T18:55:55Z",
+      "elapsed_ms": 22,
+      "code": null,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "reconciliation": "reconciliation-22ms.json",
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": null
+    },
+    {
+      "kind": "engineering",
+      "label": "fmt-safeguards",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T18:59:49.965Z",
+      "elapsed_ms": 4193,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": false,
+      "peak_sampled_process_tree_rss_bytes": 147898368,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/fmt-safeguards.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "check-safeguards",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "check",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-api",
+        "--all-targets"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T18:59:54.210Z",
+      "elapsed_ms": 30145,
+      "code": 101,
+      "signal": null,
+      "stopped": null,
+      "charged": false,
+      "peak_sampled_process_tree_rss_bytes": 2993717248,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/check-safeguards.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "fmt-safeguards-2",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:00:47.609Z",
+      "elapsed_ms": 3906,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": false,
+      "peak_sampled_process_tree_rss_bytes": 154845184,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/fmt-safeguards-2.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "check-safeguards-2",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "check",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-api",
+        "--all-targets"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:00:51.566Z",
+      "elapsed_ms": 2069,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": false,
+      "peak_sampled_process_tree_rss_bytes": 308740096,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/check-safeguards-2.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-examples-safeguards",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-api",
+        "--examples"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:00:53.692Z",
+      "elapsed_ms": 204643,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": false,
+      "peak_sampled_process_tree_rss_bytes": 2545434624,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/build-examples-safeguards.log"
+    },
+    {
+      "kind": "engineering",
+      "label": "build-tests-safeguards",
+      "cmd": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "test",
+        "--offline",
+        "--release",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-api",
+        "--lib",
+        "--test",
+        "report_output_drivers",
+        "--test",
+        "native_historical_version_artifact",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:04:18.398Z",
+      "elapsed_ms": 86011,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": false,
+      "peak_sampled_process_tree_rss_bytes": 2341126144,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/build-tests-safeguards.log"
+    },
+    {
+      "kind": "model",
+      "label": "report-output-unit-tests",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-bcfa237762d7b509",
+      "args": [
+        "report_output::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:01.192Z",
+      "elapsed_ms": 248,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/report-output-unit-tests.log"
+    },
+    {
+      "kind": "model",
+      "label": "answer-oracle-unit-tests",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/deps/uor_r4_core-bcfa237762d7b509",
+      "args": [
+        "answer_oracle::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:01.520Z",
+      "elapsed_ms": 8,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/answer-oracle-unit-tests.log"
+    },
+    {
+      "kind": "model",
+      "label": "driver-destination-check",
+      "cmd": "/usr/bin/env",
+      "args": [
+        "UOR_DRIVER_DIR=/Users/casey.allard/uor-r4/target/release/examples",
+        "/Users/casey.allard/uor-r4/target/release/deps/report_output_drivers-d37008623e7d28a0",
+        "drivers_reserve_destinations_before_model_work",
+        "--ignored",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:01.656Z",
+      "elapsed_ms": 1170,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": 2572288,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/driver-destination-check.log"
+    },
+    {
+      "kind": "model",
+      "label": "api-cases-fresh-2-3",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_version",
+      "args": [
+        "api-cases",
+        "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-reassertion-chain-repair/fresh-2-3/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/api-cases-fresh-2-3"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:25.833Z",
+      "elapsed_ms": 13,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/api-cases-fresh-2-3.log"
+    },
+    {
+      "kind": "model",
+      "label": "verify-api-cases-fresh-2-3",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_version",
+      "args": [
+        "verify",
+        "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/api-cases-fresh-2-3"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:25.897Z",
+      "elapsed_ms": 6,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/verify-api-cases-fresh-2-3.log"
+    },
+    {
+      "kind": "model",
+      "label": "verify-old-root-fresh-2-3",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_version",
+      "args": [
+        "verify",
+        "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-reassertion-chain-repair/fresh-2-3"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:25.952Z",
+      "elapsed_ms": 9,
+      "code": 1,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/verify-old-root-fresh-2-3.log"
+    },
+    {
+      "kind": "model",
+      "label": "verify-old-root-fit3",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_version",
+      "args": [
+        "verify",
+        "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-reassertion-chain-repair/fit3-construction-2"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:26.010Z",
+      "elapsed_ms": 357,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": null,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/verify-old-root-fit3.log"
+    },
+    {
+      "kind": "model",
+      "label": "reeval-fresh-2-3",
+      "cmd": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_version",
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reassertion-chain-repair/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-reassertion-chain-repair/fresh-2-3/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/reeval-fresh-2-3"
+      ],
+      "cwd": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent",
+      "started": "2026-09-10T19:06:26.419Z",
+      "elapsed_ms": 206313,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "charged": true,
+      "peak_sampled_process_tree_rss_bytes": 1409187840,
+      "logs": "/Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-repair-safeguards/reeval-fresh-2-3.log"
+    }
+  ],
+  "not_run": [
+    "blanket_full_suite",
+    "HTTP/browser/WASM",
+    "complete-path energy",
+    "actual-artifact and allocation tests (serving path unchanged; last run on this artifact in the repair cycle)"
+  ],
+  "next": "live-head same-value reassertion gap (o in a. o now in b. o in b. answers Unknown for initial/previous) before intermediate-version intent; own projection, selection and fresh evidence"
+}

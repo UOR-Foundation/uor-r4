@@ -83,6 +83,50 @@ pub fn seal(path: &Path) -> io::Result<PathBuf> {
     Ok(manifest_path)
 }
 
+/// Verify a sealed attempt: every listed file must exist with its recorded size and
+/// BLAKE3 digest, and the directory must hold no unlisted regular file besides the
+/// manifest. Returns the sorted list of unlisted files on success (empty) or an error
+/// naming the first listed mismatch; unlisted files are reported as an error too, so
+/// a complete file set is checked, not only the listed hashes.
+pub fn verify(path: &Path) -> io::Result<Vec<String>> {
+    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(path.join(MANIFEST_FILE))?)?;
+    let listed = manifest["files"]
+        .as_array()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "manifest without files"))?;
+    let mut names = std::collections::BTreeSet::new();
+    for entry in listed {
+        let relative = entry["path"].as_str().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "manifest entry without path")
+        })?;
+        let bytes = fs::read(path.join(relative))?;
+        if entry["bytes"].as_u64() != Some(bytes.len() as u64)
+            || entry["blake3"].as_str() != Some(blake3::hash(&bytes).to_hex().as_str())
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("sealed file changed: {relative}"),
+            ));
+        }
+        names.insert(relative.to_owned());
+    }
+    let mut actual = Vec::new();
+    collect(path, path, &mut actual)?;
+    let unlisted: Vec<String> = actual
+        .into_iter()
+        .filter(|f| f != MANIFEST_FILE && !names.contains(f))
+        .collect();
+    if !unlisted.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "sealed directory holds unlisted files: {}",
+                unlisted.join(", ")
+            ),
+        ));
+    }
+    Ok(unlisted)
+}
+
 fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) -> io::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -148,6 +192,24 @@ mod tests {
             blake3::hash(b"{\"exact\":1}").to_hex().to_string()
         );
         assert!(seal(&out).is_err(), "sealing twice must fail");
+        assert!(
+            verify(&out).unwrap().is_empty(),
+            "a complete sealed set verifies"
+        );
+        // A file added beneath a sealed directory is detected as unlisted.
+        fs::write(out.join("derived-input.json"), b"[]").unwrap();
+        let error = verify(&out).unwrap_err().to_string();
+        assert!(
+            error.contains("unlisted") && error.contains("derived-input.json"),
+            "{error}"
+        );
+        fs::remove_file(out.join("derived-input.json")).unwrap();
+        // A changed listed file is detected before the file set is judged.
+        fs::write(out.join("result.json"), b"{\"exact\":0}").unwrap();
+        assert!(verify(&out)
+            .unwrap_err()
+            .to_string()
+            .contains("result.json"));
         fs::remove_dir_all(base).unwrap();
     }
 

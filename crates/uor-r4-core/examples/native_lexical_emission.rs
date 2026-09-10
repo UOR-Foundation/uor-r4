@@ -94,9 +94,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if a[1] == "rust-source" {
         return rust_source(Path::new(&a[2]), Path::new(&a[3]));
     }
-    let model = Model::from_bytes(&fs::read(&a[2])?)?;
+    // The destination is reserved before the model is loaded or anything is generated.
     let out = Path::new(&a[3]);
     uor_r4_core::report_output::claim(out)?;
+    let model = Model::from_bytes(&fs::read(&a[2])?)?;
     let mut docs = match a[1].as_str() {
         "fresh" => {
             let mut d = cases("fresh-positive", 4, 109);

@@ -519,7 +519,7 @@ fn trace_summary(model: &Model, c: &Case, actual: &Value) -> Result<Value> {
     )
 }
 fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
-    uor_r4_core::report_output::claim(out)?;
+    // `out` is claimed by main before the model is loaded.
     let mut rows = Vec::new();
     let mut targets = 0;
     let mut matched = 0;
@@ -544,7 +544,7 @@ fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
     Ok(())
 }
 fn evaluate(model: &Model, parent: &Model, cases: &[Case], out: &Path) -> Result<()> {
-    uor_r4_core::report_output::claim(out)?;
+    // `out` is claimed by main before the model is loaded.
     let mut rows = Vec::new();
     let (
         mut targets,
@@ -836,15 +836,16 @@ fn main() -> Result<()> {
     {
         return Err("usage: prepare/fresh/open/balanced OUT | diagnose/context-trace MODEL CASES OUT | fit/fit-lexical/fit-scoped MODEL TRAIN OUT | evaluate/preserve MODEL CASES OUT".into());
     }
+    // The destination is reserved before the model is loaded or anything is generated.
+    let out = Path::new(&a[4]);
+    uor_r4_core::report_output::claim(out)?;
     let bytes = fs::read(&a[2])?;
     let model = Model::from_bytes(&bytes)?;
     if model.to_bytes()? != bytes {
         return Err("supplied artifact byte roundtrip differs".into());
     }
-    let out = Path::new(&a[4]);
     if ["fit", "fit-lexical", "fit-scoped"].contains(&a[1].as_str()) {
         let docs: Vec<CurrentQueryExample> = serde_json::from_slice(&fs::read(&a[3])?)?;
-        uor_r4_core::report_output::claim(out)?;
         let config = SourceRoutingConfig {
             learned_features: 768,
             passes: 8,
@@ -868,7 +869,6 @@ fn main() -> Result<()> {
     }
     let mut cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[3])?)?;
     if a[1] == "context-trace" {
-        uor_r4_core::report_output::claim(out)?;
         let mut rows = Vec::new();
         for c in &cases {
             rows.push(
