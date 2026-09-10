@@ -48,7 +48,11 @@ pub(super) fn initial_anchor(
     }
     if let Some(v) = super::historical_version_intent::choose_detail(model, values, control, work) {
         // The learned version selector owns this response; the frozen reader is bypassed.
-        if v.source != decision.word_index || decision.span_words != 0 {
+        // An abstention has no record to compose.
+        if v.source == super::role_read::NO_SOURCE
+            || v.source != decision.word_index
+            || decision.span_words != 0
+        {
             return None;
         }
         let action = super::role_read::head(model)?.actions.get(v.action)?;

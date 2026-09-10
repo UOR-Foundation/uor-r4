@@ -114,6 +114,9 @@ struct Case {
     owner: String,
     #[serde(default)]
     value: String,
+    /// The named chain is truncated: the exact answer is an abstention.
+    #[serde(default)]
+    abstain: bool,
 }
 struct Owner {
     name: String,
@@ -180,6 +183,7 @@ fn push_targets(
                 depth: Some((head - root) as u8),
                 owner: owner.into(),
                 value: initial.into(),
+                abstain: false,
             });
         }
     }
@@ -204,6 +208,7 @@ fn push_preserve(
             depth: None,
             owner: owner.into(),
             value: String::new(),
+            abstain: false,
         });
     }
 }
@@ -241,12 +246,40 @@ fn push_absent(cases: &mut Vec<Case>, id: &str, facts: &str, absent: &str) {
             depth: None,
             owner: name,
             value: String::new(),
+            abstain: false,
         });
     }
 }
 /// Lexeme-ring padding between the facts and the request. Known filler, the
 /// retained histories' filler, or a per-prompt singleton filler the dictionary
 /// never learns, so unfamiliar words in the request view are ordinary.
+/// Unrelated single facts that push a chain's root out of the sixteen-slot ring.
+/// Construction uses fixed names; a fresh draw derives its own spellings.
+fn unrelated(count: usize, seed: &str) -> Vec<String> {
+    const FIXED: [&str; 16] = [
+        "arbor", "brook", "cairn", "delta", "ember", "fjord", "glade", "haven", "islet", "jetty",
+        "knoll", "lagoon", "marsh", "nadir", "oriel", "pylon",
+    ];
+    (0..count)
+        .map(|k| {
+            if seed.is_empty() {
+                FIXED[k].to_owned()
+            } else {
+                blake3::hash(format!("unrelated:{seed}:{k}").as_bytes()).as_bytes()[..5]
+                    .iter()
+                    .map(|b| (b'a' + b % 26) as char)
+                    .collect()
+            }
+        })
+        .collect()
+}
+fn evicted_facts(chain_facts: &str, count: usize, seed: &str) -> String {
+    let mut facts = format!("Record: {chain_facts}");
+    for (k, name) in unrelated(count, seed).iter().enumerate() {
+        facts.push_str(&format!(" {name} in Zone{k}."));
+    }
+    facts
+}
 fn padding(evicted: bool, id: &str) -> String {
     if !evicted {
         return String::new();
@@ -260,7 +293,7 @@ fn padding(evicted: bool, id: &str) -> String {
         }
     }
 }
-fn authored_cases(owners: &[Owner]) -> Vec<Case> {
+fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
     let mut cases = Vec::new();
     let absent = &owners[2].name;
     for (i, owner) in owners.iter().take(2).enumerate() {
@@ -401,6 +434,7 @@ fn authored_cases(owners: &[Owner]) -> Vec<Case> {
                         depth: None,
                         owner: name,
                         value: String::new(),
+                        abstain: false,
                     });
                 }
             }
@@ -457,49 +491,101 @@ fn authored_cases(owners: &[Owner]) -> Vec<Case> {
                         depth: None,
                         owner: o.clone(),
                         value: String::new(),
+                        abstain: false,
                     });
                 }
             }
         }
     }
-    // Root evicted from the sixteen-slot ring by later unrelated facts: no
-    // genuine root survives, so every initial request must defer to the
-    // complete parent instead of manufacturing an answer from the oldest survivor.
+    // Root evicted from the sixteen-slot ring by later unrelated facts: no genuine
+    // root survives, so an initial request must abstain instead of answering with
+    // the oldest survivor, while previous/current requests keep the parent's answer.
+    // Fourteen unrelated facts evict the root; fifteen also evict the previous version.
     for (i, owner) in owners.iter().take(2).enumerate() {
         for reverse in [false, true] {
-            let mut facts = format!("Record: {}", chain(owner, 3, reverse));
-            for (k, name) in [
-                "arbor", "brook", "cairn", "delta", "ember", "fjord", "glade", "haven", "islet",
-                "jetty", "knoll", "lagoon", "marsh", "nadir",
-            ]
+            for trailing in [14, 15] {
+                let facts = evicted_facts(&chain(owner, 3, reverse), trailing, filler_seed);
+                let id = format!("evicted-root/{i}/{reverse}/{trailing}");
+                for (t, template) in INITIAL_REQUESTS.iter().enumerate() {
+                    for (s, style) in STYLES.iter().enumerate() {
+                        cases.push(Case {
+                            id: format!("{id}/initial/{t}/{s}"),
+                            prompt: format!("{facts} {}", request(template, &owner.name, style)),
+                            expected: Some(" Unknown.\n".into()),
+                            current_record: Some(3),
+                            target_record: None,
+                            depth: None,
+                            owner: owner.name.clone(),
+                            value: String::new(),
+                            abstain: true,
+                        });
+                    }
+                }
+                push_preserve(
+                    &mut cases,
+                    &id,
+                    &facts,
+                    &owner.name,
+                    &[(0, 0), (0, 1), (1, 0), (2, 0), (2, 1), (3, 0)],
+                );
+            }
+        }
+    }
+    // One truncated and one complete chain in the same record ring: the named
+    // chain decides between abstention and the exact root.
+    for swap in [false, true] {
+        let order = if swap { [1, 0] } else { [0, 1] };
+        let (a, b) = (&owners[order[0]], &owners[order[1]]);
+        // Six chain records plus eleven unrelated facts: the seventeenth record
+        // overwrites the first chain's root while the second chain stays complete.
+        let facts = evicted_facts(
+            &format!("{} {}", chain(a, 3, false), chain(b, 3, true)),
+            11,
+            filler_seed,
+        );
+        let id = format!("evicted-pair/{swap}");
+        for (t, template) in [INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]]
             .iter()
             .enumerate()
-            {
-                facts.push_str(&format!(" {name} in Zone{k}."));
+        {
+            for (s, style) in STYLES.iter().enumerate() {
+                cases.push(Case {
+                    id: format!("{id}/truncated/{t}/{s}"),
+                    prompt: format!("{facts} {}", request(template, &a.name, style)),
+                    expected: Some(" Unknown.\n".into()),
+                    current_record: Some(3),
+                    target_record: None,
+                    depth: None,
+                    owner: a.name.clone(),
+                    value: String::new(),
+                    abstain: true,
+                });
             }
-            let id = format!("evicted-root/{i}/{reverse}");
-            for (t, template) in INITIAL_REQUESTS.iter().enumerate() {
-                for (s, style) in STYLES.iter().enumerate() {
-                    cases.push(Case {
-                        id: format!("{id}/initial/{t}/{s}"),
-                        prompt: format!("{facts} {}", request(template, &owner.name, style)),
-                        expected: None,
-                        current_record: None,
-                        target_record: None,
-                        depth: None,
-                        owner: owner.name.clone(),
-                        value: String::new(),
-                    });
-                }
-            }
-            push_preserve(
-                &mut cases,
-                &id,
-                &facts,
-                &owner.name,
-                &[(0, 0), (0, 1), (2, 0)],
-            );
         }
+        push_targets(
+            &mut cases,
+            &format!("{id}/complete"),
+            &facts,
+            &b.name,
+            &b.values[0],
+            4,
+            6,
+            &[INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]],
+        );
+        push_preserve(
+            &mut cases,
+            &format!("{id}/a"),
+            &facts,
+            &a.name,
+            &[(0, 0), (2, 0), (3, 1)],
+        );
+        push_preserve(
+            &mut cases,
+            &format!("{id}/b"),
+            &facts,
+            &b.name,
+            &[(0, 0), (2, 0), (3, 1)],
+        );
     }
     // Equal spelling across distinct versions: the root occurrence, not the
     // current one, must be selected.
@@ -546,6 +632,7 @@ fn authored_cases(owners: &[Owner]) -> Vec<Case> {
                 depth: None,
                 owner: owner.name.clone(),
                 value: String::new(),
+                abstain: false,
             });
         }
         let conflict = format!(
@@ -565,6 +652,7 @@ fn authored_cases(owners: &[Owner]) -> Vec<Case> {
                 depth: None,
                 owner: owner.name.clone(),
                 value: String::new(),
+                abstain: false,
             });
         }
         let (v0, v1, v2) = (&owner.values[0], &owner.values[1], &owner.values[2]);
@@ -578,7 +666,7 @@ fn authored_cases(owners: &[Owner]) -> Vec<Case> {
         .iter()
         .enumerate()
         {
-            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new() });
+            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new(), abstain: false });
         }
         // The intent word as an owner name: its own root is still the exact answer.
         let facts = format!("Record: initial in {v0}. initial now in {v1}. initial now in {v2}.");
@@ -605,16 +693,17 @@ fn authored_cases(owners: &[Owner]) -> Vec<Case> {
 fn prepare(out: &Path, fresh: bool) -> Result<()> {
     // Fail on an existing destination: a draw is never silently overwritten.
     fs::create_dir(out)?;
+    let mut entropy_tail: Vec<u8> = Vec::new();
     let owners: Vec<Owner> = if fresh {
-        let mut entropy = [0_u8; 120];
+        let mut entropy = [0_u8; 160];
         fs::File::open("/dev/urandom")?.read_exact(&mut entropy)?;
         let hex: String = entropy.iter().map(|b| format!("{b:02x}")).collect();
         save(
             &out.join("draw.json"),
-            &json!({"source":"/dev/urandom","bytes":120,"entropy_hex":hex,"blake3":blake3::hash(&entropy).to_hex().to_string(),"at":format!("{:?}",std::time::SystemTime::now()),"redraw":false,"scope":"Fresh spelling draw; caller must invoke only after artifact selection. No fit is performed."}),
+            &json!({"source":"/dev/urandom","bytes":160,"entropy_hex":hex,"blake3":blake3::hash(&entropy).to_hex().to_string(),"at":format!("{:?}",std::time::SystemTime::now()),"redraw":false,"scope":"Fresh spelling draw; caller must invoke only after artifact selection. No fit is performed."}),
         )?;
         let mut result = Vec::new();
-        for bytes in entropy.chunks_exact(40) {
+        for bytes in entropy[..120].chunks_exact(40) {
             let word = |start: usize, n: usize| {
                 bytes[start..start + n]
                     .iter()
@@ -632,6 +721,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
         let mut values: Vec<_> = result.iter().flat_map(|o| o.values.clone()).collect();
         values.sort();
         values.dedup();
+        entropy_tail = entropy[120..].to_vec();
         if names[0] == names[1]
             || names[0] == names[2]
             || names[1] == names[2]
@@ -662,7 +752,12 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
             },
         ]
     };
-    let authored = authored_cases(&owners);
+    let filler_seed = if fresh {
+        blake3::hash(&entropy_tail).to_hex().to_string()
+    } else {
+        String::new()
+    };
+    let authored = authored_cases(&owners, &filler_seed);
     let mut cases = authored.clone();
     let mut sources = Vec::new();
     let mut duplicate_receipts = Vec::new();
@@ -688,7 +783,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
                     continue;
                 }
                 seen.insert(prompt.clone(), cases.len());
-                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new() });
+                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new(), abstain: false });
             }
         }
     }
@@ -698,7 +793,8 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
             id: c.id.clone(),
             prompt: c.prompt.clone(),
             target_record: c.target_record,
-            inherit: c.target_record.is_none(),
+            inherit: c.target_record.is_none() && !c.abstain,
+            abstain: c.abstain,
         })
         .collect();
     save(&out.join("cases.json"), &cases)?;
@@ -716,7 +812,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
             });
     save(
         &out.join("receipt.json"),
-        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
+        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"abstain_targets":cases.iter().filter(|c|c.abstain).count(),"targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
     )?;
     Ok(())
 }
@@ -772,7 +868,16 @@ fn target_record<'a>(c: &Case, actual: &'a Value) -> Option<&'a Value> {
         && record_value(cursor)? == c.value)
         .then_some(cursor)
 }
+fn abstained(actual: &Value) -> bool {
+    let copy = &actual["first_decision"]["word_copy"];
+    actual["first_decision"]["field"].is_null()
+        && copy["action"] == "no_read"
+        && copy["word_index"].as_u64() == Some(16)
+}
 fn selected(c: &Case, actual: &Value) -> bool {
+    if c.abstain {
+        return abstained(actual);
+    }
     let Some(record) = target_record(c, actual) else {
         return false;
     };
@@ -811,6 +916,9 @@ fn exact_primary(c: &Case, actual: &Value) -> bool {
         && actual["initial_relations"] == actual["final_relations"]
 }
 fn exact(c: &Case, actual: &Value) -> bool {
+    if c.abstain {
+        return exact_primary(c, actual);
+    }
     let owner_form = format!(" {} was in {}.\n", c.owner, c.value);
     let plain = c
         .expected
@@ -950,10 +1058,13 @@ fn evaluate(
         mut scope_exact,
         mut scope_preserved,
         mut primary_exact,
-    ) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        mut abstain_targets,
+        mut abstain_exact,
+        mut abstain_disabled_parent_equal,
+    ) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     let mut by_depth: BTreeMap<u8, [usize; 2]> = BTreeMap::new();
     for c in cases {
-        let target = c.target_record.is_some();
+        let target = c.target_record.is_some() || c.abstain;
         let actual = generate(model, &c.prompt, Control::Full, target, !target)?;
         let reference = generate(parent, &c.prompt, Control::Full, false, !target)?;
         let same = comparable(&actual) == comparable(&reference);
@@ -971,6 +1082,10 @@ fn evaluate(
             if c.depth.is_some_and(|d| d > 1) {
                 deep_targets += 1;
             }
+            if c.abstain {
+                abstain_targets += 1;
+                abstain_exact += usize::from(target_correct);
+            }
         } else {
             inherited += 1;
             preserved += usize::from(same);
@@ -982,6 +1097,7 @@ fn evaluate(
                 Control::HistoricalVersionIntentDisabled,
                 Control::HistoricalVersionIntentTransformDisabled,
                 Control::HistoricalVersionIntentAncestorDisabled,
+                Control::HistoricalVersionIntentAbstainDisabled,
             ] {
                 let result = generate(model, &c.prompt, control, false, false)?;
                 let result_exact = exact(c, &result) && selected(c, &result);
@@ -991,6 +1107,12 @@ fn evaluate(
                     }
                     Control::HistoricalVersionIntentTransformDisabled => {
                         transform_exact += usize::from(result_exact)
+                    }
+                    Control::HistoricalVersionIntentAbstainDisabled => {
+                        if c.abstain {
+                            abstain_disabled_parent_equal +=
+                                usize::from(comparable(&result) == comparable(&reference));
+                        }
                     }
                     _ => {
                         ancestor_exact += usize::from(result_exact);
@@ -1021,7 +1143,7 @@ fn evaluate(
     }
     rows.flush()?;
     drop(rows);
-    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
+    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
     let mut result = summary.clone();
     result["rows_file"] = json!(out.join("rows.jsonl"));
     result["rows_written"] = json!(written);
@@ -1038,6 +1160,38 @@ fn main() -> Result<()> {
     if a.len() == 4 && a[1] == "probe" {
         let model = Model::from_bytes(&fs::read(&a[2])?)?;
         return probe(&model, Path::new(&a[3]));
+    }
+    if a.len() == 6 && a[1] == "compare" {
+        // Actual outputs of this artifact against another artifact on the same prompts.
+        let model = Model::from_bytes(&fs::read(&a[2])?)?;
+        let other = Model::from_bytes(&fs::read(&a[3])?)?;
+        let cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[4])?)?;
+        let out = Path::new(&a[5]);
+        fs::create_dir(out)?;
+        let mut rows = BufWriter::new(fs::File::create_new(out.join("rows.jsonl"))?);
+        let (mut equal, mut differing) = (0, Vec::new());
+        for c in &cases {
+            let mine = generate(&model, &c.prompt, Control::Full, false, true)?;
+            let theirs = generate(&other, &c.prompt, Control::Full, false, true)?;
+            let same = comparable(&mine) == comparable(&theirs);
+            equal += usize::from(same);
+            if !same {
+                differing.push(json!({"id":c.id,"abstain_target":c.abstain,"this":mine["text"],"other":theirs["text"]}));
+            }
+            serde_json::to_writer(
+                &mut rows,
+                &json!({"id":c.id,"equal":same,"this":comparable(&mine),"other":comparable(&theirs)}),
+            )?;
+            rows.write_all(b"\n")?;
+        }
+        rows.flush()?;
+        let summary = json!({"artifact":model.artifact_cid(),"other":other.artifact_cid(),"total":cases.len(),"equal":equal,"differing":differing});
+        save(&out.join("summary.json"), &summary)?;
+        println!(
+            "{}",
+            json!({"artifact":model.artifact_cid(),"other":other.artifact_cid(),"total":cases.len(),"equal":equal,"differing":differing.len()})
+        );
+        return Ok(());
     }
     if a.len() != 5
         || !["diagnose", "fit", "refit", "evaluate", "preserve"].contains(&a[1].as_str())
@@ -1084,6 +1238,7 @@ fn main() -> Result<()> {
             c.target_record = None;
             c.depth = None;
             c.expected = None;
+            c.abstain = false;
         }
     }
     if a[1] == "diagnose" {

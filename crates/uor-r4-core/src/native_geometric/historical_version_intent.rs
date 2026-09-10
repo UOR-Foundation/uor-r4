@@ -23,6 +23,9 @@ pub struct HistoricalVersionExample {
     pub target_record: Option<u64>,
     /// Preserve the entire parent dispatch; `target_record` must be None.
     pub inherit: bool,
+    /// Offline label: the named chain is truncated and the answer is an abstention.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub abstain: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +39,10 @@ pub(super) struct HistoricalVersionIntent {
     pub dictionary: Vec<WordCopyAddress>,
     /// Limit selector context to request words after the latest committed fact.
     pub committed_query_scope: bool,
+    /// Offer a learned abstention when a named chain's validated links never
+    /// reach a genuine root. Absent in legacy artifacts, which never abstain.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub abstention: bool,
 }
 
 /// Structural candidate classes exposed to the learned selector. They describe a
@@ -44,6 +51,8 @@ const CLASS_PREVIOUS: u64 = 1;
 const CLASS_PREVIOUS_ROOT: u64 = 2;
 const CLASS_ANCESTOR: u64 = 3;
 const CLASS_ANCESTOR_ROOT: u64 = 4;
+/// A named chain whose validated links end before any genuine root.
+const CLASS_TRUNCATED: u64 = 5;
 const KIND_WORD_CLASS: u8 = 8;
 const KIND_DEPTH_CLASS: u8 = 9;
 /// How many request words the bounded committed view actually retained.
@@ -107,7 +116,7 @@ fn validate_lexical_codes(dictionary: &[WordCopyAddress], router: &SourceRouting
         .into_iter()
         .chain(dictionary.iter().map(|w| u64::from(w.prime)))
         .collect();
-    let class = |c: u64| (CLASS_PREVIOUS..=CLASS_ANCESTOR_ROOT).contains(&c);
+    let class = |c: u64| (CLASS_PREVIOUS..=CLASS_TRUNCATED).contains(&c);
     let valid = |f: ValueFeature| match f.kind {
         0 | 2 => f.a == 1 && f.b == 0,
         1 => f.a <= 1 && f.b == 0,
@@ -115,7 +124,9 @@ fn validate_lexical_codes(dictionary: &[WordCopyAddress], router: &SourceRouting
         4 | 5 => f.a <= 1 && primes.contains(&f.b),
         6 => primes.contains(&f.a) && f.b == 0,
         KIND_WORD_CLASS => primes.contains(&f.a) && class(f.b),
-        KIND_DEPTH_CLASS => (1..=u64::from(ANCESTOR_DEPTH)).contains(&f.a) && class(f.b),
+        KIND_DEPTH_CLASS => {
+            f.a <= u64::from(ANCESTOR_DEPTH) && class(f.b) && (f.a > 0 || f.b == CLASS_TRUNCATED)
+        }
         KIND_VIEW_CLASS => f.a <= 16 && class(f.b),
         _ => false,
     };
@@ -256,6 +267,8 @@ pub(super) struct Scan {
     pub record: u64,
     pub depth: u8,
     pub root: bool,
+    /// The chain ended without a root; `depth` counts its validated links.
+    pub truncated: bool,
     pub representable: bool,
     pub features: [ValueFeature; 96],
     pub n: usize,
@@ -296,6 +309,7 @@ fn features(
     dictionary_addr: &[u32; 16],
     depth: u8,
     root: bool,
+    truncated: bool,
     work: &mut WordCopyWork,
 ) -> ([ValueFeature; 96], usize) {
     let mut masked = *dictionary_addr;
@@ -330,7 +344,11 @@ fn features(
     let inherited = n;
     // At most 34 inherited and 31 ordered features precede at most 18 class features.
     n = historical_read::append_ordered_context(&mut out, n, addr, words.query_len, 16);
-    let c = class(depth, root);
+    let c = if truncated {
+        CLASS_TRUNCATED
+    } else {
+        class(depth, root)
+    };
     let limit = words.query_len.min(16);
     for q in 0..limit {
         out[n] = ValueFeature {
@@ -367,6 +385,7 @@ fn scan(
     addr: &[u32; 16],
     copy: usize,
     ancestors: bool,
+    abstention: bool,
     work: &mut WordCopyWork,
     visit: &mut impl FnMut(&Scan, &mut WordCopyWork),
 ) -> Option<()> {
@@ -392,6 +411,8 @@ fn scan(
         }
         let mut record = current;
         let mut depth: u8 = 0;
+        let mut reached_root = false;
+        let mut stopped_by_control = false;
         while depth < ANCESTOR_DEPTH {
             let next = if depth == 0 {
                 historical_read::previous(state, current, &mut work.persistent_read)
@@ -405,7 +426,7 @@ fn scan(
             record = old;
             let root = historical_read::is_root(old);
             let representable = historical_read::representable(model, values, old, copy, work);
-            let (f, n) = features(model, state, current, words, addr, depth, root, work);
+            let (f, n) = features(model, state, current, words, addr, depth, root, false, work);
             work.routing.sources_examined += 1;
             let entry = Scan {
                 source: RELATION_SOURCE + ((old.id - 1) & 15) as u8,
@@ -413,14 +434,44 @@ fn scan(
                 record: old.id,
                 depth,
                 root,
+                truncated: false,
                 representable,
                 features: f,
                 n,
             };
             visit(&entry, work);
-            if root || !ancestors {
+            if root {
+                reached_root = true;
                 break;
             }
+            if !ancestors {
+                stopped_by_control = true;
+                break;
+            }
+        }
+        // A revised head whose validated links end before any root is truncated:
+        // the requested original version is not in the retained ring. This is a
+        // structural fact about the chain; whether to abstain is learned.
+        if abstention
+            && !reached_root
+            && !stopped_by_control
+            && current.action == 2
+            && !current.conflict
+        {
+            let (f, n) = features(model, state, current, words, addr, depth, false, true, work);
+            work.routing.sources_examined += 1;
+            let entry = Scan {
+                source: super::role_read::NO_SOURCE,
+                current: id,
+                record: 0,
+                depth,
+                root: false,
+                truncated: true,
+                representable: true,
+                features: f,
+                n,
+            };
+            visit(&entry, work);
         }
     }
     Some(())
@@ -473,22 +524,26 @@ pub(super) fn choose_detail(
         &addr,
         copy,
         control != Control::HistoricalVersionIntentAncestorDisabled,
+        block.abstention && control != Control::HistoricalVersionIntentAbstainDisabled,
         work,
         &mut |s: &Scan, work: &mut WordCopyWork| {
             if !s.representable {
                 return;
             }
+            // An ancestor competes under the copy action; a truncated chain
+            // competes for the same no-read action the parent uses to abstain.
+            let action = if s.truncated { defer } else { copy };
             let roots =
                 block
                     .router
                     .encode(model, &s.features[..s.n], transform, &mut work.routing);
-            let score = block.router.score(model, roots, copy, &mut work.routing);
+            let score = block.router.score(model, roots, action, &mut work.routing);
             work.routing.comparisons += 1;
             if score > best_score {
                 best_score = score;
                 best = Some(VersionChoice {
                     source: s.source,
-                    action: copy,
+                    action,
                     current: s.current,
                     record: s.record,
                     depth: s.depth,
@@ -570,6 +625,7 @@ impl Model {
             &addr,
             copy,
             true,
+            block.is_none_or(|b| b.abstention),
             &mut work,
             &mut |s: &Scan, work: &mut WordCopyWork| {
                 let scored = block.map(|b| {
@@ -587,10 +643,10 @@ impl Model {
                         })
                         .collect();
                     serde_json::json!({"mapped_codes":mapped,"roots":roots,
-                        "score":b.router.score(self,roots,copy,&mut work.routing)})
+                        "score":b.router.score(self,roots,if s.truncated{defer}else{copy},&mut work.routing)})
                 });
-                candidates.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,
-                    "class":class(s.depth,s.root),"source":s.source,"representable":s.representable,"features":s.features[..s.n],
+                candidates.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated,
+                    "class":if s.truncated{CLASS_TRUNCATED}else{class(s.depth,s.root)},"source":s.source,"representable":s.representable,"features":s.features[..s.n],
                     "scored":scored}));
             },
         );
@@ -599,7 +655,7 @@ impl Model {
             serde_json::json!({"artifact":self.artifact_cid(),"version_witness":block.is_some(),"query_boundary":values.query_boundary,
             "committed_query_scope":committed,"committed_source_byte_cutoff":cutoff,
             "captured":captured,"base_score":base,"candidates":candidates,"word_copy_eligible":eligible,
-            "choice":choice.map(|v| serde_json::json!({"source":v.source,"action":v.action,"current":v.current,"record":v.record,"depth":v.depth})),
+            "choice":choice.map(|v| serde_json::json!({"source":v.source,"action":v.action,"current":v.current,"record":v.record,"depth":v.depth,"abstain":v.source==super::role_read::NO_SOURCE})),
             "frozen_historical_choice":historical_read::choose(self,values,Control::Full,&mut WordCopyWork::default()),
             "actual_word_copy":session.word_copy_decision(),"actual_field":session.field_composition_decision()}),
         )
@@ -674,7 +730,10 @@ impl Model {
                 d.prompt.is_empty()
                     || d.prompt.len() > 65536
                     || d.target_record == Some(0)
-                    || d.inherit == d.target_record.is_some()
+                    || usize::from(d.inherit)
+                        + usize::from(d.target_record.is_some())
+                        + usize::from(d.abstain)
+                        != 1
             })
             || docs.iter().map(|d| d.prompt.len()).sum::<usize>() > 8 * 1024 * 1024
         {
@@ -772,7 +831,7 @@ impl Model {
                 features: Vec::new(),
                 codes: Vec::new(),
                 action: defer,
-                correct: d.target_record.is_none(),
+                correct: d.inherit,
             }];
             let mut offered = Vec::new();
             scan(
@@ -782,6 +841,7 @@ impl Model {
                 &addr,
                 copy,
                 true,
+                true,
                 &mut work,
                 &mut |s: &Scan, _: &mut WordCopyWork| {
                     if !s.representable {
@@ -790,10 +850,14 @@ impl Model {
                     alternatives.push(Alternative {
                         features: s.features[..s.n].to_vec(),
                         codes: Vec::new(),
-                        action: copy,
-                        correct: d.target_record == Some(s.record),
+                        action: if s.truncated { defer } else { copy },
+                        correct: if s.truncated {
+                            d.abstain
+                        } else {
+                            d.target_record == Some(s.record)
+                        },
                     });
-                    offered.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root}));
+                    offered.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated}));
                 },
             );
             if alternatives.iter().filter(|a| a.correct).count() != 1 {
@@ -810,7 +874,7 @@ impl Model {
                 deepest_target = deepest_target.max(depth as u8);
             }
             offered_total += offered.len();
-            labels.push(serde_json::json!({"id":d.id,"inherit":d.inherit,"target_record":d.target_record,"offered":offered}));
+            labels.push(serde_json::json!({"id":d.id,"inherit":d.inherit,"target_record":d.target_record,"abstain":d.abstain,"offered":offered}));
             if alternatives.len() == 1 {
                 skipped.push(d.id.clone());
                 continue;
@@ -912,13 +976,14 @@ impl Model {
             training: receipts,
             dictionary: dictionary.clone(),
             committed_query_scope: true,
+            abstention: true,
         });
         model.refresh_identity()?;
         model.validate()?;
         let report = serde_json::json!({"schema":"uor-r4.historical-version-intent-fit/1","parent":self.artifact_cid(),
             "artifact":model.artifact_cid(),"documents":docs.len(),"frames":frames.len(),"duplicate_frames":duplicates,
             "skipped":skipped,"labels":labels,"features":feature_count,"offered_candidates":offered_total,
-            "deepest_target_depth":deepest_target,"ancestor_depth_bound":ANCESTOR_DEPTH,"committed_query_scope":true,
+            "deepest_target_depth":deepest_target,"ancestor_depth_bound":ANCESTOR_DEPTH,"committed_query_scope":true,"abstention":true,"abstain_documents":docs.iter().filter(|d| d.abstain).count(),
             "dictionary_mode":"request_view_words","dictionary_limit":128,"dictionary_min_occurrences":DICTIONARY_MIN_OCCURRENCES,"dictionary_words":dictionary.len(),
             "dictionary_omitted_words":omitted_words,"dictionary_omitted_occurrences":omitted_occurrences,"dictionary":dictionary,
             "fit":fit,"unsatisfied_frames":unsatisfied,"warm_start":warm.map(|w| serde_json::json!({"codes":w.router.codes.len(),"nonidentity_roots_reused":warm_roots})),"preparation_ms":preparation_ms,"preparation_seconds_limit":PREPARATION_SECONDS,"learning_ms":learning.elapsed().as_millis(),"elapsed_ms":start.elapsed().as_millis(),
@@ -990,7 +1055,12 @@ mod tests {
         let (dictionary, router) = fixture();
         assert!(validate_lexical_codes(&dictionary, &router).is_ok());
         let mut bad = router.clone();
-        bad.codes[0].feature.b = 5;
+        bad.codes[0].feature.b = CLASS_TRUNCATED;
+        assert!(
+            validate_lexical_codes(&dictionary, &bad).is_ok(),
+            "the truncated class is a valid word pairing"
+        );
+        bad.codes[0].feature.b = CLASS_TRUNCATED + 1;
         assert!(validate_lexical_codes(&dictionary, &bad).is_err());
         bad = router.clone();
         bad.codes[0].feature.a = 6;
@@ -1005,6 +1075,13 @@ mod tests {
         assert!(validate_lexical_codes(&dictionary, &bad).is_err());
         bad = router.clone();
         bad.codes[1].feature.a = 0;
+        assert!(validate_lexical_codes(&dictionary, &bad).is_err());
+        bad.codes[1].feature.b = CLASS_TRUNCATED;
+        assert!(
+            validate_lexical_codes(&dictionary, &bad).is_ok(),
+            "a truncated chain may have zero validated links"
+        );
+        bad.codes[1].feature.b = CLASS_TRUNCATED + 1;
         assert!(validate_lexical_codes(&dictionary, &bad).is_err());
         bad = router.clone();
         bad.codes[1].feature.kind = 11;
@@ -1033,8 +1110,21 @@ mod tests {
             training: Vec::new(),
             dictionary,
             committed_query_scope: true,
+            abstention: false,
         };
         let bytes = serde_json::to_vec(&witness).unwrap();
+        assert!(
+            serde_json::to_value(&witness)
+                .unwrap()
+                .get("abstention")
+                .is_none(),
+            "legacy artifacts keep their exact wire form"
+        );
+        let mut abstaining = witness.clone();
+        abstaining.abstention = true;
+        let restored: HistoricalVersionIntent =
+            serde_json::from_slice(&serde_json::to_vec(&abstaining).unwrap()).unwrap();
+        assert!(restored.abstention);
         let restored: HistoricalVersionIntent = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(restored, witness);
         assert_eq!(serde_json::to_vec(&restored).unwrap(), bytes);
@@ -1046,7 +1136,12 @@ mod tests {
             prompt: "prompt".into(),
             target_record: Some(1),
             inherit: false,
+            abstain: false,
         };
+        assert!(serde_json::to_value(&example)
+            .unwrap()
+            .get("abstain")
+            .is_none());
         let mut label = serde_json::to_value(&example).unwrap();
         label["response"] = serde_json::json!(" Dusk Ridge.\n");
         assert!(serde_json::from_value::<HistoricalVersionExample>(label).is_err());
