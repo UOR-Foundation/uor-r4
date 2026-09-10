@@ -114,6 +114,17 @@ fn response_session(model: &Model, prompt: &str) -> Result<Session> {
 /// The exact existing scanner supplies dictionary words, including words that
 /// later leave the sixteen-word ring. Only construction prompts contribute.
 pub(super) fn dictionary(documents: &[ValueExample]) -> Result<(Vec<WordCopyAddress>, usize, u64)> {
+    dictionary_with_limit(documents, WORD_COPY_DICTIONARY)
+}
+
+/// Same prompt-only scanner/ranking law with an explicit bounded vocabulary cap.
+pub(super) fn dictionary_with_limit(
+    documents: &[ValueExample],
+    limit: usize,
+) -> Result<(Vec<WordCopyAddress>, usize, u64)> {
+    if !(1..=WORD_COPY_DICTIONARY).contains(&limit) {
+        return Err(Error("invalid prompt dictionary limit".into()));
+    }
     let mut counts = BTreeMap::<Vec<u8>, u64>::new();
     for document in documents {
         let mut state = LexemeState::default();
@@ -138,13 +149,9 @@ pub(super) fn dictionary(documents: &[ValueExample]) -> Result<(Vec<WordCopyAddr
     }
     let mut ranked: Vec<_> = counts.into_iter().collect();
     ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    let omitted_words = ranked.len().saturating_sub(WORD_COPY_DICTIONARY);
-    let omitted_occurrences = ranked
-        .iter()
-        .skip(WORD_COPY_DICTIONARY)
-        .map(|(_, n)| n)
-        .sum();
-    ranked.truncate(WORD_COPY_DICTIONARY);
+    let omitted_words = ranked.len().saturating_sub(limit);
+    let omitted_occurrences = ranked.iter().skip(limit).map(|(_, n)| n).sum();
+    ranked.truncate(limit);
     ranked.sort_by(|a, b| a.0.cmp(&b.0));
     let primes =
         crate::corpus_induced_spin_placement::first_primes(ranked.len()).map_err(source_error)?;
@@ -1358,4 +1365,50 @@ fn fit_prefix(
         }
     }
     Ok(frames.len())
+}
+
+#[cfg(test)]
+mod dictionary_limit_tests {
+    use super::*;
+    fn documents() -> Vec<ValueExample> {
+        vec![ValueExample {
+            id: "words".into(),
+            prompt: "beta alpha beta gamma".into(),
+            response: "secret secret secret".into(),
+        }]
+    }
+    #[test]
+    fn prompt_dictionary_limit_preserves_legacy_wrapper() {
+        let docs = documents();
+        assert_eq!(
+            dictionary(&docs).unwrap(),
+            dictionary_with_limit(&docs, 256).unwrap()
+        );
+    }
+    #[test]
+    fn prompt_dictionary_limit_has_deterministic_frequency_and_byte_ties() {
+        let docs = documents();
+        let (entries, omitted, occurrences) = dictionary_with_limit(&docs, 2).unwrap();
+        assert_eq!(
+            entries
+                .iter()
+                .map(|w| &w.bytes[..usize::from(w.len)])
+                .collect::<Vec<_>>(),
+            vec![b"alpha".as_slice(), b"beta".as_slice()]
+        );
+        assert_eq!(
+            entries.iter().map(|w| w.prime).collect::<Vec<_>>(),
+            vec![2, 3]
+        );
+        assert_eq!((omitted, occurrences), (1, 1));
+        assert_eq!(
+            dictionary_with_limit(&docs, 2).unwrap(),
+            (entries, omitted, occurrences)
+        );
+    }
+    #[test]
+    fn prompt_dictionary_limit_rejects_invalid_capacity() {
+        assert!(dictionary_with_limit(&documents(), 0).is_err());
+        assert!(dictionary_with_limit(&documents(), 257).is_err());
+    }
 }

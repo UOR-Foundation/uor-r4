@@ -35,8 +35,10 @@ mod action_binding;
 mod action_emission;
 #[cfg(test)]
 mod action_emission_tests;
+mod current_query_handoff;
 mod current_source;
 mod historical_field_composition;
+pub use current_query_handoff::CurrentQueryExample;
 mod historical_query_context;
 pub use historical_query_context::HistoricalQueryExample;
 mod historical_read;
@@ -280,6 +282,9 @@ pub enum Control {
     HistoricalReadDisabled,
     HistoricalFieldCompositionDisabled,
     HistoricalQueryContextDisabled,
+    CurrentQueryHandoffDisabled,
+    CurrentQueryHandoffTransformDisabled,
+    CurrentQueryHandoffScopeDisabled,
     /// Keep the active historical router but expose only eight query words.
     HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
@@ -390,6 +395,9 @@ impl Feature {
             Control::Full
             | Control::HistoricalReadDisabled
             | Control::HistoricalQueryWindowDisabled
+            | Control::CurrentQueryHandoffDisabled
+            | Control::CurrentQueryHandoffTransformDisabled
+            | Control::CurrentQueryHandoffScopeDisabled
             | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled
@@ -517,6 +525,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    current_query_handoff: Option<current_query_handoff::CurrentQueryHandoff>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     historical_query_context: Option<historical_query_context::HistoricalQueryContext>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     historical_field_composition: Option<historical_field_composition::HistoricalFieldComposition>,
@@ -619,6 +629,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    current_query_handoff: Option<current_query_handoff::CurrentQueryHandoff>,
+    #[serde(default)]
     historical_query_context: Option<historical_query_context::HistoricalQueryContext>,
     #[serde(default)]
     historical_field_composition: Option<historical_field_composition::HistoricalFieldComposition>,
@@ -720,6 +732,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            current_query_handoff: wire.current_query_handoff,
             historical_query_context: wire.historical_query_context,
             historical_field_composition: wire.historical_field_composition,
             relation_start_refinement: wire.relation_start_refinement,

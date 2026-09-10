@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            current_query_handoff: None,
             historical_query_context: None,
             historical_field_composition: None,
             relation_start_refinement: None,
@@ -574,6 +575,9 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.current_query_handoff {
+            return witness.validate(self);
+        }
         if let Some(witness) = &self.historical_query_context {
             return witness.validate(self);
         }

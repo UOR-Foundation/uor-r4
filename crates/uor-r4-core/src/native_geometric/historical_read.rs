@@ -150,7 +150,7 @@ pub(super) fn features_with_window(
 }
 
 /// Append bounded ordered metadata after the inherited owner-match features.
-fn append_ordered_context(
+pub(super) fn append_ordered_context(
     out: &mut [ValueFeature; 96],
     mut n: usize,
     addr: &[u32; 16],
