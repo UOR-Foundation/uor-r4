@@ -37,6 +37,8 @@ mod action_emission;
 mod action_emission_tests;
 mod current_source;
 mod historical_field_composition;
+mod historical_query_context;
+pub use historical_query_context::HistoricalQueryExample;
 mod historical_read;
 mod historical_read_training;
 pub use historical_read_training::HistoricalReadExample;
@@ -277,6 +279,9 @@ pub enum Control {
     CurrentRelationReadAll,
     HistoricalReadDisabled,
     HistoricalFieldCompositionDisabled,
+    HistoricalQueryContextDisabled,
+    /// Keep the active historical router but expose only eight query words.
+    HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
     CurrentSourceDisabled,
     CurrentSourceVersionDisabled,
@@ -384,6 +389,8 @@ impl Feature {
         match control {
             Control::Full
             | Control::HistoricalReadDisabled
+            | Control::HistoricalQueryWindowDisabled
+            | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled
             | Control::CurrentSourceDisabled
@@ -510,6 +517,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    historical_query_context: Option<historical_query_context::HistoricalQueryContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     historical_field_composition: Option<historical_field_composition::HistoricalFieldComposition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_start_refinement: Option<relation_start_refinement::RelationStartRefinement>,
@@ -610,6 +619,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    historical_query_context: Option<historical_query_context::HistoricalQueryContext>,
+    #[serde(default)]
     historical_field_composition: Option<historical_field_composition::HistoricalFieldComposition>,
     #[serde(default)]
     relation_start_refinement: Option<relation_start_refinement::RelationStartRefinement>,
@@ -709,6 +720,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            historical_query_context: wire.historical_query_context,
             historical_field_composition: wire.historical_field_composition,
             relation_start_refinement: wire.relation_start_refinement,
             writer_role: wire.writer_role,

@@ -24,6 +24,33 @@ fn is_legacy_query_scope(scope: &u8) -> bool {
 }
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
+/// Select the artifact-bound context intervention without altering its inner reader.
+pub(super) fn head(model: &Model, control: Control) -> Option<&HistoricalRead> {
+    if control != Control::HistoricalQueryContextDisabled {
+        if let Some(outer) = &model.historical_query_context {
+            return Some(&outer.active);
+        }
+    }
+    model.historical_read.as_ref()
+}
+
+pub(super) fn effective_window(model: &Model, control: Control) -> usize {
+    query_window(model.historical_query_context.is_some(), control)
+}
+
+fn query_window(active: bool, control: Control) -> usize {
+    if active
+        && !matches!(
+            control,
+            Control::HistoricalQueryContextDisabled | Control::HistoricalQueryWindowDisabled
+        )
+    {
+        16
+    } else {
+        8
+    }
+}
+
 /// A selector-local view; source windows, exact identities and record state stay intact.
 pub(super) fn query_view(
     words: &super::value_lexemes::LexemeState,
@@ -95,6 +122,19 @@ pub(super) fn features(
     local: bool,
     work: &mut WordCopyWork,
 ) -> ([ValueFeature; 96], usize) {
+    features_with_window(model, values, current, addr, local, 8, work)
+}
+
+/// Only ordered historical context widens; owner matching remains bounded at eight.
+pub(super) fn features_with_window(
+    model: &Model,
+    values: &ValueState,
+    current: &RelationRecord,
+    addr: &[u32; 16],
+    local: bool,
+    window: usize,
+    work: &mut WordCopyWork,
+) -> ([ValueFeature; 96], usize) {
     let mut out = [ValueFeature::default(); 96];
     let Some(words) = &values.lexemes else {
         return (out, 0);
@@ -104,15 +144,30 @@ pub(super) fn features(
         super::relation::read_features(model, current, &words, addr, &mut work.persistent_read);
     out[..n].copy_from_slice(&base[..n]);
     let inherited_n = n;
-    // Shared ordered query metadata; no cue word selects a serving branch.
-    for q in 0..words.query_len.min(8) {
+    n = append_ordered_context(&mut out, n, addr, words.query_len, window);
+    work.persistent_read.relations.feature_writes += (n - inherited_n) as u64;
+    (out, n)
+}
+
+/// Append bounded ordered metadata after the inherited owner-match features.
+fn append_ordered_context(
+    out: &mut [ValueFeature; 96],
+    mut n: usize,
+    addr: &[u32; 16],
+    query_len: usize,
+    window: usize,
+) -> usize {
+    // The caller supplies at most 34 inherited features: two globals and
+    // four features for each of eight owner matches. This adds at most 31.
+    let limit = query_len.min(window.min(16));
+    for q in 0..limit {
         out[n] = ValueFeature {
             kind: 6,
             a: u64::from(addr[q]),
             b: 0,
         };
         n += 1;
-        if q + 1 < words.query_len.min(8) {
+        if q + 1 < limit {
             out[n] = ValueFeature {
                 kind: 7,
                 a: u64::from(addr[q + 1]),
@@ -121,8 +176,7 @@ pub(super) fn features(
             n += 1;
         }
     }
-    work.persistent_read.relations.feature_writes += (n - inherited_n) as u64;
-    (out, n)
+    n
 }
 
 /// Structural admission is independent of question spelling and learned scores.
@@ -205,7 +259,7 @@ pub(super) fn choose(
     ) {
         return None;
     }
-    let block = model.historical_read.as_ref()?;
+    let block = head(model, control)?;
     let state = values.relations.as_ref()?;
     let (defer, copy) = action_indices(model)?;
     let addr = addresses(block, values, work);
@@ -229,7 +283,15 @@ pub(super) fn choose(
         if !representable(model, values, old, copy, work) {
             continue;
         }
-        let (f, n) = features(model, values, current, &addr, block.query_scope == 2, work);
+        let (f, n) = features_with_window(
+            model,
+            values,
+            current,
+            &addr,
+            block.query_scope == 2,
+            effective_window(model, control),
+            work,
+        );
         let roots = block
             .router
             .encode(model, &f[..n], control, &mut work.routing);
@@ -356,5 +418,76 @@ mod tests {
         s.records[2].action = 2;
         s.records[1].owner = atom("other", 20);
         assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+    }
+}
+
+#[cfg(test)]
+mod query_context_tests {
+    use super::*;
+    #[test]
+    fn historical_query_window_control_changes_only_exposure_limit() {
+        assert_eq!(query_window(true, Control::Full), 16);
+        assert_eq!(
+            query_window(true, Control::HistoricalQueryWindowDisabled),
+            8
+        );
+        assert_eq!(
+            query_window(true, Control::HistoricalQueryContextDisabled),
+            8
+        );
+        assert_eq!(query_window(false, Control::Full), 8);
+        assert_eq!(
+            query_window(false, Control::HistoricalQueryWindowDisabled),
+            8
+        );
+    }
+    #[test]
+    fn historical_query_context_window_preserves_prefix_and_bounded_order() {
+        let addr = std::array::from_fn(|i| (i + 1) as u32);
+        let mut old = [ValueFeature::default(); 96];
+        let mut extended = old;
+        let old_n = append_ordered_context(&mut old, 34, &addr, 16, 8);
+        let new_n = append_ordered_context(&mut extended, 34, &addr, 16, 16);
+        assert_eq!(old_n, 49);
+        assert_eq!(new_n, 65);
+        assert_eq!(&old[..old_n], &extended[..old_n]);
+        assert_eq!(
+            extended[old_n],
+            ValueFeature {
+                kind: 7,
+                a: 9,
+                b: 8
+            }
+        );
+        assert_eq!(
+            extended[new_n - 1],
+            ValueFeature {
+                kind: 6,
+                a: 16,
+                b: 0
+            }
+        );
+        assert!(extended[new_n..]
+            .iter()
+            .all(|f| *f == ValueFeature::default()));
+        let mut clamped = [ValueFeature::default(); 96];
+        assert_eq!(
+            append_ordered_context(&mut clamped, 34, &addr, 100, 100),
+            65
+        );
+        assert_eq!(clamped, extended);
+    }
+    #[test]
+    fn historical_query_context_short_query_has_identical_features() {
+        let addr = std::array::from_fn(|i| i as u32);
+        for len in 0..=8 {
+            let mut old = [ValueFeature::default(); 96];
+            let mut extended = old;
+            assert_eq!(
+                append_ordered_context(&mut old, 0, &addr, len, 8),
+                append_ordered_context(&mut extended, 0, &addr, len, 16)
+            );
+            assert_eq!(old, extended);
+        }
     }
 }

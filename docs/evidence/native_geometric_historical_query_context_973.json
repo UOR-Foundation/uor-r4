@@ -1,0 +1,900 @@
+{
+  "schema": "uor-r4.native-historical-query-context/1",
+  "at": "2026-09-10T00:03:18.993Z",
+  "issue": 973,
+  "status": "BOUNDED_PASS_RETAIN",
+  "source_base": "474fd41f89f8f78c1f02ff3012fc0bc782b044f4",
+  "artifact": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/historical-query-context/model.json",
+    "bytes": 15731317,
+    "sha256": "ba5e72409642c6710a8d694b48e63b311c2e63cf6d90b7ae2ed3bd8d2291f3b0",
+    "cid": "blake3:84f8219164c08fe2ff10de0794af9658075b2ad5ad7723e1aa2b12d40a7a1fe5"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/historical-field/model.json",
+    "bytes": 15224162,
+    "sha256": "607e196b880a1bba8b1a1aa1a38224a18ea181ac8ca7138f9ad550ec9bad9cde",
+    "cid": "blake3:8cacb2fe0fbd4a79a8be629096b73458ea5bbd23c3dc84fa871a283437b7df81"
+  },
+  "selection": {
+    "at": "2026-09-09T23:55:55.185Z",
+    "decision": "DESIGN_SELECTED_BEFORE_FRESH_DRAW",
+    "source_base": "474fd41f89f8f78c1f02ff3012fc0bc782b044f4",
+    "artifact": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-fit/model.json",
+      "bytes": 15731317,
+      "sha256": "ba5e72409642c6710a8d694b48e63b311c2e63cf6d90b7ae2ed3bd8d2291f3b0",
+      "cid": "blake3:84f8219164c08fe2ff10de0794af9658075b2ad5ad7723e1aa2b12d40a7a1fe5"
+    },
+    "sources": [
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/historical_query_context.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_query_context.rs",
+        "bytes": 20065,
+        "sha256": "e633a98dca8d7c068e9c76624e5e07b0018ff7342acbe05b3e4e5a71b1e17dde",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/0-historical_query_context.rs"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/historical_read.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_read.rs",
+        "bytes": 16068,
+        "sha256": "b6b5560aad451bf10bb4b133be2de7edefac5c815f9864261a990a819f202bf7",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/1-historical_read.rs"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/historical_read_training.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_read_training.rs",
+        "bytes": 21760,
+        "sha256": "1aa5cae2d698928d3ec5c0266515f7148cd12df67fe287e2aec22277294e53e3",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/2-historical_read_training.rs"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/dependent_read.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/dependent_read.rs",
+        "bytes": 7107,
+        "sha256": "1003d91138f57d735936d90593e9da05a617197dd46ea5f73a0cfd4e44df1d3d",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/3-dependent_read.rs"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+        "bytes": 35825,
+        "sha256": "b6d58955585378a5ae684dc9892642a4beb3f7d12cf08380202bb123f55424d8",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/4-mod.rs"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+        "bytes": 63611,
+        "sha256": "a7135c3e6db16be0301a628a37f7a682fe7d192e63da6d8e15c5c644046260a9",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/5-training.rs"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/examples/native_historical_query.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_historical_query.rs",
+        "bytes": 24651,
+        "sha256": "2f28fae470716115019afa3b7f3ea404a27db116486649028c684e4f6435ca6f",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/6-native_historical_query.rs"
+      },
+      {
+        "repository_path": "crates/uor-r4-core/tests/native_historical_query_context_artifact.rs",
+        "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_historical_query_context_artifact.rs",
+        "bytes": 16041,
+        "sha256": "6aba4495585373014449eb4032f5f2bc6d2fc3463607bc39e7ac0286d5f4ba2d",
+        "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/7-native_historical_query_context_artifact.rs"
+      }
+    ],
+    "binary": {
+      "path": "/Users/casey.allard/uor-r4/target/release/examples/native_historical_query",
+      "bytes": 3735360,
+      "sha256": "fa6ac41bf918c9a0523f22cd7cbc9e7cb932a80136dd64d28dbc548c174a7edb"
+    },
+    "training_source": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-fit-source.json",
+      "bytes": 2589,
+      "sha256": "74f7308c37f8ae037808c71a1c302551fd665042207ec0a05a13903fd288e1fa"
+    },
+    "gate": {
+      "at": "2026-09-09T23:52:47.302Z",
+      "parent": "8cacb2fe",
+      "candidate": "84f82191",
+      "design_reopened_after_rejection": "7c33071d first-owner shortcut",
+      "construction": "48 exact historical sentences and exact current/previous field proofs;171 inherited comparisons;8 absent-owner Unknown responses;40 repaired older negatives and246 inherited older-field cases; all declared retained behavior/controls and actual artifact/API checks pass.",
+      "fresh": {
+        "planned_targets": 64,
+        "planned_inherited": 227,
+        "planned_total": 291,
+        "draw": "Three new whole owner/value tuples after selection; two-owner permutations query both present owners and the third fresh absent owner; recent/evicted; Name/State; earlier single-owner forward/reverse/two-revision panels.",
+        "gate": "All targets exact text/EOS/proof/unchanged records. All inherited comparisons exact. Full removal reproduces parent. No refit or redraw after selection."
+      },
+      "controls": "Full outer removal, historical-read removal, learned-transform removal and field-read removal; separate active-weight eight-word window comparison. Window-only preserves historical target recall but breaks long current-query historical deferral in construction; this is not a correct-current-answer claim.",
+      "resource_projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/projection.json",
+      "not_qualification": [
+        "general prose",
+        "general reasoning/program synthesis",
+        "alpha/frontier",
+        "energy",
+        "#1139 writer-context matched contribution"
+      ]
+    },
+    "fresh_not_yet_drawn": true,
+    "no_refit_or_redraw": true,
+    "focused_tests": 44,
+    "construction": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-construction/cases.json",
+      "bytes": 73405,
+      "sha256": "03085a145e6b267b1357ecab2a4764b8e8a3cb8e00b5b21e2b2197072e20bcb8"
+    },
+    "actual_artifact": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/actual-balanced-artifact.log",
+      "bytes": 4453,
+      "sha256": "a3d88d2d468ec470664a3786d880a6854d9e173441150dee21f2a9e1dc79de47"
+    }
+  },
+  "construction": {
+    "at": "2026-09-09T23:34:10.201Z",
+    "artifact": "blake3:84f8219164c08fe2ff10de0794af9658075b2ad5ad7723e1aa2b12d40a7a1fe5",
+    "exact": 48,
+    "targets": 48,
+    "selected": 48,
+    "preserved": 171,
+    "inherited": 171,
+    "disabled_parent_equal": 48,
+    "control_exact": {
+      "historical_query_context_disabled": 0,
+      "historical_query_window_disabled": 48,
+      "historical_read_disabled": 0,
+      "learned_routing_transform_disabled": 0,
+      "field_composition_read_disabled": 0
+    },
+    "checkpoint_positions": 1296,
+    "absent_owner_exact": 8,
+    "window_only": {
+      "target_exact": 48,
+      "inherited_preserved": 155,
+      "inherited_total": 171,
+      "current_query_wrong_historical_answers": 16,
+      "note": "Full still returns Unknown on these long current queries; preserved historical deferral is not correct-current-answer qualification."
+    }
+  },
+  "fresh": {
+    "at": "2026-09-09T23:58:47.220Z",
+    "artifact": "blake3:84f8219164c08fe2ff10de0794af9658075b2ad5ad7723e1aa2b12d40a7a1fe5",
+    "exact": 64,
+    "targets": 64,
+    "selected": 64,
+    "preserved": 227,
+    "inherited": 227,
+    "disabled_parent_equal": 64,
+    "control_exact": {
+      "historical_query_context_disabled": 0,
+      "historical_query_window_disabled": 64,
+      "historical_read_disabled": 0,
+      "learned_routing_transform_disabled": 0,
+      "field_composition_read_disabled": 0
+    },
+    "parent_target_exact": 0,
+    "checkpoint_positions": 1664,
+    "fresh_absent_owner_exact": 8,
+    "new_spellings_absent_from_training": true,
+    "selection_before_draw": true,
+    "no_refit_or_redraw": true,
+    "source_and_model_unchanged": true
+  },
+  "fit": {
+    "artifact": "blake3:84f8219164c08fe2ff10de0794af9658075b2ad5ad7723e1aa2b12d40a7a1fe5",
+    "documents": 1831,
+    "frames": 149,
+    "features": 255,
+    "elapsed_ms": 44974,
+    "fit": {
+      "accepted": [
+        5,
+        0,
+        0
+      ],
+      "final_correct": 149,
+      "final_hinge": 0,
+      "initial_correct": 143,
+      "initial_hinge": 12,
+      "proposals": 485528,
+      "stopped_at_time_limit": false
+    },
+    "root_changes": {
+      "artifact": "blake3:84f8219164c08fe2ff10de0794af9658075b2ad5ad7723e1aa2b12d40a7a1fe5",
+      "sha256": "ba5e72409642c6710a8d694b48e63b311c2e63cf6d90b7ae2ed3bd8d2291f3b0",
+      "bytes": 15731317,
+      "changes": [
+        {
+          "feature": {
+            "kind": 3,
+            "a": 313,
+            "b": 0
+          },
+          "before": [
+            119,
+            119
+          ],
+          "after": [
+            112,
+            119
+          ],
+          "new_key": true
+        },
+        {
+          "feature": {
+            "kind": 6,
+            "a": 229,
+            "b": 0
+          },
+          "before": [
+            119,
+            119
+          ],
+          "after": [
+            100,
+            119
+          ],
+          "new_key": false
+        }
+      ]
+    }
+  },
+  "negative_candidates": [
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/exposure/model.json",
+        "bytes": 15437196,
+        "sha256": "b70e0c2032605d6236cab7f12c497aee24f82d9d5e95f0260b0b55eb219f05c0"
+      },
+      "cid": "blake3:0fe078da642ab742b56372ce07b3a9b531ff529fcc36d53fa69aba1f432a575b",
+      "decision": "REJECTED_NO_BEHAVIOR_CHANGE",
+      "diagnostic_cases": 18
+    },
+    {
+      "artifact": {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fit/model.json",
+        "bytes": 15721739,
+        "sha256": "384705aa6dbe57a5027184edced760487f56895a3ea4654964bcdb617b03bd67"
+      },
+      "cid": "blake3:7c33071dfefc053fc08bc745b31c43b9a430be6d58575e9149a40a75a105e922",
+      "decision": "REJECTED_OWNER_POSITION_SHORTCUT",
+      "present_owner_exact": 4,
+      "present_owner_total": 8,
+      "absent_owner_wrong_copies": 4,
+      "scope": "Earlier single-owner and retained-panel passes did not cover this owner permutation failure; no fresh draw or promotion."
+    }
+  ],
+  "preservation": {
+    "retained_construction": 1300,
+    "query_owner": 72,
+    "historical_transfer": 216,
+    "older_behavior_control_reports": 14,
+    "older_report_differences": 0,
+    "histories": 12,
+    "word_rust_cases": 24,
+    "copy_add": {
+      "ordinary": 24,
+      "stress": 24
+    },
+    "action": {
+      "ordinary": 24,
+      "stress": 24
+    },
+    "older_field_panels": {
+      "repaired_targets": 40,
+      "inherited_exact": 246
+    }
+  },
+  "verification": {
+    "focused_tests": 44,
+    "library_tests": 42,
+    "kernel_source_guard": 1,
+    "actual_artifact_tests": 1,
+    "sequences": 22,
+    "two_owner_sequences": 16,
+    "input_checkpoint_positions": 6461,
+    "output_checkpoint_positions": 1308,
+    "malformed_proof_rejections": 66,
+    "disabled_parent_turn_comparisons": 66,
+    "api_checks": 330,
+    "api": [
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/api.json",
+        "bytes": 30639,
+        "sha256": "e34d76cf43141c354d3a4358c0a94088fd1e5617d34a863aa65bbe7dc3239c92",
+        "checks": 96,
+        "status": "PASS"
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/api-retained.json",
+        "bytes": 31450,
+        "sha256": "986a84ef0fa5e13f8c07a035479069dc20f9f991ebd830386b9c7805aa65dc1c",
+        "checks": 106,
+        "status": "PASS"
+      },
+      {
+        "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/api-fresh.json",
+        "bytes": 40335,
+        "sha256": "763d0bd3ddecffda9482d4d61fb77767a9f66c7891ba4be7dc36e361f93c2653",
+        "checks": 128,
+        "status": "PASS"
+      }
+    ],
+    "generated_rust_compiled_executed": true,
+    "failed_executions": [
+      {
+        "label": "build-driver",
+        "kind": "engineering",
+        "code": 101,
+        "elapsed_ms": 114256,
+        "log": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/build-driver.log"
+      },
+      {
+        "label": "balanced-api-historical-field",
+        "kind": "model",
+        "code": 1,
+        "elapsed_ms": 34572,
+        "log": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-api-historical-field.log"
+      }
+    ],
+    "scope": "Actual executed checks; queue status names are compatibility acknowledgements and run no tests."
+  },
+  "resources": {
+    "at": "2026-09-10T00:03:18.920Z",
+    "projection": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/projection.json",
+    "commands": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/commands-evidence.jsonl",
+    "model_ms": 3001982,
+    "engineering_ms": 770737,
+    "ledger": {
+      "cumulative_ms": 39707311,
+      "limit_ms": 40650000
+    },
+    "prior_reservation_ms": 196620,
+    "remaining_model_ms_after_reservation": 746069,
+    "storage_high_water": {
+      "target": 37867520,
+      "worktree": 90112,
+      "evidence": 490774528,
+      "at": "2026-09-09T23:59:17.428Z",
+      "git": 0
+    },
+    "retained_copy_bytes": 15732736,
+    "owner_checkout_copy_bytes": 0,
+    "cycle_growth_bytes": 544464896,
+    "metadata_reserve_bytes": 16777216,
+    "accounted_storage_bytes": 39912017920,
+    "storage_limit_bytes": 40768794624,
+    "stop_margin_bytes": 134217728,
+    "headroom_after_margin_bytes": 722558976,
+    "peak_model_sampled_rss_bytes": 1929494528,
+    "peak_engineering_sampled_rss_bytes": 4130078720,
+    "unique_deletions": false,
+    "paid_external_compute": false,
+    "immutable_snapshot": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/resources-evidence.json",
+    "closure": "Subsequent documentation/Git/check commands append to the mutable commands and resources receipts; cumulative charges never reset."
+  },
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/projection.json",
+      "bytes": 2170,
+      "sha256": "43d1f1198ba48c86ccf1ce8824ef43aa8258d05cd5b0717a6a2eaaa61282bd6b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/gates.json",
+      "bytes": 929,
+      "sha256": "d2cc19bbb0287fcec5e2a77202a2547b6df59945a5752b5afc9acdc4a40f0d7e"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-gates.json",
+      "bytes": 1578,
+      "sha256": "548bc94e7e4dfac4304698498158f8267a83cabec3f152a9236442704b144003"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selection.json",
+      "bytes": 7033,
+      "sha256": "f51253c60f542042bee750b59778b3c5ad0c308be587b022e482847d6fae6ea3"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fit-source.json",
+      "bytes": 1924,
+      "sha256": "8b060dde7324e4f236b057c82029959e7d03f15176455d97da8055f847a26f76"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-fit-source.json",
+      "bytes": 2589,
+      "sha256": "74f7308c37f8ae037808c71a1c302551fd665042207ec0a05a13903fd288e1fa"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fit-source-supplement.json",
+      "bytes": 816,
+      "sha256": "9993fae021d51d091515f604379cf60ed39bd99f74c132873541362d38694b94"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fit/fit.json",
+      "bytes": 280926,
+      "sha256": "ed4d33b3623468df852706ad0e745ea29912d4c287a1824f0e69462b2f780093"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-fit/fit.json",
+      "bytes": 289175,
+      "sha256": "7c741e6bfb0a77408b44701d231871f4c7564fb9deebe2d91126cd4374cd0d33"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fit-rejection.json",
+      "bytes": 685,
+      "sha256": "9ceac557221829896db7dc719d210d75d49f6d3ee5b8c6b501a828d75194a02a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/exposure-result.json",
+      "bytes": 444,
+      "sha256": "7e94b167b423daf239bc4719fa198168c007c83309b3b31b4e2ad4832e343ba5"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/diagnostic.json",
+      "bytes": 407322,
+      "sha256": "cb1cd59e18b827de7625a4c5fc5ba10f599f67e1f4bf8af4eb5a2cc93c83cc4f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/exposure-diagnostic.json",
+      "bytes": 447740,
+      "sha256": "40034edc0252a42430fd73d085e91ce7b233b4bf426b7be7feafab348fa3f617"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/owner-diagnostic.json",
+      "bytes": 451217,
+      "sha256": "181cee42c3b9529b1e173b5d787601c99a67114676282a997c3e28bfa1fd8077"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-root-changes.json",
+      "bytes": 648,
+      "sha256": "f993396c4c0ba3d106e40acbc33779034fffe89f3f6edd998992ca09507a182f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-construction/cases.json",
+      "bytes": 73405,
+      "sha256": "03085a145e6b267b1357ecab2a4764b8e8a3cb8e00b5b21e2b2197072e20bcb8"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-construction/training.json",
+      "bytes": 444609,
+      "sha256": "e8d112af017486809aebd7e7d03cf7aefe7e44af7e6f3ba7e6ad187dd51da99b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-construction/excluded-prior-negatives.json",
+      "bytes": 18737,
+      "sha256": "621fb52e6ded502f6c9e76e58987debaea8657e0905ad0091061ebc54217e84a"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-construction-result/result.json",
+      "bytes": 16529210,
+      "sha256": "bdbf1bd0becb8dbda34d258e60ed7a8e40706d2811bb4f2986731671c6eedec0"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-window-result/result.json",
+      "bytes": 10720159,
+      "sha256": "65887e905863d3ba39587b077469bd62ef82547686b7bd0915a2b38b2c7b43dd"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-construction-summary.json",
+      "bytes": 847,
+      "sha256": "f672fb65d1937bc89b0c1cddd7a4c77bc910667af0a54ca5f6f280b0ac9bdc3d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fresh-data/receipt.json",
+      "bytes": 297,
+      "sha256": "c085a7b2bb2b6ced188c9afc749b3c451409177877dc20bae8c330f05c58c4a9"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fresh-data/cases.json",
+      "bytes": 95625,
+      "sha256": "be2fb914020945873c729e172073b79523a8807442666971b11a100624b537db"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fresh-result/result.json",
+      "bytes": 21433094,
+      "sha256": "a8c7ff7d6df9fc00a9db68ca98cbfedccf4eddf83f8f1f005e5fb8c03cc09431"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/fresh-summary.json",
+      "bytes": 723,
+      "sha256": "3d405e61db1d60ecb6f29b6ceb9c54120b5e73408bfc84f62913a78585ebd32b"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-prior-fields-construction/result.json",
+      "bytes": 5088513,
+      "sha256": "4f590fd50d6dadc454ac8a4d2c5a8f3dacc2c9a79ba2270243c244cbed3d443c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-prior-fields-fresh/result.json",
+      "bytes": 7584307,
+      "sha256": "143be4635177c7832dd1fec9b55742eb21b90a33b6cc91b279e464895d4b7ab7"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/preserved-comparison-v2.json",
+      "bytes": 11141,
+      "sha256": "0a24ec2e233fce5a937b818acfb12383a4f653f8814e3292626b97bb57706140"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/history-comparison.json",
+      "bytes": 333,
+      "sha256": "484bda1a4fe3c5a0c9ee6c3a062cbeb2edf872f46f91dd6ac050a8f2e798b78d"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/retained-construction/result.json",
+      "bytes": 40658881,
+      "sha256": "9f874adf58a36b18e91fbc4c41e9bf2cdf14f7281d6fc9bfb632098483e7ca34"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/retained-query-owner/result.json",
+      "bytes": 4233593,
+      "sha256": "be2148053c17715a4e59d1326eedbfd0c9c1cd362d59e84bb3646aea637c448c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/retained-historical-fresh/result.json",
+      "bytes": 8332094,
+      "sha256": "18d0938877fd367ad5a52da59c419f9a82a9273201bd9de30aedfc6dbb76a7ac"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-validation/word-fresh-retained/full.json",
+      "bytes": 1226833,
+      "sha256": "127e1a547ef287d515ece28979dc9cbbebc20772c0323426629178c9f2ac8b5f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/api-harness-correction.json",
+      "bytes": 603,
+      "sha256": "31e045a69754548c8b6d78bda89bb48fc56585caf59a12323681e8036e63d2ee"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/actual-balanced-artifact.log",
+      "bytes": 4453,
+      "sha256": "a3d88d2d468ec470664a3786d880a6854d9e173441150dee21f2a9e1dc79de47"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/balanced-current-diagnostic.json",
+      "bytes": 913957,
+      "sha256": "13038e9e25fd43b3db3867786a349bd90655eed039f2cd49e2b98671fcb3a298"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/next-diagnostic-summary.json",
+      "bytes": 4822,
+      "sha256": "10e073260334b46aebda5e884b40273557bdc933d00612b9b29f70b3efc9d553"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/retained-copy.json",
+      "bytes": 776,
+      "sha256": "273fff4db0acfb6e6e623bd49a4b79c07ffea3afb47e939d9c6e13caf05d42ea"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/commands-evidence.jsonl",
+      "bytes": 67301,
+      "sha256": "98bbc28c038134bc236dec9963d8eed27c1146a1c39ae01248f7bdb0a2182ccc"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/resources-evidence.json",
+      "bytes": 1090,
+      "sha256": "577a785e3f404f7c2bda5b04fd0ceaa78bbc6638e7c4eec676e268cf4765658c"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/issue-1139-before.json",
+      "bytes": 4735,
+      "sha256": "e978f6442e11653512f6a7429d16331812f1ec2750e3d3bbf3447e25f561a9c1"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/issue-1139-after.json",
+      "bytes": 5750,
+      "sha256": "a2114a43d2899167c7c8f4cd41d413b7bd569f3d51340da5c508c6623a8123fe"
+    }
+  ],
+  "sources": [
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/historical_query_context.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_query_context.rs",
+      "bytes": 20065,
+      "sha256": "e633a98dca8d7c068e9c76624e5e07b0018ff7342acbe05b3e4e5a71b1e17dde",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/0-historical_query_context.rs"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/historical_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_read.rs",
+      "bytes": 16068,
+      "sha256": "b6b5560aad451bf10bb4b133be2de7edefac5c815f9864261a990a819f202bf7",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/1-historical_read.rs"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/historical_read_training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/historical_read_training.rs",
+      "bytes": 21760,
+      "sha256": "1aa5cae2d698928d3ec5c0266515f7148cd12df67fe287e2aec22277294e53e3",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/2-historical_read_training.rs"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/dependent_read.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/dependent_read.rs",
+      "bytes": 7107,
+      "sha256": "1003d91138f57d735936d90593e9da05a617197dd46ea5f73a0cfd4e44df1d3d",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/3-dependent_read.rs"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 35825,
+      "sha256": "b6d58955585378a5ae684dc9892642a4beb3f7d12cf08380202bb123f55424d8",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/4-mod.rs"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/src/native_geometric/training.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 63611,
+      "sha256": "a7135c3e6db16be0301a628a37f7a682fe7d192e63da6d8e15c5c644046260a9",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/5-training.rs"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/examples/native_historical_query.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/examples/native_historical_query.rs",
+      "bytes": 24651,
+      "sha256": "2f28fae470716115019afa3b7f3ea404a27db116486649028c684e4f6435ca6f",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/6-native_historical_query.rs"
+    },
+    {
+      "repository_path": "crates/uor-r4-core/tests/native_historical_query_context_artifact.rs",
+      "path": "/Users/casey.allard/.codex/worktrees/r4-recovery-audit/uor-r4/crates/uor-r4-core/tests/native_historical_query_context_artifact.rs",
+      "bytes": 16041,
+      "sha256": "6aba4495585373014449eb4032f5f2bc6d2fc3463607bc39e7ac0286d5f4ba2d",
+      "saved": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-historical-query-context/selected-source/7-native_historical_query_context_artifact.rs"
+    }
+  ],
+  "limitations": [
+    "Authored request forms with fresh whole spellings; not general language qualification.",
+    "Long current-location requests remain Unknown. Active eight-word context wrongly selects historical values on16construction controls; full16-word context preserves historical deferral.",
+    "No initial-versus-immediate-previous capability.",
+    "Full suite, new-artifact browser/WASM/HTTP, allocation instrumentation and complete-path energy NOT_RUN.",
+    "#1139 remains open for its separate writer-context matched contribution obligation."
+  ],
+  "next": {
+    "action": "Repair contextual current-intent selection across dependent and current-source dispatch using the existing geometric feature distinctions; preserve genuine dependent reads, missing-link abstention, owner permutations, historical/current controls and arithmetic.",
+    "observed": [
+      {
+        "id": "0/1/0",
+        "prompt": "Record: selvi in Dusk Ridge. selvi now in Copper Vale. What is the current location of selvi?  Answer:",
+        "text": " Unknown.\n",
+        "historical": null,
+        "dependent": [
+          16,
+          0,
+          [
+            2,
+            0
+          ]
+        ],
+        "dependent_base": 9,
+        "dependent_candidates": [
+          {
+            "record": 2,
+            "roots": [
+              36,
+              81
+            ],
+            "scores": [
+              12,
+              11,
+              12
+            ]
+          }
+        ],
+        "persistent": null,
+        "including_recent": [
+          33,
+          2
+        ],
+        "direct": [
+          16,
+          0,
+          10
+        ],
+        "direct_dispatched": false
+      },
+      {
+        "id": "0/1/1",
+        "prompt": "Record: selvi in Dusk Ridge. selvi now in Copper Vale. What is the current location of selvi? Name the owner first. Answer:",
+        "text": " Unknown.\n",
+        "historical": null,
+        "dependent": [
+          16,
+          0,
+          [
+            2,
+            0
+          ]
+        ],
+        "dependent_base": 9,
+        "dependent_candidates": [
+          {
+            "record": 2,
+            "roots": [
+              119,
+              81
+            ],
+            "scores": [
+              10,
+              10,
+              7
+            ]
+          }
+        ],
+        "persistent": null,
+        "including_recent": [
+          33,
+          2
+        ],
+        "direct": [
+          16,
+          0,
+          10
+        ],
+        "direct_dispatched": false
+      },
+      {
+        "id": "0/1/2",
+        "prompt": "Record: selvi in Dusk Ridge. selvi now in Copper Vale. What is the current location of selvi? State the owner first. Answer:",
+        "text": " Unknown.\n",
+        "historical": null,
+        "dependent": [
+          16,
+          0,
+          [
+            2,
+            0
+          ]
+        ],
+        "dependent_base": 9,
+        "dependent_candidates": [
+          {
+            "record": 2,
+            "roots": [
+              119,
+              81
+            ],
+            "scores": [
+              10,
+              10,
+              7
+            ]
+          }
+        ],
+        "persistent": null,
+        "including_recent": [
+          33,
+          2
+        ],
+        "direct": [
+          16,
+          0,
+          10
+        ],
+        "direct_dispatched": false
+      },
+      {
+        "id": "1/1/0",
+        "prompt": "Record: moss dale holds selvi. selvi now in Copper Vale. What is the current location of selvi?  Answer:",
+        "text": " Unknown.\n",
+        "historical": null,
+        "dependent": [
+          16,
+          0,
+          [
+            2,
+            0
+          ]
+        ],
+        "dependent_base": 9,
+        "dependent_candidates": [
+          {
+            "record": 2,
+            "roots": [
+              36,
+              81
+            ],
+            "scores": [
+              12,
+              11,
+              12
+            ]
+          }
+        ],
+        "persistent": null,
+        "including_recent": [
+          33,
+          2
+        ],
+        "direct": [
+          15,
+          2,
+          13
+        ],
+        "direct_dispatched": false
+      },
+      {
+        "id": "1/1/1",
+        "prompt": "Record: moss dale holds selvi. selvi now in Copper Vale. What is the current location of selvi? Name the owner first. Answer:",
+        "text": " Unknown.\n",
+        "historical": null,
+        "dependent": [
+          16,
+          0,
+          [
+            2,
+            0
+          ]
+        ],
+        "dependent_base": 9,
+        "dependent_candidates": [
+          {
+            "record": 2,
+            "roots": [
+              119,
+              81
+            ],
+            "scores": [
+              10,
+              10,
+              7
+            ]
+          }
+        ],
+        "persistent": null,
+        "including_recent": [
+          33,
+          2
+        ],
+        "direct": [
+          16,
+          0,
+          10
+        ],
+        "direct_dispatched": false
+      },
+      {
+        "id": "1/1/2",
+        "prompt": "Record: moss dale holds selvi. selvi now in Copper Vale. What is the current location of selvi? State the owner first. Answer:",
+        "text": " Unknown.\n",
+        "historical": null,
+        "dependent": [
+          16,
+          0,
+          [
+            2,
+            0
+          ]
+        ],
+        "dependent_base": 9,
+        "dependent_candidates": [
+          {
+            "record": 2,
+            "roots": [
+              119,
+              81
+            ],
+            "scores": [
+              10,
+              10,
+              7
+            ]
+          }
+        ],
+        "persistent": null,
+        "including_recent": [
+          33,
+          2
+        ],
+        "direct": [
+          16,
+          0,
+          10
+        ],
+        "direct_dispatched": false
+      }
+    ],
+    "boundary": "All six long current requests defer historically but select a missing dependent link. The current reader including recent values selects the correct record, but default persistent defers and counterfactual direct NoRead occurs in 5/6. Do not claim that dependent Base alone repairs complete generation."
+  }
+}

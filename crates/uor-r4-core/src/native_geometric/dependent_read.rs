@@ -22,7 +22,7 @@ pub(super) fn addresses(
     addresses_scoped(block, values, false, work)
 }
 
-fn addresses_scoped(
+pub(super) fn addresses_scoped(
     block: &DependentRead,
     values: &ValueState,
     local: bool,
@@ -63,7 +63,7 @@ pub(super) fn features(
     features_scoped(model, values, record, addr, false, work)
 }
 
-fn features_scoped(
+pub(super) fn features_scoped(
     model: &Model,
     values: &ValueState,
     record: &RelationRecord,
