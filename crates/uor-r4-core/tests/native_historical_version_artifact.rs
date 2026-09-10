@@ -544,5 +544,127 @@ fn native_historical_version_actual_checkpoint_and_identity() {
         }
     }
     assert_eq!(proof_checks, sequence_count * 3);
-    println!("actual historical-version artifact={}; sequences={sequence_count}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count * 4);
+    // A chain whose root was evicted by fourteen later facts: the initial request
+    // must abstain, the immediate previous version stays readable, and the same
+    // session then answers the current version and an independent sum.
+    let mut evicted = String::from(
+        "Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.",
+    );
+    for (k, name) in [
+        "arbor", "brook", "cairn", "delta", "ember", "fjord", "glade", "haven", "islet", "jetty",
+        "knoll", "lagoon", "marsh", "nadir",
+    ]
+    .iter()
+    .enumerate()
+    {
+        evicted.push_str(&format!(" {name} in Zone{k}."));
+    }
+    let mut abstentions = 0;
+    for instruction in ["", "Name the owner first."] {
+        let suffix = if instruction.is_empty() {
+            String::new()
+        } else {
+            format!(" {instruction}")
+        };
+        let initial_prompt =
+            format!("{evicted} What was the initial location of selvi?{suffix} Answer:");
+        let history_prompt =
+            format!("What was the previous location of selvi? Name the owner first. Answer:");
+        let current_prompt =
+            format!("What is the current location of selvi? Name the owner first. Answer:");
+        let sum_prompt = "User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
+        let prompts = [
+            initial_prompt.as_str(),
+            history_prompt.as_str(),
+            current_prompt.as_str(),
+            sum_prompt,
+        ];
+        assert_eq!(
+            raw_sequence(&model, &prompts, Control::HistoricalVersionIntentDisabled),
+            raw_sequence(&parent, &prompts, Control::Full),
+            "disabled outer witness must preserve parent output on the evicted-root sequence"
+        );
+        let withheld = raw_sequence(
+            &model,
+            &prompts,
+            Control::HistoricalVersionIntentAbstainDisabled,
+        );
+        let tokens: Vec<_> = withheld[0]
+            .0
+            .iter()
+            .copied()
+            .filter(|t| *t != EOS)
+            .collect();
+        assert_ne!(
+            model.decode(&tokens).unwrap(),
+            b" Unknown.\n",
+            "withholding the abstention candidate must fall back to the parent's answer, not abstain"
+        );
+        let mut s = model.session(Control::Full).unwrap();
+        s.observe(&model, BOS).unwrap();
+        turn(
+            &model,
+            &mut s,
+            &initial_prompt,
+            " Unknown.\n",
+            None,
+            &mut inputs,
+            &mut outputs,
+            &mut proof_checks,
+        );
+        assert!(
+            state(&s)["values"]["relations"]["records"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|r| r["id"] != 1),
+            "the root record must actually be evicted"
+        );
+        abstentions += 1;
+        turn(
+            &model,
+            &mut s,
+            &history_prompt,
+            " selvi was in Copper Vale.\n",
+            Some(ExpectedField {
+                record: 2,
+                owner: "selvi",
+                value: "Copper Vale",
+                current_proof: Some(3),
+                depth: None,
+            }),
+            &mut inputs,
+            &mut outputs,
+            &mut proof_checks,
+        );
+        turn(
+            &model,
+            &mut s,
+            &current_prompt,
+            " selvi is in Amber Field.\n",
+            Some(ExpectedField {
+                record: 3,
+                owner: "selvi",
+                value: "Amber Field",
+                current_proof: None,
+                depth: None,
+            }),
+            &mut inputs,
+            &mut outputs,
+            &mut proof_checks,
+        );
+        turn(
+            &model,
+            &mut s,
+            sum_prompt,
+            "18.\n",
+            None,
+            &mut inputs,
+            &mut outputs,
+            &mut proof_checks,
+        );
+        println!("historical-version evicted-root sequence; instruction={instruction:?}; initial abstained, previous/current fields and independent sum exact");
+    }
+    assert_eq!(abstentions, 2);
+    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2, sequence_count * 4 + 8);
 }

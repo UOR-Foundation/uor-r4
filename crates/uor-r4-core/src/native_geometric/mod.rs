@@ -292,6 +292,8 @@ pub enum Control {
     HistoricalVersionIntentScopeDisabled,
     /// Offer only each head's immediate previous record to the learned version selector.
     HistoricalVersionIntentAncestorDisabled,
+    /// Withhold truncated-chain abstention candidates from the learned version selector.
+    HistoricalVersionIntentAbstainDisabled,
     /// Keep the active historical router but expose only eight query words.
     HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
@@ -409,6 +411,7 @@ impl Feature {
             | Control::HistoricalVersionIntentTransformDisabled
             | Control::HistoricalVersionIntentScopeDisabled
             | Control::HistoricalVersionIntentAncestorDisabled
+            | Control::HistoricalVersionIntentAbstainDisabled
             | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled

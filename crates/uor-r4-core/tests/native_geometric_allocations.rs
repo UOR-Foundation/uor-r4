@@ -4117,8 +4117,21 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
     let mut input_positions = 0;
     let mut output_positions = 0;
     let mut times = Vec::new();
-    // (facts, owner, request, expected, root id, head id, depth)
+    let mut evicted = String::from(
+        "Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.",
+    );
+    for (k, name) in [
+        "arbor", "brook", "cairn", "delta", "ember", "fjord", "glade", "haven", "islet", "jetty",
+        "knoll", "lagoon", "marsh", "nadir",
+    ]
+    .iter()
+    .enumerate()
+    {
+        evicted.push_str(&format!(" {name} in Zone{k}."));
+    }
+    // (facts, owner, request, expected, root id, head id, depth); root 0 means an abstention.
     let cases = [
+        (evicted.as_str(), "selvi", "What was the initial location of selvi?", " Unknown.\n", 0, 3, 0),
         ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "What was the initial location of selvi?", " Dusk Ridge.\n", 1, 3, 2),
         ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "What was the initial location of selvi? Name the owner first.", " selvi was in Dusk Ridge.\n", 1, 3, 2),
         ("Record: moss dale holds tilva. tilva now in Birch Grove. tilva now in Pine Hollow. tilva now in Cedar Point.", "tilva", "Where was tilva originally? State the owner first.", " tilva was in moss dale.\n", 1, 4, 3),
@@ -4150,13 +4163,21 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
         let initial = state(&s);
         let relations = &initial["values"]["relations"];
         let records = relations["records"].as_array().unwrap();
-        let selected_record = records.iter().find(|r| r["id"] == root).unwrap();
-        assert_eq!(
-            selected_record["previous"],
-            if depth == 1 && root != 1 { root - 1 } else { 0 }
-        );
-        let endpoint = selected_record["value"]["end"].as_u64().unwrap();
-        let byte_endpoint = selected_record["value"]["byte_end"].as_u64().unwrap();
+        let abstain = root == 0;
+        let (endpoint, byte_endpoint) = if abstain {
+            assert!(records.iter().all(|r| r["id"] != 1), "root must be evicted");
+            (0, 0)
+        } else {
+            let selected_record = records.iter().find(|r| r["id"] == root).unwrap();
+            assert_eq!(
+                selected_record["previous"],
+                if depth == 1 && root != 1 { root - 1 } else { 0 }
+            );
+            (
+                selected_record["value"]["end"].as_u64().unwrap(),
+                selected_record["value"]["byte_end"].as_u64().unwrap(),
+            )
+        };
         let mut selected = false;
         let mut out = [EOS; 96];
         let mut used = 0;
@@ -4172,18 +4193,22 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
             s.observe(&model, actual.token).unwrap();
             let elapsed = start.elapsed().as_nanos();
             MEASURING.with(|v| v.set(false));
-            selected |= word.is_some_and(|d| {
-                matches!(d.action, WordCopyAction::Prepare | WordCopyAction::Read)
-                    && d.source_end == endpoint
-                    && d.source_byte_end == byte_endpoint
-            }) || field.is_some_and(|d| {
-                d.field != 0
-                    && d.anchor.relation_id == root
-                    && d.anchor.current_revision == Some(head)
-                    && d.anchor.ancestor_depth == (depth > 1).then_some(depth)
-                    && d.anchor.source_end == endpoint
-                    && d.anchor.source_byte_end == byte_endpoint
-            });
+            selected |= if abstain {
+                word.is_some_and(|d| d.action == WordCopyAction::NoRead && d.word_index == 16)
+            } else {
+                word.is_some_and(|d| {
+                    matches!(d.action, WordCopyAction::Prepare | WordCopyAction::Read)
+                        && d.source_end == endpoint
+                        && d.source_byte_end == byte_endpoint
+                }) || field.is_some_and(|d| {
+                    d.field != 0
+                        && d.anchor.relation_id == root
+                        && d.anchor.current_revision == Some(head)
+                        && d.anchor.ancestor_depth == (depth > 1).then_some(depth)
+                        && d.anchor.source_end == endpoint
+                        && d.anchor.source_byte_end == byte_endpoint
+                })
+            };
             assert_eq!(actual, predicted);
             restored.observe(&model, predicted.token).unwrap();
             same(&s, &restored);
@@ -4200,7 +4225,7 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
         assert_eq!(model.decode(&out[..used]).unwrap(), target.as_bytes());
         assert!(
             selected,
-            "actual answer must select the exact ancestor endpoint for {owner}"
+            "actual answer must select the exact ancestor endpoint or abstain for {owner}"
         );
         assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
         println!("historical-version owner={owner} root={root} head={head} depth={depth} output={target:?}; allocations=0 bytes=0");
