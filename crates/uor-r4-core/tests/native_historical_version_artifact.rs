@@ -75,6 +75,8 @@ struct ExpectedField<'a> {
     depth: Option<u8>,
     /// The ancestor path contains a reassertion link proven under the versioned contract.
     reassertion_links: bool,
+    /// The path's first hop passes through a same-value reassertion head.
+    reassertion_head: bool,
 }
 fn payload(r: &Value) -> String {
     atom(if r["span"].is_object() {
@@ -170,15 +172,22 @@ fn turn(
                 let older = records.iter().find(|r| r["id"] == previous).unwrap();
                 // Deeper hops may be resident same-owner, same-value reassertions
                 // under the versioned chain contract; the head link is a revision.
-                let reassertion = hop > 0
-                    && cursor["action"] == 1
+                let same_value = cursor["action"] == 1
                     && older["conflict"] == false
                     && atom(&older["owner"]) == f.owner
                     && payload(cursor) == payload(older);
+                let reassertion = hop > 0 && same_value;
+                let head_hop = hop == 0 && same_value;
                 assert!(
-                    cursor["action"] == 2 || reassertion,
+                    cursor["action"] == 2 || reassertion || head_hop,
                     "hop {hop} must be an explicit revision or a resident same-value reassertion"
                 );
+                if head_hop {
+                    assert!(
+                        f.reassertion_head,
+                        "a head hop must be proven under the head contract"
+                    );
+                }
                 reassertion_hops += usize::from(reassertion);
                 cursor = older;
             }
@@ -224,6 +233,7 @@ fn turn(
             assert_eq!(d.anchor.current_revision, f.current_proof);
             assert_eq!(d.anchor.ancestor_depth, f.depth);
             assert_eq!(d.anchor.reassertion_links, f.reassertion_links);
+            assert_eq!(d.anchor.reassertion_head, f.reassertion_head);
             let (end, byte_end) = endpoint.unwrap();
             assert_eq!(d.anchor.source_end, end);
             assert_eq!(d.anchor.source_byte_end, byte_end);
@@ -244,6 +254,13 @@ fn turn(
                         if f.reassertion_links {
                             validate_and_corrupt_reassertion(model, &after, id, depth);
                         }
+                        if f.reassertion_head {
+                            validate_and_corrupt_head(model, &after);
+                        }
+                    }
+                    (Some(id), None) if f.reassertion_head => {
+                        validate_and_corrupt_proof(model, &after, id);
+                        validate_and_corrupt_head(model, &after);
                     }
                     (Some(id), None) => validate_and_corrupt_proof(model, &after, id),
                     (None, _) => validate_and_corrupt_current(model, &after, f.record),
@@ -489,6 +506,46 @@ fn validate_and_corrupt_reassertion(model: &Model, wire: &Value, current: u64, d
     }
 }
 
+/// A path whose first hop passes through a same-value reassertion head restores only
+/// with the head flag and only while the head still repeats its predecessor's value.
+fn validate_and_corrupt_head(model: &Model, wire: &Value) {
+    let anchor = &wire["field_composition"]["anchor"];
+    assert_eq!(anchor["reassertion_head"], true);
+    let current = anchor["current_revision"].as_u64().unwrap();
+    let mut legacy = wire.clone();
+    legacy["field_composition"]["anchor"]
+        .as_object_mut()
+        .unwrap()
+        .remove("reassertion_head");
+    rejects(
+        model,
+        &legacy,
+        "a head-hop path claimed under the frozen first-hop contract must reject",
+    );
+    let mut differing = wire.clone();
+    let head = differing["values"]["relations"]["records"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|r| r["id"] == current)
+        .unwrap();
+    assert_eq!(
+        head["action"], 1,
+        "the head must be a same-value reassertion"
+    );
+    let first = head["value"]["bytes"][0].as_u64().unwrap();
+    head["value"]["bytes"][0] = json!((first + 1) % 256);
+    if head["span"].is_object() {
+        let first = head["span"]["bytes"][0].as_u64().unwrap();
+        head["span"]["bytes"][0] = json!((first + 1) % 256);
+    }
+    rejects(
+        model,
+        &differing,
+        "a head that no longer repeats its predecessor's value must reject",
+    );
+}
+
 #[test]
 #[ignore = "requires UOR_HISTORICAL_VERSION_MODEL; charged actual historical-version artifact"]
 fn native_historical_version_actual_checkpoint_and_identity() {
@@ -561,6 +618,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
     assert!(Model::from_bytes(&serde_json::to_vec(&changed).unwrap()).is_err());
     drop(changed);
     let versioned = wire["historical_version_intent"]["reassertion_links"] == true;
+    let head_contract = wire["historical_version_intent"]["reassertion_heads"] == true;
     drop(wire);
     drop(bytes);
 
@@ -612,6 +670,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     current_proof: Some(head_id),
                     depth: (depth > 1).then_some(depth),
                     reassertion_links: false,
+                    reassertion_head: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -629,6 +688,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     current_proof: Some(head_id),
                     depth: None,
                     reassertion_links: false,
+                    reassertion_head: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -646,6 +706,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     current_proof: None,
                     depth: None,
                     reassertion_links: false,
+                    reassertion_head: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -754,6 +815,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                 current_proof: Some(3),
                 depth: None,
                 reassertion_links: false,
+                reassertion_head: false,
             }),
             &mut inputs,
             &mut outputs,
@@ -771,6 +833,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                 current_proof: None,
                 depth: None,
                 reassertion_links: false,
+                reassertion_head: false,
             }),
             &mut inputs,
             &mut outputs,
@@ -846,6 +909,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                         current_proof: Some(head_id),
                         depth: Some(depth),
                         reassertion_links: true,
+                        reassertion_head: false,
                     }),
                     &mut inputs,
                     &mut outputs,
@@ -863,6 +927,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                         current_proof: Some(head_id),
                         depth: None,
                         reassertion_links: false,
+                        reassertion_head: false,
                     }),
                     &mut inputs,
                     &mut outputs,
@@ -880,6 +945,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                         current_proof: None,
                         depth: None,
                         reassertion_links: false,
+                        reassertion_head: false,
                     }),
                     &mut inputs,
                     &mut outputs,
@@ -960,6 +1026,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     current_proof: Some(4),
                     depth: None,
                     reassertion_links: false,
+                    reassertion_head: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -977,6 +1044,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     current_proof: None,
                     depth: None,
                     reassertion_links: false,
+                    reassertion_head: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -998,5 +1066,128 @@ fn native_historical_version_actual_checkpoint_and_identity() {
         assert_eq!(reassertion_sequences, 6);
         assert_eq!(reassertion_abstentions, 2);
     }
-    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; versioned_chain_contract={versioned}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 });
+    // Same-value reassertion heads under the head contract: repeating the current
+    // fact keeps the retained history readable. Initial reaches the root through the
+    // head hop, previous is the head's immediate previous record (record-hop
+    // semantics), current stays the parent's answer, the anchors carry the head flag
+    // and restore only under it, and withholding the head hop returns to the
+    // parent's Unknown.
+    let mut head_sequences = 0;
+    if head_contract {
+        for (label, facts, owner, initial, root_id, previous, previous_id, current, head_id, depth) in [
+            ("head-reassert", "Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale.", "selvi", "Dusk Ridge", 1, "Copper Vale", 2, "Copper Vale", 3, 2),
+            ("head-reassert-long", "Record: tilva in moss dale. tilva now in Birch Grove. tilva now in Pine Hollow. tilva in Pine Hollow.", "tilva", "moss dale", 1, "Pine Hollow", 3, "Pine Hollow", 4, 3),
+        ] {
+            for instruction in ["Name the owner first.", "State the owner first."] {
+                let initial_prompt = format!(
+                    "{facts} What was the initial location of {owner}? {instruction} Answer:"
+                );
+                let history_prompt =
+                    format!("What was the previous location of {owner}? {instruction} Answer:");
+                let current_prompt =
+                    format!("What is the current location of {owner}? {instruction} Answer:");
+                let sum_prompt = "User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
+                let prompts = [
+                    initial_prompt.as_str(),
+                    history_prompt.as_str(),
+                    current_prompt.as_str(),
+                    sum_prompt,
+                ];
+                assert_eq!(
+                    raw_sequence(&model, &prompts, Control::HistoricalVersionIntentDisabled),
+                    raw_sequence(&parent, &prompts, Control::Full),
+                    "disabled outer witness must preserve parent output on reassertion heads"
+                );
+                // Withholding the head hop leaves the initial request to the frozen
+                // parent (an abstention for the plain style, its current-path sentence
+                // for an owner-first style); it must never produce the root through
+                // the head hop.
+                let withheld = raw_sequence(
+                    &model,
+                    &prompts[..1],
+                    Control::HistoricalVersionIntentReassertionHeadDisabled,
+                );
+                let parent_only = raw_sequence(&parent, &prompts[..1], Control::Full);
+                assert_eq!(
+                    withheld[0].0, parent_only[0].0,
+                    "withholding the head hop must return the parent's own answer: {label}"
+                );
+                assert_ne!(
+                    model.decode(&withheld[0].0).unwrap(),
+                    format!(" {owner} was in {initial}.\n").as_bytes(),
+                    "withholding the head hop must not produce the root: {label}"
+                );
+                let mut s = model.session(Control::Full).unwrap();
+                s.observe(&model, BOS).unwrap();
+                turn(
+                    &model,
+                    &mut s,
+                    &initial_prompt,
+                    &format!(" {owner} was in {initial}.\n"),
+                    Some(ExpectedField {
+                        record: root_id,
+                        owner,
+                        value: initial,
+                        current_proof: Some(head_id),
+                        depth: Some(depth),
+                        reassertion_links: false,
+                        reassertion_head: true,
+                    }),
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                turn(
+                    &model,
+                    &mut s,
+                    &history_prompt,
+                    &format!(" {owner} was in {previous}.\n"),
+                    Some(ExpectedField {
+                        record: previous_id,
+                        owner,
+                        value: previous,
+                        current_proof: Some(head_id),
+                        depth: None,
+                        reassertion_links: false,
+                        reassertion_head: true,
+                    }),
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                turn(
+                    &model,
+                    &mut s,
+                    &current_prompt,
+                    &format!(" {owner} is in {current}.\n"),
+                    Some(ExpectedField {
+                        record: head_id,
+                        owner,
+                        value: current,
+                        current_proof: None,
+                        depth: None,
+                        reassertion_links: false,
+                        reassertion_head: false,
+                    }),
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                turn(
+                    &model,
+                    &mut s,
+                    sum_prompt,
+                    "18.\n",
+                    None,
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                head_sequences += 1;
+                println!("historical-version {label}; owner={owner}; {instruction}; root={root_id} depth={depth} through a same-value reassertion head, previous={previous_id}, head={head_id}; initial/previous/current fields and independent sum exact");
+            }
+        }
+        assert_eq!(head_sequences, 4);
+    }
+    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; head_sequences={head_sequences}; versioned_chain_contract={versioned}; head_contract={head_contract}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences + head_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 } + head_sequences * 4);
 }

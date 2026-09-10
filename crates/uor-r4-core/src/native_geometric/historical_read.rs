@@ -300,19 +300,59 @@ pub(super) fn evicted_predecessor(
     state.record(record.previous).is_none()
 }
 
-/// Exact record `depth` validated links below a live head; depth one is `previous`.
-/// `reassertions` selects the chain contract used for the deeper links.
+/// The first hop below a live head that is itself a resident same-value reassertion
+/// (an assertion naming a strictly older, nonconflicting, same-owner, same-value
+/// predecessor). The frozen immediate-previous reader never takes this hop; under the
+/// head contract the head's immediate previous record is that predecessor, so
+/// repeating the current fact leaves the retained history readable. Record-hop
+/// semantics are unchanged: previous is the head's previous record, whatever its value.
+pub(super) fn head_reassertion<'a>(
+    state: &'a RelationState,
+    current: &RelationRecord,
+    work: &mut ValueWork,
+) -> Option<&'a RelationRecord> {
+    let is_current = state.directory.iter().any(|&id| {
+        work.relations.directory_reads += 1;
+        id != 0 && id == current.id
+    });
+    if !is_current {
+        return None;
+    }
+    reassertion(state, current, work)
+}
+
+/// The first hop under the artifact's contract: the frozen immediate-previous read
+/// of a revised head, or (`heads`) the validated reassertion below a reassertion head.
+pub(super) fn first_hop<'a>(
+    state: &'a RelationState,
+    current: &RelationRecord,
+    heads: bool,
+    work: &mut ValueWork,
+) -> Option<&'a RelationRecord> {
+    if let Some(older) = previous(state, current, work) {
+        return Some(older);
+    }
+    if heads {
+        return head_reassertion(state, current, work);
+    }
+    None
+}
+
+/// Exact record `depth` validated links below a live head; depth one is the first hop.
+/// `reassertions` selects the chain contract for the deeper links and `heads` whether
+/// the first hop may pass through a same-value reassertion head.
 pub(super) fn ancestor<'a>(
     state: &'a RelationState,
     current: &RelationRecord,
     depth: u8,
     reassertions: bool,
+    heads: bool,
     work: &mut ValueWork,
 ) -> Option<&'a RelationRecord> {
     if depth == 0 || depth > ANCESTOR_DEPTH {
         return None;
     }
-    let mut record = previous(state, current, work)?;
+    let mut record = first_hop(state, current, heads, work)?;
     let mut remaining = depth - 1;
     while remaining > 0 {
         record = step(state, record, reassertions, work)?;
@@ -529,8 +569,11 @@ mod tests {
         let s = chain();
         let head = &s.records[2];
         let mut work = ValueWork::default();
-        assert_eq!(ancestor(&s, head, 1, false, &mut work).unwrap().id, 2);
-        let root = ancestor(&s, head, 2, false, &mut work).unwrap();
+        assert_eq!(
+            ancestor(&s, head, 1, false, false, &mut work).unwrap().id,
+            2
+        );
+        let root = ancestor(&s, head, 2, false, false, &mut work).unwrap();
         assert_eq!(root.id, 1);
         assert!(is_root(root));
         assert!(!is_root(&s.records[1]));
@@ -538,9 +581,9 @@ mod tests {
             root.value.byte_end, 15,
             "exact first occurrence, not a spelling"
         );
-        assert!(ancestor(&s, head, 0, false, &mut work).is_none());
-        assert!(ancestor(&s, head, 3, false, &mut work).is_none());
-        assert!(ancestor(&s, head, ANCESTOR_DEPTH + 1, false, &mut work).is_none());
+        assert!(ancestor(&s, head, 0, false, false, &mut work).is_none());
+        assert!(ancestor(&s, head, 3, false, false, &mut work).is_none());
+        assert!(ancestor(&s, head, ANCESTOR_DEPTH + 1, false, false, &mut work).is_none());
         assert!(
             link(&s, &s.records[0], &mut work).is_none(),
             "roots have no link"
@@ -551,9 +594,9 @@ mod tests {
     fn historical_read_ancestor_rejects_broken_overwritten_and_cross_owner_paths() {
         let mut s = chain();
         s.records[1].previous = 0;
-        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, false, &mut Default::default()).is_none());
         assert_eq!(
-            ancestor(&s, &s.records[2], 1, false, &mut Default::default())
+            ancestor(&s, &s.records[2], 1, false, false, &mut Default::default())
                 .unwrap()
                 .id,
             2,
@@ -561,18 +604,18 @@ mod tests {
         );
         let mut s = chain();
         s.records[0].id = 17;
-        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, false, &mut Default::default()).is_none());
         let mut s = chain();
         s.records[0].owner = atom("other", 10);
-        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, false, &mut Default::default()).is_none());
         let mut s = chain();
         s.records[1].action = 1;
         assert!(
-            ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none(),
+            ancestor(&s, &s.records[2], 2, false, false, &mut Default::default()).is_none(),
             "the legacy contract follows explicit revisions only"
         );
         assert_eq!(
-            ancestor(&s, &s.records[2], 2, true, &mut Default::default())
+            ancestor(&s, &s.records[2], 2, true, false, &mut Default::default())
                 .unwrap()
                 .id,
             1,
@@ -580,10 +623,10 @@ mod tests {
         );
         let mut s = chain();
         s.records[0].conflict = true;
-        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, false, &mut Default::default()).is_none());
         s.records[0].conflict = false;
         s.directory[0] = 2;
-        assert!(ancestor(&s, &s.records[2], 1, false, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 1, false, false, &mut Default::default()).is_none());
     }
     #[test]
     fn historical_read_reassertion_link_requires_resident_same_owner_same_value_older_record() {
@@ -628,7 +671,84 @@ mod tests {
         let mut overwritten = s.clone();
         overwritten.records[0].id = 17;
         assert!(reassertion(&overwritten, &overwritten.records[1], &mut work).is_none());
-        assert!(ancestor(&overwritten, &overwritten.records[2], 2, true, &mut work).is_none());
+        assert!(ancestor(
+            &overwritten,
+            &overwritten.records[2],
+            2,
+            true,
+            false,
+            &mut work
+        )
+        .is_none());
+    }
+    #[test]
+    fn historical_read_head_reassertion_first_hop_is_valid_only_under_the_head_contract() {
+        // Records: 1 assert, 2 revise(1), 3 assert same value as 2 (previous 2), head 3.
+        let mut s = chain();
+        s.records[2].action = 1;
+        let mut work = ValueWork::default();
+        assert!(
+            previous(&s, &s.records[2], &mut work).is_none(),
+            "the frozen immediate-previous reader never reads below an assertion head"
+        );
+        assert!(first_hop(&s, &s.records[2], false, &mut work).is_none());
+        assert_eq!(
+            head_reassertion(&s, &s.records[2], &mut work).unwrap().id,
+            2
+        );
+        assert_eq!(first_hop(&s, &s.records[2], true, &mut work).unwrap().id, 2);
+        assert!(ancestor(&s, &s.records[2], 1, true, false, &mut work).is_none());
+        assert_eq!(
+            ancestor(&s, &s.records[2], 1, true, true, &mut work)
+                .unwrap()
+                .id,
+            2
+        );
+        assert_eq!(
+            ancestor(&s, &s.records[2], 2, true, true, &mut work)
+                .unwrap()
+                .id,
+            1
+        );
+        assert!(is_root(
+            ancestor(&s, &s.records[2], 2, true, true, &mut work).unwrap()
+        ));
+        // A revised head is unchanged under the head contract.
+        let s2 = chain();
+        assert_eq!(
+            first_hop(&s2, &s2.records[2], true, &mut work).unwrap().id,
+            2
+        );
+        // Not a live head, a differing value, a conflict, a foreign owner or a
+        // missing predecessor: no head hop.
+        let mut not_head = s.clone();
+        not_head.directory[0] = 0;
+        assert!(head_reassertion(&not_head, &not_head.records[2], &mut work).is_none());
+        let mut differing = s.clone();
+        differing.records[1].value = atom("other", 25);
+        assert!(head_reassertion(&differing, &differing.records[2], &mut work).is_none());
+        let mut conflicting = s.clone();
+        conflicting.records[2].conflict = true;
+        assert!(head_reassertion(&conflicting, &conflicting.records[2], &mut work).is_none());
+        let mut foreign = s.clone();
+        foreign.records[1].owner = atom("other", 20);
+        assert!(head_reassertion(&foreign, &foreign.records[2], &mut work).is_none());
+        let mut evicted = s.clone();
+        evicted.records[1].id = 18;
+        assert!(head_reassertion(&evicted, &evicted.records[2], &mut work).is_none());
+        assert!(evicted_predecessor(
+            &evicted,
+            &evicted.records[2],
+            &mut work
+        ));
+        let mut single = RelationState::default();
+        single.records[0] = s.records[0];
+        single.directory[0] = 1;
+        single.next_id = 2;
+        assert!(
+            head_reassertion(&single, &single.records[0], &mut work).is_none(),
+            "a root has no hop"
+        );
     }
     #[test]
     fn historical_read_eviction_is_proven_by_an_overwritten_slot_not_by_rejection() {

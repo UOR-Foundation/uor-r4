@@ -119,6 +119,10 @@ pub struct FieldAnchor {
     /// stated contract.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reassertion_links: bool,
+    /// The path's first hop passes through a same-value reassertion head, proven under
+    /// the head contract; absent means the frozen immediate-previous first hop.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reassertion_head: bool,
     pub source_end: u64,
     pub source_byte_end: u64,
     pub boundary_seen: u64,
@@ -201,6 +205,7 @@ pub(super) fn record<'a>(
             current,
             depth,
             anchor.reassertion_links,
+            anchor.reassertion_head,
             &mut work.persistent_read,
         )?
         .id != anchor.relation_id
@@ -210,6 +215,7 @@ pub(super) fn record<'a>(
         }
     } else if anchor.ancestor_depth.is_some()
         || anchor.reassertion_links
+        || anchor.reassertion_head
         || !relations.directory.contains(&anchor.relation_id)
     {
         return None;
@@ -267,6 +273,7 @@ pub(super) fn initial_anchor(
         current_revision: None,
         ancestor_depth: None,
         reassertion_links: false,
+        reassertion_head: false,
         source_end: source.end,
         source_byte_end: source.byte_end,
         boundary_seen: entry.boundary?.at_seen,
@@ -464,6 +471,11 @@ pub(super) fn offer(
         // that contract is active for this model and control.
         if anchor.reassertion_links
             && !super::historical_version_intent::reassertion_links(model, control)
+        {
+            return None;
+        }
+        if anchor.reassertion_head
+            && !super::historical_version_intent::reassertion_heads(model, control)
         {
             return None;
         }
