@@ -5,6 +5,9 @@
 #[cfg(feature = "learned-reference")]
 pub mod learned_reference;
 
+/// Exclusive report directories and sealed manifests for experiment drivers.
+pub mod report_output;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};

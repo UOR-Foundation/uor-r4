@@ -802,7 +802,7 @@ fn main() -> Result<()> {
         return Err("incorrect Copy/Add arguments".into());
     }
     let out = Path::new(&args[3]);
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     if mode == "rust-source" {
         return rust_source(&args[2], out);
     }

@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let model = Model::from_bytes(&fs::read(&args[2])?)?;
     let out = Path::new(&args[3]);
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let docs = if args[1] == "fresh" {
         {
             let mut v = cases("fresh-positive", 4, 109);

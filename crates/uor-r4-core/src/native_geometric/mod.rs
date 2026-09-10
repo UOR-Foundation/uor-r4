@@ -294,6 +294,9 @@ pub enum Control {
     HistoricalVersionIntentAncestorDisabled,
     /// Withhold truncated-chain abstention candidates from the learned version selector.
     HistoricalVersionIntentAbstainDisabled,
+    /// Follow explicit revision links only: withhold same-value reassertion links and
+    /// the proven-eviction requirement of the versioned chain contract.
+    HistoricalVersionIntentReassertionDisabled,
     /// Keep the active historical router but expose only eight query words.
     HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
@@ -412,6 +415,7 @@ impl Feature {
             | Control::HistoricalVersionIntentScopeDisabled
             | Control::HistoricalVersionIntentAncestorDisabled
             | Control::HistoricalVersionIntentAbstainDisabled
+            | Control::HistoricalVersionIntentReassertionDisabled
             | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled

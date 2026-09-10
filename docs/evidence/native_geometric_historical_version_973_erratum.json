@@ -1,0 +1,735 @@
+{
+  "schema": "uor-r4.evidence-erratum/1",
+  "at": "2026-09-10T15:19:35Z",
+  "corrects": {
+    "file": "docs/evidence/native_geometric_historical_version_973.json",
+    "entry": "earlier_validation_chains[2] (status THIRD_CHAIN_DIRECTORY_COLLISIONS)",
+    "original_claim": "The fourteen older report directories were overwritten in place by the third run; the rejected candidate's versions survive only in the preserve-*-2 command logs.",
+    "original_bytes_preserved": true,
+    "pr": 1221,
+    "merge": "f3cc46aa18f59b826e83ab565a3b1a045977af4a"
+  },
+  "finding": "Independent review (2026-09-10, /Users/casey.allard/Documents/Codex/2026-09-10/uor-r4-claude-review) confirmed that the named fallback logs are zero or six bytes: the drivers print only a one-line count, so those logs cannot preserve the rejected candidate's row-level reports. The recoverability part of the original statement was inaccurate.",
+  "corrected_statement": "The fourteen older behavior/control reports produced for the rejected candidate d6144304 (labels preserve-*-2, 2026-09-10T05:19 to 05:24 UTC) under validation/validation-final, and the word/Rust retained report under validation/word-fresh-retained, were overwritten in place when the same output paths were reused for the retained candidate e3a906c8 (labels preserve-*-3, 06:03 to 06:08 UTC). Their original row-level contents are not recoverable from any surviving file: the preserve-*-2 logs hold at most a one-line exact/total count. What survives of the rejected candidate: its artifact and fit receipt, its construction/opened/independent-draw evaluations, its retained-handoff-fresh-2 regression report, its matched-history replay (validation/history), its Copy/Add and action reports (validation/*-final) and its generated word/Rust checks (validation/rust-retained), each carrying the d6144304 artifact identity. The retained e3a906c8 reports at the overwritten paths are complete and internally consistent. Neither complete recovery nor total loss of rejection evidence is claimed.",
+  "no_backup_found": "Read-only search performed in the repair cycle: `tmutil listlocalsnapshots /` lists no local snapshots; a search for the rejected artifact identity d6144304 in every JSON file under /Users/casey.allard/Documents/Codex/2026-09-09, /Users/casey.allard/Documents/Codex/2026-09-10, /Users/casey.allard/Downloads/uor-r4-project and the repository docs found no copy of the fourteen older reports or of the word/Rust report outside the run root; the only file outside the run root naming that identity is the original evidence snapshot itself. Inside the run root the files still carrying that identity are the rejected artifact and fit receipt, construction-result-8, opened-fresh-result-3, fresh-result-2, retained-query-owner, retained-historical, retained-handoff-fresh (with its rejection receipt), selected-probe, selection-2/3, history-analog-trace, validation/history, validation/copy-add-*-final, validation/action-*-final, validation/rust-retained and the rust-evaluate/rust-stress source receipts. No file is identified as an original of the overwritten reports. No reconstruction by rerunning d6144304 was performed in this cycle; if one is performed later it must be labeled new reconstructed evidence with its own source/binary/run/resource provenance.",
+  "overwritten_paths_now_holding_e3a906c8": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-operations/result.json",
+      "bytes": 1570013,
+      "sha256": "24db1f107006f208e70370481bafdc84b5c88baef9f3acf335cb5126119ce3a4",
+      "modified_utc": "2026-09-10T06:03:40Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-operations/disabled.json",
+      "bytes": 1196165,
+      "sha256": "1a970b4e67c2cc88dd57447408d1e399589a05da8d34962d1948cd77bcad0007",
+      "modified_utc": "2026-09-10T06:03:40Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-operations/intermediate-disabled.json",
+      "bytes": 1196209,
+      "sha256": "d3a426ae05b76f47eb5382063e7aad49522f70a26ca79322b4e52fb7a3635134",
+      "modified_utc": "2026-09-10T06:03:40Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-lexical-controls/result.json",
+      "bytes": 680357,
+      "sha256": "c9855e0d6d701375b4896feca4ad8317fc0ae24406ffe9feaa8e63735820a5c6",
+      "modified_utc": "2026-09-10T06:04:16Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-lexical-controls/disabled.json",
+      "bytes": 679888,
+      "sha256": "171aabbd42a5870f595089b29facbd83e19b890752deab7f0155da3d5db02e1b",
+      "modified_utc": "2026-09-10T06:04:16Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-lexical-controls/read-disabled.json",
+      "bytes": 680964,
+      "sha256": "49d17aa6d4d3f3f4235d71b75e87124c1259f5dfe51c4c251290ec95e948886a",
+      "modified_utc": "2026-09-10T06:04:16Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-lexical-controls/geometry-disabled.json",
+      "bytes": 679888,
+      "sha256": "171aabbd42a5870f595089b29facbd83e19b890752deab7f0155da3d5db02e1b",
+      "modified_utc": "2026-09-10T06:04:16Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-evaluate/result.json",
+      "bytes": 10744768,
+      "sha256": "b0b335702020d800f39909d2b455dd87d6c4e62e7485f26e73a8c0c70f1696ae",
+      "modified_utc": "2026-09-10T06:04:53Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-controls/result.json",
+      "bytes": 9796863,
+      "sha256": "266b83c654d596b23ee0517f1f80fef5f2ace62ef7f07cb4e499826d7bff31bc",
+      "modified_utc": "2026-09-10T06:05:29Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-stress/result.json",
+      "bytes": 4054290,
+      "sha256": "57f9862431f05ab91ac0dc3d960f4e441d6716ef53adaf121bde41273e21fe1b",
+      "modified_utc": "2026-09-10T06:06:05Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-evaluate/result.json",
+      "bytes": 908847,
+      "sha256": "89f2a7c6c5dbecdd451bd804442df9aa5bb85c39531f9bd9f271383228e7fbe0",
+      "modified_utc": "2026-09-10T06:06:41Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-stress/result.json",
+      "bytes": 908652,
+      "sha256": "d8e3eae8ad1979bfb400eeca1429b2f35762d3891b316f952e23edd3a6b44a86",
+      "modified_utc": "2026-09-10T06:07:18Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-fresh/result.json",
+      "bytes": 909203,
+      "sha256": "f009a66282b2b36ea5cb380fb173ef59ac626440702fc014dc5bcf1e01045d38",
+      "modified_utc": "2026-09-10T06:07:54Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-evaluate/disabled.json",
+      "bytes": 772250,
+      "sha256": "9ef7fc0e4b8ec7209e32caf211bdbe92c320ed261e17b045a5880efe817b76b3",
+      "modified_utc": "2026-09-10T06:06:41Z",
+      "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+    }
+  ],
+  "word_rust_retained_report_now_holding_e3a906c8": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/word-fresh-retained/full.json",
+    "bytes": 1227982,
+    "sha256": "2ce1a2d78f578b7f7d7e1d2e445b5f1aecdde3a4bf44c070cccdbddf14fb0184",
+    "modified_utc": "2026-09-10T06:08:32Z",
+    "artifact_now": "blake3:e3a906c86386df23fb74cf4ef667f8551abd1b4850d5264fc8164a130a7d441f"
+  },
+  "fallback_logs_verified": [
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-operations-2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modified_utc": "2026-09-10T05:19:28Z",
+      "content": ""
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-lexical-controls-2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modified_utc": "2026-09-10T05:20:05Z",
+      "content": ""
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-current-evaluate-2.log",
+      "bytes": 6,
+      "sha256": "b4dccd88f6775b1e38eddeecf287299cfcb815a05a3db43290c55884319460b7",
+      "modified_utc": "2026-09-10T05:21:17Z",
+      "content": "48/48\n"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-current-controls-2.log",
+      "bytes": 6,
+      "sha256": "4b29f66a96f87a5f5f0ffee214376b32738dd058d62c5b453693d028fd0a0e3e",
+      "modified_utc": "2026-09-10T05:21:53Z",
+      "content": "32/48\n"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-current-stress-2.log",
+      "bytes": 6,
+      "sha256": "83c1d7056b1b84a691c1aa3fd2ab8551b51e03311ff06271293d0b2f0172cdf2",
+      "modified_utc": "2026-09-10T05:22:29Z",
+      "content": "16/16\n"
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-instruction-evaluate-2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modified_utc": "2026-09-10T05:22:29Z",
+      "content": ""
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-instruction-stress-2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modified_utc": "2026-09-10T05:23:05Z",
+      "content": ""
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-prior-instruction-fresh-2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modified_utc": "2026-09-10T05:23:42Z",
+      "content": ""
+    },
+    {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/preserve-word-fresh-retained-2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modified_utc": "2026-09-10T05:24:18Z",
+      "content": ""
+    }
+  ],
+  "rejected_candidate": {
+    "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+    "bytes": 17172867,
+    "sha256": "9e610850df64b228107d6a66a94d749431bf86d8e014888508079d740e84bc68",
+    "modified_utc": "2026-09-10T04:58:36Z",
+    "artifact": "blake3:d614430473be41ecfd0a7c0d24bc983a2a32840672b7db2fe5c2c5e14f86cbd1"
+  },
+  "surviving_rejected_candidate_reports": {
+    "history/full.json": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/history/full.json",
+      "bytes": 894091,
+      "sha256": "6ea881a90f563fe7f0230c358b9e610c7263c47524e93d24fa229e404b742b35",
+      "modified_utc": "2026-09-10T05:25:33Z",
+      "artifact": "blake3:d614430473be41ecfd0a7c0d24bc983a2a32840672b7db2fe5c2c5e14f86cbd1",
+      "what": "matched histories replay of d6144304 (preserve-history-2; the -3 rerun failed on the existing directory and wrote history-3)"
+    },
+    "copy-add-evaluate-final/result.json": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-evaluate-final/result.json",
+      "bytes": 9284307,
+      "sha256": "ea200cc65dcd9e2db5628d45e92eab47c13f49eedd60c90f15f18f905cf164f3",
+      "modified_utc": "2026-09-10T05:26:12Z",
+      "artifact": "blake3:d614430473be41ecfd0a7c0d24bc983a2a32840672b7db2fe5c2c5e14f86cbd1",
+      "what": "Copy/Add ordinary report of d6144304 (the retained rerun wrote copy-add-evaluate-3)"
+    },
+    "copy-add-stress-final/result.json": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-stress-final/result.json",
+      "bytes": 9331288,
+      "sha256": "9936b9570e1d4c7c472a7910473a4b8fc2664d2efe4cc0ffff43f0b619ed35e1",
+      "modified_utc": "2026-09-10T05:28:00Z",
+      "artifact": "blake3:d614430473be41ecfd0a7c0d24bc983a2a32840672b7db2fe5c2c5e14f86cbd1",
+      "what": "Copy/Add stress report of d6144304"
+    },
+    "action-evaluate-final/result.json": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/action-evaluate-final/result.json",
+      "bytes": 654185,
+      "sha256": "c7a0bb2c39004c225d651a4dc94d0c61e044251b8bdd0dbff35f944b66ed06ab",
+      "modified_utc": "2026-09-10T05:27:06Z",
+      "artifact": "blake3:d614430473be41ecfd0a7c0d24bc983a2a32840672b7db2fe5c2c5e14f86cbd1",
+      "what": "action ordinary report of d6144304"
+    },
+    "action-stress-final/result.json": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/action-stress-final/result.json",
+      "bytes": 654448,
+      "sha256": "0dde41aaa408ee9ac7d4f42cdec93c557a44eece52f14de5e568fa8dcc0105d5",
+      "modified_utc": "2026-09-10T05:28:54Z",
+      "artifact": "blake3:d614430473be41ecfd0a7c0d24bc983a2a32840672b7db2fe5c2c5e14f86cbd1",
+      "what": "action stress report of d6144304"
+    },
+    "rust-retained/generated_checks.rs": {
+      "path": "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-retained/generated_checks.rs",
+      "bytes": 706,
+      "sha256": "33c92444345b4ace529ebd15686d7ee448379194ad441adb5c80aa486af9d6e5",
+      "modified_utc": "2026-09-10T05:29:10Z",
+      "what": "generated Rust from the d6144304 word/Rust report (the -3 extract failed on the existing directory)"
+    }
+  },
+  "commands_rejected_candidate": [
+    {
+      "label": "preserve-prior-operations-2",
+      "started": "2026-09-10T05:19:28.710Z",
+      "elapsed_ms": 36338,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-operations"
+      ]
+    },
+    {
+      "label": "preserve-prior-lexical-controls-2",
+      "started": "2026-09-10T05:20:05.092Z",
+      "elapsed_ms": 36455,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-lexical-controls"
+      ]
+    },
+    {
+      "label": "preserve-prior-current-evaluate-2",
+      "started": "2026-09-10T05:20:41.593Z",
+      "elapsed_ms": 35992,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-evaluate"
+      ]
+    },
+    {
+      "label": "preserve-prior-current-controls-2",
+      "started": "2026-09-10T05:21:17.633Z",
+      "elapsed_ms": 35822,
+      "code": 0,
+      "args": [
+        "controls",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-controls"
+      ]
+    },
+    {
+      "label": "preserve-prior-current-stress-2",
+      "started": "2026-09-10T05:21:53.502Z",
+      "elapsed_ms": 35658,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-stress"
+      ]
+    },
+    {
+      "label": "preserve-prior-instruction-evaluate-2",
+      "started": "2026-09-10T05:22:29.200Z",
+      "elapsed_ms": 36712,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-evaluate"
+      ]
+    },
+    {
+      "label": "preserve-prior-instruction-stress-2",
+      "started": "2026-09-10T05:23:05.960Z",
+      "elapsed_ms": 36328,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-stress"
+      ]
+    },
+    {
+      "label": "preserve-prior-instruction-fresh-2",
+      "started": "2026-09-10T05:23:42.330Z",
+      "elapsed_ms": 36404,
+      "code": 0,
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-fresh"
+      ]
+    },
+    {
+      "label": "preserve-word-fresh-retained-2",
+      "started": "2026-09-10T05:24:18.782Z",
+      "elapsed_ms": 37078,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/word-fresh-retained"
+      ]
+    },
+    {
+      "label": "preserve-history-2",
+      "started": "2026-09-10T05:24:55.906Z",
+      "elapsed_ms": 37898,
+      "code": 0,
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/preserve/preservation",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/history"
+      ]
+    },
+    {
+      "label": "preserve-copy-add-evaluate-2",
+      "started": "2026-09-10T05:25:33.852Z",
+      "elapsed_ms": 53695,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-evaluate-final"
+      ]
+    },
+    {
+      "label": "preserve-action-evaluate-2",
+      "started": "2026-09-10T05:26:27.594Z",
+      "elapsed_ms": 53991,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/action-evaluate-final"
+      ]
+    },
+    {
+      "label": "preserve-copy-add-stress-2",
+      "started": "2026-09-10T05:27:21.633Z",
+      "elapsed_ms": 54180,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-stress-final"
+      ]
+    },
+    {
+      "label": "preserve-action-stress-2",
+      "started": "2026-09-10T05:28:15.857Z",
+      "elapsed_ms": 53293,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-11/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/action-stress-final"
+      ]
+    },
+    {
+      "label": "preserve-rust-extract-evaluate-2",
+      "started": "2026-09-10T05:29:09.490Z",
+      "elapsed_ms": 90,
+      "code": 0,
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-evaluate-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-evaluate"
+      ]
+    },
+    {
+      "label": "preserve-rust-compile-evaluate-2",
+      "started": "2026-09-10T05:29:09.624Z",
+      "elapsed_ms": 550,
+      "code": 0,
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-evaluate/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-evaluate/generated_checks"
+      ]
+    },
+    {
+      "label": "preserve-rust-execute-evaluate-2",
+      "started": "2026-09-10T05:29:10.217Z",
+      "elapsed_ms": 132,
+      "code": 0,
+      "args": []
+    },
+    {
+      "label": "preserve-rust-extract-stress-2",
+      "started": "2026-09-10T05:29:10.408Z",
+      "elapsed_ms": 92,
+      "code": 0,
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-stress-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-stress"
+      ]
+    },
+    {
+      "label": "preserve-rust-compile-stress-2",
+      "started": "2026-09-10T05:29:10.544Z",
+      "elapsed_ms": 99,
+      "code": 0,
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-stress/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-stress/generated_checks"
+      ]
+    },
+    {
+      "label": "preserve-rust-execute-stress-2",
+      "started": "2026-09-10T05:29:10.687Z",
+      "elapsed_ms": 53,
+      "code": 0,
+      "args": []
+    },
+    {
+      "label": "preserve-rust-extract-retained-2",
+      "started": "2026-09-10T05:29:10.788Z",
+      "elapsed_ms": 16,
+      "code": 0,
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/word-fresh-retained/full.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-retained"
+      ]
+    },
+    {
+      "label": "preserve-rust-compile-retained-2",
+      "started": "2026-09-10T05:29:10.847Z",
+      "elapsed_ms": 118,
+      "code": 0,
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-retained/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-retained/generated_checks"
+      ]
+    },
+    {
+      "label": "preserve-rust-execute-retained-2",
+      "started": "2026-09-10T05:29:11.008Z",
+      "elapsed_ms": 52,
+      "code": 0,
+      "args": []
+    }
+  ],
+  "commands_retained_candidate_overwrites": [
+    {
+      "label": "preserve-prior-operations-3",
+      "started": "2026-09-10T06:03:03.917Z",
+      "elapsed_ms": 36435,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-operations"
+      ]
+    },
+    {
+      "label": "preserve-prior-lexical-controls-3",
+      "started": "2026-09-10T06:03:40.397Z",
+      "elapsed_ms": 36466,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-lexical-controls"
+      ]
+    },
+    {
+      "label": "preserve-prior-current-evaluate-3",
+      "started": "2026-09-10T06:04:16.908Z",
+      "elapsed_ms": 36197,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-evaluate"
+      ]
+    },
+    {
+      "label": "preserve-prior-current-controls-3",
+      "started": "2026-09-10T06:04:53.149Z",
+      "elapsed_ms": 35966,
+      "code": 0,
+      "args": [
+        "controls",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-controls"
+      ]
+    },
+    {
+      "label": "preserve-prior-current-stress-3",
+      "started": "2026-09-10T06:05:29.157Z",
+      "elapsed_ms": 35873,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-recovery-audit/execution/shared-independent-replay/construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-current-stress"
+      ]
+    },
+    {
+      "label": "preserve-prior-instruction-evaluate-3",
+      "started": "2026-09-10T06:06:05.073Z",
+      "elapsed_ms": 36737,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-evaluate"
+      ]
+    },
+    {
+      "label": "preserve-prior-instruction-stress-3",
+      "started": "2026-09-10T06:06:41.854Z",
+      "elapsed_ms": 36419,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-stress"
+      ]
+    },
+    {
+      "label": "preserve-prior-instruction-fresh-3",
+      "started": "2026-09-10T06:07:18.317Z",
+      "elapsed_ms": 36561,
+      "code": 0,
+      "args": [
+        "fresh",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-lexical-emission/preserve-variable/preservation/retained-construction.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/validation-final/prior-instruction-fresh"
+      ]
+    },
+    {
+      "label": "preserve-word-fresh-retained-3",
+      "started": "2026-09-10T06:07:54.921Z",
+      "elapsed_ms": 37112,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-word-sentence/fresh-data/cases.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/word-fresh-retained"
+      ]
+    },
+    {
+      "label": "preserve-history-3",
+      "started": "2026-09-10T06:08:32.078Z",
+      "elapsed_ms": 8,
+      "code": 1,
+      "args": [
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-08/uor-r4-copy-add/validation-retry/preserve/preservation",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/history"
+      ]
+    },
+    {
+      "label": "preserve-rust-extract-evaluate-3",
+      "started": "2026-09-10T06:08:32.435Z",
+      "elapsed_ms": 284,
+      "code": 0,
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-evaluate-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-evaluate"
+      ]
+    },
+    {
+      "label": "preserve-rust-compile-evaluate-3",
+      "started": "2026-09-10T06:08:32.763Z",
+      "elapsed_ms": 525,
+      "code": 0,
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-evaluate/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-evaluate/generated_checks"
+      ]
+    },
+    {
+      "label": "preserve-rust-execute-evaluate-3",
+      "started": "2026-09-10T06:08:33.332Z",
+      "elapsed_ms": 66,
+      "code": 0,
+      "args": []
+    },
+    {
+      "label": "preserve-rust-extract-stress-3",
+      "started": "2026-09-10T06:08:33.449Z",
+      "elapsed_ms": 95,
+      "code": 0,
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-stress-final/result.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-stress"
+      ]
+    },
+    {
+      "label": "preserve-rust-compile-stress-3",
+      "started": "2026-09-10T06:08:33.586Z",
+      "elapsed_ms": 101,
+      "code": 0,
+      "args": [
+        "--edition=2021",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-stress/generated_checks.rs",
+        "-o",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-stress/generated_checks"
+      ]
+    },
+    {
+      "label": "preserve-rust-execute-stress-3",
+      "started": "2026-09-10T06:08:33.731Z",
+      "elapsed_ms": 71,
+      "code": 0,
+      "args": []
+    },
+    {
+      "label": "preserve-rust-extract-retained-3",
+      "started": "2026-09-10T06:08:33.853Z",
+      "elapsed_ms": 16,
+      "code": 1,
+      "args": [
+        "rust-source",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/word-fresh-retained/full.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/rust-retained"
+      ]
+    },
+    {
+      "label": "preserve-copy-add-evaluate-3",
+      "started": "2026-09-10T06:15:47.917Z",
+      "elapsed_ms": 53960,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-evaluate-3"
+      ]
+    },
+    {
+      "label": "preserve-action-evaluate-3",
+      "started": "2026-09-10T06:16:41.922Z",
+      "elapsed_ms": 54086,
+      "code": 0,
+      "args": [
+        "evaluate",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/action-evaluate-3"
+      ]
+    },
+    {
+      "label": "preserve-copy-add-stress-3",
+      "started": "2026-09-10T06:17:36.052Z",
+      "elapsed_ms": 54145,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/copy-add-stress-3"
+      ]
+    },
+    {
+      "label": "preserve-action-stress-3",
+      "started": "2026-09-10T06:18:30.241Z",
+      "elapsed_ms": 53233,
+      "code": 0,
+      "args": [
+        "stress",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/fit-construction-12/model.json",
+        "/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-initial-previous-intent/validation/action-stress-3"
+      ]
+    }
+  ],
+  "safeguard": "Every driver used by the repair cycle now claims its report directory exclusively (uor_r4_core::report_output::claim) before model work and seals completed attempts with a BLAKE3 manifest (report_output::seal); an existing report path fails byte-identical. Focused tests: report_output::tests.",
+  "counts_also_corrected": {
+    "seven fitting attempts": "twelve fit/refit invocations in the initial/previous cycle: two failed before learning and ten exited successfully; all twelve were charged",
+    "64 per draw": "76 owner-sentence alternatives on the final 474-target draw; 64 applied to the earlier 402-target draws"
+  }
+}

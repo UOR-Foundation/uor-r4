@@ -65,7 +65,7 @@ fn rust_source(input: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error
         return Err("no generated Rust expressions".into());
     }
     program.push_str("}\n");
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     fs::write(out.join("generated_checks.rs"), program)?;
     save(
         &out.join("source-receipt.json"),
@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let model = Model::from_bytes(&fs::read(&a[2])?)?;
     let out = Path::new(&a[3]);
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let mut docs = match a[1].as_str() {
         "fresh" => {
             let mut d = cases("fresh-positive", 4, 109);

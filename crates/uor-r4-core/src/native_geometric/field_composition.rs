@@ -113,6 +113,12 @@ pub struct FieldAnchor {
     /// Exact validated link count from `current_revision` to `relation_id`; None is one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ancestor_depth: Option<u8>,
+    /// The ancestor path contains a same-value reassertion link proven under the
+    /// versioned chain contract. Absent means revision links only, the legacy form
+    /// every revision-only path keeps; restore re-proves the path under exactly the
+    /// stated contract.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reassertion_links: bool,
     pub source_end: u64,
     pub source_byte_end: u64,
     pub boundary_seen: u64,
@@ -190,14 +196,21 @@ pub(super) fn record<'a>(
             Some(depth) if depth >= 2 => depth,
             Some(_) => return None,
         };
-        if super::historical_read::ancestor(relations, current, depth, &mut work.persistent_read)?
-            .id
-            != anchor.relation_id
+        if super::historical_read::ancestor(
+            relations,
+            current,
+            depth,
+            anchor.reassertion_links,
+            &mut work.persistent_read,
+        )?
+        .id != anchor.relation_id
             || anchor.source != super::relation::RELATION_SOURCE + ((r.id - 1) & 15) as u8
         {
             return None;
         }
-    } else if anchor.ancestor_depth.is_some() || !relations.directory.contains(&anchor.relation_id)
+    } else if anchor.ancestor_depth.is_some()
+        || anchor.reassertion_links
+        || !relations.directory.contains(&anchor.relation_id)
     {
         return None;
     }
@@ -253,6 +266,7 @@ pub(super) fn initial_anchor(
         relation_id: r.id,
         current_revision: None,
         ancestor_depth: None,
+        reassertion_links: false,
         source_end: source.end,
         source_byte_end: source.byte_end,
         boundary_seen: entry.boundary?.at_seen,
@@ -443,6 +457,13 @@ pub(super) fn offer(
         if anchor.ancestor_depth.is_some()
             && (model.historical_version_intent.is_none()
                 || control == Control::HistoricalVersionIntentDisabled)
+        {
+            return None;
+        }
+        // A path proven under the versioned chain contract stays valid only while
+        // that contract is active for this model and control.
+        if anchor.reassertion_links
+            && !super::historical_version_intent::reassertion_links(model, control)
         {
             return None;
         }

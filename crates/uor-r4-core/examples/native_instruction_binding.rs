@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let model = Model::from_bytes(&fs::read(&a[2])?)?;
     let out = Path::new(&a[4]);
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     if a[1] == "preserve-lexical" {
         let baseline: serde_json::Value = serde_json::from_slice(&fs::read(&a[3])?)?;
         let wire: serde_json::Value = serde_json::from_slice(&model.to_bytes()?)?;

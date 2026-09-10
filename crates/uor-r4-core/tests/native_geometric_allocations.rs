@@ -4136,6 +4136,9 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
         ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "What was the initial location of selvi? Name the owner first.", " selvi was in Dusk Ridge.\n", 1, 3, 2),
         ("Record: moss dale holds tilva. tilva now in Birch Grove. tilva now in Pine Hollow. tilva now in Cedar Point.", "tilva", "Where was tilva originally? State the owner first.", " tilva was in moss dale.\n", 1, 4, 3),
         ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "What was the previous location of selvi? Name the owner first.", " selvi was in Copper Vale.\n", 2, 3, 1),
+        // Resident same-value reassertions are validated links: the root, not an abstention.
+        ("Record: selvi in Dusk Ridge. selvi in Dusk Ridge. selvi now in Copper Vale.", "selvi", "What was the initial location of selvi?", " Dusk Ridge.\n", 1, 3, 2),
+        ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale. selvi now in Amber Field.", "selvi", "What was the initial location of selvi? Name the owner first.", " selvi was in Dusk Ridge.\n", 1, 4, 3),
     ];
     for (facts, owner, request, target, root, head, depth) in cases {
         let prompt = format!("{facts} {request} Answer:");

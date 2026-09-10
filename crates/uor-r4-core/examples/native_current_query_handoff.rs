@@ -257,7 +257,7 @@ fn authored_cases(owners: &[Owner]) -> Vec<Case> {
 }
 fn prepare(out: &Path, fresh: bool) -> Result<()> {
     // Fail on an existing destination: a fresh draw is never silently overwritten.
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let owners: Vec<Owner> = if fresh {
         let mut entropy = [0_u8; 96];
         fs::File::open("/dev/urandom")?.read_exact(&mut entropy)?;
@@ -519,7 +519,7 @@ fn trace_summary(model: &Model, c: &Case, actual: &Value) -> Result<Value> {
     )
 }
 fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let mut rows = Vec::new();
     let mut targets = 0;
     let mut matched = 0;
@@ -544,7 +544,7 @@ fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
     Ok(())
 }
 fn evaluate(model: &Model, parent: &Model, cases: &[Case], out: &Path) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let mut rows = Vec::new();
     let (
         mut targets,
@@ -703,7 +703,7 @@ fn contrast_cases() -> Vec<Value> {
     cases
 }
 fn open_contrasts(out: &Path) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let cases = contrast_cases();
     if cases.len() != 40 {
         return Err("open contrast population differs from the authored 40 rows".into());
@@ -719,7 +719,7 @@ fn open_contrasts(out: &Path) -> Result<()> {
 
 /// Incorporates every opened contrast only after recording its development status.
 fn balanced(out: &Path) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let base =
         Path::new("/Users/casey.allard/Documents/Codex/2026-09-09/uor-r4-current-query-handoff");
     let cases_bytes = fs::read(base.join("construction/cases.json"))?;
@@ -844,7 +844,7 @@ fn main() -> Result<()> {
     let out = Path::new(&a[4]);
     if ["fit", "fit-lexical", "fit-scoped"].contains(&a[1].as_str()) {
         let docs: Vec<CurrentQueryExample> = serde_json::from_slice(&fs::read(&a[3])?)?;
-        fs::create_dir(out)?;
+        uor_r4_core::report_output::claim(out)?;
         let config = SourceRoutingConfig {
             learned_features: 768,
             passes: 8,
@@ -868,7 +868,7 @@ fn main() -> Result<()> {
     }
     let mut cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[3])?)?;
     if a[1] == "context-trace" {
-        fs::create_dir(out)?;
+        uor_r4_core::report_output::claim(out)?;
         let mut rows = Vec::new();
         for c in &cases {
             rows.push(

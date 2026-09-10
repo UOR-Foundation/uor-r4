@@ -1,5 +1,7 @@
 # Learned abstention for truncated histories — #973
 
+> **Superseded (2026-09-10).** An independent review reproduced four correct-to-wrong answers in `e44a9ae4`: a resident nonconflicting same-value reassertion was mistaken for a truncated history. The [reassertion-versus-truncation repair](native_geometric_reassertion_chain_repair_973.md) versions the chain contract and retains a new successor; `e44a9ae4` is preserved as evidence of both the real truncation improvement and that regression. The record below is unchanged.
+
 This cycle repairs the limitation left by the [learned version intent](native_geometric_historical_version_973.md): when later facts evict a chain's root from the sixteen-slot record ring, an initial-version request could only fall back to the parent's previous-value answer. The retained version-intent witness now carries a versioned abstention option. A request-named chain whose validated links end before any genuine root is offered to the same learned selector as a truncated candidate competing for the parent's no-read action, so the model answers `Unknown.` instead of the oldest survivor. The retained successor is **`e44a9ae4`**, refit from frozen parent `f0901dad` over the extended construction; it supersedes `e3a906c8`, whose behavior it reproduces on every retained population outside the declared evicted-root repair targets.
 
 ## Mechanism and boundaries

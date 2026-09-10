@@ -73,6 +73,40 @@ struct ExpectedField<'a> {
     value: &'a str,
     current_proof: Option<u64>,
     depth: Option<u8>,
+    /// The ancestor path contains a reassertion link proven under the versioned contract.
+    reassertion_links: bool,
+}
+fn payload(r: &Value) -> String {
+    atom(if r["span"].is_object() {
+        &r["span"]
+    } else {
+        &r["value"]
+    })
+}
+/// Field anchors produced while generating one prompt under `control`.
+fn anchors(model: &Model, prompt: &str, control: Control) -> Vec<(u64, Option<u8>, bool)> {
+    let mut s = model.session(control).unwrap();
+    s.observe(model, BOS).unwrap();
+    for t in model.encode(prompt).unwrap() {
+        s.observe(model, t).unwrap();
+    }
+    s.begin_response(model).unwrap();
+    let mut out = Vec::new();
+    for _ in 0..96 {
+        let p = s.predict(model).unwrap();
+        if let Some(d) = s.field_composition_decision().filter(|d| d.field != 0) {
+            out.push((
+                d.anchor.relation_id,
+                d.anchor.ancestor_depth,
+                d.anchor.reassertion_links,
+            ));
+        }
+        s.observe(model, p.token).unwrap();
+        if p.token == EOS {
+            break;
+        }
+    }
+    out
 }
 #[allow(clippy::too_many_arguments)]
 fn turn(
@@ -127,16 +161,32 @@ fn turn(
             // Walk the exact descending chain from the live head to the selected record.
             let depth = f.depth.unwrap_or(1);
             let mut cursor = records.iter().find(|r| r["id"] == id).unwrap();
+            let mut reassertion_hops = 0;
             for hop in 0..depth {
-                assert_eq!(
-                    cursor["action"], 2,
-                    "hop {hop} must be an explicit revision"
-                );
                 assert_eq!(cursor["conflict"], false);
                 assert_eq!(atom(&cursor["owner"]), f.owner);
                 let previous = cursor["previous"].as_u64().unwrap();
                 assert!(previous != 0 && previous < cursor["id"].as_u64().unwrap());
-                cursor = records.iter().find(|r| r["id"] == previous).unwrap();
+                let older = records.iter().find(|r| r["id"] == previous).unwrap();
+                // Deeper hops may be resident same-owner, same-value reassertions
+                // under the versioned chain contract; the head link is a revision.
+                let reassertion = hop > 0
+                    && cursor["action"] == 1
+                    && older["conflict"] == false
+                    && atom(&older["owner"]) == f.owner
+                    && payload(cursor) == payload(older);
+                assert!(
+                    cursor["action"] == 2 || reassertion,
+                    "hop {hop} must be an explicit revision or a resident same-value reassertion"
+                );
+                reassertion_hops += usize::from(reassertion);
+                cursor = older;
+            }
+            if reassertion_hops > 0 {
+                assert!(
+                    f.reassertion_links,
+                    "a path with a reassertion link must be proven under the versioned contract"
+                );
             }
             assert_eq!(cursor["id"], f.record);
             if f.depth.is_some() {
@@ -173,6 +223,7 @@ fn turn(
             assert_eq!(d.anchor.relation_id, f.record);
             assert_eq!(d.anchor.current_revision, f.current_proof);
             assert_eq!(d.anchor.ancestor_depth, f.depth);
+            assert_eq!(d.anchor.reassertion_links, f.reassertion_links);
             let (end, byte_end) = endpoint.unwrap();
             assert_eq!(d.anchor.source_end, end);
             assert_eq!(d.anchor.source_byte_end, byte_end);
@@ -189,7 +240,10 @@ fn turn(
             if after["field_composition"]["read"]["field"] == 1 && !checked_proof {
                 match (f.current_proof, f.depth) {
                     (Some(id), Some(depth)) => {
-                        validate_and_corrupt_ancestor(model, &after, id, depth)
+                        validate_and_corrupt_ancestor(model, &after, id, depth);
+                        if f.reassertion_links {
+                            validate_and_corrupt_reassertion(model, &after, id, depth);
+                        }
                     }
                     (Some(id), None) => validate_and_corrupt_proof(model, &after, id),
                     (None, _) => validate_and_corrupt_current(model, &after, f.record),
@@ -372,6 +426,69 @@ fn validate_and_corrupt_ancestor(model: &Model, wire: &Value, current: u64, dept
     );
 }
 
+/// A path proven through a same-value reassertion restores only under its stated
+/// contract and only while the reassertion's exact value still matches.
+fn validate_and_corrupt_reassertion(model: &Model, wire: &Value, current: u64, depth: u8) {
+    let anchor = &wire["field_composition"]["anchor"];
+    assert_eq!(anchor["reassertion_links"], true);
+    let mut legacy = wire.clone();
+    legacy["field_composition"]["anchor"]
+        .as_object_mut()
+        .unwrap()
+        .remove("reassertion_links");
+    rejects(
+        model,
+        &legacy,
+        "a reassertion path claimed under the revision-only contract must reject",
+    );
+    let records = wire["values"]["relations"]["records"].as_array().unwrap();
+    let mut cursor = records.iter().find(|r| r["id"] == current).unwrap();
+    let mut reassertions = Vec::new();
+    for _ in 0..depth {
+        let previous = cursor["previous"].as_u64().unwrap();
+        if cursor["action"] == 1 {
+            reassertions.push(cursor["id"].as_u64().unwrap());
+        }
+        cursor = records.iter().find(|r| r["id"] == previous).unwrap();
+    }
+    assert!(
+        !reassertions.is_empty(),
+        "the proven path must contain a reassertion"
+    );
+    for id in reassertions {
+        let mut differing = wire.clone();
+        let record = differing["values"]["relations"]["records"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|r| r["id"] == id)
+            .unwrap();
+        let first = record["value"]["bytes"][0].as_u64().unwrap();
+        record["value"]["bytes"][0] = json!((first + 1) % 256);
+        if record["span"].is_object() {
+            let first = record["span"]["bytes"][0].as_u64().unwrap();
+            record["span"]["bytes"][0] = json!((first + 1) % 256);
+        }
+        rejects(
+            model,
+            &differing,
+            "a reassertion whose value no longer matches its predecessor must reject",
+        );
+        let mut conflicting = wire.clone();
+        conflicting["values"]["relations"]["records"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|r| r["id"] == id)
+            .unwrap()["conflict"] = json!(true);
+        rejects(
+            model,
+            &conflicting,
+            "a conflicting reassertion is not a link",
+        );
+    }
+}
+
 #[test]
 #[ignore = "requires UOR_HISTORICAL_VERSION_MODEL; charged actual historical-version artifact"]
 fn native_historical_version_actual_checkpoint_and_identity() {
@@ -443,6 +560,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
     changed["historical_version_intent"]["dictionary"][0]["prime"] = json!(0);
     assert!(Model::from_bytes(&serde_json::to_vec(&changed).unwrap()).is_err());
     drop(changed);
+    let versioned = wire["historical_version_intent"]["reassertion_links"] == true;
     drop(wire);
     drop(bytes);
 
@@ -493,6 +611,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     value: initial,
                     current_proof: Some(head_id),
                     depth: (depth > 1).then_some(depth),
+                    reassertion_links: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -509,6 +628,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     value: previous,
                     current_proof: Some(head_id),
                     depth: None,
+                    reassertion_links: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -525,6 +645,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                     value: current,
                     current_proof: None,
                     depth: None,
+                    reassertion_links: false,
                 }),
                 &mut inputs,
                 &mut outputs,
@@ -632,6 +753,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                 value: "Copper Vale",
                 current_proof: Some(3),
                 depth: None,
+                reassertion_links: false,
             }),
             &mut inputs,
             &mut outputs,
@@ -648,6 +770,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                 value: "Amber Field",
                 current_proof: None,
                 depth: None,
+                reassertion_links: false,
             }),
             &mut inputs,
             &mut outputs,
@@ -666,5 +789,214 @@ fn native_historical_version_actual_checkpoint_and_identity() {
         println!("historical-version evicted-root sequence; instruction={instruction:?}; initial abstained, previous/current fields and independent sum exact");
     }
     assert_eq!(abstentions, 2);
-    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2, sequence_count * 4 + 8);
+    // Resident same-value reassertions under the versioned chain contract: the
+    // initial request reaches the exact root through the reassertion link, the
+    // previous request keeps the parent's immediate previous record (the
+    // reassertion itself), the current request and an independent sum follow, and
+    // the anchor restores only under its stated contract. Withholding the
+    // reassertion links never produces the root anchor.
+    let mut reassertion_sequences = 0;
+    let mut reassertion_abstentions = 0;
+    if versioned {
+        for (label, facts, owner, initial, root_id, previous, previous_id, current, head_id, depth) in [
+            ("reassert-root", "Record: selvi in Dusk Ridge. selvi in Dusk Ridge. selvi now in Copper Vale.", "selvi", "Dusk Ridge", 1, "Dusk Ridge", 2, "Copper Vale", 3, 2),
+            ("reassert-middle", "Record: tilva in moss dale. tilva now in Birch Grove. tilva in Birch Grove. tilva now in Pine Hollow.", "tilva", "moss dale", 1, "Birch Grove", 3, "Pine Hollow", 4, 3),
+        ] {
+            for instruction in ["Name the owner first.", "State the owner first."] {
+                let initial_prompt = format!(
+                    "{facts} What was the initial location of {owner}? {instruction} Answer:"
+                );
+                let history_prompt =
+                    format!("What was the previous location of {owner}? {instruction} Answer:");
+                let current_prompt =
+                    format!("What is the current location of {owner}? {instruction} Answer:");
+                let sum_prompt = "User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
+                let prompts = [
+                    initial_prompt.as_str(),
+                    history_prompt.as_str(),
+                    current_prompt.as_str(),
+                    sum_prompt,
+                ];
+                assert_eq!(
+                    raw_sequence(&model, &prompts, Control::HistoricalVersionIntentDisabled),
+                    raw_sequence(&parent, &prompts, Control::Full),
+                    "disabled outer witness must preserve parent output on reassertion chains"
+                );
+                assert!(
+                    !anchors(
+                        &model,
+                        &initial_prompt,
+                        Control::HistoricalVersionIntentReassertionDisabled
+                    )
+                    .iter()
+                    .any(|(id, d, _)| *id == root_id && d.is_some()),
+                    "withholding reassertion links must never produce the root anchor: {label}"
+                );
+                let mut s = model.session(Control::Full).unwrap();
+                s.observe(&model, BOS).unwrap();
+                turn(
+                    &model,
+                    &mut s,
+                    &initial_prompt,
+                    &format!(" {owner} was in {initial}.\n"),
+                    Some(ExpectedField {
+                        record: root_id,
+                        owner,
+                        value: initial,
+                        current_proof: Some(head_id),
+                        depth: Some(depth),
+                        reassertion_links: true,
+                    }),
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                turn(
+                    &model,
+                    &mut s,
+                    &history_prompt,
+                    &format!(" {owner} was in {previous}.\n"),
+                    Some(ExpectedField {
+                        record: previous_id,
+                        owner,
+                        value: previous,
+                        current_proof: Some(head_id),
+                        depth: None,
+                        reassertion_links: false,
+                    }),
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                turn(
+                    &model,
+                    &mut s,
+                    &current_prompt,
+                    &format!(" {owner} is in {current}.\n"),
+                    Some(ExpectedField {
+                        record: head_id,
+                        owner,
+                        value: current,
+                        current_proof: None,
+                        depth: None,
+                        reassertion_links: false,
+                    }),
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                turn(
+                    &model,
+                    &mut s,
+                    sum_prompt,
+                    "18.\n",
+                    None,
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                reassertion_sequences += 1;
+                println!("historical-version {label}; owner={owner}; {instruction}; root={root_id} depth={depth} through a same-value reassertion, previous={previous_id}, head={head_id}; initial/previous/current fields and independent sum exact");
+            }
+        }
+        // A reassertion chain whose root was evicted by thirteen later facts: the
+        // surviving reassertion is not a root, absence is proven, and the initial
+        // request abstains while previous/current stay readable.
+        let mut evicted_reassertion = String::from(
+            "Record: selvi in Dusk Ridge. selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.",
+        );
+        for (k, name) in [
+            "arbor", "brook", "cairn", "delta", "ember", "fjord", "glade", "haven", "islet",
+            "jetty", "knoll", "lagoon", "marsh",
+        ]
+        .iter()
+        .enumerate()
+        {
+            evicted_reassertion.push_str(&format!(" {name} in Zone{k}."));
+        }
+        for instruction in ["", " Name the owner first."] {
+            let initial_prompt = format!(
+                "{evicted_reassertion} What was the initial location of selvi?{instruction} Answer:"
+            );
+            let history_prompt =
+                format!("What was the previous location of selvi? Name the owner first. Answer:");
+            let current_prompt =
+                format!("What is the current location of selvi? Name the owner first. Answer:");
+            let sum_prompt = "User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
+            let mut s = model.session(Control::Full).unwrap();
+            s.observe(&model, BOS).unwrap();
+            turn(
+                &model,
+                &mut s,
+                &initial_prompt,
+                " Unknown.\n",
+                None,
+                &mut inputs,
+                &mut outputs,
+                &mut proof_checks,
+            );
+            let records = state(&s)["values"]["relations"]["records"].clone();
+            let records = records.as_array().unwrap();
+            assert!(
+                records.iter().all(|r| r["id"] != 1),
+                "the root record must actually be evicted"
+            );
+            assert!(
+                records
+                    .iter()
+                    .any(|r| r["id"] == 2 && r["action"] == 1 && r["previous"] == 1),
+                "the same-value reassertion must survive as a non-root"
+            );
+            reassertion_abstentions += 1;
+            turn(
+                &model,
+                &mut s,
+                &history_prompt,
+                " selvi was in Copper Vale.\n",
+                Some(ExpectedField {
+                    record: 3,
+                    owner: "selvi",
+                    value: "Copper Vale",
+                    current_proof: Some(4),
+                    depth: None,
+                    reassertion_links: false,
+                }),
+                &mut inputs,
+                &mut outputs,
+                &mut proof_checks,
+            );
+            turn(
+                &model,
+                &mut s,
+                &current_prompt,
+                " selvi is in Amber Field.\n",
+                Some(ExpectedField {
+                    record: 4,
+                    owner: "selvi",
+                    value: "Amber Field",
+                    current_proof: None,
+                    depth: None,
+                    reassertion_links: false,
+                }),
+                &mut inputs,
+                &mut outputs,
+                &mut proof_checks,
+            );
+            turn(
+                &model,
+                &mut s,
+                sum_prompt,
+                "18.\n",
+                None,
+                &mut inputs,
+                &mut outputs,
+                &mut proof_checks,
+            );
+            reassertion_sequences += 1;
+            println!("historical-version evicted-reassertion sequence; instruction={instruction:?}; initial abstained with the reassertion resident, previous/current fields and independent sum exact");
+        }
+        assert_eq!(reassertion_sequences, 6);
+        assert_eq!(reassertion_abstentions, 2);
+    }
+    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; versioned_chain_contract={versioned}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 });
 }
