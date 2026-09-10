@@ -170,7 +170,7 @@ impl CurrentQueryHandoff {
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
 /// Source occurrence scope only; this does not parse a linguistic request.
-fn scoped_words(
+pub(super) fn scoped_words(
     words: &LexemeState,
     boundary: Option<u64>,
     relations: Option<&RelationState>,

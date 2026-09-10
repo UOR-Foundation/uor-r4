@@ -110,6 +110,9 @@ pub struct FieldAnchor {
     pub relation_id: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_revision: Option<u64>,
+    /// Exact validated link count from `current_revision` to `relation_id`; None is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ancestor_depth: Option<u8>,
     pub source_end: u64,
     pub source_byte_end: u64,
     pub boundary_seen: u64,
@@ -181,13 +184,21 @@ pub(super) fn record<'a>(
     if let Some(id) = anchor.current_revision {
         work.persistent_read.relations.record_reads += 2;
         let current = relations.record(id)?;
-        if super::historical_read::previous(relations, current, &mut work.persistent_read)?.id
+        // None is the canonical one-link proof; explicit depths start at two.
+        let depth = match anchor.ancestor_depth {
+            None => 1,
+            Some(depth) if depth >= 2 => depth,
+            Some(_) => return None,
+        };
+        if super::historical_read::ancestor(relations, current, depth, &mut work.persistent_read)?
+            .id
             != anchor.relation_id
             || anchor.source != super::relation::RELATION_SOURCE + ((r.id - 1) & 15) as u8
         {
             return None;
         }
-    } else if !relations.directory.contains(&anchor.relation_id) {
+    } else if anchor.ancestor_depth.is_some() || !relations.directory.contains(&anchor.relation_id)
+    {
         return None;
     }
     let source = super::relation::source(values, anchor.source)?;
@@ -241,6 +252,7 @@ pub(super) fn initial_anchor(
         span_words: decision.span_words,
         relation_id: r.id,
         current_revision: None,
+        ancestor_depth: None,
         source_end: source.end,
         source_byte_end: source.byte_end,
         boundary_seen: entry.boundary?.at_seen,
@@ -425,6 +437,12 @@ pub(super) fn offer(
         if anchor.current_revision.is_some()
             && (model.historical_field_composition.is_none()
                 || control == Control::HistoricalFieldCompositionDisabled)
+        {
+            return None;
+        }
+        if anchor.ancestor_depth.is_some()
+            && (model.historical_version_intent.is_none()
+                || control == Control::HistoricalVersionIntentDisabled)
         {
             return None;
         }

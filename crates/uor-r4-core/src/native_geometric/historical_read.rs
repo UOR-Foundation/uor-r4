@@ -206,6 +206,55 @@ pub(super) fn previous<'a>(
     Some(previous)
 }
 
+/// Bounded exact ancestor admission; the ring retains at most sixteen records.
+pub(super) const ANCESTOR_DEPTH: u8 = (super::relation::RELATIONS - 1) as u8;
+
+/// One immutable descending link below a record that is not itself a live head.
+pub(super) fn link<'a>(
+    state: &'a RelationState,
+    record: &RelationRecord,
+    work: &mut ValueWork,
+) -> Option<&'a RelationRecord> {
+    if record.id == 0
+        || record.conflict
+        || record.action != 2
+        || record.previous == 0
+        || record.previous >= record.id
+    {
+        return None;
+    }
+    work.relations.record_reads += 1;
+    let older = state.record(record.previous)?;
+    if older.conflict || !record.owner.matches(&older.owner, work) {
+        return None;
+    }
+    Some(older)
+}
+
+/// Exact record `depth` validated links below a live head; depth one is `previous`.
+pub(super) fn ancestor<'a>(
+    state: &'a RelationState,
+    current: &RelationRecord,
+    depth: u8,
+    work: &mut ValueWork,
+) -> Option<&'a RelationRecord> {
+    if depth == 0 || depth > ANCESTOR_DEPTH {
+        return None;
+    }
+    let mut record = previous(state, current, work)?;
+    let mut remaining = depth - 1;
+    while remaining > 0 {
+        record = link(state, record, work)?;
+        remaining -= 1;
+    }
+    Some(record)
+}
+
+/// A genuine assertion root: the chain's first stored version, not merely its oldest survivor.
+pub(super) fn is_root(record: &RelationRecord) -> bool {
+    record.previous == 0 && record.action == 1
+}
+
 pub(super) fn action_indices(model: &Model) -> Option<(usize, usize)> {
     let read = super::role_read::head(model)?;
     let mut defer = None;
@@ -403,6 +452,57 @@ mod tests {
         s.directory[0] = 3;
         s.records[1].id = 18;
         assert!(previous(&s, &s.records[2], &mut Default::default()).is_none());
+    }
+    #[test]
+    fn historical_read_ancestor_walks_exact_validated_links_to_the_assertion_root() {
+        let s = chain();
+        let head = &s.records[2];
+        let mut work = ValueWork::default();
+        assert_eq!(ancestor(&s, head, 1, &mut work).unwrap().id, 2);
+        let root = ancestor(&s, head, 2, &mut work).unwrap();
+        assert_eq!(root.id, 1);
+        assert!(is_root(root));
+        assert!(!is_root(&s.records[1]));
+        assert_eq!(
+            root.value.byte_end, 15,
+            "exact first occurrence, not a spelling"
+        );
+        assert!(ancestor(&s, head, 0, &mut work).is_none());
+        assert!(ancestor(&s, head, 3, &mut work).is_none());
+        assert!(ancestor(&s, head, ANCESTOR_DEPTH + 1, &mut work).is_none());
+        assert!(
+            link(&s, &s.records[0], &mut work).is_none(),
+            "roots have no link"
+        );
+        assert!(work.relations.record_reads > 0);
+    }
+    #[test]
+    fn historical_read_ancestor_rejects_broken_overwritten_and_cross_owner_paths() {
+        let mut s = chain();
+        s.records[1].previous = 0;
+        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        assert_eq!(
+            ancestor(&s, &s.records[2], 1, &mut Default::default())
+                .unwrap()
+                .id,
+            2,
+            "a broken deeper link keeps the immediate previous read"
+        );
+        let mut s = chain();
+        s.records[0].id = 17;
+        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        let mut s = chain();
+        s.records[0].owner = atom("other", 10);
+        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        let mut s = chain();
+        s.records[1].action = 1;
+        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        let mut s = chain();
+        s.records[0].conflict = true;
+        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        s.records[0].conflict = false;
+        s.directory[0] = 2;
+        assert!(ancestor(&s, &s.records[2], 1, &mut Default::default()).is_none());
     }
     #[test]
     fn historical_read_previous_rejects_conflict_assertion_and_cross_owner() {
