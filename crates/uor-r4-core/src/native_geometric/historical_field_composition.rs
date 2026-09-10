@@ -46,6 +46,41 @@ pub(super) fn initial_anchor(
     {
         return None;
     }
+    if let Some(v) = super::historical_version_intent::choose_detail(model, values, control, work) {
+        // The learned version selector owns this response; the frozen reader is bypassed.
+        if v.source != decision.word_index || decision.span_words != 0 {
+            return None;
+        }
+        let action = super::role_read::head(model)?.actions.get(v.action)?;
+        if !action.copy
+            || action.prefix != Some(decision.token)
+            || decision.action != WordCopyAction::Prepare
+        {
+            return None;
+        }
+        let relations = values.relations.as_ref()?;
+        let source = super::relation::source(values, v.source)?;
+        if source.end != decision.source_end || source.byte_end != decision.source_byte_end {
+            return None;
+        }
+        work.persistent_read.relations.record_reads += 1;
+        let old = relations.record(v.record)?;
+        if old.value != *source || relations.directory.contains(&old.id) {
+            return None;
+        }
+        let anchor = FieldAnchor {
+            source: v.source,
+            span_words: decision.span_words,
+            relation_id: old.id,
+            current_revision: Some(v.current),
+            ancestor_depth: if v.depth > 1 { Some(v.depth) } else { None },
+            source_end: source.end,
+            source_byte_end: source.byte_end,
+            boundary_seen: entry.boundary?.at_seen,
+        };
+        field::record(values, anchor, work)?;
+        return span_matches(values, anchor, old, work).then_some(anchor);
+    }
     let (source_index, action) = super::historical_read::choose(model, values, control, work)?;
     if source_index != decision.word_index || decision.span_words != 0 {
         return None;
@@ -90,26 +125,40 @@ pub(super) fn initial_anchor(
         span_words: decision.span_words,
         relation_id: old.id,
         current_revision: Some(current_revision),
+        ancestor_depth: None,
         source_end: source.end,
         source_byte_end: source.byte_end,
         boundary_seen: entry.boundary?.at_seen,
     };
     field::record(values, anchor, work)?;
-    let length = super::source_span::len(values, anchor.source, anchor.span_words, work)?;
+    span_matches(values, anchor, old, work).then_some(anchor)
+}
+/// The retained source window must replay the selected record's complete exact payload.
+fn span_matches(
+    values: &ValueState,
+    anchor: FieldAnchor,
+    old: &super::relation::RelationRecord,
+    work: &mut WordCopyWork,
+) -> bool {
+    let Some(length) = super::source_span::len(values, anchor.source, anchor.span_words, work)
+    else {
+        return false;
+    };
     if length != old.span.as_ref().map_or(old.value.len, |s| s.len) {
-        return None;
+        return false;
     }
     for i in 0..length {
         let expected = old
             .span
             .as_ref()
             .map_or(old.value.bytes[usize::from(i)], |s| s.bytes[usize::from(i)]);
-        if super::source_span::byte(values, anchor.source, anchor.span_words, i, work)? != expected
+        if super::source_span::byte(values, anchor.source, anchor.span_words, i, work)
+            != Some(expected)
         {
-            return None;
+            return false;
         }
     }
-    Some(anchor)
+    true
 }
 fn historical_feature(f: ValueFeature) -> bool {
     matches!(f.kind, 0 | 3) && f.a >> 56 == 18

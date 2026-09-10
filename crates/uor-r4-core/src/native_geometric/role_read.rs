@@ -318,19 +318,26 @@ pub(super) fn offer(
     control: Control,
     work: &mut WordCopyWork,
 ) -> Option<Candidate> {
-    let historical = super::historical_read::choose(model, values, control, work);
-    let current = if historical.is_none() {
+    let version = super::historical_version_intent::choose(model, values, control, work);
+    let historical = if version.is_none() {
+        super::historical_read::choose(model, values, control, work)
+    } else {
+        None
+    };
+    let current = if version.is_none() && historical.is_none() {
         super::current_query_handoff::choose(model, values, control, work)
     } else {
         None
     };
-    let dependent = if historical.is_none() && current.is_none() {
+    let dependent = if version.is_none() && historical.is_none() && current.is_none() {
         super::dependent_read::choose(model, values, control, work)
     } else {
         None
     };
     let dependency = dependent.and_then(|(_, _, ids)| ids);
-    let (source, action_index) = if let Some(choice) = historical {
+    let (source, action_index) = if let Some(choice) = version {
+        choice
+    } else if let Some(choice) = historical {
         choice
     } else if let Some(choice) = current {
         choice

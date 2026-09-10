@@ -411,6 +411,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             .1,
         ),
         (
+            "native historical version intent",
+            region(
+                include_str!("../src/native_geometric/historical_version_intent.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
+        (
             "native current query handoff",
             region(
                 include_str!("../src/native_geometric/current_query_handoff.rs"),
@@ -4083,6 +4092,123 @@ fn native_writer_role_actual_checkpoint_and_allocation() {
 
 /// Opt-in two-owner source discrimination on the actual candidate; earlier
 /// current-source artifacts are not subjected to this new acceptance panel.
+#[test]
+#[ignore = "requires R4_HISTORICAL_VERSION_MODEL; charged actual historical-version-intent artifact"]
+fn native_historical_version_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Model, Session};
+    fn state(s: &Session) -> serde_json::Value {
+        serde_json::from_slice(&s.checkpoint().unwrap()).unwrap()
+    }
+    fn same(a: &Session, b: &Session) {
+        let mut a = state(a);
+        let mut b = state(b);
+        a.as_object_mut().unwrap().remove("work");
+        b.as_object_mut().unwrap().remove("work");
+        assert_eq!(a, b, "historical-version full causal checkpoint state");
+    }
+    let bytes = std::fs::read(std::env::var("R4_HISTORICAL_VERSION_MODEL").unwrap()).unwrap();
+    let start = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = start.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["historical_version_intent"].is_object());
+    drop(wire);
+    drop(bytes);
+    let mut input_positions = 0;
+    let mut output_positions = 0;
+    let mut times = Vec::new();
+    // (facts, owner, request, expected, root id, head id, depth)
+    let cases = [
+        ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "What was the initial location of selvi?", " Dusk Ridge.\n", 1, 3, 2),
+        ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "What was the initial location of selvi? Name the owner first.", " selvi was in Dusk Ridge.\n", 1, 3, 2),
+        ("Record: moss dale holds tilva. tilva now in Birch Grove. tilva now in Pine Hollow. tilva now in Cedar Point.", "tilva", "Where was tilva originally? State the owner first.", " tilva was in moss dale.\n", 1, 4, 3),
+        ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field.", "selvi", "What was the previous location of selvi? Name the owner first.", " selvi was in Copper Vale.\n", 2, 3, 1),
+    ];
+    for (facts, owner, request, target, root, head, depth) in cases {
+        let prompt = format!("{facts} {request} Answer:");
+        let mut s = model.session(Control::Full).unwrap();
+        s.observe(&model, BOS).unwrap();
+        let tokens = model.encode(&prompt).unwrap();
+        assert!(tokens.len() <= 512);
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        for token in tokens {
+            let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+            MEASURING.with(|v| v.set(true));
+            s.observe(&model, token).unwrap();
+            MEASURING.with(|v| v.set(false));
+            restored.observe(&model, token).unwrap();
+            same(&s, &restored);
+            input_positions += 1;
+        }
+        let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+        MEASURING.with(|v| v.set(true));
+        s.begin_response(&model).unwrap();
+        MEASURING.with(|v| v.set(false));
+        restored.begin_response(&model).unwrap();
+        same(&s, &restored);
+        let initial = state(&s);
+        let relations = &initial["values"]["relations"];
+        let records = relations["records"].as_array().unwrap();
+        let selected_record = records.iter().find(|r| r["id"] == root).unwrap();
+        assert_eq!(
+            selected_record["previous"],
+            if depth == 1 && root != 1 { root - 1 } else { 0 }
+        );
+        let endpoint = selected_record["value"]["end"].as_u64().unwrap();
+        let byte_endpoint = selected_record["value"]["byte_end"].as_u64().unwrap();
+        let mut selected = false;
+        let mut out = [EOS; 96];
+        let mut used = 0;
+        loop {
+            let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+            let predicted = restored.predict(&model).unwrap();
+            assert_eq!(restored.predict(&model).unwrap(), predicted);
+            MEASURING.with(|v| v.set(true));
+            let start = std::time::Instant::now();
+            let actual = s.predict(&model).unwrap();
+            let word = s.word_copy_decision();
+            let field = s.field_composition_decision();
+            s.observe(&model, actual.token).unwrap();
+            let elapsed = start.elapsed().as_nanos();
+            MEASURING.with(|v| v.set(false));
+            selected |= word.is_some_and(|d| {
+                matches!(d.action, WordCopyAction::Prepare | WordCopyAction::Read)
+                    && d.source_end == endpoint
+                    && d.source_byte_end == byte_endpoint
+            }) || field.is_some_and(|d| {
+                d.field != 0
+                    && d.anchor.relation_id == root
+                    && d.anchor.current_revision == Some(head)
+                    && d.anchor.ancestor_depth == (depth > 1).then_some(depth)
+                    && d.anchor.source_end == endpoint
+                    && d.anchor.source_byte_end == byte_endpoint
+            });
+            assert_eq!(actual, predicted);
+            restored.observe(&model, predicted.token).unwrap();
+            same(&s, &restored);
+            assert_eq!(state(&s)["values"]["relations"], *relations);
+            out[used] = actual.token;
+            used += 1;
+            output_positions += 1;
+            times.push(elapsed);
+            if actual.token == EOS || used == out.len() {
+                break;
+            }
+        }
+        assert_eq!(out[used - 1], EOS);
+        assert_eq!(model.decode(&out[..used]).unwrap(), target.as_bytes());
+        assert!(
+            selected,
+            "actual answer must select the exact ancestor endpoint for {owner}"
+        );
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        println!("historical-version owner={owner} root={root} head={head} depth={depth} output={target:?}; allocations=0 bytes=0");
+    }
+    times.sort_unstable();
+    println!("actual historical-version artifact={}; load_ns={load_ns}; input_checkpoint_positions={input_positions}; output_checkpoint_positions={output_positions}; allocations=0 bytes=0; predict_observe median_ns={} max_ns={} (load/encode/session/BOS/checkpoint/JSON/decode/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
+}
+
 #[test]
 #[ignore = "requires R4_QUERY_OWNER_MODEL; charged actual-model query-owner cases"]
 fn native_query_owner_actual_checkpoint_and_allocation() {

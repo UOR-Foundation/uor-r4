@@ -14,10 +14,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     for c in cases.iter().filter(|c| !c["current_record"].is_null()) {
         let prompt = c["prompt"].as_str().ok_or("prompt absent")?;
         let expected = c["expected"].as_str().ok_or("expectation absent")?;
+        // Optional authored alternates (declared in the case file, never from predictions).
+        let accepted: Vec<&str> = c["accepted"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_else(|| vec![expected]);
         let mut session = model.create_session(SessionConfig::default())?;
         let response = session.complete(CompletionRequest::new(prompt))?;
-        let passed = response.text == expected && response.stopped_by == "eos";
-        checks.push(json!({"id":c["id"],"prompt":prompt,"expected":expected,"response":response,"passed":passed}));
+        let passed = accepted.contains(&response.text.as_str()) && response.stopped_by == "eos";
+        checks.push(json!({"id":c["id"],"prompt":prompt,"expected":expected,"accepted":accepted,"response":response,"passed":passed}));
         if !passed {
             break;
         }

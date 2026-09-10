@@ -36,6 +36,8 @@ mod action_emission;
 #[cfg(test)]
 mod action_emission_tests;
 mod current_query_handoff;
+mod historical_version_intent;
+pub use historical_version_intent::HistoricalVersionExample;
 mod current_source;
 mod historical_field_composition;
 pub use current_query_handoff::CurrentQueryExample;
@@ -285,6 +287,11 @@ pub enum Control {
     CurrentQueryHandoffDisabled,
     CurrentQueryHandoffTransformDisabled,
     CurrentQueryHandoffScopeDisabled,
+    HistoricalVersionIntentDisabled,
+    HistoricalVersionIntentTransformDisabled,
+    HistoricalVersionIntentScopeDisabled,
+    /// Offer only each head's immediate previous record to the learned version selector.
+    HistoricalVersionIntentAncestorDisabled,
     /// Keep the active historical router but expose only eight query words.
     HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
@@ -398,6 +405,10 @@ impl Feature {
             | Control::CurrentQueryHandoffDisabled
             | Control::CurrentQueryHandoffTransformDisabled
             | Control::CurrentQueryHandoffScopeDisabled
+            | Control::HistoricalVersionIntentDisabled
+            | Control::HistoricalVersionIntentTransformDisabled
+            | Control::HistoricalVersionIntentScopeDisabled
+            | Control::HistoricalVersionIntentAncestorDisabled
             | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled
@@ -525,6 +536,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    historical_version_intent: Option<historical_version_intent::HistoricalVersionIntent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     current_query_handoff: Option<current_query_handoff::CurrentQueryHandoff>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     historical_query_context: Option<historical_query_context::HistoricalQueryContext>,
@@ -629,6 +642,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    historical_version_intent: Option<historical_version_intent::HistoricalVersionIntent>,
+    #[serde(default)]
     current_query_handoff: Option<current_query_handoff::CurrentQueryHandoff>,
     #[serde(default)]
     historical_query_context: Option<historical_query_context::HistoricalQueryContext>,
@@ -732,6 +747,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            historical_version_intent: wire.historical_version_intent,
             current_query_handoff: wire.current_query_handoff,
             historical_query_context: wire.historical_query_context,
             historical_field_composition: wire.historical_field_composition,
