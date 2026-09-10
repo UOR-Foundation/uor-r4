@@ -156,6 +156,13 @@ struct Case {
     /// and shared with the native API check; membership only, never derived from output.
     #[serde(default)]
     accepted: Vec<String>,
+    /// The target record must be the chain's assertion root (initial intent); false for
+    /// an exact previous-record target below a same-value reassertion head.
+    #[serde(default = "default_true")]
+    target_root: bool,
+}
+fn default_true() -> bool {
+    true
 }
 /// The request's typed intent, from the case's exact labels.
 fn intent(c: &Case) -> Intent {
@@ -167,6 +174,8 @@ fn intent(c: &Case) -> Intent {
         } else {
             Intent::Previous
         }
+    } else if !c.target_root {
+        Intent::Previous
     } else {
         Intent::Initial
     }
@@ -284,6 +293,7 @@ fn push_targets_depth(
                     owner,
                     initial,
                 ),
+                target_root: true,
             });
         }
     }
@@ -302,6 +312,7 @@ fn push_follow_ups(
     current_value: &str,
     previous_id: u64,
     head: u64,
+    previous_is_target: bool,
 ) {
     let initial = |s: usize| format!("{facts} {}", request(INITIAL_REQUESTS[0], owner, STYLES[s]));
     let previous_turn = |s: usize| request(PRESERVE_REQUESTS[0], owner, STYLES[s]);
@@ -319,19 +330,24 @@ fn push_follow_ups(
         } else {
             Intent::Previous
         };
+        // Below a same-value reassertion head the frozen parent cannot read the
+        // previous record, so that follow-up is an exact previous-record target for
+        // the selector rather than a deferral.
+        let target = previous_is_target && record != head;
         Case {
             id: format!("follow/{id}/{name}"),
             prompt,
             expected: Some(expected),
             current_record: Some(head),
-            target_record: None,
-            depth: None,
+            target_record: target.then_some(record),
+            depth: target.then_some(1),
             owner: owner.into(),
             value: value.into(),
             abstain: false,
             history,
             follow_up: Some(record),
             accepted: answer_oracle::accepted(kind, plain, owner, value),
+            target_root: !target,
         }
     };
     for s in [1usize, 2] {
@@ -369,6 +385,43 @@ fn push_follow_ups(
         previous_value,
     ));
 }
+/// Exact previous-record targets below a same-value reassertion head: the frozen
+/// parent cannot read them, so the learned selector must pick the head's immediate
+/// previous record (record-hop semantics) through the head hop.
+fn push_previous_targets(
+    cases: &mut Vec<Case>,
+    id: &str,
+    facts: &str,
+    owner: &str,
+    previous_value: &str,
+    record: u64,
+    head: u64,
+) {
+    for (t, template) in PRESERVE_REQUESTS.iter().take(2).enumerate() {
+        for (s, style) in STYLES.iter().enumerate() {
+            cases.push(Case {
+                id: format!("previous-target/{id}/{t}/{s}"),
+                prompt: format!("{facts} {}", request(template, owner, style)),
+                expected: Some(answer(style, owner, previous_value)),
+                current_record: Some(head),
+                target_record: Some(record),
+                depth: Some(1),
+                owner: owner.into(),
+                value: previous_value.into(),
+                abstain: false,
+                history: Vec::new(),
+                follow_up: None,
+                accepted: answer_oracle::accepted(
+                    Intent::Previous,
+                    style.is_empty(),
+                    owner,
+                    previous_value,
+                ),
+                target_root: false,
+            });
+        }
+    }
+}
 /// Abstention targets: the named chain's root is proven evicted, so the exact
 /// answer is the parent's no-read `Unknown.`; `head` is the chain's live record.
 fn push_abstain(
@@ -394,6 +447,7 @@ fn push_abstain(
                 history: Vec::new(),
                 follow_up: None,
                 accepted: answer_oracle::accepted(Intent::Abstain, style.is_empty(), owner, ""),
+                target_root: true,
             });
         }
     }
@@ -422,6 +476,7 @@ fn push_preserve(
             history: Vec::new(),
             follow_up: None,
             accepted: Vec::new(),
+            target_root: true,
         });
     }
 }
@@ -463,6 +518,7 @@ fn push_absent(cases: &mut Vec<Case>, id: &str, facts: &str, absent: &str) {
             history: Vec::new(),
             follow_up: None,
             accepted: Vec::new(),
+            target_root: true,
         });
     }
 }
@@ -544,6 +600,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                             &owner.values[versions - 1],
                             versions as u64 - 1,
                             versions as u64,
+                            false,
                         );
                     }
                     push_preserve(
@@ -608,6 +665,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                             &owners[i].values[2],
                             head - 1,
                             head,
+                            false,
                         );
                     }
                     push_preserve(
@@ -678,6 +736,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         history: Vec::new(),
                         follow_up: None,
                         accepted: Vec::new(),
+                        target_root: true,
                     });
                 }
             }
@@ -738,6 +797,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         history: Vec::new(),
                         follow_up: None,
                         accepted: Vec::new(),
+                        target_root: true,
                     });
                 }
             }
@@ -767,6 +827,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                             history: Vec::new(),
                             follow_up: None,
                             accepted: Vec::new(),
+                            target_root: true,
                         });
                     }
                 }
@@ -789,6 +850,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         &owner.values[2],
                         2,
                         3,
+                        false,
                     );
                 }
             }
@@ -825,6 +887,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                     history: Vec::new(),
                     follow_up: None,
                     accepted: Vec::new(),
+                    target_root: true,
                 });
             }
         }
@@ -902,6 +965,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 history: Vec::new(),
                 follow_up: None,
                 accepted: Vec::new(),
+                target_root: true,
             });
         }
         let conflict = format!(
@@ -925,6 +989,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 history: Vec::new(),
                 follow_up: None,
                 accepted: Vec::new(),
+                target_root: true,
             });
         }
         let (v0, v1, v2) = (&owner.values[0], &owner.values[1], &owner.values[2]);
@@ -938,7 +1003,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
         .iter()
         .enumerate()
         {
-            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None, accepted: Vec::new() });
+            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None, accepted: Vec::new(), target_root: true });
         }
         // The intent word as an owner name: its own root is still the exact answer.
         let facts = format!("Record: initial in {v0}. initial now in {v1}. initial now in {v2}.");
@@ -1031,9 +1096,9 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 &INITIAL_REQUESTS,
             );
             if name == "root" {
-                push_follow_ups(&mut cases, &id, &facts, o, v0, v1, 2, 3);
+                push_follow_ups(&mut cases, &id, &facts, o, v0, v1, 2, 3, false);
             } else if name == "middle" {
-                push_follow_ups(&mut cases, &id, &facts, o, v1, v2, 3, 4);
+                push_follow_ups(&mut cases, &id, &facts, o, v1, v2, 3, 4, false);
             }
             push_preserve(
                 &mut cases,
@@ -1075,34 +1140,16 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
             o,
             &[(0, 0), (2, 1)],
         );
-        // A head that is itself a same-value reassertion has no historical read under
-        // the frozen parent's contract; these rows preserve the parent and are a
-        // stated limit, not a claim.
+        // A head that is itself a same-value reassertion is answered under the head
+        // contract (the head-reassert families below); only its current request is
+        // kept here as a parent-preserved row.
         let facts = format!("Record: {o} in {v0}. {o} now in {v1}. {o} in {v1}.");
-        for (t, template) in INITIAL_REQUESTS.iter().enumerate().take(2) {
-            for (s, style) in STYLES.iter().enumerate().take(2) {
-                cases.push(Case {
-                    id: format!("reassert-head/{i}/{t}/{s}"),
-                    prompt: format!("{facts} {}", request(template, o, style)),
-                    expected: None,
-                    current_record: None,
-                    target_record: None,
-                    depth: None,
-                    owner: o.clone(),
-                    value: String::new(),
-                    abstain: false,
-                    history: Vec::new(),
-                    follow_up: None,
-                    accepted: Vec::new(),
-                });
-            }
-        }
         push_preserve(
             &mut cases,
             &format!("reassert-head/{i}"),
             &facts,
             o,
-            &[(0, 0), (2, 0)],
+            &[(2, 0)],
         );
     }
     // Reassertion chains at the ring boundary: twelve trailing facts keep the
@@ -1126,10 +1173,158 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
             } else {
                 push_abstain(&mut cases, &id, &facts, o, 4, &two);
                 if trailing == 13 {
-                    push_follow_ups(&mut cases, &id, &facts, o, v1, v2, 3, 4);
+                    push_follow_ups(&mut cases, &id, &facts, o, v1, v2, 3, 4, false);
                 }
             }
             push_preserve(&mut cases, &id, &facts, o, &[(0, 0), (2, 0), (3, 1)]);
+        }
+    }
+    // Live heads that are themselves same-value reassertions: repeating the current
+    // fact must keep the retained history readable. Record-hop semantics: initial is
+    // the root through the head hop; previous is the head's immediate previous record
+    // (the record the head repeats); current stays the parent's answer.
+    for (i, owner) in owners.iter().take(2).enumerate() {
+        let other = &owners[1 - i];
+        let (o, v0, v1, v2) = (
+            &owner.name,
+            &owner.values[0],
+            &owner.values[1],
+            &owner.values[2],
+        );
+        let (p, w0) = (&other.name, &other.values[0]);
+        // (layout, facts, root, head, root depth, previous record, previous value)
+        let layouts = [
+            (
+                "head",
+                format!("Record: {o} in {v0}. {o} now in {v1}. {o} in {v1}."),
+                1,
+                3,
+                2,
+                2,
+                v1,
+            ),
+            (
+                "head-long",
+                format!("Record: {o} in {v0}. {o} now in {v1}. {o} now in {v2}. {o} in {v2}."),
+                1,
+                4,
+                3,
+                3,
+                v2,
+            ),
+            (
+                "head-and-root",
+                format!("Record: {o} in {v0}. {o} in {v0}. {o} now in {v1}. {o} in {v1}."),
+                1,
+                4,
+                3,
+                3,
+                v1,
+            ),
+            (
+                "head-twice",
+                format!("Record: {o} in {v0}. {o} now in {v1}. {o} in {v1}. {o} in {v1}."),
+                1,
+                4,
+                3,
+                3,
+                v1,
+            ),
+            (
+                "head-interleaved",
+                format!("Record: {o} in {v0}. {p} in {w0}. {o} now in {v1}. {o} in {v1}."),
+                1,
+                4,
+                2,
+                3,
+                v1,
+            ),
+        ];
+        for (name, facts, root, head, depth, previous_id, previous_value) in layouts {
+            let id = format!("head-reassert/{i}/{name}");
+            push_targets_depth(
+                &mut cases,
+                &id,
+                &facts,
+                o,
+                v0,
+                root,
+                head,
+                depth,
+                &INITIAL_REQUESTS,
+            );
+            push_previous_targets(
+                &mut cases,
+                &id,
+                &facts,
+                o,
+                previous_value,
+                previous_id,
+                head,
+            );
+            push_preserve(
+                &mut cases,
+                &id,
+                &facts,
+                o,
+                &[(2, 0), (2, 1), (3, 0), (3, 1)],
+            );
+            if name == "head" || name == "head-long" {
+                push_follow_ups(
+                    &mut cases,
+                    &id,
+                    &facts,
+                    o,
+                    previous_value,
+                    previous_value,
+                    previous_id,
+                    head,
+                    true,
+                );
+            }
+        }
+        // Boundary: thirteen trailing facts keep the head chain resident (initial and
+        // previous answer); fourteen evict the root (initial abstains, previous still
+        // reads record 2); fifteen evict the previous record as well (both abstain).
+        let chain_facts = format!("{o} in {v0}. {o} now in {v1}. {o} in {v1}.");
+        let two = [INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]];
+        for trailing in [13, 14, 15] {
+            let facts = evicted_facts(&chain_facts, trailing, filler_seed);
+            let id = format!("head-boundary/{i}/{trailing}");
+            if trailing == 13 {
+                push_targets_depth(&mut cases, &id, &facts, o, v0, 1, 3, 2, &two);
+            } else {
+                push_abstain(&mut cases, &id, &facts, o, 3, &two);
+            }
+            if trailing < 15 {
+                push_previous_targets(&mut cases, &id, &facts, o, v1, 2, 3);
+            } else {
+                for (t, template) in PRESERVE_REQUESTS.iter().take(1).enumerate() {
+                    for (s, style) in STYLES.iter().enumerate() {
+                        cases.push(Case {
+                            id: format!("{id}/previous-abstain/{t}/{s}"),
+                            prompt: format!("{facts} {}", request(template, o, style)),
+                            expected: Some(" Unknown.\n".into()),
+                            current_record: Some(3),
+                            target_record: None,
+                            depth: None,
+                            owner: o.clone(),
+                            value: String::new(),
+                            abstain: true,
+                            history: Vec::new(),
+                            follow_up: None,
+                            accepted: answer_oracle::accepted(
+                                Intent::Abstain,
+                                style.is_empty(),
+                                o,
+                                "",
+                            ),
+                            target_root: true,
+                        });
+                    }
+                }
+            }
+            push_preserve(&mut cases, &id, &facts, o, &[(2, 0), (3, 1)]);
         }
     }
     // Thirteen trailing facts after a three-version chain leave its root resident:
@@ -1247,7 +1442,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
                     continue;
                 }
                 seen.insert(prompt.clone(), cases.len());
-                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None, accepted: Vec::new() });
+                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None, accepted: Vec::new(), target_root: true });
             }
         }
     }
@@ -1277,7 +1472,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
             });
     save(
         &out.join("receipt.json"),
-        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"abstain_targets":cases.iter().filter(|c|c.abstain).count(),"follow_up_targets":cases.iter().filter(|c|c.follow_up.is_some()).count(),"targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
+        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"abstain_targets":cases.iter().filter(|c|c.abstain).count(),"follow_up_targets":cases.iter().filter(|c|c.follow_up.is_some()).count(),"previous_targets":cases.iter().filter(|c|!c.target_root&&c.target_record.is_some()).count(),"targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
     )?;
     uor_r4_core::report_output::seal(out)?;
     Ok(())
@@ -1322,22 +1517,22 @@ fn target_record<'a>(c: &Case, actual: &'a Value) -> Option<&'a Value> {
         let older = records
             .iter()
             .find(|r| r["id"].as_u64() == Some(previous))?;
-        // The head link is an explicit revision. Deeper links are explicit revisions
-        // or resident same-owner, same-value, nonconflicting reassertions: the
-        // versioned chain contract, re-proven here from the actual retained records.
-        let reassertion = hop > 0
-            && cursor["action"] == 1
+        // A link is an explicit revision or a resident same-owner, same-value,
+        // nonconflicting reassertion (the versioned chain contract, re-proven from the
+        // actual retained records); at hop zero a same-value reassertion head is the
+        // head contract's first hop.
+        let same_value = cursor["action"] == 1
             && older["conflict"] == false
             && atom(&older["owner"])? == c.owner
             && record_value(cursor)? == record_value(older)?;
-        if cursor["action"] != 2 && !reassertion {
+        if cursor["action"] != 2 && !same_value {
             return None;
         }
+        let _ = hop;
         cursor = older;
     }
     (cursor["id"].as_u64() == Some(root)
-        && cursor["previous"] == 0
-        && cursor["action"] == 1
+        && (!c.target_root || (cursor["previous"] == 0 && cursor["action"] == 1))
         && cursor["conflict"] == false
         && atom(&cursor["owner"])? == c.owner
         && record_value(cursor)? == c.value)
@@ -1378,7 +1573,13 @@ fn follow_up_selected(c: &Case, actual: &Value) -> bool {
         let Some(h) = records.iter().find(|r| r["id"].as_u64() == Some(head)) else {
             return false;
         };
-        if h["previous"].as_u64() != Some(record_id) || h["action"] != 2 || h["conflict"] != false {
+        let head_hop = h["action"] == 1
+            && atom(&h["owner"]).as_deref() == Some(c.owner.as_str())
+            && record_value(h) == record_value(record);
+        if h["previous"].as_u64() != Some(record_id)
+            || !(h["action"] == 2 || head_hop)
+            || h["conflict"] != false
+        {
             return false;
         }
     }
@@ -1596,8 +1797,12 @@ fn evaluate(
         mut reassertion_disabled_parent_equal,
         mut follow_up_targets,
         mut follow_up_exact,
+        mut head_disabled_exact,
+        mut head_disabled_parent_equal,
+        mut previous_targets,
+        mut previous_exact,
     ) = (
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     );
     let mut by_depth: BTreeMap<u8, [usize; 2]> = BTreeMap::new();
     for c in cases {
@@ -1622,6 +1827,10 @@ fn evaluate(
             correct += usize::from(target_correct);
             primary_exact += usize::from(primary);
             selected_count += usize::from(selection);
+            if !c.target_root && c.target_record.is_some() {
+                previous_targets += 1;
+                previous_exact += usize::from(target_correct);
+            }
             if c.follow_up.is_some() {
                 follow_up_targets += 1;
                 follow_up_exact += usize::from(target_correct);
@@ -1650,6 +1859,7 @@ fn evaluate(
                 Control::HistoricalVersionIntentAncestorDisabled,
                 Control::HistoricalVersionIntentAbstainDisabled,
                 Control::HistoricalVersionIntentReassertionDisabled,
+                Control::HistoricalVersionIntentReassertionHeadDisabled,
             ] {
                 let result = generate(model, &c.history, &c.prompt, control, false, false)?;
                 let result_exact = exact(c, &result) && selected(c, &result);
@@ -1670,6 +1880,10 @@ fn evaluate(
                         reassertion_disabled_exact += usize::from(result_exact);
                         reassertion_disabled_parent_equal +=
                             usize::from(equivalent(&result, &reference));
+                    }
+                    Control::HistoricalVersionIntentReassertionHeadDisabled => {
+                        head_disabled_exact += usize::from(result_exact);
+                        head_disabled_parent_equal += usize::from(equivalent(&result, &reference));
                     }
                     _ => {
                         ancestor_exact += usize::from(result_exact);
@@ -1701,7 +1915,7 @@ fn evaluate(
     }
     rows.flush()?;
     drop(rows);
-    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"reassertion_disabled_exact_and_selected":reassertion_disabled_exact,"reassertion_disabled_parent_equal":reassertion_disabled_parent_equal,"follow_up_targets":follow_up_targets,"follow_up_exact_and_selected":follow_up_exact,"selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
+    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"reassertion_disabled_exact_and_selected":reassertion_disabled_exact,"reassertion_disabled_parent_equal":reassertion_disabled_parent_equal,"follow_up_targets":follow_up_targets,"follow_up_exact_and_selected":follow_up_exact,"previous_targets":previous_targets,"previous_exact_and_selected":previous_exact,"head_disabled_exact_and_selected":head_disabled_exact,"head_disabled_parent_equal":head_disabled_parent_equal,"selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
     let mut result = summary.clone();
     result["rows_file"] = json!(out.join("rows.jsonl"));
     result["rows_written"] = json!(written);
@@ -1765,6 +1979,25 @@ fn main() -> Result<()> {
         // Seal a completed report directory produced by any driver.
         let manifest = uor_r4_core::report_output::seal(Path::new(&a[2]))?;
         println!("{}", json!({"sealed":manifest}));
+        return Ok(());
+    }
+    if a.len() == 4 && a[1] == "promote-heads" {
+        // The same learned witness under the head contract; no refit (diagnostic).
+        let out = Path::new(&a[3]);
+        uor_r4_core::report_output::claim(out)?;
+        let bytes = fs::read(&a[2])?;
+        let model = Model::from_bytes(&bytes)?;
+        let candidate = model.with_reassertion_heads()?;
+        fs::write(out.join("model.json"), candidate.to_bytes()?)?;
+        save(
+            &out.join("promote.json"),
+            &json!({"schema":"uor-r4.historical-version-contract-promotion/1","source":model.artifact_cid(),"artifact":candidate.artifact_cid(),"source_bytes_blake3":blake3::hash(&bytes).to_hex().to_string(),"change":"reassertion_heads=true only; router codes, dictionary, receipts and every inner parameter unchanged"}),
+        )?;
+        println!(
+            "{}",
+            json!({"source":model.artifact_cid(),"artifact":candidate.artifact_cid()})
+        );
+        uor_r4_core::report_output::seal(out)?;
         return Ok(());
     }
     if a.len() == 4 && a[1] == "promote" {
@@ -1868,6 +2101,7 @@ fn main() -> Result<()> {
             c.abstain = false;
             c.follow_up = None;
             c.accepted.clear();
+            c.target_root = true;
         }
     }
     if a[1] == "diagnose" {

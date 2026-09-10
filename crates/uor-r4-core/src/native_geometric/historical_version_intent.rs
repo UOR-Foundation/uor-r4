@@ -54,6 +54,13 @@ pub(super) struct HistoricalVersionIntent {
     /// explicit revisions only and whose truncation is any unreached root.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reassertion_links: bool,
+    /// Head contract: the first hop below a live head that is itself a resident
+    /// same-value reassertion is valid, so repeating the current fact keeps the retained
+    /// history readable. Record-hop semantics are unchanged: previous is the head's
+    /// immediate previous record and initial is the assertion root. Candidates reached
+    /// through that hop carry their own chain classes. Absent in legacy artifacts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reassertion_heads: bool,
 }
 
 /// Structural candidate classes exposed to the learned selector. They describe a
@@ -64,6 +71,15 @@ const CLASS_ANCESTOR: u64 = 3;
 const CLASS_ANCESTOR_ROOT: u64 = 4;
 /// A named chain whose validated links end before any genuine root.
 const CLASS_TRUNCATED: u64 = 5;
+/// The same four chain positions reached through a same-value reassertion head; the
+/// frozen parent cannot answer these, so the selector must learn them separately.
+const CLASS_HEAD_OFFSET: u64 = 5;
+#[cfg(test)]
+const CLASS_HEAD_ANCESTOR_ROOT: u64 = CLASS_ANCESTOR_ROOT + CLASS_HEAD_OFFSET;
+/// A same-value reassertion head whose predecessor is proven evicted: truncated below
+/// a head the frozen parent never reads, so it is learned apart from a revised head's
+/// truncation, whose deferral keeps the parent's answer.
+const CLASS_HEAD_TRUNCATED: u64 = CLASS_TRUNCATED + CLASS_HEAD_OFFSET;
 const KIND_WORD_CLASS: u8 = 8;
 const KIND_DEPTH_CLASS: u8 = 9;
 /// How many request words the bounded committed view actually retained.
@@ -133,7 +149,7 @@ fn validate_lexical_codes(dictionary: &[WordCopyAddress], router: &SourceRouting
         .into_iter()
         .chain(dictionary.iter().map(|w| u64::from(w.prime)))
         .collect();
-    let class = |c: u64| (CLASS_PREVIOUS..=CLASS_TRUNCATED).contains(&c);
+    let class = |c: u64| (CLASS_PREVIOUS..=CLASS_HEAD_TRUNCATED).contains(&c);
     let valid = |f: ValueFeature| match f.kind {
         0 | 2 => f.a == 1 && f.b == 0,
         1 => f.a <= 1 && f.b == 0,
@@ -142,7 +158,9 @@ fn validate_lexical_codes(dictionary: &[WordCopyAddress], router: &SourceRouting
         6 => primes.contains(&f.a) && f.b == 0,
         KIND_WORD_CLASS => primes.contains(&f.a) && class(f.b),
         KIND_DEPTH_CLASS => {
-            f.a <= u64::from(ANCESTOR_DEPTH) && class(f.b) && (f.a > 0 || f.b == CLASS_TRUNCATED)
+            f.a <= u64::from(ANCESTOR_DEPTH)
+                && class(f.b)
+                && (f.a > 0 || f.b == CLASS_TRUNCATED || f.b == CLASS_HEAD_TRUNCATED)
         }
         KIND_VIEW_CLASS => f.a <= 16 && class(f.b),
         _ => false,
@@ -277,6 +295,17 @@ pub(super) fn reassertion_links(model: &Model, control: Control) -> bool {
         && control != Control::HistoricalVersionIntentDisabled
 }
 
+/// Whether the head contract (first hop through a same-value reassertion head) is
+/// active for this model under `control`.
+pub(super) fn reassertion_heads(model: &Model, control: Control) -> bool {
+    model
+        .historical_version_intent
+        .as_ref()
+        .is_some_and(|b| b.reassertion_heads)
+        && control != Control::HistoricalVersionIntentReassertionHeadDisabled
+        && control != Control::HistoricalVersionIntentDisabled
+}
+
 /// Selected exact ancestor and the live head that proves its path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct VersionChoice {
@@ -287,6 +316,8 @@ pub(super) struct VersionChoice {
     pub depth: u8,
     /// The validated path to `record` passes through a same-value reassertion link.
     pub reassertion: bool,
+    /// The path's first hop passes through a same-value reassertion head.
+    pub head: bool,
 }
 
 /// One structurally admitted ancestor with its selector features.
@@ -300,6 +331,8 @@ pub(super) struct Scan {
     pub truncated: bool,
     /// The validated path so far passes through a same-value reassertion link.
     pub reassertion: bool,
+    /// The first hop passed through a same-value reassertion head.
+    pub head: bool,
     pub representable: bool,
     pub features: [ValueFeature; 96],
     pub n: usize,
@@ -311,6 +344,15 @@ fn class(depth: u8, root: bool) -> u64 {
         (1, true) => CLASS_PREVIOUS_ROOT,
         (_, false) => CLASS_ANCESTOR,
         (_, true) => CLASS_ANCESTOR_ROOT,
+    }
+}
+
+/// Chain position class, offset when the path starts through a reassertion head.
+fn path_class(depth: u8, root: bool, head: bool) -> u64 {
+    if head {
+        class(depth, root) + CLASS_HEAD_OFFSET
+    } else {
+        class(depth, root)
     }
 }
 
@@ -341,6 +383,7 @@ fn features(
     depth: u8,
     root: bool,
     truncated: bool,
+    head: bool,
     work: &mut WordCopyWork,
 ) -> ([ValueFeature; 96], usize) {
     let mut masked = *dictionary_addr;
@@ -376,9 +419,13 @@ fn features(
     // At most 34 inherited and 31 ordered features precede at most 18 class features.
     n = historical_read::append_ordered_context(&mut out, n, addr, words.query_len, 16);
     let c = if truncated {
-        CLASS_TRUNCATED
+        if head {
+            CLASS_HEAD_TRUNCATED
+        } else {
+            CLASS_TRUNCATED
+        }
     } else {
-        class(depth, root)
+        path_class(depth, root, head)
     };
     let limit = words.query_len.min(16);
     for q in 0..limit {
@@ -418,6 +465,7 @@ fn scan(
     ancestors: bool,
     abstention: bool,
     reassertions: bool,
+    heads: bool,
     work: &mut WordCopyWork,
     visit: &mut impl FnMut(&Scan, &mut WordCopyWork),
 ) -> Option<()> {
@@ -447,12 +495,18 @@ fn scan(
         let mut stopped_by_control = false;
         let mut evicted = false;
         let mut via_reassertion = false;
+        let mut via_head = false;
         while depth < ANCESTOR_DEPTH {
             let mut next = if depth == 0 {
                 historical_read::previous(state, current, &mut work.persistent_read)
             } else {
                 historical_read::link(state, record, &mut work.persistent_read)
             };
+            if next.is_none() && depth == 0 && heads {
+                // Head contract: the first hop below a same-value reassertion head.
+                next = historical_read::head_reassertion(state, current, &mut work.persistent_read);
+                via_head |= next.is_some();
+            }
             if next.is_none() && depth > 0 && reassertions {
                 next = historical_read::reassertion(state, record, &mut work.persistent_read);
                 via_reassertion |= next.is_some();
@@ -468,7 +522,9 @@ fn scan(
             record = old;
             let root = historical_read::is_root(old);
             let representable = historical_read::representable(model, values, old, copy, work);
-            let (f, n) = features(model, state, current, words, addr, depth, root, false, work);
+            let (f, n) = features(
+                model, state, current, words, addr, depth, root, false, via_head, work,
+            );
             work.routing.sources_examined += 1;
             let entry = Scan {
                 source: RELATION_SOURCE + ((old.id - 1) & 15) as u8,
@@ -478,6 +534,7 @@ fn scan(
                 root,
                 truncated: false,
                 reassertion: via_reassertion,
+                head: via_head,
                 representable,
                 features: f,
                 n,
@@ -498,14 +555,31 @@ fn scan(
         // not absence. The legacy contract offered it on any unreached root, which
         // mistook a resident same-value reassertion for truncation. Whether to
         // abstain remains learned.
+        // Under the head contract a same-value reassertion head whose predecessor is
+        // proven evicted is truncated as well.
+        let reassertion_head =
+            heads && current.action == 1 && current.previous != 0 && current.previous < current.id;
         if abstention
             && !reached_root
             && !stopped_by_control
-            && current.action == 2
+            && (current.action == 2 || reassertion_head)
             && !current.conflict
             && (evicted || !reassertions)
         {
-            let (f, n) = features(model, state, current, words, addr, depth, false, true, work);
+            // A truncated head chain is classed by the head that could not be
+            // followed, whether the walk stopped at the head or below it.
+            let (f, n) = features(
+                model,
+                state,
+                current,
+                words,
+                addr,
+                depth,
+                false,
+                true,
+                via_head || reassertion_head,
+                work,
+            );
             work.routing.sources_examined += 1;
             let entry = Scan {
                 source: super::role_read::NO_SOURCE,
@@ -515,6 +589,7 @@ fn scan(
                 root: false,
                 truncated: true,
                 reassertion: via_reassertion,
+                head: via_head || reassertion_head,
                 representable: true,
                 features: f,
                 n,
@@ -574,6 +649,7 @@ pub(super) fn choose_detail(
         control != Control::HistoricalVersionIntentAncestorDisabled,
         block.abstention && control != Control::HistoricalVersionIntentAbstainDisabled,
         reassertion_links(model, control),
+        reassertion_heads(model, control),
         work,
         &mut |s: &Scan, work: &mut WordCopyWork| {
             if !s.representable {
@@ -597,6 +673,7 @@ pub(super) fn choose_detail(
                     record: s.record,
                     depth: s.depth,
                     reassertion: s.reassertion,
+                    head: s.head,
                 });
             }
         },
@@ -677,6 +754,7 @@ impl Model {
             true,
             block.is_none_or(|b| b.abstention),
             block.is_none_or(|b| b.reassertion_links),
+            block.is_none_or(|b| b.reassertion_heads),
             &mut work,
             &mut |s: &Scan, work: &mut WordCopyWork| {
                 let scored = block.map(|b| {
@@ -697,16 +775,16 @@ impl Model {
                         "score":b.router.score(self,roots,if s.truncated{defer}else{copy},&mut work.routing)})
                 });
                 candidates.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated,"reassertion":s.reassertion,
-                    "class":if s.truncated{CLASS_TRUNCATED}else{class(s.depth,s.root)},"source":s.source,"representable":s.representable,"features":s.features[..s.n],
+                    "class":if s.truncated{if s.head{CLASS_HEAD_TRUNCATED}else{CLASS_TRUNCATED}}else{path_class(s.depth,s.root,s.head)},"head":s.head,"source":s.source,"representable":s.representable,"features":s.features[..s.n],
                     "scored":scored}));
             },
         );
         let choice = choose_detail(self, values, Control::Full, &mut WordCopyWork::default());
         Ok(
             serde_json::json!({"artifact":self.artifact_cid(),"version_witness":block.is_some(),"query_boundary":values.query_boundary,
-            "committed_query_scope":committed,"committed_source_byte_cutoff":cutoff,"reassertion_links":block.is_none_or(|b| b.reassertion_links),
+            "committed_query_scope":committed,"committed_source_byte_cutoff":cutoff,"reassertion_links":block.is_none_or(|b| b.reassertion_links),"reassertion_heads":block.is_none_or(|b| b.reassertion_heads),
             "captured":captured,"base_score":base,"candidates":candidates,"word_copy_eligible":eligible,
-            "choice":choice.map(|v| serde_json::json!({"source":v.source,"action":v.action,"current":v.current,"record":v.record,"depth":v.depth,"reassertion":v.reassertion,"abstain":v.source==super::role_read::NO_SOURCE})),
+            "choice":choice.map(|v| serde_json::json!({"source":v.source,"action":v.action,"current":v.current,"record":v.record,"depth":v.depth,"reassertion":v.reassertion,"head":v.head,"abstain":v.source==super::role_read::NO_SOURCE})),
             "frozen_historical_choice":historical_read::choose(self,values,Control::Full,&mut WordCopyWork::default()),
             "actual_word_copy":session.word_copy_decision(),"actual_field":session.field_composition_decision()}),
         )
@@ -717,6 +795,23 @@ impl Model {
             Some(w) => w.parent(self),
             None => Ok(self.clone()),
         }
+    }
+
+    /// The same learned witness under the head contract as well: a diagnostic
+    /// candidate showing whether the learned codes already cover head-hop classes.
+    pub fn with_reassertion_heads(&self) -> Result<Model> {
+        let mut model = self.clone();
+        let witness = model
+            .historical_version_intent
+            .as_mut()
+            .ok_or_else(|| Error("historical version contract requires a witness".into()))?;
+        if witness.reassertion_heads {
+            return Err(Error("historical version head contract already set".into()));
+        }
+        witness.reassertion_heads = true;
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
     }
 
     /// The same learned witness under the versioned chain contract: no parameter,
@@ -947,6 +1042,7 @@ impl Model {
                 true,
                 true,
                 true,
+                true,
                 &mut work,
                 &mut |s: &Scan, _: &mut WordCopyWork| {
                     if !s.representable {
@@ -962,7 +1058,7 @@ impl Model {
                             d.target_record == Some(s.record)
                         },
                     });
-                    offered.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated,"reassertion":s.reassertion}));
+                    offered.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated,"reassertion":s.reassertion,"head":s.head}));
                 },
             );
             if alternatives.iter().filter(|a| a.correct).count() != 1 {
@@ -1083,13 +1179,14 @@ impl Model {
             committed_query_scope: true,
             abstention: true,
             reassertion_links: true,
+            reassertion_heads: true,
         });
         model.refresh_identity()?;
         model.validate()?;
         let report = serde_json::json!({"schema":"uor-r4.historical-version-intent-fit/1","parent":self.artifact_cid(),
             "artifact":model.artifact_cid(),"documents":docs.len(),"frames":frames.len(),"duplicate_frames":duplicates,
             "skipped":skipped,"labels":labels,"features":feature_count,"offered_candidates":offered_total,
-            "deepest_target_depth":deepest_target,"ancestor_depth_bound":ANCESTOR_DEPTH,"committed_query_scope":true,"abstention":true,"reassertion_links":true,"abstain_documents":docs.iter().filter(|d| d.abstain).count(),"follow_up_documents":docs.iter().filter(|d| !d.history.is_empty()).count(),"history_turn_bound":HISTORY_TURNS,
+            "deepest_target_depth":deepest_target,"ancestor_depth_bound":ANCESTOR_DEPTH,"committed_query_scope":true,"abstention":true,"reassertion_links":true,"reassertion_heads":true,"abstain_documents":docs.iter().filter(|d| d.abstain).count(),"follow_up_documents":docs.iter().filter(|d| !d.history.is_empty()).count(),"history_turn_bound":HISTORY_TURNS,
             "dictionary_mode":"request_view_words","dictionary_limit":128,"dictionary_min_occurrences":DICTIONARY_MIN_OCCURRENCES,"dictionary_words":dictionary.len(),
             "dictionary_omitted_words":omitted_words,"dictionary_omitted_occurrences":omitted_occurrences,"dictionary":dictionary,
             "fit":fit,"unsatisfied_frames":unsatisfied,"warm_start":warm.map(|w| serde_json::json!({"codes":w.router.codes.len(),"nonidentity_roots_reused":warm_roots})),"preparation_ms":preparation_ms,"preparation_seconds_limit":PREPARATION_SECONDS,"learning_ms":learning.elapsed().as_millis(),"elapsed_ms":start.elapsed().as_millis(),
@@ -1155,6 +1252,12 @@ mod tests {
         assert_eq!(class(2, false), CLASS_ANCESTOR);
         assert_eq!(class(2, true), CLASS_ANCESTOR_ROOT);
         assert_eq!(class(ANCESTOR_DEPTH, true), CLASS_ANCESTOR_ROOT);
+        assert_eq!(
+            path_class(1, false, true),
+            CLASS_PREVIOUS + CLASS_HEAD_OFFSET
+        );
+        assert_eq!(path_class(2, true, true), CLASS_HEAD_ANCESTOR_ROOT);
+        assert_eq!(path_class(2, true, false), CLASS_ANCESTOR_ROOT);
     }
     #[test]
     fn historical_version_codes_require_known_primes_classes_and_depths() {
@@ -1166,7 +1269,15 @@ mod tests {
             validate_lexical_codes(&dictionary, &bad).is_ok(),
             "the truncated class is a valid word pairing"
         );
+        // Classes six to nine are the four chain positions reached through a
+        // same-value reassertion head; ten is beyond the contract.
         bad.codes[0].feature.b = CLASS_TRUNCATED + 1;
+        assert!(validate_lexical_codes(&dictionary, &bad).is_ok());
+        bad.codes[0].feature.b = CLASS_HEAD_ANCESTOR_ROOT;
+        assert!(validate_lexical_codes(&dictionary, &bad).is_ok());
+        bad.codes[0].feature.b = CLASS_HEAD_TRUNCATED;
+        assert!(validate_lexical_codes(&dictionary, &bad).is_ok());
+        bad.codes[0].feature.b = CLASS_HEAD_TRUNCATED + 1;
         assert!(validate_lexical_codes(&dictionary, &bad).is_err());
         bad = router.clone();
         bad.codes[0].feature.a = 6;
@@ -1187,7 +1298,12 @@ mod tests {
             validate_lexical_codes(&dictionary, &bad).is_ok(),
             "a truncated chain may have zero validated links"
         );
-        bad.codes[1].feature.b = CLASS_TRUNCATED + 1;
+        bad.codes[1].feature.b = CLASS_HEAD_TRUNCATED;
+        assert!(
+            validate_lexical_codes(&dictionary, &bad).is_ok(),
+            "a truncated head chain may have zero validated links"
+        );
+        bad.codes[1].feature.b = CLASS_HEAD_TRUNCATED + 1;
         assert!(validate_lexical_codes(&dictionary, &bad).is_err());
         bad = router.clone();
         bad.codes[1].feature.kind = 11;
@@ -1218,11 +1334,14 @@ mod tests {
             committed_query_scope: true,
             abstention: false,
             reassertion_links: false,
+            reassertion_heads: false,
         };
         let bytes = serde_json::to_vec(&witness).unwrap();
         let legacy = serde_json::to_value(&witness).unwrap();
         assert!(
-            legacy.get("abstention").is_none() && legacy.get("reassertion_links").is_none(),
+            legacy.get("abstention").is_none()
+                && legacy.get("reassertion_links").is_none()
+                && legacy.get("reassertion_heads").is_none(),
             "legacy artifacts keep their exact wire form"
         );
         let mut abstaining = witness.clone();
@@ -1240,6 +1359,19 @@ mod tests {
         assert_eq!(wire["reassertion_links"], true);
         let restored: HistoricalVersionIntent = serde_json::from_value(wire).unwrap();
         assert!(restored.reassertion_links && restored.abstention);
+        assert!(
+            !restored.reassertion_heads,
+            "the link contract alone keeps assertion heads unread"
+        );
+        let mut heads = restored.clone();
+        heads.reassertion_heads = true;
+        let wire = serde_json::to_value(&heads).unwrap();
+        assert_eq!(wire["reassertion_heads"], true);
+        assert!(
+            serde_json::from_value::<HistoricalVersionIntent>(wire)
+                .unwrap()
+                .reassertion_heads
+        );
         let restored: HistoricalVersionIntent = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(restored, witness);
         assert_eq!(serde_json::to_vec(&restored).unwrap(), bytes);

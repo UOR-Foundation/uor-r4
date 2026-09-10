@@ -4139,6 +4139,10 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
         // Resident same-value reassertions are validated links: the root, not an abstention.
         ("Record: selvi in Dusk Ridge. selvi in Dusk Ridge. selvi now in Copper Vale.", "selvi", "What was the initial location of selvi?", " Dusk Ridge.\n", 1, 3, 2),
         ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale. selvi now in Amber Field.", "selvi", "What was the initial location of selvi? Name the owner first.", " selvi was in Dusk Ridge.\n", 1, 4, 3),
+        // A same-value reassertion head: the first hop reaches the head's previous record
+        // and the root stays readable (record-hop semantics).
+        ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale.", "selvi", "What was the initial location of selvi?", " Dusk Ridge.\n", 1, 3, 2),
+        ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale.", "selvi", "What was the previous location of selvi? Name the owner first.", " selvi was in Copper Vale.\n", 2, 3, 1),
     ];
     for (facts, owner, request, target, root, head, depth) in cases {
         let prompt = format!("{facts} {request} Answer:");

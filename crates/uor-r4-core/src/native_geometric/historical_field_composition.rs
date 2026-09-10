@@ -81,6 +81,7 @@ pub(super) fn initial_anchor(
             // Recorded only when the proven path actually contains a reassertion
             // link, so revision-only anchors keep their exact legacy wire form.
             reassertion_links: v.reassertion,
+            reassertion_head: v.head,
             source_end: source.end,
             source_byte_end: source.byte_end,
             boundary_seen: entry.boundary?.at_seen,
@@ -134,6 +135,7 @@ pub(super) fn initial_anchor(
         current_revision: Some(current_revision),
         ancestor_depth: None,
         reassertion_links: false,
+        reassertion_head: false,
         source_end: source.end,
         source_byte_end: source.byte_end,
         boundary_seen: entry.boundary?.at_seen,

@@ -297,6 +297,8 @@ pub enum Control {
     /// Follow explicit revision links only: withhold same-value reassertion links and
     /// the proven-eviction requirement of the versioned chain contract.
     HistoricalVersionIntentReassertionDisabled,
+    /// Withhold the first hop through a same-value reassertion head (the head contract).
+    HistoricalVersionIntentReassertionHeadDisabled,
     /// Keep the active historical router but expose only eight query words.
     HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
@@ -416,6 +418,7 @@ impl Feature {
             | Control::HistoricalVersionIntentAncestorDisabled
             | Control::HistoricalVersionIntentAbstainDisabled
             | Control::HistoricalVersionIntentReassertionDisabled
+            | Control::HistoricalVersionIntentReassertionHeadDisabled
             | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled
