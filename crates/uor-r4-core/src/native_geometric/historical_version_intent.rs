@@ -26,6 +26,11 @@ pub struct HistoricalVersionExample {
     /// Offline label: the named chain is truncated and the answer is an abstention.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub abstain: bool,
+    /// Prior turns replayed before `prompt`, each answered by the model itself with the
+    /// complete frozen dispatch, so follow-up request views (which carry the prior
+    /// response's words) are part of the construction. Empty for a single turn.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +48,12 @@ pub(super) struct HistoricalVersionIntent {
     /// reach a genuine root. Absent in legacy artifacts, which never abstain.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub abstention: bool,
+    /// Versioned chain contract: validated links also follow resident same-value
+    /// reassertions, and a chain counts as truncated only when the next predecessor
+    /// is proven evicted from the ring. Absent in legacy artifacts, whose links are
+    /// explicit revisions only and whose truncation is any unreached root.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reassertion_links: bool,
 }
 
 /// Structural candidate classes exposed to the learned selector. They describe a
@@ -67,6 +78,12 @@ const OWNER_ROLE: u32 = 1;
 const OTHER_OWNER_ROLE: u32 = 4;
 /// Preparation replays every construction prompt; learning keeps its own configured limit.
 const PREPARATION_SECONDS: u64 = 600;
+/// Construction documents and bound receipts per witness. Raised from 4096 for the
+/// reassertion repair construction (4,131 documents); frames stay capped at 4096 and
+/// the 8 MiB prompt bound is unchanged, so legacy artifacts remain valid.
+const DOCUMENT_BOUND: usize = 8192;
+/// Prior turns a construction document may replay before its labeled prompt.
+const HISTORY_TURNS: usize = 8;
 
 fn seed(model: &Model) -> Result<SourceRouting> {
     let h = historical_read::head(model, Control::Full)
@@ -222,7 +239,7 @@ impl HistoricalVersionIntent {
             || restored != previous
             || self.router.codes.len() > self.config.learned_features
             || self.training.is_empty()
-            || self.training.len() > 4096
+            || self.training.len() > DOCUMENT_BOUND
             || self.training.iter().any(|r| {
                 r.id.trim().is_empty() || r.bytes == 0 || !r.text_cid.starts_with("blake3:")
             })
@@ -250,6 +267,16 @@ impl HistoricalVersionIntent {
 }
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
+/// Whether the versioned chain contract is active for this model under `control`.
+pub(super) fn reassertion_links(model: &Model, control: Control) -> bool {
+    model
+        .historical_version_intent
+        .as_ref()
+        .is_some_and(|b| b.reassertion_links)
+        && control != Control::HistoricalVersionIntentReassertionDisabled
+        && control != Control::HistoricalVersionIntentDisabled
+}
+
 /// Selected exact ancestor and the live head that proves its path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct VersionChoice {
@@ -258,6 +285,8 @@ pub(super) struct VersionChoice {
     pub current: u64,
     pub record: u64,
     pub depth: u8,
+    /// The validated path to `record` passes through a same-value reassertion link.
+    pub reassertion: bool,
 }
 
 /// One structurally admitted ancestor with its selector features.
@@ -269,6 +298,8 @@ pub(super) struct Scan {
     pub root: bool,
     /// The chain ended without a root; `depth` counts its validated links.
     pub truncated: bool,
+    /// The validated path so far passes through a same-value reassertion link.
+    pub reassertion: bool,
     pub representable: bool,
     pub features: [ValueFeature; 96],
     pub n: usize,
@@ -386,6 +417,7 @@ fn scan(
     copy: usize,
     ancestors: bool,
     abstention: bool,
+    reassertions: bool,
     work: &mut WordCopyWork,
     visit: &mut impl FnMut(&Scan, &mut WordCopyWork),
 ) -> Option<()> {
@@ -413,13 +445,23 @@ fn scan(
         let mut depth: u8 = 0;
         let mut reached_root = false;
         let mut stopped_by_control = false;
+        let mut evicted = false;
+        let mut via_reassertion = false;
         while depth < ANCESTOR_DEPTH {
-            let next = if depth == 0 {
+            let mut next = if depth == 0 {
                 historical_read::previous(state, current, &mut work.persistent_read)
             } else {
                 historical_read::link(state, record, &mut work.persistent_read)
             };
+            if next.is_none() && depth > 0 && reassertions {
+                next = historical_read::reassertion(state, record, &mut work.persistent_read);
+                via_reassertion |= next.is_some();
+            }
             let Some(old) = next else {
+                // Absence is proven separately from link rejection: only an
+                // overwritten predecessor slot counts as an evicted chain.
+                evicted =
+                    historical_read::evicted_predecessor(state, record, &mut work.persistent_read);
                 break;
             };
             depth += 1;
@@ -435,6 +477,7 @@ fn scan(
                 depth,
                 root,
                 truncated: false,
+                reassertion: via_reassertion,
                 representable,
                 features: f,
                 n,
@@ -449,14 +492,18 @@ fn scan(
                 break;
             }
         }
-        // A revised head whose validated links end before any root is truncated:
-        // the requested original version is not in the retained ring. This is a
-        // structural fact about the chain; whether to abstain is learned.
+        // A revised head whose validated links end before any root is offered as
+        // a truncated candidate. Under the versioned contract that requires the
+        // next predecessor to be proven evicted from the ring; a rejected link is
+        // not absence. The legacy contract offered it on any unreached root, which
+        // mistook a resident same-value reassertion for truncation. Whether to
+        // abstain remains learned.
         if abstention
             && !reached_root
             && !stopped_by_control
             && current.action == 2
             && !current.conflict
+            && (evicted || !reassertions)
         {
             let (f, n) = features(model, state, current, words, addr, depth, false, true, work);
             work.routing.sources_examined += 1;
@@ -467,6 +514,7 @@ fn scan(
                 depth,
                 root: false,
                 truncated: true,
+                reassertion: via_reassertion,
                 representable: true,
                 features: f,
                 n,
@@ -525,6 +573,7 @@ pub(super) fn choose_detail(
         copy,
         control != Control::HistoricalVersionIntentAncestorDisabled,
         block.abstention && control != Control::HistoricalVersionIntentAbstainDisabled,
+        reassertion_links(model, control),
         work,
         &mut |s: &Scan, work: &mut WordCopyWork| {
             if !s.representable {
@@ -547,6 +596,7 @@ pub(super) fn choose_detail(
                     current: s.current,
                     record: s.record,
                     depth: s.depth,
+                    reassertion: s.reassertion,
                 });
             }
         },
@@ -626,6 +676,7 @@ impl Model {
             copy,
             true,
             block.is_none_or(|b| b.abstention),
+            block.is_none_or(|b| b.reassertion_links),
             &mut work,
             &mut |s: &Scan, work: &mut WordCopyWork| {
                 let scored = block.map(|b| {
@@ -645,7 +696,7 @@ impl Model {
                     serde_json::json!({"mapped_codes":mapped,"roots":roots,
                         "score":b.router.score(self,roots,if s.truncated{defer}else{copy},&mut work.routing)})
                 });
-                candidates.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated,
+                candidates.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated,"reassertion":s.reassertion,
                     "class":if s.truncated{CLASS_TRUNCATED}else{class(s.depth,s.root)},"source":s.source,"representable":s.representable,"features":s.features[..s.n],
                     "scored":scored}));
             },
@@ -653,9 +704,9 @@ impl Model {
         let choice = choose_detail(self, values, Control::Full, &mut WordCopyWork::default());
         Ok(
             serde_json::json!({"artifact":self.artifact_cid(),"version_witness":block.is_some(),"query_boundary":values.query_boundary,
-            "committed_query_scope":committed,"committed_source_byte_cutoff":cutoff,
+            "committed_query_scope":committed,"committed_source_byte_cutoff":cutoff,"reassertion_links":block.is_none_or(|b| b.reassertion_links),
             "captured":captured,"base_score":base,"candidates":candidates,"word_copy_eligible":eligible,
-            "choice":choice.map(|v| serde_json::json!({"source":v.source,"action":v.action,"current":v.current,"record":v.record,"depth":v.depth,"abstain":v.source==super::role_read::NO_SOURCE})),
+            "choice":choice.map(|v| serde_json::json!({"source":v.source,"action":v.action,"current":v.current,"record":v.record,"depth":v.depth,"reassertion":v.reassertion,"abstain":v.source==super::role_read::NO_SOURCE})),
             "frozen_historical_choice":historical_read::choose(self,values,Control::Full,&mut WordCopyWork::default()),
             "actual_word_copy":session.word_copy_decision(),"actual_field":session.field_composition_decision()}),
         )
@@ -666,6 +717,26 @@ impl Model {
             Some(w) => w.parent(self),
             None => Ok(self.clone()),
         }
+    }
+
+    /// The same learned witness under the versioned chain contract: no parameter,
+    /// dictionary or receipt changes, only the contract flag and the identity it
+    /// binds. A diagnostic repair candidate that decides whether a refit is needed.
+    pub fn with_reassertion_links(&self) -> Result<Model> {
+        let mut model = self.clone();
+        let witness = model
+            .historical_version_intent
+            .as_mut()
+            .ok_or_else(|| Error("historical version contract requires a witness".into()))?;
+        if witness.reassertion_links {
+            return Err(Error(
+                "historical version contract already versioned".into(),
+            ));
+        }
+        witness.reassertion_links = true;
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
     }
 
     /// Offline exact ancestor-record or explicit deferral labels refine fresh outer
@@ -695,14 +766,41 @@ impl Model {
         parent.fit_historical_version_mode(docs, config, Some(witness))
     }
 
-    /// Replay one prompt to its response entry with the complete frozen dispatch.
-    fn version_session(&self, prompt: &str, start: Instant) -> Result<Session> {
+    /// Replay prior turns, each answered by this model with the complete frozen
+    /// dispatch, then the labeled prompt to its response entry.
+    fn version_session(&self, history: &[String], prompt: &str, start: Instant) -> Result<Session> {
+        let mut session = self.session(Control::Full)?;
+        session.observe(self, BOS)?;
+        for prior in history {
+            let tokens = self.encode(prior)?;
+            if tokens.len() > 8192 {
+                return Err(Error("historical version token bound".into()));
+            }
+            if session.needs_input_boundary() {
+                session.end_response(self)?;
+            }
+            for token in tokens {
+                if start.elapsed().as_secs() >= PREPARATION_SECONDS {
+                    return Err(Error("historical version preparation time limit".into()));
+                }
+                session.observe(self, token)?;
+            }
+            session.begin_response(self)?;
+            for _ in 0..96 {
+                let predicted = session.predict(self)?;
+                session.observe(self, predicted.token)?;
+                if predicted.token == EOS {
+                    break;
+                }
+            }
+        }
         let tokens = self.encode(prompt)?;
         if tokens.len() > 8192 {
             return Err(Error("historical version token bound".into()));
         }
-        let mut session = self.session(Control::Full)?;
-        session.observe(self, BOS)?;
+        if session.needs_input_boundary() {
+            session.end_response(self)?;
+        }
         for token in tokens {
             if start.elapsed().as_secs() >= PREPARATION_SECONDS {
                 return Err(Error("historical version preparation time limit".into()));
@@ -725,17 +823,23 @@ impl Model {
         config_valid(&config, &previous)?;
         if self.historical_version_intent.is_some()
             || docs.is_empty()
-            || docs.len() > 4096
+            || docs.len() > DOCUMENT_BOUND
             || docs.iter().any(|d| {
                 d.prompt.is_empty()
                     || d.prompt.len() > 65536
+                    || d.history.len() > HISTORY_TURNS
+                    || d.history.iter().any(|h| h.is_empty() || h.len() > 65536)
                     || d.target_record == Some(0)
                     || usize::from(d.inherit)
                         + usize::from(d.target_record.is_some())
                         + usize::from(d.abstain)
                         != 1
             })
-            || docs.iter().map(|d| d.prompt.len()).sum::<usize>() > 8 * 1024 * 1024
+            || docs
+                .iter()
+                .map(|d| d.prompt.len() + d.history.iter().map(String::len).sum::<usize>())
+                .sum::<usize>()
+                > 8 * 1024 * 1024
         {
             return Err(Error(
                 "invalid historical version fit bounds or labels".into(),
@@ -745,7 +849,7 @@ impl Model {
         // First pass: the selector's own bounded request views supply its vocabulary.
         let mut views = Vec::with_capacity(docs.len());
         for d in docs {
-            let session = self.version_session(&d.prompt, start)?;
+            let session = self.version_session(&d.history, &d.prompt, start)?;
             let values = session
                 .values
                 .as_ref()
@@ -796,7 +900,7 @@ impl Model {
                 id: d.id.clone(),
                 text: serde_json::to_string(d).map_err(|e| Error(e.to_string()))?,
             }));
-            let session = self.version_session(&d.prompt, start)?;
+            let session = self.version_session(&d.history, &d.prompt, start)?;
             let values = session
                 .values
                 .as_ref()
@@ -842,6 +946,7 @@ impl Model {
                 copy,
                 true,
                 true,
+                true,
                 &mut work,
                 &mut |s: &Scan, _: &mut WordCopyWork| {
                     if !s.representable {
@@ -857,7 +962,7 @@ impl Model {
                             d.target_record == Some(s.record)
                         },
                     });
-                    offered.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated}));
+                    offered.push(serde_json::json!({"current":s.current,"record":s.record,"depth":s.depth,"root":s.root,"truncated":s.truncated,"reassertion":s.reassertion}));
                 },
             );
             if alternatives.iter().filter(|a| a.correct).count() != 1 {
@@ -874,7 +979,7 @@ impl Model {
                 deepest_target = deepest_target.max(depth as u8);
             }
             offered_total += offered.len();
-            labels.push(serde_json::json!({"id":d.id,"inherit":d.inherit,"target_record":d.target_record,"abstain":d.abstain,"offered":offered}));
+            labels.push(serde_json::json!({"id":d.id,"inherit":d.inherit,"target_record":d.target_record,"abstain":d.abstain,"history_turns":d.history.len(),"offered":offered}));
             if alternatives.len() == 1 {
                 skipped.push(d.id.clone());
                 continue;
@@ -977,13 +1082,14 @@ impl Model {
             dictionary: dictionary.clone(),
             committed_query_scope: true,
             abstention: true,
+            reassertion_links: true,
         });
         model.refresh_identity()?;
         model.validate()?;
         let report = serde_json::json!({"schema":"uor-r4.historical-version-intent-fit/1","parent":self.artifact_cid(),
             "artifact":model.artifact_cid(),"documents":docs.len(),"frames":frames.len(),"duplicate_frames":duplicates,
             "skipped":skipped,"labels":labels,"features":feature_count,"offered_candidates":offered_total,
-            "deepest_target_depth":deepest_target,"ancestor_depth_bound":ANCESTOR_DEPTH,"committed_query_scope":true,"abstention":true,"abstain_documents":docs.iter().filter(|d| d.abstain).count(),
+            "deepest_target_depth":deepest_target,"ancestor_depth_bound":ANCESTOR_DEPTH,"committed_query_scope":true,"abstention":true,"reassertion_links":true,"abstain_documents":docs.iter().filter(|d| d.abstain).count(),"follow_up_documents":docs.iter().filter(|d| !d.history.is_empty()).count(),"history_turn_bound":HISTORY_TURNS,
             "dictionary_mode":"request_view_words","dictionary_limit":128,"dictionary_min_occurrences":DICTIONARY_MIN_OCCURRENCES,"dictionary_words":dictionary.len(),
             "dictionary_omitted_words":omitted_words,"dictionary_omitted_occurrences":omitted_occurrences,"dictionary":dictionary,
             "fit":fit,"unsatisfied_frames":unsatisfied,"warm_start":warm.map(|w| serde_json::json!({"codes":w.router.codes.len(),"nonidentity_roots_reused":warm_roots})),"preparation_ms":preparation_ms,"preparation_seconds_limit":PREPARATION_SECONDS,"learning_ms":learning.elapsed().as_millis(),"elapsed_ms":start.elapsed().as_millis(),
@@ -1111,13 +1217,12 @@ mod tests {
             dictionary,
             committed_query_scope: true,
             abstention: false,
+            reassertion_links: false,
         };
         let bytes = serde_json::to_vec(&witness).unwrap();
+        let legacy = serde_json::to_value(&witness).unwrap();
         assert!(
-            serde_json::to_value(&witness)
-                .unwrap()
-                .get("abstention")
-                .is_none(),
+            legacy.get("abstention").is_none() && legacy.get("reassertion_links").is_none(),
             "legacy artifacts keep their exact wire form"
         );
         let mut abstaining = witness.clone();
@@ -1125,6 +1230,16 @@ mod tests {
         let restored: HistoricalVersionIntent =
             serde_json::from_slice(&serde_json::to_vec(&abstaining).unwrap()).unwrap();
         assert!(restored.abstention);
+        assert!(
+            !restored.reassertion_links,
+            "the abstention flag alone keeps the legacy chain contract"
+        );
+        let mut versioned = abstaining.clone();
+        versioned.reassertion_links = true;
+        let wire = serde_json::to_value(&versioned).unwrap();
+        assert_eq!(wire["reassertion_links"], true);
+        let restored: HistoricalVersionIntent = serde_json::from_value(wire).unwrap();
+        assert!(restored.reassertion_links && restored.abstention);
         let restored: HistoricalVersionIntent = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(restored, witness);
         assert_eq!(serde_json::to_vec(&restored).unwrap(), bytes);
@@ -1137,7 +1252,21 @@ mod tests {
             target_record: Some(1),
             inherit: false,
             abstain: false,
+            history: Vec::new(),
         };
+        assert!(
+            serde_json::to_value(&example)
+                .unwrap()
+                .get("history")
+                .is_none(),
+            "single-turn documents keep their exact wire form"
+        );
+        let follow_up: HistoricalVersionExample = serde_json::from_value(serde_json::json!({
+            "id":"follow","prompt":"What was the previous location of a? Answer:","target_record":null,"inherit":true,
+            "history":["Record: a in b. a now in c. What was the initial location of a? Answer:"]
+        }))
+        .unwrap();
+        assert_eq!(follow_up.history.len(), 1);
         assert!(serde_json::to_value(&example)
             .unwrap()
             .get("abstain")

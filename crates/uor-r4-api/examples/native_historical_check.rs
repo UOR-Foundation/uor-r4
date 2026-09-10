@@ -20,9 +20,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
             .unwrap_or_else(|| vec![expected]);
         let mut session = model.create_session(SessionConfig::default())?;
+        // Prior turns of a follow-up case are completed first through the same API
+        // session; their responses are recorded but only the labeled prompt is judged.
+        let mut prior_responses = Vec::new();
+        for prior in c["history"].as_array().into_iter().flatten() {
+            let prior = prior.as_str().ok_or("history prompt absent")?;
+            let r = session.complete(CompletionRequest::new(prior))?;
+            prior_responses.push(json!({"prompt":prior,"text":r.text,"stopped_by":r.stopped_by}));
+        }
         let response = session.complete(CompletionRequest::new(prompt))?;
         let passed = accepted.contains(&response.text.as_str()) && response.stopped_by == "eos";
-        checks.push(json!({"id":c["id"],"prompt":prompt,"expected":expected,"accepted":accepted,"response":response,"passed":passed}));
+        checks.push(json!({"id":c["id"],"prompt":prompt,"history":prior_responses,"expected":expected,"accepted":accepted,"response":response,"passed":passed}));
         if !passed {
             break;
         }
@@ -36,9 +44,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     let passed = !checks.is_empty() && checks.iter().all(|c| c["passed"] == true);
-    fs::write(
-        &a[3],
-        serde_json::to_vec(
+    // The report file is created exclusively: an existing report is never overwritten.
+    let mut report = fs::File::create_new(&a[3])?;
+    std::io::Write::write_all(
+        &mut report,
+        &serde_json::to_vec(
             &json!({"status":if passed{"PASS"}else{"FAIL"},"checks":checks,"scope":"Actual native API, checkpoint import and independent sum over supplied cases; no HTTP/browser or general-language qualification."}),
         )?,
     )?;

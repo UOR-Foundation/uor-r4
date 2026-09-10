@@ -231,11 +231,82 @@ pub(super) fn link<'a>(
     Some(older)
 }
 
+/// One immutable descending link through a resident same-value reassertion: an
+/// assertion (action one) that names a strictly older, nonconflicting predecessor
+/// of the same owner whose exact value payload it repeats. The writer marks a
+/// differing reassertion as a conflict; the value equality is re-proven here
+/// against the resident predecessor instead of being trusted from that flag.
+pub(super) fn reassertion<'a>(
+    state: &'a RelationState,
+    record: &RelationRecord,
+    work: &mut ValueWork,
+) -> Option<&'a RelationRecord> {
+    if record.id == 0
+        || record.conflict
+        || record.action != 1
+        || record.previous == 0
+        || record.previous >= record.id
+    {
+        return None;
+    }
+    work.relations.record_reads += 1;
+    let older = state.record(record.previous)?;
+    if older.conflict
+        || !record.owner.matches(&older.owner, work)
+        || !super::relation_span::same_value(
+            &record.value,
+            record.span.as_ref(),
+            &older.value,
+            older.span.as_ref(),
+            work,
+        )
+    {
+        return None;
+    }
+    Some(older)
+}
+
+/// One descending link under the artifact's chain contract: the legacy contract
+/// follows explicit revisions only; the versioned contract (`reassertions`) also
+/// follows validated same-value reassertions. Depth counts record links, not
+/// distinct values.
+pub(super) fn step<'a>(
+    state: &'a RelationState,
+    record: &RelationRecord,
+    reassertions: bool,
+    work: &mut ValueWork,
+) -> Option<&'a RelationRecord> {
+    if let Some(older) = link(state, record, work) {
+        return Some(older);
+    }
+    if reassertions {
+        return reassertion(state, record, work);
+    }
+    None
+}
+
+/// Proven absence, kept separate from link rejection: the record names a strictly
+/// older predecessor whose ring slot now holds a different identity. A conflicting,
+/// foreign-owner, malformed or otherwise rejected link is not evidence of eviction.
+pub(super) fn evicted_predecessor(
+    state: &RelationState,
+    record: &RelationRecord,
+    work: &mut ValueWork,
+) -> bool {
+    if record.id == 0 || record.previous == 0 || record.previous >= record.id {
+        return false;
+    }
+    work.relations.record_reads += 1;
+    state.record(record.previous).is_none()
+}
+
 /// Exact record `depth` validated links below a live head; depth one is `previous`.
+/// `reassertions` selects the chain contract used for the deeper links.
 pub(super) fn ancestor<'a>(
     state: &'a RelationState,
     current: &RelationRecord,
     depth: u8,
+    reassertions: bool,
     work: &mut ValueWork,
 ) -> Option<&'a RelationRecord> {
     if depth == 0 || depth > ANCESTOR_DEPTH {
@@ -244,7 +315,7 @@ pub(super) fn ancestor<'a>(
     let mut record = previous(state, current, work)?;
     let mut remaining = depth - 1;
     while remaining > 0 {
-        record = link(state, record, work)?;
+        record = step(state, record, reassertions, work)?;
         remaining -= 1;
     }
     Some(record)
@@ -458,8 +529,8 @@ mod tests {
         let s = chain();
         let head = &s.records[2];
         let mut work = ValueWork::default();
-        assert_eq!(ancestor(&s, head, 1, &mut work).unwrap().id, 2);
-        let root = ancestor(&s, head, 2, &mut work).unwrap();
+        assert_eq!(ancestor(&s, head, 1, false, &mut work).unwrap().id, 2);
+        let root = ancestor(&s, head, 2, false, &mut work).unwrap();
         assert_eq!(root.id, 1);
         assert!(is_root(root));
         assert!(!is_root(&s.records[1]));
@@ -467,9 +538,9 @@ mod tests {
             root.value.byte_end, 15,
             "exact first occurrence, not a spelling"
         );
-        assert!(ancestor(&s, head, 0, &mut work).is_none());
-        assert!(ancestor(&s, head, 3, &mut work).is_none());
-        assert!(ancestor(&s, head, ANCESTOR_DEPTH + 1, &mut work).is_none());
+        assert!(ancestor(&s, head, 0, false, &mut work).is_none());
+        assert!(ancestor(&s, head, 3, false, &mut work).is_none());
+        assert!(ancestor(&s, head, ANCESTOR_DEPTH + 1, false, &mut work).is_none());
         assert!(
             link(&s, &s.records[0], &mut work).is_none(),
             "roots have no link"
@@ -480,9 +551,9 @@ mod tests {
     fn historical_read_ancestor_rejects_broken_overwritten_and_cross_owner_paths() {
         let mut s = chain();
         s.records[1].previous = 0;
-        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
         assert_eq!(
-            ancestor(&s, &s.records[2], 1, &mut Default::default())
+            ancestor(&s, &s.records[2], 1, false, &mut Default::default())
                 .unwrap()
                 .id,
             2,
@@ -490,19 +561,132 @@ mod tests {
         );
         let mut s = chain();
         s.records[0].id = 17;
-        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
         let mut s = chain();
         s.records[0].owner = atom("other", 10);
-        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
         let mut s = chain();
         s.records[1].action = 1;
-        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        assert!(
+            ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none(),
+            "the legacy contract follows explicit revisions only"
+        );
+        assert_eq!(
+            ancestor(&s, &s.records[2], 2, true, &mut Default::default())
+                .unwrap()
+                .id,
+            1,
+            "the versioned contract follows a resident same-value reassertion"
+        );
         let mut s = chain();
         s.records[0].conflict = true;
-        assert!(ancestor(&s, &s.records[2], 2, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 2, false, &mut Default::default()).is_none());
         s.records[0].conflict = false;
         s.directory[0] = 2;
-        assert!(ancestor(&s, &s.records[2], 1, &mut Default::default()).is_none());
+        assert!(ancestor(&s, &s.records[2], 1, false, &mut Default::default()).is_none());
+    }
+    #[test]
+    fn historical_read_reassertion_link_requires_resident_same_owner_same_value_older_record() {
+        let mut s = chain();
+        s.records[1].action = 1;
+        let mut work = ValueWork::default();
+        assert_eq!(reassertion(&s, &s.records[1], &mut work).unwrap().id, 1);
+        assert_eq!(step(&s, &s.records[1], true, &mut work).unwrap().id, 1);
+        assert!(step(&s, &s.records[1], false, &mut work).is_none());
+        assert!(
+            link(&s, &s.records[1], &mut work).is_none(),
+            "a reassertion is never an explicit revision link"
+        );
+        assert!(work.relations.record_reads > 0);
+        // A revision remains a valid step under both contracts.
+        let s2 = chain();
+        assert_eq!(step(&s2, &s2.records[1], false, &mut work).unwrap().id, 1);
+        assert_eq!(step(&s2, &s2.records[1], true, &mut work).unwrap().id, 1);
+        // Differing value: the writer would have marked a conflict; the value is re-proven.
+        let mut differing = s.clone();
+        differing.records[0].value = atom("other", 15);
+        assert!(reassertion(&differing, &differing.records[1], &mut work).is_none());
+        let mut conflicting = s.clone();
+        conflicting.records[1].conflict = true;
+        assert!(reassertion(&conflicting, &conflicting.records[1], &mut work).is_none());
+        let mut older_conflict = s.clone();
+        older_conflict.records[0].conflict = true;
+        assert!(reassertion(&older_conflict, &older_conflict.records[1], &mut work).is_none());
+        let mut foreign = s.clone();
+        foreign.records[0].owner = atom("other", 10);
+        assert!(reassertion(&foreign, &foreign.records[1], &mut work).is_none());
+        let mut forward = s.clone();
+        forward.records[1].previous = 3;
+        assert!(reassertion(&forward, &forward.records[1], &mut work).is_none());
+        let mut root_like = s.clone();
+        root_like.records[1].previous = 0;
+        assert!(reassertion(&root_like, &root_like.records[1], &mut work).is_none());
+        let mut contradiction = s.clone();
+        contradiction.records[1].action = 3;
+        assert!(reassertion(&contradiction, &contradiction.records[1], &mut work).is_none());
+        // A reassertion whose predecessor slot was overwritten is not a link.
+        let mut overwritten = s.clone();
+        overwritten.records[0].id = 17;
+        assert!(reassertion(&overwritten, &overwritten.records[1], &mut work).is_none());
+        assert!(ancestor(&overwritten, &overwritten.records[2], 2, true, &mut work).is_none());
+    }
+    #[test]
+    fn historical_read_eviction_is_proven_by_an_overwritten_slot_not_by_rejection() {
+        let s = chain();
+        let mut work = ValueWork::default();
+        assert!(!evicted_predecessor(&s, &s.records[1], &mut work));
+        assert!(
+            !evicted_predecessor(&s, &s.records[0], &mut work),
+            "a root has no predecessor"
+        );
+        let mut overwritten = s.clone();
+        overwritten.records[0].id = 17;
+        assert!(evicted_predecessor(
+            &overwritten,
+            &overwritten.records[1],
+            &mut work
+        ));
+        assert!(link(&overwritten, &overwritten.records[1], &mut work).is_none());
+        // Rejected links are not evictions: the predecessor is resident.
+        let mut foreign = s.clone();
+        foreign.records[0].owner = atom("other", 10);
+        assert!(link(&foreign, &foreign.records[1], &mut work).is_none());
+        assert!(!evicted_predecessor(
+            &foreign,
+            &foreign.records[1],
+            &mut work
+        ));
+        let mut conflicting = s.clone();
+        conflicting.records[0].conflict = true;
+        assert!(link(&conflicting, &conflicting.records[1], &mut work).is_none());
+        assert!(!evicted_predecessor(
+            &conflicting,
+            &conflicting.records[1],
+            &mut work
+        ));
+        let mut assertion = s.clone();
+        assertion.records[1].action = 1;
+        assertion.records[0].value = atom("other", 15);
+        assert!(step(&assertion, &assertion.records[1], true, &mut work).is_none());
+        assert!(!evicted_predecessor(
+            &assertion,
+            &assertion.records[1],
+            &mut work
+        ));
+        let mut forward = s.clone();
+        forward.records[1].previous = 3;
+        assert!(!evicted_predecessor(
+            &forward,
+            &forward.records[1],
+            &mut work
+        ));
+        let mut zero_slot = s.clone();
+        zero_slot.records[0].id = 0;
+        assert!(evicted_predecessor(
+            &zero_slot,
+            &zero_slot.records[1],
+            &mut work
+        ));
     }
     #[test]
     fn historical_read_previous_rejects_conflict_assertion_and_cross_owner() {

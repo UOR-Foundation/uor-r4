@@ -123,7 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     let out = Path::new(&args[4]);
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let model = Model::from_bytes(&fs::read(&args[2])?)?;
     let open = contrasts("open", 8, 40);
     if args[1] == "fit" {

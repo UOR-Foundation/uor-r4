@@ -221,7 +221,7 @@ fn diagnostic_main() -> Result<()> {
     }
     let root = Path::new(&args[3]);
     let out = Path::new(&args[4]);
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let specifications = [
         ("prior.json", "role-read/first-use/0/0/0", "velra", "Lodov"),
         ("prior.json", "role-read/first-use/0/3/0", "velra", "Merok"),
@@ -405,7 +405,7 @@ fn variants(id: &str, owner: &str, value: &str, plain: &str) -> Result<Vec<Case>
     Ok(out)
 }
 fn prepare_cases(input: &Path, out: &Path) -> Result<()> {
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let original: Vec<Case> = serde_json::from_slice(&fs::read(input)?)?;
     let mut open = Vec::new();
     let mut over_limit = Vec::new();
@@ -477,7 +477,7 @@ fn prepare_cases(input: &Path, out: &Path) -> Result<()> {
     Ok(())
 }
 fn evaluate_cases(model: &Model, cases: &[Case], out: &Path, controls: bool) -> Result<()> {
-    fs::create_dir_all(out)?;
+    // `out` is claimed exclusively by the caller before the cases are saved.
     let all = [
         ("full", Control::Full),
         (
@@ -505,7 +505,7 @@ fn evaluate_cases(model: &Model, cases: &[Case], out: &Path, controls: bool) -> 
     Ok(())
 }
 fn fresh_cases(out: &Path) -> Result<()> {
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos() as u64;
@@ -604,7 +604,7 @@ fn prepare_preserving(
     rejected: &Path,
     out: &Path,
 ) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let mut cases: Vec<Case> = serde_json::from_slice(&fs::read(construction)?)?;
     for c in &mut cases {
         c.inherit_suffix = c.placement == "plain";
@@ -728,7 +728,7 @@ fn fresh_rust_source(input: &Path, out: &Path) -> Result<()> {
             "actual_text":actual,"eos":row["eos"],"checks":[[19,19],[-7,-7]]}));
     }
     program.push_str("}\n");
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     fs::write(out.join("generated_checks.rs"), &program)?;
     save(
         &out.join("receipt.json"),
@@ -793,7 +793,7 @@ fn main() -> Result<()> {
     let parent = Model::from_bytes(&fs::read(&a[2])?)?;
     let cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[3])?)?;
     let out = Path::new(&a[4]);
-    fs::create_dir_all(out)?;
+    uor_r4_core::report_output::claim(out)?;
     if cases.is_empty() || cases.len() > 256 {
         return Err("case limit".into());
     }

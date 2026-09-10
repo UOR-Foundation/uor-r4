@@ -278,7 +278,7 @@ fn main() -> Result<()> {
         return Err("usage: native_word_emission_history MODEL PRESERVATION_REPORT_DIR OUT".into());
     }
     let out = Path::new(&args[3]);
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let model = Model::from_bytes(&fs::read(&args[1])?)?;
     let mut rows = Vec::new();
     let mut receipts = Vec::new();

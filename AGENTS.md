@@ -121,6 +121,8 @@ The [complete previous operating manual](https://github.com/UOR-Foundation/uor-r
 
 Preserve `E8 = H4 x H4` as project shorthand for the concrete golden/Galois-coupled icosian construction `H4 ⊕ phi H4`, with fixed basis/glue/maps and inverse witness. The companion is not independent learned state. Hopf S3→S2 observation loses fiber information unless retained explicitly; do not assume a reversible universal S3→S2→S1 pipeline. Fixed finite zeta phases do not require solving classical RH. Geometric structural priority and measured semantic advantage are different claims.
 
+Chain traversal: a rejected or unfollowed link is not proof that a record is absent; prove eviction separately (an overwritten ring slot) before offering an abstention, and cover the cross-product of interacting supported behaviors (for example same-value reassertions with initial/previous/current intents) before qualifying a change. Compare candidates row by row against each prior artifact, not only against the frozen parent or an aggregate score. Freeze independent acceptance criteria before a fresh draw. Create every report directory exclusively (`uor_r4_core::report_output::claim`) and seal completed attempts; never reuse a report root for a retry.
+
 Missing `/tmp` teacher artifacts make historical parity unavailable, even if a conditional test exits zero. Debug build timing is not optimized serving performance. Shared build caches can retain paths from old worktrees; diagnose the affected crate instead of deleting all caches. Never remove unique research, ignored model parents or intentional dirty checkout material during routine cleanup. Read [the takeover record](docs/integration/handoff-2026-09-07.md) for the latest preserved local paths and budget snapshot.
 
 

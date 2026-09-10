@@ -17,6 +17,7 @@ fn save(path: &Path, value: &impl Serialize) -> Result<()> {
 }
 fn generate(
     model: &Model,
+    history: &[String],
     prompt: &str,
     control: Control,
     verify: bool,
@@ -35,6 +36,31 @@ fn generate(
     }
     let mut session = model.session(control)?;
     session.observe(model, BOS)?;
+    // Prior turns are answered by this model under the same control; their
+    // responses stay in the session exactly as a user would have seen them.
+    for prior in history {
+        let prior_tokens = model.encode(prior)?;
+        if prior.len() > 4096 || prior_tokens.len() > 512 {
+            return Err("configured history input bound".into());
+        }
+        if session.needs_input_boundary() {
+            session.end_response(model)?;
+        }
+        for t in prior_tokens {
+            session.observe(model, t)?;
+        }
+        session.begin_response(model)?;
+        for _ in 0..96 {
+            let p = session.predict(model)?;
+            session.observe(model, p.token)?;
+            if p.token == EOS {
+                break;
+            }
+        }
+    }
+    if session.needs_input_boundary() {
+        session.end_response(model)?;
+    }
     for t in tokens {
         session.observe(model, t)?;
     }
@@ -117,6 +143,14 @@ struct Case {
     /// The named chain is truncated: the exact answer is an abstention.
     #[serde(default)]
     abstain: bool,
+    /// Prior turns replayed in the same session before `prompt`, each answered by
+    /// the evaluated model itself; empty for a single turn.
+    #[serde(default)]
+    history: Vec<String>,
+    /// Follow-up target: the exact record a previous/current request must keep
+    /// after earlier turns (the head's immediate previous record or the head).
+    #[serde(default)]
+    follow_up: Option<u64>,
 }
 struct Owner {
     name: String,
@@ -172,6 +206,33 @@ fn push_targets(
     head: u64,
     templates: &[&str],
 ) {
+    // A contiguous chain has one validated link per record between head and root.
+    push_targets_depth(
+        cases,
+        id,
+        facts,
+        owner,
+        initial,
+        root,
+        head,
+        (head - root) as u8,
+        templates,
+    );
+}
+/// Exact root target with an explicit validated link count: chains interleaved with
+/// other owners' records or containing same-value reassertions are not contiguous.
+#[allow(clippy::too_many_arguments)]
+fn push_targets_depth(
+    cases: &mut Vec<Case>,
+    id: &str,
+    facts: &str,
+    owner: &str,
+    initial: &str,
+    root: u64,
+    head: u64,
+    depth: u8,
+    templates: &[&str],
+) {
     for (t, template) in templates.iter().enumerate() {
         for (s, style) in STYLES.iter().enumerate() {
             cases.push(Case {
@@ -180,10 +241,110 @@ fn push_targets(
                 expected: Some(answer(style, owner, initial)),
                 current_record: Some(head),
                 target_record: Some(root),
-                depth: Some((head - root) as u8),
+                depth: Some(depth),
                 owner: owner.into(),
                 value: initial.into(),
                 abstain: false,
+                history: Vec::new(),
+                follow_up: None,
+            });
+        }
+    }
+}
+/// Follow-up turns after an initial-version request in the same session: the
+/// previous and current requests must keep the frozen parent's immediate-previous
+/// and current records whatever the first turn answered, in owner-first styles and
+/// the plain style, including a current request after both earlier turns.
+#[allow(clippy::too_many_arguments)]
+fn push_follow_ups(
+    cases: &mut Vec<Case>,
+    id: &str,
+    facts: &str,
+    owner: &str,
+    previous_value: &str,
+    current_value: &str,
+    previous_id: u64,
+    head: u64,
+) {
+    let initial = |s: usize| format!("{facts} {}", request(INITIAL_REQUESTS[0], owner, STYLES[s]));
+    let previous_turn = |s: usize| request(PRESERVE_REQUESTS[0], owner, STYLES[s]);
+    let case = |name: String,
+                prompt: String,
+                expected: String,
+                history: Vec<String>,
+                record: u64,
+                value: &str| Case {
+        id: format!("follow/{id}/{name}"),
+        prompt,
+        expected: Some(expected),
+        current_record: Some(head),
+        target_record: None,
+        depth: None,
+        owner: owner.into(),
+        value: value.into(),
+        abstain: false,
+        history,
+        follow_up: Some(record),
+    };
+    for s in [1usize, 2] {
+        cases.push(case(
+            format!("previous/{s}"),
+            previous_turn(s),
+            format!(" {owner} was in {previous_value}.\n"),
+            vec![initial(s)],
+            previous_id,
+            previous_value,
+        ));
+        cases.push(case(
+            format!("current/{s}"),
+            request(PRESERVE_REQUESTS[2], owner, STYLES[s]),
+            format!(" {owner} is in {current_value}.\n"),
+            vec![initial(s)],
+            head,
+            current_value,
+        ));
+        cases.push(case(
+            format!("current-after-previous/{s}"),
+            request(PRESERVE_REQUESTS[3], owner, STYLES[s]),
+            format!(" {owner} is in {current_value}.\n"),
+            vec![initial(s), previous_turn(s)],
+            head,
+            current_value,
+        ));
+    }
+    cases.push(case(
+        "previous/0".into(),
+        previous_turn(0),
+        format!(" {previous_value}.\n"),
+        vec![initial(0)],
+        previous_id,
+        previous_value,
+    ));
+}
+/// Abstention targets: the named chain's root is proven evicted, so the exact
+/// answer is the parent's no-read `Unknown.`; `head` is the chain's live record.
+fn push_abstain(
+    cases: &mut Vec<Case>,
+    id: &str,
+    facts: &str,
+    owner: &str,
+    head: u64,
+    templates: &[&str],
+) {
+    for (t, template) in templates.iter().enumerate() {
+        for (s, style) in STYLES.iter().enumerate() {
+            cases.push(Case {
+                id: format!("{id}/abstain/{t}/{s}"),
+                prompt: format!("{facts} {}", request(template, owner, style)),
+                expected: Some(" Unknown.\n".into()),
+                current_record: Some(head),
+                target_record: None,
+                depth: None,
+                owner: owner.into(),
+                value: String::new(),
+                abstain: true,
+                history: Vec::new(),
+                follow_up: None,
             });
         }
     }
@@ -209,6 +370,8 @@ fn push_preserve(
             owner: owner.into(),
             value: String::new(),
             abstain: false,
+            history: Vec::new(),
+            follow_up: None,
         });
     }
 }
@@ -247,6 +410,8 @@ fn push_absent(cases: &mut Vec<Case>, id: &str, facts: &str, absent: &str) {
             owner: name,
             value: String::new(),
             abstain: false,
+            history: Vec::new(),
+            follow_up: None,
         });
     }
 }
@@ -318,6 +483,18 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         versions as u64,
                         &INITIAL_REQUESTS,
                     );
+                    if !evicted && versions >= 3 {
+                        push_follow_ups(
+                            &mut cases,
+                            &id,
+                            &facts,
+                            &owner.name,
+                            &owner.values[versions - 2],
+                            &owner.values[versions - 1],
+                            versions as u64 - 1,
+                            versions as u64,
+                        );
+                    }
                     push_preserve(
                         &mut cases,
                         &id,
@@ -370,6 +547,18 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         head,
                         &[INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]],
                     );
+                    if versions == 3 && !evicted {
+                        push_follow_ups(
+                            &mut cases,
+                            &format!("{id}/{i}"),
+                            &facts,
+                            &owners[i].name,
+                            &owners[i].values[1],
+                            &owners[i].values[2],
+                            head - 1,
+                            head,
+                        );
+                    }
                     push_preserve(
                         &mut cases,
                         &format!("{id}/{i}"),
@@ -435,6 +624,8 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         owner: name,
                         value: String::new(),
                         abstain: false,
+                        history: Vec::new(),
+                        follow_up: None,
                     });
                 }
             }
@@ -492,6 +683,8 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                         owner: o.clone(),
                         value: String::new(),
                         abstain: false,
+                        history: Vec::new(),
+                        follow_up: None,
                     });
                 }
             }
@@ -518,6 +711,8 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                             owner: owner.name.clone(),
                             value: String::new(),
                             abstain: true,
+                            history: Vec::new(),
+                            follow_up: None,
                         });
                     }
                 }
@@ -528,6 +723,20 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                     &owner.name,
                     &[(0, 0), (0, 1), (1, 0), (2, 0), (2, 1), (3, 0)],
                 );
+                if trailing == 14 {
+                    // After an abstained initial turn the previous and current
+                    // versions stay readable in the same session.
+                    push_follow_ups(
+                        &mut cases,
+                        &id,
+                        &facts,
+                        &owner.name,
+                        &owner.values[1],
+                        &owner.values[2],
+                        2,
+                        3,
+                    );
+                }
             }
         }
     }
@@ -559,6 +768,8 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                     owner: a.name.clone(),
                     value: String::new(),
                     abstain: true,
+                    history: Vec::new(),
+                    follow_up: None,
                 });
             }
         }
@@ -633,6 +844,8 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 owner: owner.name.clone(),
                 value: String::new(),
                 abstain: false,
+                history: Vec::new(),
+                follow_up: None,
             });
         }
         let conflict = format!(
@@ -653,6 +866,8 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 owner: owner.name.clone(),
                 value: String::new(),
                 abstain: false,
+                history: Vec::new(),
+                follow_up: None,
             });
         }
         let (v0, v1, v2) = (&owner.values[0], &owner.values[1], &owner.values[2]);
@@ -666,7 +881,7 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
         .iter()
         .enumerate()
         {
-            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new(), abstain: false });
+            cases.push(Case { id: format!("literal-role/{i}/{k}"), prompt: prompt.clone(), expected: None, current_record: None, target_record: None, depth: None, owner: o.clone(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None });
         }
         // The intent word as an owner name: its own root is still the exact answer.
         let facts = format!("Record: initial in {v0}. initial now in {v1}. initial now in {v2}.");
@@ -688,11 +903,202 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
             &[(0, 1)],
         );
     }
+    // Resident same-value reassertions are validated links, never truncations: an
+    // initial request must reach the exact assertion root through them, at the root,
+    // in the middle, repeated, interleaved with another owner, and beside an equal
+    // value owned by someone else. Depth counts validated record links.
+    for (i, owner) in owners.iter().take(2).enumerate() {
+        let other = &owners[1 - i];
+        let (o, v0, v1, v2) = (
+            &owner.name,
+            &owner.values[0],
+            &owner.values[1],
+            &owner.values[2],
+        );
+        let (p, w0) = (&other.name, &other.values[0]);
+        let layouts = [
+            (
+                "root",
+                format!("Record: {o} in {v0}. {o} in {v0}. {o} now in {v1}."),
+                1,
+                3,
+                2,
+            ),
+            (
+                "root-long",
+                format!("Record: {o} in {v0}. {o} in {v0}. {o} now in {v1}. {o} now in {v2}."),
+                1,
+                4,
+                3,
+            ),
+            (
+                "middle",
+                format!("Record: {o} in {v0}. {o} now in {v1}. {o} in {v1}. {o} now in {v2}."),
+                1,
+                4,
+                3,
+            ),
+            (
+                "multiple",
+                format!("Record: {o} in {v0}. {o} in {v0}. {o} in {v0}. {o} now in {v1}."),
+                1,
+                4,
+                3,
+            ),
+            (
+                "interleaved",
+                format!("Record: {o} in {v0}. {p} in {w0}. {o} in {v0}. {o} now in {v1}."),
+                1,
+                4,
+                2,
+            ),
+            (
+                "equal-valued-owner",
+                format!("Record: {o} in {v0}. {p} in {v0}. {o} in {v0}. {o} now in {v1}."),
+                1,
+                4,
+                2,
+            ),
+        ];
+        for (name, facts, root, head, depth) in layouts {
+            let id = format!("reassert-link/{i}/{name}");
+            push_targets_depth(
+                &mut cases,
+                &id,
+                &facts,
+                o,
+                v0,
+                root,
+                head,
+                depth,
+                &INITIAL_REQUESTS,
+            );
+            if name == "root" {
+                push_follow_ups(&mut cases, &id, &facts, o, v0, v1, 2, 3);
+            } else if name == "middle" {
+                push_follow_ups(&mut cases, &id, &facts, o, v1, v2, 3, 4);
+            }
+            push_preserve(
+                &mut cases,
+                &id,
+                &facts,
+                o,
+                &[(0, 0), (0, 1), (1, 0), (2, 0), (2, 1), (3, 1)],
+            );
+        }
+        // Equal values under distinct owners are distinct records with their own roots.
+        let facts = format!("Record: {o} in {v0}. {p} in {v0}. {o} now in {v1}. {p} now in {v1}.");
+        let two = [INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]];
+        push_targets_depth(
+            &mut cases,
+            &format!("equal-valued/{i}/a"),
+            &facts,
+            o,
+            v0,
+            1,
+            3,
+            1,
+            &two,
+        );
+        push_targets_depth(
+            &mut cases,
+            &format!("equal-valued/{i}/b"),
+            &facts,
+            p,
+            v0,
+            2,
+            4,
+            1,
+            &two,
+        );
+        push_preserve(
+            &mut cases,
+            &format!("equal-valued/{i}"),
+            &facts,
+            o,
+            &[(0, 0), (2, 1)],
+        );
+        // A head that is itself a same-value reassertion has no historical read under
+        // the frozen parent's contract; these rows preserve the parent and are a
+        // stated limit, not a claim.
+        let facts = format!("Record: {o} in {v0}. {o} now in {v1}. {o} in {v1}.");
+        for (t, template) in INITIAL_REQUESTS.iter().enumerate().take(2) {
+            for (s, style) in STYLES.iter().enumerate().take(2) {
+                cases.push(Case {
+                    id: format!("reassert-head/{i}/{t}/{s}"),
+                    prompt: format!("{facts} {}", request(template, o, style)),
+                    expected: None,
+                    current_record: None,
+                    target_record: None,
+                    depth: None,
+                    owner: o.clone(),
+                    value: String::new(),
+                    abstain: false,
+                    history: Vec::new(),
+                    follow_up: None,
+                });
+            }
+        }
+        push_preserve(
+            &mut cases,
+            &format!("reassert-head/{i}"),
+            &facts,
+            o,
+            &[(0, 0), (2, 0)],
+        );
+    }
+    // Reassertion chains at the ring boundary: twelve trailing facts keep the
+    // four-record chain's root resident; thirteen evict the root while its
+    // reassertion survives; fourteen evict the reassertion as well. Only proven
+    // eviction abstains; the surviving reassertion is not a root.
+    for (i, owner) in owners.iter().take(2).enumerate() {
+        let (o, v0, v1, v2) = (
+            &owner.name,
+            &owner.values[0],
+            &owner.values[1],
+            &owner.values[2],
+        );
+        let chain_facts = format!("{o} in {v0}. {o} in {v0}. {o} now in {v1}. {o} now in {v2}.");
+        let two = [INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]];
+        for trailing in [12, 13, 14] {
+            let facts = evicted_facts(&chain_facts, trailing, filler_seed);
+            let id = format!("reassert-boundary/{i}/{trailing}");
+            if trailing == 12 {
+                push_targets_depth(&mut cases, &id, &facts, o, v0, 1, 4, 3, &two);
+            } else {
+                push_abstain(&mut cases, &id, &facts, o, 4, &two);
+                if trailing == 13 {
+                    push_follow_ups(&mut cases, &id, &facts, o, v1, v2, 3, 4);
+                }
+            }
+            push_preserve(&mut cases, &id, &facts, o, &[(0, 0), (2, 0), (3, 1)]);
+        }
+    }
+    // Thirteen trailing facts after a three-version chain leave its root resident:
+    // the exact root answer, not an abstention, at the boundary.
+    for (i, owner) in owners.iter().take(2).enumerate() {
+        for reverse in [false, true] {
+            let facts = evicted_facts(&chain(owner, 3, reverse), 13, filler_seed);
+            let id = format!("evicted-root/{i}/{reverse}/13");
+            push_targets_depth(
+                &mut cases,
+                &id,
+                &facts,
+                &owner.name,
+                &owner.values[0],
+                1,
+                3,
+                2,
+                &[INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]],
+            );
+            push_preserve(&mut cases, &id, &facts, &owner.name, &[(0, 0), (2, 0)]);
+        }
+    }
     cases
 }
 fn prepare(out: &Path, fresh: bool) -> Result<()> {
     // Fail on an existing destination: a draw is never silently overwritten.
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let mut entropy_tail: Vec<u8> = Vec::new();
     let owners: Vec<Owner> = if fresh {
         let mut entropy = [0_u8; 160];
@@ -783,7 +1189,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
                     continue;
                 }
                 seen.insert(prompt.clone(), cases.len());
-                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new(), abstain: false });
+                cases.push(Case { id: format!("{group}/{id}"), prompt, expected: None, current_record: None, target_record: None, depth: None, owner: String::new(), value: String::new(), abstain: false, history: Vec::new(), follow_up: None });
             }
         }
     }
@@ -795,6 +1201,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
             target_record: c.target_record,
             inherit: c.target_record.is_none() && !c.abstain,
             abstain: c.abstain,
+            history: c.history.clone(),
         })
         .collect();
     save(&out.join("cases.json"), &cases)?;
@@ -812,8 +1219,9 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
             });
     save(
         &out.join("receipt.json"),
-        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"abstain_targets":cases.iter().filter(|c|c.abstain).count(),"targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
+        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"abstain_targets":cases.iter().filter(|c|c.abstain).count(),"follow_up_targets":cases.iter().filter(|c|c.follow_up.is_some()).count(),"targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
     )?;
+    uor_r4_core::report_output::seal(out)?;
     Ok(())
 }
 fn atom(v: &Value) -> Option<String> {
@@ -845,20 +1253,29 @@ fn target_record<'a>(c: &Case, actual: &'a Value) -> Option<&'a Value> {
         return None;
     }
     let mut cursor = records.iter().find(|r| r["id"].as_u64() == Some(head))?;
-    for _ in 0..depth {
-        if cursor["action"] != 2
-            || cursor["conflict"] != false
-            || atom(&cursor["owner"])? != c.owner
-        {
+    for hop in 0..depth {
+        if cursor["conflict"] != false || atom(&cursor["owner"])? != c.owner {
             return None;
         }
         let previous = cursor["previous"].as_u64()?;
         if previous == 0 || previous >= cursor["id"].as_u64()? {
             return None;
         }
-        cursor = records
+        let older = records
             .iter()
             .find(|r| r["id"].as_u64() == Some(previous))?;
+        // The head link is an explicit revision. Deeper links are explicit revisions
+        // or resident same-owner, same-value, nonconflicting reassertions: the
+        // versioned chain contract, re-proven here from the actual retained records.
+        let reassertion = hop > 0
+            && cursor["action"] == 1
+            && older["conflict"] == false
+            && atom(&older["owner"])? == c.owner
+            && record_value(cursor)? == record_value(older)?;
+        if cursor["action"] != 2 && !reassertion {
+            return None;
+        }
+        cursor = older;
     }
     (cursor["id"].as_u64() == Some(root)
         && cursor["previous"] == 0
@@ -874,7 +1291,66 @@ fn abstained(actual: &Value) -> bool {
         && copy["action"] == "no_read"
         && copy["word_index"].as_u64() == Some(16)
 }
+/// A follow-up keeps the frozen parent's record: the head's immediate previous
+/// record through a one-link proof, or the live head itself, with the exact source
+/// occurrence, whatever the earlier turns answered.
+fn follow_up_selected(c: &Case, actual: &Value) -> bool {
+    let (Some(record_id), Some(head)) = (c.follow_up, c.current_record) else {
+        return false;
+    };
+    let relations = &actual["initial_relations"];
+    let (Some(records), Some(directory)) = (
+        relations["records"].as_array(),
+        relations["directory"].as_array(),
+    ) else {
+        return false;
+    };
+    let Some(record) = records.iter().find(|r| r["id"].as_u64() == Some(record_id)) else {
+        return false;
+    };
+    if atom(&record["owner"]).as_deref() != Some(c.owner.as_str()) || record["conflict"] != false {
+        return false;
+    }
+    let is_head = record_id == head;
+    if is_head {
+        if !directory.contains(&json!(head)) {
+            return false;
+        }
+    } else {
+        let Some(h) = records.iter().find(|r| r["id"].as_u64() == Some(head)) else {
+            return false;
+        };
+        if h["previous"].as_u64() != Some(record_id) || h["action"] != 2 || h["conflict"] != false {
+            return false;
+        }
+    }
+    let source = 32 + ((record_id - 1) & 15);
+    let field = &actual["first_decision"]["field"];
+    let copy = &actual["first_decision"]["word_copy"];
+    let endpoint = |d: &Value| {
+        d["source_end"] == record["value"]["end"]
+            && d["source_byte_end"] == record["value"]["byte_end"]
+    };
+    if field.is_object() {
+        let a = &field["anchor"];
+        a["relation_id"].as_u64() == Some(record_id)
+            && a["source"].as_u64() == Some(source)
+            && (if is_head {
+                a["current_revision"].is_null()
+            } else {
+                a["current_revision"].as_u64() == Some(head) && a["ancestor_depth"].is_null()
+            })
+            && endpoint(a)
+    } else {
+        copy["word_index"].as_u64() == Some(source)
+            && copy["dependency"].is_null()
+            && endpoint(copy)
+    }
+}
 fn selected(c: &Case, actual: &Value) -> bool {
+    if c.follow_up.is_some() {
+        return follow_up_selected(c, actual);
+    }
     if c.abstain {
         return abstained(actual);
     }
@@ -920,21 +1396,23 @@ fn exact(c: &Case, actual: &Value) -> bool {
         return exact_primary(c, actual);
     }
     let owner_form = format!(" {} was in {}.\n", c.owner, c.value);
+    let current_form = format!(" {} is in {}.\n", c.owner, c.value);
     let plain = c
         .expected
         .as_ref()
         .is_some_and(|e| *e == format!(" {}.\n", c.value));
     (c.expected.as_ref().is_some_and(|e| actual["text"] == *e)
-        || (plain && actual["text"] == owner_form))
+        || (plain && actual["text"] == owner_form)
+        || (plain && c.follow_up.is_some() && actual["text"] == current_form))
         && actual["eos"] == true
         && actual["initial_relations"] == actual["final_relations"]
 }
 fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let mut rows = Vec::new();
     let (mut targets, mut offered, mut exact_count) = (0, 0, 0);
     for c in cases.iter().filter(|c| c.target_record.is_some()) {
-        let actual = generate(model, &c.prompt, Control::Full, false, false)?;
+        let actual = generate(model, &c.history, &c.prompt, Control::Full, false, false)?;
         let trace = model.historical_version_trace(&c.prompt)?;
         let candidate = trace["candidates"]
             .as_array()
@@ -956,10 +1434,11 @@ fn diagnose(model: &Model, cases: &[Case], out: &Path) -> Result<()> {
         &json!({"summary":summary,"rows":rows}),
     )?;
     println!("{summary}");
+    uor_r4_core::report_output::seal(out)?;
     Ok(())
 }
 fn probe(model: &Model, out: &Path) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let has_witness =
         model.without_historical_version_intent()?.artifact_cid() != model.artifact_cid();
     let mut rows = Vec::new();
@@ -1016,7 +1495,7 @@ fn probe(model: &Model, out: &Path) -> Result<()> {
         probes.push((format!("four-versions/{style}"), format!("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi now in Amber Field. selvi now in Silver Cove. What was the initial location of selvi? {s} Answer:")));
     }
     for (id, prompt) in probes {
-        rows.push(json!({"id":id,"prompt":prompt,"actual":generate(model,&prompt,Control::Full,false,true)?,"trace":model.historical_version_trace(&prompt)?,"frozen_trace":model.historical_query_trace(&prompt)?}));
+        rows.push(json!({"id":id,"prompt":prompt,"actual":generate(model,&[],&prompt,Control::Full,false,true)?,"trace":model.historical_version_trace(&prompt)?,"frozen_trace":model.historical_query_trace(&prompt)?}));
     }
     save(
         &out.join("probe.json"),
@@ -1031,6 +1510,7 @@ fn probe(model: &Model, out: &Path) -> Result<()> {
         "{}",
         json!({"artifact":model.artifact_cid(),"rows":rows.len(),"version_witness":has_witness})
     );
+    uor_r4_core::report_output::seal(out)?;
     Ok(())
 }
 fn evaluate(
@@ -1040,7 +1520,7 @@ fn evaluate(
     out: &Path,
     controls: bool,
 ) -> Result<()> {
-    fs::create_dir(out)?;
+    uor_r4_core::report_output::claim(out)?;
     let mut rows = BufWriter::new(fs::File::create_new(out.join("rows.jsonl"))?);
     let mut written = 0usize;
     let (
@@ -1061,13 +1541,28 @@ fn evaluate(
         mut abstain_targets,
         mut abstain_exact,
         mut abstain_disabled_parent_equal,
-    ) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        mut reassertion_disabled_exact,
+        mut reassertion_disabled_parent_equal,
+        mut follow_up_targets,
+        mut follow_up_exact,
+    ) = (
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    );
     let mut by_depth: BTreeMap<u8, [usize; 2]> = BTreeMap::new();
     for c in cases {
-        let target = c.target_record.is_some() || c.abstain;
-        let actual = generate(model, &c.prompt, Control::Full, target, !target)?;
-        let reference = generate(parent, &c.prompt, Control::Full, false, !target)?;
-        let same = comparable(&actual) == comparable(&reference);
+        let target = c.target_record.is_some() || c.abstain || c.follow_up.is_some();
+        let actual = generate(model, &c.history, &c.prompt, Control::Full, target, !target)?;
+        let reference = generate(parent, &c.history, &c.prompt, Control::Full, false, !target)?;
+        // A follow-up compares text and EOS: its prior turns were answered by each
+        // model itself, so positions differ while the record answer must not.
+        let equivalent = |a: &Value, b: &Value| {
+            if c.follow_up.is_some() {
+                a["text"] == b["text"] && a["eos"] == b["eos"]
+            } else {
+                comparable(a) == comparable(b)
+            }
+        };
+        let same = equivalent(&actual, &reference);
         let selection = target && selected(c, &actual);
         let target_correct = target && exact(c, &actual) && selection;
         let primary = target && exact_primary(c, &actual) && selection;
@@ -1076,9 +1571,14 @@ fn evaluate(
             correct += usize::from(target_correct);
             primary_exact += usize::from(primary);
             selected_count += usize::from(selection);
-            let entry = by_depth.entry(c.depth.unwrap_or(0)).or_default();
-            entry[0] += 1;
-            entry[1] += usize::from(target_correct);
+            if c.follow_up.is_some() {
+                follow_up_targets += 1;
+                follow_up_exact += usize::from(target_correct);
+            } else {
+                let entry = by_depth.entry(c.depth.unwrap_or(0)).or_default();
+                entry[0] += 1;
+                entry[1] += usize::from(target_correct);
+            }
             if c.depth.is_some_and(|d| d > 1) {
                 deep_targets += 1;
             }
@@ -1098,12 +1598,13 @@ fn evaluate(
                 Control::HistoricalVersionIntentTransformDisabled,
                 Control::HistoricalVersionIntentAncestorDisabled,
                 Control::HistoricalVersionIntentAbstainDisabled,
+                Control::HistoricalVersionIntentReassertionDisabled,
             ] {
-                let result = generate(model, &c.prompt, control, false, false)?;
+                let result = generate(model, &c.history, &c.prompt, control, false, false)?;
                 let result_exact = exact(c, &result) && selected(c, &result);
                 match control {
                     Control::HistoricalVersionIntentDisabled => {
-                        disabled_equal += usize::from(comparable(&result) == comparable(&reference))
+                        disabled_equal += usize::from(equivalent(&result, &reference))
                     }
                     Control::HistoricalVersionIntentTransformDisabled => {
                         transform_exact += usize::from(result_exact)
@@ -1111,8 +1612,13 @@ fn evaluate(
                     Control::HistoricalVersionIntentAbstainDisabled => {
                         if c.abstain {
                             abstain_disabled_parent_equal +=
-                                usize::from(comparable(&result) == comparable(&reference));
+                                usize::from(equivalent(&result, &reference));
                         }
+                    }
+                    Control::HistoricalVersionIntentReassertionDisabled => {
+                        reassertion_disabled_exact += usize::from(result_exact);
+                        reassertion_disabled_parent_equal +=
+                            usize::from(equivalent(&result, &reference));
                     }
                     _ => {
                         ancestor_exact += usize::from(result_exact);
@@ -1127,23 +1633,24 @@ fn evaluate(
         }
         let scope = generate(
             model,
+            &c.history,
             &c.prompt,
             Control::HistoricalVersionIntentScopeDisabled,
             false,
             !target,
         )?;
-        let scope_same = comparable(&scope) == comparable(&reference);
+        let scope_same = equivalent(&scope, &reference);
         let scope_correct = target && exact(c, &scope) && selected(c, &scope);
         scope_exact += usize::from(scope_correct);
         scope_preserved += usize::from(!target && scope_same);
-        let row = json!({"id":c.id,"prompt":c.prompt,"expected":c.expected,"current_record":c.current_record,"target_record":c.target_record,"depth":c.depth,"owner":c.owner,"value":c.value,"actual":actual,"parent":reference,"correct":if target{Some(target_correct)}else{None},"primary_text":if target{Some(primary)}else{None},"selected":if target{Some(selection)}else{None},"parent_equal":same,"records_unchanged":actual["initial_relations"]==actual["final_relations"],"controls":interventions,"scope_disabled":{"text":scope["text"],"eos":scope["eos"],"parent_equal":scope_same,"exact_and_selected":scope_correct}});
+        let row = json!({"id":c.id,"prompt":c.prompt,"history":c.history,"follow_up":c.follow_up,"expected":c.expected,"current_record":c.current_record,"target_record":c.target_record,"depth":c.depth,"owner":c.owner,"value":c.value,"actual":actual,"parent":reference,"correct":if target{Some(target_correct)}else{None},"primary_text":if target{Some(primary)}else{None},"selected":if target{Some(selection)}else{None},"parent_equal":same,"records_unchanged":actual["initial_relations"]==actual["final_relations"],"controls":interventions,"scope_disabled":{"text":scope["text"],"eos":scope["eos"],"parent_equal":scope_same,"exact_and_selected":scope_correct}});
         serde_json::to_writer(&mut rows, &row)?;
         rows.write_all(b"\n")?;
         written += 1;
     }
     rows.flush()?;
     drop(rows);
-    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
+    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"reassertion_disabled_exact_and_selected":reassertion_disabled_exact,"reassertion_disabled_parent_equal":reassertion_disabled_parent_equal,"follow_up_targets":follow_up_targets,"follow_up_exact_and_selected":follow_up_exact,"selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
     let mut result = summary.clone();
     result["rows_file"] = json!(out.join("rows.jsonl"));
     result["rows_written"] = json!(written);
@@ -1161,22 +1668,47 @@ fn main() -> Result<()> {
         let model = Model::from_bytes(&fs::read(&a[2])?)?;
         return probe(&model, Path::new(&a[3]));
     }
+    if a.len() == 3 && a[1] == "seal" {
+        // Seal a completed report directory produced by any driver.
+        let manifest = uor_r4_core::report_output::seal(Path::new(&a[2]))?;
+        println!("{}", json!({"sealed":manifest}));
+        return Ok(());
+    }
+    if a.len() == 4 && a[1] == "promote" {
+        // The same learned witness under the versioned chain contract; no refit.
+        let bytes = fs::read(&a[2])?;
+        let model = Model::from_bytes(&bytes)?;
+        let candidate = model.with_reassertion_links()?;
+        let out = Path::new(&a[3]);
+        uor_r4_core::report_output::claim(out)?;
+        fs::write(out.join("model.json"), candidate.to_bytes()?)?;
+        save(
+            &out.join("promote.json"),
+            &json!({"schema":"uor-r4.historical-version-contract-promotion/1","source":model.artifact_cid(),"artifact":candidate.artifact_cid(),"source_bytes_blake3":blake3::hash(&bytes).to_hex().to_string(),"change":"reassertion_links=true only; router codes, dictionary, receipts and every inner parameter unchanged"}),
+        )?;
+        println!(
+            "{}",
+            json!({"source":model.artifact_cid(),"artifact":candidate.artifact_cid()})
+        );
+        uor_r4_core::report_output::seal(out)?;
+        return Ok(());
+    }
     if a.len() == 6 && a[1] == "compare" {
         // Actual outputs of this artifact against another artifact on the same prompts.
         let model = Model::from_bytes(&fs::read(&a[2])?)?;
         let other = Model::from_bytes(&fs::read(&a[3])?)?;
         let cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[4])?)?;
         let out = Path::new(&a[5]);
-        fs::create_dir(out)?;
+        uor_r4_core::report_output::claim(out)?;
         let mut rows = BufWriter::new(fs::File::create_new(out.join("rows.jsonl"))?);
         let (mut equal, mut differing) = (0, Vec::new());
         for c in &cases {
-            let mine = generate(&model, &c.prompt, Control::Full, false, true)?;
-            let theirs = generate(&other, &c.prompt, Control::Full, false, true)?;
+            let mine = generate(&model, &c.history, &c.prompt, Control::Full, false, true)?;
+            let theirs = generate(&other, &c.history, &c.prompt, Control::Full, false, true)?;
             let same = comparable(&mine) == comparable(&theirs);
             equal += usize::from(same);
             if !same {
-                differing.push(json!({"id":c.id,"abstain_target":c.abstain,"this":mine["text"],"other":theirs["text"]}));
+                differing.push(json!({"id":c.id,"abstain_target":c.abstain,"follow_up":c.follow_up,"this":mine["text"],"other":theirs["text"]}));
             }
             serde_json::to_writer(
                 &mut rows,
@@ -1191,12 +1723,13 @@ fn main() -> Result<()> {
             "{}",
             json!({"artifact":model.artifact_cid(),"other":other.artifact_cid(),"total":cases.len(),"equal":equal,"differing":differing.len()})
         );
+        uor_r4_core::report_output::seal(out)?;
         return Ok(());
     }
     if a.len() != 5
         || !["diagnose", "fit", "refit", "evaluate", "preserve"].contains(&a[1].as_str())
     {
-        return Err("usage: prepare/fresh OUT | probe MODEL OUT | diagnose MODEL CASES OUT | fit/refit MODEL TRAIN OUT | evaluate/preserve MODEL CASES OUT".into());
+        return Err("usage: prepare/fresh OUT | probe MODEL OUT | promote MODEL OUT | seal DIR | diagnose MODEL CASES OUT | fit/refit MODEL TRAIN OUT | evaluate/preserve MODEL CASES OUT | compare MODEL OTHER CASES OUT".into());
     }
     let bytes = fs::read(&a[2])?;
     let model = Model::from_bytes(&bytes)?;
@@ -1206,7 +1739,7 @@ fn main() -> Result<()> {
     let out = Path::new(&a[4]);
     if a[1] == "fit" || a[1] == "refit" {
         let docs: Vec<HistoricalVersionExample> = serde_json::from_slice(&fs::read(&a[3])?)?;
-        fs::create_dir(out)?;
+        uor_r4_core::report_output::claim(out)?;
         let config = SourceRoutingConfig {
             learned_features: 768,
             passes: 8,
@@ -1229,6 +1762,7 @@ fn main() -> Result<()> {
             o.remove("dictionary");
         }
         println!("{brief}");
+        uor_r4_core::report_output::seal(out)?;
         return Ok(());
     }
     let mut cases: Vec<Case> = serde_json::from_slice(&fs::read(&a[3])?)?;
@@ -1239,6 +1773,7 @@ fn main() -> Result<()> {
             c.depth = None;
             c.expected = None;
             c.abstain = false;
+            c.follow_up = None;
         }
     }
     if a[1] == "diagnose" {
@@ -1253,5 +1788,6 @@ fn main() -> Result<()> {
         &out.join("lineage.json"),
         &json!({"parent":parent.artifact_cid(),"artifact":model.artifact_cid(),"candidate_roundtrip":true,"parent_bytes_blake3":blake3::hash(&parent.to_bytes()?).to_hex().to_string()}),
     )?;
+    uor_r4_core::report_output::seal(out)?;
     Ok(())
 }

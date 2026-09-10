@@ -78,6 +78,9 @@ pub(super) fn initial_anchor(
             relation_id: old.id,
             current_revision: Some(v.current),
             ancestor_depth: if v.depth > 1 { Some(v.depth) } else { None },
+            // Recorded only when the proven path actually contains a reassertion
+            // link, so revision-only anchors keep their exact legacy wire form.
+            reassertion_links: v.reassertion,
             source_end: source.end,
             source_byte_end: source.byte_end,
             boundary_seen: entry.boundary?.at_seen,
@@ -130,6 +133,7 @@ pub(super) fn initial_anchor(
         relation_id: old.id,
         current_revision: Some(current_revision),
         ancestor_depth: None,
+        reassertion_links: false,
         source_end: source.end,
         source_byte_end: source.byte_end,
         boundary_seen: entry.boundary?.at_seen,
