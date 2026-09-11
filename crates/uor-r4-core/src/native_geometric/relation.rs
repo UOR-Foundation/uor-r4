@@ -695,6 +695,50 @@ pub(super) fn read_features(
     addr: &[u32; 16],
     work: &mut ValueWork,
 ) -> ([ValueFeature; RELATION_FEATURES], usize) {
+    // The inherited feature base of every later learner keeps the eight-word owner scan.
+    read_features_window(model, record, words, addr, 8, None, work)
+}
+
+/// The byte end of the latest committed fact: owner, value or span terminal of any
+/// resident record. Words at or before it are source occurrences, not request words.
+pub(super) fn committed_cutoff(state: &RelationState, work: &mut ValueWork) -> Option<u64> {
+    let mut cutoff = None;
+    for record in &state.records {
+        work.relations.record_reads = work.relations.record_reads.saturating_add(1);
+        if record.id == 0 {
+            continue;
+        }
+        for end in [
+            record.owner.byte_end,
+            record.value.byte_end,
+            record
+                .span
+                .as_ref()
+                .map_or(record.value.byte_end, |s| s.terminal.byte_end),
+        ] {
+            if cutoff.is_none_or(|prior| end > prior) {
+                cutoff = Some(end);
+            }
+        }
+    }
+    cutoff
+}
+
+/// Persistent-read features with an explicit owner-scan window. The legacy base scans
+/// the eight most recent words with no cutoff. Under the reader-request-window
+/// contract the frozen persistent reader's own choice scans up to sixteen words but
+/// only the request words after the latest committed fact, so an owner spelled inside
+/// an earlier record is never mistaken for the requested owner. Learners fitted on the
+/// eight-word base keep their exact frames.
+pub(super) fn read_features_window(
+    model: &Model,
+    record: &RelationRecord,
+    words: &LexemeState,
+    addr: &[u32; 16],
+    window: usize,
+    cutoff: Option<u64>,
+    work: &mut ValueWork,
+) -> ([ValueFeature; RELATION_FEATURES], usize) {
     let mut out = [ValueFeature::default(); RELATION_FEATURES];
     let mut n = 0;
     let mut add = |kind, a, b| {
@@ -703,7 +747,13 @@ pub(super) fn read_features(
     };
     add(0, 1, 0);
     add(1, u64::from(record.conflict), 0);
-    for q in 0..words.query_len.min(8) {
+    for q in 0..words
+        .query_len
+        .min(window.min(super::value_lexemes::WORD_QUERY))
+    {
+        if cutoff.is_some_and(|c| words.queries[q].byte_end <= c) {
+            break;
+        }
         if record.owner.matches(&words.queries[q], work) {
             let before = if q + 1 < words.query_len {
                 u64::from(addr[q + 1])
@@ -728,9 +778,10 @@ pub(super) fn read_features(
 pub(super) fn read_choice(
     model: &Model,
     values: &ValueState,
+    control: Control,
     work: &mut ValueWork,
 ) -> Option<(u8, usize)> {
-    read_choice_with_recent(model, values, false, work)
+    read_choice_with_recent(model, values, false, control, work)
 }
 
 /// The allocating diagnostic can expose current records normally deferred to
@@ -739,12 +790,19 @@ pub(super) fn read_choice_with_recent(
     model: &Model,
     values: &ValueState,
     include_recent: bool,
+    control: Control,
     work: &mut ValueWork,
 ) -> Option<(u8, usize)> {
     let h = head(model)?;
     let state = values.relations.as_ref()?;
     let words = values.lexemes.as_ref()?;
     let addr = addresses(model, &words.queries[..words.query_len], work);
+    let window = super::historical_version_intent::reader_window(model, control);
+    let cutoff = if window > 8 {
+        committed_cutoff(state, work)
+    } else {
+        None
+    };
     let mut best = None;
     let mut best_score = 0;
     let role = super::role_read::head(model)?;
@@ -765,7 +823,7 @@ pub(super) fn read_choice_with_recent(
         {
             continue;
         }
-        let (f, n) = read_features(model, record, words, &addr, work);
+        let (f, n) = read_features_window(model, record, words, &addr, window, cutoff, work);
         for (ai, action) in role.actions.iter().enumerate() {
             if action.copy
                 && (usize::from(

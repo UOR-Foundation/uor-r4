@@ -299,6 +299,9 @@ pub enum Control {
     HistoricalVersionIntentReassertionDisabled,
     /// Withhold the first hop through a same-value reassertion head (the head contract).
     HistoricalVersionIntentReassertionHeadDisabled,
+    /// Keep the witness but let the frozen persistent reader scan only the eight most
+    /// recent request words for the owner (withhold the reader-window contract).
+    HistoricalVersionIntentReaderWindowDisabled,
     /// Keep the active historical router but expose only eight query words.
     HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
@@ -419,6 +422,7 @@ impl Feature {
             | Control::HistoricalVersionIntentAbstainDisabled
             | Control::HistoricalVersionIntentReassertionDisabled
             | Control::HistoricalVersionIntentReassertionHeadDisabled
+            | Control::HistoricalVersionIntentReaderWindowDisabled
             | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled

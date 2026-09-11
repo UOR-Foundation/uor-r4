@@ -41,6 +41,20 @@ fn sentence(plain: bool, owner: &str, verb: &str, value: &str) -> Vec<String> {
     }
 }
 
+/// Accepted complete answers for a current request that carries the explanatory
+/// instruction (`Explain in a sentence.`). With an explicit owner-first instruction only
+/// the present-tense owner sentence is accepted. Without it the inherited
+/// `VALUE is the place.` form is a legitimate declared form and the owner sentence
+/// remains acceptable; the bare value is not an explanation.
+pub fn accepted_explanatory(owner_first: bool, owner: &str, value: &str) -> Vec<String> {
+    let owner_form = format!(" {owner} is in {value}.\n");
+    if owner_first {
+        vec![owner_form]
+    } else {
+        vec![format!(" {value} is the place.\n"), owner_form]
+    }
+}
+
 /// Membership in the frozen list; nothing else.
 pub fn accepts(accepted: &[String], text: &str) -> bool {
     accepted.iter().any(|a| a == text)
@@ -49,6 +63,25 @@ pub fn accepts(accepted: &[String], text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn answer_oracle_explanatory_owner_first_requires_present_tense_owner_sentence() {
+        let both = accepted_explanatory(true, "pemru", "amber quay");
+        assert_eq!(both, vec![" pemru is in amber quay.\n".to_owned()]);
+        assert!(!accepts(&both, " amber quay is the place.\n"));
+        assert!(!accepts(&both, " pemru was in amber quay.\n"));
+        assert!(!accepts(&both, " quay holds pemru is the place.\n"));
+        assert!(!accepts(&both, " amber quay.\n"));
+    }
+
+    #[test]
+    fn answer_oracle_explanatory_only_accepts_inherited_place_form_or_owner_sentence() {
+        let explain = accepted_explanatory(false, "pemru", "amber quay");
+        assert!(accepts(&explain, " amber quay is the place.\n"));
+        assert!(accepts(&explain, " pemru is in amber quay.\n"));
+        assert!(!accepts(&explain, " amber quay.\n"));
+        assert!(!accepts(&explain, " pemru was in amber quay.\n"));
+    }
 
     #[test]
     fn answer_oracle_previous_request_rejects_present_tense_old_value() {

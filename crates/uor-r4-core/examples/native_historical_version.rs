@@ -165,12 +165,19 @@ fn default_true() -> bool {
     true
 }
 /// Disjoint typed partition of the targets: initial + previous + current + abstain.
+/// A single-turn or multi-turn current request with an exact live-head label: the
+/// answer must come from that record, complete, in the present tense and in the
+/// declared form. Never a disguised initial or previous target.
+fn is_current_target(c: &Case) -> bool {
+    c.target_record.is_none() && c.follow_up.is_none() && !c.abstain && c.current_record.is_some()
+}
+/// Every exact target row: historical, abstention, follow-up or typed current.
+fn is_target(c: &Case) -> bool {
+    c.target_record.is_some() || c.abstain || c.follow_up.is_some() || is_current_target(c)
+}
 fn partition(cases: &[Case]) -> Value {
     let mut counts = [0usize; 4];
-    for c in cases
-        .iter()
-        .filter(|c| c.target_record.is_some() || c.abstain || c.follow_up.is_some())
-    {
+    for c in cases.iter().filter(|c| is_target(c)) {
         counts[match intent(c) {
             Intent::Initial => 0,
             Intent::Previous => 1,
@@ -190,6 +197,8 @@ fn intent(c: &Case) -> Intent {
         } else {
             Intent::Previous
         }
+    } else if is_current_target(c) {
+        Intent::Current
     } else if !c.target_root {
         Intent::Previous
     } else {
@@ -1424,53 +1433,112 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                 push_follow_ups(&mut cases, &id, &facts, o, v0, v0, previous_id, head, true);
             }
         }
-        // The retained matched histories repeat a fact in a later turn and then ask a
-        // current question with the explanatory phrasing; the live head, not the
-        // root, must remain the source. Single-turn and actual two-turn forms, with
-        // and without a competing owner, in both fact orders.
-        let explain = [
-            format!("Where is {o}? Explain in a sentence. Answer:"),
-            format!("Explain in a sentence. Where is {o}? Answer:"),
-            format!("Where is {o}? Explain in a sentence. Name the owner first. Answer:"),
-        ];
-        let openers = [
+        // Current requests on identical-assertion chains, typed independently of the
+        // frozen parent: the live head is the source, the value is complete, the tense
+        // is present and the declared form is required. Plain, record and reverse
+        // layouts, with and without the repeat and a competing owner's record, as a
+        // single prompt and as an actual second turn after `Where is {o}? Answer:`;
+        // plain, owner-first, explanatory and both instructions in both orders. An
+        // explicit owner-first instruction requires the owner sentence; an explanatory
+        // request without it accepts the inherited `VALUE is the place.` form or the
+        // owner sentence. Rows the frozen path cannot answer stay in the denominator.
+        let layouts = [
+            ("plain", format!("{o} in {v0}."), format!("{p} in {w0}.")),
             (
-                format!("{o} in {v0}. {p} in {w0}."),
-                format!("{o} in {v0}."),
+                "record",
+                format!("Record: {o} in {v0}."),
+                format!("Record: {p} in {w0}."),
             ),
             (
-                format!("Record: {v0} holds {o}. Record: {w0} holds {p}."),
+                "reverse",
                 format!("Record: {v0} holds {o}."),
+                format!("Record: {w0} holds {p}."),
             ),
-            (format!("{o} in {v0}."), format!("{o} in {v0}.")),
         ];
-        for (k, (first, repeat)) in openers.iter().enumerate() {
-            for (q, question) in explain.iter().enumerate() {
-                let inherit = |id: String, prompt: String, history: Vec<String>| Case {
-                    id,
-                    prompt,
-                    expected: None,
-                    current_record: None,
-                    target_record: None,
-                    depth: None,
-                    owner: o.clone(),
-                    value: String::new(),
-                    abstain: false,
-                    history,
-                    follow_up: None,
-                    accepted: Vec::new(),
-                    target_root: true,
-                };
-                cases.push(inherit(
-                    format!("same-only-explain/{i}/{k}/{q}/single"),
-                    format!("{first} {repeat} {question}"),
-                    Vec::new(),
-                ));
-                cases.push(inherit(
-                    format!("same-only-explain/{i}/{k}/{q}/turn"),
-                    format!("{repeat} {question}"),
-                    vec![format!("{first} Where is {o}? Answer:")],
-                ));
+        let requests = [
+            ("plain", format!("Where is {o}? Answer:")),
+            (
+                "owner",
+                format!("Where is {o}? Name the owner first. Answer:"),
+            ),
+            (
+                "explain",
+                format!("Where is {o}? Explain in a sentence. Answer:"),
+            ),
+            (
+                "both",
+                format!("Where is {o}? Explain in a sentence. Name the owner first. Answer:"),
+            ),
+            (
+                "both-reversed",
+                format!("Where is {o}? Name the owner first. Explain in a sentence. Answer:"),
+            ),
+        ];
+        for (layout, fact, other) in &layouts {
+            for repeat in [false, true] {
+                for competitor in [false, true] {
+                    let first = if competitor {
+                        format!("{fact} {other}")
+                    } else {
+                        fact.clone()
+                    };
+                    let facts = if repeat {
+                        format!("{first} {fact}")
+                    } else {
+                        first.clone()
+                    };
+                    let head = 1 + u64::from(repeat) * (1 + u64::from(competitor));
+                    for (request, question) in &requests {
+                        let (expected, accepted) = match *request {
+                            "plain" => (
+                                format!(" {v0}.\n"),
+                                answer_oracle::accepted(Intent::Current, true, &o, &v0),
+                            ),
+                            "owner" => (
+                                format!(" {o} is in {v0}.\n"),
+                                answer_oracle::accepted(Intent::Current, false, &o, &v0),
+                            ),
+                            "explain" => (
+                                format!(" {v0} is the place.\n"),
+                                answer_oracle::accepted_explanatory(false, &o, &v0),
+                            ),
+                            _ => (
+                                format!(" {o} is in {v0}.\n"),
+                                answer_oracle::accepted_explanatory(true, &o, &v0),
+                            ),
+                        };
+                        let current = |turn: &str, prompt: String, history: Vec<String>| Case {
+                            id: format!(
+                                "current-form/{i}/{layout}/{}/{}/{request}/{turn}",
+                                if repeat { "repeat" } else { "once" },
+                                if competitor { "competitor" } else { "alone" }
+                            ),
+                            prompt,
+                            expected: Some(expected.clone()),
+                            current_record: Some(head),
+                            target_record: None,
+                            depth: None,
+                            owner: o.clone(),
+                            value: v0.clone(),
+                            abstain: false,
+                            history,
+                            follow_up: None,
+                            accepted: accepted.clone(),
+                            target_root: true,
+                        };
+                        cases.push(current("single", format!("{facts} {question}"), Vec::new()));
+                        let second = if repeat {
+                            format!("{fact} {question}")
+                        } else {
+                            question.clone()
+                        };
+                        cases.push(current(
+                            "turn",
+                            second,
+                            vec![format!("{first} Where is {o}? Answer:")],
+                        ));
+                    }
+                }
             }
         }
         // Boundary for the two-record chain: fourteen trailing facts keep both records
@@ -1800,6 +1868,9 @@ fn selected(c: &Case, actual: &Value) -> bool {
     if c.abstain {
         return abstained(actual);
     }
+    if is_current_target(c) {
+        return current_selected(c, actual);
+    }
     let Some(record) = target_record(c, actual) else {
         return false;
     };
@@ -1828,6 +1899,65 @@ fn selected(c: &Case, actual: &Value) -> bool {
         copy["word_index"].as_u64() == Some(source)
             && copy["dependency"].is_null()
             && endpoint(copy)
+    }
+}
+/// A typed current target is selected only from the committed live-head record's own
+/// occurrence: the head is resident, nonconflicting, owned by the named owner with the
+/// labeled value, and the first decision reads at that record's exact value endpoint,
+/// either through the committed relation source or through the recent capture of the
+/// same occurrence (the frozen recent-value law), as a field anchor without any
+/// historical proof or as a dependency-free copy. A copy of a different occurrence of
+/// the same spelling (an earlier record, the question, or the model's own prior answer)
+/// is text-correct but not selected. Whether the read went through the committed
+/// relation source is reported separately (`current_relation_source_exact_and_selected`).
+fn current_head_record<'a>(c: &Case, actual: &'a Value) -> Option<&'a Value> {
+    let head = c.current_record?;
+    let relations = &actual["initial_relations"];
+    let records = relations["records"].as_array()?;
+    let directory = relations["directory"].as_array()?;
+    if !directory.contains(&json!(head)) {
+        return None;
+    }
+    let record = records.iter().find(|r| r["id"].as_u64() == Some(head))?;
+    (record["conflict"] == false
+        && atom(&record["owner"]).as_deref() == Some(c.owner.as_str())
+        && record_value(record).as_deref() == Some(c.value.as_str()))
+    .then_some(record)
+}
+fn current_selected(c: &Case, actual: &Value) -> bool {
+    let (Some(head), Some(record)) = (c.current_record, current_head_record(c, actual)) else {
+        return false;
+    };
+    let field = &actual["first_decision"]["field"];
+    let copy = &actual["first_decision"]["word_copy"];
+    let endpoint = |d: &Value| {
+        d["source_end"] == record["value"]["end"]
+            && d["source_byte_end"] == record["value"]["byte_end"]
+    };
+    if field.is_object() {
+        let a = &field["anchor"];
+        a["relation_id"].as_u64() == Some(head)
+            && a["current_revision"].is_null()
+            && a["ancestor_depth"].is_null()
+            && endpoint(a)
+    } else {
+        matches!(copy["action"].as_str(), Some("prepare" | "read"))
+            && copy["dependency"].is_null()
+            && endpoint(copy)
+    }
+}
+/// The selected current read went through the committed relation source itself.
+fn current_relation_source(c: &Case, actual: &Value) -> bool {
+    let Some(head) = c.current_record else {
+        return false;
+    };
+    let source = 32 + ((head - 1) & 15);
+    let field = &actual["first_decision"]["field"];
+    let copy = &actual["first_decision"]["word_copy"];
+    if field.is_object() {
+        field["anchor"]["source"].as_u64() == Some(source)
+    } else {
+        copy["word_index"].as_u64() == Some(source)
     }
 }
 /// Exact authored text. A plain-style request also accepts the frozen emitter's
@@ -1993,8 +2123,15 @@ fn evaluate(
     );
     let mut by_depth: BTreeMap<u8, [usize; 2]> = BTreeMap::new();
     let mut by_intent: BTreeMap<&str, [usize; 2]> = BTreeMap::new();
+    let (
+        mut window_disabled_exact,
+        mut window_disabled_parent_equal,
+        mut current_targets,
+        mut current_exact,
+    ) = (0, 0, 0, 0);
+    let mut current_relation_source_exact = 0;
     for c in cases {
-        let target = c.target_record.is_some() || c.abstain || c.follow_up.is_some();
+        let target = is_target(c);
         let actual = generate(model, &c.history, &c.prompt, Control::Full, target, !target)?;
         let reference = generate(parent, &c.history, &c.prompt, Control::Full, false, !target)?;
         // A follow-up compares text and EOS: its prior turns were answered by each
@@ -2018,6 +2155,12 @@ fn evaluate(
             if !c.target_root && c.target_record.is_some() {
                 previous_targets += 1;
                 previous_exact += usize::from(target_correct);
+            }
+            if is_current_target(c) {
+                current_targets += 1;
+                current_exact += usize::from(target_correct);
+                current_relation_source_exact +=
+                    usize::from(target_correct && current_relation_source(c, &actual));
             }
             let kind = by_intent
                 .entry(match intent(c) {
@@ -2058,6 +2201,7 @@ fn evaluate(
                 Control::HistoricalVersionIntentAbstainDisabled,
                 Control::HistoricalVersionIntentReassertionDisabled,
                 Control::HistoricalVersionIntentReassertionHeadDisabled,
+                Control::HistoricalVersionIntentReaderWindowDisabled,
             ] {
                 let result = generate(model, &c.history, &c.prompt, control, false, false)?;
                 let result_exact = exact(c, &result) && selected(c, &result);
@@ -2082,6 +2226,11 @@ fn evaluate(
                     Control::HistoricalVersionIntentReassertionHeadDisabled => {
                         head_disabled_exact += usize::from(result_exact);
                         head_disabled_parent_equal += usize::from(equivalent(&result, &reference));
+                    }
+                    Control::HistoricalVersionIntentReaderWindowDisabled => {
+                        window_disabled_exact += usize::from(result_exact);
+                        window_disabled_parent_equal +=
+                            usize::from(equivalent(&result, &reference));
                     }
                     _ => {
                         ancestor_exact += usize::from(result_exact);
@@ -2113,7 +2262,7 @@ fn evaluate(
     }
     rows.flush()?;
     drop(rows);
-    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"reassertion_disabled_exact_and_selected":reassertion_disabled_exact,"reassertion_disabled_parent_equal":reassertion_disabled_parent_equal,"follow_up_targets":follow_up_targets,"follow_up_exact_and_selected":follow_up_exact,"previous_targets":previous_targets,"previous_exact_and_selected":previous_exact,"head_disabled_exact_and_selected":head_disabled_exact,"head_disabled_parent_equal":head_disabled_parent_equal,"targets_by_intent":by_intent.iter().map(|(k,[t,c])| json!({"intent":k,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"count_scope":"targets_by_intent is the disjoint typed partition; follow_up_targets and previous_targets are cross-cutting categories that overlap it","selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
+    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"reassertion_disabled_exact_and_selected":reassertion_disabled_exact,"reassertion_disabled_parent_equal":reassertion_disabled_parent_equal,"follow_up_targets":follow_up_targets,"follow_up_exact_and_selected":follow_up_exact,"previous_targets":previous_targets,"previous_exact_and_selected":previous_exact,"head_disabled_exact_and_selected":head_disabled_exact,"head_disabled_parent_equal":head_disabled_parent_equal,"window_disabled_exact_and_selected":window_disabled_exact,"window_disabled_parent_equal":window_disabled_parent_equal,"current_targets":current_targets,"current_exact_and_selected":current_exact,"current_relation_source_exact_and_selected":current_relation_source_exact,"current_selection_rule":"a current target is selected at the live head record's own value endpoint through the committed relation source or the recent capture of that same occurrence; reads of another occurrence of the same spelling are not selected","targets_by_intent":by_intent.iter().map(|(k,[t,c])| json!({"intent":k,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"count_scope":"targets_by_intent is the disjoint typed partition; follow_up_targets and previous_targets are cross-cutting categories that overlap it","selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
     let mut result = summary.clone();
     result["rows_file"] = json!(out.join("rows.jsonl"));
     result["rows_written"] = json!(written);
@@ -2177,6 +2326,25 @@ fn main() -> Result<()> {
         // Seal a completed report directory produced by any driver.
         let manifest = uor_r4_core::report_output::seal(Path::new(&a[2]))?;
         println!("{}", json!({"sealed":manifest}));
+        return Ok(());
+    }
+    if a.len() == 4 && a[1] == "promote-window" {
+        // The same learned witness under the reader-window contract; no refit.
+        let out = Path::new(&a[3]);
+        uor_r4_core::report_output::claim(out)?;
+        let bytes = fs::read(&a[2])?;
+        let model = Model::from_bytes(&bytes)?;
+        let candidate = model.with_reader_window()?;
+        fs::write(out.join("model.json"), candidate.to_bytes()?)?;
+        save(
+            &out.join("promote.json"),
+            &json!({"schema":"uor-r4.historical-version-contract-promotion/1","contract":"reader_request_window","source":model.artifact_cid(),"artifact":candidate.artifact_cid(),"source_bytes_blake3":blake3::hash(&bytes).to_hex().to_string(),"parent":candidate.without_historical_version_intent()?.artifact_cid(),"refit":false}),
+        )?;
+        println!(
+            "{}",
+            json!({"source":model.artifact_cid(),"artifact":candidate.artifact_cid()})
+        );
+        uor_r4_core::report_output::seal(out)?;
         return Ok(());
     }
     if a.len() == 4 && a[1] == "promote-heads" {

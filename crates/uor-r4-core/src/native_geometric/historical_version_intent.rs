@@ -61,6 +61,15 @@ pub(super) struct HistoricalVersionIntent {
     /// through that hop carry their own chain classes. Absent in legacy artifacts.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reassertion_heads: bool,
+    /// Reader-request-window contract: the frozen persistent relation reader scans
+    /// the request words after the latest committed fact, up to the sixteen-word
+    /// view, for the named owner instead of the eight most recent words of any kind,
+    /// so a current request whose instructions follow the question still reaches its
+    /// committed record while an owner spelled inside an earlier record is never
+    /// taken for the requested owner. The inherited eight-word feature base of every
+    /// later learner is unchanged. Absent in legacy artifacts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reader_request_window: bool,
 }
 
 /// Structural candidate classes exposed to the learned selector. They describe a
@@ -297,6 +306,28 @@ pub(super) fn reassertion_links(model: &Model, control: Control) -> bool {
 
 /// Whether the head contract (first hop through a same-value reassertion head) is
 /// active for this model under `control`.
+/// Owner-scan window of the frozen persistent relation reader under `control`.
+pub(super) fn reader_window(model: &Model, control: Control) -> usize {
+    reader_window_for(
+        model
+            .historical_version_intent
+            .as_ref()
+            .is_some_and(|b| b.reader_request_window),
+        control,
+    )
+}
+
+fn reader_window_for(active: bool, control: Control) -> usize {
+    if active
+        && control != Control::HistoricalVersionIntentReaderWindowDisabled
+        && control != Control::HistoricalVersionIntentDisabled
+    {
+        16
+    } else {
+        8
+    }
+}
+
 pub(super) fn reassertion_heads(model: &Model, control: Control) -> bool {
     model
         .historical_version_intent
@@ -799,6 +830,26 @@ impl Model {
 
     /// The same learned witness under the head contract as well: a diagnostic
     /// candidate showing whether the learned codes already cover head-hop classes.
+    /// The same learned witness under the reader-window contract: no parameter,
+    /// dictionary or receipt changes, only the contract flag and the identity it
+    /// binds. A repair candidate that decides whether a refit is needed at all.
+    pub fn with_reader_window(&self) -> Result<Model> {
+        let mut model = self.clone();
+        let witness = model
+            .historical_version_intent
+            .as_mut()
+            .ok_or_else(|| Error("historical version contract requires a witness".into()))?;
+        if witness.reader_request_window {
+            return Err(Error(
+                "historical version reader-request-window contract already set".into(),
+            ));
+        }
+        witness.reader_request_window = true;
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
+    }
+
     pub fn with_reassertion_heads(&self) -> Result<Model> {
         let mut model = self.clone();
         let witness = model
@@ -1180,6 +1231,7 @@ impl Model {
             abstention: true,
             reassertion_links: true,
             reassertion_heads: true,
+            reader_request_window: true,
         });
         model.refresh_identity()?;
         model.validate()?;
@@ -1197,6 +1249,28 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn historical_version_reader_window_is_sixteen_only_under_the_active_contract() {
+        use super::super::Control;
+        assert_eq!(super::reader_window_for(true, Control::Full), 16);
+        assert_eq!(
+            super::reader_window_for(
+                true,
+                Control::HistoricalVersionIntentReassertionHeadDisabled
+            ),
+            16
+        );
+        assert_eq!(
+            super::reader_window_for(true, Control::HistoricalVersionIntentReaderWindowDisabled),
+            8
+        );
+        assert_eq!(
+            super::reader_window_for(true, Control::HistoricalVersionIntentDisabled),
+            8
+        );
+        assert_eq!(super::reader_window_for(false, Control::Full), 8);
+    }
+
     use super::*;
     fn word(text: &str) -> WordCopyAddress {
         let mut w = WordCopyAddress {
@@ -1335,6 +1409,7 @@ mod tests {
             abstention: false,
             reassertion_links: false,
             reassertion_heads: false,
+            reader_request_window: false,
         };
         let bytes = serde_json::to_vec(&witness).unwrap();
         let legacy = serde_json::to_value(&witness).unwrap();

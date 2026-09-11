@@ -4146,6 +4146,11 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
         // The smallest repeated-head chain: previous is record 1 through the head hop.
         ("Record: selvi in Dusk Ridge. selvi in Dusk Ridge.", "selvi", "What was the previous location of selvi?", " Dusk Ridge.\n", 1, 2, 1),
         ("Record: selvi in Dusk Ridge. selvi in Dusk Ridge.", "selvi", "What was the initial location of selvi? Name the owner first.", " selvi was in Dusk Ridge.\n", 1, 2, 1),
+        // Reader-window contract: a current request whose two instructions follow the
+        // question reads the live head (root == head, depth 0) through the owner-first
+        // field path on a reverse-form record.
+        ("Record: amber quay holds pemru. Record: amber quay holds pemru.", "pemru", "Where is pemru? Explain in a sentence. Name the owner first.", " pemru is in amber quay.\n", 2, 2, 0),
+        ("Record: amber quay holds pemru.", "pemru", "Where is pemru? Name the owner first. Explain in a sentence.", " pemru is in amber quay.\n", 1, 1, 0),
     ];
     for (facts, owner, request, target, root, head, depth) in cases {
         let prompt = format!("{facts} {request} Answer:");
@@ -4179,10 +4184,19 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
             (0, 0)
         } else {
             let selected_record = records.iter().find(|r| r["id"] == root).unwrap();
-            assert_eq!(
-                selected_record["previous"],
-                if depth == 1 && root != 1 { root - 1 } else { 0 }
-            );
+            if root != head {
+                assert_eq!(
+                    selected_record["previous"],
+                    if depth == 1 && root != 1 { root - 1 } else { 0 }
+                );
+            } else {
+                // A current target: the live head itself, resident in the directory.
+                assert!(relations["directory"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&serde_json::json!(head)));
+                assert_eq!(depth, 0);
+            }
             (
                 selected_record["value"]["end"].as_u64().unwrap(),
                 selected_record["value"]["byte_end"].as_u64().unwrap(),
@@ -4213,7 +4227,7 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
                 }) || field.is_some_and(|d| {
                     d.field != 0
                         && d.anchor.relation_id == root
-                        && d.anchor.current_revision == Some(head)
+                        && d.anchor.current_revision == (root != head).then_some(head)
                         && d.anchor.ancestor_depth == (depth > 1).then_some(depth)
                         && d.anchor.source_end == endpoint
                         && d.anchor.source_byte_end == byte_endpoint
