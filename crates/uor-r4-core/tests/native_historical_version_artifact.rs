@@ -67,6 +67,34 @@ fn raw_sequence(
     turns
 }
 
+/// Like `raw_sequence`, but the frozen parent may legitimately fail to terminate on a
+/// prompt the contract repairs; termination is returned, not required.
+fn bounded_sequence(
+    model: &Model,
+    prompt: &str,
+    control: Control,
+) -> (Vec<u32>, bool, Value, Value) {
+    let mut s = model.session(control).unwrap();
+    s.observe(model, BOS).unwrap();
+    for t in model.encode(prompt).unwrap() {
+        s.observe(model, t).unwrap();
+    }
+    s.begin_response(model).unwrap();
+    let initial = comparable(state(&s));
+    let mut out = Vec::new();
+    let mut eos = false;
+    for _ in 0..96 {
+        let t = s.predict(model).unwrap().token;
+        s.observe(model, t).unwrap();
+        out.push(t);
+        if t == EOS {
+            eos = true;
+            break;
+        }
+    }
+    (out, eos, initial, comparable(state(&s)))
+}
+
 struct ExpectedField<'a> {
     record: u64,
     owner: &'a str,
@@ -619,6 +647,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
     drop(changed);
     let versioned = wire["historical_version_intent"]["reassertion_links"] == true;
     let head_contract = wire["historical_version_intent"]["reassertion_heads"] == true;
+    let reader_window = wire["historical_version_intent"]["reader_request_window"] == true;
     drop(wire);
     drop(bytes);
 
@@ -1195,5 +1224,105 @@ fn native_historical_version_actual_checkpoint_and_identity() {
         }
         assert_eq!(head_sequences, 8);
     }
-    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; head_sequences={head_sequences}; versioned_chain_contract={versioned}; head_contract={head_contract}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences + head_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 } + head_sequences * 4);
+    // Reader-window contract: a current request whose instructions follow the question
+    // (twelve request words, the owner beyond the eighth) must still read the committed
+    // live head through the owner-first field path: complete value, present tense,
+    // exact record source and EOS. Withholding the window, like removing the witness,
+    // must reproduce the frozen parent exactly; the explanatory request without the
+    // owner-first instruction keeps its inherited value-first form.
+    let mut window_sequences = 0;
+    if reader_window {
+        assert!(
+            head_contract,
+            "the reader-window contract builds on the head contract"
+        );
+        // (label, first-turn facts, repeated fact or empty, owner, value, live head id,
+        //  whether the frozen parent already emits the exact owner sentence through a
+        //  query-occurrence copy on this layout: forward layouts do, reverse layouts do not)
+        for (label, first, repeat, owner, value, head_id, parent_text_correct) in [
+            ("reverse-repeat", "Record: amber quay holds pemru. Record: amber quay holds pemru.", "Record: amber quay holds pemru.", "pemru", "amber quay", 2, false),
+            ("reverse-once", "Record: amber quay holds pemru.", "", "pemru", "amber quay", 1, false),
+            ("reverse-competitor", "Record: Dusk Ridge holds selvi. Record: moss dale holds tilva. Record: Dusk Ridge holds selvi.", "Record: Dusk Ridge holds selvi.", "selvi", "Dusk Ridge", 3, false),
+            ("record-repeat", "Record: pemru in amber quay. Record: pemru in amber quay.", "Record: pemru in amber quay.", "pemru", "amber quay", 2, true),
+        ] {
+            for question in [
+                "Explain in a sentence. Name the owner first.",
+                "Name the owner first. Explain in a sentence.",
+            ] {
+                let prompt = format!("{first} Where is {owner}? {question} Answer:");
+                let expected = format!(" {owner} is in {value}.\n");
+                // The frozen parent's own answer on this prompt (it may not terminate);
+                // removing the witness or withholding the window must reproduce it exactly.
+                let parent_only = bounded_sequence(&parent, &prompt, Control::Full);
+                assert_eq!(
+                    bounded_sequence(&model, &prompt, Control::HistoricalVersionIntentDisabled),
+                    parent_only,
+                    "disabled outer witness must preserve parent output: {label}"
+                );
+                assert_eq!(
+                    bounded_sequence(&model, &prompt, Control::HistoricalVersionIntentReaderWindowDisabled),
+                    parent_only,
+                    "withholding the reader window must return the parent's own answer: {label}"
+                );
+                if parent_text_correct {
+                    assert_eq!(
+                        model.decode(&parent_only.0).unwrap(),
+                        expected.as_bytes(),
+                        "the frozen parent already emits the owner sentence on a forward layout: {label}"
+                    );
+                } else {
+                    assert_ne!(
+                        model.decode(&parent_only.0).unwrap(),
+                        expected.as_bytes(),
+                        "the frozen parent must not already answer the owner sentence: {label}"
+                    );
+                }
+                println!(
+                    "historical-version reader-window {label}; parent answer {:?} terminated={}",
+                    String::from_utf8_lossy(&model.decode(&parent_only.0).unwrap()),
+                    parent_only.1
+                );
+                let field = || ExpectedField {
+                    record: head_id,
+                    owner,
+                    value,
+                    current_proof: None,
+                    depth: None,
+                    reassertion_links: false,
+                    reassertion_head: false,
+                };
+                let mut s = model.session(Control::Full).unwrap();
+                s.observe(&model, BOS).unwrap();
+                turn(&model, &mut s, &prompt, &expected, Some(field()), &mut inputs, &mut outputs, &mut proof_checks);
+                // The explanatory request alone keeps the inherited value-first form.
+                let explain = format!("{first} Where is {owner}? Explain in a sentence. Answer:");
+                assert_eq!(
+                    bounded_sequence(&model, &explain, Control::Full),
+                    bounded_sequence(&parent, &explain, Control::Full),
+                    "explanatory request without owner-first must keep the parent's form: {label}"
+                );
+                // An actual second turn: the first turn is answered by the model itself,
+                // then the fact is repeated (or not) and the same request follows.
+                let mut s = model.session(Control::Full).unwrap();
+                s.observe(&model, BOS).unwrap();
+                let (opening, first_answer) = if repeat.is_empty() {
+                    (first.to_owned(), format!(" {value}.\n"))
+                } else {
+                    let opening = first.strip_suffix(repeat).unwrap().trim_end().to_owned();
+                    (opening, format!(" {value}.\n"))
+                };
+                turn(&model, &mut s, &format!("{opening} Where is {owner}? Answer:"), &first_answer, None, &mut inputs, &mut outputs, &mut proof_checks);
+                let second = if repeat.is_empty() {
+                    format!("Where is {owner}? {question} Answer:")
+                } else {
+                    format!("{repeat} Where is {owner}? {question} Answer:")
+                };
+                turn(&model, &mut s, &second, &expected, Some(field()), &mut inputs, &mut outputs, &mut proof_checks);
+                window_sequences += 1;
+                println!("historical-version reader-window {label}; owner={owner}; {question}; head={head_id}; single and second-turn owner sentences from the live head");
+            }
+        }
+        assert_eq!(window_sequences, 8);
+    }
+    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; head_sequences={head_sequences}; window_sequences={window_sequences}; versioned_chain_contract={versioned}; head_contract={head_contract}; reader_window_contract={reader_window}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences + head_sequences + window_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 } + head_sequences * 4 + window_sequences * 2);
 }

@@ -187,8 +187,13 @@ impl Model {
             .is_some()
             {
                 Some("dependent")
-            } else if super::relation::read_choice(self, values, &mut ValueWork::default())
-                .is_some()
+            } else if super::relation::read_choice(
+                self,
+                values,
+                super::Control::Full,
+                &mut ValueWork::default(),
+            )
+            .is_some()
             {
                 Some("persistent")
             } else {

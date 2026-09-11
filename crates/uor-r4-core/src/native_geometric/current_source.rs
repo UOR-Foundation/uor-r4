@@ -172,8 +172,9 @@ pub(super) fn hints(
 /// Offline target from the frozen learned persistent reader, allowing recent values.
 fn current_target(model: &Model, values: &ValueState) -> Result<(u8, usize)> {
     let mut work = ValueWork::default();
-    let choice = super::relation::read_choice_with_recent(model, values, true, &mut work)
-        .ok_or_else(|| Error("current revision frozen read has no positive choice".into()))?;
+    let choice =
+        super::relation::read_choice_with_recent(model, values, true, Control::Full, &mut work)
+            .ok_or_else(|| Error("current revision frozen read has no positive choice".into()))?;
     if choice.0 < super::relation::RELATION_SOURCE {
         return Err(Error("current revision frozen read abstains".into()));
     }
@@ -438,8 +439,13 @@ impl Model {
             .is_some()
             {
                 Some("dependent")
-            } else if super::relation::read_choice(self, values, &mut ValueWork::default())
-                .is_some()
+            } else if super::relation::read_choice(
+                self,
+                values,
+                Control::Full,
+                &mut ValueWork::default(),
+            )
+            .is_some()
             {
                 Some("persistent")
             } else {

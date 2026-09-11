@@ -332,7 +332,14 @@ impl Model {
                 dependent += 1;
                 continue;
             }
-            if super::relation::read_choice(self, values, &mut ValueWork::default()).is_some() {
+            if super::relation::read_choice(
+                self,
+                values,
+                super::Control::Full,
+                &mut ValueWork::default(),
+            )
+            .is_some()
+            {
                 persistent += 1;
                 continue;
             }
@@ -875,9 +882,19 @@ impl Model {
             Control::Full,
             &mut WordCopyWork::default(),
         );
-        let persistent = super::relation::read_choice(self, values, &mut ValueWork::default());
-        let including_recent =
-            super::relation::read_choice_with_recent(self, values, true, &mut ValueWork::default());
+        let persistent = super::relation::read_choice(
+            self,
+            values,
+            super::Control::Full,
+            &mut ValueWork::default(),
+        );
+        let including_recent = super::relation::read_choice_with_recent(
+            self,
+            values,
+            true,
+            super::Control::Full,
+            &mut ValueWork::default(),
+        );
         let mut relation_candidates = Vec::new();
         if let (Some(relations), Some(head)) = (&values.relations, super::relation::head(self)) {
             let mut work = ValueWork::default();

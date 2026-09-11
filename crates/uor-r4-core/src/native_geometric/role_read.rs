@@ -347,6 +347,7 @@ pub(super) fn offer(
         model,
         values,
         control == Control::CurrentRelationReadAll,
+        control,
         &mut work.persistent_read,
     ) {
         choice

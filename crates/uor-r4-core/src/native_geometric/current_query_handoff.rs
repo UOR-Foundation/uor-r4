@@ -257,10 +257,16 @@ fn features(
 fn candidate(
     model: &Model,
     values: &ValueState,
+    control: Control,
     work: &mut WordCopyWork,
 ) -> Option<(u8, usize, u64)> {
-    let (source, action) =
-        super::relation::read_choice_with_recent(model, values, true, &mut work.persistent_read)?;
+    let (source, action) = super::relation::read_choice_with_recent(
+        model,
+        values,
+        true,
+        control,
+        &mut work.persistent_read,
+    )?;
     let index = source.checked_sub(super::relation::RELATION_SOURCE)?;
     let state = values.relations.as_ref()?;
     let record = state.records.get(usize::from(index))?;
@@ -295,7 +301,7 @@ pub(super) fn choose(
     }
     let block = model.current_query_handoff.as_ref()?;
     work.routing.predictions += 1;
-    let (source, action, id) = candidate(model, values, work)?;
+    let (source, action, id) = candidate(model, values, control, work)?;
     work.routing.sources_examined += 1;
     let (defer, _) = historical_read::action_indices(model)?;
     let (words, _) = scoped_words(
@@ -362,7 +368,7 @@ impl Model {
         let historical =
             historical_read::choose(self, values, Control::Full, &mut Default::default());
         let eligible = super::word_copy_runtime::eligible(self, entry, values, Control::Full);
-        let offered = candidate(self, values, &mut Default::default());
+        let offered = candidate(self, values, Control::Full, &mut Default::default());
         let raw_words = values
             .lexemes
             .as_ref()
@@ -552,7 +558,7 @@ impl Model {
                 && historical_read::choose(self, values, Control::Full, &mut Default::default())
                     .is_none();
             let offered = if eligible {
-                candidate(self, values, &mut Default::default())
+                candidate(self, values, Control::Full, &mut Default::default())
             } else {
                 None
             };
