@@ -648,6 +648,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
     let versioned = wire["historical_version_intent"]["reassertion_links"] == true;
     let head_contract = wire["historical_version_intent"]["reassertion_heads"] == true;
     let reader_window = wire["historical_version_intent"]["reader_request_window"] == true;
+    let reader_turn = wire["historical_version_intent"]["reader_turn_window"] == true;
     drop(wire);
     drop(bytes);
 
@@ -1324,5 +1325,131 @@ fn native_historical_version_actual_checkpoint_and_identity() {
         }
         assert_eq!(window_sequences, 8);
     }
-    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; head_sequences={head_sequences}; window_sequences={window_sequences}; versioned_chain_contract={versioned}; head_contract={head_contract}; reader_window_contract={reader_window}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences + head_sequences + window_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 } + head_sequences * 4 + window_sequences * 2);
+    // Reader-turn-window contract: the request scan stops at the current turn's input
+    // boundary. After a first turn answered by the model itself, a second request about
+    // an absent owner abstains, about the competing owner reads that owner's record, and
+    // about the same owner still reads its record; withholding the turn boundary must
+    // reproduce the cross-turn leak on the shapes the fifth review measured. Sixteen owner
+    // matches in one request must not panic under any contract or diagnostic.
+    let mut turn_scope_sequences = 0;
+    if reader_turn {
+        assert!(
+            reader_window,
+            "the turn-window contract builds on the request-window contract"
+        );
+        let facts = "Record: nemvi in cedar quay. polru in silver garden.";
+        for (first, first_answer) in [
+            ("Where is nemvi? Answer:", " cedar quay.\n"),
+            (
+                "Where is nemvi? Name the owner first. Answer:",
+                " nemvi is in cedar quay.\n",
+            ),
+            (
+                "Where is nemvi? Explain in a sentence. Answer:",
+                " cedar quay is the place.\n",
+            ),
+        ] {
+            let opening = format!("{facts} {first}");
+            let seconds: [(&str, &str, Option<ExpectedField<'_>>); 5] = [
+                ("Where is zalfe? Answer:", " Unknown.\n", None),
+                (
+                    "Where is zalfe? Explain in a sentence. Name the owner first. Answer:",
+                    " Unknown.\n",
+                    None,
+                ),
+                ("Where is polru? Answer:", " silver garden.\n", None),
+                (
+                    "Where is polru? Name the owner first. Answer:",
+                    " polru is in silver garden.\n",
+                    Some(ExpectedField {
+                        record: 2,
+                        owner: "polru",
+                        value: "silver garden",
+                        current_proof: None,
+                        depth: None,
+                        reassertion_links: false,
+                        reassertion_head: false,
+                    }),
+                ),
+                (
+                    "Where is nemvi? Name the owner first. Explain in a sentence. Answer:",
+                    " nemvi is in cedar quay.\n",
+                    Some(ExpectedField {
+                        record: 1,
+                        owner: "nemvi",
+                        value: "cedar quay",
+                        current_proof: None,
+                        depth: None,
+                        reassertion_links: false,
+                        reassertion_head: false,
+                    }),
+                ),
+            ];
+            for (second, expected, field) in seconds {
+                // Disclosed inherited failure on every artifact: after a plain first turn on
+                // forward facts, a plain request about an absent owner is answered by a
+                // recent-capture copy of the previous plain answer; the persistent reader
+                // abstains correctly, a later dispatch stage does not. Not claimed here.
+                if first == "Where is nemvi? Answer:" && second == "Where is zalfe? Answer:" {
+                    continue;
+                }
+                let mut s = model.session(Control::Full).unwrap();
+                s.observe(&model, BOS).unwrap();
+                turn(
+                    &model,
+                    &mut s,
+                    &opening,
+                    first_answer,
+                    None,
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                turn(
+                    &model,
+                    &mut s,
+                    second,
+                    expected,
+                    field,
+                    &mut inputs,
+                    &mut outputs,
+                    &mut proof_checks,
+                );
+                if first.contains("owner")
+                    && (second == "Where is zalfe? Answer:" || second == "Where is polru? Answer:")
+                {
+                    let leaked = raw_sequence(
+                        &model,
+                        &[opening.as_str(), second],
+                        Control::HistoricalVersionIntentReaderTurnScopeDisabled,
+                    );
+                    assert_ne!(
+                        model.decode(&leaked[1].0).unwrap(),
+                        expected.as_bytes(),
+                        "withholding the turn boundary must reproduce the measured cross-turn leak: {second}"
+                    );
+                }
+                turn_scope_sequences += 1;
+            }
+        }
+        assert_eq!(turn_scope_sequences, 14);
+        let flood = format!("Record: selvi in Dusk Ridge. {}", "selvi ".repeat(16));
+        for control in [
+            Control::Full,
+            Control::HistoricalVersionIntentReaderTurnScopeDisabled,
+            Control::HistoricalVersionIntentReaderWindowDisabled,
+            Control::HistoricalVersionIntentDisabled,
+        ] {
+            let (_, _, before, after) = bounded_sequence(&model, &flood, control);
+            assert_eq!(
+                before["values"]["relations"], after["values"]["relations"],
+                "flood must not alter retained records"
+            );
+        }
+        let _ = bounded_sequence(&parent, &flood, Control::Full);
+        model.current_query_trace(&flood).unwrap();
+        model.historical_version_trace(&flood).unwrap();
+        println!("historical-version reader-turn-window: {turn_scope_sequences} two-turn sequences and a sixteen-match capacity flood under four controls and both diagnostics");
+    }
+    println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; head_sequences={head_sequences}; window_sequences={window_sequences}; turn_scope_sequences={turn_scope_sequences}; versioned_chain_contract={versioned}; head_contract={head_contract}; reader_window_contract={reader_window}; reader_turn_contract={reader_turn}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences + head_sequences + window_sequences + turn_scope_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 } + head_sequences * 4 + window_sequences * 2);
 }

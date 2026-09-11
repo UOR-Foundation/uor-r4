@@ -6,7 +6,9 @@ use super::*;
 
 pub(super) const RELATIONS: usize = 16;
 pub(super) const RELATION_SOURCE: u8 = 32;
-pub(super) const RELATION_FEATURES: usize = 64;
+/// Two base features plus four per matching owner word over the widest owner scan
+/// (the sixteen-word view): the true maximum, never a rounded guess.
+pub(super) const RELATION_FEATURES: usize = 2 + 4 * super::value_lexemes::WORD_QUERY;
 pub(super) const RELATION_ROWS: usize = 16384;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -696,7 +698,7 @@ pub(super) fn read_features(
     work: &mut ValueWork,
 ) -> ([ValueFeature; RELATION_FEATURES], usize) {
     // The inherited feature base of every later learner keeps the eight-word owner scan.
-    read_features_window(model, record, words, addr, 8, None, work)
+    read_features_window(model, record, words, addr, 8, None, None, work)
 }
 
 /// The byte end of the latest committed fact: owner, value or span terminal of any
@@ -727,9 +729,12 @@ pub(super) fn committed_cutoff(state: &RelationState, work: &mut ValueWork) -> O
 /// Persistent-read features with an explicit owner-scan window. The legacy base scans
 /// the eight most recent words with no cutoff. Under the reader-request-window
 /// contract the frozen persistent reader's own choice scans up to sixteen words but
-/// only the request words after the latest committed fact, so an owner spelled inside
-/// an earlier record is never mistaken for the requested owner. Learners fitted on the
-/// eight-word base keep their exact frames.
+/// only words after the latest committed fact (`cutoff`, a byte coordinate); under the
+/// reader-turn-window contract it also stops at the current turn's input boundary
+/// (`boundary`, a token coordinate), so neither an earlier record nor a previous
+/// question or generated answer can name the requested owner, and a neighbour outside
+/// that scope contributes no lexical context. Learners fitted on the eight-word base
+/// keep their exact frames.
 pub(super) fn read_features_window(
     model: &Model,
     record: &RelationRecord,
@@ -737,6 +742,22 @@ pub(super) fn read_features_window(
     addr: &[u32; 16],
     window: usize,
     cutoff: Option<u64>,
+    boundary: Option<u64>,
+    work: &mut ValueWork,
+) -> ([ValueFeature; RELATION_FEATURES], usize) {
+    let _ = model;
+    read_features_scan(record, words, addr, window, cutoff, boundary, work)
+}
+
+/// The scan itself, independent of any model, so its capacity and scope can be tested
+/// at every match count and boundary.
+pub(super) fn read_features_scan(
+    record: &RelationRecord,
+    words: &LexemeState,
+    addr: &[u32; 16],
+    window: usize,
+    cutoff: Option<u64>,
+    boundary: Option<u64>,
     work: &mut ValueWork,
 ) -> ([ValueFeature; RELATION_FEATURES], usize) {
     let mut out = [ValueFeature::default(); RELATION_FEATURES];
@@ -747,15 +768,20 @@ pub(super) fn read_features_window(
     };
     add(0, 1, 0);
     add(1, u64::from(record.conflict), 0);
+    // Words are most recent first; the first word outside the scope ends the scan.
+    let in_scope = |q: usize| {
+        let word = &words.queries[q];
+        !boundary.is_some_and(|b| word.end < b) && !cutoff.is_some_and(|c| word.byte_end <= c)
+    };
     for q in 0..words
         .query_len
         .min(window.min(super::value_lexemes::WORD_QUERY))
     {
-        if cutoff.is_some_and(|c| words.queries[q].byte_end <= c) {
+        if !in_scope(q) {
             break;
         }
         if record.owner.matches(&words.queries[q], work) {
-            let before = if q + 1 < words.query_len {
+            let before = if q + 1 < words.query_len && in_scope(q + 1) {
                 u64::from(addr[q + 1])
             } else {
                 0
@@ -767,7 +793,6 @@ pub(super) fn read_features_window(
             add(5, u64::from(record.conflict), after);
         }
     }
-    let _ = model;
     work.relations.feature_writes = work.relations.feature_writes.saturating_add(n as u64);
     (out, n)
 }
@@ -797,9 +822,14 @@ pub(super) fn read_choice_with_recent(
     let state = values.relations.as_ref()?;
     let words = values.lexemes.as_ref()?;
     let addr = addresses(model, &words.queries[..words.query_len], work);
-    let window = super::historical_version_intent::reader_window(model, control);
-    let cutoff = if window > 8 {
+    let scope = super::historical_version_intent::reader_scope(model, control);
+    let cutoff = if scope.post_fact {
         committed_cutoff(state, work)
+    } else {
+        None
+    };
+    let boundary = if scope.turn {
+        values.query_boundary
     } else {
         None
     };
@@ -823,7 +853,16 @@ pub(super) fn read_choice_with_recent(
         {
             continue;
         }
-        let (f, n) = read_features_window(model, record, words, &addr, window, cutoff, work);
+        let (f, n) = read_features_window(
+            model,
+            record,
+            words,
+            &addr,
+            scope.window,
+            cutoff,
+            boundary,
+            work,
+        );
         for (ai, action) in role.actions.iter().enumerate() {
             if action.copy
                 && (usize::from(

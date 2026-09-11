@@ -266,3 +266,145 @@ fn native_writer_cue_identity_is_exact_and_does_not_change_reader_addresses() {
     // Exact word payloads, including unknown names and case, remain untouched.
     assert_eq!(words[2], atom("newname", 16));
 }
+
+/// Feed a prompt through the word scanner into a query view; token ends equal byte
+/// offsets in this fixture, so boundary tests read them from the words themselves.
+fn scanned(text: &str) -> LexemeState {
+    use super::value_types::ValueEntry;
+    let mut words = LexemeState::default();
+    let mut work = ValueWork::default();
+    for (sequence, &byte) in text.as_bytes().iter().enumerate() {
+        words.feed(
+            byte,
+            ValueEntry {
+                sequence: sequence as u64,
+                ..Default::default()
+            },
+            &mut work,
+        );
+    }
+    words.finish(&mut work);
+    words.begin();
+    words
+}
+
+fn scan_counts(
+    owner: &str,
+    text: &str,
+    window: usize,
+    cutoff: Option<u64>,
+    boundary: Option<u64>,
+) -> (usize, Vec<(u64, u64)>) {
+    let mut state = RelationState::default();
+    let mut work = ValueWork::default();
+    state.commit(atom(owner, 8), atom("Ridge", 16), 1, &mut work);
+    let record = state.record(1).unwrap().clone();
+    let words = scanned(text);
+    let mut addr = [0u32; 16];
+    for (q, slot) in addr.iter_mut().enumerate() {
+        *slot = q as u32 + 1;
+    }
+    let (features, n) =
+        read_features_scan(&record, &words, &addr, window, cutoff, boundary, &mut work);
+    assert!(n <= RELATION_FEATURES);
+    // (before, after) pairs of every owner match, in scan order
+    let pairs = features[..n]
+        .iter()
+        .filter(|f| f.kind == 3)
+        .map(|f| (f.a, f.b))
+        .collect();
+    (n, pairs)
+}
+
+#[test]
+fn native_relation_owner_scan_capacity_holds_every_match_count_up_to_the_full_view() {
+    let flood = |k: usize| format!("Record: selvi in Dusk Ridge. {}", "selvi ".repeat(k));
+    assert_eq!(RELATION_FEATURES, 2 + 4 * super::value_lexemes::WORD_QUERY);
+    for matches in [0usize, 1, 8, 15, 16] {
+        let (n, pairs) = scan_counts("selvi", &flood(matches), 16, None, None);
+        // The view holds sixteen words; the fact's own owner word is still inside it
+        // for small floods, so count what the view actually exposes.
+        let words = scanned(&flood(matches));
+        let visible = words.queries[..words.query_len]
+            .iter()
+            .filter(|w| &w.bytes[..usize::from(w.len)] == b"selvi")
+            .count();
+        assert_eq!(n, 2 + 4 * visible, "matches={matches}");
+        assert_eq!(pairs.len(), visible);
+    }
+    // The legacy eight-word base never exceeds its own bound.
+    let (n, _) = scan_counts("selvi", &flood(16), 8, None, None);
+    assert_eq!(n, 2 + 4 * 8);
+    // A mixed flood counts only the requested owner's spelling: four in the flood plus
+    // the fact's own owner word, which the thirteen-word view still holds.
+    let (n, _) = scan_counts(
+        "selvi",
+        "Record: selvi in Dusk Ridge. selvi tilva selvi tilva selvi tilva selvi tilva ",
+        16,
+        None,
+        None,
+    );
+    assert_eq!(n, 2 + 4 * 5);
+    // No owner match at all leaves only the two base features.
+    let (n, pairs) = scan_counts("other", &flood(16), 16, None, None);
+    assert_eq!((n, pairs.len()), (2, 0));
+}
+
+#[test]
+fn native_relation_owner_scan_stops_at_the_fact_cutoff_and_the_turn_boundary() {
+    // A previous turn's question and answer, then a new turn asking about another owner.
+    // Fifteen words, so the fact owner, the question owner and the answer owner all sit
+    // inside the sixteen-word view.
+    let text = "nemvi in quay. Where is nemvi? Answer: nemvi is in quay. Where is zalfe? Answer:";
+    let words = scanned(text);
+    let by_text = |needle: &[u8]| {
+        words.queries[..words.query_len]
+            .iter()
+            .filter(|w| &w.bytes[..usize::from(w.len)] == needle)
+            .map(|w| (w.end, w.byte_end))
+            .collect::<Vec<_>>()
+    };
+    let nemvi = by_text(b"nemvi");
+    assert_eq!(
+        nemvi.len(),
+        3,
+        "fact owner, question owner and answer owner are all in the sixteen-word view"
+    );
+    // Legacy base: eight most recent words, no cutoff or boundary: the answer's owner
+    // word is inside the eight and matches.
+    let (legacy, _) = scan_counts("nemvi", text, 8, None, None);
+    assert!(legacy > 2);
+    // Request-window contract: the fact cutoff removes the fact's owner word only; the
+    // previous question and generated answer still match (the measured cross-turn leak).
+    let fact_cutoff = Some(nemvi[nemvi.len() - 1].1);
+    let (post_fact, _) = scan_counts("nemvi", text, 16, fact_cutoff, None);
+    assert_eq!(post_fact, 2 + 4 * 2);
+    // Turn-window contract: the current turn begins at "Where is zalfe?": nothing older
+    // may name the owner, so no match remains.
+    let zalfe = by_text(b"zalfe");
+    let where_end = words.queries[..words.query_len]
+        .iter()
+        .filter(|w| &w.bytes[..usize::from(w.len)] == b"Where")
+        .map(|w| w.end)
+        .max()
+        .unwrap();
+    let turn_start = Some(where_end.min(zalfe[0].0));
+    let (turn, pairs) = scan_counts("nemvi", text, 16, fact_cutoff, turn_start);
+    assert_eq!((turn, pairs.len()), (2, 0));
+    // The requested owner inside the current turn is still found, and its older
+    // neighbour outside the turn contributes no context (before address masked to 0).
+    let (found, pairs) = scan_counts("zalfe", text, 16, fact_cutoff, turn_start);
+    assert_eq!(found, 2 + 4);
+    assert_eq!(
+        pairs[0].0 != 0,
+        true,
+        "the previous word 'is' lies inside the turn"
+    );
+    let mid_turn = Some(zalfe[0].0);
+    let (found, pairs) = scan_counts("zalfe", text, 16, fact_cutoff, mid_turn);
+    assert_eq!(found, 2 + 4);
+    assert_eq!(
+        pairs[0].0, 0,
+        "a neighbour older than the boundary is masked"
+    );
+}

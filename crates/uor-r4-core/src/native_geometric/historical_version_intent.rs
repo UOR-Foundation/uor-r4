@@ -70,6 +70,13 @@ pub(super) struct HistoricalVersionIntent {
     /// later learner is unchanged. Absent in legacy artifacts.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reader_request_window: bool,
+    /// Reader-turn-window contract: the request-window scan also stops at the current
+    /// turn's input boundary, so a previous question or generated answer never names
+    /// the owner requested now; stored records stay eligible for lookup. Builds on the
+    /// request-window contract. Absent in legacy artifacts and in `f3620cb7`, whose
+    /// post-fact-only scan is preserved as measured.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reader_turn_window: bool,
 }
 
 /// Structural candidate classes exposed to the learned selector. They describe a
@@ -306,25 +313,42 @@ pub(super) fn reassertion_links(model: &Model, control: Control) -> bool {
 
 /// Whether the head contract (first hop through a same-value reassertion head) is
 /// active for this model under `control`.
-/// Owner-scan window of the frozen persistent relation reader under `control`.
-pub(super) fn reader_window(model: &Model, control: Control) -> usize {
-    reader_window_for(
-        model
-            .historical_version_intent
-            .as_ref()
-            .is_some_and(|b| b.reader_request_window),
+/// Owner-scan scope of the frozen persistent relation reader under `control`: the
+/// word window, whether words at or before the latest committed fact are excluded
+/// (request-window contract) and whether the current turn's input boundary also
+/// bounds the scan (turn-window contract).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct ReaderScope {
+    pub window: usize,
+    pub post_fact: bool,
+    pub turn: bool,
+}
+
+pub(super) fn reader_scope(model: &Model, control: Control) -> ReaderScope {
+    let witness = model.historical_version_intent.as_ref();
+    reader_scope_for(
+        witness.is_some_and(|b| b.reader_request_window),
+        witness.is_some_and(|b| b.reader_turn_window),
         control,
     )
 }
 
-fn reader_window_for(active: bool, control: Control) -> usize {
-    if active
-        && control != Control::HistoricalVersionIntentReaderWindowDisabled
-        && control != Control::HistoricalVersionIntentDisabled
+fn reader_scope_for(request: bool, turn: bool, control: Control) -> ReaderScope {
+    let legacy = ReaderScope {
+        window: 8,
+        post_fact: false,
+        turn: false,
+    };
+    if !request
+        || control == Control::HistoricalVersionIntentReaderWindowDisabled
+        || control == Control::HistoricalVersionIntentDisabled
     {
-        16
-    } else {
-        8
+        return legacy;
+    }
+    ReaderScope {
+        window: 16,
+        post_fact: true,
+        turn: turn && control != Control::HistoricalVersionIntentReaderTurnScopeDisabled,
     }
 }
 
@@ -833,6 +857,31 @@ impl Model {
     /// The same learned witness under the reader-window contract: no parameter,
     /// dictionary or receipt changes, only the contract flag and the identity it
     /// binds. A repair candidate that decides whether a refit is needed at all.
+    /// The same learned witness under the reader-turn-window contract, which builds on
+    /// the request-window contract: no parameter, dictionary or receipt changes.
+    pub fn with_reader_turn_window(&self) -> Result<Model> {
+        let mut model = self.clone();
+        let witness = model
+            .historical_version_intent
+            .as_mut()
+            .ok_or_else(|| Error("historical version contract requires a witness".into()))?;
+        if !witness.reader_request_window {
+            return Err(Error(
+                "historical version turn-window contract requires the request-window contract"
+                    .into(),
+            ));
+        }
+        if witness.reader_turn_window {
+            return Err(Error(
+                "historical version reader-turn-window contract already set".into(),
+            ));
+        }
+        witness.reader_turn_window = true;
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
+    }
+
     pub fn with_reader_window(&self) -> Result<Model> {
         let mut model = self.clone();
         let witness = model
@@ -1232,6 +1281,7 @@ impl Model {
             reassertion_links: true,
             reassertion_heads: true,
             reader_request_window: true,
+            reader_turn_window: true,
         });
         model.refresh_identity()?;
         model.validate()?;
@@ -1250,25 +1300,56 @@ impl Model {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn historical_version_reader_window_is_sixteen_only_under_the_active_contract() {
+    fn historical_version_reader_scope_follows_the_declared_contracts_and_controls() {
         use super::super::Control;
-        assert_eq!(super::reader_window_for(true, Control::Full), 16);
+        use super::{reader_scope_for, ReaderScope};
+        let legacy = ReaderScope {
+            window: 8,
+            post_fact: false,
+            turn: false,
+        };
+        let request = ReaderScope {
+            window: 16,
+            post_fact: true,
+            turn: false,
+        };
+        let turn = ReaderScope {
+            window: 16,
+            post_fact: true,
+            turn: true,
+        };
+        assert_eq!(reader_scope_for(false, false, Control::Full), legacy);
+        assert_eq!(reader_scope_for(false, true, Control::Full), legacy);
+        assert_eq!(reader_scope_for(true, false, Control::Full), request);
+        assert_eq!(reader_scope_for(true, true, Control::Full), turn);
         assert_eq!(
-            super::reader_window_for(
+            reader_scope_for(
+                true,
                 true,
                 Control::HistoricalVersionIntentReassertionHeadDisabled
             ),
-            16
+            turn
         );
         assert_eq!(
-            super::reader_window_for(true, Control::HistoricalVersionIntentReaderWindowDisabled),
-            8
+            reader_scope_for(
+                true,
+                true,
+                Control::HistoricalVersionIntentReaderTurnScopeDisabled
+            ),
+            request
         );
         assert_eq!(
-            super::reader_window_for(true, Control::HistoricalVersionIntentDisabled),
-            8
+            reader_scope_for(
+                true,
+                true,
+                Control::HistoricalVersionIntentReaderWindowDisabled
+            ),
+            legacy
         );
-        assert_eq!(super::reader_window_for(false, Control::Full), 8);
+        assert_eq!(
+            reader_scope_for(true, true, Control::HistoricalVersionIntentDisabled),
+            legacy
+        );
     }
 
     use super::*;
@@ -1410,6 +1491,7 @@ mod tests {
             reassertion_links: false,
             reassertion_heads: false,
             reader_request_window: false,
+            reader_turn_window: false,
         };
         let bytes = serde_json::to_vec(&witness).unwrap();
         let legacy = serde_json::to_value(&witness).unwrap();
