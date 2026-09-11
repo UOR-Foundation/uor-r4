@@ -754,15 +754,24 @@ fn main() -> Result<()> {
         );
     }
     if a.len() == 4 && a[1] == "identity" {
+        // The report file is reserved exclusively before the model is loaded.
+        let mut report = fs::File::create_new(&a[3]).map_err(|e| {
+            format!(
+                "report file {} was not created exclusively ({e}); choose a new attempt path instead of reusing or overwriting an existing report",
+                a[3]
+            )
+        })?;
         let bytes = fs::read(&a[2])?;
         let model = Model::from_bytes(&bytes)?;
         let encoded = model.to_bytes()?;
         if bytes != encoded {
             return Err("artifact byte roundtrip differs".into());
         }
-        save(
-            Path::new(&a[3]),
-            &json!({"artifact":model.artifact_cid(),"path":a[2],"bytes":bytes.len(),"blake3":blake3::hash(&bytes).to_hex().to_string(),"serialization_byte_exact":true}),
+        std::io::Write::write_all(
+            &mut report,
+            &serde_json::to_vec(
+                &json!({"artifact":model.artifact_cid(),"path":a[2],"bytes":bytes.len(),"blake3":blake3::hash(&bytes).to_hex().to_string(),"serialization_byte_exact":true}),
+            )?,
         )?;
         return Ok(());
     }

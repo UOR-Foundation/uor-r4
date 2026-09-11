@@ -4143,6 +4143,9 @@ fn native_historical_version_actual_checkpoint_and_allocation() {
         // and the root stays readable (record-hop semantics).
         ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale.", "selvi", "What was the initial location of selvi?", " Dusk Ridge.\n", 1, 3, 2),
         ("Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale.", "selvi", "What was the previous location of selvi? Name the owner first.", " selvi was in Copper Vale.\n", 2, 3, 1),
+        // The smallest repeated-head chain: previous is record 1 through the head hop.
+        ("Record: selvi in Dusk Ridge. selvi in Dusk Ridge.", "selvi", "What was the previous location of selvi?", " Dusk Ridge.\n", 1, 2, 1),
+        ("Record: selvi in Dusk Ridge. selvi in Dusk Ridge.", "selvi", "What was the initial location of selvi? Name the owner first.", " selvi was in Dusk Ridge.\n", 1, 2, 1),
     ];
     for (facts, owner, request, target, root, head, depth) in cases {
         let prompt = format!("{facts} {request} Answer:");
