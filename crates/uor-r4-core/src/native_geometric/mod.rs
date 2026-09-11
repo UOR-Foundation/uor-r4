@@ -302,6 +302,9 @@ pub enum Control {
     /// Keep the witness but let the frozen persistent reader scan only the eight most
     /// recent request words for the owner (withhold the reader-window contract).
     HistoricalVersionIntentReaderWindowDisabled,
+    /// Keep the request-window scan but withhold the current-turn boundary (reproduces
+    /// the post-fact-only scope of f3620cb7).
+    HistoricalVersionIntentReaderTurnScopeDisabled,
     /// Keep the active historical router but expose only eight query words.
     HistoricalQueryWindowDisabled,
     RelationStartRefinementDisabled,
@@ -423,6 +426,7 @@ impl Feature {
             | Control::HistoricalVersionIntentReassertionDisabled
             | Control::HistoricalVersionIntentReassertionHeadDisabled
             | Control::HistoricalVersionIntentReaderWindowDisabled
+            | Control::HistoricalVersionIntentReaderTurnScopeDisabled
             | Control::HistoricalQueryContextDisabled
             | Control::HistoricalFieldCompositionDisabled
             | Control::RelationStartRefinementDisabled
