@@ -1074,9 +1074,15 @@ fn native_historical_version_actual_checkpoint_and_identity() {
     // parent's Unknown.
     let mut head_sequences = 0;
     if head_contract {
-        for (label, facts, owner, initial, root_id, previous, previous_id, current, head_id, depth) in [
-            ("head-reassert", "Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale.", "selvi", "Dusk Ridge", 1, "Copper Vale", 2, "Copper Vale", 3, 2),
-            ("head-reassert-long", "Record: tilva in moss dale. tilva now in Birch Grove. tilva now in Pine Hollow. tilva in Pine Hollow.", "tilva", "moss dale", 1, "Pine Hollow", 3, "Pine Hollow", 4, 3),
+        // (label, facts, owner, initial, root, previous, previous id, current, head, root depth,
+        //  whether the initial path also crosses an interior same-value reassertion link)
+        for (label, facts, owner, initial, root_id, previous, previous_id, current, head_id, depth, interior) in [
+            ("head-reassert", "Record: selvi in Dusk Ridge. selvi now in Copper Vale. selvi in Copper Vale.", "selvi", "Dusk Ridge", 1, "Copper Vale", 2, "Copper Vale", 3, 2, false),
+            ("head-reassert-long", "Record: tilva in moss dale. tilva now in Birch Grove. tilva now in Pine Hollow. tilva in Pine Hollow.", "tilva", "moss dale", 1, "Pine Hollow", 3, "Pine Hollow", 4, 3, false),
+            // The smallest repeated-head chain: initial and previous both name record 1.
+            ("same-only-two", "Record: selvi in Dusk Ridge. selvi in Dusk Ridge.", "selvi", "Dusk Ridge", 1, "Dusk Ridge", 1, "Dusk Ridge", 2, 1, false),
+            // Three identical assertions: the root lies below an interior reassertion.
+            ("same-only-three", "Record: tilva in moss dale. tilva in moss dale. tilva in moss dale.", "tilva", "moss dale", 1, "moss dale", 2, "moss dale", 3, 2, true),
         ] {
             for instruction in ["Name the owner first.", "State the owner first."] {
                 let initial_prompt = format!(
@@ -1129,8 +1135,8 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                         owner,
                         value: initial,
                         current_proof: Some(head_id),
-                        depth: Some(depth),
-                        reassertion_links: false,
+                        depth: (depth > 1).then_some(depth),
+                        reassertion_links: interior,
                         reassertion_head: true,
                     }),
                     &mut inputs,
@@ -1187,7 +1193,7 @@ fn native_historical_version_actual_checkpoint_and_identity() {
                 println!("historical-version {label}; owner={owner}; {instruction}; root={root_id} depth={depth} through a same-value reassertion head, previous={previous_id}, head={head_id}; initial/previous/current fields and independent sum exact");
             }
         }
-        assert_eq!(head_sequences, 4);
+        assert_eq!(head_sequences, 8);
     }
     println!("actual historical-version artifact={}; sequences={}; input_checkpoint_positions={inputs}; output_checkpoint_positions={outputs}; active_anchor_checkpoint_cases={proof_checks}; evicted_root_abstentions={abstentions}; reassertion_sequences={reassertion_sequences}; reassertion_abstentions={reassertion_abstentions}; head_sequences={head_sequences}; versioned_chain_contract={versioned}; head_contract={head_contract}; disabled parent equivalence across {} turns; no allocation/energy measurement", model.artifact_cid(), sequence_count + 2 + reassertion_sequences + head_sequences, sequence_count * 4 + 8 + if versioned { 16 } else { 0 } + head_sequences * 4);
 }

@@ -187,6 +187,26 @@ fn drivers_reserve_destinations_before_model_work() {
         fresh_report.is_file(),
         "the API report must be reserved before the model read"
     );
-    println!("driver destination checks: {} directory drivers plus the API report file; collisions reported before any model access; prior bytes unchanged", checked);
+    // The word/Rust identity mode also writes one report file; same contract.
+    let identity = drivers.join("native_word_sentence");
+    let report = base.join("identity-report.json");
+    fs::write(&report, b"prior identity report").unwrap();
+    let (ok, text) = run(&identity, &["identity", missing, report.to_str().unwrap()]);
+    assert!(
+        !ok && text.contains("not created exclusively") && !text.contains("No such file"),
+        "{text}"
+    );
+    assert_eq!(fs::read(&report).unwrap(), b"prior identity report");
+    let fresh_identity = base.join("identity-report-fresh.json");
+    let (ok, text) = run(
+        &identity,
+        &["identity", missing, fresh_identity.to_str().unwrap()],
+    );
+    assert!(!ok && text.contains("No such file"), "{text}");
+    assert!(
+        fresh_identity.is_file(),
+        "the identity report must be reserved before the model read"
+    );
+    println!("driver destination checks: {} directory drivers plus the API report file and the word/Rust identity report file; collisions reported before any model access; prior bytes unchanged", checked);
     fs::remove_dir_all(base).unwrap();
 }

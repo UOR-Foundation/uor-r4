@@ -164,6 +164,22 @@ struct Case {
 fn default_true() -> bool {
     true
 }
+/// Disjoint typed partition of the targets: initial + previous + current + abstain.
+fn partition(cases: &[Case]) -> Value {
+    let mut counts = [0usize; 4];
+    for c in cases
+        .iter()
+        .filter(|c| c.target_record.is_some() || c.abstain || c.follow_up.is_some())
+    {
+        counts[match intent(c) {
+            Intent::Initial => 0,
+            Intent::Previous => 1,
+            Intent::Current => 2,
+            Intent::Abstain => 3,
+        }] += 1;
+    }
+    json!({"initial":counts[0],"previous":counts[1],"current":counts[2],"abstain":counts[3],"total":counts.iter().sum::<usize>()})
+}
 /// The request's typed intent, from the case's exact labels.
 fn intent(c: &Case) -> Intent {
     if c.abstain {
@@ -826,7 +842,12 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                             abstain: true,
                             history: Vec::new(),
                             follow_up: None,
-                            accepted: Vec::new(),
+                            accepted: answer_oracle::accepted(
+                                Intent::Abstain,
+                                style.is_empty(),
+                                &owner.name,
+                                "",
+                            ),
                             target_root: true,
                         });
                     }
@@ -886,7 +907,12 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
                     abstain: true,
                     history: Vec::new(),
                     follow_up: None,
-                    accepted: Vec::new(),
+                    accepted: answer_oracle::accepted(
+                        Intent::Abstain,
+                        style.is_empty(),
+                        &a.name,
+                        "",
+                    ),
                     target_root: true,
                 });
             }
@@ -1327,6 +1353,167 @@ fn authored_cases(owners: &[Owner], filler_seed: &str) -> Vec<Case> {
             push_preserve(&mut cases, &id, &facts, o, &[(2, 0), (3, 1)]);
         }
     }
+    // Identical assertions only: the smallest repeated-head chains. Under record-hop
+    // semantics initial and previous both name exact records even when every value
+    // is equal: for two records, previous is record 1 (the root reached through the
+    // head hop, chain class seven); for three, previous is record 2 and initial is
+    // record 1 two links down. Crossed with the current intent (parent-preserved),
+    // a competing owner between the repeats, all styles, the ring boundary and
+    // actual follow-up turns.
+    for (i, owner) in owners.iter().take(2).enumerate() {
+        let other = &owners[1 - i];
+        let (o, v0) = (&owner.name, &owner.values[0]);
+        let (p, w0) = (&other.name, &other.values[0]);
+        // (layout, facts, root, head, root depth, previous record)
+        let layouts = [
+            (
+                "two",
+                format!("Record: {o} in {v0}. {o} in {v0}."),
+                1,
+                2,
+                1,
+                1,
+            ),
+            (
+                "three",
+                format!("Record: {o} in {v0}. {o} in {v0}. {o} in {v0}."),
+                1,
+                3,
+                2,
+                2,
+            ),
+            (
+                "two-competing",
+                format!("Record: {o} in {v0}. {p} in {w0}. {o} in {v0}."),
+                1,
+                3,
+                1,
+                1,
+            ),
+            (
+                "three-competing",
+                format!("Record: {o} in {v0}. {o} in {v0}. {p} in {w0}. {o} in {v0}."),
+                1,
+                4,
+                2,
+                2,
+            ),
+        ];
+        for (name, facts, root, head, depth, previous_id) in layouts {
+            let id = format!("same-only/{i}/{name}");
+            push_targets_depth(
+                &mut cases,
+                &id,
+                &facts,
+                o,
+                v0,
+                root,
+                head,
+                depth,
+                &INITIAL_REQUESTS,
+            );
+            push_previous_targets(&mut cases, &id, &facts, o, v0, previous_id, head);
+            push_preserve(
+                &mut cases,
+                &id,
+                &facts,
+                o,
+                &[(2, 0), (2, 1), (3, 0), (3, 1)],
+            );
+            if name == "two" || name == "three" {
+                push_follow_ups(&mut cases, &id, &facts, o, v0, v0, previous_id, head, true);
+            }
+        }
+        // The retained matched histories repeat a fact in a later turn and then ask a
+        // current question with the explanatory phrasing; the live head, not the
+        // root, must remain the source. Single-turn and actual two-turn forms, with
+        // and without a competing owner, in both fact orders.
+        let explain = [
+            format!("Where is {o}? Explain in a sentence. Answer:"),
+            format!("Explain in a sentence. Where is {o}? Answer:"),
+            format!("Where is {o}? Explain in a sentence. Name the owner first. Answer:"),
+        ];
+        let openers = [
+            (
+                format!("{o} in {v0}. {p} in {w0}."),
+                format!("{o} in {v0}."),
+            ),
+            (
+                format!("Record: {v0} holds {o}. Record: {w0} holds {p}."),
+                format!("Record: {v0} holds {o}."),
+            ),
+            (format!("{o} in {v0}."), format!("{o} in {v0}.")),
+        ];
+        for (k, (first, repeat)) in openers.iter().enumerate() {
+            for (q, question) in explain.iter().enumerate() {
+                let inherit = |id: String, prompt: String, history: Vec<String>| Case {
+                    id,
+                    prompt,
+                    expected: None,
+                    current_record: None,
+                    target_record: None,
+                    depth: None,
+                    owner: o.clone(),
+                    value: String::new(),
+                    abstain: false,
+                    history,
+                    follow_up: None,
+                    accepted: Vec::new(),
+                    target_root: true,
+                };
+                cases.push(inherit(
+                    format!("same-only-explain/{i}/{k}/{q}/single"),
+                    format!("{first} {repeat} {question}"),
+                    Vec::new(),
+                ));
+                cases.push(inherit(
+                    format!("same-only-explain/{i}/{k}/{q}/turn"),
+                    format!("{repeat} {question}"),
+                    vec![format!("{first} Where is {o}? Answer:")],
+                ));
+            }
+        }
+        // Boundary for the two-record chain: fourteen trailing facts keep both records
+        // resident; fifteen evict the root, so the head's predecessor is proven absent
+        // and initial and previous both abstain.
+        let chain_facts = format!("{o} in {v0}. {o} in {v0}.");
+        let two = [INITIAL_REQUESTS[0], INITIAL_REQUESTS[2]];
+        for trailing in [14, 15] {
+            let facts = evicted_facts(&chain_facts, trailing, filler_seed);
+            let id = format!("same-only-boundary/{i}/{trailing}");
+            if trailing == 14 {
+                push_targets_depth(&mut cases, &id, &facts, o, v0, 1, 2, 1, &two);
+                push_previous_targets(&mut cases, &id, &facts, o, v0, 1, 2);
+            } else {
+                push_abstain(&mut cases, &id, &facts, o, 2, &two);
+                for (t, template) in PRESERVE_REQUESTS.iter().take(1).enumerate() {
+                    for (s, style) in STYLES.iter().enumerate() {
+                        cases.push(Case {
+                            id: format!("{id}/previous-abstain/{t}/{s}"),
+                            prompt: format!("{facts} {}", request(template, o, style)),
+                            expected: Some(" Unknown.\n".into()),
+                            current_record: Some(2),
+                            target_record: None,
+                            depth: None,
+                            owner: o.clone(),
+                            value: String::new(),
+                            abstain: true,
+                            history: Vec::new(),
+                            follow_up: None,
+                            accepted: answer_oracle::accepted(
+                                Intent::Abstain,
+                                style.is_empty(),
+                                o,
+                                "",
+                            ),
+                            target_root: true,
+                        });
+                    }
+                }
+            }
+            push_preserve(&mut cases, &id, &facts, o, &[(2, 0), (3, 1)]);
+        }
+    }
     // Thirteen trailing facts after a three-version chain leave its root resident:
     // the exact root answer, not an abstention, at the boundary.
     for (i, owner) in owners.iter().take(2).enumerate() {
@@ -1472,7 +1659,7 @@ fn prepare(out: &Path, fresh: bool) -> Result<()> {
             });
     save(
         &out.join("receipt.json"),
-        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"abstain_targets":cases.iter().filter(|c|c.abstain).count(),"follow_up_targets":cases.iter().filter(|c|c.follow_up.is_some()).count(),"previous_targets":cases.iter().filter(|c|!c.target_root&&c.target_record.is_some()).count(),"targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
+        &json!({"schema":"uor-r4.historical-version-preparation/1","fresh":fresh,"owners":owners.iter().map(|o| json!({"name":o.name,"values":o.values})).collect::<Vec<_>>(),"cases":cases.len(),"authored":authored.len(),"targets":cases.iter().filter(|c|c.target_record.is_some()).count(),"abstain_targets":cases.iter().filter(|c|c.abstain).count(),"follow_up_targets":cases.iter().filter(|c|c.follow_up.is_some()).count(),"previous_targets":cases.iter().filter(|c|!c.target_root&&c.target_record.is_some()).count(),"targets_by_intent":partition(&cases),"count_scope":"targets_by_intent is the disjoint typed partition of all targets (initial + previous + current + abstain); follow_up_targets and previous_targets are cross-cutting categories that overlap it","targets_by_depth":depths,"inherited":cases.iter().filter(|c|c.target_record.is_none()).count(),"sources":sources,"duplicate_receipts":duplicate_receipts,"labels_offline_only":true,"training_written":!fresh,"initial_request_forms":INITIAL_REQUESTS,"scope":"Authored exact ancestor IDs; fresh spellings in unchanged authored forms do not establish general prose or temporal language."}),
     )?;
     uor_r4_core::report_output::seal(out)?;
     Ok(())
@@ -1805,6 +1992,7 @@ fn evaluate(
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     );
     let mut by_depth: BTreeMap<u8, [usize; 2]> = BTreeMap::new();
+    let mut by_intent: BTreeMap<&str, [usize; 2]> = BTreeMap::new();
     for c in cases {
         let target = c.target_record.is_some() || c.abstain || c.follow_up.is_some();
         let actual = generate(model, &c.history, &c.prompt, Control::Full, target, !target)?;
@@ -1831,6 +2019,16 @@ fn evaluate(
                 previous_targets += 1;
                 previous_exact += usize::from(target_correct);
             }
+            let kind = by_intent
+                .entry(match intent(c) {
+                    Intent::Initial => "initial",
+                    Intent::Previous => "previous",
+                    Intent::Current => "current",
+                    Intent::Abstain => "abstain",
+                })
+                .or_default();
+            kind[0] += 1;
+            kind[1] += usize::from(target_correct);
             if c.follow_up.is_some() {
                 follow_up_targets += 1;
                 follow_up_exact += usize::from(target_correct);
@@ -1915,7 +2113,7 @@ fn evaluate(
     }
     rows.flush()?;
     drop(rows);
-    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"reassertion_disabled_exact_and_selected":reassertion_disabled_exact,"reassertion_disabled_parent_equal":reassertion_disabled_parent_equal,"follow_up_targets":follow_up_targets,"follow_up_exact_and_selected":follow_up_exact,"previous_targets":previous_targets,"previous_exact_and_selected":previous_exact,"head_disabled_exact_and_selected":head_disabled_exact,"head_disabled_parent_equal":head_disabled_parent_equal,"selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
+    let summary = json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"total":cases.len(),"targets":targets,"exact_and_selected":correct,"primary_text_exact_and_selected":primary_exact,"abstain_targets":abstain_targets,"abstain_exact":abstain_exact,"abstain_disabled_parent_equal":abstain_disabled_parent_equal,"reassertion_disabled_exact_and_selected":reassertion_disabled_exact,"reassertion_disabled_parent_equal":reassertion_disabled_parent_equal,"follow_up_targets":follow_up_targets,"follow_up_exact_and_selected":follow_up_exact,"previous_targets":previous_targets,"previous_exact_and_selected":previous_exact,"head_disabled_exact_and_selected":head_disabled_exact,"head_disabled_parent_equal":head_disabled_parent_equal,"targets_by_intent":by_intent.iter().map(|(k,[t,c])| json!({"intent":k,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"count_scope":"targets_by_intent is the disjoint typed partition; follow_up_targets and previous_targets are cross-cutting categories that overlap it","selected":selected_count,"targets_by_depth":by_depth.iter().map(|(d,[t,c])| json!({"depth":d,"targets":t,"exact_and_selected":c})).collect::<Vec<_>>(),"deep_targets":deep_targets,"inherited":inherited,"preserved":preserved,"controls":controls,"disabled_parent_equal":disabled_equal,"transform_disabled_exact":transform_exact,"ancestor_disabled_exact":ancestor_exact,"ancestor_disabled_exact_deep":ancestor_exact_deep,"checkpoint_positions":positions,"scope_disabled_exact_and_selected":scope_exact,"scope_disabled_preserved":scope_preserved});
     let mut result = summary.clone();
     result["rows_file"] = json!(out.join("rows.jsonl"));
     result["rows_written"] = json!(written);
