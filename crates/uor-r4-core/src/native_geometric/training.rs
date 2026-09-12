@@ -105,7 +105,7 @@ pub(super) fn exact_sign([a, b]: [i64; 2]) -> i8 {
     (difference.signum() * p.signum()) as i8
 }
 
-fn geometry(token_count: usize, context_tokens: usize) -> Result<Geometry> {
+pub(super) fn geometry(token_count: usize, context_tokens: usize) -> Result<Geometry> {
     let table = validate_h4_binary_icosahedral_closure().map_err(source_error)?;
     let primes =
         crate::corpus_induced_spin_placement::first_primes(token_count).map_err(source_error)?;

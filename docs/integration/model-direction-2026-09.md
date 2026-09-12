@@ -1,7 +1,7 @@
 # UOR-R4 Geometric Language Model: direction and capability assessment
 
-Owner-adopted documentation reconciliation, 2026-09-07. This codifies the
-post-PR #1171 investigation. It adds no model run or capability result.
+Owner-adopted shared-core direction, 2026-09-12, extending the September 7
+source assessment. Plan adoption adds no model-quality result.
 [Current state](current-state.md) owns the retained artifact;
 [project-track](project-track.md) owns ordered delivery; live GitHub owns issues.
 
@@ -52,7 +52,19 @@ familiar-template comparisons, not broad language benchmarks. Source/receipts:
 [span context](../native_geometric_span_context_1139.md),
 [dependent operations](../native_geometric_dependent_source_1139.md).
 
-## What the latest negative changes
+## Current architectural decision
+
+Learn recurrent state, contextual access and lexical emission together through one reusable geometric computation. The [canonical plan](project-track.md#current-implementation-sequence--owner-adopted-september-12) owns sequencing and replacement acceptance. The [first-step design](shared-geometric-core-2026-09.md) specifies an isolated H4 finite-table recurrence, bounded geometric reads and byte/EOS branch decisions. Its offline coordinate learner evaluates the same discrete forward path used for generation.
+
+This separates the language-learning question from the accumulated memory repair, which is parked. Training cannot recover distinctions erased by representation or select a record absent from its candidate set. Repeated downstream fitting against a frozen erroneous writer is therefore not the default route to general language. Shared learned parameters, including biases where justified, are allowed; request-specific answer rules and an expanding set of narrow correction heads do not establish a general learner.
+
+The new path must satisfy the complete serving-operation constraint without the inherited additive predictor fallback. Bounded tables may represent finite geometric operations, but a lookup/add implementation of a feature-weight contraction remains excluded. Hard geometric reads are a testable access design, not evidence that they suffice for broad language. Predictive improvement, generated continuations and matched context/state/geometry controls must support any advancement. Exact memory and typed operators are preserved but not connected to the first core experiment. Its use of H4 alone does not establish the roles or benefits of every prime/zeta/paired-H4 mechanism.
+
+## Historical September 7 diagnosis
+
+The following diagnosis and proposed phrase-start slice are retained as dated
+evidence. Their artifact pointer, resource snapshot and next action are not current;
+[current state](current-state.md) owns the live checkpoint.
 
 PR #1171 candidate bb6b8ba4 fits construction 8/8 from parent 2/8 and reaches
 open 6/8 from 2/8, preserving the selected earlier outputs. It fails selection;
@@ -72,7 +84,7 @@ cannot receive distinct scores from this selector. This is a source-derived
 conditional example, **not a new model execution**. More shape-only fitting
 cannot resolve the general case.
 
-## Recommended next implementation
+## Historical proposed phrase-start implementation
 
 Extend the existing phrase-start selector with **bounded ordered lexical and
 role context**, reusing exact predecessor records, construction-bound prime
@@ -135,9 +147,9 @@ checkpoint costs separated. Tiny warm-kernel timings are not complete-model
 submillisecond claims. Tables can trade arithmetic for memory traffic; avoid
 Cartesian-product table growth or assuming every new coordinate adds information.
 
-## Evidence and resource discipline
+## Historical September 7 resource snapshot
 
-No new model result accompanies this direction. The last cycle used 60.167 s
+No new model result accompanied that direction. The recorded cycle used 60.167 s
 model and 276.856 s engineering commands. Cumulative model use is
 4,387.536/4,410 s, leaving 22.464 s at this snapshot. Refresh the shared ledger
 and storage receipt before execution; an issue or new session never resets them.
