@@ -150,6 +150,9 @@ mod writer_refinement;
 
 use serde::{Deserialize, Serialize};
 
+/// Experimental shared state/access/emission kernel; never an implicit fallback.
+pub mod shared_core;
+
 pub use completion_training::{ValueCompletionFitConfig, ValueCompletionFitReport};
 pub use completion_types::{
     CompletionAction, CompletionDecision, CompletionStateView, CompletionWork,

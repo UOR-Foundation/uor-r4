@@ -1,0 +1,427 @@
+{
+  "schema": "uor-r4.shared-core-result/1",
+  "date": "2026-09-12",
+  "issue": 973,
+  "decision": "FAIL_CONTEXTUAL_TRANSFER_SMOKE",
+  "promoted": false,
+  "retained_artifact": "blake3:15baec48bed905348d5ccf8ff0c53ff84673b0cd82976785f39ced42ef14cb78",
+  "source_base": "49da65c509e8b1b9f10e7891918d3618c65e9f20",
+  "source_freeze_sha256": "e4aee1d723cd2abe7c329d021c986b679d60ca8cb8c83a2149a02ea2735e4b5a",
+  "binary_sha256": "2cf8df990135942a3b432ee804116359a863df669b989a5966efb58d688030e4",
+  "compiler": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6\n",
+  "report_root": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent/.uor-handoff/2026-09-12-codex-v7/shared-core-first-step/experiment-1",
+  "files": {
+    "attempt.json": {
+      "sha256": "c881c14084f68d54f0258b0936db4aea69b9e1705e08c52ff904941924db3692",
+      "bytes": 469
+    },
+    "candidate.json": {
+      "sha256": "9b33248ceb41f6183e62405486669a9f49f7ef6c0342d02c0a6f40eac8a328d4",
+      "bytes": 139595
+    },
+    "design.json": {
+      "sha256": "4ea3b5305b422ba2cda20e739034655efdf2cdf5c07d88a6aad969d622942e9c",
+      "bytes": 1780
+    },
+    "fit.json": {
+      "sha256": "92f04d52e7f66c0f8d38fdb66dfcf65f9e2dc4a675f49abafc52dd027f879abf",
+      "bytes": 966
+    },
+    "generation.json": {
+      "sha256": "d108223d5f5df5aa07931f236418e3540268e3f16cddde5507e772cf6ddc503f",
+      "bytes": 36467
+    },
+    "initial.json": {
+      "sha256": "62fd3c2c359cb26d6761f22522b7c3479b43988fdd32838f02792ebd3766688a",
+      "bytes": 139466
+    },
+    "manifest.json": {
+      "sha256": "14a6cfcdca320bc17b72ff04da9c0500544d20f55c338f38f9be5fd7b9be4820",
+      "bytes": 1262
+    },
+    "result.json": {
+      "sha256": "d099f6f25ba0f287761881116479847a8d112fb78d4235e1957cf86a67cec0fb",
+      "bytes": 1898
+    }
+  },
+  "result": {
+    "artifact": "blake3:5979f2e226d34f12aae17ff3a33d0fddfa253d855af4f9754460eaf428cd925d",
+    "context_disabled": {
+      "correct": 1,
+      "mean_nll": 5.714352383868896,
+      "positions": 249,
+      "work": {
+        "candidates": 0,
+        "output_decisions": 3988,
+        "products": 16374,
+        "table_reads": 55805
+      }
+    },
+    "decision": "FAIL_CONTEXTUAL_TRANSFER_SMOKE",
+    "full": {
+      "correct": 0,
+      "mean_nll": 5.710435204912347,
+      "positions": 249,
+      "work": {
+        "candidates": 5728,
+        "output_decisions": 3988,
+        "products": 22946,
+        "table_reads": 81249
+      }
+    },
+    "initial_holdout": {
+      "correct": 2,
+      "mean_nll": 5.792988034231368,
+      "positions": 249,
+      "work": {
+        "candidates": 5728,
+        "output_decisions": 3988,
+        "products": 22942,
+        "table_reads": 81237
+      }
+    },
+    "language_qualification": "NOT_ESTABLISHED",
+    "parent": "blake3:8946180617a152f381f87c5949582646ea1662cf2dc2dff6822242750320df45",
+    "promoted": false,
+    "retained_model_comparison": "NOT_RUN",
+    "scope": "Offline likelihood uses the runtime's discrete states/branch scores. Evaluation work counts include both predicted and target branch walks, not serving latency.",
+    "state_disabled": {
+      "correct": 5,
+      "mean_nll": 5.7174382761991644,
+      "positions": 249,
+      "work": {
+        "candidates": 5728,
+        "output_decisions": 3988,
+        "products": 22926,
+        "table_reads": 81189
+      }
+    },
+    "transport_disabled": {
+      "correct": 5,
+      "mean_nll": 5.7174382761991644,
+      "positions": 249,
+      "work": {
+        "candidates": 5728,
+        "output_decisions": 3988,
+        "products": 21946,
+        "table_reads": 79229
+      }
+    },
+    "zeta_disabled": {
+      "correct": 1,
+      "mean_nll": 5.687287158311755,
+      "positions": 249,
+      "work": {
+        "candidates": 5728,
+        "output_decisions": 3988,
+        "products": 21958,
+        "table_reads": 78285
+      }
+    }
+  },
+  "fit": {
+    "config": {
+      "seed": 211,
+      "max_proposals": 100000,
+      "max_seconds": 120
+    },
+    "before": {
+      "positions": 672,
+      "correct": 4,
+      "mean_nll": 5.820628304855286,
+      "work": {
+        "products": 61240,
+        "table_reads": 216528,
+        "candidates": 14784,
+        "output_decisions": 10764
+      }
+    },
+    "after": {
+      "positions": 672,
+      "correct": 25,
+      "mean_nll": 5.223800196046726,
+      "work": {
+        "products": 61267,
+        "table_reads": 216610,
+        "candidates": 14784,
+        "output_decisions": 10765
+      }
+    },
+    "proposals": 100000,
+    "accepted": 440,
+    "proposals_by_family": [
+      11112,
+      11111,
+      11111,
+      11111,
+      11111,
+      11111,
+      11111,
+      11111,
+      11111
+    ],
+    "accepted_by_family": [
+      7,
+      15,
+      65,
+      55,
+      71,
+      4,
+      180,
+      37,
+      6
+    ],
+    "elapsed_ms": 28005,
+    "time_limit_reached": false,
+    "training_digest": "blake3:111878a1173bd58fa56c67468226945ad247a05dae38976fcab566c7b5d44a14"
+  },
+  "generations": [
+    {
+      "model": "initial",
+      "prompt": "The small bird ",
+      "control": "Full",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "86074c08144940046c0886e2214e07614a8630c040082094"
+    },
+    {
+      "model": "initial",
+      "prompt": "The small bird ",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "86074c08144940046c0886e2214e07614a8630c040082094"
+    },
+    {
+      "model": "initial",
+      "prompt": "The small bird ",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "b38388a820b38388a820b38388a820b38388a820b38388a8"
+    },
+    {
+      "model": "initial",
+      "prompt": "Cora now lives in Oslo. Cora lives in ",
+      "control": "Full",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "15865804b3560812744c9b9642ac494e393301f7b44c0734"
+    },
+    {
+      "model": "initial",
+      "prompt": "Cora now lives in Oslo. Cora lives in ",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "15865804b3560812744c9b9642ac494e393301f7b44c0734"
+    },
+    {
+      "model": "initial",
+      "prompt": "Cora now lives in Oslo. Cora lives in ",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "b38388a820b38388a820b38388a820b38388a820b38388a8"
+    },
+    {
+      "model": "initial",
+      "prompt": "User: Hello.\nAssistant:",
+      "control": "Full",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "9608065f8280664261813970184529678169c104257c1829"
+    },
+    {
+      "model": "initial",
+      "prompt": "User: Hello.\nAssistant:",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "9608065f8280664261813970184529678169c104257c1829"
+    },
+    {
+      "model": "initial",
+      "prompt": "User: Hello.\nAssistant:",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "84124d20b38388a820b38388a820b38388a820b38388a820"
+    },
+    {
+      "model": "initial",
+      "prompt": "fn third(a: i32) -> i32 { ",
+      "control": "Full",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "a8813260e54800b4d1291a0112f8f7832012e6c605a608db"
+    },
+    {
+      "model": "initial",
+      "prompt": "fn third(a: i32) -> i32 { ",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "a8813260e54800b4d1291a0112f8f7832012e6c605a608db"
+    },
+    {
+      "model": "initial",
+      "prompt": "fn third(a: i32) -> i32 { ",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "b38388a820b38388a820b38388a820b38388a820b38388a8"
+    },
+    {
+      "model": "candidate",
+      "prompt": "The small bird ",
+      "control": "Full",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "0070a113238b00c21a2e02cd01898c6b6e0b0455524088a2"
+    },
+    {
+      "model": "candidate",
+      "prompt": "The small bird ",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "0070a113238b00c21a2e02cd01898c6b6e0b16ce185d0015"
+    },
+    {
+      "model": "candidate",
+      "prompt": "The small bird ",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "00e4431042084133401fe832511065b5d909a20143106e02"
+    },
+    {
+      "model": "candidate",
+      "prompt": "Cora now lives in Oslo. Cora lives in ",
+      "control": "Full",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "9323b8180e482a1d0f32c3200417325f48a5a5270b320adc"
+    },
+    {
+      "model": "candidate",
+      "prompt": "Cora now lives in Oslo. Cora lives in ",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "1dce42d62f238f8dc4a455538ccb96906376a50ff199c86f"
+    },
+    {
+      "model": "candidate",
+      "prompt": "Cora now lives in Oslo. Cora lives in ",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "00e4325110656312631252dba0008843021065910a880e33"
+    },
+    {
+      "model": "candidate",
+      "prompt": "User: Hello.\nAssistant:",
+      "control": "Full",
+      "bytes": 93,
+      "eos": true,
+      "first_24_bytes_hex": "10320c10008214100a44a213605529fecee6ec1d0ac88950"
+    },
+    {
+      "model": "candidate",
+      "prompt": "User: Hello.\nAssistant:",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "103210441252218f988041e5638a5d5a0b67dc740e0fa30f"
+    },
+    {
+      "model": "candidate",
+      "prompt": "User: Hello.\nAssistant:",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "1065b5ccc2d833401fa301431244fa548c041c81bb316430"
+    },
+    {
+      "model": "candidate",
+      "prompt": "fn third(a: i32) -> i32 { ",
+      "control": "Full",
+      "bytes": 46,
+      "eos": true,
+      "first_24_bytes_hex": "c5131671b5e87116da0990c524890e3370c93613a6640088"
+    },
+    {
+      "model": "candidate",
+      "prompt": "fn third(a: i32) -> i32 { ",
+      "control": "ContextDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "b5c04e9475103c299f9c25a2b00ad988ccdc88a3e291a289"
+    },
+    {
+      "model": "candidate",
+      "prompt": "fn third(a: i32) -> i32 { ",
+      "control": "StateDisabled",
+      "bytes": 96,
+      "eos": false,
+      "first_24_bytes_hex": "00aec0b20ea9b35f660b1065910a880e4132510860910a09"
+    }
+  ],
+  "generation_assessment": "No useful language or Rust continuation in the four Full generations. Candidate EOS 2/4; initialized EOS 0/4. Termination alone is not language improvement. Raw output bytes for all 24 generations are sealed in generation.json.",
+  "criteria": {
+    "holdout_nll_fraction": 0.98,
+    "holdout_accuracy_not_lower": true,
+    "context_disabled_nll_fraction": 1.01,
+    "state_disabled_nll_fraction": 1.01
+  },
+  "scope": "One 672-position training population and 249-position held-out population, familiar words in changed combinations. One fit, 100000 proposals. No retained-model comparison, session/API integration, broad language/coding or energy qualification.",
+  "diagnosis": "The joint objective decreases but the shared hard-forward learner has not acquired useful byte prediction or contextual transfer. The current evidence does not isolate representation from optimizer credit assignment. Do not infer that all geometric language cores fail.",
+  "next_action": "One bounded diagnostic of branch errors and state distinctions on the preserved 5979f2e2 candidate, with no refit: identify whether frequent byte decisions are separable in the available state before changing representation or optimizer. This opened holdout is now development evidence; a later design needs a separate frozen acceptance population.",
+  "validation": {
+    "focused_tests": {
+      "passed": 7,
+      "log": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent/.uor-handoff/2026-09-12-codex-v7/shared-core-first-step/focused-tests-2.log"
+    },
+    "allocation_census": {
+      "passed": 1,
+      "observe_predict_steps": 512,
+      "allocations": 0,
+      "log": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent/.uor-handoff/2026-09-12-codex-v7/shared-core-first-step/allocation-test.log"
+    },
+    "release_example_build": "PASS",
+    "fmt_check": "PASS",
+    "claim_wording": "PASS",
+    "diff_check": "PASS",
+    "source_review": "/Users/casey.allard/uor-r4-worktrees/initial-previous-intent/.uor-handoff/2026-09-12-codex-v7/shared-core-first-step/source-review.md",
+    "full_suite": "NOT_RUN",
+    "earlier_compile_failure": "Ambiguous test sum type; fixed to usize and focused tests passed. Failed build charged and log preserved."
+  },
+  "resources": {
+    "at": "2026-09-12T20:56:22.116Z",
+    "model_ms": 248780,
+    "engineering_command_ms": 18315,
+    "ledger": {
+      "cumulative_ms": 119999353,
+      "limit_ms": 132950000
+    },
+    "limits": {
+      "model_ms": 1200000,
+      "engineering_ms": 600000,
+      "new_storage_bytes": 2147483648
+    },
+    "storage_high_water": {
+      "target": 26267648,
+      "git": 3268608,
+      "worktree": 1228300288,
+      "evidence": 2629632,
+      "at": "2026-09-12T20:53:25.115Z"
+    },
+    "storage_growth_bytes": 1260466176,
+    "peak_sampled_process_tree_rss_bytes": 2253389824,
+    "fit_attempts": 1,
+    "model_runs_complete": true,
+    "paid_compute": 0
+  }
+}

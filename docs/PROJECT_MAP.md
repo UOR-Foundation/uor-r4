@@ -20,6 +20,12 @@ and exact receipts determine what was built or executed. Read those together
 before resuming expensive work. A cached knowledge record or an archived README
 does not override the current owner direction.
 
+## Current development path
+
+The [canonical plan](integration/project-track.md#current-implementation-sequence--owner-adopted-september-12) now prioritizes a shared trainable geometric language core. The [first-step design](integration/shared-geometric-core-2026-09.md) scopes its finite H4 recurrence, bounded reads and byte/EOS decisions in `crates/uor-r4-core/src/native_geometric/shared_core/`. It is an isolated experiment with no promoted artifact, old additive predictor fallback or connected exact-memory/typed-operator serving path. [Current state](integration/current-state.md) owns its execution outcome and the retained `15baec48` identity.
+
+The accumulated memory repair is parked and preserved. Its historical records remain navigation and evidence, not active instructions. Local task notes stay in the established `.uor-handoff/2026-09-12-codex-v7/` handoff, linked from the shared-core worktree; original artifacts and sealed reports stay at their existing paths.
+
 ## The active model and interfaces
 
 The accepted native model lives in
