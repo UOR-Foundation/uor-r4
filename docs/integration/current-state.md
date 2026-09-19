@@ -1,5 +1,31 @@
 # Current native geometric AI work
 
+## Geometric addressed memory: an interference-free, multiplier-free attention, measured — September 19, 2026
+
+**THE PROJECT'S OWN THESIS — EXACT ADDRESSED MEMORY — SHOWS A MEASURED ADVANTAGE OVER THE SOFT-MATCHED-FILTER ALTERNATIVE; NEITHER SOLVES THE TASK YET.**
+
+New `learner/geometric_attention.rs`, built on the owner's direction to push the project's mathematics rather than fall back on linear attention. Design: `S[addr(prev)] += value(cur)` and `y = norm(S[addr(query)])`, then `W_o · relu(y)`. The address is a **table read**, the write is an **add**, the read is a **table read**, and the normalisation is a **bit scan plus a shift** — multiplier-free throughout, at `O(dv)` per token against linear attention's `O(dk·dv)`. Addresses are elements of the machine-checked 2I group (the 120 canonical H4 roots composed through `learner/group_table.rs`); two composed factors give 120² = 14,400 addresses (13.8 bits), the transition plan's `H4^k` product-code lever on the existing table.
+
+**Measured, held out, deterministic seeds, one layer.** Context repetition (a random run `R`, then `R` again; the second copy is only predictable from memory of `prev → next`):
+
+| context | geometric (exact address) | linear attention |
+|---:|---:|---:|
+| 4 | **0.69** | 0.05 |
+| 8 | **0.31** | 0.03 |
+| 16 | **0.02** | 0.00 |
+
+The direction is the one theory predicts — exact addressing removes the cross-talk that limits a matched filter. **But the honest reading is that both mechanisms fail this task at this scale, and the exact-addressing variant fails less.** A 0.05 baseline is at chance for 32 classes, so "beats linear attention" is a weak claim and is recorded as such.
+
+**Negatives, recorded before any claim.** It does not solve the task (0.69 at context 4, 0.02 at 16). More training does not help (900 → 3000 steps: 0.69 → 0.66, 0.31 → 0.20), so the ceiling is a mechanism limit, not a budget. The confirmed power-of-two readout normalisation had **no measurable effect here** (0.69 → 0.69) — it is retained as correct conditioning, but the binding limit is elsewhere. The address assignment is **fixed**, not learned (as the project itself initialises `token_to_root`); capacity is bounded by `n_addr`.
+
+**Focused tests pass** (11 `geometric_attention`): the integer serving path equals the `f64` reference exactly; 64 tokens map to 64 distinct addresses; gradients reach both tables; and exact addressing beats the matched filter at every context length. `cargo fmt --check` clean.
+
+**Likely causes of the ceiling, in order:** ternary `dv = 32` value/output tables give the readout limited resolution for 32 classes; and a first-order (bigram) memory cannot represent longer structure.
+
+**Next action.** (1) Raise `dv` 32 → 128 at fixed everything else: if accuracy rises with `dv` the limit is readout resolution and the mechanism scales, otherwise it is the first-order address design and product factors are required. (2) Learn the address factors (`H4^k`, Stage 3) instead of fixing them. (3) Compose rather than choose — the exact-address memory and the matrix-state core solve different problems (associative recall vs contextual integration), so a layer that reads both is the natural next architecture. The move to the project BPE is confirmed and is queued for the next training run, after conditioning.
+
+**Receipt:** [`native_geometric_geometric_attention_2026-09-19.txt`](../evidence/native_geometric_geometric_attention_2026-09-19.txt).
+
 ## Dense recurrence structurally falsified; content-addressed multiplier-free core proposed and measured — September 19, 2026
 
 **THE DENSE LOW-BIT RECURRENCE FAILS FOR TWO STRUCTURAL REASONS, BOTH MEASURED; A CONTENT-ADDRESSED REPLACEMENT RETRIEVES WHERE IT CANNOT.**

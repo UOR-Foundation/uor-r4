@@ -128,6 +128,19 @@ harness-reported wall time of the run itself.
 `lowbit_chat.bin` negative candidate from the earlier entry is unchanged. The **128 MiB model-storage
 stop margin is untouched**; no deletion, no cleanup and no paid or external compute.
 
+## Charges recorded — geometric addressed memory (2026-09-19, later still)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | `geometric_attention` focused and comparative runs (release + debug) | 210,000 ms | **Measured.** Harness wall times 55.77 + 41.58 + 65.59 + 42.78 s across the comparative sweeps, plus the smaller debug run. |
+
+**New cumulative: 142,568,565 ms.** Remaining: 147,200,000 − 142,568,565 = **4,631,435 ms (~77.2 min)**.
+
+**No extension was used**; the limit is unchanged at 147,200,000 ms. Builds and formatting remain
+engineering, not model time. **Storage:** no model artifact was created; new tracked files are text.
+The **128 MiB model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external
+compute.
+
 ## Not done
 
 No destructive deletion, no cleanup of prior artifacts, no paid compute. The 2026-09-18
