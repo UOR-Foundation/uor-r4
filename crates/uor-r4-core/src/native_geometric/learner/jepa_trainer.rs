@@ -17,7 +17,7 @@ use super::embedding::{
 use super::transition_table::{DiscreteServingTable, MultiLaneTransitionTables};
 use crate::native_geometric::engram::{EngramTable, MAX_ENGRAM_COLLOCATIONS};
 use crate::native_geometric::hopf_metric::{
-    HopfFiberPointQ30, UnitS2, UnitS2Q30, UnitS3, UnitS3Q30, EPSILON,
+    mul_shift_add, HopfFiberPointQ30, UnitS2, UnitS2Q30, UnitS3, UnitS3Q30, EPSILON,
 };
 use crate::native_geometric::lattice_table::{ContinuousLatticeTables, HierarchicalLatticeTables};
 use crate::native_geometric::learner::vsa_codes::build_root_codebook;
@@ -986,28 +986,28 @@ impl ExportedGeometricModel {
         let s2 = s2_state.0;
         let u = token_s2.0;
 
-        let hat_vx = ((ws[0] as i64 * s2[0] as i64
-            + ws[1] as i64 * s2[1] as i64
-            + ws[2] as i64 * s2[2] as i64
-            + wt[0] as i64 * u[0] as i64
-            + wt[1] as i64 * u[1] as i64
-            + wt[2] as i64 * u[2] as i64)
+        let hat_vx = ((mul_shift_add(ws[0] as i64, s2[0] as i64)
+            + mul_shift_add(ws[1] as i64, s2[1] as i64)
+            + mul_shift_add(ws[2] as i64, s2[2] as i64)
+            + mul_shift_add(wt[0] as i64, u[0] as i64)
+            + mul_shift_add(wt[1] as i64, u[1] as i64)
+            + mul_shift_add(wt[2] as i64, u[2] as i64))
             >> 14)
             + ((b[0] as i64) << 16);
-        let hat_vy = ((ws[3] as i64 * s2[0] as i64
-            + ws[4] as i64 * s2[1] as i64
-            + ws[5] as i64 * s2[2] as i64
-            + wt[3] as i64 * u[0] as i64
-            + wt[4] as i64 * u[1] as i64
-            + wt[5] as i64 * u[2] as i64)
+        let hat_vy = ((mul_shift_add(ws[3] as i64, s2[0] as i64)
+            + mul_shift_add(ws[4] as i64, s2[1] as i64)
+            + mul_shift_add(ws[5] as i64, s2[2] as i64)
+            + mul_shift_add(wt[3] as i64, u[0] as i64)
+            + mul_shift_add(wt[4] as i64, u[1] as i64)
+            + mul_shift_add(wt[5] as i64, u[2] as i64))
             >> 14)
             + ((b[1] as i64) << 16);
-        let hat_vz = ((ws[6] as i64 * s2[0] as i64
-            + ws[7] as i64 * s2[1] as i64
-            + ws[8] as i64 * s2[2] as i64
-            + wt[6] as i64 * u[0] as i64
-            + wt[7] as i64 * u[1] as i64
-            + wt[8] as i64 * u[2] as i64)
+        let hat_vz = ((mul_shift_add(ws[6] as i64, s2[0] as i64)
+            + mul_shift_add(ws[7] as i64, s2[1] as i64)
+            + mul_shift_add(ws[8] as i64, s2[2] as i64)
+            + mul_shift_add(wt[6] as i64, u[0] as i64)
+            + mul_shift_add(wt[7] as i64, u[1] as i64)
+            + mul_shift_add(wt[8] as i64, u[2] as i64))
             >> 14)
             + ((b[2] as i64) << 16);
 
@@ -1017,16 +1017,16 @@ impl ExportedGeometricModel {
         let wft = &self.discrete_jepa_fiber_w_token;
         let bf = &self.discrete_jepa_fiber_bias;
 
-        let hat_fx = ((wfs[0] as i64 * fiber_u1[0] as i64
-            + wfs[1] as i64 * fiber_u1[1] as i64
-            + wft[0] as i64 * token_u1[0] as i64
-            + wft[1] as i64 * token_u1[1] as i64)
+        let hat_fx = ((mul_shift_add(wfs[0] as i64, fiber_u1[0] as i64)
+            + mul_shift_add(wfs[1] as i64, fiber_u1[1] as i64)
+            + mul_shift_add(wft[0] as i64, token_u1[0] as i64)
+            + mul_shift_add(wft[1] as i64, token_u1[1] as i64))
             >> 14)
             + ((bf[0] as i64) << 16);
-        let hat_fy = ((wfs[2] as i64 * fiber_u1[0] as i64
-            + wfs[3] as i64 * fiber_u1[1] as i64
-            + wft[2] as i64 * token_u1[0] as i64
-            + wft[3] as i64 * token_u1[1] as i64)
+        let hat_fy = ((mul_shift_add(wfs[2] as i64, fiber_u1[0] as i64)
+            + mul_shift_add(wfs[3] as i64, fiber_u1[1] as i64)
+            + mul_shift_add(wft[2] as i64, token_u1[0] as i64)
+            + mul_shift_add(wft[3] as i64, token_u1[1] as i64))
             >> 14)
             + ((bf[1] as i64) << 16);
 
