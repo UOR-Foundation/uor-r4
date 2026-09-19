@@ -163,10 +163,30 @@ compute.
 
 **New cumulative: 142,858,565 ms.** Remaining: 147,200,000 − 142,858,565 = **4,341,435 ms (~72.4 min)**.
 
-## Not done
 **No extension was used**; the limit is unchanged at 147,200,000 ms. Builds and formatting remain
 engineering, not model time. **Storage:** no model artifact was created. The **128 MiB model-storage
 stop margin is untouched**; no deletion, no cleanup, no paid or external compute.
+
+## Charges recorded — ordered-word addressing and SpiralCore knowledge indexing (2026-09-19, final)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | `geometric_attention` ordered-word suite, three release runs (one pre-fix, two post-fix) | 215,000 ms | **Measured.** 71.39 + ~71 + 71.16 s harness wall time. |
+
+**New cumulative: 143,073,565 ms.** Remaining: 147,200,000 − 143,073,565 = **4,126,435 ms (~68.8 min)**.
+
+**No extension was used.** **Knowledge indexing is not model time** and is not charged; it writes 34
+items / 33 edges to the local knowledge SQLite database (`~/.local/share/uor-r4/knowledge/knowledge.sqlite3`)
+with import digest `e530c9f3912d755c06344f63af94e54eab0dbb1b17aff6814c4b8830d81be57e`.
+
+**Storage.** New tracked files are text: the rewritten `geometric_attention.rs`, the receipt, the
+SpiralCore extraction (`research/spiralcore-v68/spiralcore-v68-mathematics-extract.txt`, 51,757 bytes)
+and the knowledge import JSONL under the ignored `.uor-models/` tree. No model artifact was created.
+The **128 MiB model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external
+compute.
+
+**Documentation repair.** A duplicated `## Not done` heading with an orphaned paragraph was found in
+this file during the update, introduced by repeated insert-before-anchor edits, and repaired here.
 
 ## Not done
 

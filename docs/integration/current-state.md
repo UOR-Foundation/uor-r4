@@ -1,5 +1,40 @@
 # Current native geometric AI work
 
+## Ordered-word addressing recovers the collapse; context copy reaches 100% — September 19, 2026
+
+**THE PROJECT'S ORDERED-N-LET FORMALISM WORKS: THE COLLAPSE IS RECOVERED AND THE MATCHED-FILTER BASELINE IS LEFT AT ZERO.**
+
+Owner direction was to synthesise the wider toolset before implementing. Three findings changed or confirmed the plan. (1) The project's **September-13 attention synthesis** had already selected H1 (structured geometric recurrent learner with relation-preserving reads) and named the **directed relative element `r(i,j) = inverse(g_i)·g_j`** as the descriptor to prefer over a scalar distance — precisely the ordered-word idea this session derived from measurement. (2) That synthesis predates D0-b and says a published MatMul-free model's ternary accumulation "is a matrix product under this project's stronger rule"; **that was the D0-a reading, superseded by owner-signed D0-b**, which explicitly permits bounded integer/ternary linear maps with no multiplier in the kernel. `LowBitAttention` is legal under D0-b and would not have been under D0-a; the conflict is recorded, not hidden. (3) W33/NEMESIS supply no replacement attention rule (their own dossier says so), but W33's **ordered-operation principle** (`PLPL = LPLP`, `Ω = LP − PL`, `ker(Ω)` order-insensitive) transferred and worked.
+
+**Change.** `GeometricAttention` now addresses by an **ordered word** of `order` tokens over the 120 elements of `2I` — `order = 2` gives 120² = 14,400 ordered addresses with `(a,b) ≠ (b,a)` by construction. Positional radix composition of 2I elements; table reads and index arithmetic, no multiplier.
+
+**The falsifiable prediction from the previous round is confirmed.** Task and alphabet fixed; only word length changes:
+
+| measurement | order = 1 | order = 2 |
+|---|---:|---:|
+| duplicated-key accuracy | 0.14 | **0.98** |
+| clean accuracy | 0.44 | **1.00** |
+
+**Context copy (held out, deterministic seeds):**
+
+| context | order=1 | **order=2** | linear attention |
+|---:|---:|---:|---:|
+| 4 | 0.86 | **1.00** | 0.05 |
+| 8 | 0.64 | **1.00** | 0.03 |
+| 16 | 0.47 | **1.00** | 0.00 |
+
+**Two earlier ablations moved back to `order = 1`, explicitly.** Both are true and both are now unresolvable at `order = 2` because the task saturates at 1.00: the `relu`-after-read cost (order=2: 0.95 vs 1.00, below threshold; order=1: 0.31 vs 0.64) and the resolution scaling (order=2: 1.00 vs 1.00; order=1: 0.64 vs 0.80). Recorded rather than silently weakened — a saturated task is not evidence of absence.
+
+**A defect found and corrected mid-change.** The refactor's first run gave 0.00 everywhere, including `order = 1` where 0.86 was known. Cause: `tail_word` was off by one (read index `len` instead of `len − 1`), so `forward_i32` and therefore the accuracy metric read the wrong bucket — **training was correct and the measurement was not.** All results above are post-fix. Recorded because a measurement bug that mimics a mechanism failure is the exact error class this project has been burned by.
+
+**SpiralCore mathematics indexed into project knowledge** (owner request). Mechanical extraction of the preserved HTML, SHA-256 verified against the preserved copy: **33 sections, 49,066 characters** — dodecahedral/icosahedral network, six H2 decagons, 3-fold axes, addressing schema, E8 operator subnet routing, LADA ports (D4/F4), stabilizer/inversion angle-invariance, Bell 2-of-6 codec, Clifford complement, FBS binder tree, orbit/route traces, route directional-spread witness, core-edge effective resistance, scope ledger. Extract at `research/spiralcore-v68/spiralcore-v68-mathematics-extract.txt`; ingested as **34 items / 33 edges**; retrieval verified through the knowledge service. Faithful text extraction, not endorsement; formulas carried as HTML markup may be degraded, and the preserved HTML remains the source of record.
+
+**Focused tests pass** (14 `geometric_attention`); `cargo fmt --check` clean.
+
+**Next action.** (1) **Harden the measurement before claiming more**: the task now saturates at 1.00, so raise alphabet and run length until `order = 2` stops scoring 1.00, then re-measure `order = 2` vs `order = 3` there — a mechanism measured only on a task it aces is not measured. (2) **Graded group kernel** — the other half of the project's `r(i,j)` formalism: read neighbouring group elements with partial weight `w[class(q⁻¹g)]` so a query can match a *near* word. (3) Then BPE-4096 and a real instruction-data run.
+
+**Receipt:** [`native_geometric_ordered_word_addressing_2026-09-19.txt`](../evidence/native_geometric_ordered_word_addressing_2026-09-19.txt).
+
 ## Geometric addressed memory: an interference-free, multiplier-free attention, measured — September 19, 2026
 
 **THE PROJECT'S OWN THESIS — EXACT ADDRESSED MEMORY — SHOWS A MEASURED ADVANTAGE OVER THE SOFT-MATCHED-FILTER ALTERNATIVE; NEITHER SOLVES THE TASK YET.**
