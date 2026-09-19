@@ -574,6 +574,69 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
     }
 }
 
+/// Classify multiplying operators by whether a compiler can lower them to shifts and adds.
+///
+/// Heuristic, and documented as one (Card P8): the token immediately FOLLOWING `*` is examined;
+/// if it is an integer literal with `<= 4` set bits it is `cheap` (at most three shifts and adds),
+/// otherwise `dense`; if it is not a literal at all the multiply is `variable` and always needs a
+/// multiplier. A left-literal form such as `4 * a` is not detected as constant and is counted as
+/// variable, so the `variable` count is an over-estimate, which is the safe direction for a
+/// ratchet.
+fn classify_multipliers(src: &str) -> (usize, usize, usize) {
+    let (mut cheap, mut dense, mut variable) = (0usize, 0usize, 0usize);
+    for raw in src.lines() {
+        let line = match raw.find("//") {
+            Some(i) => &raw[..i],
+            None => raw,
+        };
+        if line.contains("*mut") || line.contains("*const") {
+            continue;
+        }
+        // A leading '*' is a block/doc comment continuation, not a multiply.
+        let first_star = line.find('*');
+        let bytes = line.as_bytes();
+        for (i, &c) in bytes.iter().enumerate() {
+            if c != b'*' || Some(i) == first_star {
+                continue;
+            }
+            if i + 1 < bytes.len() && bytes[i + 1] == b'=' {
+                variable += 1;
+                continue;
+            }
+            let mut j = i + 1;
+            while j < bytes.len() && (bytes[j] as char).is_whitespace() {
+                j += 1;
+            }
+            let start = j;
+            while j < bytes.len() && bytes[j].is_ascii_alphanumeric() {
+                j += 1;
+            }
+            let tok = &line[start..j];
+            let value = if let Some(h) = tok.strip_prefix("0x").or_else(|| tok.strip_prefix("0X")) {
+                let digits: String = h.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+                if digits.is_empty() {
+                    None
+                } else {
+                    u64::from_str_radix(&digits, 16).ok()
+                }
+            } else {
+                let digits: String = tok.chars().take_while(|c| c.is_ascii_digit()).collect();
+                if digits.is_empty() {
+                    None
+                } else {
+                    digits.parse::<u64>().ok()
+                }
+            };
+            match value {
+                Some(v) if v.count_ones() <= 4 => cheap += 1,
+                Some(_) => dense += 1,
+                None => variable += 1,
+            }
+        }
+    }
+    (cheap, dense, variable)
+}
+
 /// Ratcheting multiplier census over the serving path.
 ///
 /// # Why this exists
@@ -646,19 +709,75 @@ fn serving_path_multiplier_census_is_ratcheting() {
         ),
     ];
 
-    let mut counts: Vec<(&str, usize, usize)> = Vec::with_capacity(modules.len());
+    let mut counts: Vec<(&str, usize, usize, usize, usize, usize)> =
+        Vec::with_capacity(modules.len());
     for (label, src, ceiling, _target) in modules {
         let n = scan_for_forbidden_arith(src).offenders.len();
-        counts.push((label, n, ceiling));
+        let (cheap, dense, variable) = classify_multipliers(src);
+        // `classify_multipliers` inspects the `*` operator only. The scanner also counts METHOD
+        // forms (`wrapping_mul(` etc.), which the classifier does not see, so this count is
+        // reported separately rather than being silently folded into `variable`. The `variable`
+        // total is therefore a LOWER bound on real multiplies.
+        let method_forms = [
+            "wrapping_mul(",
+            "saturating_mul(",
+            "checked_mul(",
+            "unchecked_mul(",
+        ]
+        .iter()
+        .map(|m| src.matches(m).count())
+        .sum::<usize>();
+        counts.push((label, n, cheap, dense, variable, method_forms));
+        let _ = ceiling;
     }
 
+    // Controls: the classifier must not be vacuous. `vsa/attention.rs` uses `square_u64` and
+    // `div_small_positive`, so it must classify clean; and `mul_q30` must classify as variable.
+    let attention = include_str!("../src/native_geometric/vsa/attention.rs");
+    let (a_cheap, a_dense, a_var) = classify_multipliers(attention);
+    assert_eq!(
+        (a_cheap, a_dense, a_var),
+        (0, 0, 0),
+        "control failed: vsa/attention.rs is written with shift-add idioms and must classify clean"
+    );
+    let hopf_full = include_str!("../src/native_geometric/hopf_metric.rs");
+    let mul_fn = hopf_full
+        .split("pub fn mul_q30")
+        .nth(1)
+        .and_then(|s| s.split("pub fn norm_q30").next())
+        .unwrap_or("");
+    let (_, _, m_var) = classify_multipliers(mul_fn);
+    assert!(
+        m_var > 0,
+        "control failed: mul_q30 multiplies two Q1.30 runtime operands and must classify as variable"
+    );
+
     // Report every count before asserting, so one failure still shows the whole picture.
-    for (label, n, ceiling) in &counts {
-        println!("multiplier census: {label:<32} {n:>5}  ceiling {ceiling}");
+    println!("multiplier census (raw, cheap_const, dense_const, variable, method_forms):");
+    let mut raw_total = 0usize;
+    let mut gated_total = 0usize;
+    let mut method_total = 0usize;
+    for (label, n, cheap, dense, variable, method) in &counts {
+        println!(
+            "  {label:<32} raw {n:>4}  cheap {cheap:>4}  dense {dense:>4}  var {variable:>4}  method {method:>4}"
+        );
+        raw_total += n;
+        gated_total += dense + variable;
+        method_total += method;
     }
+    println!(
+        "  {:<32} raw {raw_total:>4}  gated(dense+var) {gated_total:>4}  method_forms {method_total:>4}",
+        "TOTAL"
+    );
+    println!(
+        "  NOTE: method_forms ({method_total}) are multiplies the classifier cannot see, so the \
+         gated total is a LOWER bound; the raw count includes them."
+    );
+
     let mut breaches = Vec::new();
-    for (label, n, ceiling) in &counts {
-        if n > ceiling {
+    for (i, (label, n, _cheap, _dense, _variable, _method)) in counts.iter().enumerate() {
+        let ceiling = modules[i].2;
+        if *n > ceiling {
             breaches.push(format!(
                 "{label}: {n} multiplying operators, ceiling {ceiling}"
             ));
