@@ -130,6 +130,10 @@ The native learned core may use low-bit linear maps. `learner/lowbit.rs` impleme
 ternary weights at 2 bits each with per-row power-of-two scales, trained in float, served in exact
 integer arithmetic, with a test asserting the serving path equals the floating reference.
 
+---
+
+## D1 — Falsification before extension
+
 Owner (human): Casey · Drafted by: Zed (agent) · Date: 2026-09-19 · **Signed: Casey 2026-09-19**
 
 Method is Socratic and falsify-first. Before any new geometric mechanism is added,
