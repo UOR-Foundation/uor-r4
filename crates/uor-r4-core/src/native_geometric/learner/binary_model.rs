@@ -119,6 +119,27 @@ pub struct RgmSectionHeader {
     pub _reserved: u32,
 }
 
+/// Number of `i8` entries in the LATTICE section's coarse root-trigram block, derived from
+/// the section length instead of assumed.
+///
+/// LATTICE payload layout: `num_clusters u32 + reserved u32` (`8` bytes), then
+/// `token_to_cluster u16 x vocab_size` padded to 8, then the coarse i8 block, padded to 2,
+/// then the fine `i16 x num_clusters^2` block. The writer emits **either** the full coarse
+/// table **or** none, so the residual after removing the aligned prefix and the fine block
+/// is exactly the coarse length. An artifact with an absent coarse block is valid and scores
+/// as if the coarse term were zero, which is what removing the tier means.
+fn lattice_coarse_len(section_len: usize, vocab_size: usize, num_clusters: usize) -> usize {
+    let mut prefix = 8 + vocab_size * 2;
+    let rem = prefix % 8;
+    if rem != 0 {
+        prefix += 8 - rem;
+    }
+    let fine_bytes = 2 * num_clusters * num_clusters;
+    section_len
+        .saturating_sub(prefix)
+        .saturating_sub(fine_bytes)
+}
+
 /// Error type for binary serialization, deserialization, and mmap operations.
 #[derive(Debug)]
 pub enum BinaryModelError {
@@ -645,16 +666,24 @@ impl ExportedGeometricModel {
                     cur_lat += 8 - rem;
                 }
 
-                let mut coarse_trigram = vec![0i8; COARSE_TABLE_SIZE];
-                let coarse_u8: &[u8] = &bytes[cur_lat..cur_lat + COARSE_TABLE_SIZE];
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        coarse_u8.as_ptr(),
-                        coarse_trigram.as_mut_ptr() as *mut u8,
-                        COARSE_TABLE_SIZE,
-                    );
+                let coarse_len = lattice_coarse_len(s4.length as usize, vocab_size, num_clusters);
+                if coarse_len != 0 && coarse_len != COARSE_TABLE_SIZE {
+                    return Err(BinaryModelError::CorruptedData(
+                        "lattice coarse block is neither absent nor the full table",
+                    ));
                 }
-                cur_lat += COARSE_TABLE_SIZE;
+                let mut coarse_trigram = vec![0i8; coarse_len];
+                if coarse_len > 0 {
+                    let coarse_u8: &[u8] = &bytes[cur_lat..cur_lat + coarse_len];
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            coarse_u8.as_ptr(),
+                            coarse_trigram.as_mut_ptr() as *mut u8,
+                            coarse_len,
+                        );
+                    }
+                }
+                cur_lat += coarse_len;
                 let rem2 = cur_lat % 2;
                 if rem2 != 0 {
                     cur_lat += 2 - rem2;
@@ -852,6 +881,8 @@ pub struct MmapGeometricModel {
     lattice_num_clusters: usize,
     lattice_token_to_cluster_offset: usize,
     lattice_coarse_offset: usize,
+    /// Number of `i8` coarse entries actually present; `0` means the coarse tier was removed.
+    lattice_coarse_entries: usize,
     lattice_fine_offset: usize,
 
     // Section 5: Engram
@@ -1006,6 +1037,7 @@ impl MmapGeometricModel {
             lattice_num_clusters,
             lattice_token_to_cluster_offset,
             lattice_coarse_offset,
+            lattice_coarse_entries,
             lattice_fine_offset,
         ) = if s4.length > 0 && flags & FLAG_HAS_HIERARCHICAL_LATTICE != 0 {
             let mut cur_lat = s4.offset as usize;
@@ -1017,16 +1049,17 @@ impl MmapGeometricModel {
             if rem != 0 {
                 cur_lat += 8 - rem;
             }
+            let coarse_entries = lattice_coarse_len(s4.length as usize, vocab_size as usize, num_c);
             let coarse_off = cur_lat;
-            cur_lat += COARSE_TABLE_SIZE;
+            cur_lat += coarse_entries;
             let rem2 = cur_lat % 2;
             if rem2 != 0 {
                 cur_lat += 2 - rem2;
             }
             let fine_off = cur_lat;
-            (num_c, t2c_off, coarse_off, fine_off)
+            (num_c, t2c_off, coarse_off, coarse_entries, fine_off)
         } else {
-            (0, 0, 0, 0)
+            (0, 0, 0, 0, 0)
         };
 
         // Section 5: Engram Table
@@ -1081,6 +1114,7 @@ impl MmapGeometricModel {
             lattice_num_clusters,
             lattice_token_to_cluster_offset,
             lattice_coarse_offset,
+            lattice_coarse_entries,
             lattice_fine_offset,
             engram_slot_capacity,
             engram_candidate_count,
@@ -1145,14 +1179,17 @@ impl MmapGeometricModel {
         f64::from_bits(bits)
     }
 
-    /// Zero-copy slice of coarse root trigram table in i8 format.
+    /// Zero-copy slice of the coarse root trigram table in i8 format, or `None` when the
+    /// artifact was written without the coarse tier (an absent tier scores as zero).
     #[inline]
     pub fn coarse_trigram(&self) -> Option<&[i8]> {
-        if self.header.flags & FLAG_HAS_HIERARCHICAL_LATTICE == 0 {
+        if self.header.flags & FLAG_HAS_HIERARCHICAL_LATTICE == 0
+            || self.lattice_coarse_entries == 0
+        {
             return None;
         }
         let ptr = unsafe { self.mmap.as_ptr().add(self.lattice_coarse_offset) as *const i8 };
-        Some(unsafe { std::slice::from_raw_parts(ptr, COARSE_TABLE_SIZE) })
+        Some(unsafe { std::slice::from_raw_parts(ptr, self.lattice_coarse_entries) })
     }
 
     /// Zero-copy slice of fine cluster bigram residual table in i16 format.
