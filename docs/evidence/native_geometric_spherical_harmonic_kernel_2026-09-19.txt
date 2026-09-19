@@ -212,3 +212,46 @@ own conclusion rather than a preference.
 State: `geometric_attention` **20 passed, 0 failed**; `cargo fmt --check` clean.
 
 Charged 290,000 ms. Cumulative 144,513,565 / 147,200,000 ms.
+
+## 12. Relational generalisation: the first task where the group is load-bearing
+
+The previous round concluded that learned packaging cannot be tested on a copy task, because relabelling
+group elements is a symmetry of the architecture: with no collisions and no meaningful proximity, every
+injective assignment behaves identically. The task has to reward group *structure*. So one was built.
+
+**Task.** Token `w < 120` has meaning = its own element of `2I`; token `120 + j` is a relation whose
+element is `j + 1`. The fact `(w, h_j) -> compose(w, h_j)` is **defined by the group**, so an unseen pair
+still has a well-defined answer. Each sequence lists several facts and then queries one pair; the answer
+is the final token, is **not adjacent** to the query, and appears nowhere else in the prompt. Held-out
+pairs (`(w·8 + j) % 5 == 0`) are never used as a fact during training.
+
+*(An earlier version of this task was a literal repeat of each fact. It scored 1.00 on "unseen" facts —
+because the answer sat directly beside the query and could simply be copied. That was a leak in the task,
+not a mechanism result, and it was caught by the test failing. Recorded because it is the second task
+design error this session, and both looked like successes.)*
+
+**Result.** Held out, deterministic seeds, `dv = 64`, 900 steps:
+
+```
+context lookup:     seen-query=0.39  unseen-query=0.00
+composed dictionary: seen-query=0.39  unseen-query=0.42
+```
+
+**A context-address lookup scores 0.00 on unseen relational facts: it cannot generalise, which is the
+falsification half.** The composed read — package the vocabulary by meaning, then address
+`compose(elem(w), elem(h))` — answers unseen facts at **0.42 against 0.00**, and has **no generalisation
+gap at all** (0.42 unseen vs 0.39 seen): the query is computed, not retrieved.
+
+**The ceiling is the readout, not the mechanism.** Both mechanisms sit at the same ~0.4 on facts they can
+reach, which is the same readout limit measured twice already (the fixed exact filter's 0.42; the learned
+filter's inability to beat it). Composition removes the *generalisation* gap entirely; what remains is a
+resolution/readout limit on mapping 120 value vectors to 120 classes.
+
+**This is the first result in the session where the group structure is load-bearing rather than
+decorative**: exact composition is what turns an unanswerable unseen pair into an answered one. It also
+gives the clearest statement yet of what to build next — the readout, since it is now the binding
+constraint on every mechanism tested.
+
+Tests: `geometric_attention` **22 passed, 0 failed**; `cargo fmt --check` clean.
+
+Charged 320,000 ms. Cumulative 144,833,565 / 147,200,000 ms.

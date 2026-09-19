@@ -207,8 +207,9 @@ model-storage stop margin is untouched**; no deletion, no cleanup, no paid or ex
 | 2026-09-19 | Learned-filter attempt (negative), regression check, and revert verification (release) | 235,000 ms | **Measured.** 52.47 + 92.10 + 82.82 s plus the small diagnostic runs. Change reverted; no code retained. |
 | 2026-09-19 | Corruption-in-the-objective experiment, regression cycles, and the full `geometric_attention` suite (release) | 555,000 ms | **Measured.** 87.99 + 195.21 + 55.08 + 216.04 s plus the small diagnostic runs. |
 | 2026-09-19 | General group-algebra filter A/B and the full `geometric_attention` suite (release) | 290,000 ms | **Measured.** 54.78 s A/B + 233.45 s suite. |
+| 2026-09-19 | Relational-generalisation experiment (task redesign, one leak caught) and the full suite (release) | 320,000 ms | **Measured.** 33.44 + 69.12 + 20.76 + 20.87 + 248.11 s plus the small runs. |
 
-**New cumulative: 144,513,565 ms.** Remaining: 147,200,000 − 144,513,565 = **2,686,435 ms (~44.8 min)**.
+**New cumulative: 144,833,565 ms.** Remaining: 147,200,000 − 144,833,565 = **2,366,435 ms (~39.4 min)**.
 
 **No extension was used.** No model artifact was created; new tracked files are text. The **128 MiB
 model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external compute.

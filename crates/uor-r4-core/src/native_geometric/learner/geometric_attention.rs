@@ -396,6 +396,61 @@ impl GeometricAttention {
         w
     }
 
+    /// Write the vocabulary as a dictionary keyed by **meaning**: `S[elem(t)] += value(t)`.
+    ///
+    /// This is the packaging step: every token of the vocabulary is placed at its group element, so a
+    /// query can address a *composed* element rather than a stored context.
+    pub fn build_dictionary(&self, s: &mut [i32], tokens: &[u32]) {
+        let cbase = self.n_addr * self.dv;
+        for &t in tokens {
+            let tok = (t as usize).min(self.vocab - 1);
+            let e = self.elements[tok] as usize;
+            if e >= self.n_addr || cbase + e >= s.len() {
+                continue;
+            }
+            let base = e * self.dv;
+            let vshift = self.w_v.shift(tok);
+            for j in 0..self.dv {
+                s[base + j] += self.w_v.weight(tok, j) << vshift;
+            }
+            s[cbase + e] += 1;
+        }
+    }
+
+    /// Read the bucket addressed by the **composition** `elem(a) · elem(b)`.
+    ///
+    /// The query is computed, not looked up: an unseen pair `(a, b)` still addresses a valid element,
+    /// so a dictionary keyed by meaning can answer facts it never saw. This is the mechanism a
+    /// context-address lookup cannot provide.
+    pub fn compose_logits(&self, s: &[i32], a: u32, b: u32) -> Vec<i32> {
+        let table = group_table();
+        let ea = self.elements[(a as usize).min(self.vocab - 1)] as usize;
+        let eb = self.elements[(b as usize).min(self.vocab - 1)] as usize;
+        let q = table.product[ea * ROW_STRIDE + eb] as usize;
+        let base = q * self.dv;
+        let mut m = 0i32;
+        for j in 0..self.dv {
+            m = m.max(s[base + j].abs());
+        }
+        let shift = if self.norm_bits > 0 && m > 0 {
+            (32 - (m as u32).leading_zeros()).saturating_sub(self.norm_bits)
+        } else {
+            0
+        };
+        let mut num = vec![0i32; self.dv];
+        for (j, slot) in num.iter_mut().enumerate() {
+            *slot = s[base + j] >> shift;
+        }
+        if self.use_relu {
+            for v in num.iter_mut() {
+                if *v < 0 {
+                    *v = 0;
+                }
+            }
+        }
+        self.w_o.forward_i32(&num)
+    }
+
     /// The same computation in `f64`, for verifying the integer path.
     pub fn forward_reference_f64(&self, tokens: &[u32]) -> Vec<f64> {
         let mut s = vec![0f64; self.state_len()];
@@ -697,6 +752,8 @@ impl GeometricAttentionTrainer {
         core.use_relu = self.use_relu;
         core.class_filter = self.class_filter;
         core.kernel = self.quantised_kernel();
+        // The packaging must survive the round trip or a custom element assignment is silently lost.
+        core.elements = self.elements.clone();
         Ok(core)
     }
 
@@ -1303,6 +1360,165 @@ mod tests {
             }
         }
         best == s[s.len() - 1] as usize
+    }
+
+    /// Relational facts over `2I`. Token `w < 120` has meaning = its own element; token `120 + j` is a
+    /// relation whose element is `j + 1`. The fact `(w, h_j) -> compose(w, h_j)` is *defined by the
+    /// group*, so an unseen pair still has a well-defined answer that no lookup can have stored.
+    const RELATIONS: usize = 8;
+
+    fn relational_elements() -> Vec<u16> {
+        let vocab = RADIX + RELATIONS;
+        let mut e: Vec<u16> = (0..vocab).map(|t| (t % RADIX) as u16).collect();
+        for j in 0..RELATIONS {
+            e[RADIX + j] = (j + 1) as u16;
+        }
+        e
+    }
+
+    /// Held-out pairs: never used as a fact during training, so a lookup cannot have stored them.
+    fn pair_is_held(w: usize, j: usize) -> bool {
+        (w * RELATIONS + j) % 5 == 0
+    }
+
+    /// Sequences of several facts `(w, h, target)`, then a query pair `(w_q, h_q)` whose target is the
+    /// final token. The answer is **not** adjacent to the query and appears nowhere else in the prompt,
+    /// so a context lookup can only answer it if the fact is among the sequence's own facts.
+    fn relational_sequences(
+        seed: u64,
+        n: usize,
+        facts_per_seq: usize,
+        query_held: bool,
+    ) -> Vec<Vec<u32>> {
+        let table = group_table();
+        let mut st = seed | 1;
+        let mut drawn = |st: &mut u64, m: u64| -> usize {
+            *st ^= *st << 13;
+            *st ^= *st >> 7;
+            *st ^= *st << 17;
+            (*st % m) as usize
+        };
+        (0..n)
+            .map(|_| {
+                let mut facts: Vec<(u32, u32, u32)> = Vec::new();
+                while facts.len() < facts_per_seq {
+                    let w = drawn(&mut st, RADIX as u64);
+                    let j = drawn(&mut st, RELATIONS as u64);
+                    if pair_is_held(w, j) {
+                        continue;
+                    }
+                    let t = table.product[w * ROW_STRIDE + (j + 1)] as u32;
+                    facts.push((w as u32, (RADIX + j) as u32, t));
+                }
+                let (qw, qh, qt) = if query_held {
+                    loop {
+                        let w = drawn(&mut st, RADIX as u64);
+                        let j = drawn(&mut st, RELATIONS as u64);
+                        if !pair_is_held(w, j) {
+                            continue;
+                        }
+                        let t = table.product[w * ROW_STRIDE + (j + 1)] as u32;
+                        break (w as u32, (RADIX + j) as u32, t);
+                    }
+                } else {
+                    let f = facts[drawn(&mut st, facts.len() as u64)];
+                    f
+                };
+                let mut seq = Vec::with_capacity(3 * facts.len() + 3);
+                for (a, b, c) in &facts {
+                    seq.push(*a);
+                    seq.push(*b);
+                    seq.push(*c);
+                }
+                seq.push(qw);
+                seq.push(qh);
+                seq.push(qt);
+                seq
+            })
+            .collect()
+    }
+
+    fn relational_trainer() -> GeometricAttentionTrainer {
+        let mut t =
+            GeometricAttentionTrainer::new(RADIX + RELATIONS, 64, 2, 6, 2026_0919).expect("build");
+        t.elements = relational_elements();
+        t.cfg.lr = 0.05;
+        t
+    }
+
+    /// Falsification half: the architecture as it stands is a context-address lookup, so it must fit
+    /// what it saw and fail on pairs it never saw.
+    #[test]
+    fn a_context_lookup_cannot_generalise_to_unseen_relational_facts() {
+        let train = relational_sequences(1, 64, 6, false);
+        let seen = relational_sequences(2, 64, 6, false);
+        let unseen = relational_sequences(3, 64, 6, true);
+        let mut t = relational_trainer();
+        for _ in 0..900 {
+            t.train_batch(&train);
+        }
+        let score = |seqs: &[Vec<u32>]| {
+            let hits = seqs.iter().filter(|s| t.final_token_correct(s)).count();
+            hits as f32 / seqs.len() as f32
+        };
+        let (a, b) = (score(&seen), score(&unseen));
+        eprintln!("context lookup: seen-query={a:.2} unseen-query={b:.2}");
+        // The claim is the *gap*, not an absolute level: the seen level is capped by the readout, which
+        // is a separate and already-measured limit.
+        assert!(
+            b < 0.2,
+            "a context-address lookup must not generalise to unseen pairs: {b:.2}"
+        );
+        assert!(
+            a > b + 0.2,
+            "the lookup must fit seen pairs far better than unseen ones: {a:.2} vs {b:.2}"
+        );
+    }
+
+    /// Construction half: package the vocabulary by meaning and *compose* the query. An unseen pair
+    /// then addresses a valid element, so the fact is answered without ever having been stored.
+    #[test]
+    fn a_composed_dictionary_read_answers_unseen_relational_facts() {
+        let train = relational_sequences(1, 64, 6, false);
+        let seen = relational_sequences(2, 64, 6, false);
+        let unseen = relational_sequences(3, 64, 6, true);
+        let mut t = relational_trainer();
+        for _ in 0..900 {
+            t.train_batch(&train);
+        }
+        let core = t.to_core().expect("quantise");
+        let mut s = core.initial_state();
+        let words: Vec<u32> = (0..RADIX as u32).collect();
+        core.build_dictionary(&mut s, &words);
+        let score = |seqs: &[Vec<u32>]| {
+            let mut hits = 0usize;
+            for sq in seqs {
+                let n = sq.len();
+                let logits = core.compose_logits(&s, sq[n - 3], sq[n - 2]);
+                let mut best = 0usize;
+                for (i, &v) in logits.iter().enumerate() {
+                    if v > logits[best] {
+                        best = i;
+                    }
+                }
+                if best == sq[n - 1] as usize {
+                    hits += 1;
+                }
+            }
+            hits as f32 / seqs.len() as f32
+        };
+        let (a, b) = (score(&seen), score(&unseen));
+        eprintln!("composed dictionary: seen-query={a:.2} unseen-query={b:.2}");
+        // The composed read answers an unseen pair at the same level as a seen one: it has no
+        // generalisation gap, because the query is computed rather than retrieved.
+        assert!(
+            b >= a - 0.05,
+            "the composed read must not generalise worse than it fits: {a:.2} vs {b:.2}"
+        );
+        assert!(
+            b > 0.3,
+            "the composed read must be far above the lookup's unseen level: {b:.2}"
+        );
     }
 
     #[test]

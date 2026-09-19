@@ -61,6 +61,21 @@ A 13× increase in filter capacity changes nothing: training uses 5 of 120 slots
 
 **State.** `geometric_attention` **20 passed, 0 failed**; `cargo fmt --check` clean.
 
+**Relational generalisation: the first task where the group is load-bearing.** Learned packaging cannot be tested on a copy task — relabelling group elements is a symmetry of the architecture, so with no collisions and no meaningful proximity every injective assignment behaves identically. The task must reward group *structure*, so one was built: token `w < 120` has meaning = its own element of 2I, token `120 + j` is a relation with element `j + 1`, and the fact `(w, h_j) → compose(w, h_j)` is **defined by the group**, so an unseen pair still has a well-defined answer. Each sequence lists several facts then queries one pair; the answer is not adjacent to the query and appears nowhere else in the prompt; held-out pairs are never used as a fact in training. Held out, `dv = 64`, 900 steps:
+
+```
+context lookup:      seen-query=0.39  unseen-query=0.00
+composed dictionary: seen-query=0.39  unseen-query=0.42
+```
+
+**A context-address lookup scores 0.00 on unseen relational facts — it cannot generalise, which is the falsification half.** The composed read — package the vocabulary by meaning, then address `compose(elem(w), elem(h))` — answers unseen facts at **0.42 against 0.00** and has **no generalisation gap** (0.42 unseen vs 0.39 seen), because the query is *computed* rather than retrieved. **This is the first result this session where the group structure is load-bearing rather than decorative.**
+
+**The remaining ceiling is the readout, not the mechanism.** Both mechanisms sit at the same ~0.4 on facts they can reach — the same readout limit measured twice already (the fixed exact filter's 0.42; the learned filter's inability to beat it). Composition removes the generalisation gap entirely; what remains is mapping 120 value vectors to 120 classes. That makes the **readout** the single binding constraint on every mechanism tested, and the clearest next target.
+
+*(An earlier version of this task was a literal repeat of each fact and scored 1.00 on "unseen" facts — the answer sat beside the query and could be copied. A leak, caught by a failing test, and the second task-design error this session; both initially looked like successes.)*
+
+**Receipt:** [`native_geometric_spherical_harmonic_kernel_2026-09-19.txt`](../evidence/native_geometric_spherical_harmonic_kernel_2026-09-19.txt).
+
 ## Ordered-word addressing recovers the collapse; context copy reaches 100% — September 19, 2026
 
 **THE PROJECT'S ORDERED-N-LET FORMALISM WORKS: THE COLLAPSE IS RECOVERED AND THE MATCHED-FILTER BASELINE IS LEFT AT ZERO.**
