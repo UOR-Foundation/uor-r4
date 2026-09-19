@@ -574,67 +574,227 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
     }
 }
 
-/// Classify multiplying operators by whether a compiler can lower them to shifts and adds.
+/// Per-module multiplier census.
 ///
-/// Heuristic, and documented as one (Card P8): the token immediately FOLLOWING `*` is examined;
-/// if it is an integer literal with `<= 4` set bits it is `cheap` (at most three shifts and adds),
-/// otherwise `dense`; if it is not a literal at all the multiply is `variable` and always needs a
-/// multiplier. A left-literal form such as `4 * a` is not detected as constant and is counted as
-/// variable, so the `variable` count is an over-estimate, which is the safe direction for a
-/// ratchet.
-fn classify_multipliers(src: &str) -> (usize, usize, usize) {
-    let (mut cheap, mut dense, mut variable) = (0usize, 0usize, 0usize);
-    for raw in src.lines() {
-        let line = match raw.find("//") {
-            Some(i) => &raw[..i],
-            None => raw,
-        };
-        if line.contains("*mut") || line.contains("*const") {
-            continue;
-        }
-        // A leading '*' is a block/doc comment continuation, not a multiply.
-        let first_star = line.find('*');
-        let bytes = line.as_bytes();
-        for (i, &c) in bytes.iter().enumerate() {
-            if c != b'*' || Some(i) == first_star {
-                continue;
+/// `cheap` / `dense` count binary `*` with a constant operand (split by set-bit count);
+/// `variable` counts binary `*` with two non-literal operands; `deref` counts `*` used as a
+/// dereference, which is not a multiply at all. The `method_*` fields count `*_mul(` calls and
+/// their `pow(` equivalents, classified by their argument whether literal or not.
+#[derive(Default, Debug, PartialEq, Eq)]
+struct MulCensus {
+    cheap: usize,
+    dense: usize,
+    variable: usize,
+    deref: usize,
+    method_cheap: usize,
+    method_dense: usize,
+    method_variable: usize,
+}
+
+impl MulCensus {
+    /// Sites that engage a multiplier circuit: two runtime operands, a dense constant, or a
+    /// method-form multiply whose argument is not a cheap constant.
+    fn gated(&self) -> usize {
+        self.variable + self.dense + self.method_dense + self.method_variable
+    }
+}
+
+/// Blank out comments and string/char literals, preserving byte offsets.
+fn mask_literals(src: &str) -> Vec<u8> {
+    let b = src.as_bytes();
+    let mut m = b.to_vec();
+    let mut i = 0usize;
+    while i < b.len() {
+        if i + 1 < b.len() && b[i] == b'/' && b[i + 1] == b'/' {
+            while i < b.len() && b[i] != b'\n' {
+                m[i] = b' ';
+                i += 1;
             }
-            if i + 1 < bytes.len() && bytes[i + 1] == b'=' {
-                variable += 1;
-                continue;
+        } else if i + 1 < b.len() && b[i] == b'/' && b[i + 1] == b'*' {
+            // Rust block comments nest.
+            let mut depth = 0usize;
+            while i < b.len() {
+                if i + 1 < b.len() && b[i] == b'/' && b[i + 1] == b'*' {
+                    depth += 1;
+                    m[i] = b' ';
+                    m[i + 1] = b' ';
+                    i += 2;
+                } else if i + 1 < b.len() && b[i] == b'*' && b[i + 1] == b'/' {
+                    depth -= 1;
+                    m[i] = b' ';
+                    m[i + 1] = b' ';
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    m[i] = b' ';
+                    i += 1;
+                }
             }
+        } else if b[i] == b'"' {
+            m[i] = b' ';
+            i += 1;
+            while i < b.len() {
+                if b[i] == b'\\' {
+                    m[i] = b' ';
+                    if i + 1 < b.len() {
+                        m[i + 1] = b' ';
+                    }
+                    i += 2;
+                } else if b[i] == b'"' {
+                    m[i] = b' ';
+                    i += 1;
+                    break;
+                } else {
+                    m[i] = b' ';
+                    i += 1;
+                }
+            }
+        } else if b[i] == b'\'' {
+            // A char literal has its closing quote within a few bytes; a lifetime does not.
             let mut j = i + 1;
-            while j < bytes.len() && (bytes[j] as char).is_whitespace() {
-                j += 1;
-            }
-            let start = j;
-            while j < bytes.len() && bytes[j].is_ascii_alphanumeric() {
-                j += 1;
-            }
-            let tok = &line[start..j];
-            let value = if let Some(h) = tok.strip_prefix("0x").or_else(|| tok.strip_prefix("0X")) {
-                let digits: String = h.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
-                if digits.is_empty() {
-                    None
-                } else {
-                    u64::from_str_radix(&digits, 16).ok()
+            let mut closed = None;
+            while j < b.len() && j < i + 6 {
+                if b[j] == b'\\' {
+                    j += 2;
+                    continue;
                 }
+                if b[j] == b'\'' {
+                    closed = Some(j);
+                    break;
+                }
+                j += 1;
+            }
+            if let Some(end) = closed {
+                for k in i..=end {
+                    m[k] = b' ';
+                }
+                i = end + 1;
             } else {
-                let digits: String = tok.chars().take_while(|c| c.is_ascii_digit()).collect();
-                if digits.is_empty() {
-                    None
-                } else {
-                    digits.parse::<u64>().ok()
-                }
-            };
-            match value {
-                Some(v) if v.count_ones() <= 4 => cheap += 1,
-                Some(_) => dense += 1,
-                None => variable += 1,
+                i += 1;
             }
+        } else {
+            i += 1;
         }
     }
-    (cheap, dense, variable)
+    m
+}
+
+fn is_ident_byte(c: u8) -> bool {
+    c.is_ascii_alphanumeric() || c == b'_'
+}
+
+/// Parse the integer literal starting at `start`, returning its value and end offset.
+fn literal_at(src: &[u8], start: usize) -> Option<(u64, usize)> {
+    let mut j = start;
+    if !src.get(j).map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        return None;
+    }
+    if src.get(j) == Some(&b'0') && matches!(src.get(j + 1), Some(b'x') | Some(b'X')) {
+        j += 2;
+        let s = j;
+        while src
+            .get(j)
+            .map(|c| c.is_ascii_hexdigit() || *c == b'_')
+            .unwrap_or(false)
+        {
+            j += 1;
+        }
+        if j == s {
+            return None;
+        }
+        let digits: String = src[s..j]
+            .iter()
+            .map(|&c| c as char)
+            .filter(|c| *c != '_')
+            .collect();
+        return u64::from_str_radix(&digits, 16).ok().map(|v| (v, j));
+    }
+    let s = j;
+    while src
+        .get(j)
+        .map(|c| c.is_ascii_digit() || *c == b'_')
+        .unwrap_or(false)
+    {
+        j += 1;
+    }
+    let digits: String = src[s..j]
+        .iter()
+        .map(|&c| c as char)
+        .filter(|c| *c != '_')
+        .collect();
+    digits.parse::<u64>().ok().map(|v| (v, j))
+}
+
+fn census(src: &str) -> MulCensus {
+    let m = mask_literals(src);
+    let mut c = MulCensus::default();
+
+    for i in 0..m.len() {
+        if m[i] != b'*' {
+            continue;
+        }
+        // Previous non-whitespace byte decides dereference vs binary operator.
+        let mut p = i;
+        while p > 0 && (m[p - 1] as char).is_whitespace() {
+            p -= 1;
+        }
+        let prev = if p == 0 { None } else { Some(m[p - 1]) };
+        let binary = matches!(prev, Some(x) if is_ident_byte(x) || x == b')' || x == b']');
+        if !binary {
+            c.deref += 1;
+            continue;
+        }
+        // Literal on either side?
+        let mut q = i + 1;
+        while q < m.len() && (m[q] as char).is_whitespace() {
+            q += 1;
+        }
+        let right = literal_at(&m, q);
+        // The token ending just before the operator.
+        let mut e = p;
+        while e > 0 && is_ident_byte(m[e - 1]) {
+            e -= 1;
+        }
+        let left = literal_at(&m, e);
+        match (left, right) {
+            (Some(_), _) | (_, Some(_)) => {
+                let v = left.or(right).map(|(v, _)| v).unwrap_or(0);
+                if v.count_ones() <= 4 {
+                    c.cheap += 1;
+                } else {
+                    c.dense += 1;
+                }
+            }
+            (None, None) => c.variable += 1,
+        }
+    }
+
+    // Method forms: `*_mul(` and `pow(`. Their first argument decides the class.
+    for name in [
+        "wrapping_mul(",
+        "saturating_mul(",
+        "checked_mul(",
+        "overflowing_mul(",
+        "unchecked_mul(",
+        "wrapping_pow(",
+        "saturating_pow(",
+        "checked_pow(",
+    ] {
+        let mut from = 0usize;
+        while let Some(rel) = src[from..].find(name) {
+            let at = from + rel + name.len();
+            let arg = literal_at(&m, at);
+            match arg {
+                Some((v, _)) if v.count_ones() <= 4 => c.method_cheap += 1,
+                Some(_) => c.method_dense += 1,
+                None => c.method_variable += 1,
+            }
+            from = at;
+        }
+    }
+    c
 }
 
 /// Ratcheting multiplier census over the serving path.
@@ -662,13 +822,8 @@ fn serving_path_multiplier_census_is_ratcheting() {
         .unwrap_or(hopf_src.len());
     let kernel = &hopf_src[begin..end];
 
-    // (label, source, ceiling, target)
-    //
-    // Ceilings are the counts measured on 2026-09-19 and are an UPPER BOUND on serving
-    // multiplies, not an exact serving count: a per-file scan also sees that file's `#[cfg(test)]`
-    // modules and its training-side tables (for example `lattice_table.rs`'s continuous
-    // `f32`/`f64` lattice and `hopf_metric.rs`'s float half). What the ratchet guarantees is that
-    // no module may ADD a multiplying operator, so the number can only fall.
+    // (label, source, raw ceiling, target). Ceilings may only be LOWERED; raising one weakens
+    // D0-a and needs an owner decision.
     let modules: [(&str, &str, usize, &str); 7] = [
         ("hopf_metric.rs integer kernel", kernel, 43, "zero"),
         (
@@ -709,77 +864,93 @@ fn serving_path_multiplier_census_is_ratcheting() {
         ),
     ];
 
-    let mut counts: Vec<(&str, usize, usize, usize, usize, usize)> =
-        Vec::with_capacity(modules.len());
-    for (label, src, ceiling, _target) in modules {
-        let n = scan_for_forbidden_arith(src).offenders.len();
-        let (cheap, dense, variable) = classify_multipliers(src);
-        // `classify_multipliers` inspects the `*` operator only. The scanner also counts METHOD
-        // forms (`wrapping_mul(` etc.), which the classifier does not see, so this count is
-        // reported separately rather than being silently folded into `variable`. The `variable`
-        // total is therefore a LOWER bound on real multiplies.
-        let method_forms = [
-            "wrapping_mul(",
-            "saturating_mul(",
-            "checked_mul(",
-            "unchecked_mul(",
-        ]
-        .iter()
-        .map(|m| src.matches(m).count())
-        .sum::<usize>();
-        counts.push((label, n, cheap, dense, variable, method_forms));
-        let _ = ceiling;
+    let mut counts: Vec<(&str, usize, MulCensus)> = Vec::with_capacity(modules.len());
+    for (label, src, _ceiling, _target) in modules {
+        counts.push((
+            label,
+            scan_for_forbidden_arith(src).offenders.len(),
+            census(src),
+        ));
     }
 
-    // Controls: the classifier must not be vacuous. `vsa/attention.rs` uses `square_u64` and
-    // `div_small_positive`, so it must classify clean; and `mul_q30` must classify as variable.
-    let attention = include_str!("../src/native_geometric/vsa/attention.rs");
-    let (a_cheap, a_dense, a_var) = classify_multipliers(attention);
+    // Controls. `vsa/attention.rs` is written with `square_u64` and `div_small_positive`, so it is
+    // the negative control and must classify completely clean; `mul_q30` multiplies two Q1.30
+    // runtime operands, so it is the positive control.
+    let attention = census(include_str!("../src/native_geometric/vsa/attention.rs"));
     assert_eq!(
-        (a_cheap, a_dense, a_var),
-        (0, 0, 0),
-        "control failed: vsa/attention.rs is written with shift-add idioms and must classify clean"
+        (
+            attention.cheap,
+            attention.dense,
+            attention.variable,
+            attention.method_cheap,
+            attention.method_dense,
+            attention.method_variable,
+        ),
+        (0, 0, 0, 0, 0, 0),
+        "control failed: vsa/attention.rs uses shift-add idioms and must have no multiplying \
+         form at all (dereferences are expected and are not multiplies): {attention:?}"
     );
-    let hopf_full = include_str!("../src/native_geometric/hopf_metric.rs");
-    let mul_fn = hopf_full
+    let mul_fn = hopf_src
         .split("pub fn mul_q30")
         .nth(1)
         .and_then(|s| s.split("pub fn norm_q30").next())
         .unwrap_or("");
-    let (_, _, m_var) = classify_multipliers(mul_fn);
+    let mq = census(mul_fn);
     assert!(
-        m_var > 0,
-        "control failed: mul_q30 multiplies two Q1.30 runtime operands and must classify as variable"
+        mq.variable > 0,
+        "control failed: mul_q30 must classify as variable, got {mq:?}"
     );
 
-    // Report every count before asserting, so one failure still shows the whole picture.
-    println!("multiplier census (raw, cheap_const, dense_const, variable, method_forms):");
+    println!("multiplier census (token-level classifier):");
+    println!(
+        "  {:<32} {:>5} {:>6} {:>6} {:>8} {:>6} {:>8} {:>8} {:>7}",
+        "module", "raw", "cheap", "dense", "variable", "deref", "m_cheap", "m_dense", "m_var"
+    );
     let mut raw_total = 0usize;
-    let mut gated_total = 0usize;
-    let mut method_total = 0usize;
-    for (label, n, cheap, dense, variable, method) in &counts {
+    let mut totals = MulCensus::default();
+    for (label, raw, c) in &counts {
         println!(
-            "  {label:<32} raw {n:>4}  cheap {cheap:>4}  dense {dense:>4}  var {variable:>4}  method {method:>4}"
+            "  {label:<32} {raw:>5} {:>6} {:>6} {:>8} {:>6} {:>8} {:>8} {:>7}",
+            c.cheap,
+            c.dense,
+            c.variable,
+            c.deref,
+            c.method_cheap,
+            c.method_dense,
+            c.method_variable
         );
-        raw_total += n;
-        gated_total += dense + variable;
-        method_total += method;
+        raw_total += raw;
+        totals.cheap += c.cheap;
+        totals.dense += c.dense;
+        totals.variable += c.variable;
+        totals.deref += c.deref;
+        totals.method_cheap += c.method_cheap;
+        totals.method_dense += c.method_dense;
+        totals.method_variable += c.method_variable;
     }
     println!(
-        "  {:<32} raw {raw_total:>4}  gated(dense+var) {gated_total:>4}  method_forms {method_total:>4}",
-        "TOTAL"
+        "  {:<32} {raw_total:>5} {:>6} {:>6} {:>8} {:>6} {:>8} {:>8} {:>7}  gated={}",
+        "TOTAL",
+        totals.cheap,
+        totals.dense,
+        totals.variable,
+        totals.deref,
+        totals.method_cheap,
+        totals.method_dense,
+        totals.method_variable,
+        totals.gated()
     );
     println!(
-        "  NOTE: method_forms ({method_total}) are multiplies the classifier cannot see, so the \
-         gated total is a LOWER bound; the raw count includes them."
+        "  NOTE: `deref` counts are excluded from the gate; the classifier is a token scan, so a"
     );
+    println!("  construct it mis-tokenises is possible. The controls above bound that risk.");
 
     let mut breaches = Vec::new();
-    for (i, (label, n, _cheap, _dense, _variable, _method)) in counts.iter().enumerate() {
+    for (i, (label, raw, _c)) in counts.iter().enumerate() {
         let ceiling = modules[i].2;
-        if *n > ceiling {
+        if *raw > ceiling {
             breaches.push(format!(
-                "{label}: {n} multiplying operators, ceiling {ceiling}"
+                "{label}: {raw} raw multiplying operators, ceiling {ceiling}"
             ));
         }
     }

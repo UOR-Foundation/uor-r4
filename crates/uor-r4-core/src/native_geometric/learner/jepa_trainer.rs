@@ -722,11 +722,11 @@ impl ExportedGeometricModel {
         if let Some(r) = self.discrete_s2_readout.get(candidate) {
             let s2 = fiber_pt.base.0;
             let u1 = fiber_pt.fiber_u1;
-            let s2_proj = (s2[0] as i64 * r[0] as i64
-                + s2[1] as i64 * r[1] as i64
-                + s2[2] as i64 * r[2] as i64
-                + u1[0] as i64 * r[3] as i64
-                + u1[1] as i64 * r[4] as i64)
+            let s2_proj = (mul_shift_add(s2[0] as i64, r[0] as i64)
+                + mul_shift_add(s2[1] as i64, r[1] as i64)
+                + mul_shift_add(s2[2] as i64, r[2] as i64)
+                + mul_shift_add(u1[0] as i64, r[3] as i64)
+                + mul_shift_add(u1[1] as i64, r[4] as i64))
                 >> 31;
             total += s2_proj as i32;
         }
@@ -856,11 +856,11 @@ impl ExportedGeometricModel {
         if let Some(r) = self.discrete_s2_readout.get(candidate) {
             let s2 = fiber_pt.base.0;
             let u1 = fiber_pt.fiber_u1;
-            let proj = (s2[0] as i64 * r[0] as i64
-                + s2[1] as i64 * r[1] as i64
-                + s2[2] as i64 * r[2] as i64
-                + u1[0] as i64 * r[3] as i64
-                + u1[1] as i64 * r[4] as i64)
+            let proj = (mul_shift_add(s2[0] as i64, r[0] as i64)
+                + mul_shift_add(s2[1] as i64, r[1] as i64)
+                + mul_shift_add(s2[2] as i64, r[2] as i64)
+                + mul_shift_add(u1[0] as i64, r[3] as i64)
+                + mul_shift_add(u1[1] as i64, r[4] as i64))
                 >> 31;
             proj as i32
         } else {
@@ -873,9 +873,9 @@ impl ExportedGeometricModel {
     pub fn score_readout_s2(&self, candidate: usize, s2_state: UnitS2Q30) -> i32 {
         if let Some(r) = self.discrete_s2_readout.get(candidate) {
             let s2 = s2_state.0;
-            let proj = (s2[0] as i64 * r[0] as i64
-                + s2[1] as i64 * r[1] as i64
-                + s2[2] as i64 * r[2] as i64)
+            let proj = (mul_shift_add(s2[0] as i64, r[0] as i64)
+                + mul_shift_add(s2[1] as i64, r[1] as i64)
+                + mul_shift_add(s2[2] as i64, r[2] as i64))
                 >> 31;
             proj as i32
         } else {
@@ -896,7 +896,7 @@ impl ExportedGeometricModel {
         }
         let cand_vec = codebook.get(candidate);
         let sim_q15 = context_vec.bipolar_correlation_q15(&cand_vec);
-        (self.vsa_scale_q15 as i32 * sim_q15 as i32) >> 16
+        (mul_shift_add(self.vsa_scale_q15 as i32 as i64, sim_q15 as i64) >> 16) as i32
     }
 
     /// Compute S2 Hopf state directly from a ring buffer without heap allocations.
