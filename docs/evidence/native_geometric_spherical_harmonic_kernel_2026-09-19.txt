@@ -298,3 +298,46 @@ what the evidence now points at.
 Tests: `geometric_attention` **25 passed, 0 failed**; `cargo fmt --check` clean.
 
 Charged 790,000 ms. Cumulative 145,623,565 / 147,200,000 ms.
+
+## 14. Open/closed route abstention: implemented and measured; the fifth lever is flat
+
+Two ideas from the owner's routing discussion were worth incorporating. One worked, one is another flat lever.
+
+**Open/closed route state — the good one.** The state already carried a per-bucket write count and never
+used it. Anything with count zero silently produced a uniform distribution, i.e. a *confident guess*.
+`logits_or_abstain` now returns `None` for a closed route, and the relational lookup measures:
+
+```
+route state: seen ok/abstain/wrong=25/0/39   unseen=0/64/0
+```
+
+**Every unseen query now abstains (64/64) and produces zero confident wrong answers**, while seen accuracy
+is unchanged at 0.39. That converts hallucination into honest abstention and matches the project's own
+chain-traversal rule, which requires eviction to be proved separately before an abstention is offered —
+here the proof is exact: the bucket was never written.
+
+**Nearest-prototype decode, in reduced form — flat.** A nearest-prototype/table decode is
+`argmax_r (2·num·p_r − ‖p_r‖²)`, which is *linear in `num` with a per-class constant*. So the full
+nearest-root build is a linear readout **plus a bias**, and the cheap falsification was to add the bias
+first:
+
+```
+nearest-prototype reduced form: plain=0.28  with-bias=0.28
+```
+
+Flat. The decode's *geometry* is not the missing piece, so the elaborate nearest-root version is not
+worth building on this evidence — the same reasoning that retired the 4-bit kernel.
+
+**Five levers now ruled out** on the relational ceiling: weight precision, training budget, read width,
+filter capacity, and decode geometry (bias). The ceiling is not explained by any of them.
+
+**What the next step must therefore be: diagnose the failure mode directly, not tune further.** The read
+is provably correct — an unseen pair composes to a valid element that *is* in the dictionary — so the
+failure is in decoding one read vector into 120 classes. The next experiment should inspect the *structure*
+of the errors rather than a scalar: is the read vector actually distinct for every word; are errors
+concentrated on a subset of the vocabulary; is the effective dimensionality of the read space far below
+`dv`? Those are cheap, and they localise the mechanism rather than sweeping another hyper-parameter.
+
+Tests: `geometric_attention` **27 passed, 0 failed**; `cargo fmt --check` clean.
+
+Charged 265,000 ms. Cumulative 145,888,565 / 147,200,000 ms.

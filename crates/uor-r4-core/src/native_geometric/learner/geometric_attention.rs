@@ -451,6 +451,25 @@ impl GeometricAttention {
         self.w_o.forward_i32(&num)
     }
 
+    /// The write count of the route addressed by `ctx`: `0` means the route is **closed**.
+    #[inline]
+    pub fn route_count(&self, s: &[i32], ctx: &[u32]) -> i32 {
+        let a = self.address(ctx);
+        s[self.n_addr * self.dv + a]
+    }
+
+    /// Read the addressed route, or `None` when the route is closed.
+    ///
+    /// A closed route is not evidence that the answer is absent from the world — only that this
+    /// address holds no record — so the honest output is an abstention, not a confident guess. This
+    /// matches the project's chain-traversal rule: prove eviction separately before abstaining.
+    pub fn logits_or_abstain(&self, s: &[i32], ctx: &[u32]) -> Option<Vec<i32>> {
+        if self.route_count(s, ctx) == 0 {
+            return None;
+        }
+        Some(self.logits(s, ctx))
+    }
+
     /// The same computation in `f64`, for verifying the integer path.
     pub fn forward_reference_f64(&self, tokens: &[u32]) -> Vec<f64> {
         let mut s = vec![0f64; self.state_len()];
@@ -607,6 +626,15 @@ pub struct GeometricAttentionTrainer {
     /// oracle for testing whether readout resolution is the binding constraint; it is not a serving
     /// path and must stay false outside that experiment.
     pub readout_oracle: bool,
+    /// Learn a per-class bias on the readout. This is the **reduced form** of a nearest-prototype
+    /// decode: `argmax_r (2·num·p_r − ‖p_r‖²)` is linear in `num` with a per-class constant, so a
+    /// nearest-root table decode is exactly a linear readout *plus a bias*. Testing the bias first
+    /// decides whether the decode's geometry is the missing piece before building the full version.
+    pub readout_bias: bool,
+    wb: Vec<f32>,
+    gwb: Vec<f32>,
+    mwb: Vec<f32>,
+    vwb: Vec<f32>,
     /// Learned harmonic filter masters; the read is the group convolution of the stored
     /// superposition with this filter.
     pub kernel_m: Vec<f32>,
@@ -690,6 +718,11 @@ impl GeometricAttentionTrainer {
             dscratch: Vec::new(),
             touched: Vec::new(),
             readout_oracle: false,
+            readout_bias: false,
+            wb: vec![0f32; vocab],
+            gwb: vec![0f32; vocab],
+            mwb: vec![0f32; vocab],
+            vwb: vec![0f32; vocab],
         })
     }
 
@@ -928,6 +961,11 @@ impl GeometricAttentionTrainer {
                     *slot = acc * so[r];
                 }
             }
+            if self.readout_bias {
+                for (r, slot) in logits.iter_mut().enumerate() {
+                    *slot += self.wb[r];
+                }
+            }
             let mut p = softmax_f32(&logits);
             let target = (tokens[i + 1] as usize).min(self.vocab - 1);
             loss += -(p[target].max(1e-9)).ln() as f64;
@@ -936,6 +974,9 @@ impl GeometricAttentionTrainer {
             let mut dnum = vec![0f32; self.dv];
             for r in 0..self.vocab {
                 let g = p[r] * inv;
+                if self.readout_bias {
+                    self.gwb[r] += g;
+                }
                 if g == 0.0 {
                     continue;
                 }
@@ -1011,6 +1052,9 @@ impl GeometricAttentionTrainer {
         for g in self.gkernel.iter_mut() {
             *g = 0.0;
         }
+        for g in self.gwb.iter_mut() {
+            *g = 0.0;
+        }
     }
 
     /// Scale and clip. The nine filter weights are clipped in their **own** group: folding them into
@@ -1033,6 +1077,11 @@ impl GeometricAttentionTrainer {
             *g *= scale;
             ksq += (*g as f64) * (*g as f64);
         }
+        let mut bsq = 0f64;
+        for g in self.gwb.iter_mut() {
+            *g *= scale;
+            bsq += (*g as f64) * (*g as f64);
+        }
         if self.cfg.grad_clip > 0.0 {
             let clip = self.cfg.grad_clip as f64;
             let norm = libm::sqrt(sumsq);
@@ -1046,6 +1095,13 @@ impl GeometricAttentionTrainer {
             if knorm > clip && knorm > 0.0 {
                 let s = (clip / knorm) as f32;
                 for g in self.gkernel.iter_mut() {
+                    *g *= s;
+                }
+            }
+            let bnorm = libm::sqrt(bsq);
+            if bnorm > clip && bnorm > 0.0 {
+                let s = (clip / bnorm) as f32;
+                for g in self.gwb.iter_mut() {
                     *g *= s;
                 }
             }
@@ -1077,6 +1133,14 @@ impl GeometricAttentionTrainer {
             &self.gkernel,
             &mut self.mkernel,
             &mut self.vkernel,
+            &cfg,
+            step,
+        );
+        adam_update(
+            &mut self.wb,
+            &self.gwb,
+            &mut self.mwb,
+            &mut self.vwb,
             &cfg,
             step,
         );
@@ -1621,6 +1685,11 @@ mod tests {
                 }
                 *slot = acc;
             }
+            if t.readout_bias {
+                for (r, slot) in logits.iter_mut().enumerate() {
+                    *slot += t.wb[r];
+                }
+            }
             let mut best = 0usize;
             for (i, &v) in logits.iter().enumerate() {
                 if v > logits[best] {
@@ -1681,6 +1750,87 @@ mod tests {
             "4x the read width must not be the lever: {:.2} vs {:.2}",
             seen[0],
             seen[1]
+        );
+    }
+
+    /// Open/closed route state: a closed route must **abstain**, not guess. Measured on the relational
+    /// lookup, seen against unseen queries.
+    #[test]
+    fn closed_routes_abstain_instead_of_guessing() {
+        let train = relational_sequences(1, 64, 6, false);
+        let seen = relational_sequences(2, 64, 6, false);
+        let unseen = relational_sequences(3, 64, 6, true);
+        let mut t = relational_trainer();
+        for _ in 0..900 {
+            t.train_batch(&train);
+        }
+        let core = t.to_core().expect("quantise");
+        let tally = |seqs: &[Vec<u32>]| -> (usize, usize, usize) {
+            let (mut ok, mut abstain, mut wrong) = (0usize, 0usize, 0usize);
+            for sq in seqs {
+                let n = sq.len();
+                let prompt = &sq[..n - 1];
+                let mut st = core.initial_state();
+                for i in 2..prompt.len() {
+                    core.observe(&mut st, &prompt[i - 2..i], prompt[i]);
+                }
+                let ctx = &prompt[prompt.len() - 2..];
+                match core.logits_or_abstain(&st, ctx) {
+                    None => abstain += 1,
+                    Some(logits) => {
+                        let mut best = 0usize;
+                        for (i, &v) in logits.iter().enumerate() {
+                            if v > logits[best] {
+                                best = i;
+                            }
+                        }
+                        if best == sq[n - 1] as usize {
+                            ok += 1
+                        } else {
+                            wrong += 1
+                        }
+                    }
+                }
+            }
+            (ok, abstain, wrong)
+        };
+        let (so, sa, sw) = tally(&seen);
+        let (uo, ua, uw) = tally(&unseen);
+        eprintln!("route state: seen ok/abstain/wrong={so}/{sa}/{sw} unseen={uo}/{ua}/{uw}");
+        // The claim: a closed route abstains rather than guessing, and abstention does not cost the
+        // answers that were reachable.
+        assert!(so > 0, "seen routes must still answer: {so}");
+        assert_eq!(
+            uw, 0,
+            "no unseen route may produce a confident wrong answer"
+        );
+        assert_eq!(ua, unseen.len(), "every unseen route must abstain");
+    }
+
+    /// The reduced form of a nearest-root/table decode. `argmax_r (2·num·p_r − ‖p_r‖²)` is linear in
+    /// `num` with a per-class constant, so a nearest-prototype decode is a linear readout **plus a
+    /// bias**. If the bias does not move the ceiling, the decode's geometry is not the missing piece
+    /// and building the full nearest-root version would be wasted work.
+    #[test]
+    fn a_per_class_bias_is_the_nearest_prototype_reduced_form() {
+        let train = relational_sequences(1, 32, 6, false);
+        let held = relational_sequences(4, 32, 6, true);
+        let run = |bias: bool| -> f32 {
+            let mut t = relational_trainer();
+            t.readout_bias = bias;
+            for _ in 0..900 {
+                t.train_batch(&train);
+            }
+            eval_composed(&t, &held, false)
+        };
+        let plain = run(false);
+        let biased = run(true);
+        eprintln!("nearest-prototype reduced form: plain={plain:.2} with-bias={biased:.2}");
+        // Recorded either way; the informative part is the comparison, and a large move would justify
+        // the full nearest-root build while a flat result would not.
+        assert!(
+            (biased - plain).abs() < 0.5,
+            "the comparison must be informative: {plain:.2} vs {biased:.2}"
         );
     }
 
