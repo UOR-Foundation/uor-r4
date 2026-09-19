@@ -152,3 +152,32 @@ cargo fmt -p uor-r4-core -- --check                          -> clean
 Design doc §7.1–7.2: add a **power-of-two readout normalisation** (shift the read by the leading bit of
 the accumulated key mass — bit scan plus shift, no divide), then re-measure the regime map and the
 induction horizon. Only after the regime map is flat should `dk`, layer count or the tokenizer change.
+
+## 9. Conditioning fix measured (2026-09-19, later)
+
+The owner confirmed the power-of-two readout normalisation is D0-b-compliant (bit scan + shift; no
+multiply, divide or float) and asked for it to be applied before any further training. It has now been
+implemented in `LowBitAttention` (serving path, `sequence_loss`, and the trainer, with the shift
+treated as a constant under STE) and measured against the collapse recorded in §5.
+
+```
+cargo test --release -p uor-r4-core --offline --lib lowbit_attention
+```
+
+```
+norm dk=128 lr=0.05 norm_bits=0 acc=0.06 loss=2.079
+norm dk=128 lr=0.05 norm_bits=6 acc=0.38 loss=1.970
+```
+
+`2.079 = ln 8` exactly, so the unnormalised run is the uniform predictor — the collapse is real and
+reproduced. Normalisation moves it off that floor: accuracy 0.06 → 0.38 and the loss leaves `ln 8`.
+**Prediction §7.1 of the design doc is partially confirmed**: normalisation changes the regime, but
+0.38 is not a solution, so conditioning alone is not sufficient.
+
+It is pinned as a deterministic assertion in `normalisation_moves_off_the_uniform_collapse`.
+
+The same normalisation was also applied to `GeometricAttention`, where it had **no measurable effect**
+(§4 of the geometric receipt). Both results are recorded: the mechanism is correct conditioning, but
+the binding limit differs between the two cores.
+
+Charged 105,000 ms. Cumulative 142,673,565 / 147,200,000 ms.

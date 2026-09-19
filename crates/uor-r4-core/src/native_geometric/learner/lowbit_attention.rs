@@ -82,6 +82,9 @@ pub struct LowBitAttention {
     pub w_q: TernaryLinear,
     /// Output table, `vocab x dv`.
     pub w_o: TernaryLinear,
+    /// Power-of-two readout normalisation: the read is shifted so its largest magnitude is about
+    /// `2^norm_bits`. `0` disables it. A bit scan plus a shift — no divide, no multiply.
+    pub norm_bits: u32,
 }
 
 impl LowBitAttention {
@@ -126,7 +129,15 @@ impl LowBitAttention {
             w_v: TernaryLinear::quantize(wv, vocab, dv),
             w_q: TernaryLinear::quantize(wq, vocab, dk),
             w_o: TernaryLinear::quantize(wo, vocab, dv),
+            norm_bits: 0,
         })
+    }
+
+    /// Enable the power-of-two readout normalisation (see [`LowBitAttention::norm_bits`]).
+    #[must_use]
+    pub fn with_norm_bits(mut self, k: u32) -> Self {
+        self.norm_bits = k;
+        self
     }
 
     /// The empty state: a `dk x dv` matrix of zeros.
@@ -179,12 +190,32 @@ impl LowBitAttention {
                 }
             }
         }
+        let shift = Self::normaliser(&num, self.norm_bits);
+        if shift > 0 {
+            for v in num.iter_mut() {
+                *v >>= shift;
+            }
+        }
         for v in num.iter_mut() {
             if *v < 0 {
                 *v = 0;
             }
         }
         self.w_o.forward_i32(&num)
+    }
+
+    /// Shift the read so its largest magnitude is about `2^norm_bits`. Bit scan plus shift.
+    #[inline]
+    fn normaliser(num: &[i32], norm_bits: u32) -> u32 {
+        if norm_bits == 0 {
+            return 0;
+        }
+        let m = num.iter().fold(0i32, |a, &v| a.max(v.abs()));
+        if m == 0 {
+            0
+        } else {
+            (32 - (m as u32).leading_zeros()).saturating_sub(norm_bits)
+        }
     }
 
     /// Ingest a whole prompt and read with the final token's query.
@@ -274,6 +305,14 @@ impl LowBitAttention {
                     num[j] += q * s[ki * self.dv + j];
                 }
             }
+            let m = num.iter().fold(0f32, |a, &v| a.max(v.abs()));
+            let shift = if self.norm_bits > 0 && m >= 1.0 {
+                (32 - (m as u32).leading_zeros()).saturating_sub(self.norm_bits)
+            } else {
+                0
+            };
+            let dec = 1.0f32 / (1u64 << shift) as f32;
+            let mut num: Vec<f32> = num.iter().map(|&v| (v * dec).floor()).collect();
             for v in num.iter_mut() {
                 if *v < 0.0 {
                     *v = 0.0;
@@ -306,6 +345,8 @@ pub struct LowBitAttentionTrainer {
     pub dk: usize,
     pub dv: usize,
     pub decay: u32,
+    /// Power-of-two readout normalisation; `0` disables it.
+    pub norm_bits: u32,
     /// Key masters, `vocab x dk`.
     pub wk: Vec<f32>,
     /// Value masters, `vocab x dv`.
@@ -345,6 +386,7 @@ impl LowBitAttentionTrainer {
             dk,
             dv,
             decay,
+            norm_bits: 0,
             wk: fill(vocab * dk),
             wv: fill(vocab * dv),
             wq: fill(vocab * dk),
@@ -367,9 +409,11 @@ impl LowBitAttentionTrainer {
     }
 
     pub fn to_core(&self) -> Result<LowBitAttention, String> {
-        LowBitAttention::from_f32(
+        let mut core = LowBitAttention::from_f32(
             self.vocab, self.dk, self.dv, self.decay, &self.wk, &self.wv, &self.wq, &self.wo,
-        )
+        )?;
+        core.norm_bits = self.norm_bits;
+        Ok(core)
     }
 
     /// Whether the argmax of the final prediction matches the final target token.
@@ -449,6 +493,14 @@ impl LowBitAttentionTrainer {
                     num[j] += q * st[i * self.dv + j];
                 }
             }
+            let m = num.iter().fold(0f32, |a, &v| a.max(v.abs()));
+            let shift = if self.norm_bits > 0 && m >= 1.0 {
+                (32 - (m as u32).leading_zeros()).saturating_sub(self.norm_bits)
+            } else {
+                0
+            };
+            let dec = 1.0f32 / (1u64 << shift) as f32;
+            let num: Vec<f32> = num.iter().map(|&v| (v * dec).floor()).collect();
             let h: Vec<f32> = num.iter().map(|&v| v.max(0.0)).collect();
             let mut logits = vec![0f32; self.vocab];
             for (r, slot) in logits.iter_mut().enumerate() {
@@ -479,7 +531,8 @@ impl LowBitAttentionTrainer {
             }
             let mut dnum = vec![0f32; self.dv];
             for j in 0..self.dv {
-                dnum[j] = if num[j] > 0.0 { dh[j] } else { 0.0 };
+                // The shift is treated as a constant (STE through the bit scan).
+                dnum[j] = if num[j] > 0.0 { dh[j] * dec } else { 0.0 };
             }
 
             // dS_t from the read, plus the carry from the next step's ingest.
@@ -760,6 +813,34 @@ mod tests {
         assert!(
             acc >= 0.9,
             "content-addressed memory must retrieve the pair at delay {delay}, got {acc:.2}"
+        );
+    }
+
+    /// The confirmed power-of-two readout normalisation moves the run off the uniform collapse that
+    /// was measured at `dk = 128, lr = 0.05` (loss exactly `ln 8`, accuracy 0.06).
+    #[test]
+    fn normalisation_moves_off_the_uniform_collapse() {
+        let delay = 16usize;
+        let train = induction_batch(0xA5A5_1234, 32, delay);
+        let held = induction_batch(0x0BAD_F00D, 32, delay);
+        let mut base = LowBitAttentionTrainer::new(8, 128, 128, 0, 2026_0919).expect("build");
+        base.cfg.lr = 0.05;
+        let mut norm = base.clone();
+        norm.norm_bits = 6;
+        for _ in 0..1200 {
+            base.train_batch(&train);
+            norm.train_batch(&train);
+        }
+        let acc = |t: &LowBitAttentionTrainer| {
+            let hits = held.iter().filter(|s| t.final_token_correct(s)).count();
+            hits as f32 / held.len() as f32
+        };
+        let a = acc(&base);
+        let b = acc(&norm);
+        eprintln!("collapse: unnormalised={a:.2} normalised={b:.2}");
+        assert!(
+            b > a,
+            "normalisation must move the run off the uniform collapse: {a:.2} -> {b:.2}"
         );
     }
 

@@ -141,6 +141,19 @@ engineering, not model time. **Storage:** no model artifact was created; new tra
 The **128 MiB model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external
 compute.
 
+## Charges recorded — conditioning fix (2026-09-19, later still)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | Power-of-two normalisation: `LowBitAttention` regime runs and focused suite (release) | 105,000 ms | **Measured.** 51.18 + 51.42 s harness wall time. |
+
+**New cumulative: 142,673,565 ms.** Remaining: 147,200,000 − 142,673,565 = **4,526,435 ms (~75.4 min)**.
+
+**No extension was used**; the limit is unchanged at 147,200,000 ms. Builds and formatting remain
+engineering, not model time. **Storage:** no model artifact was created; new tracked files are text.
+The **128 MiB model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external
+compute.
+
 ## Not done
 
 No destructive deletion, no cleanup of prior artifacts, no paid compute. The 2026-09-18

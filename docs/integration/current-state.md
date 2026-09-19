@@ -48,6 +48,8 @@ The direction is the one theory predicts — exact addressing removes the cross-
 
 **Next action.** Design doc §7.1–7.2: add a **power-of-two readout normalisation** (shift the read by the leading bit of the accumulated key mass — bit scan plus shift, no divide), then re-measure the regime map and the induction horizon. Do not scale `dk`, add layers or change the tokenizer until the regime map is flat; adding parameters to an unstable optimiser produces larger failures, not capability.
 
+**Conditioning fix, measured.** The owner confirmed the power-of-two readout normalisation is D0-b-compliant, and it is now implemented in `LowBitAttention` (serving, loss and trainer, with the shift constant under STE). Against the recorded collapse at `dk = 128, lr = 0.05`: accuracy **0.06 → 0.38** and loss **2.079 (= ln 8, the uniform predictor) → 1.970**. Design-doc §7.1 is **partially confirmed** — normalisation changes the regime but is not sufficient on its own. The same normalisation had no measurable effect on `GeometricAttention`, so the binding limit differs between the two cores.
+
 **Receipt:** [`native_geometric_lowbit_attention_2026-09-19.txt`](../evidence/native_geometric_lowbit_attention_2026-09-19.txt).
 
 ## Low-bit core learns: backward pass, STE, Adam, and the first trained instruction run — September 19, 2026
