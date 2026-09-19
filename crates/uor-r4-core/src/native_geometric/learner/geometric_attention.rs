@@ -73,12 +73,21 @@ pub fn conjugacy_classes() -> (Vec<u8>, usize) {
 
 /// The exact-read kernel: unit weight on the identity class, zero elsewhere. In the graded read this
 /// reproduces `y = S[q]` exactly, so it is the control for the soft kernel.
-pub fn exact_kernel(n_classes: usize) -> Vec<i32> {
+///
+/// The identity class must be looked up, not assumed: `2I`'s identity is element 1 of the table, not
+/// element 0, so class index 0 is *not* the identity class.
+pub fn exact_kernel(n_classes: usize, identity_class: usize) -> Vec<i32> {
     let mut k = vec![0i32; n_classes];
-    if !k.is_empty() {
-        k[0] = 1;
+    if identity_class < n_classes {
+        k[identity_class] = 1;
     }
     k
+}
+
+/// The class index of the group identity.
+pub fn identity_class(class_of: &[u8]) -> usize {
+    let ident = group_table().identity as usize;
+    class_of.get(ident).copied().unwrap_or(0) as usize
 }
 
 /// Radix of the word: one element per position is an element of 2I.
@@ -122,6 +131,12 @@ pub struct GeometricAttention {
     pub n_addr: usize,
     /// Fixed `2I` element per token.
     pub elements: Vec<u16>,
+    /// Conjugacy class of each group element (Peter–Weyl band index).
+    pub class_of: Vec<u8>,
+    /// Number of conjugacy classes — the dimension of the conjugation-invariant kernel space.
+    pub n_classes: usize,
+    /// Ternary graded-read kernel, one weight per conjugacy class. `[1, 0, …]` is the exact read.
+    pub kernel: Vec<i8>,
     /// Values, `vocab x dv`, ternary with a per-token power-of-two magnitude.
     pub w_v: TernaryLinear,
     /// Output map, `vocab x dv`.
@@ -160,11 +175,75 @@ impl GeometricAttention {
             order,
             n_addr: address_space(order),
             elements: element_table(vocab),
+            class_of: conjugacy_classes().0,
+            n_classes: conjugacy_classes().1,
+            kernel: {
+                let (class_of, n_classes) = conjugacy_classes();
+                exact_kernel(n_classes, identity_class(&class_of))
+                    .into_iter()
+                    .map(|k| k as i8)
+                    .collect()
+            },
             w_v: TernaryLinear::quantize(wv, vocab, dv),
             w_o: TernaryLinear::quantize(wo, vocab, dv),
             norm_bits,
             use_relu: false,
         })
+    }
+
+    /// Replace the graded-read kernel (one ternary weight per conjugacy class).
+    #[must_use]
+    pub fn with_kernel(mut self, kernel: Vec<i8>) -> Self {
+        self.kernel = kernel;
+        self
+    }
+
+    /// The graded read: `Σ_g w[class(q⁻¹g)] · S[g]`, ternary `w`, so adds and subtracts only.
+    ///
+    /// With `w = [1, 0, …]` this is exactly `S[q]`. With weight on other classes it pools over
+    /// group-near stored elements, which is the band-limited (class-function) kernel this group
+    /// admits — and the reason a corrupted query address can still retrieve its value.
+    fn graded_read(&self, s: &[i32], q: usize) -> Vec<i32> {
+        let t = group_table();
+        let inv_q = t.inverse[q] as usize;
+        let mut num = vec![0i32; self.dv];
+        for g in 0..RADIX {
+            let c = self.class_of[t.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+            let base = g * self.dv;
+            match self.kernel[c] {
+                1 => {
+                    for j in 0..self.dv {
+                        num[j] += s[base + j];
+                    }
+                }
+                -1 => {
+                    for j in 0..self.dv {
+                        num[j] -= s[base + j];
+                    }
+                }
+                _ => {}
+            }
+        }
+        num
+    }
+
+    /// The graded read in `f64`.
+    fn graded_read_f64(&self, s: &[f64], q: usize) -> Vec<f64> {
+        let t = group_table();
+        let inv_q = t.inverse[q] as usize;
+        let mut num = vec![0f64; self.dv];
+        for g in 0..RADIX {
+            let c = self.class_of[t.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+            let w = self.kernel[c] as f64;
+            if w == 0.0 {
+                continue;
+            }
+            let base = g * self.dv;
+            for j in 0..self.dv {
+                num[j] += w * s[base + j];
+            }
+        }
+        num
     }
 
     /// Choose whether the read is passed through `relu`.
@@ -212,19 +291,25 @@ impl GeometricAttention {
     /// Read the bucket addressed by `ctx`, normalised to a power-of-two magnitude.
     pub fn logits(&self, s: &[i32], ctx: &[u32]) -> Vec<i32> {
         let a = self.address(ctx);
-        let base = a * self.dv;
+        let mut num = if self.order == 1 {
+            self.graded_read(s, a)
+        } else {
+            let base = a * self.dv;
+            s[base..base + self.dv].to_vec()
+        };
         let mut m = 0i32;
-        for j in 0..self.dv {
-            m = m.max(s[base + j].abs());
+        for v in num.iter() {
+            m = m.max(v.abs());
         }
         let shift = if self.norm_bits > 0 && m > 0 {
             (32 - (m as u32).leading_zeros()).saturating_sub(self.norm_bits)
         } else {
             0
         };
-        let mut num = vec![0i32; self.dv];
-        for (j, slot) in num.iter_mut().enumerate() {
-            *slot = s[base + j] >> shift;
+        if shift > 0 {
+            for v in num.iter_mut() {
+                *v >>= shift;
+            }
         }
         if self.use_relu {
             for v in num.iter_mut() {
@@ -279,10 +364,15 @@ impl GeometricAttention {
         }
         let ctx = self.tail_word(tokens);
         let a = self.address(&ctx);
-        let base = a * self.dv;
+        let num = if self.order == 1 {
+            self.graded_read_f64(&s, a)
+        } else {
+            let base = a * self.dv;
+            s[base..base + self.dv].to_vec()
+        };
         let mut m = 0f64;
-        for j in 0..self.dv {
-            m = m.max(s[base + j].abs());
+        for v in num.iter() {
+            m = m.max(v.abs());
         }
         let shift = if self.norm_bits > 0 && m >= 1.0 {
             (64 - (m as u64).leading_zeros()).saturating_sub(self.norm_bits)
@@ -290,14 +380,32 @@ impl GeometricAttention {
             0
         };
         let div = (1u64 << shift) as f64;
-        let mut num = vec![0f64; self.dv];
-        for j in 0..self.dv {
-            num[j] = (s[base + j] / div).floor();
-            if self.use_relu && num[j] < 0.0 {
-                num[j] = 0.0;
+        let mut num: Vec<f64> = num.iter().map(|&v| (v / div).floor()).collect();
+        for v in num.iter_mut() {
+            if self.use_relu && *v < 0.0 {
+                *v = 0.0;
             }
         }
         self.w_o.forward_reference(&num)
+    }
+
+    /// The graded read in `f32` (training/evaluation, not a serving path).
+    fn graded_read_f32(&self, s: &[f32], q: usize) -> Vec<f32> {
+        let t = group_table();
+        let inv_q = t.inverse[q] as usize;
+        let mut num = vec![0f32; self.dv];
+        for g in 0..RADIX {
+            let c = self.class_of[t.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+            let w = self.kernel[c] as f32;
+            if w == 0.0 {
+                continue;
+            }
+            let base = g * self.dv;
+            for j in 0..self.dv {
+                num[j] += w * s[base + j];
+            }
+        }
+        num
     }
 
     pub fn weight_bytes(&self) -> usize {
@@ -333,10 +441,15 @@ impl GeometricAttention {
                 })
                 .collect();
             let a = self.address(&ctx);
-            let base = a * self.dv;
+            let mut num = if self.order == 1 {
+                self.graded_read_f32(&s, a)
+            } else {
+                let base = a * self.dv;
+                s[base..base + self.dv].to_vec()
+            };
             let mut m = 0f32;
-            for j in 0..self.dv {
-                m = m.max(s[base + j].abs());
+            for v in num.iter() {
+                m = m.max(v.abs());
             }
             let shift = if self.norm_bits > 0 && m >= 1.0 {
                 (32 - (m as u32).leading_zeros()).saturating_sub(self.norm_bits)
@@ -344,10 +457,9 @@ impl GeometricAttention {
                 0
             };
             let div = (1u64 << shift) as f32;
-            let mut num = vec![0f32; self.dv];
-            for j in 0..self.dv {
-                let v = (s[base + j] / div).floor();
-                num[j] = if self.use_relu { v.max(0.0) } else { v };
+            for v in num.iter_mut() {
+                let x = (*v / div).floor();
+                *v = if self.use_relu { x.max(0.0) } else { x };
             }
             let mut logits = vec![0f32; self.vocab];
             for (r, slot) in logits.iter_mut().enumerate() {
@@ -768,6 +880,100 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The spherical-harmonic (class-function) kernel doing work: a corrupted query address still
+    /// retrieves its value, because `w[class(q⁻¹g)]` pools over group-near stored elements where the
+    /// exact read would look in exactly one wrong bucket.
+    #[test]
+    fn graded_kernel_recovers_a_corrupted_query() {
+        let k = 8usize;
+        let (class_of, n_classes) = conjugacy_classes();
+        // `vocab = 120` makes the element table the identity, so every group element is a token and a
+        // corrupted query is still a valid token.
+        let train = repeat_alphabet(0xA5A5_1234, 64, k, 8);
+        let held = repeat_alphabet(0x0BAD_F00D, 64, k, 8);
+        let mut t = GeometricAttentionTrainer::new(RADIX, 64, 1, 6, 2026_0919).expect("build");
+        t.cfg.lr = 0.05;
+        for _ in 0..900 {
+            t.train_batch(&train);
+        }
+        let base = t.to_core().expect("quantise");
+
+        let gt = group_table();
+        let score = |core: &GeometricAttention, h: Option<usize>| {
+            let mut hits = 0usize;
+            for s in &held {
+                let mut prompt: Vec<u32> = s[..s.len() - 1].to_vec();
+                if let Some(h) = h {
+                    let q = *prompt.last().unwrap() as usize;
+                    *prompt.last_mut().unwrap() = gt.product[h * ROW_STRIDE + q] as u32;
+                }
+                let logits = core.forward_i32(&prompt);
+                let mut best = 0usize;
+                for (i, &v) in logits.iter().enumerate() {
+                    if v > logits[best] {
+                        best = i;
+                    }
+                }
+                if best == s[s.len() - 1] as usize {
+                    hits += 1;
+                }
+            }
+            hits as f32 / held.len() as f32
+        };
+
+        let clean_exact = score(&base, None);
+        let mut exact_sum = 0f32;
+        let mut soft_sum = 0f32;
+        let mut clean_soft_sum = 0f32;
+        let hs = [3usize, 7, 11, 13, 17];
+        for &h in &hs {
+            let hc = class_of[h] as usize;
+            let mut soft = vec![0i32; n_classes];
+            soft[hc] = 1;
+            let soft_core = base
+                .clone()
+                .with_kernel(soft.iter().map(|x| *x as i8).collect());
+            exact_sum += score(&base, Some(h));
+            soft_sum += score(&soft_core, Some(h));
+            clean_soft_sum += score(&soft_core, None);
+        }
+        let n = hs.len() as f32;
+        let (exact_corrupt, soft_corrupt, clean_soft) =
+            (exact_sum / n, soft_sum / n, clean_soft_sum / n);
+        eprintln!(
+            "graded kernel over {n:.0} corruptions: clean exact={clean_exact:.2} soft={clean_soft:.2} | \
+             corrupted exact={exact_corrupt:.2} soft={soft_corrupt:.2}"
+        );
+        assert!(
+            soft_corrupt > exact_corrupt,
+            "a class-function kernel must recover a corrupted query on average: \
+             {exact_corrupt:.2} -> {soft_corrupt:.2}"
+        );
+    }
+
+    #[test]
+    fn graded_exact_kernel_equals_the_bucket_read() {
+        let a = random_attention(120, 16, 1, 1234);
+        let mut s = a.initial_state();
+        // `vocab = 120` makes elements the identity, so every element can be a token.
+        let tokens: Vec<u32> = vec![0, 3, 7, 1, 16, 2, 5, 5];
+        for i in 1..tokens.len() {
+            a.observe(&mut s, &tokens[i - 1..i], tokens[i]);
+        }
+        let q = a.elements[*tokens.last().unwrap() as usize] as usize;
+        let base = q * a.dv;
+        let manual: Vec<i32> = (0..a.dv).map(|j| s[base + j]).collect();
+        assert!(
+            manual.iter().any(|&v| v != 0),
+            "the bucket must be non-empty, or the comparison is vacuous"
+        );
+        let via = a.graded_read(&s, q);
+        assert_eq!(manual, via, "exact kernel must reproduce the bucket read");
+        // And the read must actually depend on the query, not be a constant.
+        let other = a.graded_read(&s, (q + 1) % RADIX);
+        assert_ne!(via, other, "the read must depend on the addressed element");
     }
 
     #[test]

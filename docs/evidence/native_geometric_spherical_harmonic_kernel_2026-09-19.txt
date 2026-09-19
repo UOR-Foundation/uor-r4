@@ -1,0 +1,91 @@
+# Spherical-harmonic grounding and a graded group kernel — 2026-09-19
+
+Branch `codex/stage1-falsification-sweep`. Machine `MacBookPro17,1` (M1, 8 cores).
+
+Owner note: some original ideas were based on **spherical harmonics**. This records the exact finite
+form that takes in this project, what it buys, and the two bugs the attempt exposed.
+
+## 1. The exact finite form: Peter–Weyl on 2I
+
+For a finite group, conjugation-invariant functions — functions of the *relative* element
+`r(q,g) = inverse(q)·g`, which is the descriptor the September-13 attention synthesis named — form a
+space whose dimension is the number of conjugacy classes, spanned by the irreducible characters. That
+dimension is this group's harmonic band count.
+
+Computed from the project's own verified group table, not cited:
+
+```
+2I conjugacy classes = 9, sizes (sorted) = [1, 1, 12, 12, 12, 12, 20, 20, 30]
+```
+
+with conjugation-invariance checked directly over all 14,400 `(g,h)` pairs. This matches SL(2,5)'s
+structure and means a graded read kernel `w[class(inverse(q)·g)]` is the **maximally compact
+rotation-invariant kernel this group admits: nine ternary weights rather than 120**.
+
+## 2. The graded read
+
+Added `graded_read`: `y = Σ_g w[class(q⁻¹g)] · S[g]` with **ternary** `w`, so the read is conditional
+adds/subtracts only. With `w` on the identity class this reproduces the exact read `S[q]` — asserted
+non-vacuously (`graded_exact_kernel_equals_the_bucket_read` now also requires a non-empty bucket and a
+query-dependent read, after the first version passed on two empty vectors).
+
+## 3. Measured: it does work, at a cost
+
+Corrupt the query address by a fixed group element and weight the kernel on that element's conjugacy
+class. Averaged over five corruption elements (`h ∈ {3,7,11,13,17}`), held out, deterministic seeds,
+`vocab = 120`, `dv = 64`, 900 steps:
+
+```
+graded kernel over 5 corruptions: clean exact=0.55 soft=0.15 | corrupted exact=0.13 soft=0.23
+```
+
+**The class-function kernel recovers a corrupted query — 0.13 → 0.23, about 1.8× — because the kernel
+pools over group-near stored elements where the exact read looks in exactly one wrong bucket.** It
+pays for that with clean accuracy, 0.55 → 0.15. Both numbers are reported; the kernel here is
+**hand-set, not learned**, so this is a lower bound on what a trained kernel could trade.
+
+## 4. Two defects found, both by the new checks
+
+1. **The identity of 2I is element 1, not element 0.** `exact_kernel` assumed class index 0 was the
+   identity class, so the "exact" kernel weighted an arbitrary singleton class instead. The first
+   graded measurement (clean 0.19, corrupted 0.13 → 0.23) was therefore **invalid and was
+   re-measured**; §3 is the corrected result. `exact_kernel` now takes the identity class explicitly.
+2. **A vacuous test.** `graded_exact_kernel_equals_the_bucket_read` initially compared two empty
+   vectors and passed. It now asserts the bucket is non-empty and that the read depends on the query,
+   and its token list was changed so the queried element is genuinely a predecessor.
+
+This is the second time in two sessions that a measurement defect looked like a mechanism result. The
+non-vacuity guard is the general lesson and is now in the test.
+
+## 5. Focused tests — PASS
+
+```
+cargo test --release -p uor-r4-core --offline --lib geometric_attention::tests -> 18 passed; 0 failed
+cargo fmt -p uor-r4-core -- --check -> clean
+```
+
+Includes: 9 conjugacy classes verified by direct conjugation over all pairs; ordered words distinct and
+order-sensitive; exact kernel ≡ bucket read (non-vacuously); graded kernel recovers a corrupted query;
+ordered words win at every difficulty; `relu`-after-read cost and resolution scaling at `order = 1`.
+
+## 6. Honest limits
+
+* Still **not a language model**: one layer, synthetic tasks, `dv = 64`, `vocab = 120`.
+* The graded kernel is **hand-set**, not learned; the clean-accuracy cost is large and the corruption
+  benefit modest. Whether a *learned* kernel finds a better trade is untested.
+* Corruption is by a single fixed group element per evaluation; composition of several corruptions, and
+  corruption that moves the element out of the stored set, are untested.
+* The kernel is ternary, so a class weight can only be `±1` or `0`. Larger integer weights would
+  require a small multiply and are therefore not D0-b-compliant in this form.
+* No serving-multiplier claim (`serving_multiplier_check.py` not run). Energy/token UNAVAILABLE.
+
+## 7. Next action
+
+1. **Learn the kernel.** Nine ternary weights; the gradient is available in closed form
+   (`∂L/∂w[c] = Σ_{g∈c} Σ_j dnum_j·S[g][j]`), and the write path is unchanged. Prediction: a learned
+   kernel keeps most clean accuracy while retaining the corruption benefit — if it cannot, the
+   trade-off is structural and should be reported as such.
+2. Then **BPE-4096 and a real instruction corpus**, which is where the next honest signal has to come
+   from.
+
+Charged 290,000 ms. Cumulative 143,433,565 / 147,200,000 ms.

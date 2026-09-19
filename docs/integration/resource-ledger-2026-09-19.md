@@ -199,6 +199,17 @@ this file during the update, introduced by repeated insert-before-anchor edits, 
 **No extension was used.** No model artifact was created; new tracked files are text. The **128 MiB
 model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external compute.
 
+## Charges recorded — harmonic grounding and the graded kernel (2026-09-19, final)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | Conjugacy-class verification, graded-kernel experiment, and the corrected full `geometric_attention` suite (release) | 290,000 ms | **Measured.** 78.82 + 79.22 + 2.28 + 2.26 + 14.59 + 14.70 + 83.80 s plus the small diagnostic runs. |
+
+**New cumulative: 143,433,565 ms.** Remaining: 147,200,000 − 143,433,565 = **3,766,435 ms (~62.8 min)**.
+
+**No extension was used.** No model artifact was created; new tracked files are text. The **128 MiB
+model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external compute.
+
 ## Not done
 
 No destructive deletion, no cleanup of prior artifacts, no paid compute. The 2026-09-18

@@ -1,5 +1,29 @@
 # Current native geometric AI work
 
+## Spherical-harmonic grounding and a graded group kernel — September 19, 2026
+
+**THE OWNER'S HARMONIC INTUITION HAS AN EXACT FINITE FORM HERE: PETER–WEYL ON 2I. THE GRADED KERNEL WORKS, AND THE ATTEMPT EXPOSED TWO MORE MEASUREMENT DEFECTS.**
+
+**Exact form.** For a finite group, conjugation-invariant functions — functions of the *relative* element `r(q,g) = inverse(q)·g`, the descriptor the September-13 synthesis named — form a space whose dimension is the number of conjugacy classes, spanned by the irreducible characters. That is this group's harmonic band count. Computed from the project's own verified table: **2I has 9 conjugacy classes, sizes `[1, 1, 12, 12, 12, 12, 20, 20, 30]`**, with conjugation-invariance checked directly over all 14,400 `(g,h)` pairs. So a graded read kernel `w[class(inverse(q)·g)]` is the **maximally compact rotation-invariant kernel this group admits: nine ternary weights rather than 120.**
+
+**Mechanism.** Added a `graded_read`: `y = Σ_g w[class(q⁻¹g)]·S[g]` with **ternary** `w`, so the read is conditional adds/subtracts only. With weight on the identity class it reproduces the exact read `S[q]`.
+
+**Measured.** Corrupt the query address by a fixed group element and weight the kernel on that element's conjugacy class; averaged over five corruption elements, held out, deterministic seeds (`vocab` 120, `dv` 64, 900 steps):
+
+```
+graded kernel over 5 corruptions: clean exact=0.55 soft=0.15 | corrupted exact=0.13 soft=0.23
+```
+
+A class-function kernel **recovers a corrupted query, 0.13 → 0.23 (≈1.8×)**, because it pools over group-near stored elements where the exact read looks in exactly one wrong bucket. It pays with clean accuracy, 0.55 → 0.15. **The kernel is hand-set, not learned**, so this is a lower bound on what a trained kernel could trade.
+
+**Two defects found by the new checks.** (1) **The identity of 2I is element 1, not element 0** — `exact_kernel` weighted an arbitrary singleton class, so the first graded measurement (clean 0.19; corrupted 0.13 → 0.23) was **invalid and re-measured**; §3 of the receipt is the corrected result, and `exact_kernel` now takes the identity class explicitly. (2) A **vacuous test**: `graded_exact_kernel_equals_the_bucket_read` initially compared two empty vectors and passed; it now requires a non-empty bucket and a query-dependent read. **This is the second time in two sessions that a measurement defect looked like a mechanism result**; the non-vacuity guard is now in the test.
+
+**Focused tests pass** (18 `geometric_attention`); `cargo fmt --check` clean.
+
+**Next action.** (1) **Learn the kernel** — nine ternary weights, gradient available in closed form (`∂L/∂w[c] = Σ_{g∈c} Σ_j dnum_j·S[g][j]`), write path unchanged; prediction: a learned kernel keeps most clean accuracy while retaining the corruption benefit, and if it cannot then the trade-off is structural and should be recorded as such. (2) Then **BPE-4096 and a real instruction corpus**, where the next honest signal has to come from.
+
+**Receipt:** [`native_geometric_spherical_harmonic_kernel_2026-09-19.txt`](../evidence/native_geometric_spherical_harmonic_kernel_2026-09-19.txt).
+
 ## Ordered-word addressing recovers the collapse; context copy reaches 100% — September 19, 2026
 
 **THE PROJECT'S ORDERED-N-LET FORMALISM WORKS: THE COLLAPSE IS RECOVERED AND THE MATCHED-FILTER BASELINE IS LEFT AT ZERO.**
