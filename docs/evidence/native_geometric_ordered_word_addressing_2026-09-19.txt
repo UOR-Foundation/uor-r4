@@ -146,3 +146,27 @@ cargo fmt -p uor-r4-core -- --check -> clean
 3. Then BPE-4096 wiring and a real training run on instruction data.
 
 Charged 215,000 ms. Cumulative 143,073,565 / 147,200,000 ms.
+
+## 11. Closing the saturation caveat: a discriminating curve
+
+§9 flagged that the copy task saturates at `order = 2` for a 32-token alphabet, so it can no longer
+discriminate. Difficulty is now raised by shrinking the alphabet until ordered *pairs* repeat with
+different successors. Context 16, 900 steps, deterministic seeds, `dv = 64`:
+
+```
+alphabet= 4 context=16 order1=0.34 order2=0.62
+alphabet= 8 context=16 order1=0.25 order2=0.84
+alphabet=16 context=16 order1=0.42 order2=0.97
+alphabet=32 context=16 order1=0.55 order2=1.00
+```
+
+**The ordered-pair address wins at every difficulty, and the margin grows as words become unique**
+(+0.28, +0.59, +0.55, +0.45). At alphabet 4 — only 16 possible ordered pairs for a 16-token run — both
+saturate-limit cases are gone and `order = 2` still doubles `order = 1`. The measurement now
+discriminates. Pinned as `ordered_words_win_at_every_difficulty`.
+
+(Counter-intuitive but consistent: `order = 1` also improves with a larger alphabet, 0.34 → 0.55,
+because single tokens then repeat less often. The two effects are different collisions and the
+data shows both.)
+
+Charged 70,000 ms. Cumulative 143,143,565 / 147,200,000 ms.

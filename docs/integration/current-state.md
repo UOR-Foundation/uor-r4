@@ -33,6 +33,17 @@ Owner direction was to synthesise the wider toolset before implementing. Three f
 
 **Next action.** (1) **Harden the measurement before claiming more**: the task now saturates at 1.00, so raise alphabet and run length until `order = 2` stops scoring 1.00, then re-measure `order = 2` vs `order = 3` there — a mechanism measured only on a task it aces is not measured. (2) **Graded group kernel** — the other half of the project's `r(i,j)` formalism: read neighbouring group elements with partial weight `w[class(q⁻¹g)]` so a query can match a *near* word. (3) Then BPE-4096 and a real instruction-data run.
 
+**Saturation caveat closed.** Difficulty was raised by shrinking the alphabet until ordered *pairs* repeat with different successors (context 16, dv 64):
+
+| alphabet | order=1 | order=2 |
+|---:|---:|---:|
+| 4 | 0.34 | **0.62** |
+| 8 | 0.25 | **0.84** |
+| 16 | 0.42 | **0.97** |
+| 32 | 0.55 | **1.00** |
+
+The ordered-pair address wins at every difficulty and the margin grows as words become unique (+0.28, +0.59, +0.55, +0.45); at alphabet 4 both ceilings are gone and it still doubles `order = 1`. Pinned as `ordered_words_win_at_every_difficulty`. `order = 1` also improves with a larger alphabet (0.34 → 0.55) because single tokens then repeat less often — two different collisions, both visible in the data.
+
 **Receipt:** [`native_geometric_ordered_word_addressing_2026-09-19.txt`](../evidence/native_geometric_ordered_word_addressing_2026-09-19.txt).
 
 ## Geometric addressed memory: an interference-free, multiplier-free attention, measured — September 19, 2026

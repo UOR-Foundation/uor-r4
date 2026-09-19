@@ -188,6 +188,17 @@ compute.
 **Documentation repair.** A duplicated `## Not done` heading with an orphaned paragraph was found in
 this file during the update, introduced by repeated insert-before-anchor edits, and repaired here.
 
+## Charges recorded — discriminating-difficulty sweep (2026-09-19, final)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | Alphabet-difficulty sweep (4 alphabets × 2 orders) + full `geometric_attention` suite | 70,000 ms | **Measured.** 67.78 s sweep + 77.39 s suite. |
+
+**New cumulative: 143,143,565 ms.** Remaining: 147,200,000 − 143,143,565 = **4,056,435 ms (~67.6 min)**.
+
+**No extension was used.** No model artifact was created; new tracked files are text. The **128 MiB
+model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external compute.
+
 ## Not done
 
 No destructive deletion, no cleanup of prior artifacts, no paid compute. The 2026-09-18

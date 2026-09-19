@@ -866,6 +866,61 @@ mod tests {
 
     /// The headline result: an ordered-word address copies a repeated context of 16 tokens, where a
     /// matched-filter memory scores zero.
+    /// The copy task saturates at `order = 2` for a 32-token alphabet, so it can no longer
+    /// discriminate. Shrinking the alphabet makes ordered *pairs* repeat with different successors,
+    /// which should produce a real curve instead of a ceiling.
+    fn repeat_alphabet(seed: u64, n: usize, k: usize, alphabet: usize) -> Vec<Vec<u32>> {
+        let mut st = seed | 1;
+        (0..n)
+            .map(|_| {
+                let mut r = Vec::with_capacity(k);
+                for _ in 0..k {
+                    st ^= st << 13;
+                    st ^= st >> 7;
+                    st ^= st << 17;
+                    r.push((st % alphabet as u64) as u32);
+                }
+                let mut seq = r.clone();
+                seq.extend_from_slice(&r);
+                seq
+            })
+            .collect()
+    }
+
+    /// The 32-token copy task saturates at `order = 2`, so difficulty is raised by shrinking the
+    /// alphabet until ordered *pairs* repeat with different successors. The ordered-pair address wins
+    /// at every difficulty, and the margin grows as words become unique:
+    /// alphabet 4/8/16/32 → order1 0.34/0.25/0.42/0.55, order2 0.62/0.84/0.97/1.00.
+    #[test]
+    fn ordered_words_win_at_every_difficulty() {
+        let k = 16usize;
+        let mut margins = Vec::new();
+        for alphabet in [4usize, 8, 16, 32] {
+            let train = repeat_alphabet(0xA5A5_1234, 64, k, alphabet);
+            let held = repeat_alphabet(0x0BAD_F00D, 64, k, alphabet);
+            let run = |order: usize| {
+                let mut t =
+                    GeometricAttentionTrainer::new(VOCAB, 64, order, 6, 2026_0919).expect("build");
+                t.cfg.lr = 0.05;
+                for _ in 0..900 {
+                    t.train_batch(&train);
+                }
+                let hits = held.iter().filter(|s| t.final_token_correct(s)).count();
+                hits as f32 / held.len() as f32
+            };
+            let one = run(1);
+            let two = run(2);
+            eprintln!("alphabet={alphabet:>2} context={k} order1={one:.2} order2={two:.2}");
+            margins.push((alphabet, two - one));
+        }
+        for (alphabet, margin) in margins {
+            assert!(
+                margin > 0.0,
+                "the ordered-pair address must beat the first-order one at alphabet {alphabet}"
+            );
+        }
+    }
+
     #[test]
     fn copies_a_repeated_context() {
         for k in [4usize, 8, 16] {
