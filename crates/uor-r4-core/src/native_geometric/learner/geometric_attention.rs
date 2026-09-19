@@ -38,9 +38,48 @@
 
 #![forbid(unsafe_code)]
 
-use super::group_table::GROUP_ORDER;
+use super::group_table::{group_table, GROUP_ORDER, ROW_STRIDE};
 use super::lowbit::TernaryLinear;
 use super::lowbit_core::{adam_update, quantize_codes, softmax_f32, xorshift_unit, TrainConfig};
+
+/// The conjugacy classes of `2I`, computed from the project's verified group table.
+///
+/// `class_of[g]` is the class index of `g`, and the returned count is the number of classes. This is
+/// the exact finite analogue of a spherical-harmonic band decomposition: by Peter–Weyl, the
+/// conjugation-invariant functions on a finite group (the functions of the *relative* element) form a
+/// space whose dimension is the number of conjugacy classes, spanned by the irreducible characters.
+/// A graded kernel that depends only on `class(q⁻¹g)` is therefore the maximally compact
+/// rotation-invariant kernel this group admits — nine free weights rather than 120.
+///
+/// Computed rather than cited: conjugation `g ↦ h g h⁻¹` uses the table's product and inverse rows.
+pub fn conjugacy_classes() -> (Vec<u8>, usize) {
+    let t = group_table();
+    let n = RADIX;
+    let mut class_of = vec![u8::MAX; n];
+    let mut next = 0u8;
+    for g in 0..n {
+        if class_of[g] != u8::MAX {
+            continue;
+        }
+        for h in 0..n {
+            let hg = t.product[h * ROW_STRIDE + g] as usize;
+            let c = t.product[hg * ROW_STRIDE + t.inverse[h] as usize] as usize;
+            class_of[c] = next;
+        }
+        next += 1;
+    }
+    (class_of, next as usize)
+}
+
+/// The exact-read kernel: unit weight on the identity class, zero elsewhere. In the graded read this
+/// reproduces `y = S[q]` exactly, so it is the control for the soft kernel.
+pub fn exact_kernel(n_classes: usize) -> Vec<i32> {
+    let mut k = vec![0i32; n_classes];
+    if !k.is_empty() {
+        k[0] = 1;
+    }
+    k
+}
 
 /// Radix of the word: one element per position is an element of 2I.
 pub const RADIX: usize = GROUP_ORDER;
@@ -698,6 +737,37 @@ mod tests {
         assert_eq!(seen.len(), 64 * 64);
         assert_ne!(word_address(&[1, 2], 2), word_address(&[2, 1], 2));
         assert!(word_address(&[1, 2], 2) < address_space(2));
+    }
+
+    /// The harmonic grounding: conjugation-invariant functions on `2I` (functions of the *relative*
+    /// element) form a space whose dimension is the number of conjugacy classes — the Peter–Weyl
+    /// analogue of a spherical-harmonic band count. Computed from the project's verified table.
+    #[test]
+    fn conjugacy_classes_of_2i_from_the_verified_table() {
+        let (class_of, n_classes) = conjugacy_classes();
+        let mut counts = vec![0usize; n_classes];
+        for &c in &class_of {
+            assert_ne!(c, u8::MAX, "every element must land in a class");
+            counts[c as usize] += 1;
+        }
+        let mut sorted = counts.clone();
+        sorted.sort_unstable();
+        eprintln!("2I conjugacy classes={n_classes} sizes(sorted)={sorted:?}");
+        assert_eq!(counts.iter().sum::<usize>(), RADIX);
+        // The identity is alone in its class.
+        assert_eq!(counts[class_of[0] as usize], 1);
+        // Direct conjugation invariance over every pair.
+        let t = group_table();
+        for g in 0..RADIX {
+            for h in 0..RADIX {
+                let hg = t.product[h * ROW_STRIDE + g] as usize;
+                let c = t.product[hg * ROW_STRIDE + t.inverse[h] as usize] as usize;
+                assert_eq!(
+                    class_of[c], class_of[g],
+                    "class must be conjugation-invariant"
+                );
+            }
+        }
     }
 
     #[test]
