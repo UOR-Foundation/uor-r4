@@ -50,6 +50,17 @@ Corruption in the objective **does** change the filter (spreads 3 → 7 classes)
 
 **Receipt:** [`native_geometric_spherical_harmonic_kernel_2026-09-19.txt`](../evidence/native_geometric_spherical_harmonic_kernel_2026-09-19.txt).
 
+**Step (2) done: the general group-algebra filter buys nothing — the bottleneck is not the filter.** The filter can now be a class function (9 slots, conjugation-invariant) or a general group-algebra element (120 slots), selectable by `class_filter`; the general case contains the class case as a subspace.
+
+```
+class filter:   slots=9   non_zero=3  clean=0.11
+general filter: slots=120 non_zero=5  clean=0.11
+```
+
+A 13× increase in filter capacity changes nothing: training uses 5 of 120 slots and reaches the same accuracy, and both remain far below the **fixed exact filter's clean 0.42**. **Filter capacity, expressiveness and conjugation-invariance are all immaterial to clean accuracy here**, so whatever limits the learned variants is upstream of the read — in the stored representation or the readout. That is now the measurement's own conclusion, not a preference, and it makes **learned packaging** the next step on evidence rather than on taste.
+
+**State.** `geometric_attention` **20 passed, 0 failed**; `cargo fmt --check` clean.
+
 ## Ordered-word addressing recovers the collapse; context copy reaches 100% — September 19, 2026
 
 **THE PROJECT'S ORDERED-N-LET FORMALISM WORKS: THE COLLAPSE IS RECOVERED AND THE MATCHED-FILTER BASELINE IS LEFT AT ZERO.**

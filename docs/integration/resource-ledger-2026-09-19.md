@@ -206,8 +206,9 @@ model-storage stop margin is untouched**; no deletion, no cleanup, no paid or ex
 | 2026-09-19 | Conjugacy-class verification, graded-kernel experiment, and the corrected full `geometric_attention` suite (release) | 290,000 ms | **Measured.** 78.82 + 79.22 + 2.28 + 2.26 + 14.59 + 14.70 + 83.80 s plus the small diagnostic runs. |
 | 2026-09-19 | Learned-filter attempt (negative), regression check, and revert verification (release) | 235,000 ms | **Measured.** 52.47 + 92.10 + 82.82 s plus the small diagnostic runs. Change reverted; no code retained. |
 | 2026-09-19 | Corruption-in-the-objective experiment, regression cycles, and the full `geometric_attention` suite (release) | 555,000 ms | **Measured.** 87.99 + 195.21 + 55.08 + 216.04 s plus the small diagnostic runs. |
+| 2026-09-19 | General group-algebra filter A/B and the full `geometric_attention` suite (release) | 290,000 ms | **Measured.** 54.78 s A/B + 233.45 s suite. |
 
-**New cumulative: 144,223,565 ms.** Remaining: 147,200,000 − 144,223,565 = **2,976,435 ms (~49.6 min)**.
+**New cumulative: 144,513,565 ms.** Remaining: 147,200,000 − 144,513,565 = **2,686,435 ms (~44.8 min)**.
 
 **No extension was used.** No model artifact was created; new tracked files are text. The **128 MiB
 model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external compute.

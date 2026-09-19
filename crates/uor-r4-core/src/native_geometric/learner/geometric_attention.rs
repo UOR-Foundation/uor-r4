@@ -71,15 +71,40 @@ pub fn conjugacy_classes() -> (Vec<u8>, usize) {
     (class_of, next as usize)
 }
 
-/// The exact-read kernel: unit weight on the identity class, zero elsewhere. In the graded read this
-/// reproduces `y = S[q]` exactly, so it is the control for the soft kernel.
+/// The exact-read kernel: unit weight on the identity, zero elsewhere. In the graded read this
+/// reproduces `y = S[q]` exactly, so it is the control for a soft filter.
 ///
-/// The identity class must be looked up, not assumed: `2I`'s identity is element 1 of the table, not
-/// element 0, so class index 0 is *not* the identity class.
+/// The identity must be looked up, not assumed: `2I`'s identity is element 1 of the table, not element
+/// 0. In class mode the identity's *class* is the slot; in general mode the identity *offset* is.
 pub fn exact_kernel(n_classes: usize, identity_class: usize) -> Vec<i32> {
     let mut k = vec![0i32; n_classes];
     if identity_class < n_classes {
         k[identity_class] = 1;
+    }
+    k
+}
+
+/// Number of filter slots: one per conjugacy class (conjugation-invariant), or one per group element
+/// (a general group-algebra element, strictly more expressive).
+pub fn kernel_slots(class_filter: bool, n_classes: usize) -> usize {
+    if class_filter {
+        n_classes
+    } else {
+        RADIX
+    }
+}
+
+/// The control filter: unit weight on the identity, zero elsewhere.
+pub fn identity_kernel(class_filter: bool, n_classes: usize, class_of: &[u8]) -> Vec<i32> {
+    let n = kernel_slots(class_filter, n_classes);
+    let mut k = vec![0i32; n];
+    let slot = if class_filter {
+        identity_class(class_of)
+    } else {
+        group_table().identity as usize
+    };
+    if slot < n {
+        k[slot] = 1;
     }
     k
 }
@@ -144,7 +169,10 @@ pub struct GeometricAttention {
     pub class_of: Vec<u8>,
     /// Number of conjugacy classes — the dimension of the conjugation-invariant kernel space.
     pub n_classes: usize,
-    /// Ternary graded-read kernel, one weight per conjugacy class. `[1, 0, …]` is the exact read.
+    /// When true the filter is a class function (conjugation-invariant, 9 weights); when false it is a
+    /// general group-algebra element (120 weights), which contains the class functions as a subspace.
+    pub class_filter: bool,
+    /// Ternary graded-read filter. The exact read is a unit weight on the identity.
     pub kernel: Vec<i8>,
     /// Values, `vocab x dv`, ternary with a per-token power-of-two magnitude.
     pub w_v: TernaryLinear,
@@ -186,9 +214,10 @@ impl GeometricAttention {
             elements: element_table(vocab),
             class_of: conjugacy_classes().0,
             n_classes: conjugacy_classes().1,
+            class_filter: true,
             kernel: {
                 let (class_of, n_classes) = conjugacy_classes();
-                exact_kernel(n_classes, identity_class(&class_of))
+                identity_kernel(true, n_classes, &class_of)
                     .into_iter()
                     .map(|k| k as i8)
                     .collect()
@@ -217,7 +246,12 @@ impl GeometricAttention {
         let inv_q = t.inverse[q] as usize;
         let mut num = vec![0i32; self.dv];
         for g in 0..RADIX {
-            let c = self.class_of[t.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+            let off = t.product[inv_q * ROW_STRIDE + g] as usize;
+            let c = if self.class_filter {
+                self.class_of[off] as usize
+            } else {
+                off
+            };
             let base = g * self.dv;
             match self.kernel[c] {
                 1 => {
@@ -242,7 +276,12 @@ impl GeometricAttention {
         let inv_q = t.inverse[q] as usize;
         let mut num = vec![0f64; self.dv];
         for g in 0..RADIX {
-            let c = self.class_of[t.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+            let off = t.product[inv_q * ROW_STRIDE + g] as usize;
+            let c = if self.class_filter {
+                self.class_of[off] as usize
+            } else {
+                off
+            };
             let w = self.kernel[c] as f64;
             if w == 0.0 {
                 continue;
@@ -404,7 +443,12 @@ impl GeometricAttention {
         let inv_q = t.inverse[q] as usize;
         let mut num = vec![0f32; self.dv];
         for g in 0..RADIX {
-            let c = self.class_of[t.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+            let off = t.product[inv_q * ROW_STRIDE + g] as usize;
+            let c = if self.class_filter {
+                self.class_of[off] as usize
+            } else {
+                off
+            };
             let w = self.kernel[c] as f32;
             if w == 0.0 {
                 continue;
@@ -502,8 +546,10 @@ pub struct GeometricAttentionTrainer {
     /// Conjugacy class of each group element (the harmonic band index).
     pub class_of: Vec<u8>,
     pub n_classes: usize,
-    /// Learned harmonic filter masters, one per conjugacy class; the read is the group convolution
-    /// of the stored superposition with this filter.
+    /// Class function (9 weights) or general group-algebra element (120 weights).
+    pub class_filter: bool,
+    /// Learned harmonic filter masters; the read is the group convolution of the stored
+    /// superposition with this filter.
     pub kernel_m: Vec<f32>,
     gkernel: Vec<f32>,
     mkernel: Vec<f32>,
@@ -557,9 +603,10 @@ impl GeometricAttentionTrainer {
             use_relu: false,
             class_of: conjugacy_classes().0,
             n_classes: conjugacy_classes().1,
+            class_filter: true,
             kernel_m: {
                 let (class_of, n_classes) = conjugacy_classes();
-                exact_kernel(n_classes, identity_class(&class_of))
+                identity_kernel(true, n_classes, &class_of)
                     .into_iter()
                     .map(|k| k as f32)
                     .collect()
@@ -623,6 +670,21 @@ impl GeometricAttentionTrainer {
             .collect()
     }
 
+    /// Switch between a class-function filter and a general group-algebra filter, rebuilding the
+    /// filter state at the identity control so the change is safe.
+    pub fn set_class_filter(&mut self, class_filter: bool) {
+        let (class_of, n_classes) = conjugacy_classes();
+        let n = kernel_slots(class_filter, n_classes);
+        self.class_filter = class_filter;
+        self.kernel_m = identity_kernel(class_filter, n_classes, &class_of)
+            .into_iter()
+            .map(|k| k as f32)
+            .collect();
+        self.gkernel = vec![0f32; n];
+        self.mkernel = vec![0f32; n];
+        self.vkernel = vec![0f32; n];
+    }
+
     pub fn to_core(&self) -> Result<GeometricAttention, String> {
         let mut core = GeometricAttention::from_f32(
             self.vocab,
@@ -633,6 +695,7 @@ impl GeometricAttentionTrainer {
             &self.wo,
         )?;
         core.use_relu = self.use_relu;
+        core.class_filter = self.class_filter;
         core.kernel = self.quantised_kernel();
         Ok(core)
     }
@@ -748,7 +811,12 @@ impl GeometricAttentionTrainer {
                 let st = &states[i];
                 let mut num = vec![0f32; self.dv];
                 for g in 0..RADIX {
-                    let c = self.class_of[gt.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+                    let off = gt.product[inv_q * ROW_STRIDE + g] as usize;
+                    let c = if self.class_filter {
+                        self.class_of[off] as usize
+                    } else {
+                        off
+                    };
                     let w = kern[c] as f32;
                     if w == 0.0 {
                         continue;
@@ -823,7 +891,12 @@ impl GeometricAttentionTrainer {
             if self.order == 1 {
                 let st = &states[i];
                 for g in 0..RADIX {
-                    let c = self.class_of[gt.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+                    let off = gt.product[inv_q * ROW_STRIDE + g] as usize;
+                    let c = if self.class_filter {
+                        self.class_of[off] as usize
+                    } else {
+                        off
+                    };
                     let bl = g * self.dv;
                     let mut acc = 0f32;
                     for j in 0..self.dv {
@@ -1189,6 +1262,47 @@ mod tests {
             x5 > x0,
             "corruption in the objective must raise corrupted accuracy: {x0:.2} -> {x5:.2}"
         );
+    }
+
+    /// Does the general group-algebra filter (120 weights) beat the class-function filter (9)?
+    #[test]
+    fn a_general_filter_is_at_least_as_good_as_a_class_filter() {
+        let k = 8usize;
+        let train = repeat_alphabet(0xA5A5_1234, 64, k, 8);
+        let held = repeat_alphabet(0x0BAD_F00D, 64, k, 8);
+        let run = |class_filter: bool| -> (usize, usize, f32) {
+            let mut t = GeometricAttentionTrainer::new(RADIX, 64, 1, 6, 2026_0919).expect("build");
+            t.cfg.lr = 0.05;
+            t.set_class_filter(class_filter);
+            for _ in 0..900 {
+                t.train_batch(&train);
+            }
+            let non_zero = t.quantised_kernel().iter().filter(|&&w| w != 0).count();
+            let slots = t.quantised_kernel().len();
+            let core = t.to_core().expect("quantise");
+            let hits = held.iter().filter(|s| core_hit(&core, s)).count();
+            (non_zero, slots, hits as f32 / held.len() as f32)
+        };
+        let (cn, cs, ca) = run(true);
+        let (gn, gs, ga) = run(false);
+        eprintln!("class filter: slots={cs} non_zero={cn} clean={ca:.2}");
+        eprintln!("general filter: slots={gs} non_zero={gn} clean={ga:.2}");
+        assert!(
+            ga >= ca - 0.02,
+            "the general filter contains the class filter, so it must not lose: {ca:.2} -> {ga:.2}"
+        );
+    }
+
+    /// Predict the final token of a held-out sequence with a core.
+    fn core_hit(core: &GeometricAttention, s: &[u32]) -> bool {
+        let logits = core.forward_i32(&s[..s.len() - 1]);
+        let mut best = 0usize;
+        for (i, &v) in logits.iter().enumerate() {
+            if v > logits[best] {
+                best = i;
+            }
+        }
+        best == s[s.len() - 1] as usize
     }
 
     #[test]
