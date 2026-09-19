@@ -81,10 +81,54 @@ Recorded with D0. These are measured, not asserted, and are reported together.
 
 I3 and I5 are the properties a dense transformer cannot match at equal quality and
 are the basis of any efficiency claim.
-
 ---
 
-## D1 — Falsification before extension
+## D0-b — What "no matmul at serving" means, adopted
+
+Owner (human): Casey · Drafted by: Zed (agent) · Date: 2026-09-19 · **Signed: Casey 2026-09-19**
+
+**Decision: D0-b. Bounded integer/ternary linear maps are permitted at serving, executed with no
+multiplier in the kernel.** This supersedes D0-a, whose strict reading banned the mathematical
+linear map even when tabulated.
+
+### The serving contract
+
+- **No floating point** at serving, and no `libm` transcendentals.
+- **Weights at most 4 bits**, ternary preferred.
+- Allowed: integer add, subtract, shift, bitwise, popcount, compare, table and array reads, bounded
+  index arithmetic, exact fixed-point.
+- **No multiplier instruction in the kernel.** A linear map is legal only in a form that executes
+  as adds/subtracts/shifts/table reads.
+- **Energy measured, not estimated**, on a named machine, when the value is claimed.
+
+### Why D0-a was withdrawn
+
+The strict reading banned the one operation every architecture that *learns a representation* uses,
+and thereby excluded every published precedent (BitNet b1.58, MatMul-free LM, T-MAC) while leaving
+only logic-gate networks, whose best published sequence result is 5.00 BLEU on 16-token MT. Under
+that reading the project was in genuinely unexplored territory with no learnable substrate of
+sufficient capacity, which is not a viable path to a chat model.
+
+D0-b preserves the actual objective — no multiplier, tiny RAM, no GPU, local, measured energy —
+while allowing the substrate that reaches chat quality. The multiplier constraint stays; the
+mathematical ban is what changes.
+
+### How it is enforced
+
+1. `scripts/serving_multiplier_check.py` — a per-function **zero-check** over a `--release` binary:
+   a declared serving symbol whose instruction range contains no multiply mnemonic cannot execute
+   one. Sound where counting is not.
+2. `scripts/energy_per_token.py` — refuses to report a power figure that is not physically
+   plausible, which is what stops an unpopulated `CPU Power` field from becoming a published
+   result.
+3. Every low-bit weight matrix uses a **power-of-two per-row scale**, so `y = (Σ ±x) << shift` and
+   the layer is multiplier-free by construction rather than by compiler grace.
+
+### Consequence
+
+The native learned core may use low-bit linear maps. `learner/lowbit.rs` implements the substrate:
+ternary weights at 2 bits each with per-row power-of-two scales, trained in float, served in exact
+integer arithmetic, with a test asserting the serving path equals the floating reference.
 
 Owner (human): Casey · Drafted by: Zed (agent) · Date: 2026-09-19 · **Signed: Casey 2026-09-19**
 

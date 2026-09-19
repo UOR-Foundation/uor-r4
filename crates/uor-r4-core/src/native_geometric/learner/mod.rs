@@ -7,6 +7,7 @@ pub mod binary_model;
 pub mod embedding;
 pub mod group_table;
 pub mod jepa_trainer;
+pub mod lowbit;
 pub mod transition_table;
 pub mod vsa_codes;
 
@@ -20,11 +21,12 @@ pub use embedding::{
     canonical_h4_fiber_roots_q30, canonical_h4_hopf_s2, canonical_h4_roots, canonical_h4_roots_q30,
     ContinuousEmbedding, H4_ROOT_COUNT, PHI,
 };
-pub use group_table::{group_table, GroupTable, GROUP_ORDER};
+pub use group_table::{group_table, GroupTable, GROUP_ORDER, ROW_STRIDE};
 pub use jepa_trainer::{
     ExportedGeometricModel, JepaTrainer, JepaTrainerConfig, NativeGeometricLearnerModel,
     TrainingMetrics,
 };
+pub use lowbit::TernaryLinear;
 pub use transition_table::{
     ContinuousLaneTable, DiscreteServingTable, MultiLaneTransitionTables, ENTRIES_PER_TABLE,
 };
