@@ -1,5 +1,23 @@
 # Current native geometric AI work
 
+## Low-bit core learns: backward pass, STE, Adam, and the first trained instruction run — September 19, 2026
+
+**BACKWARD PASS DELIVERED; THE CORE LEARNS ON SHORT SEQUENCES; THE RECURRENCE IS THE BLOCKER.**
+
+`LowBitCoreTrainer` (`learner/lowbit_core.rs`) supplies the half the core was missing: `f32` masters, quantisation on every forward using the same rule `TernaryLinear::quantize` applies, a straight-through estimator through the ternary step (the per-row power-of-two scale cancels under the identity, so the master gradient is `∂L/∂y · x`), BPTT through the recurrence and the `relu` mask, and bias-corrected Adam mirroring `learner/jepa_trainer.rs::AdamMoments`. New instruments beside it: `LowBitCore::sequence_loss`, `LowBitCore::forward_reference_f32`, `LowBitCoreTrainer::loss` and `::next_token_accuracy`.
+
+**Focused tests pass** (10 `lowbit_core`, 7 `chat`; `cargo fmt --check` clean). The learning test is a delayed-recall language the recurrence is required for — a no-recurrence control cannot exceed chance (§4). Result: held-out loss **4.390 → 0.094**, **100 % recall**, no-recurrence control 0.901, `trainer.loss == core.sequence_loss` (the trainer optimises the served function), and the trained `forward_i32` equals `float_forward_ste` elementwise. Seed sensitivity was measured, not assumed: four of five seeds reach 100 % at 400 steps.
+
+**Pipeline.** `learner/chat.rs` is a byte-level tokenizer (vocab 259, with `<|user|>`, `<|assistant|>`, `<|end|>`) plus a tab-separated instruction loader; `bin/train-lowbit-chat.rs` trains and then prints raw generations. The corpus is procedural instruction data (arithmetic, reversal, casing, repetition, first letter) plus six conversational turns — **not TinyStories**. The byte-level vocabulary is a recorded tradeoff: the two existing tokenizers (legacy llama2.c 4096, `HfBpeTokenizer` ≈49 k) are too large to train on a small corpus within budget; the core takes `vocab` as a parameter, so this is a size change and a re-export, not an architecture change.
+
+**First run (dim 128, 4,000 steps, 24-token cap).** Held-out loss **20.2727 → 3.9138**, top-1 next-token accuracy **29.5 %** (uniform reference `ln 259 = 5.56`). **But response-only teacher-forced accuracy is 0/470 and no held-out response is reproduced exactly (0/134).** Free-running generation collapses to one repeating fragment (`854854854…`) for every prompt and never emits `<|end|>`. The 29.5 % is instruction copying, not answering. **No conversational capability is claimed or observed.**
+
+**Blocking finding — the recurrence is unstable.** A held-out sweep over usable sequence length shows learning is confined to roughly **≤24-byte sequences**; at 40 tokens held-out loss is ≈18.5, far worse than uniform, i.e. the logits are confidently wrong. Cause: `h_t = relu(W_x[:,t] + W_h·h_{t-1})` with random ternary `W_h` has a per-step growth factor ≈ `√dim/2` (≈4.9 at `dim = 96`) and no contraction or normalisation, so `‖h‖` and the logits grow with the horizon, the softmax saturates, and the response gradient is lost. This is an architecture property, not a defect in the backward pass — which the recall task verifies independently at 100 %.
+
+**Next action.** Stabilise the recurrence inside D0-b and re-run. Two candidates: a saturating state bound `min(relu(·), MAX)` (smaller change; preserves integer/float exactness because both paths clamp at the same integer) or a right shift `relu(W_x + (W_h·h) >> k)` (contractive, but moves the float reference into a fractional domain and requires its exactness test to be restated). Only after response accuracy leaves zero should scale, the project tokenizer and real chat data follow.
+
+**Receipt:** [`native_geometric_lowbit_chat_2026-09-19.txt`](../evidence/native_geometric_lowbit_chat_2026-09-19.txt). Retained negative candidate: `.uor-models/native-lowbit-chat-2026-09-19/lowbit_chat.bin` (330,764 bytes).
+
 ## Stage 1 falsification sweep, attention repair, and contract decision — September 19, 2026
 
 **D0 RECORDED; ATTENTION INVERTED-FIXED; PER-MECHANISM ABLATION TABLE PRODUCED.**

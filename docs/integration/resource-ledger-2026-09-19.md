@@ -88,6 +88,24 @@ from is 1,728,000 bytes larger, so the two together are still smaller than a hyp
 retrained pair. The **128 MiB stop margin remains untouched**; no deletion, no cleanup and
 no paid compute were performed.
 
+## Charges recorded — low-bit core backward pass and first instruction run (2026-09-19, later)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | Held-out sequence-length sweep, release binary (`--procedural 3000`) | 236,000 ms | **Measured.** Seven runs at the wall times printed by the tool: 72 tokens/dim 96 (20.3 s), 72/dim 48, 24/dim 96, 16/dim 96 (aborted, corpus below the minimum), and four at 3,000 steps (32/dim 96 ×2, 40/dim 128, 24/dim 128). Sum ≈ 236 s. |
+| 2026-09-19 | Final trained instruction run, twice (4,000 steps, dim 128, ≤24-token sequences) | 197,000 ms | **Measured.** 95.7 s training wall per run, plus the O(n²) response-only evaluation (~3 s per run). Recorded in `docs/evidence/native_geometric_lowbit_chat_2026-09-19.txt`. |
+
+**New cumulative: 140,329,275 ms.** Remaining: 147,200,000 − 140,329,275 = **6,870,725 ms (~114.5 min)**.
+
+**No extension was used.** The work fit inside the existing ceiling, so no increment is recorded and
+the limit is unchanged at 147,200,000 ms. Builds, `cargo test` runs and formatting are engineering,
+not model time, and are not charged here (consistent with the earlier entries on this page).
+
+**Storage.** New retained storage: `.uor-models/native-lowbit-chat-2026-09-19/lowbit_chat.bin`
+(330,764 bytes, retained as a negative candidate) plus `run.log` (~4 KB). New build output:
+`target/release/train-lowbit-chat` (~ recreated from source). The **128 MiB model-storage stop
+margin is untouched**; no deletion, no cleanup and no paid or external compute.
+
 ## Not done
 
 No destructive deletion, no cleanup of prior artifacts, no paid compute. The 2026-09-18

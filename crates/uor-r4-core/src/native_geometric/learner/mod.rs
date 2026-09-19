@@ -4,6 +4,7 @@
 //! Discrete table export for zero-GEMM, zero-runtime-float, zero-heap-allocation inference.
 
 pub mod binary_model;
+pub mod chat;
 pub mod embedding;
 pub mod group_table;
 pub mod jepa_trainer;
@@ -28,7 +29,7 @@ pub use jepa_trainer::{
     TrainingMetrics,
 };
 pub use lowbit::TernaryLinear;
-pub use lowbit_core::{LowBitCore, DEFAULT_STATE_DIM};
+pub use lowbit_core::{LowBitCore, LowBitCoreTrainer, TrainConfig, DEFAULT_STATE_DIM};
 pub use transition_table::{
     ContinuousLaneTable, DiscreteServingTable, MultiLaneTransitionTables, ENTRIES_PER_TABLE,
 };
