@@ -110,6 +110,15 @@ pub fn element_table(vocab: usize) -> Vec<u16> {
     (0..vocab).map(|t| (t % RADIX) as u16).collect()
 }
 
+#[inline]
+fn xorshift_u64(state: u64) -> u64 {
+    let mut x = state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    x
+}
+
 /// The address of an ordered word: positional radix composition, order-preserving by construction.
 #[inline]
 pub fn word_address(elements: &[u16], order: usize) -> usize {
@@ -490,6 +499,20 @@ pub struct GeometricAttentionTrainer {
     pub elements: Vec<u16>,
     pub norm_bits: u32,
     pub use_relu: bool,
+    /// Conjugacy class of each group element (the harmonic band index).
+    pub class_of: Vec<u8>,
+    pub n_classes: usize,
+    /// Learned harmonic filter masters, one per conjugacy class; the read is the group convolution
+    /// of the stored superposition with this filter.
+    pub kernel_m: Vec<f32>,
+    gkernel: Vec<f32>,
+    mkernel: Vec<f32>,
+    vkernel: Vec<f32>,
+    /// Probability per training sequence that the final query address is corrupted.
+    pub corrupt_frac: f32,
+    /// When false the filter is held at its initialisation (its gradient is discarded).
+    pub learn_kernel: bool,
+    corrupt_state: u64,
     pub wv: Vec<f32>,
     pub wo: Vec<f32>,
     pub cfg: TrainConfig,
@@ -532,6 +555,21 @@ impl GeometricAttentionTrainer {
             elements: element_table(vocab),
             norm_bits,
             use_relu: false,
+            class_of: conjugacy_classes().0,
+            n_classes: conjugacy_classes().1,
+            kernel_m: {
+                let (class_of, n_classes) = conjugacy_classes();
+                exact_kernel(n_classes, identity_class(&class_of))
+                    .into_iter()
+                    .map(|k| k as f32)
+                    .collect()
+            },
+            gkernel: vec![0f32; conjugacy_classes().1],
+            mkernel: vec![0f32; conjugacy_classes().1],
+            vkernel: vec![0f32; conjugacy_classes().1],
+            corrupt_frac: 0.0,
+            learn_kernel: true,
+            corrupt_state: seed ^ 0x5DEE_CE66_D1CE_B00D,
             wv: fill(vocab * dv),
             wo: fill(vocab * dv),
             cfg: TrainConfig::default(),
@@ -569,6 +607,22 @@ impl GeometricAttentionTrainer {
             .collect()
     }
 
+    /// The ternary harmonic filter actually used in the read.
+    pub fn quantised_kernel(&self) -> Vec<i8> {
+        self.kernel_m
+            .iter()
+            .map(|&w| {
+                if w > 0.5 {
+                    1
+                } else if w < -0.5 {
+                    -1
+                } else {
+                    0
+                }
+            })
+            .collect()
+    }
+
     pub fn to_core(&self) -> Result<GeometricAttention, String> {
         let mut core = GeometricAttention::from_f32(
             self.vocab,
@@ -579,6 +633,7 @@ impl GeometricAttentionTrainer {
             &self.wo,
         )?;
         core.use_relu = self.use_relu;
+        core.kernel = self.quantised_kernel();
         Ok(core)
     }
 
@@ -630,6 +685,9 @@ impl GeometricAttentionTrainer {
 
         // Forward. Cache what each read sees: the addressed bucket, its magnitude and its count.
         let mut reads: Vec<(Vec<f32>, u32)> = Vec::with_capacity(n - 1);
+        // `order = 1` reads through a group convolution, which sees many buckets, so the full state is
+        // cached per step (120 · dv, cheap). `order = 2` reads one exact bucket, so only that is kept.
+        let mut states: Vec<Vec<f32>> = Vec::new();
         for i in 0..(n - 1) {
             if i >= order {
                 let a = self.address(&tokens[i - order..i]);
@@ -645,22 +703,68 @@ impl GeometricAttentionTrainer {
             }
             let ctx = self.word_at(tokens, i);
             let a = self.address(&ctx);
-            let base = a * self.dv;
-            let mut bucket = vec![0f32; self.dv];
-            bucket.copy_from_slice(&self.scratch[base..base + self.dv]);
-            reads.push((bucket, self.scratch[cbase + a].max(0.0) as u32));
+            if self.order == 1 {
+                states.push(self.scratch.clone());
+            } else {
+                let base = a * self.dv;
+                let mut bucket = vec![0f32; self.dv];
+                bucket.copy_from_slice(&self.scratch[base..base + self.dv]);
+                reads.push((bucket, self.scratch[cbase + a].max(0.0) as u32));
+            }
         }
 
         // Backward. The state is a pure accumulator, so a write's gradient is the sum of the read
         // gradients at its bucket over *later* steps: a suffix sum, accumulated in reverse.
         let mut loss = 0f64;
+        let kern = self.quantised_kernel();
+        let gt = group_table();
         for i in (0..(n - 1)).rev() {
             let ctx = self.word_at(tokens, i);
             let a = self.address(&ctx);
             let base = a * self.dv;
+            // Corruption goes into the OBJECTIVE: with probability `corrupt_frac` the read queries a
+            // displaced group element, so a spread filter is what makes the answer recoverable.
+            let q_elem = if self.order == 1 && self.corrupt_frac > 0.0 {
+                self.corrupt_state = xorshift_u64(self.corrupt_state);
+                let r = ((self.corrupt_state >> 11) as f64) / ((1u64 << 53) as f64);
+                if (r as f32) < self.corrupt_frac {
+                    self.corrupt_state = xorshift_u64(self.corrupt_state);
+                    let h = (self.corrupt_state % RADIX as u64) as usize;
+                    gt.product[h * ROW_STRIDE + a] as usize
+                } else {
+                    a
+                }
+            } else {
+                a
+            };
+            // Only `order = 1` addresses a group *element*; an `order = 2` address is a pair index.
+            let inv_q = if self.order == 1 {
+                gt.inverse[q_elem] as usize
+            } else {
+                0
+            };
+            // The read: a group convolution for `order = 1`, an exact bucket for `order = 2`.
+            let num_raw: Vec<f32> = if self.order == 1 {
+                let st = &states[i];
+                let mut num = vec![0f32; self.dv];
+                for g in 0..RADIX {
+                    let c = self.class_of[gt.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+                    let w = kern[c] as f32;
+                    if w == 0.0 {
+                        continue;
+                    }
+                    let bl = g * self.dv;
+                    for j in 0..self.dv {
+                        num[j] += w * st[bl + j];
+                    }
+                }
+                num
+            } else {
+                reads[i].0.clone()
+            };
             let mut m = 0f32;
-            for j in 0..self.dv {
-                m = m.max(reads[i].0[j].abs());
+            for v in num_raw.iter() {
+                m = m.max(v.abs());
             }
             let shift = if self.norm_bits > 0 && m >= 1.0 {
                 (32 - (m as u32).leading_zeros()).saturating_sub(self.norm_bits)
@@ -671,7 +775,7 @@ impl GeometricAttentionTrainer {
 
             let mut num = vec![0f32; self.dv];
             for j in 0..self.dv {
-                let v = (reads[i].0[j] * dec).floor();
+                let v = (num_raw[j] * dec).floor();
                 num[j] = if self.use_relu { v.max(0.0) } else { v };
             }
             let mut logits = vec![0f32; self.vocab];
@@ -700,8 +804,10 @@ impl GeometricAttentionTrainer {
                     dnum[j] += g * (qo[rbase + j] as f32 * sr);
                 }
             }
-            // Read gradient. The shift is treated as a constant (STE through the bit scan).
-            self.touched.push(a as u32);
+            // Read gradient. The shift is treated as a constant (STE through the bit scan). For the
+            // convolution the filter's own gradient is the correlation of the read gradient with the
+            // stored superposition.
+            let mut dm = vec![0f32; self.dv];
             for j in 0..self.dv {
                 let mask = if self.use_relu {
                     if num[j] > 0.0 {
@@ -712,7 +818,26 @@ impl GeometricAttentionTrainer {
                 } else {
                     1.0
                 };
-                self.dscratch[base + j] += dnum[j] * mask * dec;
+                dm[j] = dnum[j] * mask * dec;
+            }
+            if self.order == 1 {
+                let st = &states[i];
+                for g in 0..RADIX {
+                    let c = self.class_of[gt.product[inv_q * ROW_STRIDE + g] as usize] as usize;
+                    let bl = g * self.dv;
+                    let mut acc = 0f32;
+                    for j in 0..self.dv {
+                        acc += dm[j] * st[bl + j];
+                        self.dscratch[bl + j] += (kern[c] as f32) * dm[j];
+                    }
+                    self.gkernel[c] += acc * inv;
+                    self.touched.push(g as u32);
+                }
+            } else {
+                self.touched.push(a as u32);
+                for j in 0..self.dv {
+                    self.dscratch[base + j] += dm[j];
+                }
             }
 
             // Distribute the accumulated bucket gradient to the write made at this step.
@@ -732,21 +857,44 @@ impl GeometricAttentionTrainer {
         for g in self.gwv.iter_mut().chain(&mut self.gwo) {
             *g = 0.0;
         }
+        for g in self.gkernel.iter_mut() {
+            *g = 0.0;
+        }
     }
 
+    /// Scale and clip. The nine filter weights are clipped in their **own** group: folding them into
+    /// the matrices' global norm would change the clip applied to the matrices and alter every
+    /// existing training result.
     fn normalize_and_clip(&mut self, batch: usize) {
         let scale = 1.0f32 / batch.max(1) as f32;
+        if !self.learn_kernel {
+            for g in self.gkernel.iter_mut() {
+                *g = 0.0;
+            }
+        }
         let mut sumsq = 0f64;
         for g in self.gwv.iter_mut().chain(&mut self.gwo) {
             *g *= scale;
             sumsq += (*g as f64) * (*g as f64);
         }
+        let mut ksq = 0f64;
+        for g in self.gkernel.iter_mut() {
+            *g *= scale;
+            ksq += (*g as f64) * (*g as f64);
+        }
         if self.cfg.grad_clip > 0.0 {
-            let norm = libm::sqrt(sumsq);
             let clip = self.cfg.grad_clip as f64;
+            let norm = libm::sqrt(sumsq);
             if norm > clip && norm > 0.0 {
                 let s = (clip / norm) as f32;
                 for g in self.gwv.iter_mut().chain(&mut self.gwo) {
+                    *g *= s;
+                }
+            }
+            let knorm = libm::sqrt(ksq);
+            if knorm > clip && knorm > 0.0 {
+                let s = (clip / knorm) as f32;
+                for g in self.gkernel.iter_mut() {
                     *g *= s;
                 }
             }
@@ -770,6 +918,14 @@ impl GeometricAttentionTrainer {
             &self.gwo,
             &mut self.mwo,
             &mut self.vwo,
+            &cfg,
+            step,
+        );
+        adam_update(
+            &mut self.kernel_m,
+            &self.gkernel,
+            &mut self.mkernel,
+            &mut self.vkernel,
             &cfg,
             step,
         );
@@ -895,6 +1051,7 @@ mod tests {
         let held = repeat_alphabet(0x0BAD_F00D, 64, k, 8);
         let mut t = GeometricAttentionTrainer::new(RADIX, 64, 1, 6, 2026_0919).expect("build");
         t.cfg.lr = 0.05;
+        t.learn_kernel = false;
         for _ in 0..900 {
             t.train_batch(&train);
         }
@@ -974,6 +1131,64 @@ mod tests {
         // And the read must actually depend on the query, not be a constant.
         let other = a.graded_read(&s, (q + 1) % RADIX);
         assert_ne!(via, other, "the read must depend on the addressed element");
+    }
+
+    /// The diagnosis from the previous round was that robustness is not in the objective. Put corrupted
+    /// addresses *in* the objective and the learned filter should stop being pure loss.
+    #[test]
+    fn corruption_in_the_objective_changes_the_filter() {
+        let k = 8usize;
+        let train = repeat_alphabet(0xA5A5_1234, 64, k, 8);
+        let held = repeat_alphabet(0x0BAD_F00D, 64, k, 8);
+        let gt = group_table();
+        let hs = [3usize, 7, 11, 13, 17];
+
+        let run = |corrupt_frac: f32| -> (Vec<i8>, f32, f32) {
+            let mut t = GeometricAttentionTrainer::new(RADIX, 64, 1, 6, 2026_0919).expect("build");
+            t.cfg.lr = 0.05;
+            t.corrupt_frac = corrupt_frac;
+            for _ in 0..900 {
+                t.train_batch(&train);
+            }
+            let kernel = t.quantised_kernel();
+            let core = t.to_core().expect("quantise");
+            let score = |h: Option<usize>| {
+                let mut hits = 0usize;
+                for s in &held {
+                    let mut prompt: Vec<u32> = s[..s.len() - 1].to_vec();
+                    if let Some(h) = h {
+                        let q = *prompt.last().unwrap() as usize;
+                        *prompt.last_mut().unwrap() = gt.product[h * ROW_STRIDE + q] as u32;
+                    }
+                    let logits = core.forward_i32(&prompt);
+                    let mut best = 0usize;
+                    for (i, &v) in logits.iter().enumerate() {
+                        if v > logits[best] {
+                            best = i;
+                        }
+                    }
+                    if best == s[s.len() - 1] as usize {
+                        hits += 1;
+                    }
+                }
+                hits as f32 / held.len() as f32
+            };
+            let clean = score(None);
+            let mut corr = 0f32;
+            for &h in &hs {
+                corr += score(Some(h));
+            }
+            (kernel, clean, corr / hs.len() as f32)
+        };
+
+        let (k0, c0, x0) = run(0.0);
+        let (k5, c5, x5) = run(0.5);
+        eprintln!("corrupt 0.0: kernel={k0:?} clean={c0:.2} corrupted={x0:.2}");
+        eprintln!("corrupt 0.5: kernel={k5:?} clean={c5:.2} corrupted={x5:.2}");
+        assert!(
+            x5 > x0,
+            "corruption in the objective must raise corrupted accuracy: {x0:.2} -> {x5:.2}"
+        );
     }
 
     #[test]

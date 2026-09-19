@@ -35,6 +35,19 @@ Trained on clean addresses only, the filter **spreads over neighbouring classes 
 
 **Next honest steps, in order:** (1) put corrupted addresses in the training objective and re-test the learned filter — the diagnosis predicts that is what makes it work; (2) a general (non-class) group-algebra filter; (3) learned packaging of the element assignment; (4) then BPE-4096 and real text.
 
+**Corruption in the objective: diagnosis confirmed, filter still not worth it.** Step (1) was done — an optional `corrupt_frac` displaces the query address by a random group element during training, the filter is now learnable (`learn_kernel`, own clip group):
+
+```
+corrupt 0.0: kernel=[1,1,1,0,0,0,0,0,0] clean=0.11 corrupted=0.12
+corrupt 0.5: kernel=[1,1,0,1,1,1,0,1,0] clean=0.27 corrupted=0.13
+```
+
+Corruption in the objective **does** change the filter (spreads 3 → 7 classes) and **does** raise corrupted accuracy (0.12 → 0.13); clean also rises (0.11 → 0.27) as a regularisation effect. **But the fixed exact filter reaches clean 0.42 on the same budget**, so every learned variant is worse on clean and only marginally better under corruption. Honest reading: **a spread filter pays only if address corruption is part of the deployment distribution**; +0.01 corrupted against −0.15 clean is not a default trade.
+
+**Two more defects found and fixed**, both invisible in aggregate numbers and visible only as regressions in unrelated tests: (a) `order = 2` addresses are pair indices, not group elements, so the inverse lookup indexed a 120-entry table with a value up to 14,399 — an out-of-bounds panic in six tests; it is now guarded to `order = 1`. (b) The filter's gradient was folded into the matrices' global clip norm, which altered every existing training result; the nine filter weights are now clipped in their own group.
+
+**State.** `geometric_attention` **19 passed, 0 failed**; `cargo fmt --check` clean. The learned filter is retained as an option with defaults preserving previously verified behaviour, so nothing regressed.
+
 **Receipt:** [`native_geometric_spherical_harmonic_kernel_2026-09-19.txt`](../evidence/native_geometric_spherical_harmonic_kernel_2026-09-19.txt).
 
 ## Ordered-word addressing recovers the collapse; context copy reaches 100% — September 19, 2026

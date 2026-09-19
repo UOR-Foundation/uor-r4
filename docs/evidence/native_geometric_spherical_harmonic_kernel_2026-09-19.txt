@@ -140,3 +140,49 @@ learned filter — the diagnosis predicts this is what makes it work; (2) a gene
 (3) learned packaging of the element assignment; (4) then BPE-4096 and real text.
 
 Charged 235,000 ms. Cumulative 143,668,565 / 147,200,000 ms.
+
+## 10. Corruption in the objective: the diagnosis is confirmed, and the filter is still not worth it
+
+§8's diagnosis was that robustness cannot be learned because the objective contains no corruption. That
+was tested directly: an optional `corrupt_frac` displaces the query address by a random group element
+during training, so a spread filter is what makes the answer recoverable. The filter is now trivially
+learnable (`learn_kernel`, separate clip group), and the test is the filter's *shape* and both
+accuracies.
+
+```
+corrupt 0.0: kernel=[1,1,1,0,0,0,0,0,0] clean=0.11 corrupted=0.12
+corrupt 0.5: kernel=[1,1,0,1,1,1,0,1,0] clean=0.27 corrupted=0.13
+```
+
+**The diagnosis is confirmed:** corruption in the objective changes what the filter learns — it spreads
+from 3 to 7 classes — and it raises corrupted accuracy (0.12 → 0.13). Clean accuracy also rises
+(0.11 → 0.27), which is a regularisation effect: training through displaced addresses yields values
+that are more recoverable.
+
+**But the learned filter is still not worth it on this task.** The *fixed exact* filter reaches
+clean 0.42 with the same architecture and training budget, so every learned variant — with or without
+corruption in the objective — is worse on the clean task and only marginally better under corruption.
+Honest reading: **robustness to address corruption is worth a spread filter only if such corruption is
+part of the deployment distribution; it is not a free accuracy gain.** Gains of +0.01 under corruption
+against −0.15 clean are not a trade worth making by default.
+
+### Two more defects found and fixed
+
+1. **`order = 2` addresses are pair indices, not group elements.** The inverse lookup was computed
+   unconditionally, indexing the 120-entry inverse table with a value up to 14,399 — an
+   out-of-bounds panic in six tests. It is now guarded to `order = 1`. This was the cause of the
+   previous round's five failures.
+2. **The filter's gradient was folded into the matrices' global gradient norm.** That changed the clip
+   applied to the matrices and altered every existing training result. The nine filter weights are now
+   clipped in their own group.
+
+Both are recorded because each was invisible in the aggregate numbers and only appeared as a
+regression in tests that had nothing to do with the change.
+
+### State after this round
+
+`geometric_attention` **19 passed, 0 failed**; `cargo fmt --check` clean. The learned filter is retained
+as an option (`learn_kernel`, `corrupt_frac`) with the defaults being the previously verified
+behaviour, so nothing regressed.
+
+Charged 555,000 ms. Cumulative 144,223,565 / 147,200,000 ms.
