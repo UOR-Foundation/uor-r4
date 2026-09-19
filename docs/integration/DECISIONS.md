@@ -96,3 +96,62 @@ correctness of its mathematics, or architectural priority.
 
 Corollary: the per-mechanism ablation table (Card P7) is a precondition for
 Stages 3–6, not an optional diagnostic.
+
+---
+
+## D2 — How a mechanism's contribution is judged
+
+Owner (human): Casey · Drafted by: Zed (agent) · Date: 2026-09-19 · **Signed: Casey 2026-09-19**
+
+**Decision: an ablation is a measurement, not a verdict. Magnitude and mechanism class are
+judged separately, and a geometric mechanism is not retired on a near-zero delta.**
+
+Owner direction: *"you probably need to weight falsification misses that are very small vs if
+the mechanism truly works coherently, and not immediately rule it out because it may be a
+better mechanism that maintains our project goal of a geometric language model."*
+
+### Two independent axes
+
+1. **Magnitude**, against an equivalence margin `epsilon` (default **0.01 BPB**, about one
+   third of the 0.0316 BPB gap to the matched Kneser-Ney 5-gram, so anything below it cannot
+   be decisive for the competitive question):
+   `MAJOR+ / MINOR+ / NEGLIGIBLE / MINOR- / MAJOR-`.
+   A paired bootstrap CI can exclude zero on a practically meaningless effect. **Passing the
+   CI test is not evidence that a mechanism matters, and failing the magnitude test is not
+   evidence that it is a dead end.** Statistical and practical significance are reported
+   separately and never conflated.
+
+2. **Mechanism class**, declared per mechanism and never inferred from the number:
+
+   | Class | Role | A NEGLIGIBLE delta means |
+   |---|---|---|
+   | `primary-carrier` | expected to carry predictive signal | a defect to diagnose |
+   | `modulator` | expected small, consistent shaping | acceptable |
+   | `selector` | routing / candidate selection | **nothing** — BPB ablation is the wrong instrument, because an alternative path substitutes; use decision-flip rate and forced-choice tests |
+   | `enabler` | observation channel whose value appears only once composed with a component that does not yet exist | expected, and uninformative about the mechanism |
+   | `count-table` | a count statistic, not a learned geometric mechanism | removable on resource cost |
+
+3. **Decision-flip rate** is reported alongside BPB. A mechanism can be BPB-neutral while
+   changing a large fraction of decisions, which matters for the *kind* of errors rather
+   than their average. Measured examples from the first run: `lattice_coarse` is
+   BPB-negligible yet flips **9.5 %** of decisions; `vsa` flips 0.7 %.
+
+### Decision rule
+
+- **Never retire** an `enabler` or `selector` on a near-zero or negative delta. Repair the
+  wiring or change the instrument and re-measure.
+- Only a `count-table` or a correctly wired `primary-carrier` that is measurably
+  net-negative is a removal candidate, and then on resource cost as much as accuracy.
+- Record the identified wiring defect with the delta, so a small number is never read as a
+  mechanism verdict. Example: the `vsa` delta measures a codebook that is **not** consistent
+  with the learned representation, not the VSA mechanism.
+
+### Consequences
+
+- The 2026-09-19 `vsa` and `lanes` results are **not** retirement verdicts. `vsa` is a
+  wiring defect with an identified cause; the required action is to learn a consistent
+  codebook and re-measure.
+- Interaction must be accounted for before any removal: zeroing the JEPA weights also
+  changes the fiber the S2 readout consumes, so single-mechanism deltas do not sum. A
+  pairwise factorial or Shapley attribution over the mechanism set is the correct
+  instrument once the set is stable.

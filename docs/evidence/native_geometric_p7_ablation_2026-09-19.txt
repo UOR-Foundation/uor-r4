@@ -71,3 +71,49 @@ LIMITATIONS (must travel with these numbers)
   * Absolute BPB 1.8055 is the DISCRETE scorer. It is not comparable to the training-time
     continuous figure reported in current-state (1.2372) and must not be quoted as if it were.
   * Debug build. Timings are not a performance result.
+
+------------------------------------------------------------------------------
+CORRECTION APPENDED 2026-09-19 (same day, after owner direction) -- the labels above
+are superseded. This file is append-only; the numbers stand, the verdicts do not.
+
+OWNER CORRECTION
+  "you probably need to weight falsification misses that are very small vs if the
+   mechanism truly works coherently, and not immediately rule it out because it may be a
+   better mechanism that maintains our project goal of a geometric language model"
+
+  The HARMFUL/CONTRIBUTES labels above collapse two independent questions and treat a
+  paired bootstrap CI as a verdict. A paired test has high power, so |delta| = 0.0007 can
+  exclude zero while being practically meaningless. The CI answers "is the sign stable",
+  not "does this mechanism matter".
+
+SEE: DECISIONS.md D2 for the recorded replacement methodology.
+
+REPLACEMENT INSTRUMENT (implemented in ablate-prose at the same revision)
+  * equivalence margin `--epsilon` (default 0.01 BPB, ~1/3 of the 0.0316 BPB gap to the
+    matched Kneser-Ney 5-gram) -> bands MAJOR+/MINOR+/NEGLIGIBLE/MINOR-/MAJOR-
+  * declared mechanism class per mechanism (primary-carrier / modulator / selector /
+    enabler / count-table), never inferred from the delta
+  * decision-flip rate and top-1 accuracy change alongside BPB, because a mechanism can
+    be BPB-neutral while changing many decisions
+  * action derived from (band, class), with an explicit refusal to retire an `enabler`
+    or `selector` on a small or negative delta
+
+CORRECTED READING OF THE EXISTING NUMBERS
+  vsa (-0.0007)      -> class `enabler`, wiring MIS-WIRED (fixed random codebook at
+                        vsa/codebook.rs is disconnected from the learned 120-root
+                        assignment at jepa_trainer.rs:1119). This delta measures that
+                        wiring, NOT the VSA mechanism. Action: repair the wiring and
+                        re-measure. NOT a retirement verdict.
+  lanes (-0.0071)    -> class `primary-carrier`; net-negative, so diagnose rather than
+                        assume; NOT a retirement verdict on this evidence alone.
+  lattice_coarse     -> class `count-table`; NEGLIGIBLE at 1024 positions but flips 9.5%
+                        of decisions, so it is not inert -- it reshapes the distribution
+                        slightly for the worse while costing 64.2% of artifact bytes.
+                        Removal is a resource-cost decision, not a "no effect" finding.
+  engram (+0.2228)   -> MAJOR+, 37.3% flip rate at 1024 positions; genuinely load-bearing.
+  jepa/s2_readout    -> MAJOR+; note the two interact and their deltas overlap.
+
+REPLICATION OBSERVED BEFORE THE RUN WAS INTERRUPTED (slice A, 8192 positions, offset 0)
+  baseline BPB 1.8964 over 8127 positions; vsa -0.0010 [-0.0011, -0.0009];
+  engram +0.2210 [+0.2055, +0.2354]. Same signs and magnitudes as the 2048-position run.
+  The interrupted run is recorded as partial, not as a result.

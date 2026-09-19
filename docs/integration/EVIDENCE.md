@@ -22,7 +22,9 @@ bind the 2026-09-19 measurements to the exact bytes evaluated.
 
 | Date | Card | Measurement | Scorer | Data | Result | Receipt |
 |---|---|---|---|---|---|---|
-| 2026-09-19 | P7 | Per-mechanism ablation BPB sweep, 9 ablations, 2,048 positions | discrete (full-vocab) | open development slice | 6 mechanisms contribute; `vsa` inert (−0.0007); `lattice_coarse` harmful (−0.0066, 64 % of artifact bytes); `lanes` harmful (−0.0071); `jepa` largest contributor (+0.3743) from 62 bytes | [receipt](../evidence/native_geometric_p7_ablation_2026-09-19.txt), [result](cards/P7-falsification-sweep-RESULT.md) |
+| 2026-09-19 | P7 | Per-mechanism ablation BPB sweep, 9 ablations, 2,048 positions | discrete (full-vocab) | open development slice | 6 mechanisms contribute (`jepa` +0.3743, `s2_readout` +0.3377, `engram` +0.2228, `bias` +0.1482, `lattice_fine` +0.0955, `lattice` +0.0927); `vsa` −0.0007, `lattice_coarse` −0.0066, `lanes` −0.0071 are NEGLIGIBLE | [receipt](../evidence/native_geometric_p7_ablation_2026-09-19.txt), [result](cards/P7-falsification-sweep-RESULT.md) |
+| 2026-09-19 | P7 | **Superseding reading under D2** (ablation is a measurement, not a verdict) | discrete (full-vocab) | open development slice | `vsa` is a **wiring defect** (fixed random codebook disconnected from the learned assignment), class `enabler` ⇒ repair and re-measure, **not** a retirement; `lattice_coarse` is BPB-NEGLIGIBLE but flips **9.5 %** of decisions and is 64.2 % of artifact bytes ⇒ removal candidate on resource cost; `engram` MAJOR+ with 37.3 % flip rate | [receipt](../evidence/native_geometric_p7_ablation_2026-09-19.txt) |
+| 2026-09-19 | P7 | Instrument corrected: equivalence margin `epsilon`, declared mechanism class, decision-flip rate and top-1 change added to `ablate-prose`; `LATTICE_COARSE`/`vsa` no longer labelled HARMFUL | — | — | Statistical significance separated from practical significance; `enabler`/`selector` mechanisms are never retired on a near-zero delta | [D2](DECISIONS.md) |
 | 2026-09-19 | P7 | Query/key role inversion repaired; controlled induction test added | — | — | `r_query != r_key` gave identical tokens `d_H ≈ 2048 ≥ THRESHOLD` ⇒ zero weight for matches, weight for noise. Fixed by a shared `r_role`; 23/23 `native_geometric::vsa` tests pass | [result](cards/P7-falsification-sweep-RESULT.md) |
 | 2026-09-19 | P7 | Metric/serving divergence quantified | discrete vs continuous | open development slice | continuous training-time 1.2372 BPB vs discrete artifact **1.8055** BPB — a 0.57 BPB gap between the reported number and the shipped model | [receipt](../evidence/native_geometric_p7_ablation_2026-09-19.txt) |
 
@@ -33,8 +35,13 @@ bind the 2026-09-19 measurements to the exact bytes evaluated.
 - **P4** geometry controls (random phases vs zeta zeros, random token→root assignment vs
   the learned assignment). Not run. The two provable checks (Hamming ≡ angle-class table;
   reachable-root census) are specified but not yet written.
-- **P7** `induction` ablation and the `E1.4` recall-attribution measurement. Not run.
+- **P7** `induction` ablation, the pairwise `jepa` × `s2_readout` factorial, Shapley
+  attribution, and the `E1.4` recall-attribution measurement. Not run.
   `attribute-recall` exists and its smoke tests pass; the full 5..=13 k sweep is
   projected at ~20 min debug per the tool's own report and was not executed.
+- The 8,192-position confirmation sweep (slice A at offset 0) was **interrupted by the
+  owner after two ablations**; the partial result (`vsa` −0.0010, `engram` +0.2210, both
+  replicating the 2,048-position signs and magnitudes) is recorded as partial, not as a
+  result. Slice B was not started.
 - The historical 9,984-case regression replay (`scripts/verify_qualification.sh`) was not
   re-executed in the 2026-09-19 change.

@@ -16,6 +16,12 @@ identical positions, with a 1,000-resample bootstrap 95% CI.
 
 ## Result
 
+> **Superseded labels.** The `Verdict` column below is the first-pass reading and is
+> **corrected** by [D2](../../DECISIONS.md): an ablation is a measurement, not a verdict.
+> Mechanism class, an equivalence margin and decision-flip rate are now reported, and
+> `vsa` in particular is a **wiring defect, not a retirement**. See
+> “Corrected reading” below.
+
 Artifact `native_geometric_prose_model.rgm` (2,691,950 B, vocab 4096, 4 lanes,
 `flags = 0x000f`); 2,112-token held-out slice, 2,048 teacher-forced positions.
 Baseline BPB **1.8055**.
@@ -32,23 +38,45 @@ Baseline BPB **1.8055**.
 | `lattice_coarse` | −0.0066 | [−0.0101, −0.0033] | **HARMFUL** | 1,728,000 |
 | `lanes` | −0.0071 | [−0.0082, −0.0059] | **HARMFUL** | 115,232 |
 
-## Findings
+## Corrected reading (per D2)
 
-1. **The VSA attention layer is inert.** Ablating it *improves* BPB by 0.0007
-   (CI excludes 0). This confirms the source analysis: the four heads bind a **fixed
-   random** token codebook (`vsa/codebook.rs`) that is disconnected from the learned
-   120-root assignment (`jepa_trainer.rs:1119`), so the only recoverable signal is
-   `a == b` and the mechanism duplicates the exact n-gram/induction paths. It is not a
-   learned attention over the model's representation.
+| Mechanism | ΔBPB | Band | Class | Wiring | Action |
+|---|---:|---|---|---|---|
+| `vsa` | −0.0007 | NEGLIGIBLE | `enabler` | **MIS-WIRED**: heads bind a fixed random codebook (`vsa/codebook.rs`) disconnected from the learned 120-root assignment (`jepa_trainer.rs:1119`) | **Repair the wiring and re-measure.** Not a retirement verdict — the delta measures the wiring, not the mechanism |
+| `lanes` | −0.0071 | NEGLIGIBLE | `primary-carrier` | presumed wired | Diagnose. Not a retirement verdict on this evidence alone |
+| `lattice_coarse` | −0.0066 | NEGLIGIBLE | `count-table` | wired | Removal candidate **on resource cost** (64.2 % of artifact bytes), not a “no effect” finding — it flips **9.5 %** of decisions |
+| `engram` | +0.2228 | MAJOR+ | `count-table` | wired | Retain; 37.3 % flip rate |
+| `jepa`, `s2_readout` | +0.3743, +0.3377 | MAJOR+ | `primary-carrier` | wired; **the two interact** | Retain; treat as a pair, deltas overlap |
+| `bias` | +0.1482 | MAJOR+ | `modulator` | wired | Retain |
+| `lattice_fine` | +0.0955 | MINOR+ | `count-table` | wired | Retain |
 
-2. **The coarse lattice tier is net-negative and is 64 % of the artifact.**
-   `coarse_trigram` is 1,728,000 B of 2,691,950 B (64.2 %) and its ablation improves BPB
-   by 0.0066. Removing it would cut bytes/token by ~64 % while *improving* quality — a
-   direct I2 (bytes-per-token) win. The fine cluster residual (+0.0955) carries the
-   lattice's contribution.
+Two facts the first-pass labels hid, and which the corrected instrument surfaces:
 
-3. **The learned lane tables are net-negative.** Zeroing four Adam-trained 120×120
-   i16 maps improves BPB by 0.0071. They are 115,232 B of the artifact.
+- **A BPB-neutral mechanism can still change many decisions.** `lattice_coarse` is
+  BPB-negligible yet flips 9.5 % of decisions; `vsa` flips 0.7 %. Average loss is not the
+  only quantity that matters.
+- **A statistically significant delta can be practically meaningless.** `vsa`’s CI
+  excludes zero at a magnitude of 0.0007 BPB. Passing a CI test is not evidence that a
+  mechanism matters.
+
+## Original findings (retained, superseded where noted)
+
+1. **The VSA attention layer contributes ≈0 under its current wiring.** The cause is
+   identified in source: the four heads bind a **fixed random** token codebook
+   (`vsa/codebook.rs`) that is disconnected from the learned 120-root assignment
+   (`jepa_trainer.rs:1119`), so the only recoverable signal is token identity. **This is a
+   wiring defect with a known repair, not evidence about the mechanism.**
+
+2. **The coarse lattice tier is 64.2 % of the artifact and is marginally net-negative.**
+   `coarse_trigram` is 1,728,000 B of 2,691,950 B. Its ablation is BPB-NEGLIGIBLE and
+   *improves* BPB by 0.0066 while flipping 9.5 % of decisions. Removing it would cut
+   bytes/token by ~64 % for a very small quality change — a direct I2
+   (bytes-per-token) win, decided on resource cost rather than on the accuracy delta.
+   The fine cluster residual (+0.0955) carries the lattice’s contribution.
+
+3. **The learned lane tables carry no measurable contribution.** Zeroing four
+   Adam-trained 120×120 i16 maps moves BPB by 0.0071 in the improving direction. Class
+   `primary-carrier`, so this is a defect to diagnose, not a conclusion.
 
 4. **Geometry-carried state prediction is the most valuable mechanism per byte.**
    The JEPA block is **62 bytes** (31 × i16, padded to 64) and its ablation costs more
@@ -91,9 +119,15 @@ regression guard asserting zero distance for identical tokens.
 
 ## Consequences for the plan
 
-- Retire the `vsa` score term and the coarse lattice tier from the critical path
-  (Stage 1 gate), pending confirmation on a wider position count.
-- Re-examine the lane tables as a net-negative term rather than a foundation.
-- Reorder Stage 3: the learned-codebook work is justified by finding 1, but the
-  **immediate** win is artifact shrinkage (finding 2) — remove 64 % of the bytes for a
-  small quality gain before adding capacity.
+- The `vsa` mechanism is **not retired**. The required Stage 3 action is to make the VSA
+  codebook consistent with the learned representation, then re-measure: if the delta stays
+  NEGLIGIBLE and the flip rate stays low with a correctly wired codebook, that is evidence
+  about the mechanism; the current run is not.
+- The immediate resource win stands: **remove the coarse lattice tier** (64 % of the bytes
+  for a very small quality change), decided on I2 grounds.
+- Class assignments are judgement, and they drive the actions, so they should be ratified
+  by the owner: `vsa` = enabler, `lanes`/`jepa`/`s2_readout` = primary-carrier, `bias` =
+  modulator, `induction` = selector, `engram`/`lattice*` = count-table.
+- **Add an interaction-aware instrument before any removal.** Single-mechanism deltas do
+  not sum; a pairwise factorial for the known-interacting pair (`jepa` × `s2_readout`) or a
+  Shapley attribution over the mechanism set is required.

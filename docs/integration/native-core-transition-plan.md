@@ -83,8 +83,13 @@ print a table of ΔBPB per mechanism.
 | `s2_readout` | zero `discrete_s2_readout` |
 | `induction` | requires a small code flag on the `4096/k` term (`native_capability_api.rs:1050-1067`) |
 
-**Gate:** every mechanism with |ΔBPB| below its matched-control noise band is retired
-from the critical path. Deliverable: one table in `EVIDENCE.md`.
+**Gate (per [D2](DECISIONS.md)).** A near-zero delta retires nothing on its own. Report
+`|ΔBPB|` against the equivalence margin `epsilon`, the declared mechanism class, and the
+decision-flip rate. A mechanism is retired only if it is a `count-table` or a correctly
+wired `primary-carrier` that is measurably net-negative, or it carries a large resource
+cost for no measured return. An `enabler` or `selector` with a near-zero delta is a
+**wiring/instrument** problem: repair it and re-measure. Deliverable: one table in
+`EVIDENCE.md` with the band, class, wiring status and flip rate per mechanism.
 
 ### E1.2 Fix the metric/serving divergence
 
@@ -155,6 +160,11 @@ neither measured nor maximised.
 - Instrument and report per token: candidates scored (**I3**), learned-store bytes read
   (**I2**), fraction of the store touched (**I1**), ops by class (**I4**), addressed-memory
   reads (**I5**).
+- Instrument the mechanism-class and equivalence-margin reporting from `DECISIONS.md D2`
+  (implemented in `ablate-prose`).
+- **Interaction-aware attribution is required before any removal.** Single-mechanism
+  deltas do not sum; a pairwise factorial for `jepa` × `s2_readout`, or a Shapley
+  attribution over the mechanism set, is the correct instrument once the set is stable.
 - Compare the same quantities against `llama.cpp` / `bitnet.cpp` on the same M1.
 
 **Gate:** a stated frontier — "at BPB ≤ X, this model scores N candidates and streams B

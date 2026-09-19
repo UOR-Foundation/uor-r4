@@ -26,6 +26,39 @@
 //! free of shortlist-recall confounds. Ablation deltas are **paired** on identical
 //! positions, so their bootstrap CI is far tighter than the absolute BPB uncertainty.
 //!
+//! # What an ablation delta does and does not tell you
+//!
+//! A paired ablation has high statistical power, so a *practically meaningless* effect can
+//! still show a CI that excludes zero. Passing the CI test is therefore **not** a verdict
+//! on a mechanism. Two axes are reported separately and must be judged separately:
+//!
+//! 1. **Magnitude** — `|delta|` against an equivalence margin `epsilon` (default 0.01 BPB,
+//!    about one third of the 0.0316 BPB gap to the matched Kneser-Ney 5-gram, so anything
+//!    below it cannot be decisive for the competitive question). Bands:
+//!    MAJOR+ / MINOR+ / NEGLIGIBLE / MINOR- / MAJOR-.
+//! 2. **Mechanism class** — declared per mechanism, never inferred from the number. A small
+//!    delta is consistent with at least four different situations, and they demand opposite
+//!    actions:
+//!    * `PrimaryCarrier` — expected to carry signal; a NEGLIGIBLE delta is a defect.
+//!    * `Modulator` — expected small, consistent effect; NEGLIGIBLE is acceptable.
+//!    * `Selector` — routing/candidate selection. **BPB ablation is the wrong instrument**:
+//!      an alternative path substitutes for the ablated selector, so a near-zero delta says
+//!      nothing about whether the selector works. Use decision-flip rate and forced-choice
+//!      tests.
+//!    * `Enabler` — an observation channel whose value appears only once composed with a
+//!      component that does not exist yet. A near-zero delta is *expected and uninformative*.
+//!    * `CountTable` — a count statistic, not a learned geometric mechanism.
+//!
+//! A mechanism is therefore **never retired** on a near-zero delta if its class is
+//! `Enabler` or `Selector`; the required action is to repair the wiring or change the
+//! instrument and re-measure. Only a `CountTable` or `PrimaryCarrier` that is correctly
+//! wired and measurably net-negative, or carrying a large resource cost for no measured
+//! return, is a removal candidate.
+//!
+//! Decision-flip rate and top-1 accuracy change are reported alongside BPB because a
+//! mechanism can be BPB-neutral while changing many decisions — which matters for the
+//! *kind* of errors, not the average.
+//!
 //! # Contract note
 //!
 //! This is an offline evaluation harness and is deliberately outside the frozen
@@ -46,6 +79,10 @@ const DEFAULT_CORPUS: &str = "tinystories_train.u16";
 const DEFAULT_TOKENIZER: &str = ".uor-models/research/issue-1014/export/tokenizer.json";
 const DEFAULT_SEQ_LEN: usize = 64;
 const DEFAULT_POSITIONS: usize = 8_192;
+/// Equivalence margin in BPB. |delta| below this is reported NEGLIGIBLE regardless of the
+/// bootstrap CI, because a paired test can exclude zero on a meaningless effect. 0.01 BPB
+/// is about one third of the 0.0316 BPB gap to the matched Kneser-Ney 5-gram.
+const DEFAULT_EPSILON: f64 = 0.01;
 /// Serving sampler divisor: `(s - max) / (temperature * 8192)`.
 const SAMPLER_SCALE: f64 = 8192.0;
 const BOOTSTRAP_RESAMPLES: usize = 1_000;
@@ -70,6 +107,8 @@ struct Args {
     tokenizer: PathBuf,
     seq_len: usize,
     positions: usize,
+    holdout_offset: usize,
+    epsilon: f64,
     ablations: Vec<String>,
 }
 
@@ -85,6 +124,9 @@ fn usage() -> String {
          \x20 --tokenizer <path>  tokenizer.json             [default: {DEFAULT_TOKENIZER}]\n\
          \x20 --seq-len <n>       teacher-forced chunk size  [default: {DEFAULT_SEQ_LEN}]\n\
          \x20 --positions <n>     held-out positions to score [default: {DEFAULT_POSITIONS}]\n\
+         \x20 --holdout-offset <n>  token offset of the held-out slice [default: 0]; use a\n\
+         \x20                     disjoint offset to confirm a verdict on a second slice\n\
+         \x20 --epsilon <f>      equivalence margin in BPB [default: {DEFAULT_EPSILON}]\n\
          \x20 --ablations <list>  comma-separated subset; default all\n\
          \x20 --help\n\
          \n\
@@ -100,6 +142,8 @@ fn parse_args() -> Result<Args, String> {
         tokenizer: PathBuf::from(DEFAULT_TOKENIZER),
         seq_len: DEFAULT_SEQ_LEN,
         positions: DEFAULT_POSITIONS,
+        holdout_offset: 0,
+        epsilon: DEFAULT_EPSILON,
         ablations: ABLATIONS.iter().map(|s| s.to_string()).collect(),
     };
     let argv: Vec<String> = std::env::args().skip(1).collect();
@@ -131,6 +175,16 @@ fn parse_args() -> Result<Args, String> {
                 args.positions = next(i)?
                     .parse()
                     .map_err(|_| "bad --positions".to_string())?;
+                i += 2;
+            }
+            "--holdout-offset" => {
+                args.holdout_offset = next(i)?
+                    .parse()
+                    .map_err(|_| "bad --holdout-offset".to_string())?;
+                i += 2;
+            }
+            "--epsilon" => {
+                args.epsilon = next(i)?.parse().map_err(|_| "bad --epsilon".to_string())?;
                 i += 2;
             }
             "--ablations" => {
@@ -213,10 +267,14 @@ fn apply_ablation(model: &mut ExportedGeometricModel, name: &str) -> Result<(), 
     Ok(())
 }
 
-/// `(bits, bytes)` contributed by each scored position.
+/// `(bits, bytes)` contributed by each scored position, plus the decision it produced.
 struct Losses {
     bits: Vec<f64>,
     bytes: Vec<u64>,
+    /// Argmax token chosen at each scored position under the serving scorer.
+    argmax: Vec<u32>,
+    /// Positions where the argmax equals the teacher-forced target.
+    top1_hits: usize,
     scored: usize,
 }
 
@@ -227,6 +285,137 @@ impl Losses {
             return f64::NAN;
         }
         self.bits.iter().sum::<f64>() / total_bytes as f64
+    }
+
+    /// Top-1 accuracy in percentage points.
+    fn top1_pct(&self) -> f64 {
+        if self.scored == 0 {
+            return f64::NAN;
+        }
+        100.0 * self.top1_hits as f64 / self.scored as f64
+    }
+}
+
+/// Fraction of positions where `other` chooses a different argmax than `base`.
+/// This is the instrument that can see a `Selector` or `Enabler` that BPB cannot.
+fn decision_flip_rate(base: &Losses, other: &Losses) -> f64 {
+    let n = base.argmax.len().min(other.argmax.len());
+    if n == 0 {
+        return f64::NAN;
+    }
+    let flips = (0..n)
+        .filter(|&i| base.argmax[i] != other.argmax[i])
+        .count();
+    100.0 * flips as f64 / n as f64
+}
+
+/// Magnitude band against the equivalence margin. `.0` is true for a positive delta.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Band {
+    MajorPositive,
+    MinorPositive,
+    Negligible,
+    MinorNegative,
+    MajorNegative,
+}
+
+impl Band {
+    fn of(delta: f64, eps: f64) -> Band {
+        if delta >= 0.10 {
+            Band::MajorPositive
+        } else if delta >= eps {
+            Band::MinorPositive
+        } else if delta > -eps {
+            Band::Negligible
+        } else if delta > -0.10 {
+            Band::MinorNegative
+        } else {
+            Band::MajorNegative
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Band::MajorPositive => "MAJOR+",
+            Band::MinorPositive => "MINOR+",
+            Band::Negligible => "NEGLIGIBLE",
+            Band::MinorNegative => "MINOR-",
+            Band::MajorNegative => "MAJOR-",
+        }
+    }
+}
+
+/// Declared mechanism class. Never inferred from the measured delta.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MechClass {
+    PrimaryCarrier,
+    Modulator,
+    Selector,
+    Enabler,
+    CountTable,
+}
+
+impl MechClass {
+    fn label(self) -> &'static str {
+        match self {
+            MechClass::PrimaryCarrier => "primary-carrier",
+            MechClass::Modulator => "modulator",
+            MechClass::Selector => "selector",
+            MechClass::Enabler => "enabler",
+            MechClass::CountTable => "count-table",
+        }
+    }
+}
+
+fn mechanism_class(name: &str) -> MechClass {
+    match name {
+        // Learned geometric state prediction and its readout: expected to carry signal.
+        "jepa" | "s2_readout" => MechClass::PrimaryCarrier,
+        // Learned 120x120 compatibility tables: expected to carry signal.
+        "lanes" => MechClass::PrimaryCarrier,
+        // Emission bias: small, broad shaping.
+        "bias" => MechClass::Modulator,
+        // Observation channel over a codebook that is not yet consistent with the learned
+        // representation. Its value can only appear once the codebook is learned.
+        "vsa" => MechClass::Enabler,
+        // Hop-free: the hand-coded induction term is candidate selection.
+        "induction" => MechClass::Selector,
+        // Count statistics, not learned geometric mechanisms.
+        "engram" | "lattice" | "lattice_coarse" | "lattice_fine" => MechClass::CountTable,
+        _ => MechClass::PrimaryCarrier,
+    }
+}
+
+/// Known wiring status, stated so a small delta is not mistaken for a mechanism verdict.
+fn wiring_status(name: &str) -> &'static str {
+    match name {
+        "vsa" => {
+            "MIS-WIRED: heads bind a fixed random codebook (vsa/codebook.rs) disconnected \
+                   from the learned 120-root assignment (jepa_trainer.rs:1119), so only token \
+                   identity is recoverable. This delta measures THAT WIRING, not the mechanism."
+        }
+        "lanes" => "presumed wired; net-negative here, so diagnose rather than assume",
+        "jepa" => "wired; note it also changes the fiber the S2 readout consumes",
+        "lattice_coarse" => "wired; count table",
+        _ => "presumed wired",
+    }
+}
+
+/// Action implied by (band, class). Deliberately refuses to retire an `Enabler` or
+/// `Selector` on a near-zero or negative delta.
+fn action(band: Band, class: MechClass) -> &'static str {
+    match (band, class) {
+        (Band::MajorPositive | Band::MinorPositive, _) => "RETAIN",
+        (Band::Negligible, MechClass::Enabler | MechClass::Selector) => {
+            "DO NOT CONCLUDE: instrument cannot see this role; fix wiring / use a decision test"
+        }
+        (Band::Negligible, _) => {
+            "no measurable contribution; removal candidate on resource cost only"
+        }
+        (Band::MajorNegative | Band::MinorNegative, MechClass::Enabler | MechClass::Selector) => {
+            "DO NOT RETIRE ON THIS EVIDENCE: verify wiring first"
+        }
+        (Band::MajorNegative | Band::MinorNegative, _) => "net-negative; removal candidate",
     }
 }
 
@@ -244,6 +433,8 @@ fn evaluate(
 ) -> Result<Losses, String> {
     let mut bits = Vec::with_capacity(max_positions);
     let mut bytes = Vec::with_capacity(max_positions);
+    let mut argmax: Vec<u32> = Vec::with_capacity(max_positions);
+    let mut top1_hits = 0usize;
     let mut ctx: Vec<usize> = Vec::with_capacity(seq_len);
     let mut scores: Vec<i32> = vec![0; vocab];
 
@@ -272,6 +463,7 @@ fn evaluate(
 
             // Full-vocabulary scores under the serving scorer, one pass.
             let mut max_score = i32::MIN;
+            let mut best_cand = 0usize;
             for cand in 0..vocab {
                 let s = model.score_context_candidate_with_vsa(
                     &ctx,
@@ -282,6 +474,7 @@ fn evaluate(
                 scores[cand] = s;
                 if s > max_score {
                     max_score = s;
+                    best_cand = cand;
                 }
             }
 
@@ -303,12 +496,18 @@ fn evaluate(
             }
             bits.push(-(target_p / sum).log2());
             bytes.push(token_lens.get(target).copied().unwrap_or(1).max(1) as u64);
+            if best_cand == target {
+                top1_hits += 1;
+            }
+            argmax.push(best_cand as u32);
         }
     }
     let scored = bits.len();
     Ok(Losses {
         bits,
         bytes,
+        argmax,
+        top1_hits,
         scored,
     })
 }
@@ -373,21 +572,36 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         .positions
         .next_multiple_of(args.seq_len)
         .saturating_add(args.seq_len);
-    let holdout = corpus.len().min(needed);
-    let held_out = &corpus[..holdout];
+    let slice_start = args.holdout_offset.min(corpus.len());
+    let slice_end = slice_start.saturating_add(needed).min(corpus.len());
+    if slice_end <= slice_start {
+        return Err(format!(
+            "empty held-out slice: offset {} with {} corpus tokens",
+            slice_start,
+            corpus.len()
+        )
+        .into());
+    }
+    let held_out = &corpus[slice_start..slice_end];
 
     println!("ablate-prose (Card P7) -- per-mechanism ablation BPB sweep");
     println!("  model      : {} (vocab {})", args.model.display(), vocab);
     println!(
-        "  corpus     : {} ({} tokens; held-out slice {} tokens)",
+        "  corpus     : {} ({} tokens; held-out slice [{}..{}) = {} tokens)",
         args.corpus.display(),
         corpus.len(),
+        slice_start,
+        slice_end,
         held_out.len()
     );
     println!("  scorer     : discrete additive scorer, full-vocabulary softmax at temperature 1.0");
     println!(
         "  seq_len    : {}   positions requested: {}",
         args.seq_len, args.positions
+    );
+    println!(
+        "  epsilon    : {:.4} BPB (equivalence margin; |delta| below this is NEGLIGIBLE)",
+        args.epsilon
     );
     println!();
 
@@ -408,8 +622,8 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
     println!(
-        "{:<16} {:>10} {:>10} {:>24}  {}",
-        "ablation", "BPB", "delta", "paired 95% CI", "verdict"
+        "{:<16} {:>9} {:>+9} {:>19} {:>11} {:>8} {:>7}",
+        "ablation", "BPB", "delta", "paired 95% CI", "band", "dTop1pp", "flip%"
     );
 
     for name in &args.ablations {
@@ -429,28 +643,49 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
             vocab,
         )?;
         let (delta, lo, hi) = bootstrap_delta_ci(&baseline, &losses);
-        let verdict = if lo > 0.0 {
-            "CONTRIBUTES (ablation costs BPB)"
-        } else if hi < 0.0 {
-            "HARMFUL (ablation helps)"
-        } else {
-            "INERT (CI includes 0)"
-        };
+        let band = Band::of(delta, args.epsilon);
+        let class = mechanism_class(name);
+        let d_top1 = losses.top1_pct() - baseline.top1_pct();
+        let flip = decision_flip_rate(&baseline, &losses);
         println!(
-            "{:<16} {:>10.4} {:>+10.4} {:>24}  {}",
+            "{:<16} {:>9.4} {:>+9.4} {:>19} {:>11} {:>+8.2} {:>6.1}%",
             name,
             losses.bpb(),
             delta,
             format!("[{lo:+.4}, {hi:+.4}]"),
-            verdict
+            band.label(),
+            d_top1,
+            flip
         );
+        // The CI is reported for completeness; the BAND and the declared class drive the
+        // action, because a paired CI can exclude zero on a practically meaningless effect.
+        let ci_excludes_zero = lo > 0.0 || hi < 0.0;
+        println!(
+            "{:<16}   class={}  ci_excludes_0={}  wiring: {}",
+            "",
+            class.label(),
+            ci_excludes_zero,
+            wiring_status(name)
+        );
+        println!("{:<16}   action: {}", "", action(band, class));
         eprintln!("  ({name}: {:.1}s)", t.elapsed().as_secs_f64());
     }
 
     println!();
+    println!("baseline top-1 accuracy: {:.2}%", baseline.top1_pct());
     println!("elapsed_total_s: {:.1}", started.elapsed().as_secs_f64());
+    println!();
+    println!("Decision rule (an ablation is not a verdict):");
     println!(
-        "A mechanism is RETAINED only if its ablation CI excludes 0 in the positive direction."
+        "  * A NEGLIGIBLE delta on an `enabler` or `selector` means the instrument cannot \
+         see that role -- repair the wiring or use a decision test, do not retire."
+    );
+    println!(
+        "  * Only a `count-table` or `primary-carrier` that is correctly wired and measurably \
+         net-negative is a removal candidate, and then on resource cost as much as accuracy."
+    );
+    println!(
+        "  * Statistical significance (CI excluding 0) is not practical significance; read the band."
     );
     Ok(())
 }
