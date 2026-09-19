@@ -74,6 +74,21 @@ composed dictionary: seen-query=0.39  unseen-query=0.42
 
 *(An earlier version of this task was a literal repeat of each fact and scored 1.00 on "unseen" facts — the answer sat beside the query and could be copied. A leak, caught by a failing test, and the second task-design error this session; both initially looked like successes.)*
 
+**Four levers ruled out — the ceiling is not resolution, budget, width or filter capacity.** The recommended step was to fix the readout on the theory that its resolution caused the ~0.3–0.4 ceiling. Tested falsify-first with an **unquantised-readout oracle** before building anything (D0-b permits 4-bit weights, so a 4-bit shift-and-add readout would have been the build if the oracle showed headroom):
+
+```
+serving readout:    ternary=0.28  unquantised=0.28
+relational budget:  steps=900 0.28 | steps=4000 0.28
+read width:         dv=64 0.28 | dv=256 0.28
+filter capacity:    9 slots 0.11 | 120 slots 0.11
+```
+
+**All four are flat.** Weight precision, training budget, read width and filter capacity each fail to move the ceiling, so the 4-bit kernel build is **not** recommended on this evidence and the reason is recorded. *(The first oracle was wrong — it changed only training while evaluation still used the ternary readout — and was rebuilt to compare at evaluation on identical masters; that is the third diagnostic defect this session. A second defect, a dictionary polluted by relation tokens colliding with word elements, was also found and fixed.)*
+
+**What this rules in.** The ceiling is structural in the readout **mechanism** — one linear map over one read vector decoding 120 classes — not in its width, precision, the filter, the addressing or the budget. The natural next candidate is a **non-linear / table decode**: the project's own nearest-root decoder over the 120 canonical roots, which is exact, multiplier-free by construction (compare plus table read, not a contraction), and is listed in the project synthesis under exact finite geometric actions. That is a different *kind* of readout, which is what the evidence now points at.
+
+**State.** `geometric_attention` **25 passed, 0 failed**; `cargo fmt --check` clean; nothing regressed.
+
 **Receipt:** [`native_geometric_spherical_harmonic_kernel_2026-09-19.txt`](../evidence/native_geometric_spherical_harmonic_kernel_2026-09-19.txt).
 
 ## Ordered-word addressing recovers the collapse; context copy reaches 100% — September 19, 2026

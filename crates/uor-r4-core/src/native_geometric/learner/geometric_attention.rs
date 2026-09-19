@@ -603,6 +603,10 @@ pub struct GeometricAttentionTrainer {
     pub n_classes: usize,
     /// Class function (9 weights) or general group-algebra element (120 weights).
     pub class_filter: bool,
+    /// DIAGNOSTIC ONLY: use the unquantised `f32` readout instead of the ternary one. This is an
+    /// oracle for testing whether readout resolution is the binding constraint; it is not a serving
+    /// path and must stay false outside that experiment.
+    pub readout_oracle: bool,
     /// Learned harmonic filter masters; the read is the group convolution of the stored
     /// superposition with this filter.
     pub kernel_m: Vec<f32>,
@@ -685,6 +689,7 @@ impl GeometricAttentionTrainer {
             scratch: Vec::new(),
             dscratch: Vec::new(),
             touched: Vec::new(),
+            readout_oracle: false,
         })
     }
 
@@ -904,12 +909,24 @@ impl GeometricAttentionTrainer {
                 num[j] = if self.use_relu { v.max(0.0) } else { v };
             }
             let mut logits = vec![0f32; self.vocab];
-            for (r, slot) in logits.iter_mut().enumerate() {
-                let mut acc = 0f32;
-                for j in 0..self.dv {
-                    acc += qo[r * self.dv + j] as f32 * num[j];
+            if self.readout_oracle {
+                // DIAGNOSTIC: unquantised readout. Tests whether weight resolution is the binding
+                // constraint. Not a serving path.
+                for (r, slot) in logits.iter_mut().enumerate() {
+                    let mut acc = 0f32;
+                    for j in 0..self.dv {
+                        acc += self.wo[r * self.dv + j] * num[j];
+                    }
+                    *slot = acc;
                 }
-                *slot = acc * so[r];
+            } else {
+                for (r, slot) in logits.iter_mut().enumerate() {
+                    let mut acc = 0f32;
+                    for j in 0..self.dv {
+                        acc += qo[r * self.dv + j] as f32 * num[j];
+                    }
+                    *slot = acc * so[r];
+                }
             }
             let mut p = softmax_f32(&logits);
             let target = (tokens[i + 1] as usize).min(self.vocab - 1);
@@ -926,7 +943,11 @@ impl GeometricAttentionTrainer {
                 let sr = so[r];
                 for j in 0..self.dv {
                     self.gwo[rbase + j] += g * num[j];
-                    dnum[j] += g * (qo[rbase + j] as f32 * sr);
+                    dnum[j] += if self.readout_oracle {
+                        g * self.wo[rbase + j]
+                    } else {
+                        g * (qo[rbase + j] as f32 * sr)
+                    };
                 }
             }
             // Read gradient. The shift is treated as a constant (STE through the bit scan). For the
@@ -1518,6 +1539,148 @@ mod tests {
         assert!(
             b > 0.3,
             "the composed read must be far above the lookup's unseen level: {b:.2}"
+        );
+    }
+
+    /// Is the ceiling a capacity limit or an optimisation limit? Cheapest discriminator: budget.
+    /// Measured: 0.28 at 900 steps and 0.28 at 4000 — **budget is not the constraint either.**
+    #[test]
+    fn training_budget_is_not_the_constraint() {
+        let train = relational_sequences(1, 32, 6, false);
+        let held = relational_sequences(4, 32, 6, true);
+        let mut seen = Vec::new();
+        for steps in [900usize, 4000] {
+            let mut t = relational_trainer();
+            for _ in 0..steps {
+                t.train_batch(&train);
+            }
+            let acc = eval_composed(&t, &held, false);
+            eprintln!("relational budget: steps={steps} unseen={acc:.2}");
+            seen.push(acc);
+        }
+        assert!(
+            (seen[1] - seen[0]).abs() < 0.05,
+            "4.4x the budget must not be the lever: {:.2} vs {:.2}",
+            seen[0],
+            seen[1]
+        );
+    }
+
+    /// Evaluate a composed query from the trainer's masters, with the readout either quantised
+    /// (serving form) or unquantised (diagnostic oracle). The dictionary is built the same way in both
+    /// modes, so the *only* difference is readout resolution.
+    fn eval_composed(t: &GeometricAttentionTrainer, seqs: &[Vec<u32>], oracle: bool) -> f32 {
+        let (qo, so) = quantize_codes(&t.wo, t.vocab, t.dv);
+        let (qv, sv) = quantize_codes(&t.wv, t.vocab, t.dv);
+        let n_addr = t.n_addr;
+        let mut s = vec![0f32; n_addr * t.dv + n_addr];
+        // Words only. Relation tokens deliberately reuse elements 1..8, so including them would write
+        // several values into eight word buckets and corrupt the dictionary.
+        for tok in 0..RADIX.min(t.vocab) {
+            let e = t.elements[tok] as usize;
+            if e >= n_addr {
+                continue;
+            }
+            for j in 0..t.dv {
+                s[e * t.dv + j] += if oracle {
+                    t.wv[tok * t.dv + j]
+                } else {
+                    qv[tok * t.dv + j] as f32 * sv[tok]
+                };
+            }
+            s[n_addr * t.dv + e] += 1.0;
+        }
+        let gt = group_table();
+        let mut hits = 0usize;
+        for sq in seqs {
+            let n = sq.len();
+            let ea = t.elements[sq[n - 3] as usize] as usize;
+            let eb = t.elements[sq[n - 2] as usize] as usize;
+            let q = gt.product[ea * ROW_STRIDE + eb] as usize;
+            let base = q * t.dv;
+            let mut num: Vec<f32> = (0..t.dv).map(|j| s[base + j]).collect();
+            let m = num.iter().fold(0f32, |a, &v| a.max(v.abs()));
+            let shift = if t.norm_bits > 0 && m >= 1.0 {
+                (32 - (m as u32).leading_zeros()).saturating_sub(t.norm_bits)
+            } else {
+                0
+            };
+            let div = (1u64 << shift) as f32;
+            for v in num.iter_mut() {
+                *v = (*v / div).floor();
+            }
+            let mut logits = vec![0f32; t.vocab];
+            for (r, slot) in logits.iter_mut().enumerate() {
+                let mut acc = 0f32;
+                for j in 0..t.dv {
+                    acc += if oracle {
+                        t.wo[r * t.dv + j]
+                    } else {
+                        qo[r * t.dv + j] as f32 * so[r]
+                    } * num[j];
+                }
+                *slot = acc;
+            }
+            let mut best = 0usize;
+            for (i, &v) in logits.iter().enumerate() {
+                if v > logits[best] {
+                    best = i;
+                }
+            }
+            if best == sq[n - 1] as usize {
+                hits += 1;
+            }
+        }
+        hits as f32 / seqs.len() as f32
+    }
+
+    /// Is the *serving* readout resolution the constraint? Compare the quantised readout against an
+    /// unquantised one on the **same trained masters**, so only resolution differs.
+    ///
+    /// Measured: 0.28 vs 0.28. **Resolution is not the constraint.** Recorded as the falsification it is.
+    #[test]
+    fn readout_resolution_is_not_the_constraint() {
+        let train = relational_sequences(1, 32, 6, false);
+        let held = relational_sequences(4, 32, 6, true);
+        let mut t = relational_trainer();
+        for _ in 0..900 {
+            t.train_batch(&train);
+        }
+        let ternary = eval_composed(&t, &held, false);
+        let oracle = eval_composed(&t, &held, true);
+        eprintln!("serving readout: ternary={ternary:.2} unquantised={oracle:.2}");
+        assert!(
+            (oracle - ternary).abs() < 0.05,
+            "resolution must not be the constraint, or the 4-bit lever is worth building: \
+             {ternary:.2} vs {oracle:.2}"
+        );
+    }
+
+    /// Resolution, budget and filter capacity are all ruled out. Remaining candidate: the read
+    /// *dimension*. Measured: 0.28 at dv=64 and 0.28 at dv=256 — **width is not the constraint either.**
+    #[test]
+    fn read_width_is_not_the_constraint() {
+        let train = relational_sequences(1, 32, 6, false);
+        let held = relational_sequences(4, 32, 6, true);
+        let mut seen = Vec::new();
+        for dv in [64usize, 256] {
+            let mut t = GeometricAttentionTrainer::new(RADIX + RELATIONS, dv, 2, 6, 2026_0919)
+                .expect("build");
+            t.elements = relational_elements();
+            t.cfg.lr = 0.05;
+            for _ in 0..900 {
+                t.train_batch(&train);
+            }
+            let acc = eval_composed(&t, &held, false);
+            let oracle = eval_composed(&t, &held, true);
+            eprintln!("read width dv={dv:>3}: ternary={acc:.2} unquantised={oracle:.2}");
+            seen.push(acc);
+        }
+        assert!(
+            (seen[1] - seen[0]).abs() < 0.05,
+            "4x the read width must not be the lever: {:.2} vs {:.2}",
+            seen[0],
+            seen[1]
         );
     }
 

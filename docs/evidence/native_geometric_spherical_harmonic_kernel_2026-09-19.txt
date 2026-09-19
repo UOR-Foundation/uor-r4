@@ -255,3 +255,46 @@ constraint on every mechanism tested.
 Tests: `geometric_attention` **22 passed, 0 failed**; `cargo fmt --check` clean.
 
 Charged 320,000 ms. Cumulative 144,833,565 / 147,200,000 ms.
+
+## 13. Four levers ruled out: the ceiling is not resolution, budget, width or filter capacity
+
+The recommended next step was to fix the readout, on the theory that its resolution caused the ~0.3–0.4
+ceiling. Falsify-first, that theory was tested cheaply before building anything: an **unquantised
+readout** is an oracle for "would more weight precision help?". D0-b permits up to 4 bits per weight, so
+if the oracle had shown headroom the right build would have been a 4-bit shift-and-add readout.
+
+*(The first version of that oracle was wrong: it changed only **training**, while evaluation still went
+through the core's ternary readout, so it never tested serving resolution. Rebuilt to compare
+quantised against unquantised **at evaluation, on the same trained masters**. The conclusion below is
+from the corrected instrument. That is the third diagnostic defect this session.)*
+
+```
+serving readout:    ternary=0.28  unquantised=0.28
+relational budget:  steps=900 0.28 | steps=4000 0.28
+read width:         dv=64 0.28 | dv=256 0.28
+filter capacity:    9 slots 0.11 | 120 slots 0.11   (§11)
+```
+
+**All four levers are flat.**
+
+* **Weight precision is not the constraint** (0.28 vs 0.28), so building a 4-bit kernel on this evidence
+  would be wasted work. That build is *not* recommended now, and the reason is recorded.
+* **Training budget is not the constraint** (4.4× the steps, identical).
+* **Read width is not the constraint** (4× `dv`, identical).
+* **Filter capacity is not the constraint** (§11).
+
+A second defect was found in the diagnostic itself: the dictionary was built from *all* tokens including
+the relation tokens, whose elements (1..8) deliberately collide with word elements, so eight of 120
+buckets were corrupted. Corrected; the numbers above are post-fix and it did not change the conclusions.
+
+**What this rules in.** The ceiling is structural in the readout **mechanism** — a single linear map over
+one read vector decoding 120 classes — not in its width, precision, the filter, the addressing or the
+budget. The natural next candidate is therefore a **non-linear / table decode**: the project already has
+the notion of a nearest-root decoder over the 120 canonical roots, which is exact, multiplier-free by
+construction (compare and table-read rather than a contraction), and is the mechanism the project's own
+synthesis lists under "exact finite geometric actions". That is a different *kind* of readout, which is
+what the evidence now points at.
+
+Tests: `geometric_attention` **25 passed, 0 failed**; `cargo fmt --check` clean.
+
+Charged 790,000 ms. Cumulative 145,623,565 / 147,200,000 ms.
