@@ -20,8 +20,9 @@ i.e. **before** the 2026-09-18 training run. No increment had been recorded for 
 | 2026-09-19 | `ablate-prose` instrument smoke + coarse-tier removal verification | 22,000 ms | **Measured.** Instrument smoke at 1,024 positions (~44 s incl. 3 ablations), the stripped-artifact verification run at 2,048 positions (21.2 s), and `strip-coarse`'s 864-comparison scoring self-check (~2 s). Recorded in `docs/evidence/native_geometric_p7_coarse_strip_2026-09-19.txt`. |
 | 2026-09-19 | VSA codebook-mode comparison (`fixed` vs `root`) | 46,000 ms | **Measured.** Two 2,048-position runs, 24.2 s and 21.3 s, at 2 evaluations each (baseline + `vsa` ablation). Recorded in `docs/evidence/native_geometric_vsa_codebook_repair_2026-09-19.txt`. |
 | 2026-09-19 | Shortlist routing + served-path BPB under both codebook modes | 135,000 ms | **Measured.** `shortlist-recall` runs: 2,048 positions (22.0 s), 4,096 positions at offset 0 (22.4 s), and 4,096 positions at offset 40,960 (~90 s), each routing and scoring both modes. Recorded in `docs/evidence/native_geometric_shortlist_routing_2026-09-19.txt`. |
+| 2026-09-19 | Code-mode wiring: mode-setting tool + two end-to-end serves | 10,000 ms | **Measured.** `set-vsa-code-mode` structural verification (~1 s) and two greedy `r4-native-chat` generations of 128 tokens. Builds and tests are engineering, not model time. Recorded in `docs/evidence/native_geometric_vsa_code_mode_wiring_2026-09-19.txt`. |
 
-**New cumulative: 139,634,275 ms.** Remaining against the prior ceiling: 572,725 ms
+**New cumulative: 139,644,275 ms.** Remaining against the prior ceiling: 572,725 ms
 (~9.5 minutes) — insufficient for the next stage.
 
 ## Extension recorded before use

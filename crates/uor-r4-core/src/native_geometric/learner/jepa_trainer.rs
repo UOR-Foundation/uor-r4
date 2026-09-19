@@ -20,6 +20,7 @@ use crate::native_geometric::hopf_metric::{
     HopfFiberPointQ30, UnitS2, UnitS2Q30, UnitS3, UnitS3Q30, EPSILON,
 };
 use crate::native_geometric::lattice_table::{ContinuousLatticeTables, HierarchicalLatticeTables};
+use crate::native_geometric::learner::vsa_codes::build_root_codebook;
 use crate::native_geometric::vsa::{
     encode_attended_multiscale_context, encode_multiscale_context, Codebook, HierarchicalCodebook,
     Hypervector, Hypervector4096,
@@ -613,6 +614,18 @@ pub struct ExportedGeometricModel {
     /// VSA context scoring scale in Q1.15 format.
     #[serde(default)]
     pub vsa_scale_q15: i16,
+    /// VSA token-code mode.
+    ///
+    /// `0` = fixed token-id hash (`splitmix64(vsa_seed, token_id)`), the legacy wiring in which
+    /// `E[d_H] = D/2` for distinct tokens so only identity is recoverable. `1` = codes derived
+    /// from the **learned** 120-root assignment by locality-sensitive hashing of the canonical
+    /// icosian root quaternions (see `learner/vsa_codes.rs`). Mode `1` requires the hierarchical
+    /// codebook to be rebuilt in the matching space; call
+    /// [`ExportedGeometricModel::prepare_vsa_code_mode`] after deserializing.
+    ///
+    /// `serde(default)` keeps artifacts written before this field loadable.
+    #[serde(default)]
+    pub vsa_code_mode: u8,
     /// Hierarchical lattice codebook for bounded-shortlist zero-allocation routing.
     #[serde(default)]
     pub hierarchical_codebook: Option<HierarchicalCodebook<64>>,
@@ -2694,7 +2707,15 @@ impl JepaTrainer {
             .clamp(-32767.0, 32767.0)
             .round() as i16;
 
-        let vsa_codebook = Codebook::<64>::new(self.config.vocab_size, self.config.vsa_seed);
+        // New artifacts declare the learned-root code mode, which the Card P7 routing measurement
+        // found better on every routing metric (recall 8.4-8.8 % -> 10.7-11.2 %, served-path
+        // shortlist BPB 2.72-2.83 -> 2.67-2.78) on two disjoint slices. The hierarchical codebook
+        // must be built in THAT space: its centroids are bundles of token vectors, so a mismatched
+        // build would leave the router comparing vectors from two different spaces. The loaders
+        // also call `prepare_vsa_code_mode`, so a mismatched artifact is corrected on load rather
+        // than silently incoherent.
+        let vsa_codebook =
+            build_root_codebook(self.config.vocab_size, &token_to_root, self.config.vsa_seed);
         let hierarchical =
             HierarchicalCodebook::new(self.config.vocab_size, &token_to_root, &vsa_codebook);
         let engram_table = self.collocations.build_engram_table();
@@ -2714,6 +2735,7 @@ impl JepaTrainer {
             discrete_jepa_fiber_bias,
             vsa_seed: self.config.vsa_seed,
             vsa_scale_q15,
+            vsa_code_mode: 1,
             hierarchical_codebook: Some(hierarchical),
             engram_table: Some(engram_table),
             hierarchical_lattice,

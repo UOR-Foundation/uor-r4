@@ -330,8 +330,13 @@ impl NativeModel {
         rgm_bytes: &[u8],
         tokenizer_bytes: Option<&[u8]>,
     ) -> Result<Self, NativeApiError> {
-        let exported = ExportedGeometricModel::from_binary(rgm_bytes)
+        let mut exported = ExportedGeometricModel::from_binary(rgm_bytes)
             .map_err(|e| NativeApiError::ModelLoad(format!("invalid RGM binary: {e}")))?;
+        // Rebuild the hierarchical codebook when the artifact declares a code space other than the
+        // fixed hash, so routing and scoring operate in one consistent space.
+        exported
+            .prepare_vsa_code_mode()
+            .map_err(NativeApiError::ModelLoad)?;
         let tokenizer = resolve_tokenizer(tokenizer_bytes)?;
         Self::from_prose_model(Arc::new(exported), tokenizer, rgm_bytes)
     }
@@ -341,8 +346,11 @@ impl NativeModel {
         json_bytes: &[u8],
         tokenizer_bytes: Option<&[u8]>,
     ) -> Result<Self, NativeApiError> {
-        let exported: ExportedGeometricModel = serde_json::from_slice(json_bytes)
+        let mut exported: ExportedGeometricModel = serde_json::from_slice(json_bytes)
             .map_err(|e| NativeApiError::ModelLoad(format!("invalid prose JSON: {e}")))?;
+        exported
+            .prepare_vsa_code_mode()
+            .map_err(NativeApiError::ModelLoad)?;
         let tokenizer = resolve_tokenizer(tokenizer_bytes)?;
         Self::from_prose_model(Arc::new(exported), tokenizer, json_bytes)
     }
@@ -469,7 +477,7 @@ impl NativeModel {
                 general_ai_disavowal: "Native geometric language model replacing transformers; not an AGI system".into(),
             },
         };
-        let codebook = Arc::new(Codebook::<64>::new(model.vocab_size, model.vsa_seed));
+        let codebook = Arc::new(model.vsa_codebook());
         Ok(Self {
             kind: NativeModelKind::GeometricProse {
                 model,

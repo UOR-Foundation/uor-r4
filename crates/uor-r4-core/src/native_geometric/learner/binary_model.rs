@@ -470,7 +470,9 @@ impl ExportedGeometricModel {
             flags,
             vsa_seed: self.vsa_seed,
             vsa_scale_q15: self.vsa_scale_q15,
-            _reserved: [0; 2],
+            // `_reserved[0]` carries the VSA code mode; the rest of the reserved space stays zero
+            // so the header size is unchanged and older artifacts (which read 0) remain valid.
+            _reserved: [self.vsa_code_mode, 0],
             section_count: NUM_SECTIONS as u32,
             blake3_digest: *payload_digest.as_bytes(),
         };
@@ -527,6 +529,14 @@ impl ExportedGeometricModel {
         let flags = u16::from_le_bytes(bytes[14..16].try_into().unwrap());
         let vsa_seed = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
         let vsa_scale_q15 = i16::from_le_bytes(bytes[24..26].try_into().unwrap());
+        // Byte 26 of the header is `_reserved[0]` and carries the VSA code mode, so the format
+        // stays size-compatible with artifacts written before the field existed (those read 0).
+        let vsa_code_mode = bytes[26];
+        if vsa_code_mode > 1 {
+            return Err(BinaryModelError::CorruptedData(
+                "vsa_code_mode is not 0 (fixed) or 1 (learned-root codes)",
+            ));
+        }
         let section_count = u32::from_le_bytes(bytes[28..32].try_into().unwrap()) as usize;
         let blake3_digest: [u8; 32] = bytes[32..64].try_into().unwrap();
 
@@ -843,6 +853,9 @@ impl ExportedGeometricModel {
             discrete_jepa_fiber_bias,
             vsa_seed,
             vsa_scale_q15,
+            // The hierarchical codebook read from the file was built in the export-time code
+            // space; `prepare_vsa_code_mode` replaces it when the mode requires a different one.
+            vsa_code_mode,
             hierarchical_codebook,
             engram_table,
             hierarchical_lattice,
@@ -860,6 +873,9 @@ impl ExportedGeometricModel {
 pub struct MmapGeometricModel {
     mmap: memmap2::Mmap,
     header: RgmHeader,
+    /// VSA token-code mode read from the header's reserved byte (0 = fixed hash, 1 = learned-root
+    /// codes). `0` for artifacts written before the field existed.
+    vsa_code_mode: u8,
 
     // Section 1: Base
     token_to_root_offset: usize,
@@ -942,6 +958,13 @@ impl MmapGeometricModel {
         let flags = u16::from_le_bytes(mmap[14..16].try_into().unwrap());
         let vsa_seed = u64::from_le_bytes(mmap[16..24].try_into().unwrap());
         let vsa_scale_q15 = i16::from_le_bytes(mmap[24..26].try_into().unwrap());
+        // `_reserved[0]` carries the VSA code mode; see `ExportedGeometricModel::vsa_code_mode`.
+        let vsa_code_mode = mmap[26];
+        if vsa_code_mode > 1 {
+            return Err(BinaryModelError::CorruptedData(
+                "vsa_code_mode is not 0 (fixed) or 1 (learned-root codes)",
+            ));
+        }
         let _reserved = [mmap[26], mmap[27]];
         let section_count = u32::from_le_bytes(mmap[28..32].try_into().unwrap());
         let blake3_digest: [u8; 32] = mmap[32..64].try_into().unwrap();
@@ -1101,6 +1124,7 @@ impl MmapGeometricModel {
         Ok(Self {
             mmap,
             header,
+            vsa_code_mode,
             token_to_root_offset,
             discrete_bias_offset,
             discrete_s2_readout_offset,
@@ -1128,6 +1152,13 @@ impl MmapGeometricModel {
     #[inline]
     pub fn header(&self) -> &RgmHeader {
         &self.header
+    }
+
+    /// VSA token-code mode declared by the artifact: `0` = fixed token-id hash,
+    /// `1` = codes derived from the learned 120-root assignment.
+    #[inline]
+    pub fn vsa_code_mode(&self) -> u8 {
+        self.vsa_code_mode
     }
 
     /// Number of discrete tokens in vocabulary.

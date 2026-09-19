@@ -46,8 +46,9 @@
 //! stores `token_to_root` only). That is Stage 3 of `native-core-transition-plan.md`. This module
 //! makes the mechanism testable now and bounds what is achievable at root resolution.
 
+use super::jepa_trainer::ExportedGeometricModel;
 use crate::native_geometric::learner::embedding::{canonical_h4_roots_q30, H4_ROOT_COUNT};
-use crate::native_geometric::vsa::{Codebook, Hypervector};
+use crate::native_geometric::vsa::{Codebook, HierarchicalCodebook, Hypervector};
 
 /// Number of bits in the default code (`Hypervector<64>` = 64 words x 64 bits).
 const CODE_BITS: usize = 64 * 64;
@@ -124,6 +125,45 @@ pub fn build_root_codebook(vocab_size: usize, token_to_root: &[u8], seed: u64) -
         table.push(codes[root]);
     }
     Codebook::from_vectors(seed, table)
+}
+
+impl ExportedGeometricModel {
+    /// The VSA codebook implied by the artifact's declared code mode.
+    pub fn vsa_codebook(&self) -> Codebook<64> {
+        match self.vsa_code_mode {
+            1 => build_root_codebook(self.vocab_size, &self.token_to_root, self.vsa_seed),
+            _ => Codebook::<64>::on_demand(self.vocab_size, self.vsa_seed),
+        }
+    }
+
+    /// Make the artifact self-consistent for its declared VSA code mode.
+    ///
+    /// The stored `hierarchical_codebook` centroids are bundles of the token vectors used at
+    /// **export time**. When the declared mode selects a different code space those centroids
+    /// must be rebuilt, or the router would compare a query vector against centroids from a
+    /// different space — a silently incoherent system. This is the coherence requirement that
+    /// made mode `1` measurable at all: the Card P7 routing comparison would have been meaningless
+    /// without it.
+    ///
+    /// Call once immediately after deserializing. Mode `0` needs no rebuild because the stored
+    /// codebook was built from the same fixed-hash codes that mode `0` selects.
+    pub fn prepare_vsa_code_mode(&mut self) -> Result<(), String> {
+        match self.vsa_code_mode {
+            0 => Ok(()),
+            1 => {
+                let codebook = self.vsa_codebook();
+                self.hierarchical_codebook = Some(HierarchicalCodebook::<64>::new(
+                    self.vocab_size,
+                    &self.token_to_root,
+                    &codebook,
+                ));
+                Ok(())
+            }
+            other => Err(format!(
+                "unsupported vsa_code_mode {other}; known: 0 (fixed), 1 (learned-root codes)"
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
