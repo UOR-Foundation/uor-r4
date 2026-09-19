@@ -734,6 +734,54 @@ mod tests {
         }
     }
 
+    /// The context-16 ceiling is a *first-order* address collision, not capacity or resolution.
+    /// Controlled: the same K and alphabet, differing only in whether the queried token's bucket
+    /// receives two different successors. Measured 0.44 clean vs 0.14 duplicated-key.
+    #[test]
+    fn a_duplicated_queried_key_breaks_first_order_addressing() {
+        let k = 16usize;
+        let build = |seed: u64, n: usize, force_dup: bool| -> Vec<Vec<u32>> {
+            let mut st = seed | 1;
+            (0..n)
+                .map(|_| {
+                    let mut r: Vec<u32> = (0..k)
+                        .map(|_| {
+                            st ^= st << 13;
+                            st ^= st >> 7;
+                            st ^= st << 17;
+                            (st % ALPHABET as u64) as u32
+                        })
+                        .collect();
+                    if force_dup {
+                        // The queried token (index K-2) also appears at index 0 with a different
+                        // successor, so its bucket receives two values.
+                        r[k - 2] = r[0];
+                    }
+                    let mut seq = r.clone();
+                    seq.extend_from_slice(&r);
+                    seq
+                })
+                .collect()
+        };
+        let train = build(0xA5A5_1234, 64, false);
+        let mut t = GeometricAttentionTrainer::new(VOCAB, 128, 2, 6, 2026_0919).expect("build");
+        t.cfg.lr = 0.05;
+        for _ in 0..900 {
+            t.train_batch(&train);
+        }
+        let score = |t: &GeometricAttentionTrainer, seqs: &[Vec<u32>]| {
+            let hits = seqs.iter().filter(|s| t.final_token_correct(s)).count();
+            hits as f32 / seqs.len() as f32
+        };
+        let clean = score(&t, &build(0x0BAD_F00D, 64, false));
+        let ambiguous = score(&t, &build(0x0BAD_F00D, 64, true));
+        eprintln!("ambiguity clean={clean:.2} duplicated-key={ambiguous:.2}");
+        assert!(
+            clean > ambiguous,
+            "a duplicated queried key must hurt: {clean:.2} vs {ambiguous:.2}"
+        );
+    }
+
     /// With a sign-preserving read, value/output resolution scales the mechanism. (The earlier
     /// `dv` sweep that showed no effect was confounded by the sign-destroying `relu`.)
     #[test]
