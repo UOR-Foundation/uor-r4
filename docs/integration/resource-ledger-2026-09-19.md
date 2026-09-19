@@ -159,9 +159,11 @@ compute.
 | Date | Work | Charge | Basis |
 |---|---|---:|---|
 | 2026-09-19 | `geometric_attention` capacity and read-activation sweeps, plus the focused suite (release) | 165,000 ms | **Measured.** 107.01 + 14.50 + 43.10 s harness wall time. |
+| 2026-09-19 | Geometric ambiguity diagnostic + focused suite (release) | 20,000 ms | **Measured.** 16.13 s diagnostic plus the 14-test suite (44.23 s). |
 
-**New cumulative: 142,838,565 ms.** Remaining: 147,200,000 − 142,838,565 = **4,361,435 ms (~72.7 min)**.
+**New cumulative: 142,858,565 ms.** Remaining: 147,200,000 − 142,858,565 = **4,341,435 ms (~72.4 min)**.
 
+## Not done
 **No extension was used**; the limit is unchanged at 147,200,000 ms. Builds and formatting remain
 engineering, not model time. **Storage:** no model artifact was created. The **128 MiB model-storage
 stop margin is untouched**; no deletion, no cleanup, no paid or external compute.
