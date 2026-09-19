@@ -224,9 +224,34 @@ def main():
     print(f"  decode rate               : {tokens / elapsed:.2f} tok/s")
     print(f"  idle power (not the model): {idle_mean:.1f} mW")
     print(f"  workload power            : {work_mean:.1f} mW")
+    print(f"  power field used          : {work_field}")
     print(f"  GROSS energy              : {gross_j:.3f} J   ({gross_j / tokens:.4f} J/token)")
     print(f"  NET energy (idle removed) : {net_j:.3f} J   ({net_j / tokens:.4f} J/token)")
     print()
+
+    # PLAUSIBILITY GUARD. A CPU-bound workload cannot draw under 200 mW on an M1-class SoC; an
+    # idle machine sits at roughly 1-3 W and a loaded one at several watts. Observed on
+    # MacBookPro17,1 / macOS 26A5378n: `CPU Power` reports 0 mW while the E-cluster sits at 60-71%
+    # active residency, so `Combined Power` contains only the GPU. Reporting a J/token from that
+    # would understate energy by roughly three orders of magnitude.
+    if work_mean < 200.0:
+        print("*** STOP: THE POWER READING IS NOT PHYSICALLY PLAUSIBLE ***")
+        print(
+            f"  A workload drawing {work_mean:.1f} mW cannot be a CPU-bound run on an M1-class SoC,\n"
+            "  which sits near 1-3 W idle and several watts under load. The most likely cause is\n"
+            "  that this powermetrics build does not populate the CPU power term at all, so the\n"
+            "  selected field excludes the CPU. Check the raw sample for `CPU Power: 0 mW` while\n"
+            "  cluster active residency is non-trivial."
+        )
+        print(
+            "  DO NOT quote the J/token above. Report the measurement as UNAVAILABLE and say why.\n"
+            "  Alternatives: try `sudo powermetrics -n 2 -i 1000` for any SoC/package power line;\n"
+            "  or `sudo powermetrics --samplers tasks --show-process-energy` for a per-process\n"
+            "  energy-impact comparison, which is Apple's unitless score and not joules."
+        )
+        print()
+        return 2
+
     print("Quote the NET figure: the gross one charges the model for the machine's idle floor.")
     print("A single run is not a result. Repeat at least three times and report the range.")
     print("Record: AC or battery, whether the SoC was warm, and where the token count came from.")
