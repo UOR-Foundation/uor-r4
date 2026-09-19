@@ -40,6 +40,15 @@ use super::embedding::{canonical_h4_roots_q30, H4_ROOT_COUNT};
 /// Number of group elements: the 120 canonical H4 roots.
 pub const GROUP_ORDER: usize = H4_ROOT_COUNT;
 
+/// Row stride of the product table, padded to a power of two.
+///
+/// Addressing element `(a, b)` of a 120x120 table is `a * 120 + b`, and a multiply by a
+/// non-power-of-two constant needs a shift/add sequence the compiler often emits as `madd` -- the
+/// serving zero-check (`scripts/serving_multiplier_check.py`) counted those instructions in
+/// `compose_ring_roots`. Padding the stride to 128 makes the row base a shift, at the cost of
+/// 120 x 8 = 960 padding bytes.
+pub const ROW_STRIDE: usize = 128;
+
 /// Exact `2I` composition tables.
 pub struct GroupTable {
     /// Flat `GROUP_ORDER * GROUP_ORDER` table: `product[a * N + b]` is the index of
@@ -79,8 +88,13 @@ pub fn compose_context_roots(token_to_root: &[u8], context: &[usize]) -> usize {
     let start = context.len().saturating_sub(64);
     let root_len = token_to_root.len();
     for &token in &context[start..] {
-        let root = token_to_root[token.min(root_len - 1)] as usize % GROUP_ORDER;
-        state = table.product[state * GROUP_ORDER + root] as usize;
+        // `.min(GROUP_ORDER - 1)` rather than `% GROUP_ORDER`: `token_to_root` holds canonical
+        // root indices from `nearest_h4_root` and is already in range, so this is a defensive
+        // bound, and a branchless min avoids a modulo by a non-power-of-two constant -- which the
+        // compiler lowers to a `umulh` multiply sequence. The serving zero-check
+        // (`scripts/serving_multiplier_check.py`) flagged exactly those instructions.
+        let root = (token_to_root[token.min(root_len - 1)] as usize).min(GROUP_ORDER - 1);
+        state = table.product[state * ROW_STRIDE + root] as usize;
     }
     state
 }
@@ -108,8 +122,8 @@ pub fn compose_ring_roots(
             ring.len() - (lag - cursor)
         };
         let token = ring[index] as usize;
-        let root = token_to_root[token.min(root_len - 1)] as usize % GROUP_ORDER;
-        state = table.product[state * GROUP_ORDER + root] as usize;
+        let root = (token_to_root[token.min(root_len - 1)] as usize).min(GROUP_ORDER - 1);
+        state = table.product[state * ROW_STRIDE + root] as usize;
     }
     state
 }
@@ -147,7 +161,7 @@ impl GroupTable {
             .collect();
 
         let n = GROUP_ORDER;
-        let mut product = vec![0u8; n * n];
+        let mut product = vec![0u8; n * ROW_STRIDE];
         let mut max_closure_residual = 0.0f64;
 
         for a in 0..n {
@@ -168,7 +182,7 @@ impl GroupTable {
                         second = d;
                     }
                 }
-                product[a * n + b] = best as u8;
+                product[a * ROW_STRIDE + b] = best as u8;
                 let residual = 1.0 - best_dot;
                 if residual > max_closure_residual {
                     max_closure_residual = residual;
@@ -195,7 +209,7 @@ impl GroupTable {
         for a in 0..n {
             let mut found = None;
             for b in 0..n {
-                if product[a * n + b] as usize == identity {
+                if product[a * ROW_STRIDE + b] as usize == identity {
                     found = Some(b as u8);
                     break;
                 }
@@ -219,11 +233,11 @@ mod tests {
     #[test]
     fn table_is_a_latin_square_so_left_multiplication_is_a_bijection() {
         let t = group_table();
-        assert_eq!(t.product.len(), GROUP_ORDER * GROUP_ORDER);
+        assert_eq!(t.product.len(), GROUP_ORDER * ROW_STRIDE);
         for a in 0..GROUP_ORDER {
             let mut seen = [false; GROUP_ORDER];
             for b in 0..GROUP_ORDER {
-                let p = t.product[a * GROUP_ORDER + b] as usize;
+                let p = t.product[a * ROW_STRIDE + b] as usize;
                 assert!(p < GROUP_ORDER);
                 assert!(!seen[p], "row {a} repeats element {p}");
                 seen[p] = true;
@@ -232,7 +246,7 @@ mod tests {
         for b in 0..GROUP_ORDER {
             let mut seen = [false; GROUP_ORDER];
             for a in 0..GROUP_ORDER {
-                let p = t.product[a * GROUP_ORDER + b] as usize;
+                let p = t.product[a * ROW_STRIDE + b] as usize;
                 assert!(!seen[p], "column {b} repeats element {p}");
                 seen[p] = true;
             }
@@ -245,11 +259,11 @@ mod tests {
         let n = GROUP_ORDER;
         for a in 0..n {
             for b in 0..n {
-                let ab = t.product[a * n + b] as usize;
+                let ab = t.product[a * ROW_STRIDE + b] as usize;
                 for c in 0..n {
-                    let left = t.product[ab * n + c] as usize;
-                    let bc = t.product[b * n + c] as usize;
-                    let right = t.product[a * n + bc] as usize;
+                    let left = t.product[ab * ROW_STRIDE + c] as usize;
+                    let bc = t.product[b * ROW_STRIDE + c] as usize;
+                    let right = t.product[a * ROW_STRIDE + bc] as usize;
                     assert_eq!(left, right, "associativity failed for ({a}, {b}, {c})");
                 }
             }
@@ -262,10 +276,22 @@ mod tests {
         let e = t.identity as usize;
         let n = GROUP_ORDER;
         for a in 0..n {
-            assert_eq!(t.product[e * n + a] as usize, a, "e*a != a for {a}");
-            assert_eq!(t.product[a * n + e] as usize, a, "a*e != a for {a}");
+            assert_eq!(
+                t.product[e * ROW_STRIDE + a] as usize,
+                a,
+                "e*a != a for {a}"
+            );
+            assert_eq!(
+                t.product[a * ROW_STRIDE + e] as usize,
+                a,
+                "a*e != a for {a}"
+            );
             let inv = t.inverse[a] as usize;
-            assert_eq!(t.product[a * n + inv] as usize, e, "a*inv(a) != e for {a}");
+            assert_eq!(
+                t.product[a * ROW_STRIDE + inv] as usize,
+                e,
+                "a*inv(a) != e for {a}"
+            );
         }
     }
 
