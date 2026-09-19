@@ -109,6 +109,7 @@ struct Args {
     positions: usize,
     holdout_offset: usize,
     epsilon: f64,
+    vsa_code_mode: String,
     ablations: Vec<String>,
 }
 
@@ -127,6 +128,8 @@ fn usage() -> String {
          \x20 --holdout-offset <n>  token offset of the held-out slice [default: 0]; use a\n\
          \x20                     disjoint offset to confirm a verdict on a second slice\n\
          \x20 --epsilon <f>      equivalence margin in BPB [default: {DEFAULT_EPSILON}]\n\
+         \x20 --vsa-code-mode <m>  VSA token codes: `fixed` (token-id hash, current) or\n\
+         \x20                     `root` (derived from the learned 120-root assignment)\n\
          \x20 --ablations <list>  comma-separated subset; default all\n\
          \x20 --help\n\
          \n\
@@ -144,6 +147,7 @@ fn parse_args() -> Result<Args, String> {
         positions: DEFAULT_POSITIONS,
         holdout_offset: 0,
         epsilon: DEFAULT_EPSILON,
+        vsa_code_mode: "fixed".to_string(),
         ablations: ABLATIONS.iter().map(|s| s.to_string()).collect(),
     };
     let argv: Vec<String> = std::env::args().skip(1).collect();
@@ -185,6 +189,16 @@ fn parse_args() -> Result<Args, String> {
             }
             "--epsilon" => {
                 args.epsilon = next(i)?.parse().map_err(|_| "bad --epsilon".to_string())?;
+                i += 2;
+            }
+            "--vsa-code-mode" => {
+                let mode = next(i)?.to_ascii_lowercase();
+                if mode != "fixed" && mode != "root" {
+                    return Err(format!(
+                        "unknown --vsa-code-mode '{mode}'; known: fixed, root"
+                    ));
+                }
+                args.vsa_code_mode = mode;
                 i += 2;
             }
             "--ablations" => {
@@ -563,7 +577,14 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let reader = MmapCorpusReader::open(&args.corpus)?;
     let corpus = reader.as_slice();
     let vocab = model.vocab_size;
-    let codebook = Codebook::<64>::on_demand(vocab, model.vsa_seed);
+    let codebook = match args.vsa_code_mode.as_str() {
+        "root" => uor_r4_core::native_geometric::learner::build_root_codebook(
+            vocab,
+            &model.token_to_root,
+            model.vsa_seed,
+        ),
+        _ => Codebook::<64>::on_demand(vocab, model.vsa_seed),
+    };
 
     // Held-out convention matches `train-native-prose`: the first tokens of the
     // mapped stream are evaluation, the remainder is training. Positions are drawn
@@ -602,6 +623,17 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "  epsilon    : {:.4} BPB (equivalence margin; |delta| below this is NEGLIGIBLE)",
         args.epsilon
+    );
+    println!(
+        "  vsa codes  : {} ({} distinct code vectors)",
+        args.vsa_code_mode,
+        {
+            let mut seen = std::collections::BTreeSet::new();
+            for v in codebook.table.iter().take(vocab) {
+                seen.insert(v.data.to_vec());
+            }
+            seen.len()
+        }
     );
     println!();
 

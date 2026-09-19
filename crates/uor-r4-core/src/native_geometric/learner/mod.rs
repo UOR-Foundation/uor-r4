@@ -7,6 +7,7 @@ pub mod binary_model;
 pub mod embedding;
 pub mod jepa_trainer;
 pub mod transition_table;
+pub mod vsa_codes;
 
 pub use binary_model::{
     BinaryModelError, MmapGeometricModel, RgmHeader, RgmSectionHeader, FLAG_HAS_ENGRAM_TABLE,
@@ -25,6 +26,7 @@ pub use jepa_trainer::{
 pub use transition_table::{
     ContinuousLaneTable, DiscreteServingTable, MultiLaneTransitionTables, ENTRIES_PER_TABLE,
 };
+pub use vsa_codes::{build_root_codebook, root_codes};
 
 #[cfg(test)]
 mod tests {
