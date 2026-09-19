@@ -655,28 +655,33 @@ impl ExportedGeometricModel {
     }
 
     /// Compute cumulative fixed-point S3 state and fiber-preserving Hopf projection over context tokens.
+    ///
+    /// # Multiplier-free and exact
+    ///
+    /// The accumulated state is always an element of `2I`: the 120 canonical roots *are* the
+    /// group, and the group is closed. Composing with the next root is therefore a **table read**,
+    /// not an arithmetic operation. This replaces up to 64 `mul_q30` calls per token (~1,000
+    /// multiplies) with 64 array reads and integer index arithmetic, and it is *more* exact than
+    /// what it replaces: the table stores exact products of exact elements, whereas the previous
+    /// path multiplied Q1.30-quantized roots and called `normalized()` every 8 steps to contain
+    /// the resulting drift. No renormalization is needed here at all.
+    ///
+    /// The table's group axioms are verified by tests, not assumed: Latin-square rows and columns,
+    /// associativity over every triple, two-sided identity and inverses.
     pub fn context_hopf_fiber_q30(&self, context: &[usize]) -> HopfFiberPointQ30 {
         if self.token_to_root.is_empty() || context.is_empty() {
             return UnitS3Q30::IDENTITY.hopf_fiber_project();
         }
         let roots = super::embedding::canonical_h4_roots_q30();
-        let mut s3 = UnitS3Q30::IDENTITY;
+        let table = super::group_table::group_table();
         let start = context.len().saturating_sub(64);
         let root_len = self.token_to_root.len();
-        let mut step = 0;
+        let mut state = table.identity as usize;
         for &token in &context[start..] {
-            let root_idx = self.token_to_root[token.min(root_len - 1)] as usize;
-            let q_root_q30 = roots[root_idx % H4_ROOT_COUNT];
-            s3 = s3.mul_q30(&q_root_q30);
-            step += 1;
-            if step % 8 == 0 {
-                s3 = s3.normalized();
-            }
+            let root_idx = self.token_to_root[token.min(root_len - 1)] as usize % H4_ROOT_COUNT;
+            state = table.product[state * H4_ROOT_COUNT + root_idx] as usize;
         }
-        if step % 8 != 0 {
-            s3 = s3.normalized();
-        }
-        s3.hopf_fiber_project()
+        roots[state].hopf_fiber_project()
     }
 
     /// Compute cumulative fixed-point S2 Hopf projection over context tokens.
