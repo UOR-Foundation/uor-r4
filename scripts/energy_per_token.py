@@ -52,11 +52,32 @@ import subprocess
 import sys
 import time
 
-# `Combined Power` is the Apple Silicon total; the others are fallbacks for OS versions that name
-# the field differently.
-POWER_RE = re.compile(
-    r"(?:Combined Power \(CPU \+ GPU \+ ANE\)|Package Power|CPU Power)\s*:\s*([0-9.]+)\s*mW"
-)
+# Power fields in PRIORITY order. One is chosen for the whole run and used consistently; see
+# `parse_power`. `Combined Power` is the Apple Silicon SoC total and is what an energy figure
+# should use. `CPU Power` is the CPU cluster alone and appears in the SAME sample, so a per-line
+# alternation averages two different quantities together -- which is what an earlier version did,
+# reporting an idle baseline of 1.4 mW that is not physically plausible for an M1.
+POWER_FIELDS = [
+    (
+        "Combined Power (CPU + GPU + ANE)",
+        re.compile(r"Combined Power \(CPU \+ GPU \+ ANE\)\s*:\s*([0-9.]+)\s*mW"),
+    ),
+    ("Package Power", re.compile(r"Package Power\s*:\s*([0-9.]+)\s*mW")),
+    ("CPU Power", re.compile(r"CPU Power\s*:\s*([0-9.]+)\s*mW")),
+]
+
+
+def parse_power(text):
+    """Pick ONE power field for the whole output, in priority order.
+
+    Returns (readings_mW, field_name). Mixing fields corrupts the mean because several power
+    fields appear in every sample, so the field used is reported to the user.
+    """
+    for name, pat in POWER_FIELDS:
+        vals = [float(m) for m in pat.findall(text)]
+        if vals:
+            return vals, name
+    return [], None
 
 # Token-count patterns read from the command's own output.
 TOKEN_PATTERNS = [
@@ -77,19 +98,26 @@ def split_on_double_dash(argv):
 
 
 def run_powermetrics(seconds, interval_ms):
-    """Sample for `seconds` and return (readings_mW, raw_text, stderr)."""
+    """Sample for `seconds` and return (readings_mW, field_name, raw_text, stderr)."""
     count = max(1, math.ceil(seconds * 1000 / interval_ms))
     cmd = ["powermetrics", "--samplers", "cpu_power", "-i", str(interval_ms), "-n", str(count)]
     out = subprocess.run(cmd, capture_output=True, text=True)
-    readings = [float(m) for m in POWER_RE.findall(out.stdout)]
-    return readings, out.stdout, out.stderr
+    readings, field = parse_power(out.stdout)
+    return readings, field, out.stdout, out.stderr
 
 
 def detect_tokens(text):
+    """Total tokens generated, summed across every match of the FIRST pattern that matches.
+
+    Summing matters for a looped command: five runs of the native CLI print five telemetry lines,
+    and returning only the first would under-count the denominator by 5x. Summing within one
+    pattern (rather than across patterns) avoids double-counting when a tool reports the same
+    quantity twice.
+    """
     for pat in TOKEN_PATTERNS:
-        m = pat.search(text)
-        if m:
-            return int(m.group(1))
+        hits = [int(m) for m in pat.findall(text)]
+        if hits:
+            return sum(hits)
     return None
 
 
@@ -124,16 +152,18 @@ def main():
     print()
 
     print(f"[1/2] idle baseline, {args.idle_seconds:.0f}s, no workload ...")
-    idle, _, idle_err = run_powermetrics(args.idle_seconds, args.interval_ms)
+    idle, idle_field, idle_raw, idle_err = run_powermetrics(args.idle_seconds, args.interval_ms)
     if not idle:
         sys.exit(
             "powermetrics produced no readings for the idle phase, so the subtraction is "
             "impossible and any J/token would be wrong.\n"
             f"stderr: {idle_err.strip()[:500]}\n"
-            "If this says 'must be run as root', run the script under sudo."
+            "If this says 'must be run as root', run the script under sudo.\n"
+            "If it printed output but nothing matched, the field names differ on this OS; the "
+            "first 600 bytes of the raw sample follow:\n" + (idle_raw or "")[:600]
         )
     idle_mean = statistics.mean(idle)
-    print(f"      idle  n={len(idle):>3}  mean {idle_mean:8.1f} mW")
+    print(f"      idle  n={len(idle):>3}  mean {idle_mean:8.1f} mW   field: {idle_field}")
     print()
 
     print("[2/2] workload ...")
@@ -156,7 +186,7 @@ def main():
         sampler.kill()
         sampler_out, sampler_err = sampler.communicate()
 
-    work = [float(m) for m in POWER_RE.findall(sampler_out or "")]
+    work, work_field = parse_power(sampler_out or "")
     if not work:
         print(f"      workload exited {run.returncode} in {elapsed:.2f}s")
         sys.exit(
@@ -180,7 +210,7 @@ def main():
         )
 
     print(f"      workload exited {run.returncode} in {elapsed:.2f}s")
-    print(f"      work  n={len(work):>3}  mean {work_mean:8.1f} mW")
+    print(f"      work  n={len(work):>3}  mean {work_mean:8.1f} mW   field: {work_field}")
     print(f"      tokens detected: {tokens}{' (from --tokens)' if args.tokens else ' (auto)'}")
     print()
 
