@@ -571,7 +571,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             "--help" | "-h" => {
                 println!(
-                    "train_native_prose [OPTIONS]\n\
+                    "train-native-prose [OPTIONS]\n\
                      --corpus PATH       Path to u16 tokenized corpus (default: tinystories_train.u16)\n\
                      --data PATH         Path to raw text slice\n\
                      --tokenizer PATH    Path to tokenizer.json\n\

@@ -515,7 +515,7 @@ impl CorpusWriter {
             let byte_slice = unsafe {
                 std::slice::from_raw_parts(
                     tokens.as_ptr() as *const u8,
-                    tokens.len() * std::mem::size_of::<u16>(),
+                    std::mem::size_of_val(tokens),
                 )
             };
             self.writer.write_all(byte_slice)?;
@@ -534,10 +534,7 @@ impl CorpusWriter {
     pub fn finish(mut self) -> Result<u64, CorpusError> {
         self.writer.flush()?;
         let header = CorpusHeader::new(self.token_count, self.vocab_size);
-        let mut file = self
-            .writer
-            .into_inner()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let mut file = self.writer.into_inner().map_err(std::io::Error::other)?;
         file.seek(SeekFrom::Start(0))?;
         file.write_all(&header.to_bytes())?;
         file.flush()?;

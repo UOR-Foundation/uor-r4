@@ -1145,7 +1145,7 @@ impl Session {
                     }
                 }
                 for &k in &[2, 4, 8] {
-                    if self.length >= k + 1 {
+                    if self.length > k {
                         let w_curr = self.recent(1);
                         let w_skip = self.recent(k + 1);
                         if let Some(cands) =
@@ -1270,7 +1270,7 @@ impl Session {
                     }
                 }
                 for &k in &[2, 4, 8] {
-                    if self.length >= k + 1 {
+                    if self.length > k {
                         let w_curr = self.recent(1);
                         let w_skip = self.recent(k + 1);
                         if let Some(cands) =
