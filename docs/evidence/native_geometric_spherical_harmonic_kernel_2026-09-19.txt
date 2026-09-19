@@ -89,3 +89,54 @@ ordered words win at every difficulty; `relu`-after-read cost and resolution sca
    from.
 
 Charged 290,000 ms. Cumulative 143,433,565 / 147,200,000 ms.
+
+## 8. Learning the filter: attempted, negative, reverted — with the reason
+
+Owner direction was to learn the harmonic filter next (nine ternary weights; gradient
+`∂L/∂w[c] = Σ_{g∈c} Σ_j dnum_j·S[g][j]`, write path unchanged). It was implemented — a learnable
+ternary kernel with STE and Adam, the read becoming a group convolution with per-step state caching —
+and measured against the fixed exact filter under the protocol of §3:
+
+```
+fixed   kernel=[0, 1, 0, 0, 0, 0, 0, 0, 0] clean=0.42 corrupted=0.13
+learned kernel=[1, 1, 1, 0, 0, 0, 0, 0, 0] clean=0.14 corrupted=0.14
+```
+
+**Trained on clean addresses only, the filter learns to spread over neighbouring classes and loses
+clean accuracy (0.42 → 0.14) without gaining corrupted accuracy (0.13 → 0.14).** The reason is
+principled and is the useful result: **the training objective contains no address corruption, so
+robustness to it cannot be learned from that objective.** The optimiser is doing exactly what it was
+asked — it adds filter mass only while it helps the clean loss, and spreading never does. The
+corruption benefit measured in §3 (0.13 → 0.23 for a hand-set filter) is real, but a spread filter must
+be *chosen*, or trained with corrupted addresses present in the objective.
+
+The change also regressed five `geometric_attention` tests in the trainer's read path. Since the
+experiment is a clear negative, the implementation was **reverted** and the file is back at its
+verified 18/18 state (`git checkout` of the file at `17b3eaa2`). **The diagnosis is retained; the
+regressing change is not.** Recovery is one line away for the next attempt, which should change the
+*objective*, not the optimiser.
+
+## 9. Closest thing to the owner's wider concept, and what is still missing
+
+The owner's framing is harmonic compute with Lie-group packaging, storage and backpropagation carried
+in a superposition over that basis. The honest mapping of what now exists:
+
+* **Superposition storage — present.** The state is a superposition over the group: `S = Σ_g c_g · δ_g`
+  with `c_g` an integer vector, and the read is a convolution of that superposition with a filter. That
+  is a classical superposition over a Lie-group basis, not a quantum one, and should be described that
+  way.
+* **Backpropagation in the basis — present.** The suffix-sum gradient is exactly the adjoint of the
+  convolution: `∂L/∂c_g` accumulates through the filter, and the write gradient is the transpose of the
+  read. Learning in the group-algebra basis is implemented, not proposed.
+* **Lie-group packaging — partly present.** Composition is exact via the verified 2I table, and the
+  ordered word packs context into a group element. What is missing is a *learned* packaging: the
+  element assignment is still a fixed function of the token id.
+* **Harmonic compute — partly present.** The filter is a class function, i.e. a band-limited
+  (conjugation-invariant) kernel, and it is the maximally compact one. What is missing is a
+  *non-class* filter (a full group-algebra element, not merely a class function) and multiple bands.
+
+Next honest steps, in order: (1) put corrupted addresses in the training objective and re-test the
+learned filter — the diagnosis predicts this is what makes it work; (2) a general (non-class) filter;
+(3) learned packaging of the element assignment; (4) then BPE-4096 and real text.
+
+Charged 235,000 ms. Cumulative 143,668,565 / 147,200,000 ms.

@@ -22,6 +22,19 @@ A class-function kernel **recovers a corrupted query, 0.13 → 0.23 (≈1.8×)**
 
 **Next action.** (1) **Learn the kernel** — nine ternary weights, gradient available in closed form (`∂L/∂w[c] = Σ_{g∈c} Σ_j dnum_j·S[g][j]`), write path unchanged; prediction: a learned kernel keeps most clean accuracy while retaining the corruption benefit, and if it cannot then the trade-off is structural and should be recorded as such. (2) Then **BPE-4096 and a real instruction corpus**, where the next honest signal has to come from.
 
+**Attempted and negative: learning the filter does not work from clean data, and the reason is the objective.** Implemented the learnable ternary kernel (STE + Adam, read as a group convolution, per-step state caching) and measured it against the fixed exact filter:
+
+```
+fixed   kernel=[0,1,0,0,0,0,0,0,0] clean=0.42 corrupted=0.13
+learned kernel=[1,1,1,0,0,0,0,0,0] clean=0.14 corrupted=0.14
+```
+
+Trained on clean addresses only, the filter **spreads over neighbouring classes and loses clean accuracy without gaining corrupted accuracy** — because the training objective contains no address corruption, so robustness to it is not learnable from that objective. The spread filter's benefit is real (0.13 → 0.23 hand-set, §3) but must be *chosen* or trained with corruption in the objective. The change also regressed five tests in the trainer's read path, so it was **reverted**; the file is back at its verified 18/18 state and the diagnosis is retained rather than the regressing code.
+
+**Where the owner's wider concept already lands, and what is missing.** *Superposition storage* over the group — `S = Σ_g c_g·δ_g` with the read a convolution against a filter — is **present** (classical superposition over a Lie-group basis, not quantum). *Backpropagation in that basis* is **present**: the suffix-sum gradient is exactly the adjoint of the convolution. *Lie-group packaging* is **partly present** (exact composition via the verified table; the ordered word packs context into a group element) but the element assignment is still a fixed function of the token id. *Harmonic compute* is **partly present** (a band-limited class-function filter) but a general non-class filter and multiple bands are missing.
+
+**Next honest steps, in order:** (1) put corrupted addresses in the training objective and re-test the learned filter — the diagnosis predicts that is what makes it work; (2) a general (non-class) group-algebra filter; (3) learned packaging of the element assignment; (4) then BPE-4096 and real text.
+
 **Receipt:** [`native_geometric_spherical_harmonic_kernel_2026-09-19.txt`](../evidence/native_geometric_spherical_harmonic_kernel_2026-09-19.txt).
 
 ## Ordered-word addressing recovers the collapse; context copy reaches 100% — September 19, 2026
