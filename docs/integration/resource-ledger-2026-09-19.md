@@ -106,6 +106,28 @@ not model time, and are not charged here (consistent with the earlier entries on
 `target/release/train-lowbit-chat` (~ recreated from source). The **128 MiB model-storage stop
 margin is untouched**; no deletion, no cleanup and no paid or external compute.
 
+## Charges recorded — dense-recurrence falsification and the content-addressed core (2026-09-19, later)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | `explore_state_growth` + `explore_recall_capacity` (release) | 488,380 ms | **Measured.** 488.38 s reported by the test harness. |
+| 2026-09-19 | `explore_induction_capacity`, width/decay/tie sweep (release) | 206,720 ms | **Measured.** 206.72 s. |
+| 2026-09-19 | `explore_induction_capacity`, learning-rate/width sweep (release) | 1,203,500 ms | **Measured.** 1,203.50 s. |
+| 2026-09-19 | `explore_induction_capacity`, delay-horizon sweep (release) | 76,690 ms | **Measured.** 76.69 s. |
+| 2026-09-19 | Focused test runs (`lowbit_core`, `lowbit_attention`, debug) | 54,000 ms | **Measured.** 19.17 + 18.98 + 9.02 + 7.00 s. |
+
+**New cumulative: 142,358,565 ms.** Remaining: 147,200,000 − 142,358,565 = **4,841,435 ms (~80.7 min)**.
+
+**No extension was used** and the limit is unchanged at 147,200,000 ms. Builds, `cargo fmt` and
+`cargo test` compilation remain engineering, not model time, and are not charged (consistent with the
+earlier entries on this page). The four exploratory sweeps above are the only charges, and each is the
+harness-reported wall time of the run itself.
+
+**Storage.** New retained storage: none of substance. New tracked files are text
+(`lowbit_attention.rs`, the design doc, the receipt). No model artifact was created; the
+`lowbit_chat.bin` negative candidate from the earlier entry is unchanged. The **128 MiB model-storage
+stop margin is untouched**; no deletion, no cleanup and no paid or external compute.
+
 ## Not done
 
 No destructive deletion, no cleanup of prior artifacts, no paid compute. The 2026-09-18

@@ -1,5 +1,29 @@
 # Current native geometric AI work
 
+## Dense recurrence structurally falsified; content-addressed multiplier-free core proposed and measured — September 19, 2026
+
+**THE DENSE LOW-BIT RECURRENCE FAILS FOR TWO STRUCTURAL REASONS, BOTH MEASURED; A CONTENT-ADDRESSED REPLACEMENT RETRIEVES WHERE IT CANNOT.**
+
+**(1) Magnitude.** `h_t = relu(W_x + W_h·h)`, `W_h` ternary, has spectral norm ≈ `2√(p·dim)` (Bai–Yin), so the state expands ≈`√dim/2` per step. Measured peak `|h|`: at `dim` 32/64/128 it reaches ~2.14e9 — **i32 saturation — between 16 and 32 steps**. That is exactly the previously observed ~24-token workable window and the collapse at 40 tokens (held-out loss 18.47, worse than the uniform `ln 259 = 5.56`).
+
+**(2) Burial.** Every past input is summed into the same channels, so a remembered item is buried under `T·|x|` of distractors. Delayed recall: `dim` 64/128/256 reach delay 2, `dim ≥ 128` reaches delay 4, and **delay 8 is 0.00 at every width** (steps 800 and 3000 identical). Eight times the width buys no extra remembered item.
+
+**(3) The obvious repair is falsified.** A right shift on the recurrent term (`recurrent_shift`) stabilises the magnitude and destroys the memory in the same operation: delay-1 recall 1.00 (k=0) → 0.16 (k=2) → 0.00 (k=3). Structural reason: a ternary matrix cannot be near-orthogonal, so the only shift that stabilises the recursion also erases what is stored. **Stability and memory are not jointly available from dense ternary mixing with a scalar decay.** The mechanism is retained as opt-in (`recurrent_shift = 0` is the original behaviour) rather than deleted.
+
+**(4) Replacement — content-addressed linear attention, multiplier-free.** New `learner/lowbit_attention.rs`: `S_t = (S_{t-1} >> decay) + k⊗v`, read as `relu(q·S)`, then the ternary output map. `k` and `q` are unscaled ternary, so the outer product and the matched-filter read are **conditional adds/subtracts with no multiplier**, and the integer path is verified exactly equal to an `f64` reference at decay 0/2/4. `decay = 0` grows the state **linearly** (peak `|S| < 2^20` over 512 steps). Grounded in linear attention / RWKV (2305.13048) / HGRN2 (2404.07904) / MatMul-free LM (2406.02528).
+
+**Measured.** Induction (`[x,y,filler*delay,x] → y`), held out: **delay 16 = 1.00** at `dk=dv` 64 (lr 0.05) and at 128/256/512 (lr 0.005) — against the dense core's **0.00 at delay 8**. The read is a matched filter, so capacity buys horizon (`SNR ≈ √(dk/N)`).
+
+**The negative that matters more: training is fragile.** `dk=128, lr=0.05` collapses to the uniform predictor (loss exactly `ln 8`); `dk=256, lr=0.02` gives 0.38; `dk=64` delay 32+ gives 0.00 where delay 16 gives 1.00. An architecture that finds its solution only in part of the regime map cannot be scaled, so this is the top open item, not a footnote.
+
+**Design and scaling.** New [`geometric-core-architecture-2026-09-19.md`](geometric-core-architecture-2026-09-19.md) records the reasoning, the mapping of prime/zeta/H4/E8/`Z[φ]` mechanisms onto concrete slots (addressed select: **used**; phi key codebook, icosian quantiser, per-channel zeta decay schedule, R4/S4 transport: **proposed, unmeasured**), and a scaling projection with its assumptions explicit. Its uncomfortable conclusion: a coherent chat model of this family needs ~`10^9` parameters and `10^10`–`10^11` tokens; at this code's measured rate on one M1 that is `10^5`–`10^6` hours of BPTT. **The serving premise survives; the implicit premise that chat-scale training also happens on this laptop does not.** Three honest options are put to the owner in §6: narrow the target to a domain-scoped local model, separate training compute from serving, or pursue a sample-efficiency result.
+
+**No capability claim.** Still no chat capability; the instruction run remains copy-only (response-only 0/470) and the new core is measured on synthetic induction, not language. No serving-multiplier claim is made for the new module: the construction is multiplier-free and the integer path is verified, but `scripts/serving_multiplier_check.py` was not run against it. Energy per token remains UNAVAILABLE.
+
+**Next action.** Design doc §7.1–7.2: add a **power-of-two readout normalisation** (shift the read by the leading bit of the accumulated key mass — bit scan plus shift, no divide), then re-measure the regime map and the induction horizon. Do not scale `dk`, add layers or change the tokenizer until the regime map is flat; adding parameters to an unstable optimiser produces larger failures, not capability.
+
+**Receipt:** [`native_geometric_lowbit_attention_2026-09-19.txt`](../evidence/native_geometric_lowbit_attention_2026-09-19.txt).
+
 ## Low-bit core learns: backward pass, STE, Adam, and the first trained instruction run — September 19, 2026
 
 **BACKWARD PASS DELIVERED; THE CORE LEARNS ON SHORT SEQUENCES; THE RECURRENCE IS THE BLOCKER.**
