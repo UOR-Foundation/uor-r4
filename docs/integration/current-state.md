@@ -1,5 +1,37 @@
 # Current native geometric AI work
 
+## Stage 1 falsification sweep, attention repair, and contract decision — September 19, 2026
+
+**D0 RECORDED; ATTENTION INVERTED-FIXED; PER-MECHANISM ABLATION TABLE PRODUCED.**
+
+Decision [`D0-a`](DECISIONS.md) records the owner's 2026-09-19 ruling: the serving path executes no multiplier and no floating point, and no dense contraction that touches every parameter per token; offline training is unrestricted; the distinguishing test is **per-token parameter sparsity**, not the opcode. Invariants I1–I5 recorded with it. Two shipped serving operations do not satisfy D0-a and remain to be repaired or removed: the JEPA projection in `learner/jepa_trainer.rs::predict_jepa_step_q30` (literal `i64` multiplies) and the `f64` softmax sampler in `native_capability_api.rs` (reachable when `temperature > 0.001`). Root `README.md`/`AGENTS.md` are narrower than D0-a and conflict with the shipped lane tables; that stable-goal wording change still requires owner-directed protected delivery.
+
+**Attention repair.** `vsa/attention.rs` bound *independent* random roles into query and key, so two occurrences of the same token gave `d_H = d_H(r_query, r_key) ≈ 2048`, not strictly below the 2048 threshold, and received **zero** weight while mismatching pairs fluctuating below the threshold received weight. The heads attended to noise and skipped their matches. Fixed by sharing one `r_role` between query and key (XOR is self-inverse, so identical tokens now give `d_H = 0`). The previous `test_head_1_induction_circuit` could not detect this and `test_multi_head_roles_orthogonality` asserted the broken configuration; both are replaced by a controlled multi-seed induction test (predecessor-order control plus a no-repeat arm), a value-role orthogonality test and a zero-distance regression guard. `native_geometric::vsa` 23/23 pass.
+
+**Per-mechanism ablation table** (`ablate-prose`, Card P7, 2,048 teacher-forced positions, discrete scorer over full 4,096-vocabulary normalisation, paired bootstrap 95% CI; baseline **1.8055** BPB). Full record: [receipt](../evidence/native_geometric_p7_ablation_2026-09-19.txt), [result](cards/P7-falsification-sweep-RESULT.md), [EVIDENCE](EVIDENCE.md).
+
+| Mechanism | ΔBPB when ablated | Verdict | Artifact bytes |
+|---|---:|---|---:|
+| `jepa` | +0.3743 | CONTRIBUTES | 64 |
+| `s2_readout` | +0.3377 | CONTRIBUTES | 40,960 |
+| `engram` | +0.2228 | CONTRIBUTES | 495,632 |
+| `bias` | +0.1482 | CONTRIBUTES | 16,384 |
+| `lattice_fine` | +0.0955 | CONTRIBUTES | 57,600 |
+| `lattice` (both tiers) | +0.0927 | CONTRIBUTES | 1,851,400 |
+| `vsa` | −0.0007 | **INERT/HARMFUL** | 168,022 |
+| `lattice_coarse` | −0.0066 | **HARMFUL** | 1,728,000 |
+| `lanes` | −0.0071 | **HARMFUL** | 115,232 |
+
+The VSA layer is confirmed **inert** as the source analysis predicted: the four heads bind a fixed random token codebook (`vsa/codebook.rs`) that is disconnected from the learned 120-root assignment (`jepa_trainer.rs:1119`), so the only recoverable signal is token identity. The **coarse lattice tier is net-negative and is 64.2 % of the artifact**; removing it would cut bytes/token by roughly 64 % while slightly improving BPB. The learned lane tables are also net-negative. Geometry-carried state prediction is the most valuable mechanism per byte (62 bytes for the largest delta).
+
+**Metric/serving divergence quantified.** The training-time continuous figure is 1.2372 BPB; the discrete artifact that actually serves scores **1.8055** BPB under full-vocabulary normalisation — a 0.57 BPB gap between the number reported and the model that ships. The two use different scorer functions (`JepaTrainer::evaluate_bpb_with_engram` versus the additive discrete scorer) and must not be quoted interchangeably.
+
+**Limitations.** 2,048 positions from a single already-open development slice, not a fresh draw; ablated terms are not orthogonal (zeroing the JEPA weights also changes the fiber the S2 readout consumes, so deltas do not sum); full-vocabulary normalisation rather than the 64-candidate served shortlist; debug build. The 9,984-case regression replay was **not** re-executed in this change, and the `induction` ablation plus the Card P7 `E1.4` recall-attribution measurement remain **NOT_RUN**.
+
+**New artifacts.** `crates/uor-r4-core/src/bin/ablate-prose.rs` (per-mechanism ablation BPB sweep), `crates/uor-r4-core/src/bin/attribute-recall.rs` (verbatim-recall attribution against the corpus; smoke-tested, full sweep not run), [`DECISIONS.md`](DECISIONS.md), [`native-core-transition-plan.md`](native-core-transition-plan.md), [`cards/P7-falsification-sweep.md`](cards/P7-falsification-sweep.md) (unsigned) and its result.
+
+**Next action.** Confirm the three harmful verdicts on a wider position count and a second slice, then remove the `vsa` score term and the coarse lattice tier from the critical path before adding capacity. Repair or remove the two D0-a violators. Reconcile the cumulative ledger: the 2026-09-18 full-corpus run is still not recorded in `.uor-models/native-joint-learning-2026-09-04/model-time.json`.
+
 ## Full-corpus 555M-token native geometric training, zero-allocation serving, and Card P3 disposition — September 18, 2026
 
 **FULL_CORPUS_555M_TRAINING_COMPLETE; CARD_P3_RETIRED_PER_PRE_REGISTERED_KILL_CRITERIA.** The native geometric language model completed full-corpus training over the 555,385,505-token corpus (`tinystories_train.u16`, 1,059.31 MB pre-tokenized binary token stream), processing 546,644,574 sequence tokens across 33,895 batches ($256 \times 64$) with Adam optimization in 3,982.42 seconds (~66.4 minutes) at a sustained 137,264.5 tokens/sec across all 8 M1 cores (4 Firestorm + 4 Icestorm via Rayon). Initial held-out bits-per-byte (BPB) on 64,000 held-out tokens (255,022 UTF-8 bytes) was 2.0356 BPB; converged final geometric BPB reached **1.2372 bits/byte** ($\Delta = -0.7985\text{ BPB}$).
