@@ -50,7 +50,25 @@ remaining 9.5 minutes cannot fund either.
 **Updated limit: 147,200,000 ms.** Remaining after the extension:
 147,200,000 − 139,427,275 = **7,772,725 ms (~129.5 min)**.
 
-## Storage
+## Projection recorded before use — release build for the binary-level multiplier check (2026-09-19)
+
+**Reason.** Three source-level multiplier censuses have disagreed (82 raw grep, 43 scanner
+offences, 216 token-scan gated) about the same bytes. Settling the count requires measuring what
+the CPU executes, which needs a `--release` build with optimisation applied and a disassembly of
+the serving symbols.
+
+| Item | Projection |
+|---|---|
+| Wall time | <= 12 min incremental (the release tree is warm: `target/release` is 3.2 GB, last built 2026-09-18) |
+| Peak RAM | <= 8 GB during LTO/codegen of `uor-r4-core` and `uor-r4-api` |
+| New storage | <= 300 MB incremental in `target/release` (existing 3.2 GB already counted) |
+| Temporary storage | none beyond the cargo target directory |
+| Stop margin | free space is 27 GB; the **128 MiB model-storage stop margin is untouched** because this writes only build output, no model artifact |
+| Model time | compilation is charged to the ledger as build work; ~600,000 ms projected |
+| Retries | one rebuild if the disassembly tooling fails, charged at the measured cost |
+
+The disassembly itself is read-only over an existing binary and adds no storage.
+
 
 No model artifact was created or modified by the 2026-09-19 work. New retained storage is
 limited to two debug binaries (`target/debug/ablate-prose`, `target/debug/attribute-recall`,
