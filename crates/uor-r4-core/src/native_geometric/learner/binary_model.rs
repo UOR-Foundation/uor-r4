@@ -5,7 +5,7 @@
 //! Cold-start initialization time < 50 microseconds.
 //! Bit-exact parity with JSON reference model.
 
-use super::embedding::{canonical_h4_roots_q30, H4_ROOT_COUNT};
+use super::embedding::canonical_h4_roots_q30;
 use super::jepa_trainer::ExportedGeometricModel;
 use super::transition_table::DiscreteServingTable;
 use crate::native_geometric::engram::{
@@ -1342,24 +1342,11 @@ impl MmapGeometricModel {
         if token_to_root.is_empty() || context.is_empty() {
             return UnitS3Q30::IDENTITY.hopf_fiber_project();
         }
-        let roots = canonical_h4_roots_q30();
-        let mut s3 = UnitS3Q30::IDENTITY;
-        let start = context.len().saturating_sub(64);
-        let root_len = token_to_root.len();
-        let mut step = 0;
-        for &token in &context[start..] {
-            let root_idx = token_to_root[token.min(root_len - 1)] as usize;
-            let q_root_q30 = roots[root_idx % H4_ROOT_COUNT];
-            s3 = s3.mul_q30(&q_root_q30);
-            step += 1;
-            if step % 8 == 0 {
-                s3 = s3.normalized();
-            }
-        }
-        if step % 8 != 0 {
-            s3 = s3.normalized();
-        }
-        s3.hopf_fiber_project()
+        let state = crate::native_geometric::learner::group_table::compose_context_roots(
+            token_to_root,
+            context,
+        );
+        canonical_h4_roots_q30()[state].hopf_fiber_project()
     }
 
     /// O(1) query-key scoring across all lanes with zero runtime matrix multiplications.

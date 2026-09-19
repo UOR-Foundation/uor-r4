@@ -574,6 +574,104 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
     }
 }
 
+/// Ratcheting multiplier census over the serving path.
+///
+/// # Why this exists
+///
+/// The multiplier-free invariant was enforced against a *named subset* of the kernel, so
+/// `hopf_metric.rs` was float-checked but never arithmetic-scanned — and its 82 raw multiplies,
+/// on the serving hot path, were invisible. A guard that covers a list cannot report what it
+/// does not cover. This test makes the count explicit per module and ratcheting: a module may not
+/// ADD multiplies, and each ceiling carries its target.
+///
+/// Ceilings may only be LOWERED as multiplies are removed. Raising one weakens the D0-a serving
+/// contract and requires an owner decision.
+#[test]
+fn serving_path_multiplier_census_is_ratcheting() {
+    use uor_r4_core::transformerless::source_scan::scan_for_forbidden_arith;
+
+    let hopf_src = include_str!("../src/native_geometric/hopf_metric.rs");
+    let begin = hopf_src
+        .find("// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN")
+        .unwrap_or(0);
+    let end = hopf_src
+        .find("// NATIVE_GEOMETRIC_INTEGER_KERNEL_END")
+        .unwrap_or(hopf_src.len());
+    let kernel = &hopf_src[begin..end];
+
+    // (label, source, ceiling, target)
+    //
+    // Ceilings are the counts measured on 2026-09-19 and are an UPPER BOUND on serving
+    // multiplies, not an exact serving count: a per-file scan also sees that file's `#[cfg(test)]`
+    // modules and its training-side tables (for example `lattice_table.rs`'s continuous
+    // `f32`/`f64` lattice and `hopf_metric.rs`'s float half). What the ratchet guarantees is that
+    // no module may ADD a multiplying operator, so the number can only fall.
+    let modules: [(&str, &str, usize, &str); 7] = [
+        ("hopf_metric.rs integer kernel", kernel, 43, "zero"),
+        (
+            "engram.rs",
+            include_str!("../src/native_geometric/engram.rs"),
+            40,
+            "zero",
+        ),
+        (
+            "lattice_table.rs",
+            include_str!("../src/native_geometric/lattice_table.rs"),
+            98,
+            "zero",
+        ),
+        (
+            "vsa/hypervector.rs",
+            include_str!("../src/native_geometric/vsa/hypervector.rs"),
+            18,
+            "zero",
+        ),
+        (
+            "vsa/attention.rs",
+            include_str!("../src/native_geometric/vsa/attention.rs"),
+            0,
+            "zero",
+        ),
+        (
+            "vsa/hierarchical.rs",
+            include_str!("../src/native_geometric/vsa/hierarchical.rs"),
+            6,
+            "zero",
+        ),
+        (
+            "learner/binary_model.rs",
+            include_str!("../src/native_geometric/learner/binary_model.rs"),
+            78,
+            "zero",
+        ),
+    ];
+
+    let mut counts: Vec<(&str, usize, usize)> = Vec::with_capacity(modules.len());
+    for (label, src, ceiling, _target) in modules {
+        let n = scan_for_forbidden_arith(src).offenders.len();
+        counts.push((label, n, ceiling));
+    }
+
+    // Report every count before asserting, so one failure still shows the whole picture.
+    for (label, n, ceiling) in &counts {
+        println!("multiplier census: {label:<32} {n:>5}  ceiling {ceiling}");
+    }
+    let mut breaches = Vec::new();
+    for (label, n, ceiling) in &counts {
+        if n > ceiling {
+            breaches.push(format!(
+                "{label}: {n} multiplying operators, ceiling {ceiling}"
+            ));
+        }
+    }
+    assert!(
+        breaches.is_empty(),
+        "serving-path multiplier ceilings exceeded (a ceiling may only be LOWERED as multiplies \
+         are removed; raising one weakens D0-a and needs an owner decision):\n{}",
+        breaches.join("\n")
+    );
+}
+
 #[test]
 fn native_learned_routing_selection_and_transformation_are_allocation_free() {
     routing_allocation(false);
@@ -4879,6 +4977,7 @@ fn vsa_context_64_and_s3_normalization_have_zero_allocations() {
         discrete_jepa_fiber_bias: [0; 2],
         vsa_seed: 0x1234_5678,
         vsa_scale_q15: 500,
+        vsa_code_mode: 0,
         hierarchical_codebook: None,
         engram_table: None,
         hierarchical_lattice: None,

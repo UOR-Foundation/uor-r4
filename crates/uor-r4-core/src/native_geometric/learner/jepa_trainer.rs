@@ -672,16 +672,8 @@ impl ExportedGeometricModel {
         if self.token_to_root.is_empty() || context.is_empty() {
             return UnitS3Q30::IDENTITY.hopf_fiber_project();
         }
-        let roots = super::embedding::canonical_h4_roots_q30();
-        let table = super::group_table::group_table();
-        let start = context.len().saturating_sub(64);
-        let root_len = self.token_to_root.len();
-        let mut state = table.identity as usize;
-        for &token in &context[start..] {
-            let root_idx = self.token_to_root[token.min(root_len - 1)] as usize % H4_ROOT_COUNT;
-            state = table.product[state * H4_ROOT_COUNT + root_idx] as usize;
-        }
-        roots[state].hopf_fiber_project()
+        let state = super::group_table::compose_context_roots(&self.token_to_root, context);
+        super::embedding::canonical_h4_roots_q30()[state].hopf_fiber_project()
     }
 
     /// Compute cumulative fixed-point S2 Hopf projection over context tokens.
@@ -922,31 +914,9 @@ impl ExportedGeometricModel {
         if length == 0 || ring.is_empty() || self.token_to_root.is_empty() {
             return UnitS3Q30::IDENTITY.hopf_fiber_project();
         }
-        let roots = super::embedding::canonical_h4_roots_q30();
-        let mut s3 = UnitS3Q30::IDENTITY;
-        let window = length.min(64).min(ring.len());
-        let root_len = self.token_to_root.len();
-        let cursor = cursor % ring.len();
-        let mut step = 0;
-        for lag in (1..=window).rev() {
-            let index = if cursor >= lag {
-                cursor - lag
-            } else {
-                ring.len() - (lag - cursor)
-            };
-            let token = ring[index] as usize;
-            let root_idx = self.token_to_root[token.min(root_len - 1)] as usize;
-            let q_root_q30 = roots[root_idx % H4_ROOT_COUNT];
-            s3 = s3.mul_q30(&q_root_q30);
-            step += 1;
-            if step % 8 == 0 {
-                s3 = s3.normalized();
-            }
-        }
-        if step % 8 != 0 {
-            s3 = s3.normalized();
-        }
-        s3.hopf_fiber_project()
+        let state =
+            super::group_table::compose_ring_roots(&self.token_to_root, ring, cursor, length);
+        super::embedding::canonical_h4_roots_q30()[state].hopf_fiber_project()
     }
 
     /// Compute VSA context hypervector directly from a ring buffer without heap allocations.

@@ -61,6 +61,59 @@ pub fn group_table() -> &'static GroupTable {
     TABLE.get_or_init(GroupTable::build)
 }
 
+/// Exact `2I` composition over a chronological context window.
+///
+/// Returns the index of the accumulated group element. Only the most recent 64 tokens take
+/// part, matching the serving context bound. This is the single implementation of the
+/// accumulation that `ExportedGeometricModel::context_hopf_fiber_q30`,
+/// `MmapGeometricModel::context_hopf_fiber_q30` and `context_fiber_from_ring` all call.
+///
+/// It existed as three independent copies of a 64-step `mul_q30` loop, which is why converting
+/// one of them did not remove the multiplies from serving. Sharing it is the point.
+pub fn compose_context_roots(token_to_root: &[u8], context: &[usize]) -> usize {
+    let table = group_table();
+    let mut state = table.identity as usize;
+    if token_to_root.is_empty() || context.is_empty() {
+        return state;
+    }
+    let start = context.len().saturating_sub(64);
+    let root_len = token_to_root.len();
+    for &token in &context[start..] {
+        let root = token_to_root[token.min(root_len - 1)] as usize % GROUP_ORDER;
+        state = table.product[state * GROUP_ORDER + root] as usize;
+    }
+    state
+}
+
+/// As [`compose_context_roots`], for a ring buffer: accumulates the most recent `length`
+/// entries in chronological order, oldest first.
+pub fn compose_ring_roots(
+    token_to_root: &[u8],
+    ring: &[u32],
+    cursor: usize,
+    length: usize,
+) -> usize {
+    let table = group_table();
+    let mut state = table.identity as usize;
+    if token_to_root.is_empty() || ring.is_empty() {
+        return state;
+    }
+    let window = length.min(64).min(ring.len());
+    let root_len = token_to_root.len();
+    let cursor = cursor % ring.len();
+    for lag in (1..=window).rev() {
+        let index = if cursor >= lag {
+            cursor - lag
+        } else {
+            ring.len() - (lag - cursor)
+        };
+        let token = ring[index] as usize;
+        let root = token_to_root[token.min(root_len - 1)] as usize % GROUP_ORDER;
+        state = table.product[state * GROUP_ORDER + root] as usize;
+    }
+    state
+}
+
 fn normalize(v: [f64; 4]) -> [f64; 4] {
     let n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]).sqrt();
     if n == 0.0 {
@@ -223,6 +276,108 @@ mod tests {
             t.max_closure_residual < 1e-6,
             "closure residual {:.3e} is too large: the product classification would be ambiguous",
             t.max_closure_residual
+        );
+    }
+
+    /// The table must reproduce what the removed Q1.30 accumulation produced. The old algorithm is
+    /// kept here as a test oracle so the replacement is justified by measurement rather than
+    /// asserted; it is test-only and is not on any serving path.
+    #[test]
+    fn table_agrees_with_the_quantized_accumulation_it_replaced() {
+        use crate::native_geometric::hopf_metric::UnitS3Q30;
+
+        fn q30_reference(token_to_root: &[u8], context: &[usize]) -> usize {
+            let roots = canonical_h4_roots_q30();
+            let exact: Vec<[f64; 4]> = roots
+                .iter()
+                .map(|q| normalize([q.0[0] as f64, q.0[1] as f64, q.0[2] as f64, q.0[3] as f64]))
+                .collect();
+            let mut s3 = UnitS3Q30::IDENTITY;
+            let start = context.len().saturating_sub(64);
+            let root_len = token_to_root.len();
+            let mut step = 0usize;
+            for &token in &context[start..] {
+                let idx = token_to_root[token.min(root_len - 1)] as usize % GROUP_ORDER;
+                s3 = s3.mul_q30(&roots[idx]);
+                step += 1;
+                if step % 8 == 0 {
+                    s3 = s3.normalized();
+                }
+            }
+            if step % 8 != 0 {
+                s3 = s3.normalized();
+            }
+            let p = normalize([
+                s3.0[0] as f64,
+                s3.0[1] as f64,
+                s3.0[2] as f64,
+                s3.0[3] as f64,
+            ]);
+            let mut best = 0usize;
+            let mut best_dot = -2.0f64;
+            for (i, e) in exact.iter().enumerate() {
+                let d = dot(p, *e);
+                if d > best_dot {
+                    best_dot = d;
+                    best = i;
+                }
+            }
+            best
+        }
+
+        // Deterministic pseudo-random token-to-root assignment and contexts.
+        let vocab = 4096usize;
+        let mut state = 0x1234_5678_9abc_def0u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let token_to_root: Vec<u8> = (0..vocab)
+            .map(|_| (next() % GROUP_ORDER as u64) as u8)
+            .collect();
+        let mut agree = 0usize;
+        let mut total = 0usize;
+        for len in [1usize, 2, 5, 17, 64] {
+            for _ in 0..200 {
+                let ctx: Vec<usize> = (0..len).map(|_| (next() as usize) % vocab).collect();
+                let table_state = compose_context_roots(&token_to_root, &ctx);
+                let quantized = q30_reference(&token_to_root, &ctx);
+                total += 1;
+                if table_state == quantized {
+                    agree += 1;
+                }
+            }
+        }
+        assert_eq!(total, 1000);
+        assert!(
+            agree * 100 >= total * 99,
+            "the exact table must reproduce the quantized accumulation it replaced: {agree}/{total}"
+        );
+    }
+
+    /// The shared helpers must be the single composition path: a one-token context is that
+    /// token's root, an empty context is the identity, and a ring agrees with the equivalent
+    /// slice.
+    #[test]
+    fn shared_composition_helpers_are_consistent() {
+        let token_to_root: Vec<u8> = (0..256u32)
+            .map(|t| (t % GROUP_ORDER as u32) as u8)
+            .collect();
+        assert_eq!(
+            compose_context_roots(&token_to_root, &[]),
+            group_table().identity as usize
+        );
+        for t in [0usize, 7, 100, 255] {
+            assert_eq!(compose_context_roots(&token_to_root, &[t]), t % GROUP_ORDER);
+        }
+        // A ring holding the same tokens in order must compose to the same element.
+        let ctx = [3usize, 41, 200, 17, 88];
+        let ring: Vec<u32> = ctx.iter().map(|&t| t as u32).collect();
+        assert_eq!(
+            compose_ring_roots(&token_to_root, &ring, ring.len() % ring.len(), ctx.len()),
+            compose_context_roots(&token_to_root, &ctx)
         );
     }
 }
