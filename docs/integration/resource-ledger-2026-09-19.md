@@ -154,6 +154,18 @@ engineering, not model time. **Storage:** no model artifact was created; new tra
 The **128 MiB model-storage stop margin is untouched**; no deletion, no cleanup, no paid or external
 compute.
 
+## Charges recorded — geometric memory: read activation and resolution (2026-09-19, later still)
+
+| Date | Work | Charge | Basis |
+|---|---|---:|---|
+| 2026-09-19 | `geometric_attention` capacity and read-activation sweeps, plus the focused suite (release) | 165,000 ms | **Measured.** 107.01 + 14.50 + 43.10 s harness wall time. |
+
+**New cumulative: 142,838,565 ms.** Remaining: 147,200,000 − 142,838,565 = **4,361,435 ms (~72.7 min)**.
+
+**No extension was used**; the limit is unchanged at 147,200,000 ms. Builds and formatting remain
+engineering, not model time. **Storage:** no model artifact was created. The **128 MiB model-storage
+stop margin is untouched**; no deletion, no cleanup, no paid or external compute.
+
 ## Not done
 
 No destructive deletion, no cleanup of prior artifacts, no paid compute. The 2026-09-18

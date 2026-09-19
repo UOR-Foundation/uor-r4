@@ -103,3 +103,59 @@ that *both* mechanisms fail this task at this scale, and the exact-addressing va
 Charged 210,000 ms measured model time. Cumulative **142,568,565 / 147,200,000 ms** (~77.2 min
 remaining). No extension used. No model artifact created; new storage is source and text only. The
 128 MiB storage stop margin is untouched. No paid or external compute.
+
+## 8. The read activation was the ceiling (2026-09-19, later)
+
+Follow-up owed on §4's unexplained ceiling. Two diagnostics, in order.
+
+**(a) Value/output resolution is NOT the limit — but the sweep was confounded.** Raising `dv` with a
+`relu` on the read changed nothing: dv=32/64/128/256 gave 0.69/0.72/0.75/0.70 at context 4 and
+0.31/0.20/0.17/0.20 at context 8.
+
+**(b) The `relu` after the read was the ceiling.** With exact addressing the *selection* is the
+nonlinearity, so a `relu` on the read only discards the retrieved value's sign half:
+
+```
+read relu=true  context= 4 geometric=0.69
+read relu=true  context= 8 geometric=0.31
+read relu=true  context=16 geometric=0.02
+read relu=false context= 4 geometric=0.86
+read relu=false context= 8 geometric=0.64
+read relu=false context=16 geometric=0.47
+```
+
+`relu=false` is now the measured default for `GeometricAttention` (set by `from_f32` and by the
+trainer), and the claim is pinned as `selection_is_the_nonlinearity_not_the_read`.
+
+**(c) Re-run under a sign-preserving read, resolution DOES scale the mechanism** — the (a) sweep was
+measuring a broken read, not a capacity limit:
+
+| `dv` | context 4 | context 8 | context 16 |
+|---:|---:|---:|---:|
+| 32 | 0.86 | 0.64 | 0.47 |
+| 64 | 0.89 | 0.70 | 0.55 |
+| 128 | **0.94** | 0.72 | 0.44 |
+| 256 | 0.89 | **0.80** | 0.50 |
+
+Pinned as `resolution_scales_the_mechanism` (dv=32 vs 256 at context 8: 0.64 vs 0.80).
+
+**What remains, and why it is now well identified.** At context 16 the alphabet is small enough that
+tokens repeat *within* the run, so a first-order `(prev → next)` address accumulates several different
+successors and becomes ambiguous. That is inherent to a bigram-addressed memory and is the argument
+for **higher-order addressing**: an address formed from an *ordered* word of group elements, composed
+through the 2I table. The ordered-operation point is exactly the one W33 supplies
+(`P²=2P+3I`, `L²=2L+3I`, `PLPL=LPLP`, `Ω=LP−PL`, and `ker(Ω)` insensitive to order): the same
+operation multiset can act differently, so an ordered composition carries information a set or a hash
+cannot. That is the next mechanism to build and falsify.
+
+Current best: **0.94 at context 4 (dv=128), 0.80 at context 8 (dv=256), against linear attention's
+0.05/0.03/0.00.** Still not a solution, and still not a language model.
+
+## 9. Focused tests after these changes
+
+```
+cargo test --release -p uor-r4-core --offline --lib geometric_attention::tests -> 13 passed; 0 failed
+cargo fmt -p uor-r4-core -- --check -> clean
+```
+
+Charged 165,000 ms. Cumulative 142,838,565 / 147,200,000 ms.

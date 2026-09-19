@@ -100,6 +100,9 @@ pub struct GeometricAttention {
     /// Target readout magnitude in bits for the power-of-two count normalisation. `0` normalises a
     /// bucket with `n` writes by `2^floor(log2 n)`, i.e. to the stored mean.
     pub norm_bits: u32,
+    /// Apply `relu` to the read. With exact addressing the *selection* is the nonlinearity, and a
+    /// `relu` after the read discards the sign half of the retrieved value.
+    pub use_relu: bool,
 }
 
 impl GeometricAttention {
@@ -129,7 +132,15 @@ impl GeometricAttention {
             w_v: TernaryLinear::quantize(wv, vocab, dv),
             w_o: TernaryLinear::quantize(wo, vocab, dv),
             norm_bits,
+            use_relu: false,
         })
+    }
+
+    /// Choose whether the read is passed through `relu`.
+    #[must_use]
+    pub fn with_relu(mut self, use_relu: bool) -> Self {
+        self.use_relu = use_relu;
+        self
     }
 
     #[inline]
@@ -178,9 +189,11 @@ impl GeometricAttention {
         for (j, slot) in num.iter_mut().enumerate() {
             *slot = s[base + j] >> shift;
         }
-        for v in num.iter_mut() {
-            if *v < 0 {
-                *v = 0;
+        if self.use_relu {
+            for v in num.iter_mut() {
+                if *v < 0 {
+                    *v = 0;
+                }
             }
         }
         self.w_o.forward_i32(&num)
@@ -228,8 +241,12 @@ impl GeometricAttention {
         let mut num = vec![0f64; self.dv];
         for j in 0..self.dv {
             num[j] = (s[base + j] / div).floor();
-            if num[j] < 0.0 {
-                num[j] = 0.0;
+            if self.use_relu {
+                for v in num.iter_mut() {
+                    if *v < 0.0 {
+                        *v = 0.0;
+                    }
+                }
             }
         }
         self.w_o.forward_reference(&num)
@@ -275,7 +292,11 @@ impl GeometricAttention {
             let div = (1u64 << shift) as f32;
             let mut num = vec![0f32; self.dv];
             for j in 0..self.dv {
-                num[j] = (s[base + j] / div).floor().max(0.0);
+                num[j] = if self.use_relu {
+                    (s[base + j] / div).floor().max(0.0)
+                } else {
+                    (s[base + j] / div).floor()
+                };
             }
             let mut logits = vec![0f32; self.vocab];
             for (r, slot) in logits.iter_mut().enumerate() {
@@ -305,6 +326,8 @@ pub struct GeometricAttentionTrainer {
     pub n_addr: usize,
     pub addr: Vec<u32>,
     pub norm_bits: u32,
+    /// Apply `relu` to the read.
+    pub use_relu: bool,
     pub wv: Vec<f32>,
     pub wo: Vec<f32>,
     pub cfg: TrainConfig,
@@ -345,6 +368,7 @@ impl GeometricAttentionTrainer {
             n_addr: address_space(factors),
             addr: build_addresses(vocab, factors),
             norm_bits,
+            use_relu: false,
             wv: fill(vocab * dv),
             wo: fill(vocab * dv),
             cfg: TrainConfig::default(),
@@ -362,14 +386,16 @@ impl GeometricAttentionTrainer {
     }
 
     pub fn to_core(&self) -> Result<GeometricAttention, String> {
-        GeometricAttention::from_f32(
+        let mut core = GeometricAttention::from_f32(
             self.vocab,
             self.dv,
             self.factors,
             self.norm_bits,
             &self.wv,
             &self.wo,
-        )
+        )?;
+        core.use_relu = self.use_relu;
+        Ok(core)
     }
 
     pub fn final_token_correct(&self, tokens: &[u32]) -> bool {
@@ -466,7 +492,11 @@ impl GeometricAttentionTrainer {
 
             let mut num = vec![0f32; self.dv];
             for j in 0..self.dv {
-                num[j] = (reads[i].0[j] * dec).floor().max(0.0);
+                num[j] = if self.use_relu {
+                    (reads[i].0[j] * dec).floor().max(0.0)
+                } else {
+                    (reads[i].0[j] * dec).floor()
+                };
             }
             let mut logits = vec![0f32; self.vocab];
             for (r, slot) in logits.iter_mut().enumerate() {
@@ -498,8 +528,16 @@ impl GeometricAttentionTrainer {
             // bucket is registered so a later sequence clears it.
             self.touched.push(a as u32);
             for j in 0..self.dv {
-                let m = if num[j] > 0.0 { dnum[j] * dec } else { 0.0 };
-                self.dscratch[base + j] += m;
+                let mask = if self.use_relu {
+                    if num[j] > 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                } else {
+                    1.0
+                };
+                self.dscratch[base + j] += dnum[j] * mask * dec;
             }
 
             // Distribute the accumulated bucket gradient to this step's write.
@@ -659,10 +697,10 @@ mod tests {
     const ALPHABET: usize = 32;
     const VOCAB: usize = 32;
 
-    fn geometric_repeat(k: usize, steps: usize, seed: u64, norm_bits: u32) -> f32 {
+    fn geometric_repeat(k: usize, steps: usize, seed: u64, norm_bits: u32, dv: usize) -> f32 {
         let train = repeat_batch(0xA5A5_1234, 64, k, ALPHABET);
         let held = repeat_batch(0x0BAD_F00D, 64, k, ALPHABET);
-        let mut t = GeometricAttentionTrainer::new(VOCAB, 32, 2, norm_bits, seed).expect("build");
+        let mut t = GeometricAttentionTrainer::new(VOCAB, dv, 2, norm_bits, seed).expect("build");
         t.cfg.lr = 0.05;
         for _ in 0..steps {
             t.train_batch(&train);
@@ -686,7 +724,7 @@ mod tests {
     #[test]
     fn exact_addressing_beats_matched_filter_as_context_grows() {
         for k in [4usize, 8, 16] {
-            let g = geometric_repeat(k, 900, 2026_0919, 6);
+            let g = geometric_repeat(k, 900, 2026_0919, 6, 32);
             let l = linear_repeat(k, 900, 2026_0919);
             eprintln!("context={k:>3} geometric={g:.2} linear={l:.2}");
             assert!(
@@ -696,12 +734,52 @@ mod tests {
         }
     }
 
+    /// With a sign-preserving read, value/output resolution scales the mechanism. (The earlier
+    /// `dv` sweep that showed no effect was confounded by the sign-destroying `relu`.)
+    #[test]
+    fn resolution_scales_the_mechanism() {
+        let narrow = geometric_repeat(8, 900, 2026_0919, 6, 32);
+        let wide = geometric_repeat(8, 900, 2026_0919, 6, 256);
+        eprintln!("resolution dv=32 {narrow:.2} vs dv=256 {wide:.2}");
+        assert!(
+            wide > narrow + 0.1,
+            "value/output resolution must scale the mechanism: {narrow:.2} vs {wide:.2}"
+        );
+    }
+
+    /// Is the ceiling caused by the `relu` after the read discarding the retrieved value's sign
+    /// half? With exact addressing the selection is already the nonlinearity.
+    #[test]
+    fn selection_is_the_nonlinearity_not_the_read() {
+        let k = 8usize;
+        let train = repeat_batch(0xA5A5_1234, 64, k, ALPHABET);
+        let held = repeat_batch(0x0BAD_F00D, 64, k, ALPHABET);
+        let run = |use_relu: bool| {
+            let mut t = GeometricAttentionTrainer::new(VOCAB, 32, 2, 6, 2026_0919).expect("build");
+            t.cfg.lr = 0.05;
+            t.use_relu = use_relu;
+            for _ in 0..900 {
+                t.train_batch(&train);
+            }
+            let hits = held.iter().filter(|s| t.final_token_correct(s)).count();
+            hits as f32 / held.len() as f32
+        };
+        let with = run(true);
+        let without = run(false);
+        eprintln!("read relu={with:.2} no-relu={without:.2}");
+        assert!(
+            without > with + 0.1,
+            "the sign-destroying relu after an exact-address read must hurt: {with:.2} vs {without:.2}"
+        );
+    }
+
     #[test]
     fn copies_a_repeated_context() {
-        let acc = geometric_repeat(4, 900, 2026_0919, 6);
+        let acc4 = geometric_repeat(4, 900, 2026_0919, 6, 32);
+        let acc8 = geometric_repeat(8, 900, 2026_0919, 6, 32);
         assert!(
-            acc >= 0.5,
-            "exact addressed memory must beat chance on a 4-token context, got {acc:.2}"
+            acc4 >= 0.8 && acc8 >= 0.5,
+            "exact addressed memory must copy a repeated context, got {acc4:.2} / {acc8:.2}"
         );
     }
 
