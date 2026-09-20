@@ -2,7 +2,7 @@
 
 September 20, 2026. Reviewed PR #1314 at `c6a3978484540eeae9f94623481621324c90aff4`; its code/result are unchanged at delivered head `fdae053c6198a6f75502f611e9a002e9818aa433`, merged as `fbf542aa4c1f7ed336cd028c6b7b3502cba4118c`. The intervening changes incorporate the structural-memory documentation. This review inspected source and retained outputs, verified all manifest BLAKE3 hashes, and derived corrected counts/provenance without a build, model forward or fit. Original sealed roots are unchanged.
 
-**Decision:** retain the exact occurrence substrate and constructed selection gain. Do not promote the candidate. The next constructive task is learned contextual memory utility: improve source ranking, NoRead and bounded copy strength against actual predictive loss. The previous instruction to freeze ranking and amplitude while adding exactly one abstention signal is superseded. [Execution handoff](deepseek-memory-utility-step-2026-09-20.md); [architecture synthesis](geometric-attention-mechanism-synthesis-2026-09-20.md).
+**Decision after the completed handoff and owner clarification:** retain the exact occurrence substrate and constructed gain; do not promote the candidate. The next primary experiment is a [learned contextual geometric reader](deepseek-relational-reader-step-2026-09-20.md), using repaired/calibrated PR #1314 as comparator. Source ranking, NoRead and bounded copy strength remain jointly improvable, but calibration is not the sole mechanism goal. Exact-key admission and shallow equality cannot test the broader contextual relation hypothesis. [Architecture synthesis](geometric-attention-mechanism-synthesis-2026-09-20.md).
 
 ## What the retained measurements establish
 
