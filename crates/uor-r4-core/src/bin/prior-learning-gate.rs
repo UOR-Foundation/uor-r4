@@ -49,7 +49,12 @@ impl Fixture {
     }
 
     /// The same, with the contextual residual optionally disabled (the constant control).
-    fn score_with(&self, core: &PriorCore, pairs: &[(u32, u32, u32)], use_context: bool) -> (f64, f64) {
+    fn score_with(
+        &self,
+        core: &PriorCore,
+        pairs: &[(u32, u32, u32)],
+        use_context: bool,
+    ) -> (f64, f64) {
         let mut hit = 0usize;
         let mut bits = 0f64;
         for &(x, y, s) in pairs {

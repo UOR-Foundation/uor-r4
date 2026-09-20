@@ -1267,10 +1267,11 @@ mod tests {
         );
         // An envelope violation in the readout shift block must also be rejected.
         let mut bad_row = bytes.clone();
-        let wo_shift_at =
-            element_end + (4 + 4 + 65 * 4 + (65 * 16usize).div_ceil(4))
-                + (4 + 4 + 64 * 4 + (64 * 16usize).div_ceil(4))
-                + 4 + 4;
+        let wo_shift_at = element_end
+            + (4 + 4 + 65 * 4 + (65 * 16usize).div_ceil(4))
+            + (4 + 4 + 64 * 4 + (64 * 16usize).div_ceil(4))
+            + 4
+            + 4;
         bad_row[wo_shift_at..wo_shift_at + 4].copy_from_slice(&30u32.to_le_bytes());
         assert!(
             PriorCore::from_bytes(&bad_row).is_err(),
