@@ -413,5 +413,19 @@
     "whole-path D0-b not claimed",
     "no positive read-conditioned capability: oracle ceiling zero"
   ],
-  "successor": "a learned small shared low-bit output residual so a read-conditioned state can place mass on an uncopied token"
+  "successor": "a learned small shared low-bit output residual so a read-conditioned state can place mass on an uncopied token",
+  "principal_correction": {
+    "review": "docs/integration/read-conditioned-review-2026-09-21.md",
+    "audit": "docs/evidence/read-conditioned-principal-review-2026-09-21.json",
+    "retained": "verified short confidence rollout; old panels are exposed replays; seeded finite-row diagnostic on earlier prefixes",
+    "not_established": [
+      "context-required instrument",
+      "learned update improvement",
+      "nongeometric comparator",
+      "readout-only diagnosis",
+      "new model promotion"
+    ],
+    "code_repairs": "full prefix, first token, fail-closed returned loader, future source inventory; model rerun NOT_RUN",
+    "next": "genuine paired older-context transformation plus learned shared low-bit emission"
+  }
 }

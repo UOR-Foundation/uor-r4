@@ -1,4 +1,13 @@
-# Read-conditioned geometric emission: the rollout boundary is closed, the update is a readout-capacity negative
+# Read-conditioned result: short confidence rollout and an invalid contextual instrument
+
+**PR #1334, independently reviewed and corrected:** short frozen-confidence generation is verified: H4 23/42 reads, categorical 22/42, valid exact references and disabled/local token parity 7/7. The new update result is a **seeded frozen-row diagnostic with an invalid contextual instrument**: target depends on the query suffix, extraction omits its last key, accuracy-only search makes no parameter changes, and the alleged categorical arm is the same H4 algebra. The reported 0/60 ceiling is limited to those extracted positions, not a sole-readout diagnosis. Original confidence preservation failures remain exposed replays. [Principal review](read-conditioned-review-2026-09-21.md); [audit](../evidence/read-conditioned-principal-review-2026-09-21.json).
+
+**Next:** [one genuinely context-required transformation with a learned shared low-bit emitter](deepseek-contextual-emission-step-2026-09-21.md). Use identical-query pairs with changed older payloads and different uncopied outputs, correct full-prefix serving, useful NLL/margin learning, a real matched alternate update algebra and actual changed-source/disabled generation. Retain admission/selection and exact ownership initially; dependent scheduling follows a useful one-read primitive. Structural/Hopf and conditional S7/E8/harmonic tools remain available for witnessed needs. No new trained model or broader language qualification is claimed by the principal repair.
+
+The principal review retains original numerical aggregates at their actual scope: reported 0/60 frozen-row reachable answers and 0/30 fourth-token update hits were measured before the final query key. Both saved maps are initialization, so NLL reductions 0.254126/0.300109 bits are not learned improvements. The original “categorical” arm is another H4 seed. Finite NLL means positive probability, not zero mass on uncopied tokens. The module was missing from the three-file source inventory; RC loaded parameters were compared then discarded. New interface/loader tests qualify the principal source repairs, not a corrected model rerun. See the independent audit for verified hashes, replay boundaries and missing sufficient statistics.
+
+## Original submitted result, retained with the corrections above
+
 
 September 21, 2026. Executed from reviewed parent `466043eb` (PR #1333). Prospective
 [design](read-conditioned-design-2026-09-21.md); [principal confidence review](reader-confidence-review-2026-09-21.md);

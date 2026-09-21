@@ -4003,10 +4003,9 @@ const SEED_RC_DEV: u64 = 0x5C0F_D001;
 const SEED_RC_TUNE: u64 = 0x5C0F_D002;
 const SEED_RC_FRESH: u64 = 0x5C0F_D003;
 
-/// Derived-role instrument. Several families share the query key; the query asks with the role of
-/// one family. The required next token is that family's **partner role**, which appears nowhere in
-/// the sequence and in no admitted payload, so no single-copy boost can produce it. The relevant
-/// evidence (the family identified by the query role and the retrieved block) is present.
+/// Historical derived-role diagnostic. The answer is the fixed partner of the query role and is
+/// therefore determined by the recent suffix alone. This does not test whether older context is
+/// necessary. `tokens` is the complete observed prefix: it does not contain an answer sentinel.
 fn make_derive_seq(banks: &Banks, st: &mut u64) -> Seq {
     let n_fam = 3 + (xorshift(st) as usize) % 2;
     let mut fams: Vec<(u32, u32)> = Vec::new();
@@ -4081,6 +4080,39 @@ struct RcPos {
     cands: usize,
 }
 
+/// The target-free boundary for a complete observed prefix. Its final token remains the current
+/// input; no supervised next-token observation or last-nonempty-candidate search is involved.
+fn rc_prefix_boundary(prefix: &[u32]) -> Result<(OccurrenceRing, u32, u32, u32), String> {
+    if prefix.len() < 3 {
+        return Err("read-conditioned prefix needs two predecessors".into());
+    }
+    let i = prefix.len() - 1;
+    Ok((
+        ring_before_current(prefix),
+        prefix[i],
+        prefix[i - 1],
+        prefix[i - 2],
+    ))
+}
+
+fn first_continuation_token(tokens: &[u32], prefix_len: usize) -> Result<u32, String> {
+    tokens
+        .get(prefix_len)
+        .copied()
+        .ok_or_else(|| "rollout did not emit a first continuation token".into())
+}
+
+fn reload_read_conditioned(
+    bytes: &[u8],
+    expected: &ReadConditionedParams,
+) -> Result<ReadConditionedParams, String> {
+    let loaded = ReadConditionedParams::from_bytes(bytes)?;
+    if loaded != *expected {
+        return Err("read-conditioned reload changed the parameters".into());
+    }
+    Ok(loaded)
+}
+
 /// Build instrument positions under one frozen read rule. Returns the positions and validity counts.
 #[allow(clippy::too_many_arguments)]
 fn rc_positions(
@@ -4090,33 +4122,20 @@ fn rc_positions(
     table: &ExactGroupTable,
     sel: &RelationalSelector,
     seqs: &[Seq],
-) -> (Vec<RcPos>, usize, usize, usize) {
+) -> Result<(Vec<RcPos>, usize, usize, usize), String> {
     let mut out = Vec::new();
     let (mut covered_violations, mut decisive, mut no_read) = (0usize, 0usize, 0usize);
     for seq in seqs.iter() {
-        let obs = observe_full(seq);
-        let Some(o) = obs.iter().rev().find(|o| !o.cands.is_empty()) else {
-            continue;
-        };
-        let z = local_logits(
-            parent,
-            local,
-            u,
-            o.cur,
-            o.prev as usize,
-            o.prev2,
-            o.ring.written(),
-        );
-        let rel = rels_for(sel, o, table, false);
-        let (rel_sel, payload, read) = match sel.choose_scored(&o.cands, &rel) {
-            Some((k, _)) => (rel[k], o.cands[k].payload, true),
-            None => (0usize, 0u32, false),
-        };
-        let covered = o.cands.iter().any(|c| c.payload == seq.answer);
+        let (ring, cur, prev, prev2) = rc_prefix_boundary(&seq.tokens)?;
+        let z = local_logits(parent, local, u, cur, prev as usize, prev2, ring.written());
+        let selected = read_step(&ring, cur, prev, prev2, sel, table, true, &z);
+        let (cands, _) = admit_mixed(&ring, ring.written(), cur, prev, prev2, MAX_CAND);
+        let read = selected.action.is_some();
+        let covered = cands.iter().any(|c| c.payload == seq.answer);
         if covered {
             covered_violations += 1;
         }
-        let q0 = local.query_state(o.cur).min(u.len() - 1);
+        let q0 = local.query_state(cur).min(u.len() - 1);
         let z_base: Vec<i32> = z.iter().zip(u[q0].iter()).map(|(a, b)| a - b).collect();
         let local_argmax = argmax_low(&z) as u32;
         if local_argmax != seq.answer {
@@ -4128,15 +4147,15 @@ fn rc_positions(
         out.push(RcPos {
             z_base,
             q0,
-            rel: rel_sel,
-            payload,
+            rel: selected.rel,
+            payload: selected.payload.unwrap_or(0),
             read,
             answer: seq.answer,
             covered,
-            cands: o.cands.len(),
+            cands: cands.len(),
         });
     }
-    (out, covered_violations, decisive, no_read)
+    Ok((out, covered_violations, decisive, no_read))
 }
 
 #[inline]
@@ -4187,14 +4206,18 @@ fn rc_oracle(positions: &[RcPos], u: &[Vec<i32>]) -> (usize, usize) {
     (hit, positions.len())
 }
 
-/// A fixed non-isomorphic value-code seed for the matched ordinary categorical control.
-fn categorical_value_seed(token: u32) -> usize {
+/// A different fixed initialization of the same H4 operator, not a categorical-state control.
+fn alternate_h4_value_seed(token: u32) -> usize {
     ((token as usize) * 7 + 3) % GROUP_ORDER
 }
 
 /// Bounded discrete coordinate search over the transport and value-code maps under final-token
 /// accuracy on the development instrument. No gradients, no new readout parameters.
-fn rc_learn(positions: &[RcPos], u: &[Vec<i32>], categorical: bool) -> ReadConditionedParams {
+fn rc_learn(
+    positions: &[RcPos],
+    u: &[Vec<i32>],
+    alternate_initialization: bool,
+) -> ReadConditionedParams {
     let t = group_table();
     let relations: Vec<usize> = {
         let mut v: Vec<usize> = positions
@@ -4216,14 +4239,13 @@ fn rc_learn(positions: &[RcPos], u: &[Vec<i32>], categorical: bool) -> ReadCondi
         v.dedup();
         v
     };
-    let mut params = if categorical {
-        // A fixed non-isomorphic start for the matched ordinary control: identity transport, codes
-        // spread by token, learned under the same search.
+    let mut params = if alternate_initialization {
+        // Same H4 products, relation encoding and optimizer; only the initial value codes differ.
         let mut p = ReadConditionedParams::identity();
         p.value_domain = domain.clone();
         p.value_code = domain
             .iter()
-            .map(|tok| (categorical_value_seed(*tok)) as u8)
+            .map(|tok| (alternate_h4_value_seed(*tok)) as u8)
             .collect();
         p
     } else {
@@ -4373,7 +4395,7 @@ fn rc_rollout(
     allowed: bool,
     n: usize,
 ) -> Result<(Vec<u32>, Vec<serde_json::Value>), String> {
-    let mut ring = ring_before_current(prefix);
+    let (mut ring, _, _, _) = rc_prefix_boundary(prefix)?;
     let mut toks = prefix.to_vec();
     let mut steps = Vec::new();
     for s in 0..n {
@@ -4402,6 +4424,8 @@ fn rc_rollout(
         steps.push(json!({
             "step": s, "read": r.action.is_some(), "updated": q1 != q0,
             "q0": q0, "q1": q1, "admitted": r.admitted,
+            "source_ref": r.source.map(|source| json!({"seq": source.seq, "abs": source.abs})),
+            "payload_abs": r.payload_abs,
             "payload": r.payload, "emitted": next,
         }));
         ring.observe(toks[i]);
@@ -4494,6 +4518,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         Some(sr) => [
             "crates/uor-r4-core/src/native_geometric/learner/relational.rs",
             "crates/uor-r4-core/src/native_geometric/learner/policy_feasibility.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/read_conditioned.rs",
             "crates/uor-r4-core/src/bin/competitive-reader.rs",
         ]
         .iter()
@@ -6245,7 +6270,6 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     }));
 
     // ---- frozen-confidence rollout: complete responses through the shared path -------------
-    let rollout_t0 = Instant::now();
     let mut rollout_rows: Vec<serde_json::Value> = Vec::new();
     {
         let mut prompts: Vec<(&'static str, Vec<u32>)> = Vec::new();
@@ -6294,8 +6318,8 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     mark("frozen-confidence rollout", &mut marks);
 
     // ---- read-conditioned geometric emission --------------------------------------------------
-    // One learned read -> geometric update -> shared emission primitive, tested on an instrument
-    // whose required answer is absent from every admitted payload and from the prefix itself.
+    // Historical suffix-solvable diagnostic. Corrected full-prefix/first-token semantics differ
+    // from read-conditioned-1; rerunning this block does not validate context-required attention.
     let rc_t0 = Instant::now();
     let rc_dev_seqs = make_rc_pop(&banks, N_RC_DEV, SEED_RC_DEV);
     let rc_tune_seqs = make_rc_pop(&banks, N_RC_TUNE, SEED_RC_TUNE);
@@ -6307,7 +6331,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         &table,
         &relational_ctx_base,
         &rc_dev_seqs,
-    );
+    )?;
     let (rc_tune, _, _, _) = rc_positions(
         &parent,
         &local,
@@ -6315,7 +6339,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         &table,
         &relational_ctx_base,
         &rc_tune_seqs,
-    );
+    )?;
     let (rc_fresh, _, _, _) = rc_positions(
         &parent,
         &local,
@@ -6323,29 +6347,24 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         &table,
         &relational_ctx_base,
         &rc_fresh_seqs,
-    );
+    )?;
     let (rc_oracle_hit, rc_oracle_total) = rc_oracle(&rc_dev, &u);
     let rc_identity = ReadConditionedParams::identity();
     let rc_h4 = rc_learn(&rc_dev, &u, false);
-    let rc_cat = rc_learn(&rc_dev, &u, true);
-    // Artifact binding: write, hash, independently reload and compare.
+    let rc_alt_h4 = rc_learn(&rc_dev, &u, true);
+    // Parameter serialization only: write, hash, independently reload and compare. RLRC v1 does
+    // not bind the parent/reader/tokenizer/fit identities; the successor must supply that contract.
     let rc_h4_bytes = rc_h4.to_bytes();
     write_checked(&root, "artifacts/h4_read_conditioned.rlrc", &rc_h4_bytes)?;
     let rc_h4_hash = artifact_sha256(&rc_h4_bytes);
-    match ReadConditionedParams::from_bytes(&rc_h4_bytes) {
-        Ok(back) if back == rc_h4 => {}
-        _ => reload_failures += 1,
-    }
-    let rc_cat_bytes = rc_cat.to_bytes();
+    let rc_h4 = reload_read_conditioned(&rc_h4_bytes, &rc_h4)?;
+    let rc_alt_h4_bytes = rc_alt_h4.to_bytes();
     write_checked(
         &root,
-        "artifacts/categorical_read_conditioned.rlrc",
-        &rc_cat_bytes,
+        "artifacts/h4_alternate_init_read_conditioned.rlrc",
+        &rc_alt_h4_bytes,
     )?;
-    match ReadConditionedParams::from_bytes(&rc_cat_bytes) {
-        Ok(back) if back == rc_cat => {}
-        _ => reload_failures += 1,
-    }
+    let rc_alt_h4 = reload_read_conditioned(&rc_alt_h4_bytes, &rc_alt_h4)?;
     let acc = |p: &ReadConditionedParams, pos: &[RcPos]| rc_accuracy(p, pos, &u);
     let nll = |p: &ReadConditionedParams, pos: &[RcPos]| -> f64 {
         if pos.is_empty() {
@@ -6386,7 +6405,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     let mut rc_gen_total = 0usize;
     let mut rc_gen_samples: Vec<serde_json::Value> = Vec::new();
     for seq in rc_fresh_seqs.iter().take(30) {
-        let prefix = &seq.tokens[..seq.tokens.len() - 1];
+        let prefix = &seq.tokens[..];
         if prefix.len() < 3 {
             continue;
         }
@@ -6403,7 +6422,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             true,
             4,
         )?;
-        let emitted = *toks.last().unwrap_or(&0);
+        let emitted = first_continuation_token(&toks, prefix.len())?;
         if emitted == seq.answer {
             rc_gen_hit += 1;
         }
@@ -6417,14 +6436,16 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             &rc_identity,
             false,
             true,
-            1,
+            4,
         )?;
-        if *local_toks.last().unwrap_or(&0) == seq.answer {
+        if first_continuation_token(&local_toks, prefix.len())? == seq.answer {
             rc_gen_local_hit += 1;
         }
         if rc_gen_samples.len() < 4 {
             rc_gen_samples.push(json!({
                 "answer": seq.answer,
+                "prefix_len": prefix.len(),
+                "first_emitted": emitted,
                 "tokens": toks,
                 "decoded": tokenizer.decode(&toks),
                 "steps": steps,
@@ -6432,7 +6453,9 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         }
     }
     let rc_report = json!({
-        "instrument": "derived role-partner: the query carries the role of one family; the required next token is that family's partner role, absent from the prefix and from every admitted payload",
+        "instrument": "historical derived role-partner: answer is determined by the recent query role alone; not a context-required attention test",
+        "semantics": "full observed prefix retained; actual first continuation token; no last-nonempty fallback; principal-corrected diagnostic differs from read-conditioned-1",
+        "categorical_control": "NOT_RUN: the alternate arm changes initialization of the same H4 operator",
         "populations": {"dev": rc_dev_seqs.len(), "tune": rc_tune_seqs.len(), "fresh": rc_fresh_seqs.len()},
         "validity": {
             "dev_positions": rc_dev.len(),
@@ -6444,12 +6467,12 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         "accuracy": {
             "local_no_update": {"dev": acc(&rc_identity, &rc_dev), "tune": acc(&rc_identity, &rc_tune), "fresh": acc(&rc_identity, &rc_fresh)},
             "h4_read_conditioned": {"dev": acc(&rc_h4, &rc_dev), "tune": acc(&rc_h4, &rc_tune), "fresh": acc(&rc_h4, &rc_fresh)},
-            "categorical_read_conditioned": {"dev": acc(&rc_cat, &rc_dev), "tune": acc(&rc_cat, &rc_tune), "fresh": acc(&rc_cat, &rc_fresh)},
+            "h4_alternate_initialization": {"dev": acc(&rc_alt_h4, &rc_dev), "tune": acc(&rc_alt_h4, &rc_tune), "fresh": acc(&rc_alt_h4, &rc_fresh)},
         },
         "answer_nll_bits": {
             "local_no_update": nll(&rc_identity, &rc_fresh),
             "h4_read_conditioned": nll(&rc_h4, &rc_fresh),
-            "categorical_read_conditioned": nll(&rc_cat, &rc_fresh),
+            "h4_alternate_initialization": nll(&rc_alt_h4, &rc_fresh),
         },
         "causal": {
             "fresh_read_positions_updated": upd_positions,
@@ -6462,16 +6485,20 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             "local_no_update_hits": rc_gen_local_hit,
             "samples": rc_gen_samples,
         },
-        "artifact": {"h4_sha256": rc_h4_hash, "bytes": rc_h4_bytes.len()},
+        "artifact": {
+            "h4_sha256": rc_h4_hash, "bytes": rc_h4_bytes.len(),
+            "alternate_h4_sha256": artifact_sha256(&rc_alt_h4_bytes),
+            "binding_scope": "RLRC v1 parameters only; no parent/reader/tokenizer/fit identity validation",
+        },
         "seconds": rc_t0.elapsed().as_secs_f64(),
-        "scope": "one read, one learned geometric update, shared emission readout; a bounded authored instrument, not general language or reasoning",
+        "scope": "suffix-solvable diagnostic only; fixed-readout reachability at these prefixes cannot isolate admission, selection or geometric advantage; no context-required or broad language claim",
     });
     controls.push(json!({
         "control": "read_conditioned_update",
         "instrument": "derived_role_partner",
         "update_disabled_residual_exact_zero": ReadConditionedParams::identity().update(7, 3, 100) == 7,
         "h4_artifact_sha256": rc_h4_hash,
-        "note": "NoRead or UpdateDisabled sets q1 = q0, so u(q1) - u(q0) is exactly zero and the local baseline is preserved",
+        "note": "The reported boolean checks an identity parameter map only; actual NoRead/UpdateDisabled predictor parity requires its own executed control",
     }));
     mark("read-conditioned emission", &mut marks);
 
@@ -6959,6 +6986,47 @@ fn main() -> ExitCode {
             eprintln!("error: {e}");
             ExitCode::from(1)
         }
+    }
+}
+
+#[cfg(test)]
+mod read_conditioned_boundary_tests {
+    use super::*;
+
+    #[test]
+    fn complete_prefix_keeps_query_key_and_empty_pool_position() {
+        // The last two observed tokens are the role and key, not role and an answer sentinel.
+        let prefix = [10, 20, 30, 40, 50];
+        let (ring, cur, prev, prev2) = rc_prefix_boundary(&prefix).unwrap();
+        assert_eq!((cur, prev, prev2, ring.written()), (50, 40, 30, 4));
+        let (cands, _) = admit_mixed(&ring, ring.written(), cur, prev, prev2, MAX_CAND);
+        assert!(cands.is_empty());
+        // No candidate does not move the prediction back to an earlier token or drop the row.
+        assert_eq!(ring.written() as usize, prefix.len() - 1);
+        assert!(rc_prefix_boundary(&[]).is_err());
+        assert!(rc_prefix_boundary(&[10, 20]).is_err());
+    }
+
+    #[test]
+    fn continuation_accuracy_uses_first_emission_not_last() {
+        let tokens = [10, 20, 30, 41, 42, 43, 44];
+        assert_eq!(first_continuation_token(&tokens, 3).unwrap(), 41);
+        assert_ne!(first_continuation_token(&tokens, 3).unwrap(), tokens[6]);
+        assert!(first_continuation_token(&tokens[..3], 3).is_err());
+    }
+
+    #[test]
+    fn read_conditioned_reload_returns_validated_parameters_or_fails() {
+        let expected = ReadConditionedParams::identity();
+        let bytes = expected.to_bytes();
+        assert_eq!(
+            reload_read_conditioned(&bytes, &expected).unwrap(),
+            expected
+        );
+        assert!(reload_read_conditioned(&bytes[..4], &expected).is_err());
+        let mut changed = expected.clone();
+        changed.transport[0] = (changed.transport[0] + 1) % GROUP_ORDER as u8;
+        assert!(reload_read_conditioned(&changed.to_bytes(), &expected).is_err());
     }
 }
 

@@ -19,8 +19,8 @@
 
 use super::group_table::{group_table, GROUP_ORDER, ROW_STRIDE};
 
-/// Learned parameters of the read-conditioned update. Both maps are small, integer, artifact-bound
-/// and capacity-matched between the geometric and categorical arms.
+/// Parameters of the read-conditioned H4 update. Different initial value-code maps remain the
+/// same geometric operator; they are not an ordinary categorical-state comparator.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReadConditionedParams {
     /// `transport[r]` is the group element applied for directed relation `r`.
@@ -49,8 +49,8 @@ impl ReadConditionedParams {
         }
     }
 
-    /// The read-conditioned state `q1 = (q0 * T[r]) * V[payload]`. `q0` is returned unchanged when
-    /// the read is disabled or the relation is out of range.
+    /// The read-conditioned state `q1 = (q0 * T[r]) * V[payload]`. Callers implement NoRead and
+    /// UpdateDisabled by not calling this method. Relations are reduced modulo the group order.
     #[inline]
     pub fn update(&self, q0: usize, r: usize, payload: u32) -> usize {
         let t = group_table();
@@ -106,9 +106,21 @@ impl ReadConditionedParams {
         }
         let transport = take(&mut c, n_t)?.to_vec();
         let n_d = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
+        // Validate the advertised allocation against the remaining serialized bytes first. Each
+        // domain entry needs four bytes and a value code, plus the following code-length field.
+        let minimum = n_d
+            .checked_mul(5)
+            .and_then(|n| n.checked_add(4))
+            .ok_or("value domain size overflow")?;
+        if minimum > bytes.len().saturating_sub(c) {
+            return Err("truncated value domain or value codes".into());
+        }
         let mut value_domain = Vec::with_capacity(n_d);
         for _ in 0..n_d {
             value_domain.push(u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()));
+        }
+        if value_domain.windows(2).any(|w| w[0] >= w[1]) {
+            return Err("value domain must be strictly increasing and unique".into());
         }
         let n_c = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
         if n_c != n_d {
@@ -169,5 +181,23 @@ mod tests {
         let mut bad = q.to_bytes();
         bad.truncate(bad.len() - 1);
         assert!(ReadConditionedParams::from_bytes(&bad).is_err());
+    }
+
+    #[test]
+    fn loader_rejects_unbounded_or_ambiguous_domains() {
+        let mut bytes = ReadConditionedParams::identity().to_bytes();
+        let domain_count_offset = 12 + GROUP_ORDER;
+        bytes[domain_count_offset..domain_count_offset + 4]
+            .copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(ReadConditionedParams::from_bytes(&bytes).is_err());
+
+        let mut p = ReadConditionedParams::identity();
+        p.value_domain = vec![7, 7];
+        p.value_code = vec![0, 1];
+        assert!(ReadConditionedParams::from_bytes(&p.to_bytes()).is_err());
+        p.value_domain = vec![8, 7];
+        assert!(ReadConditionedParams::from_bytes(&p.to_bytes()).is_err());
+        p.value_domain = vec![7, 8];
+        assert_eq!(ReadConditionedParams::from_bytes(&p.to_bytes()).unwrap(), p);
     }
 }

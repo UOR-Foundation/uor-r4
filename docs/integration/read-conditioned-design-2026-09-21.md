@@ -1,5 +1,7 @@
 # Read-conditioned geometric emission — prospective design
 
+> **Executed in part; principal correction after PR #1334:** [review](read-conditioned-review-2026-09-21.md) distinguishes verified short confidence rollout from a suffix-solvable, misindexed frozen-row diagnostic with unchanged maps. The [new execution prompt](deepseek-contextual-emission-step-2026-09-21.md) owns scheduling. Original instructions/design below remain dated evidence, not completed claims.
+
 September 21, 2026. Executes the [principal confidence review](reader-confidence-review-2026-09-21.md) and
 the [constructive prompt](deepseek-read-conditioned-state-step-2026-09-21.md) on reviewed parent
 `466043eb`. Recorded **before** the extraction, fit and any fresh outcome. The [resource ledger](resource-ledger-2026-09-19.md)

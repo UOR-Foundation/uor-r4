@@ -1,6 +1,18 @@
 # Current native geometric AI work
 
-## Active: read-conditioned rollout closed; the first update is a readout-capacity negative
+## Active: learn contextual transformation and shared emission at the correct boundary
+
+**PR #1334, independently reviewed and corrected:** short frozen-confidence generation is verified: H4 23/42 reads, categorical 22/42, valid exact references and disabled/local token parity 7/7. The new update result is a **seeded frozen-row diagnostic with an invalid contextual instrument**: target depends on the query suffix, extraction omits its last key, accuracy-only search makes no parameter changes, and the alleged categorical arm is the same H4 algebra. The reported 0/60 ceiling is limited to those extracted positions, not a sole-readout diagnosis. Original confidence preservation failures remain exposed replays. [Principal review](read-conditioned-review-2026-09-21.md); [audit](../evidence/read-conditioned-principal-review-2026-09-21.json).
+
+**Next:** [one genuinely context-required transformation with a learned shared low-bit emitter](deepseek-contextual-emission-step-2026-09-21.md). Use identical-query pairs with changed older payloads and different uncopied outputs, correct full-prefix serving, useful NLL/margin learning, a real matched alternate update algebra and actual changed-source/disabled generation. Retain admission/selection and exact ownership initially; dependent scheduling follows a useful one-read primitive. Structural/Hopf and conditional S7/E8/harmonic tools remain available for witnessed needs. No new trained model or broader language qualification is claimed by the principal repair.
+
+All 12 sealed files, five RLR2/four parent hashes and three declared source hashes verify. The new module was omitted from the original source binding. Both RLRC maps match initialization; reported answer-NLL reductions are not learned gains. Original new oracle/accuracy aggregates lack sufficient per-position rows for independent replay without inference; only four update trajectories remain. Six-token confidence continuations do not qualify conflict/source interventions or useful complete responses. Principal code repairs full-prefix extraction, first-token/equal-horizon scoring, loader use/bounds and future source inventory; focused checks do not rerun model evaluation.
+
+Use the absolute owner-checkout live resource JSON and latest ledger. Prior3200000-ms charge/+4000000-ms allowance were missing there and are reconciled; principal checks debit separately. Cache-only cleanup recovered 871112704 bytes observed free space, with all source/models/evidence/research preserved. Refresh physical headroom and reserve + 128 MiB before work.
+
+### Historical submission and earlier states (read with the active corrections)
+
+## Historical submission: read-conditioned rollout and originally claimed readout diagnosis
 
 **Frozen-confidence rollout executed.** The actual retained confidence artifacts now run through the shared target-free predictor: length-64 opcode dispatch after reload, 45 reads over 84 steps with exact selected occurrences and served actions, read-disabled reproducing local, degenerate text consistent with the retained whole-model negative. [Result](read-conditioned-result-2026-09-21.md); [evidence](../evidence/read-conditioned-2026-09-21.json).
 
@@ -918,7 +930,7 @@ Active worktree /Users/casey.allard/uor-r4-worktrees/shared-geometric-core; bran
 
 **PASS_HAMMING_REFINEMENT_PRIMITIVES.** [Executed result](../native_geometric_hamming_refinement_973.md) and [source-bound evidence](../evidence/native_geometric_hamming_refinement_973.json). Owner adopted Hamming-based relevance inside bounded repeated contextual refinement. New Rust kernel queries, reads exact records, exposes all four selected start-context roots and full owned payload, composes working state, then queries again for1..4hops. It preserves exact references and preceding-hop provenance. Five authored cases establish changed-fourth-root→changed-second-read; disabling update or restricting to first root loses the dependency. These are selected fixture payloads, not learned/generated language. Retain15baec48; old model gate remains failed; no promotion.
 
-All120geometric signatures are distinct. Single-root Hamming/angle ranking agrees across856800comparisons:727320strict,129480ties,zero reversals/tie changes. Independent summed two-lane ordering and softmax weights are not certified equivalent. Candidate admission remains a bounded256occurrence/eight-result scan. Learned policy/emission, full paired-H4/fiber integration and hierarchical routing remain explicit missing work. No fit or parameter update occurred.
+All 120geometric signatures are distinct. Single-root Hamming/angle ranking agrees across856800comparisons:727320strict,129480ties,zero reversals/tie changes. Independent summed two-lane ordering and softmax weights are not certified equivalent. Candidate admission remains a bounded256occurrence/eight-result scan. Learned policy/emission, full paired-H4/fiber integration and hierarchical routing remain explicit missing work. No fit or parameter update occurred.
 
 Seven focused release tests plus separate sealed report pass. Complete charge115442/240000ms; shared123490955/132950000ms; parent3740382/3870000ms after recorded140000ms local extension. Step96MiB,4GiB RAM,two build threads/one process,128MiB margin. Prior28sealed roots/873files and original dirty checkouts/retained model preserved. No paid compute, cleanup or V3–V7 replay.
 
@@ -2114,7 +2126,7 @@ record. The complete `c29ab982` parent and all learned numeric/source parameters
 remain unchanged; no session-state field or response provider is added.
 
 Exposed complete answers improve12/16 to14/16 and reserved changed-name/value
-answers14/16 to15/16. All12 new numeric answers and3/4 abstentions pass. The
+answers14/16 to15/16. All 12 new numeric answers and3/4 abstentions pass. The
 remaining new failure copies `coins` as a location answer. Complete three-turn
 computations stay16/16, identifier returns8/8, and the earlier independent set
 16/16. Preservation passes48/48 dependent cases,62/62 earlier responses,24/24
