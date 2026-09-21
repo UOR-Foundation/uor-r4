@@ -1,4 +1,6 @@
-# Read-confidence influence interface: the parent rule is preserved, the class is feasible, text is not improved
+# Read-confidence influence interface: fitted feasibility, fresh preservation failures
+
+> **Principal correction completing PR #1333:** [review](reader-confidence-review-2026-09-21.md) and [audit](../evidence/reader-confidence-principal-review-2026-09-21.json). Fit expressivity is retained, but both confidence arms fail fresh own-parent present CE and absent-read criteria; categorical parent is 81 present/six absent reads, not H4's 73/ten. Confidence rollout/interventions/timing are NOT_RUN. Three attempts repeat one exposed population; current source hashes verify. The exclusive stream-mixing diagnosis is unproven and the [next prompt](deepseek-read-conditioned-state-step-2026-09-21.md) tests a read-conditioned update/shared emission operation. Original dated design/measurements retain their historical scope.
 
 September 21, 2026. Executed from reviewed parent `e0d6296c` (PR #1332). Prospective
 [design](reader-confidence-design-2026-09-21.md); [principal review](policy-obstruction-review-2026-09-21.md);
@@ -7,22 +9,18 @@ September 21, 2026. Executed from reviewed parent `e0d6296c` (PR #1332). Prospec
 `d81bda9e3dbff98a69ba5020631527698fbad83f3359611c1a15c5f3d6b0255f`); superseded `reader-confidence-1`
 and `-2` are retained and never reused as the delivered root.
 
-## Decision
+## Decision, independently corrected
 
-The parent-preserving interface is **verified**, the confidence-extended influence class is
-**feasible and optimal** on development (the coarse 32-address class is not), and it preserves useful
-answers and absence while cutting most of the parent's text harm. It does **not** obtain a useful
-(negative) text gain, so **no positive influence claim is made**. The interface and its witness are
-retained as a reusable component; the bounded integration ends here.
+Retain the confidence interface as a useful fitted component. Both selected tables meet development-fit constraints and have reported exhaustive solver status at their support/fallback scope. Both fail fresh own-parent present CE and absent-read preservation, despite meeting the selected-query count tolerance and point text-harm screen. No useful negative text gain or new confidence generated-behavior result exists. Preserve the artifacts; the principal review selects a read-conditioned state/emission operation instead of automatically adding another stream-type feature.
 
-## Witness: exact parity with the retained scored reader
+## Witness: selected-index and strength parity on nonempty fit positions
 
 `D = max_strength strength_score(candidate, relation, strength, parent_bucket) - noread_score(parent_bucket)`
 in widened `i64`; `parent_bucket` is the selector's own `bucket_of`. The rule
 `empty pool -> NoRead; otherwise the ungated top source at eight nats iff D > 0` reproduces the
 frozen parent's own served action on **2,969 development positions with 0 mismatches** for both the
 H4 (`relational_ctx`) and categorical scored parents. This is the cheap implementation prerequisite,
-not a model-quality claim.
+not a model-quality claim. Empty pools are skipped, and independently reloaded integer-logit/predictor parity and explicit tie coverage remain unmeasured.
 
 ## The confidence address restores feasibility
 
@@ -31,17 +29,16 @@ Address `= utility_bucket * 2 + 1[D > 0]`, at most 64 opcodes, same four actions
 
 | Arm | Solve | Supported | Text b/t | Present correct | Present Δ bits | Absent reads | Absent Δ bits |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| parent reference | — | — | +0.4532* | 149 | −1931.32 | 7 | +3.497 |
+| H4 parent reference (same fit) | — | — | +0.5724 | 149 | −1931.32 | 7 | +3.497 |
 | **H4 confidence (selected)** | `OPTIMAL` exhaustive | 28/64 | **+0.0228** | 148 | −1926.64 | 7 | +3.497 |
 | **categorical confidence (selected)** | `OPTIMAL` exhaustive | 27/64 | **+0.0036** | 158 | −2032.89 | 5 | +1.416 |
 | witnessed parent rule (H4) | — | — | +0.5724 | 149 | — | 7 | — |
 
-\*parent text value is the previously measured held-out figure; the others are the development fit
-text stream. The learned tables satisfy every behavioral constraint **and** the +0.05 bits/token text
+All rows refer to the development-fit population. The learned tables satisfy every fitted behavioral constraint **and** the +0.05 bits/token text
 screen, while the raw witnessed parent rule would fail the screen (+0.5724). The 64-address search
 finishes exhaustively (about 1.7–2.6M nodes), unlike the coarse class, which was proven infeasible.
 
-## Fresh evaluation (one declared draw)
+## Final evaluation (one draw, exposed in attempt 1 and replayed in attempts 2/3)
 
 Fresh construction seed `0x5C0F_C0DE` (140 sequences, 117 final-present / 23 final-absent) and the
 **four remaining eligible `Dev` reader documents** (976 positions, disclosed as a small honest final
@@ -58,21 +55,16 @@ population; the other 32 are development history).
 | **`categorical_confidence`** | **79/117** | **7/23** | **+0.0201** |
 
 Required present preservation is parent − 2 (margin translated to 117): H4 confidence keeps 71 versus
-the parent's 73, so **present answers are preserved**; its absent reads rise 10 → 11, which **fails the
-no-increase absence criterion by one read**. The categorical confidence arm preserves both (79 present,
-7 absent reads) and keeps text inside the screen. Both confidence arms lift text from the parent's
+the parent's 73, so **the emitted-count margin is met**; its absent reads rise 10 → 11, which **fails the
+no-increase absence criterion by one read**. The categorical confidence arm preserves the emitted-count tolerance (79 against its own parent’s 81,
+7 absent reads against its own parent’s 6) and keeps text inside the screen, but also fails absence. Both arms fail present CE preservation (+0.159790/+0.152981 bits/query against a +.05 limit). Both confidence arms lift text from the parent's
 +0.4346 to within +0.05, but neither reaches a *useful* negative gain; the constant one-nat reader is
 the only negative text arm and it emits **zero** correct present answers. Copying an answer is not
 reasoning and this is not a prose result.
 
-## Diagnosis
+## Diagnosis, corrected by principal review
 
-The sign-of-D bit resolves the **present/absent** collision inside a bucket, which is exactly why the
-coarse class was infeasible and this class is feasible. It does not separate **natural-text** positions
-from **present-query** positions, which still share the five-bit bucket; those addresses must read at
-eight nats to satisfy the present constraint, and that shared dose is the residual text harm. The
-remaining text harm is therefore a stream-mixing effect at the address, plus the low copy reliability
-of the text stream itself, not an absent/present confusion and not a geometry-capacity limit.
+Restoring the sign fixes a demonstrated loss of information and yields feasible fitted tables. The proposed exclusive stream-mixing/forced-eight-nat explanation is not established: 64-address fit/tune matrices and per-position causal outcomes were not saved. Target absence from admitted payloads explains the scope of possible copy gains, and the current positive payload-only boost cannot improve any nonpayload target. Retain the interface; characterize its missing actual rollout and test one learned read-conditioned state/emission update. This is a new operation, not a claimed solution to every text regression.
 
 ## Interface repairs delivered in this run
 
@@ -85,20 +77,17 @@ of the text stream itself, not an absent/present confusion and not a geometry-ca
 - **Expected-manifest loader**: 0 failures across `h4_policy`, `categorical_policy`, `h4_one_nat` and
   the two confidence artifacts; four rejections exercised (drifted thresholds, wrong byte hash, wrong
   fit-input identity, truncated bytes).
-- **Neighbour accounting**: the deliberately edited occurrence is excluded from neighbour-change
+- **Neighbour accounting (old coarse H4 policy only)**: the deliberately edited occurrence is excluded from neighbour-change
   counts (140 → 20 changed), with neighbours added (0), removed (16), lost admission (0), still-admitted
   (140/140) and NoRead (0) reported separately; the disabled-condition invariant holds 140/140.
 - **Identity**: the counterfactual score-space identity holds to `1.42e-13` bits over 5,442 positions.
 
 ## Retained and next
 
-Retained: the verified parent-preserving confidence interface, the witnessed parent rule as fallback,
-the two compact tables, and all superseded sealed roots. The evidenced successor is to separate the
-**text stream from the present-query stream at the address** — a prospectively declared query-type /
-role observation, or an explicit per-position reliability signal — rather than adding persistent state
-or dimensions. Structural persistence, dependent composition, broader language/executed Rust and
+Retained: the confidence interface with a feasible fitted policy, the witnessed parent rule as fallback,
+the two compact tables, and all superseded sealed roots. The [principal successor](deepseek-read-conditioned-state-step-2026-09-21.md) is frozen-confidence rollout plus one learned read-conditioned geometric update feeding shared emission. Structural persistence, dependent composition, broader language/executed Rust and
 qualified scale remain the ordered responsibilities in [project-track](project-track.md).
 
-Development selection plus one declared fresh evaluation; not generalization. Physical energy is
+Development selection plus one acceptance population and two replays; not generalization. Physical energy is
 UNAVAILABLE and whole-path D0-b is not claimed. Resources and charges are in the
 [resource ledger](resource-ledger-2026-09-19.md).

@@ -3888,9 +3888,41 @@ fn table_obj(p: &FeasProblem, x: &[usize]) -> f64 {
     x.iter().enumerate().map(|(b, a)| p.obj[b][*a]).sum()
 }
 
+fn require_witness_parity(checked: usize, mismatches: usize) -> Result<(), String> {
+    if checked == 0 || mismatches != 0 {
+        return Err(format!(
+            "confidence witness has {mismatches} mismatches over {checked} checked candidate-bearing positions"
+        ));
+    }
+    Ok(())
+}
+
+/// A failed confidence load cannot become `None`, which means the local baseline to panel callers.
+fn require_matching_confidence_load(
+    name: &str,
+    expected: &RelationalSelector,
+    loaded: Result<RelationalSelector, String>,
+) -> Result<RelationalSelector, String> {
+    let got = loaded.map_err(|e| format!("confidence load failed for {name}: {e}"))?;
+    if got.policy.len() != CONF_ADDRESSES || got != *expected {
+        return Err(format!(
+            "loaded confidence selector {name} differs from the selected 64-address operator"
+        ));
+    }
+    Ok(got)
+}
+
+fn required_confidence_arm<'a>(
+    arms: &'a BTreeMap<&str, RelationalSelector>,
+    name: &str,
+) -> Result<&'a RelationalSelector, String> {
+    arms.get(name)
+        .ok_or_else(|| format!("required confidence arm {name} was not selected and verified"))
+}
+
 /// Verify the parent-preserving witness: the configured selector's confidence sign must reproduce the
-/// frozen scored parent's own action on causal development prefixes (empty pool, one and many
-/// candidates, ties). Reporting only; no new model-quality claim.
+/// frozen scored parent's candidate-index/action pair on candidate-bearing causal development
+/// prefixes. This check does not exercise empty pools or independently loaded integer-logit parity.
 #[allow(clippy::too_many_arguments)]
 fn witness_parity(
     configured: &RelationalSelector,
@@ -3900,7 +3932,7 @@ fn witness_parity(
     u: &[Vec<i32>],
     table: &ExactGroupTable,
     obs: &[Vec<Obs>],
-) -> serde_json::Value {
+) -> Result<serde_json::Value, String> {
     let (mut checked, mut mismatches, mut parent_reads, mut d_pos) =
         (0usize, 0usize, 0usize, 0usize);
     let mut examples: Vec<serde_json::Value> = Vec::new();
@@ -3947,14 +3979,15 @@ fn witness_parity(
             }
         }
     }
-    json!({
+    require_witness_parity(checked, mismatches)?;
+    Ok(json!({
         "checked_positions": checked,
         "mismatches": mismatches,
         "parent_reads": parent_reads,
         "d_positive": d_pos,
         "examples": examples,
-        "note": "witness = empty pool -> NoRead; otherwise the ungated top source at eight nats iff D>0; D uses the parent bucket and widened i64",
-    })
+        "note": "candidate-bearing index/action parity only; witness = ungated top source at eight nats iff D>0; D uses the parent bucket and widened i64; empty-pool, independent loaded-logit and rollout parity are not tested here",
+    }))
 }
 
 fn utility_transfer_run() -> Result<ExitCode, String> {
@@ -4989,7 +5022,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     ] {
         let witness = witness_parity(
             configured, parent_sel, &parent, &local, &u, &table, &fit_obs,
-        );
+        )?;
         let mut fit_stats = FeasStats::new(CONF_ADDRESSES);
         accumulate_feas(
             &parent,
@@ -5213,7 +5246,8 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             sel.verify_policy_contract(&policy_cfg)?;
             conf_tables.insert(name, (sel, ch_text));
         }
-        // Bind the fit inputs that produced this interface (boundaries, references, addresses, D sign).
+        // This partial construction-observation digest does not bind text fit inputs, sequence/
+        // document boundaries, selected occurrence references or all optimizer configuration.
         for o in fit_obs.iter().flatten() {
             let z = local_logits(
                 &parent,
@@ -5252,27 +5286,24 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             bytes_sha256: artifact_sha256(&bytes),
             data_digest: conf_fit_digest,
         };
-        match load_expected_artifact(
-            &root,
-            &exp,
-            &e_digest,
-            &raw_tok,
-            &policy_cfg,
-            parent.cfg.vocab,
-        ) {
-            Ok(got) => {
-                if got != *sel {
-                    reload_failures += 1;
-                }
-                conf_load.insert(name, got);
-            }
-            Err(e) => {
-                eprintln!("confidence load failed for {name}: {e}");
-                reload_failures += 1;
-            }
-        }
+        let got = require_matching_confidence_load(
+            name,
+            sel,
+            load_expected_artifact(
+                &root,
+                &exp,
+                &e_digest,
+                &raw_tok,
+                &policy_cfg,
+                parent.cfg.vocab,
+            ),
+        )?;
+        conf_load.insert(name, got);
         export_bytes.insert(name, bytes);
     }
+    let h4_confidence_load = required_confidence_arm(&conf_load, "h4_confidence")?;
+    let categorical_confidence_load =
+        required_confidence_arm(&conf_load, "categorical_confidence")?;
     controls.push(json!({
         "control": "read_confidence_interface",
         "addresses": CONF_ADDRESSES,
@@ -5295,6 +5326,12 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     let conf_report = json!({
         "design": "restore the parent's learned Read/NoRead decision at the influence boundary as a sixth address bit; minimize complete-stream development text loss subject to the same present-emission/loss and absent-read/loss constraints, with the witnessed parent rule as candidate and fallback",
         "identity": "D = max_strength strength_score(candidate, relation, strength, parent_bucket) - noread_score(parent_bucket), widened i64; read iff D>0",
+        "policy_semantics": "64 opcodes select the confidence interface; 32 opcodes retain the coarse interface; opcode count is serialized in RLR2 v4",
+        "binding": {
+            "partial_construction_digest": hex_of(&conf_fit_digest),
+            "scope": "shared coarse PolicyConfig digest plus construction cur/prev/target/candidate-count/address/D-sign for each fitted arm",
+            "not_bound_by_this_digest": ["text fit inputs", "sequence/document boundaries", "selected occurrence and payload references", "full optimizer configuration", "confidence feature semantics"],
+        },
         "arms": conf_arms,
         "fresh_population": {
             "construction_seed": SEED_CONF_FRESH,
@@ -5328,11 +5365,8 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         ("h4_policy", Some(&h4_load)),
         ("categorical_policy", Some(&cat_load)),
         ("h4_one_nat_fixed", Some(&one_nat_load)),
-        ("h4_confidence", conf_load.get("h4_confidence")),
-        (
-            "categorical_confidence",
-            conf_load.get("categorical_confidence"),
-        ),
+        ("h4_confidence", Some(h4_confidence_load)),
+        ("categorical_confidence", Some(categorical_confidence_load)),
     ];
     let mut panels: Vec<serde_json::Value> = Vec::new();
     let mut agg_store: BTreeMap<(String, String), ArmAgg> = BTreeMap::new();
@@ -5906,11 +5940,13 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     }
     let cost = json!({
         "measurements": cost_rows,
+        "measured_reader_arm": "h4_policy (32-address coarse policy)",
+        "confidence_arm_timing": "NOT_RUN",
         "serialized_bytes": serde_json::Value::Object(serialized),
         "resident_bytes": {
             "local_row_table": 120 * parent.cfg.vocab * 4,
             "parent_scratch": parent.cfg.vocab * 4,
-            "policy_opcodes_per_arm": UTIL_BUCKETS,
+            "policy_opcodes_per_arm": {"coarse": UTIL_BUCKETS, "confidence": CONF_ADDRESSES},
             "gap_thresholds_per_arm": 4 * (UTIL_GAP_BINS - 1),
         },
         "energy": "UNAVAILABLE",
@@ -5926,6 +5962,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         "parents": parents_meta,
         "policy_config": {
             "config_digest": hex_of(&policy_cfg_digest),
+            "digest_scope": "coarse 32-address observation/action contract and shared gap thresholds; does not identify the added confidence-bit semantics",
             "gap_thresholds": gap_thresholds,
             "bucket_formula": POLICY_BUCKET_FORMULA,
             "gap_units": POLICY_GAP_UNITS,
@@ -5936,6 +5973,17 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             "configured_before_event_extraction": true,
         },
         "fit_input_digest": hex_of(&fit_input_digest),
+        "fit_input_digest_scope": "coarse policy fit events; not the confidence artifacts' data_digest",
+        "confidence_interface": {
+            "addresses": CONF_ADDRESSES,
+            "dispatch": "serialized policy length 64 selects confidence semantics; length 32 selects the unchanged coarse policy",
+            "address_formula": "2 * coarse_utility_bucket + 1[D > 0]",
+            "D": "max_strength strength_score(ungated top source, relation, strength, parent bucket) minus noread_score(parent bucket), in widened i64",
+            "parent_bucket": "selector bucket_of including newest bit and its own single-candidate margin rule; not the coarse utility bucket",
+            "action_encoding": POLICY_ACTION_ENCODING,
+            "partial_construction_digest": hex_of(&conf_fit_digest),
+            "binding_limit": "this digest omits text fit inputs, sequence/document boundaries, selected occurrence/payload references, confidence feature semantics and full optimizer configuration; complete fit dependency closure is not established",
+        },
         "artifact_bytes_sha256": export_bytes
             .iter()
             .map(|(k, v)| ((*k).to_string(), json!(sha256_hex(v))))
@@ -5957,6 +6005,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         },
         "text_split": text_split.clone(),
         "features": {
+            "scope": "coarse policy; see confidence_interface for the 64-address extension",
             "buckets": UTIL_BUCKETS,
             "bucket_formula": "gap_bin*8 + ctx_class*2 + margin_bit",
             "gap_bin": "count of declared integer thresholds below the selected payload's local logit gap",
@@ -5968,10 +6017,10 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         },
         "configuration": {
             "ring_cap": RING_CAP, "max_candidates": MAX_CAND,
-            "seeds": {"fit": SEED_FIT, "tune": SEED_TUNE, "regression": SEED_FRESH, "previous_final": SEED_FINAL, "final": SEED_FINAL2},
+            "seeds": {"fit": SEED_FIT, "tune": SEED_TUNE, "regression": SEED_FRESH, "previous_final": SEED_FINAL, "final": SEED_FINAL2, "confidence_fresh": SEED_CONF_FRESH},
             "min_support": UTIL_MIN_SUPPORT,
-            "abstention": "a read is chosen only if its mean cost is strictly below NoRead's",
-            "text_weight": "construction and natural text carry equal declared total weight",
+            "coarse_policy_fit": "equal construction/text total weight; a read is chosen only if its mean cost is strictly below NoRead's",
+            "confidence_policy_fit": "minimize full-stream fit text delta subject to present emitted-count/loss and absent read-count/loss constraints; unsupported addresses keep the witnessed parent rule",
         },
         "export": {"format": "RLR2 v4", "artifacts": export_bytes.keys().collect::<Vec<_>>()},
         "source_files": sources.clone(),
@@ -5991,7 +6040,8 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         "control": "artifact_reload_parity",
         "arms": ["h4_policy", "categorical_policy"],
         "reload_failures": reload_failures,
-        "note": "every exported arm is reloaded through the independent loader and compared to the fitted selector; the reloaded selectors drive every panel, the intervention, generation and timing",
+        "confidence_arms": ["h4_confidence", "categorical_confidence"],
+        "note": "confidence artifacts must load and equal the selected selectors before their teacher-forced panels run; generation, interventions and timing still use coarse policies and do not validate confidence rollout",
     }));
 
     // ---- decision --------------------------------------------------------------
@@ -6237,5 +6287,63 @@ fn main() -> ExitCode {
             eprintln!("error: {e}");
             ExitCode::from(1)
         }
+    }
+}
+
+#[cfg(test)]
+mod confidence_boundary_tests {
+    use super::*;
+
+    fn selector() -> RelationalSelector {
+        RelationalSelector {
+            q_roots: vec![0],
+            mode: RelMode::Geometric,
+            code_of: Vec::new(),
+            w: [0; EXACT_FEATS],
+            rank: [0; RANKS],
+            bias: 0,
+            sb: [0; ACTS],
+            noread: 0,
+            ctx: Vec::new(),
+            policy: vec![0; CONF_ADDRESSES],
+            gap_thresholds: [-8, -4, -1],
+        }
+    }
+
+    #[test]
+    fn confidence_failures_cannot_be_served_as_the_local_baseline() {
+        let expected = selector();
+        assert!(require_matching_confidence_load(
+            "h4_confidence",
+            &expected,
+            Err("expected-manifest rejection".into()),
+        )
+        .is_err());
+        let mut changed = expected.clone();
+        changed.policy[1] = 3;
+        assert!(require_matching_confidence_load("h4_confidence", &expected, Ok(changed)).is_err());
+        let mut coarse = expected.clone();
+        coarse.policy.truncate(UTIL_BUCKETS);
+        assert!(
+            require_matching_confidence_load("h4_confidence", &coarse, Ok(coarse.clone())).is_err()
+        );
+        let got =
+            require_matching_confidence_load("h4_confidence", &expected, Ok(expected.clone()))
+                .expect("the exact verified selector must remain usable");
+        let mut arms = BTreeMap::new();
+        assert!(required_confidence_arm(&arms, "h4_confidence").is_err());
+        arms.insert("h4_confidence", got);
+        assert_eq!(
+            required_confidence_arm(&arms, "h4_confidence").unwrap(),
+            &expected
+        );
+        assert!(required_confidence_arm(&arms, "categorical_confidence").is_err());
+    }
+
+    #[test]
+    fn confidence_witness_requires_nonempty_successful_comparison() {
+        assert!(require_witness_parity(0, 0).is_err());
+        assert!(require_witness_parity(20, 1).is_err());
+        assert!(require_witness_parity(20, 0).is_ok());
     }
 }

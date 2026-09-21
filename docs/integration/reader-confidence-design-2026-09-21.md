@@ -1,5 +1,7 @@
 # Read-confidence influence interface — prospective design
 
+> **Principal correction completing PR #1333:** [review](reader-confidence-review-2026-09-21.md) and [audit](../evidence/reader-confidence-principal-review-2026-09-21.json). Fit expressivity is retained, but both confidence arms fail fresh own-parent present CE and absent-read criteria; categorical parent is 81 present/six absent reads, not H4's 73/ten. Confidence rollout/interventions/timing are NOT_RUN. Three attempts repeat one exposed population; current source hashes verify. The exclusive stream-mixing diagnosis is unproven and the [next prompt](deepseek-read-conditioned-state-step-2026-09-21.md) tests a read-conditioned update/shared emission operation. Original dated design/measurements retain their historical scope.
+
 September 21, 2026. Executes the [principal review](policy-obstruction-review-2026-09-21.md) and the
 [constructive prompt](deepseek-reader-confidence-step-2026-09-21.md) on reviewed parent `e0d6296c`.
 Recorded **before** the extraction, fit and any fresh outcome. Base revision and the source/executable

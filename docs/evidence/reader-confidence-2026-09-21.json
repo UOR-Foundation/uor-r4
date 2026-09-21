@@ -347,5 +347,19 @@
       "final_absent_reads": 1,
       "final_absent_delta_bpp": 3.6363226217274226e-05
     }
+  },
+  "principal_correction": {
+    "review": "docs/integration/reader-confidence-review-2026-09-21.md",
+    "audit": "docs/evidence/reader-confidence-principal-review-2026-09-21.json",
+    "fresh_joint_preservation": "FAIL_BOTH_OWN_PARENT_PRESENT_CE_AND_ABSENT_COUNTS",
+    "categorical_parent_fresh": {
+      "present_correct": 81,
+      "absent_reads": 6
+    },
+    "new_confidence_rollout_interventions_timing": "NOT_RUN",
+    "repeat_scope": "one new population first exposed inattempt1, replayed2/3",
+    "source_hashes": "all three submitted source hashes match",
+    "stream_mixing_diagnosis": "UNPROVEN",
+    "next": "Frozen confidence rollout and one learned read-conditioned geometric update/shared emission residual"
   }
 }
