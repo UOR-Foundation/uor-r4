@@ -1,6 +1,20 @@
 # Current native geometric AI work
 
-## Active: shared learned transitions and owned response continuation
+## Active: shared learned transitions and complete result continuation executed
+
+**Executed the shared-transition brief** on merged `86623138` (PR #1338). New `--mode=shared-transition` and module `learner/shared_transition.rs`: `s0 = E[selected payload]`, `s_j = A[observed primitive j] * s_{j-1}`, `out_j = D(s_j)`, and a learned remaining-indexed `Stop`. One action per primitive is **reused at every occurrence**, the state is retained between emitted tokens (emitted tokens are never re-read as a query), and `Emit`/`Stop`/`UnknownValue`/`UnknownPrimitive`/`NoGrounding` are distinct typed outcomes. Artifact `RLST` v1, exported and independently reloaded with full-trajectory parity before any reported response.
+
+**Result.** On an authored ordered-primitive fixture with a witnessed non-abelian order-8 action subgroup, the primary completes **48/128 unseen length-4 ordered combinations** against **0** for an exact transition dictionary and 24 for the best matched control; development is 186/288 complete and 556/672 tokens, all 288 development responses stop, and the learned stop policy transfers to the unseen length 4. Four complete responses were generated from held-out prompts and three are exactly correct. A recount from the 1,312 saved per-step events equals the arm totals (244 = 186 + 48 + 10).
+
+**Causal controls.** A payload change at an identical query and identical primitives changes every step to the expected label; the state trajectory is independent of emitted tokens; a **noncommuting witness** on the learned codes shows H4's final result state differs under a single reversal (72 vs 90) while the additive arm's final token is provably invariant (4090 both ways); unknown primitive and undefined value are typed rather than identity; absent source yields no response; lengths 1-4 all stop.
+
+**Withdrawn and corrected:** the earlier claim that missing fixture cells are independent free parameters (the rectangle identity and connected graph refute it); the earlier development probe was supervised outer fitting through an initialized-domain defect, not held-out-operation generalization; the earlier operation/identity/absence controls were defective and are replaced.
+
+**Next:** persistent source ownership and a separate observed control channel to remove the instruction/selection coupling, then a dependent second read whose query and answer change with the first selected evidence; and a fitting method that converges on the action structure (development is 186/288). [Result](shared-transition-result-2026-09-21.md); [evidence](../evidence/shared-transition-2026-09-21.json). Retained roots `shared-transition-{1,4,5,6}` (0 unlisted). Energy UNAVAILABLE; whole-path D0-b not claimed.
+
+### Previous active (superseded by the section above)
+
+## Former active: shared learned transitions and owned response continuation
 
 **PR #1338, independently reviewed:** retain the reported value-only lexical decoder result, 161/180 development, 108/120 tune and 104/120 final, matching its same-run dictionary. The prior residual 33/120 uses different seeds, and the original winning decoder was not exported/served. Composition H4's 8/64 is independently reconstructed, but two supervised probe operations were absent from the learned vocabulary and fell back to identity. **Missing cells are not independent free parameters of a shared product family.** The original intervention/identity/parity claims are narrowed in the [principal review](derived-state-decoder-review-2026-09-21.md) and [audit](../evidence/derived-state-decoder-principal-review-2026-09-21.json).
 

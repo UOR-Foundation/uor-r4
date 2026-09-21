@@ -27,6 +27,7 @@ use uor_r4_core::native_geometric::learner::read_conditioned::*;
 use uor_r4_core::native_geometric::learner::realtext_support::*;
 use uor_r4_core::native_geometric::learner::relational::*;
 use uor_r4_core::native_geometric::learner::result_decoder::*;
+use uor_r4_core::native_geometric::learner::shared_transition::*;
 use uor_r4_core::report_output::{claim, seal, verify};
 use uor_r4_core::transformerless::bpe_derive::{derive_tokenizer, derive_tokenizer_json};
 use uor_r4_core::transformerless::hf_bpe::HfBpeTokenizer;
@@ -10582,12 +10583,924 @@ fn dsd_run() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+// ---------------------------------------------------------------------------
+// Shared-transition continuation: read -> compute -> emit -> stop
+// ---------------------------------------------------------------------------
+
+const ST_VALUES: usize = 4;
+const ST_PRIMITIVES: usize = 8;
+const ST_SEED: u64 = 0xC0F3_0001;
+const ST_PASSES: usize = 3;
+const ST_RESTARTS: usize = 6;
+const ST_DEV_LEN2: usize = 32;
+const ST_DEV_LEN3: usize = 32;
+const ST_HELD_LEN4: usize = 16;
+const ST_HELD_REV: usize = 16;
+
+#[derive(Clone)]
+struct StItem {
+    item_id: usize,
+    prefix: Vec<u32>,
+    primitives: Vec<u32>,
+    targets: Vec<u32>,
+    value: u32,
+    split: &'static str,
+}
+
+struct StFixture {
+    pub items: Vec<StItem>,
+    pub stop_token: u32,
+    pub primitives: Vec<u32>,
+    pub q8: [u8; 8],
+    pub noncommuting_pair: (usize, usize),
+}
+
+fn st_primitive_seqs(lens: &[usize], stride: usize, seed: u64) -> Vec<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut st = seed | 1;
+    for &l in lens.iter() {
+        let total = ST_PRIMITIVES.pow(l as u32);
+        let mut i = (xorshift(&mut st) as usize) % stride.max(1);
+        while i < total {
+            let mut seq = Vec::with_capacity(l);
+            let mut x = i;
+            for _ in 0..l {
+                seq.push(x % ST_PRIMITIVES);
+                x /= ST_PRIMITIVES;
+            }
+            out.push(seq);
+            i += stride.max(1);
+        }
+    }
+    out
+}
+
+fn st_fixture(
+    banks: &Banks,
+    vocab: usize,
+    labels: &[u32],
+    q8: [u8; 8],
+) -> Result<StFixture, String> {
+    let t = group_table();
+    let mul = |a: usize, b: usize| t.product[a * ROW_STRIDE + b] as usize;
+    let idx_of = |g: usize| q8.iter().position(|x| *x as usize == g).unwrap_or(0);
+    // True data codes live only in the generator; the model never sees them.
+    let vcode = |i: usize| q8[(i * 3) % 8] as usize;
+    let pcode = |j: usize| q8[(j * 5 + 1) % 8] as usize;
+    let values: Vec<u32> = banks.values_fit.iter().copied().take(ST_VALUES).collect();
+    let primitives: Vec<u32> = banks
+        .values_fit
+        .iter()
+        .copied()
+        .skip(ST_VALUES)
+        .take(ST_PRIMITIVES)
+        .collect();
+    if values.len() < ST_VALUES || primitives.len() < ST_PRIMITIVES {
+        return Err("insufficient bank for the shared-transition fixture".into());
+    }
+    let key = banks.keys[0];
+    let qrole = banks.pairs[0].0;
+    let source_role = banks.pairs[0].1;
+    let mut stop_token = 0u32;
+    for tk in (0..vocab as u32).rev() {
+        if !values.contains(&tk) && !primitives.contains(&tk) && !labels.contains(&tk) {
+            stop_token = tk;
+            break;
+        }
+    }
+    if stop_token == 0 {
+        return Err("no disjoint stop token".into());
+    }
+    let mut noncommuting_pair = (0usize, 0usize);
+    'outer: for a in 0..ST_PRIMITIVES {
+        for b in 0..ST_PRIMITIVES {
+            if mul(pcode(a), pcode(b)) != mul(pcode(b), pcode(a)) {
+                noncommuting_pair = (a, b);
+                break 'outer;
+            }
+        }
+    }
+    if noncommuting_pair == (0usize, 0usize) && mul(pcode(0), pcode(0)) == mul(pcode(0), pcode(0)) {
+        // A single generator may still be noncommuting with itself only if it is not; check all.
+        let any = (0..ST_PRIMITIVES).any(|a| {
+            (0..ST_PRIMITIVES).any(|b| mul(pcode(a), pcode(b)) != mul(pcode(b), pcode(a)))
+        });
+        if !any {
+            return Err("the declared primitives do not contain a noncommuting pair".into());
+        }
+    }
+    let mut items: Vec<StItem> = Vec::new();
+    let mut build =
+        |seq: &[usize], value_idx: usize, split: &'static str, items: &mut Vec<StItem>| {
+            let mut state = vcode(value_idx);
+            let mut targets = Vec::with_capacity(seq.len());
+            for &p in seq.iter() {
+                state = mul(pcode(p), state);
+                targets.push(labels[idx_of(state)]);
+            }
+            let mut prefix: Vec<u32> = vec![source_role, key, values[value_idx]];
+            prefix.extend(seq.iter().map(|p| primitives[*p]));
+            prefix.push(qrole);
+            prefix.push(key);
+            items.push(StItem {
+                item_id: items.len(),
+                prefix,
+                primitives: seq.iter().map(|p| primitives[*p]).collect(),
+                targets,
+                value: values[value_idx],
+                split,
+            });
+        };
+    for seq in st_primitive_seqs(&[1], 1, ST_SEED) {
+        for v in 0..ST_VALUES {
+            build(&seq, v, "dev", &mut items);
+        }
+    }
+    for seq in st_primitive_seqs(&[2], 2, ST_SEED ^ 0x11) {
+        for v in 0..ST_VALUES {
+            build(&seq, v, "dev", &mut items);
+        }
+    }
+    for seq in st_primitive_seqs(&[3], 16, ST_SEED ^ 0x22) {
+        for v in 0..ST_VALUES {
+            build(&seq, v, "dev", &mut items);
+        }
+    }
+    for seq in st_primitive_seqs(&[4], 128, ST_SEED ^ 0x33) {
+        for v in 0..ST_VALUES {
+            build(&seq, v, "held_out_length4", &mut items);
+        }
+    }
+    // Order-reversal held-out population: reversed development pairs that do **not** occur in
+    // development at any length, so the reversal is genuinely unseen.
+    let dev_pairs = st_primitive_seqs(&[2], 2, ST_SEED ^ 0x11);
+    let dev_set: std::collections::BTreeSet<Vec<usize>> = {
+        let mut set = std::collections::BTreeSet::new();
+        for seq in st_primitive_seqs(&[1], 1, ST_SEED) {
+            set.insert(seq);
+        }
+        for seq in dev_pairs.iter() {
+            set.insert(seq.clone());
+        }
+        for seq in st_primitive_seqs(&[3], 16, ST_SEED ^ 0x22) {
+            set.insert(seq);
+        }
+        set
+    };
+    let mut rev_built = 0usize;
+    for seq in dev_pairs.iter() {
+        if rev_built >= ST_HELD_REV {
+            break;
+        }
+        let rev: Vec<usize> = seq.iter().rev().copied().collect();
+        if dev_set.contains(&rev) {
+            continue;
+        }
+        for v in 0..ST_VALUES {
+            build(&rev, v, "held_out_reversal", &mut items);
+        }
+        rev_built += 1;
+    }
+    let _ = (ST_DEV_LEN2, ST_DEV_LEN3, ST_HELD_LEN4);
+    Ok(StFixture {
+        items,
+        stop_token,
+        primitives,
+        q8,
+        noncommuting_pair,
+    })
+}
+
+/// One served response produced from the shared read, with the selected occurrence recorded.
+struct StServed {
+    response: Response,
+    payload: Option<u32>,
+    read: bool,
+    source_abs: Option<u32>,
+    local_token: u32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn st_read_and_serve(
+    parent: &PriorCore,
+    local: &QueryHard,
+    u: &[Vec<i32>],
+    table: &ExactGroupTable,
+    sel: &RelationalSelector,
+    model: &SharedTransitionModel,
+    item: &StItem,
+    use_reader: bool,
+) -> Result<StServed, String> {
+    let ring = ring_before_current(&item.prefix);
+    let i = item.prefix.len() - 1;
+    let z = local_logits(
+        parent,
+        local,
+        u,
+        item.prefix[i],
+        item.prefix[i - 1] as usize,
+        item.prefix[i - 2],
+        ring.written(),
+    );
+    let r = read_step(
+        &ring,
+        item.prefix[i],
+        item.prefix[i - 1],
+        item.prefix[i - 2],
+        sel,
+        table,
+        use_reader,
+        &z,
+    );
+    let local_token = argmax_low(&z) as u32;
+    let response = match (use_reader, r.payload) {
+        (true, Some(p)) => model.serve(p, &item.primitives),
+        _ => Response {
+            tokens: Vec::new(),
+            states: Vec::new(),
+            steps: vec![StepKind::Stop],
+            stopped: false,
+        },
+    };
+    Ok(StServed {
+        response,
+        payload: r.payload,
+        read: r.action.is_some(),
+        source_abs: r.source.map(|x| x.abs),
+        local_token,
+    })
+}
+
+fn st_complete(item: &StItem, r: &Response) -> bool {
+    r.stopped && r.tokens == item.targets
+}
+
+fn st_score<F>(items: &[StItem], serve: &F) -> Result<(usize, usize, usize, usize), String>
+where
+    F: Fn(&StItem) -> Result<StServed, String>,
+{
+    let mut complete = 0usize;
+    let mut hits = 0usize;
+    let mut total = 0usize;
+    let mut stop_ok = 0usize;
+    for it in items.iter() {
+        let s = serve(it)?;
+        if st_complete(it, &s.response) {
+            complete += 1;
+        }
+        if s.response.stopped && s.response.tokens.len() == it.targets.len() {
+            stop_ok += 1;
+        }
+        for (j, t) in it.targets.iter().enumerate() {
+            total += 1;
+            if s.response.tokens.get(j) == Some(t) {
+                hits += 1;
+            }
+        }
+    }
+    Ok((complete, hits, total, stop_ok))
+}
+
+fn st_run() -> Result<ExitCode, String> {
+    let mut root = PathBuf::from(
+        "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/shared-transition-1",
+    );
+    let mut source_root: Option<PathBuf> = None;
+    {
+        let mut a = std::env::args().skip(1);
+        while let Some(k) = a.next() {
+            match k.as_str() {
+                "--root" => root = PathBuf::from(a.next().ok_or("--root value")?),
+                "--source-root" => source_root = Some(PathBuf::from(a.next().ok_or("value")?)),
+                other if other.starts_with("--mode") => {}
+                other => return Err(format!("unknown argument {other}")),
+            }
+        }
+    }
+    claim(&root).map_err(|e| format!("claim {}: {e}", root.display()))?;
+    let started = Instant::now();
+
+    let pb = std::fs::read(E_PATH).map_err(|e| format!("E: {e}"))?;
+    if sha256_hex(&pb) != E_SHA {
+        return Err("E sha mismatch".into());
+    }
+    let parent = PriorCore::from_bytes(&pb).map_err(|e| format!("load E: {e}"))?;
+    parent.validate()?;
+    let (parent_digest, _) = parent_hash_convention(&pb);
+    let sb = std::fs::read(S_PATH).map_err(|e| format!("S: {e}"))?;
+    if sha256_hex(&sb) != S_SHA {
+        return Err("S sha mismatch".into());
+    }
+    let tb = std::fs::read(DEFAULT_TOKENIZER).map_err(|e| format!("tokenizer: {e}"))?;
+    if sha256_hex(&tb) != TOKENIZER_SHA {
+        return Err("tokenizer sha mismatch".into());
+    }
+    let derived = sha256_hex(&derive_tokenizer_json(&tb, VOCAB).map_err(|e| format!("{e}"))?);
+    if derived != DERIVED_SHA {
+        return Err("derived tokenizer sha mismatch".into());
+    }
+    let tokenizer = derive_tokenizer(&tb, VOCAB).map_err(|e| format!("derive: {e}"))?;
+    let raw_tok: [u8; 32] = hex_to_bytes(&derived)?.try_into().unwrap();
+    let local = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
+        .map_err(|e| format!("load S: {e}"))?;
+    let u: Vec<Vec<i32>> = (0..120).map(|s| local.row_scores(s)).collect();
+    let table = ExactGroupTable::build().map_err(|e| format!("table: {e}"))?;
+    let group_digest = group_table_digest(&table);
+    let banks = build_banks(&tokenizer, parent.cfg.vocab)?;
+    let source_files: Vec<serde_json::Value> = match &source_root {
+        Some(sr) => [
+            "crates/uor-r4-core/src/native_geometric/learner/relational.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/read_conditioned.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/result_decoder.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/shared_transition.rs",
+            "crates/uor-r4-core/src/bin/competitive-reader.rs",
+        ]
+        .iter()
+        .map(|rel| match std::fs::read(sr.join(rel)) {
+            Ok(b) => json!({"path": rel, "sha256": sha256_hex(&b)}),
+            Err(_) => json!({"path": rel, "sha256": "UNAVAILABLE"}),
+        })
+        .collect(),
+        None => vec![json!({"path": "unspecified", "sha256": "UNAVAILABLE"})],
+    };
+    let executable_sha256 = hex_of(&sha256_bytes(
+        &std::env::current_exe()
+            .ok()
+            .and_then(|p| std::fs::read(p).ok())
+            .unwrap_or_default(),
+    ));
+    let parent_root = PathBuf::from(PARENT_ROOT);
+    let selector_bytes = std::fs::read(parent_root.join("artifacts/relational_ctx.rlr2"))
+        .map_err(|e| format!("parent artifact: {e}"))?;
+    let selector_sha256 = sha256_hex(&selector_bytes);
+    if selector_sha256 != PARENT_SHA_RELATIONAL_CTX {
+        return Err("contextual selector hash mismatch".into());
+    }
+    let sel =
+        RelationalArtifact::from_bytes(&selector_bytes, &sha256_bytes(&sb), &raw_tok)?.selector;
+
+    let q8 = q8_witness()?;
+    let labels: Vec<u32> = (0..parent.cfg.vocab as u32).rev().take(64).collect();
+    let fixture = st_fixture(&banks, parent.cfg.vocab, &labels, q8)?;
+    let dev: Vec<StItem> = fixture
+        .items
+        .iter()
+        .filter(|i| i.split == "dev")
+        .cloned()
+        .collect();
+    let held_len: Vec<StItem> = fixture
+        .items
+        .iter()
+        .filter(|i| i.split == "held_out_length4")
+        .cloned()
+        .collect();
+    let held_rev: Vec<StItem> = fixture
+        .items
+        .iter()
+        .filter(|i| i.split == "held_out_reversal")
+        .cloned()
+        .collect();
+    let dev_examples: Vec<StExample> = dev
+        .iter()
+        .map(|i| StExample {
+            payload: i.value,
+            primitives: i.primitives.clone(),
+            targets: i.targets.clone(),
+        })
+        .collect();
+
+    // Sequence-disjoint development probe: even sequence ids calibrate, odd ones probe. Both are
+    // supervised development, so probe accuracy is not held-out population evidence.
+    let dev_fit: Vec<StExample> = dev_examples
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| i % 2 == 0)
+        .map(|(_, e)| e.clone())
+        .collect();
+    let dev_probe: Vec<StExample> = dev_examples
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| i % 2 == 1)
+        .map(|(_, e)| e.clone())
+        .collect();
+    let (h4, h4_fit) = fit_shared_transition(
+        &dev_fit,
+        &dev_probe,
+        ST_MAX_STATES,
+        ST_PASSES,
+        false,
+        ST_RESTARTS,
+        ST_SEED,
+    );
+    let (c120, c120_fit) = fit_shared_transition(
+        &dev_fit,
+        &dev_probe,
+        ST_MAX_STATES,
+        ST_PASSES,
+        true,
+        ST_RESTARTS,
+        ST_SEED,
+    );
+
+    // Export and independently reload before any reported response.
+    let mut artifacts: Vec<serde_json::Value> = Vec::new();
+    let mut reload =
+        |name: &str, model: SharedTransitionModel| -> Result<SharedTransitionModel, String> {
+            let bytes = model.to_bytes();
+            let rel = format!("artifacts/{name}.rlst");
+            write_checked(&root, &rel, &bytes)?;
+            let loaded = SharedTransitionModel::from_bytes(
+                &std::fs::read(root.join(&rel)).map_err(|e| e.to_string())?,
+                parent.cfg.vocab,
+            )?;
+            if loaded != model {
+                return Err("shared-transition reload mismatch".into());
+            }
+            let mut parity = 0usize;
+            for it in fixture.items.iter() {
+                let a = model.serve(it.value, &it.primitives);
+                let b = loaded.serve(it.value, &it.primitives);
+                if a != b {
+                    return Err("shared-transition loaded parity failure".into());
+                }
+                parity += 1;
+            }
+            artifacts.push(json!({"arm": name, "artifact_sha256": sha256_hex(&bytes),
+            "reload_identical": true, "loaded_parity_items": parity,
+            "algebra": if model.cyclic {"cyclic_c120"} else {"signed_h4"},
+            "selector_sha256": selector_sha256, "group_digest": group_digest}));
+            Ok(loaded)
+        };
+    let h4 = reload("shared_transition_h4", h4)?;
+    let c120 = reload("shared_transition_c120", c120)?;
+
+    // Retained lexical component: the value-only derived-state decoder as a one-token emitter.
+    let vo_fit: Vec<DecExample> = dev
+        .iter()
+        .filter_map(|i| {
+            i.targets.first().map(|t| DecExample {
+                r: 0,
+                qrole: 0,
+                payload: i.value,
+                target: *t,
+                read: true,
+                grounded: true,
+            })
+        })
+        .collect();
+    let (vo_model, _vo_report) =
+        fit_derived_state_model(&vo_fit, &[], DEC_MAX_STATES, ST_PASSES, false, true);
+    let vo_bytes = vo_model.to_bytes();
+    write_checked(&root, "artifacts/value_only_lexical.rlds", &vo_bytes)?;
+    let vo_loaded = DerivedStateModel::from_bytes(
+        &std::fs::read(root.join("artifacts/value_only_lexical.rlds"))
+            .map_err(|e| e.to_string())?,
+        parent.cfg.vocab,
+    )?;
+    if vo_loaded.value_only != true || vo_loaded != vo_model {
+        return Err("value-only lexical reload or factor contract mismatch".into());
+    }
+    artifacts.push(
+        json!({"arm": "value_only_lexical", "artifact_sha256": sha256_hex(&vo_bytes),
+        "reload_identical": true, "value_only": vo_loaded.value_only,
+        "strict_operands": vo_loaded.strict_operands}),
+    );
+
+    // Comparators.
+    let mut dict: BTreeMap<(u32, Vec<u32>), Vec<u32>> = BTreeMap::new();
+    let mut value_first: BTreeMap<u32, BTreeMap<u32, usize>> = BTreeMap::new();
+    for i in dev.iter() {
+        dict.insert((i.value, i.primitives.clone()), i.targets.clone());
+        if let Some(t) = i.targets.first() {
+            *value_first
+                .entry(i.value)
+                .or_default()
+                .entry(*t)
+                .or_default() += 1;
+        }
+    }
+    let value_first: BTreeMap<u32, u32> = value_first
+        .iter()
+        .map(|(v, m)| {
+            (
+                *v,
+                m.iter()
+                    .max_by_key(|(_, c)| **c)
+                    .map(|(t, _)| *t)
+                    .unwrap_or(0),
+            )
+        })
+        .collect();
+
+    let mut arms: Vec<serde_json::Value> = Vec::new();
+    for (split, items) in [
+        ("dev", &dev),
+        ("held_out_length4", &held_len),
+        ("held_out_reversal", &held_rev),
+    ] {
+        let h4_score = st_score(items, &|it| {
+            st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, it, true)
+        })?;
+        let c120_score = st_score(items, &|it| {
+            st_read_and_serve(&parent, &local, &u, &table, &sel, &c120, it, true)
+        })?;
+        let local_score = st_score(items, &|it| {
+            let s = st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, it, false)?;
+            Ok(StServed {
+                response: Response {
+                    tokens: vec![s.local_token],
+                    states: vec![],
+                    steps: vec![StepKind::Emit, StepKind::Stop],
+                    stopped: true,
+                },
+                ..s
+            })
+        })?;
+        let dict_score = st_score(items, &|it| {
+            let s = st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, it, true)?;
+            let payload = s.payload.unwrap_or(it.value);
+            let tokens = match dict.get(&(payload, it.primitives.clone())) {
+                Some(t) => t.clone(),
+                None => vec![value_first.get(&payload).copied().unwrap_or(0)],
+            };
+            Ok(StServed {
+                response: Response {
+                    tokens,
+                    states: vec![],
+                    steps: vec![StepKind::Emit, StepKind::Stop],
+                    stopped: true,
+                },
+                ..s
+            })
+        })?;
+        let vo_score = st_score(items, &|it| {
+            let s = st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, it, true)?;
+            let payload = s.payload.unwrap_or(it.value);
+            let tokens = match vo_loaded.decode(0, 0, payload) {
+                DecOutcome::Emit { token, .. } => vec![token],
+                DecOutcome::NoRead => vec![],
+            };
+            Ok(StServed {
+                response: Response {
+                    tokens,
+                    states: vec![],
+                    steps: vec![StepKind::Emit, StepKind::Stop],
+                    stopped: true,
+                },
+                ..s
+            })
+        })?;
+        for (label, sc) in [
+            ("h4_shared_transition", h4_score),
+            ("c120_shared_transition", c120_score),
+            ("local_noread", local_score),
+            ("transition_dictionary", dict_score),
+            ("value_only_lexical", vo_score),
+        ] {
+            arms.push(json!({"arm": label, "split": split, "items": items.len(),
+                "complete": sc.0, "token_hits": sc.1, "token_total": sc.2, "stopped_correctly": sc.3}));
+        }
+    }
+
+    // Interventions on the loaded H4 model.
+    let nc = fixture.noncommuting_pair;
+    // Do the *learned* H4 action codes contain a noncommuting pair? If not, an order test on this
+    // model is vacuous and is reported as such rather than assumed.
+    let learned_noncommuting = {
+        let t = group_table();
+        let mul = |x: usize, y: usize| t.product[x * ROW_STRIDE + y] as usize;
+        let mut found = false;
+        for i in 0..h4.action_code.len() {
+            for j in 0..h4.action_code.len() {
+                if mul(h4.action_code[i] as usize, h4.action_code[j] as usize)
+                    != mul(h4.action_code[j] as usize, h4.action_code[i] as usize)
+                {
+                    found = true;
+                }
+            }
+        }
+        found
+    };
+    let base = dev.iter().find(|i| i.primitives.len() == 2).cloned();
+    let mut interventions = json!({});
+    let rev_item: Option<&StItem> = base.as_ref().and_then(|b| {
+        let swapped: Vec<u32> = b.primitives.iter().rev().copied().collect();
+        held_rev
+            .iter()
+            .find(|i| i.value == b.value && i.primitives == swapped)
+    });
+    if let Some(b) = base.as_ref() {
+        let mut swapped = b.clone();
+        swapped.primitives = b.primitives.iter().rev().copied().collect();
+        let mut repl = b.clone();
+        repl.prefix = {
+            let mut p: Vec<u32> = b.prefix[..3].to_vec();
+            p.extend(swapped.primitives.iter());
+            p.extend_from_slice(&b.prefix[b.prefix.len() - 2..]);
+            p
+        };
+        let a = h4.serve(b.value, &b.primitives);
+        let c = h4.serve(b.value, &swapped.primitives);
+        let ab = c120.serve(b.value, &b.primitives);
+        let cb = c120.serve(b.value, &swapped.primitives);
+        // Payload change at the same query and same primitives.
+        let other_value = dev
+            .iter()
+            .find(|i| i.value != b.value)
+            .map(|i| i.value)
+            .unwrap_or(b.value);
+        let third = dev
+            .iter()
+            .find(|i| i.primitives == b.primitives && i.value == other_value);
+        let d = third.map(|t| h4.serve(t.value, &t.primitives));
+        interventions = json!({
+            "payload_changed_same_query_and_primitives": {
+                "value_a": b.value, "emitted_a": a.tokens,
+                "value_b": other_value,
+                "emitted_b": d.as_ref().map(|x| x.tokens.clone()),
+                "expected_b": third.map(|t| t.targets.clone()),
+                "changed": d.as_ref().map(|x| x.tokens != a.tokens).unwrap_or(false),
+                "all_steps_as_expected": d
+                    .as_ref()
+                    .zip(third)
+                    .map(|(x, t)| x.tokens == t.targets)
+                    .unwrap_or(false),
+            },
+            "computation_only_order_comparison": {
+                "selected_operand_held_fixed": b.value,
+                "h4_forward": h4.serve(b.value, &b.primitives).tokens,
+                "h4_reversed": h4.serve(b.value, &swapped.primitives).tokens,
+                "h4_order_sensitive_on_the_learned_codes": h4.serve(b.value, &b.primitives).tokens
+                    != h4.serve(b.value, &swapped.primitives).tokens,
+                "c120_forward": c120.serve(b.value, &b.primitives).tokens,
+                "c120_reversed": c120.serve(b.value, &swapped.primitives).tokens,
+                "c120_order_insensitive_on_the_learned_codes": c120.serve(b.value, &b.primitives).tokens
+                    == c120.serve(b.value, &swapped.primitives).tokens,
+                "learned_h4_actions_noncommuting": learned_noncommuting,
+                "expected_reversed_from_the_fixture": rev_item.map(|i| i.targets.clone()),
+                "h4_reversed_matches_fixture": rev_item
+                    .map(|i| h4.serve(b.value, &swapped.primitives).tokens == i.targets),
+            },
+            "primitive_order_reversed_fixed_evidence": {
+                "forward": b.primitives, "forward_emitted": a.tokens, "forward_expected": b.targets,
+                "reversed": swapped.primitives, "reversed_emitted": c.tokens,
+                "changed_under_h4": c.tokens != a.tokens,
+                "c120_forward": ab.tokens, "c120_reversed": cb.tokens,
+                "c120_order_insensitive": ab.tokens == cb.tokens,
+                "noncommuting_primitive_pair": [
+                    fixture.primitives[nc.0], fixture.primitives[nc.1]
+                ],
+            },
+            "unknown_primitive_is_typed": {
+                "step_kind": format!("{:?}", h4.serve(b.value, &[b.primitives[0], 0]).steps.last()),
+                "unknown_primitive_token": 0u32,
+            },
+            "absent_source_is_noread": {
+                "read": st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, b, false)?.read,
+                "response_stopped": st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, b, false)?.response.stopped,
+            },
+            "undefined_value_is_typed": {
+                "step_kind": format!("{:?}", h4.serve(u32::MAX - 3, &b.primitives).steps),
+            },
+            "variable_lengths_stop": {
+                "lengths": [1usize, 2, 3, 4],
+                "stopped": [
+                    h4.serve(b.value, &fixture.primitives[..1]).stopped,
+                    h4.serve(b.value, &fixture.primitives[..2]).stopped,
+                    h4.serve(b.value, &fixture.primitives[..3]).stopped,
+                    h4.serve(b.value, &fixture.primitives[..4]).stopped,
+                ],
+                "token_counts": [
+                    h4.serve(b.value, &fixture.primitives[..1]).tokens.len(),
+                    h4.serve(b.value, &fixture.primitives[..2]).tokens.len(),
+                    h4.serve(b.value, &fixture.primitives[..3]).tokens.len(),
+                    h4.serve(b.value, &fixture.primitives[..4]).tokens.len(),
+                ],
+            },
+        });
+        // Rigorous noncommuting witness on the *learned* codes: the final result state is the
+        // order-sensitive quantity. An additive alternative maps every ordering of the same
+        // multiset of actions to one state, so its final emission cannot distinguish a reversal.
+        let order_witness = {
+            let mut found: Option<(
+                u32,
+                u32,
+                usize,
+                usize,
+                Vec<u32>,
+                Vec<u32>,
+                Vec<u32>,
+                Vec<u32>,
+            )> = None;
+            'search: for x in fixture.primitives.iter() {
+                for y in fixture.primitives.iter() {
+                    if x == y {
+                        continue;
+                    }
+                    let fwd = h4.serve(b.value, &[*x, *y]);
+                    let rev = h4.serve(b.value, &[*y, *x]);
+                    if fwd.states.len() == 2
+                        && rev.states.len() == 2
+                        && fwd.states[1] != rev.states[1]
+                    {
+                        let cf = c120.serve(b.value, &[*x, *y]);
+                        let cr = c120.serve(b.value, &[*y, *x]);
+                        found = Some((
+                            *x,
+                            *y,
+                            fwd.states[1],
+                            rev.states[1],
+                            fwd.tokens.clone(),
+                            rev.tokens.clone(),
+                            cf.tokens.clone(),
+                            cr.tokens.clone(),
+                        ));
+                        break 'search;
+                    }
+                }
+            }
+            match found {
+                Some((x, y, sf, sr, tf, tr, cf, cr)) => json!({
+                    "primitives": [x, y],
+                    "selected_operand_held_fixed": b.value,
+                    "h4_final_state_forward": sf, "h4_final_state_reversed": sr,
+                    "h4_final_state_order_sensitive": sf != sr,
+                    "h4_tokens_forward": tf, "h4_tokens_reversed": tr,
+                    "c120_tokens_forward": cf, "c120_tokens_reversed": cr,
+                    "c120_final_token_order_insensitive": cf.last() == cr.last(),
+                    "note": "the final result state is the order-sensitive quantity; an additive alternative maps every ordering of the same action multiset to one state",
+                }),
+                None => json!({"found": false,
+                    "note": "no learned noncommuting pair produced distinct final states on this operand"}),
+            }
+        };
+        interventions["noncommuting_final_state_witness"] = order_witness;
+        // Retained-result control: the state trajectory cannot depend on emitted tokens.
+        let states_a = h4.serve(b.value, &b.primitives).states;
+        let states_b = h4.serve(b.value, &b.primitives).states;
+        interventions["retained_state_independent_of_emissions"] = json!({
+            "states_a": states_a, "states_b": states_b, "identical": states_a == states_b,
+            "note": "the served trajectory recomputes each state from the selected payload and the observed primitive prefix; emitted tokens are never re-read as a query",
+        });
+    }
+
+    // Complete generated responses (the whole trajectory, not one next-token score).
+    let mut generation: Vec<serde_json::Value> = Vec::new();
+    for it in held_len.iter().take(4) {
+        let s = st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, it, true)?;
+        generation.push(json!({
+            "split": it.split, "value": it.value, "primitives": it.primitives,
+            "expected": it.targets, "emitted": s.response.tokens,
+            "stopped": s.response.stopped, "states": s.response.states,
+            "steps": s.response.steps.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>(),
+            "complete_correct": st_complete(it, &s.response),
+        }));
+    }
+
+    // Per-step events, aggregated back from the saved rows.
+    let mut rows_text = String::new();
+    let mut per_step: Vec<serde_json::Value> = Vec::new();
+    for it in fixture.items.iter() {
+        let s = st_read_and_serve(&parent, &local, &u, &table, &sel, &h4, it, true)?;
+        let mut state = h4.initial_state(s.payload.unwrap_or(it.value)).unwrap_or(0);
+        for (j, prim) in it.primitives.iter().enumerate() {
+            state = h4.apply(state, *prim).unwrap_or(state);
+            let emitted = s.response.tokens.get(j).copied();
+            let expected = it.targets.get(j).copied();
+            let row = json!({"split": it.split, "item_id": it.item_id, "value": it.value,
+                "primitive_index": j, "primitive": prim, "state": state,
+                "expected": expected, "emitted": emitted,
+                "selected_payload": s.payload, "read": s.read, "source_abs": s.source_abs,
+                "step_kind": s.response.steps.get(j).map(|k| format!("{k:?}")),
+                "stopped": s.response.stopped});
+            rows_text.push_str(&serde_json::to_string(&row).map_err(|e| e.to_string())?);
+            rows_text.push('\n');
+            per_step.push(row);
+        }
+    }
+    write_checked(&root, "rows.jsonl", rows_text.as_bytes())?;
+    // Recount complete responses from the saved per-step events, keyed by the unique item id.
+    let mut by_item: BTreeMap<usize, Vec<&serde_json::Value>> = BTreeMap::new();
+    for r in per_step.iter() {
+        by_item
+            .entry(r["item_id"].as_u64().unwrap_or(u64::MAX) as usize)
+            .or_default()
+            .push(r);
+    }
+    let recounted_complete = fixture
+        .items
+        .iter()
+        .filter(|it| match by_item.get(&it.item_id) {
+            Some(rows) => {
+                rows.len() == it.targets.len()
+                    && rows
+                        .iter()
+                        .enumerate()
+                        .all(|(j, r)| r["emitted"].as_u64() == Some(it.targets[j] as u64))
+                    && rows.iter().all(|r| r["stopped"] == json!(true))
+            }
+            None => false,
+        })
+        .count();
+
+    let find = |arm: &str, split: &str| -> u64 {
+        arms.iter()
+            .find(|a| a["arm"] == json!(arm) && a["split"] == json!(split))
+            .and_then(|a| a["complete"].as_u64())
+            .unwrap_or(0)
+    };
+    let h4_len = find("h4_shared_transition", "held_out_length4");
+    let control_max = [
+        "c120_shared_transition",
+        "local_noread",
+        "transition_dictionary",
+        "value_only_lexical",
+    ]
+    .iter()
+    .map(|a| find(a, "held_out_length4"))
+    .max()
+    .unwrap_or(0);
+    let screen = json!({
+        "declared": "held-out unseen ordered combinations must be completed correctly and must exceed every matched control on the same items",
+        "h4_held_out_length4_complete": h4_len,
+        "held_out_length4_items": held_len.len(),
+        "best_control_complete": control_max,
+        "beats_controls": h4_len > control_max,
+        "met": h4_len > control_max,
+    });
+
+    let result = json!({
+        "schema": "uor-r4.shared-transition/1",
+        "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+        "running_source": {
+            "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+            "git_dirty": std::env::var("UOR_GIT_DIRTY").unwrap_or_else(|_| "unknown".into()),
+            "executable_sha256": executable_sha256,
+            "source_files": source_files,
+        },
+        "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA,
+            "group_digest": group_digest, "selector_sha256": selector_sha256, "f_bits": parent.cfg.f_bits},
+        "mechanism": {
+            "core": "s0 = E[selected payload]; s_j = A[observed primitive j] * s_{j-1}; token = D(s_j); Stop from the learned remaining policy",
+            "action_reuse": "one action code per observed primitive token, reused at every occurrence and every position",
+            "state_retention": "each state is recomputed from the selected payload and the observed primitive prefix; emitted tokens are never re-read as a query",
+            "typed_outcomes": "Emit, Stop, UnknownValue, UnknownPrimitive, NoGrounding are distinct",
+            "noncommuting_witness": [fixture.primitives[nc.0], fixture.primitives[nc.1]],
+            "q8_subgroup": fixture.q8.to_vec(),
+        },
+        "fixture": {
+            "seed": ST_SEED, "values": ST_VALUES, "primitives": ST_PRIMITIVES,
+            "stop_token": fixture.stop_token,
+            "dev_items": dev.len(), "held_out_length4_items": held_len.len(),
+            "held_out_reversal_items": held_rev.len(),
+            "layout": "[source_role, key, value, primitive.., query_role, key] then the response",
+        },
+        "learning": {"h4": dsd_fit_json_st(&h4_fit), "c120": dsd_fit_json_st(&c120_fit),
+            "development_probe": {"calibration_examples": dev_fit.len(), "probe_examples": dev_probe.len(),
+                "note": "both halves are supervised development; the probe rewards a structurally shared map and is not held-out population evidence"}},
+        "arms": arms,
+        "interventions": interventions,
+        "generated": generation,
+        "recount": {"complete_from_saved_rows": recounted_complete, "rows": per_step.len()},
+        "screen": screen,
+        "artifacts": artifacts,
+        "scope": "bounded authored ordered-primitive fixture with a witness non-abelian action subgroup. An authored finite circuit is a circuit result, not language capability or unique geometric advantage. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "elapsed_s": started.elapsed().as_secs_f64(),
+    });
+    write_json(&root, "result.json", &result)?;
+    seal(&root).map_err(|e| format!("seal: {e}"))?;
+    let unlisted = verify(&root).map_err(|e| format!("verify: {e}"))?;
+    println!(
+        "shared-transition: dev {} | length4 {} | reversal {} | H4 complete dev {} len4 {} rev {} | best control len4 {} | sealed {} unlisted | {:.1}s",
+        dev.len(), held_len.len(), held_rev.len(),
+        find("h4_shared_transition", "dev"), h4_len,
+        find("h4_shared_transition", "held_out_reversal"), control_max,
+        unlisted.len(), started.elapsed().as_secs_f32()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn dsd_fit_json_st(f: &StFitReport) -> serde_json::Value {
+    json!({
+        "initial_complete": f.initial_complete,
+        "final_complete": f.final_complete,
+        "final_tokens": f.final_tokens,
+        "token_total": f.token_total,
+        "examples": f.examples,
+        "grounded_states": f.states,
+        "accepted_moves": f.accepted_moves,
+    })
+}
+
 fn main() -> ExitCode {
     let mode = std::env::args().any(|a| a == "--mode=utility-transfer");
     let ce = std::env::args().any(|a| a == "--mode=contextual-emission");
     let comp = std::env::args().any(|a| a == "--mode=relation-composition");
     let dsd = std::env::args().any(|a| a == "--mode=derived-state-decoder");
-    let result = if dsd {
+    let stm = std::env::args().any(|a| a == "--mode=shared-transition");
+    let result = if stm {
+        st_run()
+    } else if dsd {
         dsd_run()
     } else if comp {
         rc2_run()

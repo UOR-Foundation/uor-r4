@@ -1724,3 +1724,39 @@ temporary estimate held throughout the first compile.
 At 2026-09-21T20:04:29.525667+00:00, the principal review charges **2,001,138 ms**: 1,521,138 ms elapsed since its projection, 180,000 ms estimated preceding preparation, and 300,000 ms final-delivery reserve. This includes source repair, both runner build/check sets, independent saved-data audits and the 57,022 ms debug replay; do not debit them again. Live absolute JSON moves from 229,398,372 to **231,399,510 / 233,900,000 ms**, leaving 2,500,490 ms. No cumulative allowance increase was needed. Standing authorization still permits a necessary prospectively recorded local extension for later work.
 
 The original 512 MiB temporary-build estimate was exceeded; the documented 3 GiB revision preceded subsequent runner builds. Free space after checks is **46,594,277,376 bytes** (projection start 48,757,575,680); filesystem change is not attributed exclusively to this task. Preserve 36,766,079,385 bytes plus 134,217,728-byte stop margin. Deleted **0 bytes**; no paid/external compute. The new seven-file report is sealed with no unlisted files; all five recorded source hashes, the debug executable and four RLDSv2 artifacts match. Original reports/source freezes and the owner checkout remain untouched.
+
+## Shared-transition continuation step — September 21, 2026
+
+**Projection recorded before implementation and execution.** One shared-transition model with a
+learned initial state, one action per primitive, a learned lexical decoder and a learned stop policy;
+a development-probe objective with multi-start fitting; an ordered-primitive fixture over a witnessed
+non-abelian action subgroup; comparators, causal controls, complete generated responses, per-step
+events, evidence and delivery.
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **<= 10,000,000 ms (~167 min)** | context recovery, module + fixture + mode, compile cycles, six model runs, controls, evidence, delivery |
+| Compiler workers | <= 2, `CARGO_INCREMENTAL=0` | offline Rust build, shared owner target |
+| Model workers | 1 | single harness process |
+| Peak RSS | <= 8 GiB | existing loaders plus the 4096x16 latent map |
+| New/temporary/retained storage | <= 512 MiB build, <= 32 MiB reports | shared target reuse, bounded row files |
+| Free space at projection | `45346590720` bytes | above the 36,766,079,385-byte reserve plus the 128 MiB stop margin by 8,446,293,607 bytes |
+
+**Extension taken.** Time increment **+10,000,000 ms**; **new cumulative limit 243,900,000 ms**
+(previous 233,900,000 ms; live 231,399,510 ms). Reason: a new transition module and fixture, a
+probe-based fitting method with multi-start search, six executed model runs and protected delivery
+cannot be funded by the remaining 2,500,490 ms. Recorded **before** the work. No reserve reduction
+and no paid/external compute.
+
+**Completed charges — shared-transition step.** Measured: six targeted model runs (**4.9 s**,
+**8.4 s**, **7.1 s**, **7.2 s**, **7.0 s**, **7.1 s**); release builds and compile/fmt/test cycles
+(~**1200 s**). Estimated: context/source/literature/knowledge recovery ~**1200 s**; module, fixture
+and mode implementation ~**3300 s**; diagnosed instrument repairs (recount key, reversal
+contamination, stuck search) ~**1500 s**; documentation, evidence, delivery and knowledge
+~**1800 s**. **Charge 9,000,000 ms** (measured + estimated). Live allowance limit **243,900,000 ms**;
+**new cumulative 240,399,510 ms**; remaining **3,500,490 ms**. `CARGO_INCREMENTAL=0` throughout; no
+reserve reduction, no deletion of unique material, no paid/external compute.
+
+**Delivered** under the claimed, sealed and verified roots
+`.uor-models/realtext-prior-2026-09-20/shared-transition-{1,4,5,6}` (0 unlisted each), with `-6` the
+delivered primary. Superseded attempts `-2` and `-3` are sealed and retained unchanged.

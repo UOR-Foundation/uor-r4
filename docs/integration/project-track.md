@@ -1,6 +1,14 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Active direction — shared transitions and complete result continuation
+## Active direction — shared transitions and complete response continuation executed
+
+D0-b/D1/D2/D3 and geometric priority remain unchanged.
+
+**PR #1339, returned for review:** one shared learned action per observed primitive, reused at every occurrence, drives a retained result state through Emit and a learned remaining-indexed Stop (`s_j = A[primitive_j] * s_{j-1}`, `out_j = D(s_j)`); emitted tokens are never re-read as a query. On an authored ordered-primitive fixture with a witnessed non-abelian order-8 action subgroup the primary completes **48/128 unseen length-4 ordered combinations** against **0** for an exact lookup dictionary and 24 for the best matched control, with 186/288 development, all development responses stopping, and three of four generated held-out responses exactly correct. A noncommuting witness on the learned codes separates H4 (final state 72 vs 90 under reversal) from the additive arm (final token invariant). Withdrawn: the earlier free-parameter claim and the earlier probe/control descriptions. [Result](shared-transition-result-2026-09-21.md); [evidence](../evidence/shared-transition-2026-09-21.json).
+
+**Next:** persistent source ownership and a separate observed control channel to remove the instruction/selection coupling, then a dependent second read whose query and answer change with the first selected evidence; and a fitting method that converges on the action structure. Structural scope/retention, relative H4/Spin/Hopf and finite spectral features remain tools for concrete needs; paired-H4/E8/S7 conditional.
+
+## Former direction — shared transitions and complete result continuation
 
 D0-b/D1/D2/D3 and geometric priority remain unchanged.
 
