@@ -1,6 +1,17 @@
 # Current native geometric AI work
 
-## Active: shared learned transitions and complete result continuation executed
+## Active: grounded transitions and an owned dependent session
+
+**PR #1339, independently reviewed:** retain the shared learned primitive recurrence and loaded artifacts. Original H4 completes 186/288 development, 48/128 length-four and 10/64 reversal responses. Every reversal source is correct; that failure is not explained by reader confounding. The old dictionary memorizes whole programs; a competent shared-transition comparator can reuse all observed local transitions. The split is value-parity supervised fitting, the four showcased responses use one program, and remaining-indexed Stop is supplied-program completion. [Principal review](shared-transition-review-2026-09-21.md); [original audit](../evidence/shared-transition-principal-review-2026-09-21.json); [corrected executed checks](../evidence/shared-transition-principal-checks-2026-09-21.json).
+
+**Corrected exposed replay:** H4 remains **186/288, 48/128 and 10/64**; the independently loaded finite shared-transition table reaches **288/288, 124/128 and 64/64** on the same development/length-four/reversal populations. The table uses its own preceding prediction at serving, not gold intermediate answers. Actual payload and order interventions produce correct changed responses; decoder-label perturbation changes emissions without changing states. The noncommuting latent witness still misses the reversed final answer. All 2,880 actual arm/item records and 8,316 step/terminal events are saved. This is a retained partial geometric component, not a superiority or general-continuation result.
+
+**Next:** [grounded computation in an owned dependent session](deepseek-grounded-dependent-session-step-2026-09-21.md). Development observations themselves identify a regular Q8 action, permitting constructive geometric factorization of learned transitions. Tie typed result grounding to shared actions, retain exact source/result ownership across calls, and let the first result change a later query, selected occurrence and complete answer. Distinguish reversible transport from noninvertible read/commit/emit/control. Relative H4/Spin/Hopf, structural role/scope and finite spectral features remain tools for concrete needs; paired-H4/E8/S7 follows a demonstrated missing distinction. Exposed regression is not fresh or broad language qualification.
+
+**Research leadership and autonomy:** Codex owns holistic mathematics/ML/systems architecture, evidence interpretation and roadmap revision. DeepSeek owns substantive implementation/diagnostic choices and complete lifecycle delivery, with prospectively accounted necessary local extensions. No arbitrary short timer or retry quota replaces scientific judgment, preservation or physical limits.
+
+
+## Historical PR #1339 submission (corrected above): shared transitions
 
 **Executed the shared-transition brief** on merged `86623138` (PR #1338). New `--mode=shared-transition` and module `learner/shared_transition.rs`: `s0 = E[selected payload]`, `s_j = A[observed primitive j] * s_{j-1}`, `out_j = D(s_j)`, and a learned remaining-indexed `Stop`. One action per primitive is **reused at every occurrence**, the state is retained between emitted tokens (emitted tokens are never re-read as a query), and `Emit`/`Stop`/`UnknownValue`/`UnknownPrimitive`/`NoGrounding` are distinct typed outcomes. Artifact `RLST` v1, exported and independently reloaded with full-trajectory parity before any reported response.
 

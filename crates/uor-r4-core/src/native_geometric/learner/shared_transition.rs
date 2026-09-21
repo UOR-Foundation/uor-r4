@@ -7,7 +7,7 @@
 //! s0   = E[selected payload]
 //! s_j  = A[observed primitive j] * s_{j-1}        exact ordered products
 //! out_j = D(s_j)                                   learned lexical decoder
-//! Stop  = P(remaining observed primitives)         learned continuation policy
+//! Stop  = P(remaining observed primitives)         supervised input-exhaustion table
 //! ```
 //!
 //! The result state is retained between emissions: the emitted tokens are *not* re-read as a new
@@ -38,6 +38,9 @@ pub enum StepKind {
     UnknownValue,
     UnknownPrimitive,
     NoGrounding,
+    NoRead,
+    Exhausted,
+    InvalidState,
 }
 
 /// The complete served response for one item.
@@ -120,7 +123,135 @@ pub struct StExample {
     pub targets: Vec<u32>,
 }
 
-/// The served shared-transition model. Every field is learned from declared development outcomes.
+/// A finite shared transition comparator fitted from the same intermediate labels.
+/// Initial inputs and computed outcome tokens have separate tables; an unseen
+/// complete instruction sequence can reuse observed local transitions.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FiniteTransitionModel {
+    version: u8,
+    initial: Vec<[u32; 3]>,
+    recurrent: Vec<[u32; 3]>,
+    values: Vec<u32>,
+    actions: Vec<u32>,
+    stop_table: Vec<(u8, bool)>,
+}
+
+impl FiniteTransitionModel {
+    pub fn fit(examples: &[StExample]) -> Self {
+        let mut initial: BTreeMap<(u32, u32), BTreeMap<u32, usize>> = BTreeMap::new();
+        let mut recurrent: BTreeMap<(u32, u32), BTreeMap<u32, usize>> = BTreeMap::new();
+        for ex in examples {
+            for (j, (&primitive, &target)) in ex.primitives.iter().zip(&ex.targets).enumerate() {
+                let (table, input) = if j == 0 {
+                    (&mut initial, ex.payload)
+                } else {
+                    (&mut recurrent, ex.targets[j - 1])
+                };
+                *table
+                    .entry((input, primitive))
+                    .or_default()
+                    .entry(target)
+                    .or_default() += 1;
+            }
+        }
+        let choose = |table: BTreeMap<(u32, u32), BTreeMap<u32, usize>>| {
+            table
+                .into_iter()
+                .filter_map(|((input, primitive), counts)| {
+                    counts
+                        .into_iter()
+                        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+                        .map(|(target, _)| [input, primitive, target])
+                })
+                .collect()
+        };
+        Self {
+            version: 1,
+            initial: choose(initial),
+            recurrent: choose(recurrent),
+            values: examples
+                .iter()
+                .map(|e| e.payload)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+            actions: examples
+                .iter()
+                .flat_map(|e| e.primitives.iter().copied())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+            stop_table: fit_stop_policy(examples),
+        }
+    }
+
+    pub fn serve(&self, payload: Option<u32>, primitives: &[u32]) -> Response {
+        let mut out = Response {
+            tokens: Vec::new(),
+            states: Vec::new(),
+            steps: Vec::new(),
+            stopped: false,
+        };
+        let Some(mut state) = payload else {
+            out.steps.push(StepKind::NoRead);
+            return out;
+        };
+        if !self.values.contains(&state) {
+            out.steps.push(StepKind::UnknownValue);
+            return out;
+        }
+        for (j, primitive) in primitives.iter().enumerate() {
+            if !self.actions.contains(primitive) {
+                out.steps.push(StepKind::UnknownPrimitive);
+                return out;
+            }
+            let table = if j == 0 {
+                &self.initial
+            } else {
+                &self.recurrent
+            };
+            let Some(row) = table.iter().find(|r| r[0] == state && r[1] == *primitive) else {
+                out.steps.push(StepKind::NoGrounding);
+                return out;
+            };
+            state = row[2];
+            out.tokens.push(state);
+            out.steps.push(StepKind::Emit);
+        }
+        out.stopped = self.stop_table.iter().any(|(r, stop)| *r == 0 && *stop);
+        out.steps.push(if out.stopped {
+            StepKind::Stop
+        } else {
+            StepKind::Exhausted
+        });
+        out
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
+        serde_json::to_vec(self).map_err(|e| e.to_string())
+    }
+    pub fn from_bytes(bytes: &[u8], max_vocab: usize) -> Result<Self, String> {
+        let model: Self = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+        if model.version != 1
+            || model
+                .initial
+                .iter()
+                .chain(&model.recurrent)
+                .flatten()
+                .chain(&model.values)
+                .chain(&model.actions)
+                .any(|t| *t as usize >= max_vocab)
+        {
+            return Err("invalid finite shared transition artifact".into());
+        }
+        Ok(model)
+    }
+    pub fn table_sizes(&self) -> (usize, usize) {
+        (self.initial.len(), self.recurrent.len())
+    }
+}
+
+/// The served shared-transition model, with learned maps and declared algebra/format policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedTransitionModel {
     /// Additive `mod GROUP_ORDER` action composition instead of the exact product.
@@ -132,6 +263,8 @@ pub struct SharedTransitionModel {
     pub decoder: ResultDecoder,
     /// Strictly increasing `remaining -> stop`. An unobserved `remaining` continues by default.
     pub stop_table: Vec<(u8, bool)>,
+    /// RLST v1 forced Stop at input exhaustion even without a policy entry.
+    pub legacy_exhaustion_stop: bool,
 }
 
 impl SharedTransitionModel {
@@ -154,6 +287,7 @@ impl SharedTransitionModel {
             action_code,
             decoder: ResultDecoder::default(),
             stop_table: Vec::new(),
+            legacy_exhaustion_stop: false,
         }
     }
 
@@ -188,6 +322,9 @@ impl SharedTransitionModel {
     /// Apply one observed primitive to the retained result state.
     #[inline]
     pub fn apply(&self, state: usize, primitive: u32) -> Result<usize, StepKind> {
+        if state >= GROUP_ORDER {
+            return Err(StepKind::InvalidState);
+        }
         let i = self
             .action_domain
             .iter()
@@ -239,9 +376,14 @@ impl SharedTransitionModel {
                 return out;
             }
             if j == n {
-                // No stop decision was learned for this point; the response still ends here.
-                out.steps.push(StepKind::Stop);
-                out.stopped = true;
+                // Input exhaustion is distinct from a policy-selected Stop. Preserve the
+                // original artifact's behavior only when loading an RLST v1 model.
+                out.steps.push(if self.legacy_exhaustion_stop {
+                    StepKind::Stop
+                } else {
+                    StepKind::Exhausted
+                });
+                out.stopped = self.legacy_exhaustion_stop;
                 return out;
             }
             state = match self.apply(state, primitives[j]) {
@@ -270,8 +412,9 @@ impl SharedTransitionModel {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut o = Vec::new();
         o.extend_from_slice(b"RLST");
-        o.extend_from_slice(&1u32.to_le_bytes());
+        o.extend_from_slice(&2u32.to_le_bytes());
         o.push(u8::from(self.cyclic));
+        o.push(u8::from(self.legacy_exhaustion_stop));
         for domain in [&self.value_domain, &self.action_domain] {
             o.extend_from_slice(&(domain.len() as u32).to_le_bytes());
             for t in domain.iter() {
@@ -307,10 +450,12 @@ impl SharedTransitionModel {
         if take(&mut c, 4)? != b"RLST" {
             return Err("bad shared-transition artifact magic".into());
         }
-        if u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) != 1 {
+        let version = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
+        if version != 1 && version != 2 {
             return Err("unsupported shared-transition artifact version".into());
         }
         let cyclic = take(&mut c, 1)?[0] != 0;
+        let legacy_exhaustion_stop = version == 1 || take(&mut c, 1)?[0] != 0;
         let mut domains = Vec::new();
         for _ in 0..2 {
             let n = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
@@ -362,6 +507,9 @@ impl SharedTransitionModel {
         stop_table.shrink_to_fit();
         let dl = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
         let decoder = ResultDecoder::from_bytes(take(&mut c, dl)?, max_vocab)?;
+        if version == 2 && decoder.state_count() > ST_MAX_STATES {
+            return Err("shared-transition decoder exceeds the 16-state bound".into());
+        }
         if c != bytes.len() {
             return Err("trailing bytes in the shared-transition artifact".into());
         }
@@ -373,6 +521,7 @@ impl SharedTransitionModel {
             action_code,
             decoder,
             stop_table,
+            legacy_exhaustion_stop,
         })
     }
 }
@@ -386,6 +535,8 @@ pub struct StFitReport {
     pub token_total: usize,
     pub examples: usize,
     pub states: usize,
+    /// Historical restart tie-break, measured before the final decoder refit.
+    pub pre_refit_states: usize,
     pub accepted_moves: usize,
 }
 
@@ -466,8 +617,10 @@ fn fit_stop_policy(examples: &[StExample]) -> Vec<(u8, bool)> {
 }
 
 /// Jointly fit the initial-state map, the shared action codes, the lexical decoder and the stop
-/// policy on declared development outcomes. Objective: complete responses matched, then token hits,
-/// then fewer grounded states. Every occurrence of a primitive reuses one action code.
+/// policy on declared development outcomes. Coordinate objective: combined supervised token
+/// hits, complete responses, then fewer states. Restart selection uses complete responses
+/// and token hits measured after the final all-development decoder refit, followed by the
+/// historical pre-refit state-count tie-break.
 pub fn fit_shared_transition(
     fit: &[StExample],
     probe: &[StExample],
@@ -486,7 +639,8 @@ pub fn fit_shared_transition(
                 cand.1.final_complete > b.final_complete
                     || (cand.1.final_complete == b.final_complete
                         && (cand.1.final_tokens > b.final_tokens
-                            || (cand.1.final_tokens == b.final_tokens && cand.1.states < b.states)))
+                            || (cand.1.final_tokens == b.final_tokens
+                                && cand.1.pre_refit_states < b.pre_refit_states)))
             }
         };
         if take {
@@ -520,8 +674,8 @@ fn fit_shared_transition_once(
         m.decoder = fit_decoder(&observations(m, fit), max_states, ST_K);
     };
     // Smoother, structure-rewarding objective: correct tokens over the calibration set *and* the
-    // sequence-disjoint development probe, then complete responses, then fewer states. The probe
-    // penalises a map that only fits the calibration sequences.
+    // supervised outer development set, then complete responses, then fewer states. The
+    // caller declares which observed values/sequences are shared between these sets.
     let grade = |m: &SharedTransitionModel| -> (usize, usize, usize) {
         let (cf, hf, _) = score(m, fit);
         let (cp, hp, _) = score(m, probe);
@@ -591,7 +745,8 @@ fn fit_shared_transition_once(
         final_tokens: tokens,
         token_total: total,
         examples: all.len(),
-        states: best.2,
+        states: model.decoder.state_count(),
+        pre_refit_states: best.2,
         accepted_moves: accepted,
     };
     (model, report)
@@ -600,6 +755,62 @@ fn fit_shared_transition_once(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finite_transition_reuses_intermediate_labels_and_never_invents_an_absent_operand() {
+        let examples = vec![
+            StExample {
+                payload: 10,
+                primitives: vec![1],
+                targets: vec![20],
+            },
+            StExample {
+                payload: 11,
+                primitives: vec![1, 2],
+                targets: vec![20, 40],
+            },
+        ];
+        let model = FiniteTransitionModel::fit(&examples);
+        let loaded = FiniteTransitionModel::from_bytes(&model.to_bytes().unwrap(), 100).unwrap();
+        assert_eq!(model, loaded);
+        // This full payload/sequence pair was never shown. Its two shared transitions were.
+        let response = loaded.serve(Some(10), &[1, 2]);
+        assert_eq!(response.tokens, vec![20, 40]);
+        assert!(response.stopped);
+        assert_eq!(loaded.serve(None, &[1, 2]).steps, vec![StepKind::NoRead]);
+        assert_eq!(
+            loaded.serve(Some(99), &[1]).steps,
+            vec![StepKind::UnknownValue]
+        );
+        assert_eq!(
+            loaded.serve(Some(10), &[2]).steps,
+            vec![StepKind::NoGrounding]
+        );
+    }
+
+    #[test]
+    fn exhaustion_is_not_a_learned_stop_and_v1_keeps_its_legacy_contract() {
+        let examples = vec![StExample {
+            payload: 10,
+            primitives: vec![1],
+            targets: vec![20],
+        }];
+        let mut model = SharedTransitionModel::seeded(&examples, false);
+        let response = model.serve(10, &[]);
+        assert_eq!(response.steps, vec![StepKind::Exhausted]);
+        assert!(!response.stopped);
+        let loaded = SharedTransitionModel::from_bytes(&model.to_bytes(), 100).unwrap();
+        assert_eq!(loaded.serve(10, &[]), response);
+        let mut legacy = model.to_bytes();
+        legacy[4..8].copy_from_slice(&1u32.to_le_bytes());
+        legacy.remove(9); // RLST v1 has no explicit exhaustion-policy flag.
+        let loaded_legacy = SharedTransitionModel::from_bytes(&legacy, 100).unwrap();
+        assert_eq!(loaded_legacy.serve(10, &[]).steps, vec![StepKind::Stop]);
+        assert!(loaded_legacy.serve(10, &[]).stopped);
+        model.stop_table = fit_stop_policy(&examples);
+        assert_eq!(model.serve(10, &[]).steps, vec![StepKind::Stop]);
+        assert_eq!(model.apply(GROUP_ORDER, 1), Err(StepKind::InvalidState));
+    }
 
     #[test]
     fn the_witness_subgroup_is_closed_and_non_abelian() {

@@ -1,95 +1,43 @@
-# Shared learned transitions and complete result continuation
+# Shared learned transitions: original result and principal corrections
 
-September 21, 2026. Executes the [shared-transition brief](deepseek-shared-transition-continuation-step-2026-09-21.md) and
-the [principal review](derived-state-decoder-review-2026-09-21.md) on merged `86623138` (PR #1338,
-verified equal to the merged head). Isolation worktree `.worktrees/shared-transition`; owner checkout
-untouched. New mode `--mode=shared-transition` and module `learner/shared_transition.rs`.
-[Evidence](../evidence/shared-transition-2026-09-21.json).
+September 21, 2026. Original PR #1339 submitted head `832c1c33`, based on merged PR #1338 `86623138`. Original isolated checkout `.worktrees/shared-transition`, preserved with all report roots. This record retains the original numerical results with their independently reviewed scope. Read the [principal review](shared-transition-review-2026-09-21.md), [saved-data audit](../evidence/shared-transition-principal-review-2026-09-21.json), [corrected executed checks](../evidence/shared-transition-principal-checks-2026-09-21.json), and [next complete brief](deepseek-grounded-dependent-session-step-2026-09-21.md).
 
-## Accepted corrections
+## Implemented mechanism
 
-- The claim that the fixture's missing cells are independent free parameters is **withdrawn**. For
-  source-correct cells the per-operation binding relation is fixed, so absorbing it into
-  `A[o]=T_bind[r(o)]*U[o]` gives `P[o,v]=A[o]*B[v]`, and three rectangle corners determine the fourth.
-  The observed graph is connected. Labels pass through a many-to-one decoder, so the latent products
-  are not necessarily identified - but the defective optimizer never established non-identifiability.
-- The earlier development probe was mis-described: the probe operation tokens were absent from the
-  initialized operation domain and fell back to identity while still steering every candidate score.
-  That is **supervised outer development fitting through a defective domain**, not held-out-operation
-  generalization. This run declares calibration and probe halves explicitly and never claims the
-  probe as population evidence.
-- The old controls were defective (the operation change moved source and query roles together; the
-  identity example checked target class 0 rather than the group identity; the absence parity boolean
-  was not a real comparison). All are replaced below.
+`s0 = E[selected payload]; s_j = A[observed primitive_j] * s_{j-1}; output_j = D(s_j)`.
 
-## The milestone
+One learned action per primitive is reused at every occurrence. The result variable persists inside one serving call; emitted tokens are not fed back as new instructions. Learned maps and decoder are exported, independently reloaded and used. The supervised remaining-indexed stop table encodes explicit input exhaustion. This is supplied-program completion, not learned semantic continuation or answer length. There is no externally resumable result frame, durable source lease or dependent second read yet.
 
-```text
-s0    = E[selected payload]                       learned initial state
-s_j   = A[observed primitive j] * s_{j-1}         one shared action per primitive, exact products
-out_j = D(s_j)                                    learned lexical decoder
-Stop  = P(observed remaining primitives)          learned continuation policy
-```
+## Original numerical results, retained
 
-Exact evidence identity, the computed geometric value and the response phase stay distinct. The
-predictor **retains its state between emitted tokens**: each state is recomputed from the selected
-payload and the observed primitive prefix, and emitted tokens are never re-read as a query (the
-three-token loop of the previous milestone did exactly that after its first emission). `Emit`,
-`Stop`, `UnknownValue`, `UnknownPrimitive` and `NoGrounding` are separate typed outcomes, so an
-unknown operand is not silently an identity. Reversible transport is used for the product only; the
-surrounding machine is not forced into a group.
-
-## Task, populations and result
-
-Prefix `[source_role, key, value, primitive.., query_role, key]`, response one label per observed
-primitive then `Stop`. The primitive meanings and the label lexicalisations are grounded in
-development; the held-out populations are **unseen ordered combinations** (length 4) and **unseen
-order reversals**. Actions come from a witnessed non-abelian order-8 subgroup of the served table.
-
-| Arm | dev /288 | unseen length 4 /128 | unseen reversal /64 |
+| Arm | Development /288 | Length four /128 | Reversal /64 |
 | --- | ---: | ---: | ---: |
-| frozen local prior | 0 | 0 | 0 |
-| value-only lexical decoder (retained component) | 4 | 0 | 0 |
-| exact transition dictionary (lookup, unseen fallback) | 288 | **0** | **0** |
-| matched additive C120, same technique | 153 | 24 | 15 |
-| **H4 shared transition (primary)** | **186** | **48** | 10 |
+| Local/NoRead ablation | 0 | 0 | 0 |
+| Value-only lexical ablation | 4 | 0 | 0 |
+| Whole-program cache, unseen fallback one token | 288 | 0 | 0 |
+| Additive C120, same fitting method | 153 | 24 | 15 |
+| H4 shared transitions | 186 | 48 | 10 |
 
-Complete responses are multi-token: 556/672 dev tokens, 288/288 dev responses stop, and the learned
-remaining-indexed stop policy transfers to the unseen length 4 (124/128 stop correctly there). The
-headline structural result is that **shared actions transfer to unseen ordered combinations where an
-exact lookup cannot**: 48/128 against 0/128 for the dictionary and 24/128 for the best matched
-control.
+H4 saved events independently reconstruct all three complete-response counts, including 556/672 development token hits. Length four contains 32 programs × four values, with the first two primitive tokens fixed by the enumeration stride. Four showcased generations are four values on one program; three complete correctly. The fit/probe partition is value-index parity with all 72 development programs in both halves, and both halves guide optimization. Final decoder fitting uses all development observations. These are now exposed regression panels.
 
-## Causal controls
+The whole-program cache cannot complete an unseen length-four program by construction. Therefore H4's win over that cache does not establish an advantage over ordinary shared transition lookup. Development labels supply every needed initial and recurrent transition; the principal correction adds a competent finite recurrent table using the same supervision and its own previous predicted outcome at serving. Its cost and artifact size differ from H4 and must be reported.
 
-| Control | Observed |
-| --- | --- |
-| selected payload changed, identical query and identical primitives | every step changes to the expected label |
-| retained state vs emitted tokens | identical state trajectory; emissions are never re-read |
-| **noncommuting witness on the learned codes** | H4 final state 72 forward vs 90 reversed (final tokens 4091 vs 4092); the additive arm's final token is invariant (4090 both ways), as an abelian algebra requires |
-| unknown primitive / undefined value | typed `UnknownPrimitive` / `UnknownValue`, not identity |
-| absent source | read absent; no response |
-| variable lengths 1-4 | all stop, with matching token counts |
+## Corrections to the original causal interpretation
 
-The order-reversal *population* (10/64) is confounded: the instruction order changes the
-decision-point predecessor, so the read itself can change. The computation-only comparison with a
-fixed selected operand is the decisive test and is the one reported above. This coupling between the
-observed instruction and source selection is the interface limitation the review predicted; removing
-it needs persistent source ownership and a separate control channel, which is **NOT_RUN** here.
+All 64 reversal cases select the correct source. H4's 10/64 reversal result is consequently a learning/computation limitation in that population; reader confounding is not the observed explanation. Length four selects correctly in 124/128, including all 48 complete successes. Persistent evidence ownership still matters for future multi-call and dependent-read behavior, but cannot by itself repair the current arithmetic failures.
 
-## Generated behaviour and independent recount
+The original payload intervention bypassed actual selection; the supposed absence test disabled the reader without removing the source; state independence compared identical calls. The noncommuting witness showed different final states without checking both expected answers. Additive final-state invariance does not imply identical intermediate output sequences. Those reported controls are preserved as historical fields in the evidence JSON, not promoted as causal checks.
 
-Four complete responses were generated from held-out prompts; three of the four are exactly correct
-four-token responses ending in `Stop`. A recount of complete responses from the saved 1,312 per-step
-events, keyed by a unique item id, gives **244**, equal to the arm totals (186 + 48 + 10), so the
-headline counts are derived from saved events rather than maintained separately.
+The corrected Rust path derives instructions from the actual declared prefix span, eliminates gold-operand fallback, logs actual all-arm response/source/terminal events, independently reloads a shared finite transition comparator and performs actual changed-source/source-removal/decoder-perturbation controls. RLST v2 distinguishes `Exhausted` from a policy decision; v1 retains its historical behavior. A supplied instruction span is not learned parsing. The [corrected checks receipt](../evidence/shared-transition-principal-checks-2026-09-21.json) owns the executed replay and remaining limitations.
 
-## What is not established
+## Corrected exposed replay
 
-Development is 186/288 complete (556/672 tokens), so the learned codes approximate rather than equal
-the true action structure; the coordinate search with multi-start and a development probe improves on
-a raw fit objective but does not converge. The reversal population does not favour H4. No dependent
-second read was executed, so the brief's Read/Compute/Emit/Stop -> dependent-Read step remains open.
-This is an authored finite circuit: a circuit result, not language capability or unique geometric
-advantage. Energy `UNAVAILABLE`; whole-path D0-b not claimed. Retained roots
-`shared-transition-{1,4,5,6}` (0 unlisted each), with `-6` the delivered primary.
+**Corrected exposed replay:** H4 remains **186/288, 48/128 and 10/64**; the independently loaded finite shared-transition table reaches **288/288, 124/128 and 64/64** on the same development/length-four/reversal populations. The table uses its own preceding prediction at serving, not gold intermediate answers. Actual payload and order interventions produce correct changed responses; decoder-label perturbation changes emissions without changing states. The noncommuting latent witness still misses the reversed final answer. All 2,880 actual arm/item records and 8,316 step/terminal events are saved. This is a retained partial geometric component, not a superiority or general-continuation result.
+
+The [independent corrected audit](../evidence/shared-transition-corrected-replay-audit-2026-09-21.json) owns source/artifact/seal and event reconstruction. Runtime is 49.754 seconds for the debug experiment, not optimized serving performance.
+
+## What the evidence directs next
+
+The [development-only mathematical audit](../evidence/shared-transition-observed-action-audit-2026-09-21.json) identifies the eight observed primitive permutations as a regular Q8 action. This supports constructive learning from the observed transition graph into a verified quaternion subgroup, with consistent typed outcome and initial-state grounding. It does not establish that a new model has learned those coordinates yet.
+
+Advance that grounding inside a complete owned read → compute → dependent read → answer/stop session. Keep source occurrence/version/payload separate from compressed result geometry, retain state across calls and snapshot/resume, and make the first result causally change the next query and selected evidence. All original roots `shared-transition-{1..6}` remain sealed and preserved. No general language, fresh-final qualification, whole-path D0-b or physical energy advantage is established.

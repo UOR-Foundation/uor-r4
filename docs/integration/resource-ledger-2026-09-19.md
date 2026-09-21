@@ -1760,3 +1760,15 @@ reserve reduction, no deletion of unique material, no paid/external compute.
 **Delivered** under the claimed, sealed and verified roots
 `.uor-models/realtext-prior-2026-09-20/shared-transition-{1,4,5,6}` (0 unlisted each), with `-6` the
 delivered primary. Superseded attempts `-2` and `-3` are sealed and retained unchanged.
+
+## PR #1339 principal review projection
+
+At 2026-09-21T20:41:20.935820+00:00, live absolute JSON is **240,399,510 / 243,900,000 ms**. The prior extension and charge are already applied. Project at most **2,700,000 ms**, including 180,000 ms preceding recovery estimate, independent source/math/saved-data review, necessary repairs and focused checks, one corrected exposed diagnostic if needed, documentation and protected delivery. The current balance covers this projection; no extension is needed now. Two compiler workers, one model worker, peak 8 GiB, 3 GiB temporary build headroom and 64 MiB reports. Record an exact model-run projection before any replay. Free at projection **45,340,524,544 bytes**; preserve 36,766,079,385 bytes plus 128 MiB. No deletion or paid compute planned.
+
+## September 21: PR #1339 principal correction and delivery charge
+
+Prospective projection: 2026-09-21T20:41:20.935820+00:00, 2,700,000 ms inclusive of preparation/build/checks/audit and delivery, two compiler workers, one model worker, 8 GiB RAM, 3 GiB temporary builds and 64 MiB reports. The exact corrected exposed command/build projection was saved before execution; [checks receipt](../evidence/shared-transition-principal-checks-2026-09-21.json) preserves it. No new final qualification campaign.
+
+Charge **1,958,296 ms** = 1,478,296 ms elapsed since projection + 180,000 ms preprojection preparation estimate + 300,000 ms final delivery reserve. This includes checks and the 49.754301 s corrected debug experiment; do not add it again. Original DeepSeek charge remains preserved, not recharged. Balance **242,357,806 / 243,900,000 ms**, remaining **1,542,194 ms**. No extension needed.
+
+Free after checks **43,314,593,792 bytes**, versus 45,340,524,544 at projection. Deleted **0 bytes**; owner checkout, source/research, all original six report roots, original release executable and new corrected report retained. Preserve 36,766,079,385-byte reserve plus 128 MiB stop margin. Whole-machine free-space change is not attributed solely to this build. No paid compute. Debug timing is functional experiment evidence, not optimized serving cost; energy UNAVAILABLE.
