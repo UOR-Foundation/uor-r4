@@ -15,7 +15,7 @@ use std::time::Instant;
 use serde_json::json;
 
 use uor_r4_core::native_geometric::learner::contextual_emission::*;
-use uor_r4_core::native_geometric::learner::group_table::{group_table, GROUP_ORDER};
+use uor_r4_core::native_geometric::learner::group_table::{group_table, GROUP_ORDER, ROW_STRIDE};
 use uor_r4_core::native_geometric::learner::occurrence::{OccurrenceRef, OccurrenceRing};
 use uor_r4_core::native_geometric::learner::policy_feasibility::*;
 use uor_r4_core::native_geometric::learner::prefix_artifact::{
@@ -7394,6 +7394,54 @@ fn ce_signature_report(examples: &[CeExample]) -> serde_json::Value {
     })
 }
 
+/// **Actual served-feature separability.** The principal requirement is to test the real feature
+/// used by the emission readout, `R(q0*T[r]*V[v]) - R(q0)`, not the injectivity of the value codes.
+/// Among positions whose intended source was selected, how many demand different targets while
+/// sharing an identical integer service feature? Distinct state ids and injective value maps are
+/// insufficient: two different `q1` can still yield the same `R` difference. `CONFLICT` counts
+/// features that carry more than one target; `bound` is the majority-vote ceiling such a feature
+/// table could reach, so `positions - (positions - reachable)` is the irreducible loss.
+fn ce_feature_alias_report(
+    examples: &[CeExample],
+    eligible: &[bool],
+    params: &ReadConditionedParams,
+    res: &EmissionResidual,
+    cyclic: bool,
+) -> serde_json::Value {
+    let mut m: BTreeMap<Vec<i32>, BTreeMap<u32, usize>> = BTreeMap::new();
+    let mut considered = 0usize;
+    for (i, ex) in examples.iter().enumerate() {
+        if !ex.read || !eligible.get(i).copied().unwrap_or(false) {
+            continue;
+        }
+        let q1 = ex.q1(params, cyclic);
+        *m.entry(res.delta(ex.q0, q1).to_vec())
+            .or_default()
+            .entry(ex.target)
+            .or_default() += 1;
+        considered += 1;
+    }
+    let conflicting = m.values().filter(|t| t.len() > 1).count();
+    let on_conflict = m
+        .values()
+        .filter(|t| t.len() > 1)
+        .map(|t| t.values().sum::<usize>())
+        .sum::<usize>();
+    let best_case = m
+        .values()
+        .map(|t| t.values().copied().max().unwrap_or(0))
+        .sum::<usize>();
+    json!({
+        "source_correct_positions": considered,
+        "distinct_service_features": m.len(),
+        "features_with_conflicting_targets": conflicting,
+        "positions_on_conflicting_features": on_conflict,
+        "best_case_from_features_alone": best_case,
+        "feature_only_ceiling_fraction": if considered == 0 { serde_json::Value::Null } else { json!(best_case as f64 / considered as f64) },
+        "note": "feature = integer R(q1)-R(q0) of the deployed residual; a bound on what any per-feature emission table could recover, independent of optimisation",
+    })
+}
+
 fn contextual_emission_run() -> Result<ExitCode, String> {
     let mut root = PathBuf::from(
         "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/contextual-emission-1",
@@ -8203,7 +8251,9 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         "diagnostics": {
             "distinct_update_signatures_dev": ce_signature_report(&dev_ex),
             "distinct_update_signatures_fresh": ce_signature_report(&fresh_ex),
-            "note": "signature = (q0, relation, selected payload). Ambiguous signatures demand different targets from an identical update input; the update cannot separate them without help from the unchanged local logits.",
+            "served_feature_separability_dev": ce_feature_alias_report(&dev_ex, &dev_pos.iter().map(|p| p.correct_source).collect::<Vec<_>>(), &h4_params, &h4_res, false),
+            "served_feature_separability_fresh": ce_feature_alias_report(&fresh_ex, &fresh_pos.iter().map(|p| p.correct_source).collect::<Vec<_>>(), &h4_params, &h4_res, false),
+            "note": "signature = (q0, relation, selected payload). Ambiguous signatures demand different targets from an identical update input; the update cannot separate them without help from the unchanged local logits. The served_feature report tests the actual R(q1)-R(q0) the readout consumes.",
         },
         "learning": {"h4": h4_rep, "cyclic_c120": c120_rep},
         "comparisons": comparisons,
@@ -8233,10 +8283,902 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+// ---------------------------------------------------------------------------
+// Relation composition: a derived answer from a query operation and retrieved content
+// ---------------------------------------------------------------------------
+//
+// The association instrument answers `out = label(value)`. A payload-only table is the natural
+// sufficient mechanism there, so it cannot measure a geometric contribution. This instrument
+// instead makes the answer a function of the **query operation composed with the retrieved
+// content**: `class = (op + vi) mod 10`, where `op` is the directed relation between the query role
+// and the selected source role, and `vi` is the selected value. Some operations are withheld by
+// *value* during development and evaluated as held-out combinations. The declared rule is
+// realisable by the served H4 update: `2I` contains an element `h` of order 10, so with
+// `T[rel(op)] = h^op` and `V[value(vi)] = h^vi` the served state is `q0 * h^((op+vi) mod 10)`.
+// Two cells that share a class therefore share one served state, which a per-cell table cannot use.
+
+const RC2_N_OPS: usize = 8;
+const RC2_N_VALUES_DEV: usize = 6;
+const RC2_N_VALUES_TEST: usize = 2;
+const RC2_DISTRACTORS: usize = 2;
+const RC2_CLASS_MODULUS: usize = 10;
+/// Repeated contexts per `(op, vi)` cell: the query key, query role and source role are held fixed,
+/// so the frozen query state is constant and only the distractor context and placement vary.
+const RC2_REPEATS: usize = 4;
+const RC2_MAX_W_ROWS: usize = 64;
+const RC2_EPOCHS: usize = 600;
+const RC2_LR: f64 = 1.0;
+const RC2_SEED: u64 = 0xC0F1_0001;
+
+#[derive(Clone)]
+struct Rc2Item {
+    tokens: Vec<u32>,
+    answer: u32,
+    op: usize,
+    vi: usize,
+    test: bool,
+    source_value: u32,
+    expected_payload_abs: u32,
+}
+
+struct Rc2Pos {
+    q0: usize,
+    r: usize,
+    payload: u32,
+    read: bool,
+    target: u32,
+    op: usize,
+    vi: usize,
+    test: bool,
+    correct_source: bool,
+    correct_value: bool,
+    target_margin: i32,
+}
+
+/// The declared composition rule. `op` and `vi` are the two independent inputs; the class merges
+/// cells whose operation and value indices sum to the same residue.
+fn rc2_class(op: usize, vi: usize, k: usize) -> usize {
+    (op + vi) % k
+}
+
+/// The smallest modulus (largest class count) for which every held-out value cell shares its class
+/// with a development cell, so the instrument is solvable by a rule that composes the two inputs.
+fn rc2_choose_modulus(n_ops: usize) -> Result<usize, String> {
+    for k in (2..=RC2_CLASS_MODULUS).rev() {
+        let dev: std::collections::BTreeSet<usize> = (0..n_ops)
+            .flat_map(|op| (0..RC2_N_VALUES_DEV).map(move |vi| (op + vi) % k))
+            .collect();
+        let covered = (0..n_ops).all(|op| {
+            (RC2_N_VALUES_DEV..(RC2_N_VALUES_DEV + RC2_N_VALUES_TEST))
+                .all(|vi| dev.contains(&((op + vi) % k)))
+        });
+        if covered {
+            return Ok(k);
+        }
+    }
+    Err("no declared class modulus covers the held-out value cells".into())
+}
+
+/// Witness that `2I` contains the order-10 element the declared rule needs, and that power
+/// composition reproduces it for every reachable exponent pair. This makes the rule an *exact*
+/// property of the served algebra rather than an aspiration, so the instrument is realisable.
+fn rc2_order_ten_witness() -> Result<usize, String> {
+    let t = group_table();
+    let identity = t.identity as usize;
+    let mul = |a: usize, b: usize| t.product[a * ROW_STRIDE + b] as usize;
+    let pow = |g: usize, e: usize| -> usize {
+        let mut x = identity;
+        for _ in 0..e {
+            x = mul(x, g);
+        }
+        x
+    };
+    let mut found = None;
+    for g in 0..GROUP_ORDER {
+        let mut x = identity;
+        let mut order = 0usize;
+        for k in 1..=RC2_CLASS_MODULUS + 1 {
+            x = mul(x, g);
+            if x == identity {
+                order = k;
+                break;
+            }
+        }
+        if order == RC2_CLASS_MODULUS {
+            found = Some(g);
+            break;
+        }
+    }
+    let g = found.ok_or("2I has no order-10 element")?;
+    for a in 0..RC2_CLASS_MODULUS {
+        for b in 0..RC2_CLASS_MODULUS {
+            if mul(pow(g, a), pow(g, b)) != pow(g, (a + b) % RC2_CLASS_MODULUS) {
+                return Err("order-10 powers do not realise the declared class".into());
+            }
+        }
+    }
+    Ok(g)
+}
+
+/// Both population members for every `(op, vi)` cell with a fixed query key, so the frozen query
+/// state `q0` is constant and the only varying inputs are the operation and the value. Distractor
+/// blocks share the key and use other operations' source roles, so the reader faces a genuine
+/// competing-source pool.
+fn make_rc2_items(
+    banks: &Banks,
+    op_pairs: &[(u32, u32)],
+    n_ops: usize,
+    values: &[u32],
+    out_bank: &[u32],
+    k: usize,
+    seed: u64,
+) -> Result<Vec<Rc2Item>, String> {
+    if op_pairs.len() < n_ops
+        || values.len() < RC2_N_VALUES_DEV + RC2_N_VALUES_TEST
+        || out_bank.len() < k
+    {
+        return Err("insufficient bank for the composition instrument".into());
+    }
+    let key = banks.keys[0];
+    let mut st = seed | 1;
+    let mut items = Vec::new();
+    for op in 0..n_ops {
+        let (qrole, source_role) = op_pairs[op];
+        for vi in 0..(RC2_N_VALUES_DEV + RC2_N_VALUES_TEST) {
+            let test = vi >= RC2_N_VALUES_DEV;
+            for _rep in 0..RC2_REPEATS {
+                let mut blocks: Vec<(u32, u32, u32)> = Vec::new();
+                for _ in 0..RC2_DISTRACTORS {
+                    let other = (op + 1 + (xorshift(&mut st) as usize) % (n_ops - 1)) % n_ops;
+                    let role = op_pairs[other].1;
+                    let v = values[(xorshift(&mut st) as usize) % values.len()];
+                    blocks.push((role, key, v));
+                }
+                let pos = (xorshift(&mut st) as usize) % (blocks.len() + 1);
+                let mut seq_blocks = blocks.clone();
+                seq_blocks.insert(pos, (source_role, key, values[vi]));
+                let mut tokens = Vec::new();
+                let mut expected_payload_abs = 0u32;
+                for (i, (r, k, v)) in seq_blocks.iter().enumerate() {
+                    if i == pos {
+                        expected_payload_abs = (i * 3 + 2) as u32;
+                    }
+                    tokens.push(*r);
+                    tokens.push(*k);
+                    tokens.push(*v);
+                }
+                tokens.push(qrole);
+                tokens.push(key);
+                let answer = out_bank[rc2_class(op, vi, k)];
+                tokens.push(answer);
+                items.push(Rc2Item {
+                    tokens,
+                    answer,
+                    op,
+                    vi,
+                    test,
+                    source_value: values[vi],
+                    expected_payload_abs,
+                });
+            }
+        }
+    }
+    Ok(items)
+}
+
+fn rc2_extract(
+    parent: &PriorCore,
+    local: &QueryHard,
+    u: &[Vec<i32>],
+    table: &ExactGroupTable,
+    sel: &RelationalSelector,
+    items: &[Rc2Item],
+) -> Result<(Vec<Rc2Pos>, Vec<CeExample>), String> {
+    let mut positions = Vec::new();
+    let mut examples = Vec::new();
+    for it in items.iter() {
+        let seq = Seq {
+            tokens: it.tokens.clone(),
+            group: 0,
+            answer: it.answer,
+            absent: false,
+            answer_source_abs: None,
+        };
+        let obs = observe_full(&seq);
+        let want = it.tokens.len() - 2;
+        let o = obs
+            .iter()
+            .find(|o| o.ring.written() as usize == want)
+            .ok_or("composition decision point is missing")?;
+        let z = local_logits(
+            parent,
+            local,
+            u,
+            o.cur,
+            o.prev as usize,
+            o.prev2,
+            o.ring.written(),
+        );
+        let selected = read_step(&o.ring, o.cur, o.prev, o.prev2, sel, table, true, &z);
+        let q0 = local.query_state(o.cur).min(u.len() - 1);
+        let t = (it.answer as usize).min(z.len() - 1);
+        let best_other = z
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != t)
+            .map(|(_, v)| *v)
+            .max()
+            .unwrap_or(i32::MIN);
+        positions.push(Rc2Pos {
+            q0,
+            r: selected.rel,
+            payload: selected.payload.unwrap_or(0),
+            read: selected.action.is_some(),
+            target: it.answer,
+            op: it.op,
+            vi: it.vi,
+            test: it.test,
+            correct_source: selected.payload_abs == Some(it.expected_payload_abs),
+            correct_value: selected.payload == Some(it.source_value),
+            target_margin: z[t] - best_other,
+        });
+        examples.push(CeExample {
+            z_local: z,
+            q0,
+            r: selected.rel,
+            payload: selected.payload.unwrap_or(0),
+            read: selected.action.is_some(),
+            target: it.answer,
+        });
+    }
+    Ok((positions, examples))
+}
+
+fn rc2_run() -> Result<ExitCode, String> {
+    let mut root = PathBuf::from(
+        "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/relation-composition-1",
+    );
+    let mut source_root: Option<PathBuf> = None;
+    {
+        let mut a = std::env::args().skip(1);
+        while let Some(k) = a.next() {
+            match k.as_str() {
+                "--root" => root = PathBuf::from(a.next().ok_or("--root value")?),
+                "--source-root" => source_root = Some(PathBuf::from(a.next().ok_or("value")?)),
+                other if other.starts_with("--mode") => {}
+                other => return Err(format!("unknown argument {other}")),
+            }
+        }
+    }
+    claim(&root).map_err(|e| format!("claim {}: {e}", root.display()))?;
+    let started = Instant::now();
+
+    let pb = std::fs::read(E_PATH).map_err(|e| format!("E: {e}"))?;
+    if sha256_hex(&pb) != E_SHA {
+        return Err("E sha mismatch".into());
+    }
+    let parent = PriorCore::from_bytes(&pb).map_err(|e| format!("load E: {e}"))?;
+    parent.validate()?;
+    let (parent_digest, _) = parent_hash_convention(&pb);
+    let sb = std::fs::read(S_PATH).map_err(|e| format!("S: {e}"))?;
+    if sha256_hex(&sb) != S_SHA {
+        return Err("S sha mismatch".into());
+    }
+    let tb = std::fs::read(DEFAULT_TOKENIZER).map_err(|e| format!("tokenizer: {e}"))?;
+    if sha256_hex(&tb) != TOKENIZER_SHA {
+        return Err("tokenizer sha mismatch".into());
+    }
+    let derived = sha256_hex(&derive_tokenizer_json(&tb, VOCAB).map_err(|e| format!("{e}"))?);
+    if derived != DERIVED_SHA {
+        return Err("derived tokenizer sha mismatch".into());
+    }
+    let tokenizer = derive_tokenizer(&tb, VOCAB).map_err(|e| format!("derive: {e}"))?;
+    let raw_tok: [u8; 32] = hex_to_bytes(&derived)?.try_into().unwrap();
+    let local = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
+        .map_err(|e| format!("load S: {e}"))?;
+    let u: Vec<Vec<i32>> = (0..120).map(|s| local.row_scores(s)).collect();
+    let table = ExactGroupTable::build().map_err(|e| format!("table: {e}"))?;
+    let group_digest = group_table_digest(&table);
+    let banks = build_banks(&tokenizer, parent.cfg.vocab)?;
+    let source_files: Vec<serde_json::Value> = match &source_root {
+        Some(sr) => [
+            "crates/uor-r4-core/src/native_geometric/learner/relational.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/read_conditioned.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/contextual_emission.rs",
+            "crates/uor-r4-core/src/bin/competitive-reader.rs",
+        ]
+        .iter()
+        .map(|rel| match std::fs::read(sr.join(rel)) {
+            Ok(b) => json!({"path": rel, "sha256": sha256_hex(&b)}),
+            Err(_) => json!({"path": rel, "sha256": "UNAVAILABLE"}),
+        })
+        .collect(),
+        None => vec![json!({"path": "unspecified", "sha256": "UNAVAILABLE"})],
+    };
+    let executable_sha256 = hex_of(&sha256_bytes(
+        &std::env::current_exe()
+            .ok()
+            .and_then(|p| std::fs::read(p).ok())
+            .unwrap_or_default(),
+    ));
+
+    let parent_root = PathBuf::from(PARENT_ROOT);
+    let selector_bytes = std::fs::read(parent_root.join("artifacts/relational_ctx.rlr2"))
+        .map_err(|e| format!("parent artifact: {e}"))?;
+    let selector_sha256 = sha256_hex(&selector_bytes);
+    if selector_sha256 != PARENT_SHA_RELATIONAL_CTX {
+        return Err("contextual selector hash mismatch".into());
+    }
+    let sel =
+        RelationalArtifact::from_bytes(&selector_bytes, &sha256_bytes(&sb), &raw_tok)?.selector;
+
+    // The declared operations must be *distinguishable at the relation interface*. The learned
+    // descriptor roots can map many role tokens to the same relative element; if so, `T[rel]`
+    // cannot separate the operations and the composition is unreachable. Select one role pair per
+    // distinct directed relation rather than trusting the bank order.
+    let rel_of = |qrole: u32, source_role: u32| -> usize {
+        relation_index(
+            &table,
+            sel.mode,
+            &sel.code_of,
+            *sel.q_roots.get(qrole as usize).unwrap_or(&0),
+            *sel.q_roots.get(source_role as usize).unwrap_or(&0),
+            qrole as usize,
+            source_role as usize,
+        )
+    };
+    let mut op_pairs: Vec<(u32, u32)> = Vec::new();
+    let mut seen_rel: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+    let mut all_rels: Vec<(u32, u32, usize, u8, u8)> = Vec::new();
+    for &(a, b) in banks.pairs.iter() {
+        let r = rel_of(a, b) % GROUP_ORDER;
+        all_rels.push((
+            a,
+            b,
+            r,
+            *sel.q_roots.get(a as usize).unwrap_or(&0),
+            *sel.q_roots.get(b as usize).unwrap_or(&0),
+        ));
+        if seen_rel.insert(r) {
+            op_pairs.push((a, b));
+            if op_pairs.len() == RC2_N_OPS {
+                break;
+            }
+        }
+    }
+    let available_relations = seen_rel.len();
+    let n_ops = op_pairs.len().min(RC2_N_OPS);
+    if n_ops < 2 {
+        return Err(format!(
+            "the served relation interface exposes {available_relations} distinct relative element(s); an operation-conditioned composition needs at least two"
+        ));
+    }
+    let k = rc2_choose_modulus(n_ops)?;
+
+    let witness = rc2_order_ten_witness()?;
+    let values: Vec<u32> = banks.values_fit.iter().copied().take(8).collect();
+    let mut used: std::collections::BTreeSet<u32> = values.iter().copied().collect();
+    used.insert(banks.keys[0]);
+    for (a, b) in op_pairs.iter() {
+        used.insert(*a);
+        used.insert(*b);
+    }
+    let out_bank: Vec<u32> = (0..parent.cfg.vocab as u32)
+        .rev()
+        .filter(|t| !used.contains(t))
+        .take(k)
+        .collect();
+    if out_bank.len() < k {
+        return Err("no disjoint composition output bank".into());
+    }
+    let items = make_rc2_items(&banks, &op_pairs, n_ops, &values, &out_bank, k, RC2_SEED)?;
+    let dev_items: Vec<Rc2Item> = items.iter().filter(|i| !i.test).cloned().collect();
+    let test_items: Vec<Rc2Item> = items.iter().filter(|i| i.test).cloned().collect();
+
+    let relation_exposure: Vec<serde_json::Value> = all_rels
+        .iter()
+        .map(|(a, b, r, qr, kr)| json!({"qrole": a, "source_role": b, "relation": r, "q_root": qr, "source_root": kr}))
+        .collect();
+
+    let (dev_pos, dev_ex) = rc2_extract(&parent, &local, &u, &table, &sel, &dev_items)?;
+    let (test_pos, test_ex) = rc2_extract(&parent, &local, &u, &table, &sel, &test_items)?;
+    if dev_pos.len() != dev_items.len() || test_pos.len() != test_items.len() {
+        return Err("composition extraction lost a declared position".into());
+    }
+    let all_read = dev_pos.iter().chain(test_pos.iter()).all(|p| p.read);
+    let all_source = dev_pos
+        .iter()
+        .chain(test_pos.iter())
+        .all(|p| p.correct_source);
+    let q0_values: std::collections::BTreeSet<usize> = dev_pos
+        .iter()
+        .chain(test_pos.iter())
+        .map(|p| p.q0)
+        .collect();
+    let rels: std::collections::BTreeSet<usize> =
+        dev_pos.iter().map(|p| p.r % GROUP_ORDER).collect();
+    if all_read && all_source && q0_values.len() != 1 {
+        return Err("composition instrument does not hold a single frozen query state".into());
+    }
+    // The reader may expose a relation outside the declared operation budget (a distractor or an
+    // empty-predecessor candidate). Record the exposure rather than asserting it away.
+    let relations_observed = rels.len();
+
+    let deficit = dev_pos
+        .iter()
+        .map(|p| (-p.target_margin).max(0) as i64)
+        .max()
+        .unwrap_or(0);
+    let mut shift = 0u32;
+    while shift < 12 && (CE_WIDTH as i64) * 2 * (1i64 << shift) < deficit {
+        shift += 1;
+    }
+    let base_params = {
+        let mut p = ReadConditionedParams::identity();
+        p.value_domain = values.clone();
+        p.value_code = (0..values.len()).map(|i| (i % GROUP_ORDER) as u8).collect();
+        for r in 0..GROUP_ORDER {
+            p.transport[r] = (r % GROUP_ORDER) as u8;
+        }
+        p
+    };
+    let learn = |cyclic: bool| -> Result<
+        (
+            serde_json::Value,
+            ReadConditionedParams,
+            EmissionResidual,
+            Vec<usize>,
+        ),
+        String,
+    > {
+        let params0 = base_params.clone();
+        let mut res0 = EmissionResidual::seeded(parent.cfg.vocab, 0x51E5_0000);
+        res0.shift = shift;
+        let (res_before_maps, nll_initial, nll_before_maps, flips_before_maps) = fit_output_block(
+            &dev_ex,
+            &params0,
+            &res0,
+            cyclic,
+            RC2_EPOCHS,
+            RC2_LR,
+            parent.cfg.f_bits,
+            RC2_MAX_W_ROWS,
+            5,
+        );
+        let rows_before_maps = res_before_maps.active_rows();
+        let (params, accepted) = ce_search_maps(
+            &dev_ex,
+            &params0,
+            &res_before_maps,
+            cyclic,
+            &rows_before_maps,
+            4,
+            parent.cfg.f_bits,
+        );
+        let nll_after_maps = served_nll_bits(
+            &dev_ex,
+            &params,
+            &res_before_maps,
+            cyclic,
+            &rows_before_maps,
+            parent.cfg.f_bits,
+        );
+        let (res, refit_initial, nll_final, flips_after_maps) = fit_output_block(
+            &dev_ex,
+            &params,
+            &res_before_maps,
+            cyclic,
+            RC2_EPOCHS,
+            RC2_LR,
+            parent.cfg.f_bits,
+            RC2_MAX_W_ROWS,
+            5,
+        );
+        if (refit_initial - nll_after_maps).abs() > 1e-12 || nll_final > refit_initial + 1e-12 {
+            return Err(
+                "composition post-map output refit violated the incumbent CE contract".into(),
+            );
+        }
+        let rows = res.active_rows();
+        let report = json!({
+            "algebra": if cyclic { "cyclic_c120" } else { "signed_h4" },
+            "shift": shift,
+            "f_bits": parent.cfg.f_bits,
+            "loss_units": "bits after fixed-point normalization",
+            "output_rows": rows.len(),
+            "nll_bits": {
+                "initial": nll_initial, "served_output_before_map_search": nll_before_maps,
+                "served_after_map_search": nll_after_maps, "post_map_refit_incumbent": refit_initial,
+                "served_final": nll_final,
+            },
+            "distinct_payload_alias_pairs_dev_before": ce_collisions(&dev_ex, &params0),
+            "distinct_payload_alias_pairs_dev_after": ce_collisions(&dev_ex, &params),
+            "accepted_ternary_flips": flips_before_maps + flips_after_maps,
+            "accepted_map_changes": accepted,
+            "post_map_output_refit_executed": true,
+            "dev_hits": ce_hits(&dev_ex, &params, &res, cyclic, &rows),
+            "output_after_maps_refit_sha256": sha256_hex(&res.to_bytes()),
+        });
+        Ok((report, params, res, rows))
+    };
+    let (h4_rep, h4_params0, h4_res0, _h4_rows0) = learn(false)?;
+    let (c120_rep, c120_params0, c120_res0, _c120_rows0) = learn(true)?;
+
+    let reload = |name: &str,
+                  params: ReadConditionedParams,
+                  res: EmissionResidual,
+                  cyclic: bool|
+     -> Result<
+        (
+            ReadConditionedParams,
+            EmissionResidual,
+            Vec<usize>,
+            serde_json::Value,
+        ),
+        String,
+    > {
+        let pbytes = params.to_bytes();
+        let rbytes = res.to_bytes();
+        let pp = format!("artifacts/{name}.rlrc");
+        let rp = format!("artifacts/{name}.rlce");
+        write_checked(&root, &pp, &pbytes)?;
+        write_checked(&root, &rp, &rbytes)?;
+        let loaded_p = ReadConditionedParams::from_bytes(
+            &std::fs::read(root.join(&pp)).map_err(|e| e.to_string())?,
+        )?;
+        let loaded_r = EmissionResidual::from_bytes(
+            &std::fs::read(root.join(&rp)).map_err(|e| e.to_string())?,
+            parent.cfg.vocab,
+        )?;
+        if params != loaded_p || res != loaded_r || loaded_r.w.len() != parent.cfg.vocab {
+            return Err("composition independent artifact load mismatch".into());
+        }
+        let loaded_rows = loaded_r.active_rows();
+        let unloaded_rows = res.active_rows();
+        let mut parity = 0usize;
+        for it in items.iter() {
+            let prefix = &it.tokens[..it.tokens.len() - 1];
+            let ring = ring_before_current(prefix);
+            let i = prefix.len() - 1;
+            let before = ce_predict(
+                &ring,
+                prefix[i],
+                prefix[i - 1] as usize,
+                prefix[i - 2],
+                &sel,
+                &table,
+                &parent,
+                &local,
+                &u,
+                &params,
+                &res,
+                &unloaded_rows,
+                cyclic,
+                true,
+                true,
+            );
+            let after = ce_predict(
+                &ring,
+                prefix[i],
+                prefix[i - 1] as usize,
+                prefix[i - 2],
+                &sel,
+                &table,
+                &parent,
+                &local,
+                &u,
+                &loaded_p,
+                &loaded_r,
+                &loaded_rows,
+                cyclic,
+                true,
+                true,
+            );
+            if before != after {
+                return Err("composition loaded predictor parity failure".into());
+            }
+            parity += 1;
+        }
+        let receipt = json!({"arm": name, "params_sha256": sha256_hex(&pbytes), "residual_sha256": sha256_hex(&rbytes),
+            "params_reload_identical": true, "residual_reload_identical": true,
+            "loaded_full_predictor_parity_positions": parity,
+            "loaded_objects_used_for_evaluation": true,
+            "algebra": if cyclic {"cyclic_c120"} else {"signed_h4"}, "f_bits": parent.cfg.f_bits,
+            "selector_sha256": selector_sha256, "group_digest": group_digest});
+        Ok((loaded_p, loaded_r, loaded_rows, receipt))
+    };
+    let (h4_params, h4_res, h4_rows, h4_artifact) =
+        reload("h4_composition", h4_params0, h4_res0, false)?;
+    let (c120_params, c120_res, c120_rows, c120_artifact) =
+        reload("cyclic_c120_composition", c120_params0, c120_res0, true)?;
+    let artifacts = vec![h4_artifact, c120_artifact];
+
+    let eval_arm = |params: &ReadConditionedParams,
+                    res: &EmissionResidual,
+                    rows: &[usize],
+                    cyclic: bool,
+                    use_update: bool,
+                    allowed: bool,
+                    items: &[Rc2Item]|
+     -> Result<(usize, usize), String> {
+        let mut hits = 0usize;
+        let mut reads = 0usize;
+        for it in items.iter() {
+            let prefix = &it.tokens[..it.tokens.len() - 1];
+            let ring = ring_before_current(prefix);
+            let i = prefix.len() - 1;
+            let (z, r, _q0, _q1) = ce_predict(
+                &ring,
+                prefix[i],
+                prefix[i - 1] as usize,
+                prefix[i - 2],
+                &sel,
+                &table,
+                &parent,
+                &local,
+                &u,
+                params,
+                res,
+                rows,
+                cyclic,
+                use_update,
+                allowed,
+            );
+            if r.action.is_some() {
+                reads += 1;
+            }
+            if argmax_low(&z) as u32 == it.answer {
+                hits += 1;
+            }
+        }
+        Ok((hits, reads))
+    };
+
+    let mut comparisons: Vec<serde_json::Value> = Vec::new();
+    for (label, params, res, rows, cyclic, use_update, allowed) in [
+        (
+            "local_noread",
+            &h4_params,
+            &h4_res,
+            &h4_rows,
+            false,
+            false,
+            false,
+        ),
+        (
+            "h4_composition",
+            &h4_params,
+            &h4_res,
+            &h4_rows,
+            false,
+            true,
+            true,
+        ),
+        (
+            "h4_update_disabled",
+            &h4_params,
+            &h4_res,
+            &h4_rows,
+            false,
+            false,
+            true,
+        ),
+        (
+            "h4_read_disabled",
+            &h4_params,
+            &h4_res,
+            &h4_rows,
+            false,
+            true,
+            false,
+        ),
+        (
+            "cyclic_c120_composition",
+            &c120_params,
+            &c120_res,
+            &c120_rows,
+            true,
+            true,
+            true,
+        ),
+    ] {
+        let (dh, dr) = eval_arm(params, res, rows, cyclic, use_update, allowed, &dev_items)?;
+        let (th, tr) = eval_arm(params, res, rows, cyclic, use_update, allowed, &test_items)?;
+        comparisons.push(json!({
+            "arm": label,
+            "dev_hits": dh, "dev_positions": dev_items.len(), "dev_reads": dr,
+            "test_hits": th, "test_positions": test_items.len(), "test_reads": tr,
+        }));
+    }
+
+    // Fair comparators fitted on development only and given the same observable inputs.
+    let mut const_counts: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut pay: BTreeMap<u32, BTreeMap<u32, usize>> = BTreeMap::new();
+    let mut two: BTreeMap<(usize, u32), BTreeMap<u32, usize>> = BTreeMap::new();
+    for p in dev_pos.iter() {
+        *const_counts.entry(p.target).or_default() += 1;
+        *pay.entry(p.payload)
+            .or_default()
+            .entry(p.target)
+            .or_default() += 1;
+        *two.entry((p.r % GROUP_ORDER, p.payload))
+            .or_default()
+            .entry(p.target)
+            .or_default() += 1;
+    }
+    let const_target = const_counts
+        .iter()
+        .max_by_key(|(_, c)| **c)
+        .map(|(t, _)| *t)
+        .unwrap_or(0);
+    let majority = |m: &BTreeMap<u32, usize>| -> u32 {
+        m.iter()
+            .max_by_key(|(_, c)| **c)
+            .map(|(t, _)| *t)
+            .unwrap_or(const_target)
+    };
+    let pay_table: BTreeMap<u32, u32> = pay.iter().map(|(k, m)| (*k, majority(m))).collect();
+    let two_table: BTreeMap<(usize, u32), u32> =
+        two.iter().map(|(k, m)| (*k, majority(m))).collect();
+    let count_hits = |poss: &[Rc2Pos], f: &dyn Fn(&Rc2Pos) -> u32| -> usize {
+        poss.iter().filter(|p| f(p) == p.target).count()
+    };
+    for (label, f) in [
+        (
+            "development_constant",
+            &(|_: &Rc2Pos| const_target) as &dyn Fn(&Rc2Pos) -> u32,
+        ),
+        (
+            "payload_only_table",
+            &(|p: &Rc2Pos| pay_table.get(&p.payload).copied().unwrap_or(const_target)),
+        ),
+        (
+            "relation_and_payload_table",
+            &(|p: &Rc2Pos| {
+                two_table
+                    .get(&(p.r % GROUP_ORDER, p.payload))
+                    .copied()
+                    .unwrap_or(const_target)
+            }),
+        ),
+    ] {
+        comparisons.push(json!({
+            "arm": label,
+            "dev_hits": count_hits(&dev_pos, f), "dev_positions": dev_pos.len(),
+            "test_hits": count_hits(&test_pos, f), "test_positions": test_pos.len(),
+            "blind_to_operation": label == "payload_only_table",
+        }));
+    }
+
+    // Service-state sharing: how many held-out positions reach a state already produced by a
+    // development position. This is the mechanism by which a composition can transfer at all.
+    let state_of = |p: &Rc2Pos| -> usize { h4_params.update(p.q0, p.r, p.payload) };
+    let dev_states: std::collections::BTreeSet<usize> = dev_pos.iter().map(&state_of).collect();
+    let test_shared = test_pos
+        .iter()
+        .filter(|p| dev_states.contains(&state_of(p)))
+        .count();
+    let test_classes: std::collections::BTreeSet<usize> =
+        test_pos.iter().map(|p| rc2_class(p.op, p.vi, k)).collect();
+    let dev_classes: std::collections::BTreeSet<usize> =
+        dev_pos.iter().map(|p| rc2_class(p.op, p.vi, k)).collect();
+    let feature_dev = ce_feature_alias_report(
+        &dev_ex,
+        &dev_pos.iter().map(|p| p.correct_source).collect::<Vec<_>>(),
+        &h4_params,
+        &h4_res,
+        false,
+    );
+    let feature_held_out = ce_feature_alias_report(
+        &test_ex,
+        &test_pos
+            .iter()
+            .map(|p| p.correct_source)
+            .collect::<Vec<_>>(),
+        &h4_params,
+        &h4_res,
+        false,
+    );
+
+    let mut rows_text = String::new();
+    for (split, poss) in [("dev", &dev_pos), ("replayed", &test_pos)] {
+        for p in poss.iter() {
+            let q1 = state_of(p);
+            rows_text.push_str(&format!(
+                "{{\"split\":\"{split}\",\"op\":{},\"value_index\":{},\"class\":{},\"test\":{},\"target\":{},\"selected_payload\":{},\"read\":{},\"correct_source\":{},\"correct_value\":{},\"q0\":{},\"relation\":{},\"q1\":{},\"q1_state_seen_in_dev\":{},\"target_margin\":{}}}\n",
+                p.op, p.vi, rc2_class(p.op, p.vi, k), p.test, p.target, p.payload, p.read,
+                p.correct_source, p.correct_value, p.q0, p.r % GROUP_ORDER, q1,
+                dev_states.contains(&q1), p.target_margin
+            ));
+        }
+    }
+    write_checked(&root, "rows.jsonl", rows_text.as_bytes())?;
+
+    let find_h = |name: &str| -> u64 {
+        comparisons
+            .iter()
+            .find(|c| c["arm"] == json!(name))
+            .and_then(|c| c["test_hits"].as_u64())
+            .unwrap_or(0)
+    };
+    let h4_test = find_h("h4_composition");
+    let control_max = [
+        "local_noread",
+        "h4_update_disabled",
+        "h4_read_disabled",
+        "development_constant",
+        "payload_only_table",
+        "relation_and_payload_table",
+        "cyclic_c120_composition",
+    ]
+    .iter()
+    .map(|n| find_h(n))
+    .max()
+    .unwrap_or(0);
+    let screen = json!({
+        "declared_before_final": "held-out (op, value) cells whose declared class was observed in development must exceed every control on the same cells",
+        "h4_test_hits": h4_test, "test_positions": test_items.len(),
+        "best_control_test_hits": control_max,
+        "beats_controls": h4_test > control_max,
+        "met": h4_test > control_max,
+        "note": "the declared rule was constructed to be realisable by the group composition, so a pass is a composition-circuit result, not a language-advantage or alpha claim",
+    });
+
+    let result = json!({
+        "schema": "uor-r4.relation-composition/1",
+        "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+        "running_source": {
+            "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+            "git_dirty": std::env::var("UOR_GIT_DIRTY").unwrap_or_else(|_| "unknown".into()),
+            "executable_sha256": executable_sha256,
+            "source_files": source_files,
+        },
+        "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA, "group_digest": group_digest, "selector_sha256": selector_sha256, "f_bits": parent.cfg.f_bits},
+        "instrument": {
+            "design": "fixed query key and two values per (operation, value) cell; the query role and the selected source role are the two members of that operation's declared role pair; distractor blocks share the key and use other operations' source roles",
+            "declared_rule": "class = (op + vi) mod 10; the answer token is a disjoint output bank entry per class, absent from every prefix",
+            "order_ten_witness_element": witness,
+            "realisability": "T[rel(op)] = h^op and V[value(vi)] = h^vi give served state q0*h^class, so cells sharing a class share one state",
+            "values": values, "output_bank": out_bank,
+            "ops": n_ops, "available_relations": available_relations, "relation_budget_saturating": available_relations < RC2_N_OPS, "class_modulus": k, "dev_values": RC2_N_VALUES_DEV, "held_out_values": RC2_N_VALUES_TEST,
+            "relation_exposure": relation_exposure,
+        },
+        "validity": {
+            "dev_positions": dev_pos.len(), "held_out_positions": test_pos.len(),
+            "all_read": all_read, "all_source_selected": all_source,
+            "distinct_frozen_query_states": q0_values.len(), "distinct_relations": relations_observed,
+            "dev_classes": dev_classes.len(), "held_out_classes": test_classes.len(),
+            "held_out_states_already_reached_in_dev": test_shared,
+            "max_target_deficit_units": deficit, "declared_shift": shift,
+        },
+        "diagnostics": {"served_feature_separability_dev": feature_dev, "served_feature_separability_held_out": feature_held_out},
+        "learning": {"h4": h4_rep, "cyclic_c120": c120_rep},
+        "comparisons": comparisons,
+        "screen": screen,
+        "artifacts": artifacts,
+        "scope": "bounded authored relation-composition instrument. The declared rule was chosen to be realisable by the served group composition, so this is a group-multiplication circuit test, not independent evidence that H4 is the best language geometry. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "elapsed_s": started.elapsed().as_secs_f64(),
+    });
+    write_json(&root, "result.json", &result)?;
+    seal(&root).map_err(|e| format!("seal: {e}"))?;
+    let unlisted = verify(&root).map_err(|e| format!("verify: {e}"))?;
+    println!(
+        "relation-composition: dev {} | held-out {} | all-read {} | all-source {} | frozen q0 {} | dev classes {} held-out classes {} | held-out states shared {} | H4 dev {} held-out {} | best control {} | sealed {} unlisted | {:.1}s",
+        dev_pos.len(), test_pos.len(), all_read, all_source, q0_values.len(),
+        dev_classes.len(), test_classes.len(), test_shared,
+        comparisons.iter().find(|c| c["arm"] == json!("h4_composition")).and_then(|c| c["dev_hits"].as_u64()).unwrap_or(0),
+        h4_test, control_max, unlisted.len(), started.elapsed().as_secs_f32()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mode = std::env::args().any(|a| a == "--mode=utility-transfer");
     let ce = std::env::args().any(|a| a == "--mode=contextual-emission");
-    let result = if ce {
+    let comp = std::env::args().any(|a| a == "--mode=relation-composition");
+    let result = if comp {
+        rc2_run()
+    } else if ce {
         contextual_emission_run()
     } else if mode {
         utility_transfer_run()
@@ -8248,6 +9190,75 @@ fn main() -> ExitCode {
         Err(e) => {
             eprintln!("error: {e}");
             ExitCode::from(1)
+        }
+    }
+}
+
+#[cfg(test)]
+mod relation_composition_tests {
+    use super::*;
+
+    #[test]
+    fn declared_class_merges_only_the_shared_residue() {
+        // Cells that share a residue must share a class; a value change must move it.
+        assert_eq!(
+            rc2_class(1, 4, RC2_CLASS_MODULUS),
+            rc2_class(5, 0, RC2_CLASS_MODULUS)
+        );
+        assert_eq!(
+            rc2_class(3, 7, RC2_CLASS_MODULUS),
+            rc2_class(0, 0, RC2_CLASS_MODULUS)
+        );
+        assert_ne!(
+            rc2_class(2, 1, RC2_CLASS_MODULUS),
+            rc2_class(2, 2, RC2_CLASS_MODULUS)
+        );
+        for op in 0..RC2_N_OPS {
+            for vi in 0..(RC2_N_VALUES_DEV + RC2_N_VALUES_TEST) {
+                assert!(rc2_class(op, vi, RC2_CLASS_MODULUS) < RC2_CLASS_MODULUS);
+            }
+        }
+    }
+
+    #[test]
+    fn the_rule_is_realisable_by_the_served_group() {
+        // A witnessed order-10 element whose powers compose exactly as the rule declares.
+        let g = rc2_order_ten_witness().expect("2I must contain an order-10 element");
+        let t = group_table();
+        let identity = t.identity as usize;
+        let mul = |a: usize, b: usize| t.product[a * ROW_STRIDE + b] as usize;
+        let pow = |e: usize| -> usize {
+            let mut x = identity;
+            for _ in 0..e {
+                x = mul(x, g);
+            }
+            x
+        };
+        assert_eq!(pow(RC2_CLASS_MODULUS), pow(0));
+        // Distinct residues 0..9 are distinct states, so the ten classes are separable.
+        let mut seen = std::collections::BTreeSet::new();
+        for e in 0..RC2_CLASS_MODULUS {
+            assert!(seen.insert(pow(e)), "residue {e} collides");
+        }
+    }
+
+    #[test]
+    fn held_out_cells_share_a_class_with_development() {
+        // Every held-out residue must be covered by an all-operations development population, for
+        // the full operation budget and for the reduced budgets the served relation set may force.
+        for n_ops in 2..=RC2_N_OPS {
+            let k = rc2_choose_modulus(n_ops).expect("a covering modulus must exist");
+            let dev: std::collections::BTreeSet<usize> = (0..n_ops)
+                .flat_map(|op| (0..RC2_N_VALUES_DEV).map(move |vi| rc2_class(op, vi, k)))
+                .collect();
+            for op in 0..n_ops {
+                for vi in RC2_N_VALUES_DEV..(RC2_N_VALUES_DEV + RC2_N_VALUES_TEST) {
+                    assert!(
+                        dev.contains(&rc2_class(op, vi, k)),
+                        "held-out cell ({op},{vi}) has no development class at n_ops={n_ops}"
+                    );
+                }
+            }
         }
     }
 }

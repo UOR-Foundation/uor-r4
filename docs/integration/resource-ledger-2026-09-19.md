@@ -1562,3 +1562,54 @@ Principal cleanup: **none; 0 bytes deleted**. Free after checks **37355491328 by
 versus 37404250112 bytes at the audit snapshot; normal build/activity growth explains
 the decrease, not reclaimed space. Unique research, models, sealed attempts, worktrees
 and Downloads are preserved. [Complete check/resource receipt](../evidence/consistent-emission-principal-checks-2026-09-21.json).
+
+## Geometric-computation step — September 21, 2026
+
+**Projection recorded before implementation and execution.** One corrected association lifecycle run
+with the principal's repairs, the added served-feature separability diagnostic, a new
+relation-composition instrument with held-out value cells and fair comparators, focused tests,
+evidence and delivery.
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **<= 8,000,000 ms (~133 min)** | context/source recovery, instrument + diagnostic implementation, compile cycles, three model runs, controls, evidence, delivery |
+| Compiler workers | <= 2, `CARGO_INCREMENTAL=0` | offline Rust build, shared owner target |
+| Model workers | 1 | single harness process |
+| Peak RSS | <= 8 GiB | existing loaders plus the 4096x16 float latent map |
+| New/temporary/retained storage | <= 512 MiB build, <= 32 MiB reports | shared target reuse, bounded row files |
+| Free space at projection | `36156182528` bytes | **below** the 36766079385-byte reserve; reclaimed before work (below) |
+
+**Extension taken.** Time increment **+8,000,000 ms**; **new cumulative limit 224,900,000 ms**
+(previous 216,900,000 ms; live 214,561,250 ms). Reason: the corrected lifecycle, a new composition
+instrument, the required diagnostic and protected delivery cannot be implemented, executed and
+documented within the remaining 2,338,750 ms. Recorded **before** the work. No reserve reduction and
+no paid/external compute.
+
+**Storage recovered before work (measured).** Free space at the start of the session was
+**36,155,400,192 bytes**, which is **744,114,585 bytes below** the 36,766,079,385-byte reserve before
+the 128 MiB stop margin. Read-only inventory of the inactive worktree
+`.worktrees/geometric-query-read/target/debug/deps` found **10,201 `*.rcgu.o` codegen intermediates**
+last modified before 2026-09-21 02:19 (more than eleven hours old) with no active cargo/rustc process,
+plus the linked executables (`competitive_reader-0e1d5b53a6446331`, `uor_r4_core-ebfa7e035fd2bc43`) and
+four `*.dylib`s, which were preserved. Removing only those intermediates reclaimed **12,719,296 KB
+allocated = 13,024,559,104 bytes logical**; observed free space moved **36,155,400,192 ->
+49,189,490,688 bytes**, a **13,034,090,496-byte** gain. No unique source, model, sealed evidence,
+executable, research, worktree or Download was deleted; no blanket clean or reserve reduction. Free
+space after the work is **51,228,819,456 bytes**, above the reserve plus the 128 MiB stop margin by
+**14,328,522,343 bytes**.
+
+**Completed charges — geometric-computation step.** Measured: three model runs (**141.5 s**, **157.1 s**,
+**31.3 s**) plus the two superseded composition attempts (**34.6 s**, **8.4 s**); release build and
+incremental compile cycles (~**480 s**); focused tests (**3 s**). Estimated: context/source/literature
+recovery ~**900 s**; instrument and diagnostic implementation ~**2400 s**; documentation, evidence,
+delivery and knowledge ~**1200 s**. **Charge 5,200,000 ms** (measured + estimated). Live allowance
+limit **224,900,000 ms**; **new cumulative 219,761,250 ms**; remaining **5,138,750 ms**.
+`CARGO_INCREMENTAL=0` throughout. No reserve reduction, no deletion of unique material, no
+paid/external compute.
+
+**Delivered** under the claimed, sealed and verified roots
+`.uor-models/realtext-prior-2026-09-20/geometric-computation-1` and `-2` (association regression),
+`relation-composition-1` (eight-operation construction, retained as the feature-alias witness) and
+`relation-composition-5` (adaptive two-operation budget), each with 0 unlisted files. Attempts
+`relation-composition-{diag,diag2,3,4}` are empty claim directories created by superseded runs and hold
+no evidence; they are retained and never reused.
