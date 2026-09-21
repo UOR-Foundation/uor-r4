@@ -1235,3 +1235,45 @@ Delivered under the claimed, sealed and verified report root `.uor-models/realte
 Live snapshot **192996749/194900000 ms**, remaining **1903251 ms (~31.72 minutes)**. This source/literature/saved-data/document review adds no model build, fit or inference debit, extension or external spend. All prior charges remain. Necessary local extensions remain owner-authorized when projected and recorded before use.
 
 Read-only inventory at 2026-09-21T13:22:37Z: **38537052160 bytes free (38.54 GB)**, reserve **36766079385 bytes**, headroom **1.77 GB**. Shared target 8780767232 allocated bytes, knowledge 1961205760, models at least 20979634176 with three protected-path errors. No permissions changed; overlapping/APFS rows are not exclusive physical totals. **Zero deletions.** Preserve the 128 MiB stop margin and refresh before the [next constrained-policy experiment](deepseek-policy-feasibility-step-2026-09-21.md). Reuse valid builds: a 6 GB build-growth estimate exceeds current headroom. See the [principal review](policy-objective-review-2026-09-21.md) for scope and retained evidence.
+
+
+## Joint finite-policy feasibility step — September 21, 2026
+
+**Projection recorded before the step's execution and delivery.** One extracted development pass over
+the frozen populations, one bounded solve per matched arm plus the fallback-relaxed wider class, the
+expected-manifest loader repair, two complete harness runs, focused tests, documentation and delivery.
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **≤ 3,600,000 ms (~60 min)** | context/authority recovery, Rust extraction + solver + verified loader, two complete runs, focused tests, documentation and delivery |
+| Compiler workers | ≤ 2 | offline Rust build |
+| Model workers | 1 | single harness process |
+| Peak RSS | ≤ 8 GiB | existing harness |
+| New reports | ≤ 512 MiB | two claimed report roots (~1 MiB measured) |
+| Incremental reusable build | ≤ 6 GiB | shared target reuse (measured ~2.4 GiB) |
+| Storage stop margin | 128 MiB retained | never breached |
+
+**Extension taken.** Time increment **+4,000,000 ms**; **new cumulative limit 198,900,000 ms**
+(previous limit 194,900,000 ms). Reason: the terminal feasibility experiment requires a new Rust
+sufficient-statistics extraction, a bounded constrained solver, an expected-manifest loader and two
+complete runs, which the remaining 1,903,251 ms could not fund. Storage increment **+4.5 GB**; the
+already-projected reusable build growth brought free space to **32,599,908,352 bytes** (30.36 GiB)
+against the **36,766,079,385 byte** reserve, so the necessary build-growth allowance is extended by
+**4,166,171,033 bytes** with the 128 MiB model-storage stop margin retained. No deletion, no paid or
+external compute.
+
+**Charges.** Two complete harness runs **487.5 s**; release builds **92 s** (84 + 8) and offline
+checks/tests **235 s** (26 + 148 + 61); documentation, evidence and delivery allocation **~900 s**;
+context, source and literature recovery **~900 s**. **Charge 2,600,000 ms** (measured + estimated).
+
+**New cumulative: 195,596,749 ms.** Remaining: 198,900,000 − 195,596,749 = **3,303,251 ms (~55 min)**.
+
+Delivered under the claimed, sealed and verified report root
+`.uor-models/realtext-prior-2026-09-20/policy-feasibility-2` (0 unlisted files, ~0.5 MiB; manifest
+`a28803c4e8c1e86049293eb74ad1fe35f5117e690db95e67461a7a548ed31fac`). The superseded attempt
+`policy-feasibility-1` is retained with identical measurements and is never reused as the delivered
+root. Shared target **12,014,945,792 allocated bytes**; the growth is reusable build output, not unique
+research. Preserved untouched: `reader-utility-1..4`, `relational-learning-1..4`,
+`contextual-utility-1/2`, `competitive-reader-1`, `relational-reader-1`, `occurrence-reader-1..4`,
+`s-attribution-1..3`, `query-read-1..2` and all other retained roots. No deletion of unique material,
+no paid/external compute.

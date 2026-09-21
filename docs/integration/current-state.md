@@ -1,6 +1,16 @@
 # Current native geometric AI work
 
-## Active: settle joint finite-policy feasibility, then advance the missing operation
+## Active: joint finite-policy feasibility is a proven obstruction — separate positions inside a bucket
+
+**Feasibility settled (obstruction).** The declared per-bucket action class, and the fallback-relaxed wider class, are **jointly infeasible** on the frozen development populations. Each behavioral constraint is reachable alone but not together: with absent reads bounded to the parent's 7, the maximum present emitted-correct attainable is **74** (H4) and **71** (categorical) against a required **145**; both Rust solves return `INFEASIBLE` with an exhausted search. Text is not the blocker (per-bucket text optimum −0.0366 / −0.0349 bits/token, both better than local). The cause is **within-bucket position separability**: present- and absent-query positions share the same coarse buckets (buckets 1 and 9 alone hold 11 of 23 absent positions), so one action per bucket cannot read the present positions without reading the absent ones — the fitted tables read **23/23** absent positions versus the parent's 7. Development feasibility only; no fresh final draw was taken. [Result](policy-feasibility-result-2026-09-21.md); [design](policy-feasibility-design-2026-09-21.md); [evidence](../evidence/policy-feasibility-obstruction-2026-09-21.json).
+
+**Next:** end this scalar-policy campaign. Its evidenced successor is to inspect the **omitted existing causal information** — absolute selected-source/NoRead confidence, the directed relation, or local normalization — and admit the distinction that separates a present from an absent position *within a bucket*, as one bounded operation with matched comparators. Do not infer persistent state or more dimensions from this obstruction. The expected-manifest loader control repair is delivered (`expected_manifest_loader`, 0 failures, four exercised rejections); the intervention neighbour-change accounting remains open. Whole-path D0-b and physical energy remain unqualified.
+
+Delivered root `.uor-models/realtext-prior-2026-09-20/policy-feasibility-2` (sealed, verified, 0 unlisted, manifest `a28803c4e8c1e86049293eb74ad1fe35f5117e690db95e67461a7a548ed31fac`); superseded `policy-feasibility-1` is retained (identical measurements; its infeasible-arm reporting printed a non-selected search path). The four declared categories and all prior artifacts are unchanged; final-panel comparators reproduce PR #1331 exactly. Counterfactual identity residual **1.42e-13 bits** over 5,442 positions. Ledger and extension: [resource ledger](resource-ledger-2026-09-19.md).
+
+### Previous active (superseded by the section above)
+
+## Former active: settle joint finite-policy feasibility, then advance the missing operation
 
 **PR #1330, independently reviewed:** the fit/serve feature repair and four negative outcome criteria verify. Corrected H4 harms reader-held-out text by **+0.119319 bits/token [+0.070211,+0.167862]**, versus parent +0.453197 and fixed one nat −0.014769. Present-query correct emissions fall **77→56/121**; absent reads rise **5→19/19**. Preserve PR #1328's old artifact gain: the changed successor does not refute that measurement. Both modified source hashes and all five reported document intervals verify. Attempt 4 faithfully replays attempt 3 after a report repair; it is not a second independent final draw. [Principal review](policy-objective-review-2026-09-21.md); [saved-data audit](../evidence/policy-objective-principal-review-2026-09-21.json).
 
