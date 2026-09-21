@@ -25,7 +25,7 @@ use super::group_table::{group_table, GROUP_ORDER, ROW_STRIDE};
 /// Shortlist size stored per grounded state.
 pub const DEC_K: usize = 4;
 /// Bounded number of grounded states the decoder may carry. This is the resource constraint that
-/// makes memorising every observed cell impossible and forces one state per required distinction.
+/// limits memorisation capacity; it does not itself force correct structural sharing.
 pub const DEC_MAX_STATES: usize = 16;
 
 /// Result of one decoder lookup.
@@ -171,6 +171,8 @@ impl ResultDecoder {
 pub struct DecObservation {
     pub s: usize,
     pub target: u32,
+    /// Factual reader action, separate from intended-source supervision.
+    pub read: bool,
     /// The intended source was actually selected, so this observation may supervise the decoder.
     pub grounded: bool,
 }
@@ -179,7 +181,7 @@ pub struct DecObservation {
 /// `max_states`, and store the `k` most frequent targets with their counts as integer scores.
 pub fn fit_decoder(obs: &[DecObservation], max_states: usize, k: usize) -> ResultDecoder {
     let mut counts: BTreeMap<u8, BTreeMap<u32, i32>> = BTreeMap::new();
-    for o in obs.iter().filter(|o| o.grounded) {
+    for o in obs.iter().filter(|o| o.read && o.grounded) {
         *counts
             .entry(o.s.min(GROUP_ORDER - 1) as u8)
             .or_default()
@@ -191,13 +193,13 @@ pub fn fit_decoder(obs: &[DecObservation], max_states: usize, k: usize) -> Resul
         .map(|(s, m)| (m.values().sum::<i32>(), *s))
         .collect();
     ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    ranked.truncate(max_states.max(1));
+    ranked.truncate(max_states.min(DEC_MAX_STATES));
     let mut states = Vec::new();
     for (_support, s) in ranked {
         let m = &counts[&s];
         let mut entries: Vec<(i32, u32)> = m.iter().map(|(t, c)| (*c, *t)).collect();
         entries.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-        entries.truncate(k.max(1));
+        entries.truncate(k.min(DEC_K));
         let tokens = entries.iter().map(|(_, t)| *t).collect();
         let scores = entries.iter().map(|(c, _)| *c).collect();
         states.push(DecState {
@@ -215,9 +217,11 @@ pub fn fit_decoder(obs: &[DecObservation], max_states: usize, k: usize) -> Resul
 pub fn decode_hits(dec: &ResultDecoder, obs: &[DecObservation]) -> (usize, usize) {
     let mut correct = 0usize;
     for o in obs.iter() {
-        if let DecOutcome::Emit { token, .. } = dec.decode(o.s) {
-            if token == o.target {
-                correct += 1;
+        if o.read {
+            if let DecOutcome::Emit { token, .. } = dec.decode(o.s) {
+                if token == o.target {
+                    correct += 1;
+                }
             }
         }
     }
@@ -232,6 +236,7 @@ pub struct DecExample {
     pub qrole: u32,
     pub payload: u32,
     pub target: u32,
+    pub read: bool,
     pub grounded: bool,
 }
 
@@ -243,6 +248,10 @@ pub struct DerivedStateModel {
     pub transport: Vec<u8>,
     /// Additive `mod GROUP_ORDER` combination instead of the exact group product.
     pub cyclic: bool,
+    /// Explicit factor contract: value-only decoding deliberately ignores query and binding.
+    pub value_only: bool,
+    /// v2 rejects unseen active operands; v1 loads retain their historical identity fallback.
+    pub strict_operands: bool,
     pub op_domain: Vec<u32>,
     pub op_code: Vec<u8>,
     pub value_domain: Vec<u32>,
@@ -257,7 +266,8 @@ impl DerivedStateModel {
         let rels: BTreeSet<usize> = examples.iter().map(|e| e.r % GROUP_ORDER).collect();
         let ops: BTreeSet<u32> = examples.iter().map(|e| e.qrole).collect();
         let values: BTreeSet<u32> = examples.iter().map(|e| e.payload).collect();
-        let mut transport = vec![group_table().identity; GROUP_ORDER];
+        let neutral = if cyclic { 0 } else { group_table().identity };
+        let mut transport = vec![neutral; GROUP_ORDER];
         for r in rels {
             transport[r] = (r % GROUP_ORDER) as u8;
         }
@@ -272,6 +282,8 @@ impl DerivedStateModel {
         DerivedStateModel {
             transport,
             cyclic,
+            value_only: false,
+            strict_operands: true,
             op_domain,
             op_code,
             value_domain,
@@ -284,7 +296,7 @@ impl DerivedStateModel {
     pub fn op_state(&self, qrole: u32) -> usize {
         match self.op_domain.iter().position(|t| *t == qrole) {
             Some(i) => self.op_code[i] as usize,
-            None => group_table().identity as usize,
+            None => self.neutral_element(),
         }
     }
 
@@ -292,19 +304,30 @@ impl DerivedStateModel {
     pub fn value_state(&self, payload: u32) -> usize {
         match self.value_domain.iter().position(|t| *t == payload) {
             Some(i) => self.value_code[i] as usize,
-            None => group_table().identity as usize,
+            None => self.neutral_element(),
+        }
+    }
+
+    fn neutral_element(&self) -> usize {
+        if self.cyclic && self.strict_operands {
+            0
+        } else {
+            group_table().identity as usize
         }
     }
 
     /// `s = inverse(q0) * q1 = T_bind[r] * U_op[query] * V[value]`, exact ordered products.
     #[inline]
     pub fn relative_result(&self, r: usize, qrole: u32, payload: u32) -> usize {
+        if self.value_only {
+            return self.value_state(payload);
+        }
         let t = group_table();
         let a = self
             .transport
             .get(r % GROUP_ORDER)
             .copied()
-            .unwrap_or(t.identity) as usize;
+            .unwrap_or(self.neutral_element() as u8) as usize;
         let o = self.op_state(qrole).min(GROUP_ORDER - 1);
         let v = self.value_state(payload).min(GROUP_ORDER - 1);
         if self.cyclic {
@@ -315,16 +338,39 @@ impl DerivedStateModel {
     }
 
     pub fn decode(&self, r: usize, qrole: u32, payload: u32) -> DecOutcome {
-        self.decoder.decode(self.relative_result(r, qrole, payload))
+        match self.checked_relative_result(r, qrole, payload) {
+            Ok(s) => self.decoder.decode(s),
+            Err(_) => DecOutcome::NoRead,
+        }
+    }
+
+    /// Distinguish an unknown active operand from a legitimate computed identity.
+    pub fn checked_relative_result(
+        &self,
+        r: usize,
+        qrole: u32,
+        payload: u32,
+    ) -> Result<usize, &'static str> {
+        if self.strict_operands {
+            if !self.value_only && !self.op_domain.contains(&qrole) {
+                return Err("UnknownOperation");
+            }
+            if !self.value_domain.contains(&payload) {
+                return Err("UnknownValue");
+            }
+        }
+        Ok(self.relative_result(r, qrole, payload))
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut o = Vec::new();
         o.extend_from_slice(b"RLDS");
-        o.extend_from_slice(&1u32.to_le_bytes());
+        o.extend_from_slice(&2u32.to_le_bytes());
         o.extend_from_slice(&(self.transport.len() as u32).to_le_bytes());
         o.extend_from_slice(&self.transport);
         o.push(u8::from(self.cyclic));
+        o.push(u8::from(self.value_only));
+        o.push(u8::from(self.strict_operands));
         for domain in [&self.op_domain, &self.value_domain] {
             o.extend_from_slice(&(domain.len() as u32).to_le_bytes());
             for t in domain.iter() {
@@ -355,7 +401,8 @@ impl DerivedStateModel {
         if take(&mut c, 4)? != b"RLDS" {
             return Err("bad derived-state artifact magic".into());
         }
-        if u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) != 1 {
+        let version = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
+        if version != 1 && version != 2 {
             return Err("unsupported derived-state artifact version".into());
         }
         let nt = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
@@ -364,6 +411,15 @@ impl DerivedStateModel {
         }
         let transport = take(&mut c, nt)?.to_vec();
         let cyclic = take(&mut c, 1)?[0] != 0;
+        let (value_only, strict_operands) = if version == 2 {
+            let flags = take(&mut c, 2)?;
+            if flags.iter().any(|f| *f > 1) {
+                return Err("invalid derived-state factor/operand flags".into());
+            }
+            (flags[0] != 0, flags[1] != 0)
+        } else {
+            (false, false)
+        };
         let mut domains = Vec::new();
         for _ in 0..2 {
             let n = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
@@ -406,12 +462,17 @@ impl DerivedStateModel {
         }
         let dl = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
         let decoder = ResultDecoder::from_bytes(take(&mut c, dl)?, max_vocab)?;
+        if version == 2 && decoder.state_count() > DEC_MAX_STATES {
+            return Err("v2 derived decoder exceeds its state bound".into());
+        }
         if c != bytes.len() {
             return Err("trailing bytes in the derived-state artifact".into());
         }
         Ok(DerivedStateModel {
             transport,
             cyclic,
+            value_only,
+            strict_operands,
             op_domain,
             op_code,
             value_domain,
@@ -427,7 +488,7 @@ pub struct DecFitReport {
     pub initial_hits: usize,
     pub final_hits: usize,
     pub examples: usize,
-    /// Held-out development cells, used only to select between maps during fitting.
+    /// Supervised outer-development cells queried during every candidate-map evaluation.
     pub probe_hits: usize,
     pub probe_examples: usize,
     pub states: usize,
@@ -440,6 +501,7 @@ fn observe(model: &DerivedStateModel, examples: &[DecExample]) -> Vec<DecObserva
         .map(|e| DecObservation {
             s: model.relative_result(e.r, e.qrole, e.payload),
             target: e.target,
+            read: e.read,
             grounded: e.grounded,
         })
         .collect()
@@ -448,10 +510,10 @@ fn observe(model: &DerivedStateModel, examples: &[DecExample]) -> Vec<DecObserva
 /// Jointly fit the binding/operation/value maps **and** the decoder on development outcomes.
 ///
 /// `fit` supplies the decoder supervision; `probe` is a disjoint set of development cells whose
-/// classes are covered by `fit`. Objective, lexicographic: fit hits, then probe hits, then fewer
-/// grounded states. The probe is what rewards *sharing*: a map that memorises the fit cells scores
-/// no better than one that merges them by the required distinction, so the state bound and the
-/// probe together select a compositional map rather than a per-cell table. `value_only` keeps the
+/// classes are covered by `fit`. Both sets are supervised development: outer labels are queried
+/// on every candidate map, so their accuracy is not held-out generalization. Objective,
+/// lexicographic: outer hits, then fit hits, then fewer grounded states. This can encourage sharing
+/// but does not prove compositional identification. `value_only` keeps the
 /// binding and operation factors at the identity, so only factors the data justifies are retained.
 pub fn fit_derived_state_model(
     fit: &[DecExample],
@@ -461,10 +523,14 @@ pub fn fit_derived_state_model(
     cyclic: bool,
     value_only: bool,
 ) -> (DerivedStateModel, DecFitReport) {
-    let mut model = DerivedStateModel::seeded(fit, cyclic);
+    // Initialize active operand domains from all supervised development observations. In
+    // particular, an outer-only operation must have its own optimizable code, not identity fallback.
+    let development: Vec<DecExample> = fit.iter().chain(probe).copied().collect();
+    let mut model = DerivedStateModel::seeded(&development, cyclic);
+    model.value_only = value_only;
     if value_only {
-        model.transport = vec![group_table().identity; GROUP_ORDER];
-        model.op_code = vec![group_table().identity; model.op_domain.len()];
+        model.transport = vec![model.neutral_element() as u8; GROUP_ORDER];
+        model.op_code = vec![model.neutral_element() as u8; model.op_domain.len()];
     }
     let refit = |m: &mut DerivedStateModel| {
         m.decoder = fit_decoder(&observe(m, fit), max_states, DEC_K);
@@ -478,15 +544,13 @@ pub fn fit_derived_state_model(
     let mut best = score(&model);
     let initial_hits = best.0;
     let mut accepted = 0usize;
-    // Probe first, then fit, then fewer states. The probe is a disjoint development set whose
-    // classes are covered by the fit cells, so preferring it selects a map that shares states by
-    // the required distinction instead of memorising the fit cells.
+    // Supervised outer objective first, then calibration fit, then fewer states.
     let better = |c: (usize, usize, usize), b: (usize, usize, usize)| {
         c.1 > b.1 || (c.1 == b.1 && c.0 > b.0) || (c.1 == b.1 && c.0 == b.0 && c.2 < b.2)
     };
     for _ in 0..passes.max(1) {
         let mut improved = false;
-        let rels: BTreeSet<usize> = fit.iter().map(|e| e.r % GROUP_ORDER).collect();
+        let rels: BTreeSet<usize> = development.iter().map(|e| e.r % GROUP_ORDER).collect();
         if !value_only {
             for r in rels {
                 if r >= model.transport.len() {
@@ -575,9 +639,11 @@ pub fn fit_derived_state_model(
 pub fn model_hits(model: &DerivedStateModel, examples: &[DecExample]) -> (usize, usize) {
     let mut correct = 0usize;
     for e in examples.iter() {
-        if let DecOutcome::Emit { token, .. } = model.decode(e.r, e.qrole, e.payload) {
-            if token == e.target {
-                correct += 1;
+        if e.read {
+            if let DecOutcome::Emit { token, .. } = model.decode(e.r, e.qrole, e.payload) {
+                if token == e.target {
+                    correct += 1;
+                }
             }
         }
     }
@@ -594,6 +660,7 @@ mod tests {
             .map(|(s, t, g)| DecObservation {
                 s: *s,
                 target: *t,
+                read: true,
                 grounded: *g,
             })
             .collect()
@@ -601,14 +668,15 @@ mod tests {
 
     #[test]
     fn decoder_round_trips_and_separates_identity_from_noread() {
+        let identity = group_table().identity as usize;
         let d = fit_decoder(
-            &obs(&[(0, 7, true), (0, 7, true), (5, 9, true)]),
+            &obs(&[(identity, 7, true), (identity, 7, true), (5, 9, true)]),
             DEC_MAX_STATES,
             DEC_K,
         );
         assert_eq!(d.state_count(), 2);
         // The identity state is an ordinary emittable result, not NoRead.
-        assert_eq!(d.decode(0), DecOutcome::Emit { token: 7, score: 2 });
+        assert_eq!(d.decode(identity), DecOutcome::Emit { token: 7, score: 2 });
         // An unseen relative result is NoRead, so the local prior stands.
         assert_eq!(d.decode(11), DecOutcome::NoRead);
         let back = ResultDecoder::from_bytes(&d.to_bytes(), 32).unwrap();
@@ -622,6 +690,86 @@ mod tests {
     }
 
     #[test]
+    fn supervised_outer_operations_are_parameters_and_absent_reads_do_not_score() {
+        let fit = [DecExample {
+            r: 2,
+            qrole: 10,
+            payload: 20,
+            target: 7,
+            read: true,
+            grounded: true,
+        }];
+        let outer = [DecExample {
+            qrole: 11,
+            ..fit[0]
+        }];
+        let (model, _) = fit_derived_state_model(&fit, &outer, DEC_MAX_STATES, 1, false, false);
+        assert!(model.op_domain.contains(&10));
+        assert!(model.op_domain.contains(&11));
+        assert!(model.checked_relative_result(2, 11, 20).is_ok());
+        assert_eq!(
+            model.checked_relative_result(2, 12, 20),
+            Err("UnknownOperation")
+        );
+        assert_eq!(
+            model_hits(
+                &model,
+                &[DecExample {
+                    read: false,
+                    ..fit[0]
+                }]
+            ),
+            (0, 1)
+        );
+    }
+
+    #[test]
+    fn v2_distinguishes_unknown_operands_from_identity_and_v1_keeps_legacy_policy() {
+        let e = group_table().identity;
+        let example = DecExample {
+            r: 2,
+            qrole: 10,
+            payload: 20,
+            target: 7,
+            read: true,
+            grounded: true,
+        };
+        let mut model = DerivedStateModel::seeded(&[example], false);
+        model.transport.fill(e);
+        model.op_code.fill(e);
+        model.value_code.fill(e);
+        model.decoder = fit_decoder(&obs(&[(e as usize, 7, true)]), DEC_MAX_STATES, DEC_K);
+        assert_eq!(
+            model.decode(2, 10, 20),
+            DecOutcome::Emit { token: 7, score: 1 }
+        );
+        assert_eq!(model.decode(2, 11, 20), DecOutcome::NoRead);
+        assert_eq!(model.decode(2, 10, 21), DecOutcome::NoRead);
+        let encoded = model.to_bytes();
+        assert_eq!(DerivedStateModel::from_bytes(&encoded, 32).unwrap(), model);
+        // v1 had only the cyclic flag at this location and deliberately used identity fallback.
+        let mut old = encoded;
+        old[4..8].copy_from_slice(&1u32.to_le_bytes());
+        old.drain(13 + GROUP_ORDER..15 + GROUP_ORDER);
+        let legacy = DerivedStateModel::from_bytes(&old, 32).unwrap();
+        assert!(!legacy.strict_operands);
+        assert_eq!(
+            legacy.decode(2, 11, 20),
+            DecOutcome::Emit { token: 7, score: 1 }
+        );
+        model.value_only = true;
+        assert_eq!(
+            model.decode(2, 999, 20),
+            DecOutcome::Emit { token: 7, score: 1 }
+        );
+        assert_eq!(model.decode(2, 999, 21), DecOutcome::NoRead);
+        assert_eq!(
+            DerivedStateModel::from_bytes(&model.to_bytes(), 1024).unwrap(),
+            model
+        );
+    }
+
+    #[test]
     fn relative_result_is_the_frame_free_ordered_product() {
         let t = group_table();
         let mut ex = Vec::new();
@@ -632,6 +780,7 @@ mod tests {
                     qrole: q,
                     payload: p,
                     target: 1,
+                    read: true,
                     grounded: true,
                 });
             }
@@ -672,6 +821,7 @@ mod tests {
                     qrole: *role,
                     payload: *value,
                     target: (op + vi) as u32 % 10,
+                    read: true,
                     grounded: true,
                 });
             }

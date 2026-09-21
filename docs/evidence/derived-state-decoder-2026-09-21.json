@@ -17,7 +17,7 @@
   },
   "panels": {
     "association": {
-      "note": "same instrument and seeds as the preserved PR #1337 regression; new populations for the decoder run",
+      "note": "Same panel family, different seeds from PR1337: no paired residual-to-decoder improvement. Original winner was decoder-only and not exported; corrected replay later exports and serves it.",
       "split_arms": {
         "dev": {
           "positions": 180,
@@ -64,17 +64,17 @@
         "grounded_states": 8,
         "initial_hits": 161
       },
-      "reading": "the value-only derived-state decoder exactly reproduces the strongest selected-value dictionary on all three splits (161/108/104) with 8 grounded states, while the residual readout reached 61/41/33; the extra binding/operation factors raise fit accuracy (166 dev) and cost held-out accuracy (91 final), so they are not justified by this data"
+      "reading": "Original reported value-only decoder counts match its own dictionary at161/108/104 with8 grounded states. Full-factor166/80/91 suggests unnecessary distinctions at this scope. Prior residual61/41/33 uses different seeds."
     },
     "composition": {
       "fixture_version": 2,
-      "seed": 3220177410,
+      "seed": 3237019650,
       "ops": 8,
       "class_modulus": 10,
       "binding_relation_budget": 2,
       "order_ten_witness_element": 74,
-      "dev_cells": 192,
-      "held_out_cells": 64,
+      "dev_cells": 48,
+      "held_out_cells": 16,
       "development_probe_split": {
         "probe_operations": [
           6,
@@ -82,7 +82,7 @@
         ],
         "fit_examples": 144,
         "probe_examples": 48,
-        "reading": "the probe is a disjoint set of development operations whose output classes are covered by the fit operations; it is selection on development only and the fixture's held-out cells are never used for fitting or selection"
+        "reading": "Supervised outer development objective: probe labels guide each map choice. Both probe operations were absent from the original model domain and received identity fallback; original negative is not a generalization impossibility."
       },
       "probe_first_primary": {
         "root": ".uor-models/realtext-prior-2026-09-20/derived-state-decoder-5",
@@ -229,7 +229,8 @@
           "h4_held_out_hits": 8,
           "held_out_positions": 64,
           "met": false
-        }
+        },
+        "intervention_scope_correction": "Original operation intervention changes both source and query roles; target class zero is not proof of latent group identity; equals_local is not a measured full-logit comparison. Actual numerical outputs are preserved. See principal review and corrected replay."
       },
       "fit_first_diagnostic": {
         "root": ".uor-models/realtext-prior-2026-09-20/derived-state-decoder-4",
@@ -321,16 +322,20 @@
           "h4_held_out_hits": 0,
           "held_out_positions": 64,
           "met": false
-        }
+        },
+        "intervention_scope_correction": "Original operation intervention changes both source and query roles; target class zero is not proof of latent group identity; equals_local is not a measured full-logit comparison. Actual numerical outputs are preserved. See principal review and corrected replay."
       },
-      "reading": "the declared screen is not met on either objective ordering. The development probe improves from 0/48 to 27/48 (H4) and 1/48 to 34/48 (C120) when probe hits lead the objective, and held-out cells improve from 0/64 to 8/64 (H4) and 39/64 to 20/64 (C120). Held-out (operation, value) combinations remain under-constrained: each value code is supervised only by the operations whose development mask includes it. The matched additive C120 arm is stronger than H4 on this fixture, which is expected because the declared rule is additive in (op, vi).",
+      "reading": "Original screen negative under both objective orderings, but supervised outer operation domains were incomplete. H4 primary103/192 and8/64 reconstruct; original C120132/192 and20/64 remain reported. The factor family constrains missing products; these results do not establish independent free cells, impossibility or unique algebra advantage.",
       "structural_results_that_hold": [
         "a computed identity is emitted rather than silenced, while an absent required source returns NoRead and the local prior",
         "read-disabled and update-disabled both return NoRead",
         "changing the observed operation at fixed evidence changes the emitted token",
         "changing an irrelevant distractor leaves the emitted token unchanged",
         "changing the relevant payload at an identical query changes the emitted token"
-      ]
+      ],
+      "original_reported_seed": 3220177410,
+      "dev_positions": 192,
+      "held_out_positions": 64
     }
   },
   "changed_source": [
@@ -354,7 +359,56 @@
   "limitations": [
     "the association final split is an exposed regression population",
     "the composition rule was constructed to be realisable by the served algebra, so a pass would be a composition-circuit result, not unique geometric advantage",
-    "held-out composition cells are under-constrained for a free per-operation/per-value code; the fixture would need a structured code family or a task whose combination rule is forced by the observed inputs",
+    "The claim of independent free unseen operation-value cells is withdrawn. Connected shared factors constrain latent products; unknown lexical decoding and incomplete fitting require separate diagnosis.",
     "generated completions are three tokens; useful prose is not qualified"
-  ]
+  ],
+  "principal_correction": {
+    "review": "docs/integration/derived-state-decoder-review-2026-09-21.md",
+    "audit": "docs/evidence/derived-state-decoder-principal-review-2026-09-21.json",
+    "original_outcomes_preserved": true,
+    "interpretation_precedence": "Principal review supersedes original free-cell/loaded-winner/identity/causal claims",
+    "association_winner": "reported decoder-only104/120; no original winner artifact or association rows; old33/120 is differentpopulation",
+    "composition_probe": "supervised outer map-fitting labels, but two operationcodes absent from modeldomain",
+    "original_modulo10_seed_correct": 3237019650,
+    "original_modulo10_seed_misreported": 3220177410,
+    "completed_roots": [
+      1,
+      2,
+      4,
+      5
+    ],
+    "partial_unsealed_roots": [
+      3
+    ],
+    "source_equality": "two new source hashes do not match submitted16b7148e; no exact binding claimed"
+  },
+  "principal_corrected_replay": {
+    "root": "derived-state-decoder-principal-1",
+    "scope": "exposed diagnostic, independent final qualification NOT_RUN",
+    "value_only_emitted_hits": [
+      161,
+      108,
+      104
+    ],
+    "h4_composition": [
+      92,
+      3
+    ],
+    "c120_composition": [
+      106,
+      4
+    ],
+    "composition_positions": [
+      192,
+      64
+    ],
+    "composition_unique_cells": [
+      48,
+      16
+    ],
+    "h4_heldout_missing_decoder_state": 60,
+    "c120_heldout_missing_decoder_state": 58,
+    "actual_loaded_candidate_parity_positions": 1352
+  },
+  "panels_status": "Historical submitted-run numerical outcomes preserved; corrected source replay is separately identified under principal_corrected_replay. Original intervention labels are not validated control claims."
 }
