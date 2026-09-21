@@ -1653,3 +1653,39 @@ readback: **221398372 / 224900000 ms**; remaining
 **51127488512 bytes** (projection: 51214413824); principal deleted **0 bytes**.
 The reserve plus 128 MiB margin remains intact. Idle external merge-queue waiting
 is not a new local model run. [Complete receipt](../evidence/geometric-computation-principal-checks-2026-09-21.json).
+
+## Derived-state decoder step — September 21, 2026
+
+**Projection recorded before implementation and execution.** One learned result decoder on the
+relative computed state, an explicit validity/NoRead interface, the repaired composition fixture with
+a development-internal operation probe, both-input comparators, interventions, loaded generation,
+focused tests, evidence and delivery.
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **<= 9,000,000 ms (~150 min)** | context recovery, decoder module + runner modes, compile cycles, four model runs, controls, interventions, evidence, delivery |
+| Compiler workers | <= 2, `CARGO_INCREMENTAL=0` | offline Rust build, shared owner target |
+| Model workers | 1 | single harness process |
+| Peak RSS | <= 8 GiB | existing loaders plus the 4096x16 latent map |
+| New/temporary/retained storage | <= 512 MiB build, <= 32 MiB reports | shared target reuse, bounded row files |
+| Free space at projection | `48888545280` bytes | above the 36,766,079,385-byte reserve plus the 128 MiB stop margin by 11,988,248,167 bytes |
+
+**Extension taken.** Time increment **+9,000,000 ms**; **new cumulative limit 233,900,000 ms**
+(previous 224,900,000 ms; live 221,398,372 ms). Reason: a new decoder module and mode, a repaired
+composition instrument, four executed model runs and protected delivery cannot be funded by the
+remaining 3,501,628 ms. Recorded **before** the work. No reserve reduction and no paid/external
+compute.
+
+**Completed charges — derived-state decoder step.** Measured: four targeted model runs (**4.0 s**,
+**3.6 s**, **6.7 s**, **6.8 s**) plus superseded attempts; release builds and compile/fmt/test cycles
+(~**900 s**). Estimated: context/source/literature recovery ~**1200 s**; decoder module and runner
+mode implementation ~**3000 s**; diagnosed iteration and instrument repair ~**1200 s**; documentation,
+evidence, delivery and knowledge ~**1500 s**. **Charge 8,000,000 ms** (measured + estimated). Live
+allowance limit **233,900,000 ms**; **new cumulative 229,398,372 ms**; remaining **4,501,628 ms**.
+`CARGO_INCREMENTAL=0` throughout; no reserve reduction, no deletion of unique material, no
+paid/external compute.
+
+**Delivered** under the claimed, sealed and verified roots
+`.uor-models/realtext-prior-2026-09-20/derived-state-decoder-{1,4,5}` (0 unlisted each), with `-5` the
+primary probe-first model and `-4` the fit-first diagnostic. Superseded attempts `-2` and `-3` are
+sealed and retained unchanged.

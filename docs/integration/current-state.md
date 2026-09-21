@@ -1,6 +1,20 @@
 # Current native geometric AI work
 
-## Active: learned derived-state decoding and valid composition transfer
+## Active: a useful learned result decoder, and composition limited by free operand codes
+
+**Executed the derived-state brief.** New `--mode=derived-state-decoder` decodes the frame-free relative result `s = T_bind[r] * U_op[observed query role] * V[value]` through a bounded learned per-state token shortlist (<= 16 grounded states, k = 4), with a computed identity emittable and **distinct from `NoRead`**. Old zero-residual artifacts and their contracts are untouched; this is a new `RLDS`/`RLRD` interface.
+
+**Useful association result.** On new populations the value-only derived-state decoder reproduces the strongest selected-value dictionary exactly (dev 161/180, tune 108/120, **final 104/120**) with 8 grounded states, against the retained residual readout's 61/41/33. The full-factor decoder fits development better (166) and generalizes worse (91 final), so the binding/operation factors are nuisance on this task. Readout is now a learned lexical emission over computed state.
+
+**Composition, honestly bounded.** Fixture v2 (modulus 10, witnessed order-10 element, 8 observed-query operations, 192 development / 64 held-out cells) with a development-internal probe over held-out *operations*. Probe hits rise from 0/48 to 27/48 (H4) and held-out cells from 0/64 to 8/64 when probe hits lead the objective; the declared screen is **not met**, and matched additive C120 is stronger (20/64) because the declared rule is additive in `(op, vi)`. The residual obstacle is measured: held-out `(operation, value)` combinations are **free parameters** for a per-operation/per-value code family, not an H4 capacity limit. The earlier "no linear readout can solve it" framing is withdrawn as over-claimed.
+
+**Interventions hold structurally:** changing the observed operation or the relevant payload changes the emitted token; an irrelevant distractor is ignored; removing the required source, disabling read or disabling update all return `NoRead` with the local prior; a composed identity is an Emit, not `NoRead`.
+
+**Next:** either a composition task whose combination rule is forced by the observed inputs, or a **structured one-parameter code family** instead of eight free operand codes, before retrying multi-operation composition; then dependent Read/Emit/Stop once one read is useful. [Result](derived-state-decoder-result-2026-09-21.md); [evidence](../evidence/derived-state-decoder-2026-09-21.json). Retained roots `derived-state-decoder-{1,4,5}` (0 unlisted). Energy UNAVAILABLE; whole-path D0-b not claimed.
+
+### Previous active (superseded by the section above)
+
+## Former active: learned derived-state decoding and valid composition transfer
 
 **PR #1337, independently reviewed:** the corrected learner now executes output → maps → output and improves H4 to **33/120 exposed-final answers and 7/60 complete pairs**, from 25/120 and 1/60. The learned selected-value lookup remains 108/120 and 54/60. Four report seals and artifact hashes verify; short association generation remains degenerate. **Zero observed feature aliases does not prove linear impossibility.** The composition negative used modulo 7 with an order-10 witness and withheld whole operand meanings; it does not test combinations of familiar primitives. [Principal review](geometric-computation-review-2026-09-21.md); [independent audit](../evidence/geometric-computation-principal-review-2026-09-21.json).
 

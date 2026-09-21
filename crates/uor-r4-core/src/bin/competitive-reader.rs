@@ -26,6 +26,7 @@ use uor_r4_core::native_geometric::learner::query_read::QueryHard;
 use uor_r4_core::native_geometric::learner::read_conditioned::*;
 use uor_r4_core::native_geometric::learner::realtext_support::*;
 use uor_r4_core::native_geometric::learner::relational::*;
+use uor_r4_core::native_geometric::learner::result_decoder::*;
 use uor_r4_core::report_output::{claim, seal, verify};
 use uor_r4_core::transformerless::bpe_derive::{derive_tokenizer, derive_tokenizer_json};
 use uor_r4_core::transformerless::hf_bpe::HfBpeTokenizer;
@@ -9482,11 +9483,963 @@ fn rc2_run() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+// ---------------------------------------------------------------------------
+// Derived-state decoding: a learned lexical decoder on the relative result
+// ---------------------------------------------------------------------------
+
+const DSD_CE_N_DEV: usize = 90;
+const DSD_CE_N_TUNE: usize = 60;
+const DSD_CE_N_FINAL: usize = 60;
+const DSD_SEED_DEV: u64 = 0xC0F2_0011;
+const DSD_SEED_TUNE: u64 = 0xC0F2_0012;
+const DSD_SEED_FINAL: u64 = 0xC0F2_0021;
+const DSD_PASSES: usize = 3;
+const DSD_GEN_TOKENS: usize = 3;
+
+struct DsdPrediction {
+    emitted: u32,
+    decoder_token: Option<u32>,
+    decoder_score: i32,
+    read: bool,
+    rel: usize,
+    payload: Option<u32>,
+    payload_abs: Option<u32>,
+    source_abs: Option<u32>,
+    q0: usize,
+    s: usize,
+    z: Vec<i32>,
+}
+
+/// **The one derived-state step.** Teacher-forced evaluation, interventions and generation all call
+/// this on the actual observed prefix. The operation input is the observed query role token, never a
+/// fixture label. A grounded learned emission wins the argmax; `NoRead` leaves the local prior.
+#[allow(clippy::too_many_arguments)]
+fn dsd_step(
+    parent: &PriorCore,
+    local: &QueryHard,
+    u: &[Vec<i32>],
+    table: &ExactGroupTable,
+    sel: &RelationalSelector,
+    model: &DerivedStateModel,
+    tokens: &[u32],
+    use_reader: bool,
+    use_update: bool,
+) -> Result<DsdPrediction, String> {
+    if tokens.len() < 4 {
+        return Err("derived-state step needs a complete query prefix".into());
+    }
+    let ring = ring_before_current(tokens);
+    let i = tokens.len() - 1;
+    let mut z = local_logits(
+        parent,
+        local,
+        u,
+        tokens[i],
+        tokens[i - 1] as usize,
+        tokens[i - 2],
+        ring.written(),
+    );
+    let r = read_step(
+        &ring,
+        tokens[i],
+        tokens[i - 1],
+        tokens[i - 2],
+        sel,
+        table,
+        use_reader,
+        &z,
+    );
+    let qrole = tokens[i - 1];
+    let q0 = local.query_state(tokens[i]).min(u.len() - 1);
+    let grounded = use_update && r.action.is_some();
+    let s = if grounded {
+        model.relative_result(r.rel, qrole, r.payload.unwrap_or(0))
+    } else {
+        group_table().identity as usize
+    };
+    let (decoder_token, decoder_score) = if grounded {
+        match model.decoder.decode(s) {
+            DecOutcome::Emit { token, score } => (Some(token), score),
+            DecOutcome::NoRead => (None, 0),
+        }
+    } else {
+        (None, 0)
+    };
+    if let Some(t) = decoder_token {
+        if (t as usize) < z.len() {
+            let top = z.iter().copied().max().unwrap_or(0);
+            z[t as usize] =
+                z[t as usize].saturating_add(top.saturating_sub(z[t as usize]).saturating_add(1));
+        }
+    }
+    Ok(DsdPrediction {
+        emitted: argmax_low(&z) as u32,
+        decoder_token,
+        decoder_score,
+        read: r.action.is_some(),
+        rel: r.rel,
+        payload: r.payload,
+        payload_abs: r.payload_abs,
+        source_abs: r.source.map(|x| x.abs),
+        q0,
+        s,
+        z,
+    })
+}
+
+/// Witness that the declared class rule is realisable through the **derived-state interface**
+/// `s = T_bind[r] * U_op[observed query] * V[value]`, and that the served update really is
+/// `q1 = q0 * s`, so `inverse(q0) * q1 = s` for every fixture cell. This is a constructed state
+/// witness, never learner initialisation or serving supervision.
+fn dsd_validate_algebra(
+    relations: &[usize],
+    qroles: &[u32],
+    values: &[u32],
+    k: usize,
+    witness: usize,
+    q0: usize,
+) -> Result<(), String> {
+    let n_ops = qroles.len();
+    if relations.len() != n_ops || values.len() < 8 || GROUP_ORDER % k != 0 {
+        return Err("derived-state witness has an invalid domain".into());
+    }
+    let t = group_table();
+    let mul = |a: usize, b: usize| t.product[a * ROW_STRIDE + b] as usize;
+    let pow = |e: usize| (0..e).fold(t.identity as usize, |x, _| mul(x, witness));
+    let m = DerivedStateModel {
+        transport: vec![t.identity; GROUP_ORDER],
+        cyclic: false,
+        op_domain: qroles.to_vec(),
+        op_code: (0..n_ops).map(|op| pow(op) as u8).collect(),
+        value_domain: values.to_vec(),
+        value_code: (0..values.len()).map(|vi| pow(vi) as u8).collect(),
+        decoder: ResultDecoder::default(),
+    };
+    for op in 0..n_ops {
+        for (vi, &value) in values.iter().enumerate() {
+            let sv = m.relative_result(relations[op], qroles[op], value);
+            if sv != pow(rc2_class(op, vi, k)) {
+                return Err(format!(
+                    "derived-state interface does not realize cell ({op},{vi})"
+                ));
+            }
+            let q1 = mul(
+                mul(q0, m.transport[relations[op]] as usize),
+                mul(m.op_state(qroles[op]), m.value_state(value)),
+            );
+            if mul(t.inverse[q0] as usize, q1) != sv {
+                return Err("relative result is not inverse(q0)*q1".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn dsd_fit_json(f: &DecFitReport) -> serde_json::Value {
+    json!({
+        "initial_hits": f.initial_hits,
+        "final_hits": f.final_hits,
+        "examples": f.examples,
+        "grounded_states": f.states,
+        "accepted_moves": f.accepted_moves,
+    })
+}
+
+fn dsd_run() -> Result<ExitCode, String> {
+    let mut root = PathBuf::from(
+        "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/derived-state-decoder-1",
+    );
+    let mut source_root: Option<PathBuf> = None;
+    {
+        let mut a = std::env::args().skip(1);
+        while let Some(k) = a.next() {
+            match k.as_str() {
+                "--root" => root = PathBuf::from(a.next().ok_or("--root value")?),
+                "--source-root" => source_root = Some(PathBuf::from(a.next().ok_or("value")?)),
+                other if other.starts_with("--mode") => {}
+                other => return Err(format!("unknown argument {other}")),
+            }
+        }
+    }
+    claim(&root).map_err(|e| format!("claim {}: {e}", root.display()))?;
+    let started = Instant::now();
+
+    let pb = std::fs::read(E_PATH).map_err(|e| format!("E: {e}"))?;
+    if sha256_hex(&pb) != E_SHA {
+        return Err("E sha mismatch".into());
+    }
+    let parent = PriorCore::from_bytes(&pb).map_err(|e| format!("load E: {e}"))?;
+    parent.validate()?;
+    let (parent_digest, _) = parent_hash_convention(&pb);
+    let sb = std::fs::read(S_PATH).map_err(|e| format!("S: {e}"))?;
+    if sha256_hex(&sb) != S_SHA {
+        return Err("S sha mismatch".into());
+    }
+    let tb = std::fs::read(DEFAULT_TOKENIZER).map_err(|e| format!("tokenizer: {e}"))?;
+    if sha256_hex(&tb) != TOKENIZER_SHA {
+        return Err("tokenizer sha mismatch".into());
+    }
+    let derived = sha256_hex(&derive_tokenizer_json(&tb, VOCAB).map_err(|e| format!("{e}"))?);
+    if derived != DERIVED_SHA {
+        return Err("derived tokenizer sha mismatch".into());
+    }
+    let tokenizer = derive_tokenizer(&tb, VOCAB).map_err(|e| format!("derive: {e}"))?;
+    let raw_tok: [u8; 32] = hex_to_bytes(&derived)?.try_into().unwrap();
+    let local = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
+        .map_err(|e| format!("load S: {e}"))?;
+    let u: Vec<Vec<i32>> = (0..120).map(|s| local.row_scores(s)).collect();
+    let table = ExactGroupTable::build().map_err(|e| format!("table: {e}"))?;
+    let group_digest = group_table_digest(&table);
+    let banks = build_banks(&tokenizer, parent.cfg.vocab)?;
+    let source_files: Vec<serde_json::Value> = match &source_root {
+        Some(sr) => [
+            "crates/uor-r4-core/src/native_geometric/learner/relational.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/read_conditioned.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/contextual_emission.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/result_decoder.rs",
+            "crates/uor-r4-core/src/bin/competitive-reader.rs",
+        ]
+        .iter()
+        .map(|rel| match std::fs::read(sr.join(rel)) {
+            Ok(b) => json!({"path": rel, "sha256": sha256_hex(&b)}),
+            Err(_) => json!({"path": rel, "sha256": "UNAVAILABLE"}),
+        })
+        .collect(),
+        None => vec![json!({"path": "unspecified", "sha256": "UNAVAILABLE"})],
+    };
+    let executable_sha256 = hex_of(&sha256_bytes(
+        &std::env::current_exe()
+            .ok()
+            .and_then(|p| std::fs::read(p).ok())
+            .unwrap_or_default(),
+    ));
+    let parent_root = PathBuf::from(PARENT_ROOT);
+    let selector_bytes = std::fs::read(parent_root.join("artifacts/relational_ctx.rlr2"))
+        .map_err(|e| format!("parent artifact: {e}"))?;
+    let selector_sha256 = sha256_hex(&selector_bytes);
+    if selector_sha256 != PARENT_SHA_RELATIONAL_CTX {
+        return Err("contextual selector hash mismatch".into());
+    }
+    let sel =
+        RelationalArtifact::from_bytes(&selector_bytes, &sha256_bytes(&sb), &raw_tok)?.selector;
+
+    let values: Vec<u32> = banks.values_fit.iter().copied().take(8).collect();
+
+    // ---------------- Panel A: the association regression ----------------
+    let specs_dev = make_ce_specs(&banks, DSD_CE_N_DEV, DSD_SEED_DEV, &values);
+    let specs_tune = make_ce_specs(&banks, DSD_CE_N_TUNE, DSD_SEED_TUNE, &values);
+    let specs_final = make_ce_specs(&banks, DSD_CE_N_FINAL, DSD_SEED_FINAL, &values);
+    let mut used: std::collections::BTreeSet<u32> = values.iter().copied().collect();
+    for spec in specs_dev
+        .iter()
+        .chain(specs_tune.iter())
+        .chain(specs_final.iter())
+    {
+        used.insert(spec.key);
+        used.insert(spec.qrole);
+        used.insert(spec.source_role);
+        for (r, k, v) in spec.blocks.iter() {
+            used.insert(*r);
+            used.insert(*k);
+            used.insert(*v);
+        }
+    }
+    let out_bank: Vec<u32> = (0..parent.cfg.vocab as u32)
+        .rev()
+        .filter(|t| !used.contains(t))
+        .take(values.len())
+        .collect();
+    if out_bank.len() < values.len() {
+        return Err("no disjoint association output bank".into());
+    }
+    let materialize = |specs: &[CePairSpec]| -> Vec<CeItem> {
+        let mut items = Vec::new();
+        for (pid, spec) in specs.iter().enumerate() {
+            for (member, &vi) in spec.value_idx.iter().enumerate() {
+                let tokens = ce_item_tokens(spec, values[vi], out_bank[vi]);
+                items.push(CeItem {
+                    seq: Seq {
+                        tokens,
+                        group: 0,
+                        answer: out_bank[vi],
+                        absent: false,
+                        answer_source_abs: None,
+                    },
+                    value: values[vi],
+                    out: out_bank[vi],
+                    pair_id: pid,
+                    member,
+                    expected_payload_abs: (3 * spec.pos + 2) as u32,
+                });
+            }
+        }
+        items
+    };
+    let items_dev = materialize(&specs_dev);
+    let items_tune = materialize(&specs_tune);
+    let items_final = materialize(&specs_final);
+    let (a_dev_pos, _, _) = ce_extract(&parent, &local, &u, &table, &sel, &items_dev)?;
+    let (a_tune_pos, _, _) = ce_extract(&parent, &local, &u, &table, &sel, &items_tune)?;
+    let (a_final_pos, _, _) = ce_extract(&parent, &local, &u, &table, &sel, &items_final)?;
+    let a_example = |p: &CePos, it: &CeItem| -> DecExample {
+        DecExample {
+            r: p.r % GROUP_ORDER,
+            qrole: it.seq.tokens[it.seq.tokens.len() - 3],
+            payload: p.payload,
+            target: p.target,
+            grounded: p.read && p.correct_source,
+        }
+    };
+    let a_dev_ex: Vec<DecExample> = a_dev_pos
+        .iter()
+        .zip(items_dev.iter())
+        .map(|(p, it)| a_example(p, it))
+        .collect();
+    let a_tune_ex: Vec<DecExample> = a_tune_pos
+        .iter()
+        .zip(items_tune.iter())
+        .map(|(p, it)| a_example(p, it))
+        .collect();
+    let a_final_ex: Vec<DecExample> = a_final_pos
+        .iter()
+        .zip(items_final.iter())
+        .map(|(p, it)| a_example(p, it))
+        .collect();
+    let (a_model, a_fit) =
+        fit_derived_state_model(&a_dev_ex, &[], DEC_MAX_STATES, DSD_PASSES, false, false);
+    let (a_value_only, a_vo_fit) =
+        fit_derived_state_model(&a_dev_ex, &[], DEC_MAX_STATES, DSD_PASSES, false, true);
+    // Applied and independently reloaded before any reported prediction.
+    let a_artifacts = {
+        let bytes = a_model.to_bytes();
+        write_checked(&root, "artifacts/association_derived_state.rlds", &bytes)?;
+        let loaded = DerivedStateModel::from_bytes(
+            &std::fs::read(root.join("artifacts/association_derived_state.rlds"))
+                .map_err(|e| e.to_string())?,
+            parent.cfg.vocab,
+        )?;
+        if loaded != a_model {
+            return Err("association derived-state reload mismatch".into());
+        }
+        let mut parity = 0usize;
+        for it in items_dev
+            .iter()
+            .chain(items_tune.iter())
+            .chain(items_final.iter())
+        {
+            let prefix = &it.seq.tokens[..it.seq.tokens.len() - 1];
+            let before = dsd_step(
+                &parent, &local, &u, &table, &sel, &a_model, prefix, true, true,
+            )?;
+            let after = dsd_step(
+                &parent, &local, &u, &table, &sel, &loaded, prefix, true, true,
+            )?;
+            if before.emitted != after.emitted || before.s != after.s {
+                return Err("association loaded derived-state parity failure".into());
+            }
+            parity += 1;
+        }
+        json!({"arm": "association_derived_state", "artifact_sha256": sha256_hex(&bytes),
+            "reload_identical": true, "loaded_parity_positions": parity,
+            "algebra": "signed_h4", "f_bits": parent.cfg.f_bits,
+            "selector_sha256": selector_sha256, "group_digest": group_digest})
+    };
+    // Comparators on the same panel: the frozen local prior and a development-fitted
+    // selected-value dictionary (the strongest arbitrary-label mechanism).
+    let a_local_hits = |items: &[CeItem]| -> usize {
+        items
+            .iter()
+            .filter(|it| {
+                let prefix = &it.seq.tokens[..it.seq.tokens.len() - 1];
+                let p = dsd_step(
+                    &parent, &local, &u, &table, &sel, &a_model, prefix, false, false,
+                )
+                .map(|x| x.emitted)
+                .unwrap_or(u32::MAX);
+                p == it.seq.answer
+            })
+            .count()
+    };
+    let mut a_dict: BTreeMap<u32, BTreeMap<u32, usize>> = BTreeMap::new();
+    for (p, it) in a_dev_pos.iter().zip(items_dev.iter()) {
+        *a_dict
+            .entry(p.payload)
+            .or_default()
+            .entry(it.seq.answer)
+            .or_default() += 1;
+    }
+    let a_majority = |m: &BTreeMap<u32, usize>| -> u32 {
+        m.iter()
+            .max_by_key(|(_, c)| **c)
+            .map(|(t, _)| *t)
+            .unwrap_or(0)
+    };
+    let a_table: BTreeMap<u32, u32> = a_dict.iter().map(|(k, m)| (*k, a_majority(m))).collect();
+    let a_table_hits = |poss: &[CePos]| -> usize {
+        poss.iter()
+            .filter(|p| a_table.get(&p.payload).copied().unwrap_or(u32::MAX) == p.target)
+            .count()
+    };
+    let mut a_arms: Vec<serde_json::Value> = Vec::new();
+    for (split, ex, poss, items) in [
+        ("dev", &a_dev_ex, &a_dev_pos, &items_dev),
+        ("tune", &a_tune_ex, &a_tune_pos, &items_tune),
+        ("final", &a_final_ex, &a_final_pos, &items_final),
+    ] {
+        let (dh, dt) = model_hits(&a_model, ex);
+        let n = poss.len();
+        let no_read = ex
+            .iter()
+            .filter(|e| {
+                matches!(
+                    a_model
+                        .decoder
+                        .decode(a_model.relative_result(e.r, e.qrole, e.payload)),
+                    DecOutcome::NoRead
+                )
+            })
+            .count();
+        let (vh, _) = model_hits(&a_value_only, ex);
+        a_arms.push(
+            json!({"arm": "association_derived_state", "split": split, "positions": n,
+            "decoder_hits": dh, "decoder_total": dt, "no_read_positions": no_read,
+            "value_only_decoder_hits": vh,
+            "local_hits": a_local_hits(items), "selected_value_dictionary_hits": a_table_hits(poss),
+            "grounded_positions": ex.iter().filter(|e| e.grounded).count(),
+            "correct_source_positions": poss.iter().filter(|p| p.correct_source).count()}),
+        );
+    }
+
+    // ---------------- Panel B: the repaired composition fixture ----------------
+    let rel_of = |qrole: u32, source_role: u32| -> usize {
+        relation_index(
+            &table,
+            sel.mode,
+            &sel.code_of,
+            *sel.q_roots.get(qrole as usize).unwrap_or(&0),
+            *sel.q_roots.get(source_role as usize).unwrap_or(&0),
+            qrole as usize,
+            source_role as usize,
+        )
+    };
+    // The operation is carried by the **observed query role token**, not by the binding relation:
+    // the frozen 14 role pairs expose only two relative elements, which is a property of those
+    // descriptors, not of the algebra. Operation identity therefore uses as many observed query
+    // role tokens as the declared fixture, while `r` keeps the source-compatibility role.
+    let op_pairs: Vec<(u32, u32)> = banks.pairs.iter().copied().take(RC2_N_OPS).collect();
+    let n_ops = op_pairs.len().min(RC2_N_OPS);
+    if n_ops < 2 {
+        return Err("composition needs at least two declared operations".into());
+    }
+    let relations: Vec<usize> = op_pairs
+        .iter()
+        .map(|(a, b)| rel_of(*a, *b) % GROUP_ORDER)
+        .collect();
+    let binding_budget = relations
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    let k = rc2_choose_modulus(n_ops)?;
+    let witness = rc2_order_ten_witness()?;
+    let mut comp_used: std::collections::BTreeSet<u32> = values.iter().copied().collect();
+    comp_used.insert(banks.keys[0]);
+    for (qa, qb) in op_pairs.iter() {
+        comp_used.insert(*qa);
+        comp_used.insert(*qb);
+    }
+    let comp_out: Vec<u32> = (0..parent.cfg.vocab as u32)
+        .rev()
+        .filter(|t| !comp_used.contains(t))
+        .take(k)
+        .collect();
+    if comp_out.len() < k {
+        return Err("no disjoint composition output bank".into());
+    }
+    let comp_items = make_rc2_items(&banks, &op_pairs, n_ops, &values, &comp_out, k, RC2_SEED)?;
+    let comp_dev: Vec<Rc2Item> = comp_items.iter().filter(|i| !i.test).cloned().collect();
+    let comp_test: Vec<Rc2Item> = comp_items.iter().filter(|i| i.test).cloned().collect();
+    let (b_dev_pos, _) = rc2_extract(&parent, &local, &u, &table, &sel, &comp_dev)?;
+    let (b_test_pos, _) = rc2_extract(&parent, &local, &u, &table, &sel, &comp_test)?;
+    let comp_q0 = b_dev_pos
+        .first()
+        .map(|p| p.q0)
+        .ok_or("composition probe lost its query state")?;
+    let op_qroles: Vec<u32> = op_pairs.iter().map(|(a, _)| *a).collect();
+    dsd_validate_algebra(&relations, &op_qroles, &values, k, witness, comp_q0)?;
+    let b_example = |p: &Rc2Pos, it: &Rc2Item| -> DecExample {
+        DecExample {
+            r: p.r % GROUP_ORDER,
+            qrole: it.tokens[it.tokens.len() - 3],
+            payload: p.payload,
+            target: p.target,
+            grounded: p.read && p.correct_source,
+        }
+    };
+    let b_dev_ex: Vec<DecExample> = b_dev_pos
+        .iter()
+        .zip(comp_dev.iter())
+        .map(|(p, it)| b_example(p, it))
+        .collect();
+    let b_test_ex: Vec<DecExample> = b_test_pos
+        .iter()
+        .zip(comp_test.iter())
+        .map(|(p, it)| b_example(p, it))
+        .collect();
+    // Development-internal held-out **operations**: the last two declared operations supply the
+    // probe. Selection is on development only; the fixture's held-out cells are never used.
+    let b_cells: Vec<usize> = comp_dev.iter().map(|it| it.op * 64 + it.vi).collect();
+    let probe_ops: std::collections::BTreeSet<usize> =
+        (n_ops.saturating_sub(2).max(1)..n_ops).collect();
+    let b_mask: Vec<bool> = comp_dev
+        .iter()
+        .map(|it| !probe_ops.contains(&it.op))
+        .collect();
+    {
+        let fit_targets: std::collections::BTreeSet<u32> = comp_dev
+            .iter()
+            .zip(b_mask.iter())
+            .filter(|(_, m)| **m)
+            .map(|(it, _)| it.answer)
+            .collect();
+        let probe_targets: std::collections::BTreeSet<u32> = comp_dev
+            .iter()
+            .zip(b_mask.iter())
+            .filter(|(_, m)| !**m)
+            .map(|(it, _)| it.answer)
+            .collect();
+        if !probe_targets.iter().all(|t| fit_targets.contains(t)) || b_mask.iter().all(|m| *m) {
+            return Err("development probe operations do not cover the fit classes".into());
+        }
+    }
+    let b_fit_ex: Vec<DecExample> = b_dev_ex
+        .iter()
+        .zip(b_mask.iter())
+        .filter(|(_, m)| **m)
+        .map(|(e, _)| *e)
+        .collect();
+    let b_probe_ex: Vec<DecExample> = b_dev_ex
+        .iter()
+        .zip(b_mask.iter())
+        .filter(|(_, m)| !**m)
+        .map(|(e, _)| *e)
+        .collect();
+    let (b_h4, b_h4_fit) = fit_derived_state_model(
+        &b_fit_ex,
+        &b_probe_ex,
+        DEC_MAX_STATES,
+        DSD_PASSES,
+        false,
+        false,
+    );
+    let (b_c120, b_c120_fit) = fit_derived_state_model(
+        &b_fit_ex,
+        &b_probe_ex,
+        DEC_MAX_STATES,
+        DSD_PASSES,
+        true,
+        false,
+    );
+    let mut b_artifacts: Vec<serde_json::Value> = Vec::new();
+    for (name, model) in [
+        ("composition_derived_state_h4", &b_h4),
+        ("composition_derived_state_c120", &b_c120),
+    ] {
+        let bytes = model.to_bytes();
+        let rel = format!("artifacts/{name}.rlds");
+        write_checked(&root, &rel, &bytes)?;
+        let loaded = DerivedStateModel::from_bytes(
+            &std::fs::read(root.join(&rel)).map_err(|e| e.to_string())?,
+            parent.cfg.vocab,
+        )?;
+        if loaded != *model {
+            return Err("composition derived-state reload mismatch".into());
+        }
+        let mut parity = 0usize;
+        for it in comp_items.iter() {
+            let prefix = &it.tokens[..it.tokens.len() - 1];
+            let before = dsd_step(&parent, &local, &u, &table, &sel, model, prefix, true, true)?;
+            let after = dsd_step(
+                &parent, &local, &u, &table, &sel, &loaded, prefix, true, true,
+            )?;
+            if before.emitted != after.emitted || before.s != after.s {
+                return Err("composition loaded derived-state parity failure".into());
+            }
+            parity += 1;
+        }
+        b_artifacts.push(json!({"arm": name, "artifact_sha256": sha256_hex(&bytes),
+            "reload_identical": true, "loaded_parity_positions": parity,
+            "algebra": if model.cyclic {"cyclic_c120"} else {"signed_h4"},
+            "selector_sha256": selector_sha256, "group_digest": group_digest}));
+    }
+    // Both-input comparators with an explicit unseen-cell fallback.
+    let mut b_const_counts: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut b_pay: BTreeMap<u32, BTreeMap<u32, usize>> = BTreeMap::new();
+    let mut b_two: BTreeMap<(u32, u32), BTreeMap<u32, usize>> = BTreeMap::new();
+    for (p, it) in b_dev_pos.iter().zip(comp_dev.iter()) {
+        let qrole = it.tokens[it.tokens.len() - 3];
+        *b_const_counts.entry(p.target).or_default() += 1;
+        *b_pay
+            .entry(p.payload)
+            .or_default()
+            .entry(p.target)
+            .or_default() += 1;
+        *b_two
+            .entry((qrole, p.payload))
+            .or_default()
+            .entry(p.target)
+            .or_default() += 1;
+    }
+    let b_const = b_const_counts
+        .iter()
+        .max_by_key(|(_, c)| **c)
+        .map(|(t, _)| *t)
+        .unwrap_or(0);
+    let b_majority = |m: &BTreeMap<u32, usize>| -> u32 {
+        m.iter()
+            .max_by_key(|(_, c)| **c)
+            .map(|(t, _)| *t)
+            .unwrap_or(b_const)
+    };
+    let b_pay_table: BTreeMap<u32, u32> = b_pay.iter().map(|(x, m)| (*x, b_majority(m))).collect();
+    let b_two_table: BTreeMap<(u32, u32), u32> =
+        b_two.iter().map(|(x, m)| (*x, b_majority(m))).collect();
+    let b_arm = |split: &str,
+                 label: &str,
+                 model: Option<&DerivedStateModel>,
+                 items: &[Rc2Item],
+                 f: &dyn Fn(&Rc2Item, &DsdPrediction) -> u32|
+     -> Result<serde_json::Value, String> {
+        let mut hits = 0usize;
+        let mut reads = 0usize;
+        let mut no_read = 0usize;
+        for it in items.iter() {
+            let prefix = &it.tokens[..it.tokens.len() - 1];
+            let pred = match model {
+                Some(m) => dsd_step(&parent, &local, &u, &table, &sel, m, prefix, true, true)?,
+                None => dsd_step(
+                    &parent, &local, &u, &table, &sel, &b_h4, prefix, false, false,
+                )?,
+            };
+            if pred.read {
+                reads += 1;
+            }
+            if pred.decoder_token.is_none() {
+                no_read += 1;
+            }
+            if f(it, &pred) == it.answer {
+                hits += 1;
+            }
+        }
+        Ok(
+            json!({"arm": label, "split": split, "positions": items.len(), "hits": hits,
+            "reads": reads, "decoder_no_read": no_read}),
+        )
+    };
+    let identity_map = |_: &Rc2Item, p: &DsdPrediction| p.emitted;
+    let mut b_arms: Vec<serde_json::Value> = Vec::new();
+    for (split, items) in [("dev_cells", &comp_dev), ("held_out_cells", &comp_test)] {
+        let payload_only = |_: &Rc2Item, p: &DsdPrediction| {
+            b_pay_table
+                .get(&p.payload.unwrap_or(0))
+                .copied()
+                .unwrap_or(b_const)
+        };
+        let two_input = |it: &Rc2Item, p: &DsdPrediction| {
+            let qrole = it.tokens[it.tokens.len() - 3];
+            b_two_table
+                .get(&(qrole, p.payload.unwrap_or(0)))
+                .copied()
+                .unwrap_or(b_const)
+        };
+        b_arms.push(b_arm(split, "local_noread", None, items, &identity_map)?);
+        b_arms.push(b_arm(
+            split,
+            "h4_derived_state",
+            Some(&b_h4),
+            items,
+            &identity_map,
+        )?);
+        b_arms.push(b_arm(
+            split,
+            "c120_derived_state",
+            Some(&b_c120),
+            items,
+            &identity_map,
+        )?);
+        b_arms.push(b_arm(
+            split,
+            "payload_only_table",
+            Some(&b_h4),
+            items,
+            &payload_only,
+        )?);
+        b_arms.push(b_arm(
+            split,
+            "operation_and_payload_table",
+            Some(&b_h4),
+            items,
+            &two_input,
+        )?);
+        b_arms.push(b_arm(
+            split,
+            "development_constant",
+            Some(&b_h4),
+            items,
+            &(|_: &Rc2Item, _: &DsdPrediction| b_const),
+        )?);
+    }
+    // ---------------- Interventions on the shared step ----------------
+    let key0 = banks.keys[0];
+    let key1 = banks.keys.get(1).copied().unwrap_or(key0);
+    let (q0role, s0role) = op_pairs[0];
+    let (q1role, s1role) = op_pairs[1 % n_ops];
+    let drole = op_pairs[2 % n_ops].1;
+    let base =
+        |qrole: u32, srole: u32, value: u32| -> Vec<u32> { vec![srole, key0, value, qrole, key0] };
+    let with_distractor = |qrole: u32, srole: u32, value: u32, dv: u32| -> Vec<u32> {
+        vec![drole, key0, dv, srole, key0, value, qrole, key0]
+    };
+    let filler_only = |qrole: u32| -> Vec<u32> { vec![drole, key1, values[0], qrole, key0] };
+    let run = |tokens: &[u32], model: &DerivedStateModel, use_reader: bool, use_update: bool| {
+        dsd_step(
+            &parent, &local, &u, &table, &sel, model, tokens, use_reader, use_update,
+        )
+    };
+    let v0 = values[0];
+    let v1 = values[1 % values.len()];
+    let payload_a = base(q0role, s0role, v0);
+    let payload_b = base(q0role, s0role, v1);
+    let op_a = base(q0role, s0role, v0);
+    let op_b = base(q1role, s1role, v0);
+    let dist_a = with_distractor(q0role, s0role, v0, values[2 % values.len()]);
+    let dist_b = with_distractor(q0role, s0role, v0, values[3 % values.len()]);
+    let removed = filler_only(q0role);
+    let (pa, pb) = (
+        run(&payload_a, &b_h4, true, true)?,
+        run(&payload_b, &b_h4, true, true)?,
+    );
+    let (oa, ob) = (
+        run(&op_a, &b_h4, true, true)?,
+        run(&op_b, &b_h4, true, true)?,
+    );
+    let (da, db) = (
+        run(&dist_a, &b_h4, true, true)?,
+        run(&dist_b, &b_h4, true, true)?,
+    );
+    let rem = run(&removed, &b_h4, true, true)?;
+    let rd = run(&payload_a, &b_h4, false, true)?;
+    let ud = run(&payload_a, &b_h4, true, false)?;
+    let expected_a = comp_out[rc2_class(0, 0, k)];
+    let expected_b = comp_out[rc2_class(0, 1 % values.len(), k)];
+    let expected_op_b = comp_out[rc2_class(1 % n_ops, 0, k)];
+    let identity_cell = (0..n_ops)
+        .flat_map(|op| (0..values.len()).map(move |vi| (op, vi)))
+        .find(|(op, vi)| rc2_class(*op, *vi, k) == 0)
+        .ok_or("composition fixture has no identity-class cell")?;
+    let identity_tokens = base(
+        op_pairs[identity_cell.0].0,
+        op_pairs[identity_cell.0].1,
+        values[identity_cell.1],
+    );
+    let identity_pred = run(&identity_tokens, &b_h4, true, true)?;
+    let interventions = json!({
+        "payload_changed_identical_query": {
+            "emitted_a": pa.emitted, "emitted_b": pb.emitted,
+            "expected_a": expected_a, "expected_b": expected_b,
+            "changed": pa.emitted != pb.emitted,
+            "both_expected": pa.emitted == expected_a && pb.emitted == expected_b,
+            "selected_a": pa.payload, "selected_b": pb.payload,
+        },
+        "operation_changed_fixed_evidence": {
+            "emitted_a": oa.emitted, "emitted_b": ob.emitted,
+            "expected_a": expected_a, "expected_b": expected_op_b,
+            "changed": oa.emitted != ob.emitted,
+            "both_expected": oa.emitted == expected_a && ob.emitted == expected_op_b,
+        },
+        "irrelevant_distractor_changed": {
+            "emitted_a": da.emitted, "emitted_b": db.emitted,
+            "preserved": da.emitted == db.emitted,
+            "matches_clean": da.emitted == expected_a && db.emitted == expected_a,
+        },
+        "required_source_removed": {
+            "emitted": rem.emitted, "read": rem.read,
+            "decoder_noread": rem.decoder_token.is_none(),
+            "equals_local": rem.emitted == pa.emitted || !rem.read,
+        },
+        "read_disabled": {"read": rd.read, "decoder_noread": rd.decoder_token.is_none()},
+        "update_disabled": {"read": ud.read, "decoder_noread": ud.decoder_token.is_none()},
+        "composed_identity_versus_absence": {
+            "identity_cell": [identity_cell.0, identity_cell.1],
+            "identity_class": rc2_class(identity_cell.0, identity_cell.1, k),
+            "identity_expected": comp_out[0],
+            "identity_emitted": identity_pred.emitted,
+            "identity_is_emit_not_noread": identity_pred.decoder_token.is_some(),
+            "identity_correct": identity_pred.emitted == comp_out[0],
+            "absent_read_noread": rem.decoder_token.is_none(),
+        },
+    });
+    // ---------------- Complete generated outputs ----------------
+    let mut generation: Vec<serde_json::Value> = Vec::new();
+    for it in comp_test.iter().take(3) {
+        let mut tokens = it.tokens[..it.tokens.len() - 1].to_vec();
+        let mut emitted = Vec::new();
+        for _ in 0..DSD_GEN_TOKENS {
+            let pred = run(&tokens, &b_h4, true, true)?;
+            emitted.push(pred.emitted);
+            tokens.push(pred.emitted);
+        }
+        generation.push(
+            json!({"class": rc2_class(it.op, it.vi, k), "answer": it.answer,
+            "emitted": emitted, "first_correct": emitted.first().copied() == Some(it.answer),
+            "decoded": tokenizer.decode(&emitted)}),
+        );
+    }
+    // ---------------- Prediction-event rows ----------------
+    let mut rows_text = String::new();
+    let mut write_rows = |panel: &str,
+                          split: &str,
+                          poss: &[Rc2Pos],
+                          items: &[Rc2Item],
+                          model: &DerivedStateModel|
+     -> Result<(), String> {
+        for (p, it) in poss.iter().zip(items.iter()) {
+            let pred = run(&it.tokens[..it.tokens.len() - 1], model, true, true)?;
+            let row = json!({"panel": panel, "split": split,
+                "op": p.op, "value_index": p.vi, "class": rc2_class(p.op, p.vi, k),
+                "query_role": it.tokens[it.tokens.len() - 3],
+                "s": pred.s, "target": p.target, "emitted": pred.emitted,
+                "decoder_token": pred.decoder_token, "decoder_score": pred.decoder_score,
+                "read": pred.read, "relation": pred.rel % GROUP_ORDER,
+                "selected_payload": pred.payload, "intended_payload": it.source_value,
+                "selected_payload_abs": pred.payload_abs, "selected_source_abs": pred.source_abs,
+                "intended_payload_abs": it.expected_payload_abs,
+                "correct_source": p.correct_source, "correct_value": p.correct_value,
+                "q0": pred.q0});
+            rows_text.push_str(&serde_json::to_string(&row).map_err(|e| e.to_string())?);
+            rows_text.push('\n');
+        }
+        Ok(())
+    };
+    write_rows("composition", "dev_cells", &b_dev_pos, &comp_dev, &b_h4)?;
+    write_rows(
+        "composition",
+        "held_out_cells",
+        &b_test_pos,
+        &comp_test,
+        &b_h4,
+    )?;
+    write_checked(&root, "rows.jsonl", rows_text.as_bytes())?;
+
+    // Decoder-only (no local fallback) and the state-sharing mechanism that permits transfer.
+    let h4_dev_only = model_hits(&b_h4, &b_dev_ex);
+    let c120_dev_only = model_hits(&b_c120, &b_dev_ex);
+    let h4_held_only = model_hits(&b_h4, &b_test_ex);
+    let c120_held_only = model_hits(&b_c120, &b_test_ex);
+    let b_dev_states: std::collections::BTreeSet<usize> = b_dev_ex
+        .iter()
+        .map(|e| b_h4.relative_result(e.r, e.qrole, e.payload))
+        .collect();
+    let b_test_states: std::collections::BTreeSet<usize> = b_test_ex
+        .iter()
+        .map(|e| b_h4.relative_result(e.r, e.qrole, e.payload))
+        .collect();
+    let b_test_shared = b_test_states.intersection(&b_dev_states).count();
+
+    let b_hits = |label: &str, split: &str| -> u64 {
+        b_arms
+            .iter()
+            .find(|c| c["arm"] == json!(label) && c["split"] == json!(split))
+            .and_then(|c| c["hits"].as_u64())
+            .unwrap_or(0)
+    };
+    let h4_test = b_hits("h4_derived_state", "held_out_cells");
+    let control_max = [
+        "local_noread",
+        "c120_derived_state",
+        "payload_only_table",
+        "operation_and_payload_table",
+        "development_constant",
+    ]
+    .iter()
+    .map(|n| b_hits(n, "held_out_cells"))
+    .max()
+    .unwrap_or(0);
+    let screen = json!({
+        "declared": "held-out operation x value cells must exceed every matched control on the same cells, and the paired intervention suite must show the expected change or preservation",
+        "h4_held_out_hits": h4_test,
+        "held_out_positions": comp_test.len(),
+        "best_control_held_out_hits": control_max,
+        "beats_controls": h4_test > control_max,
+        "met": h4_test > control_max,
+    });
+
+    let result = json!({
+        "schema": "uor-r4.derived-state-decoder/1",
+        "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+        "running_source": {
+            "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+            "git_dirty": std::env::var("UOR_GIT_DIRTY").unwrap_or_else(|_| "unknown".into()),
+            "executable_sha256": executable_sha256,
+            "source_files": source_files,
+        },
+        "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA,
+            "group_digest": group_digest, "selector_sha256": selector_sha256, "f_bits": parent.cfg.f_bits},
+        "mechanism": {
+            "relative_result": "s = inverse(q0) * ((q0 * T_bind[r]) * U_op[observed_query_role] * V[payload]) = T_bind[r] * U_op[query] * V[value]",
+            "operation_input": "the observed query role token of the actual causal prefix; the fixture's hidden operation index is never read",
+            "decoder": "bounded learned per-state token shortlist; NoRead preserves the frozen local prior and is distinct from a valid identity result",
+            "state_bound": DEC_MAX_STATES, "shortlist_k": DEC_K,
+        },
+        "association_panel": {"fit": dsd_fit_json(&a_fit), "value_only_fit": dsd_fit_json(&a_vo_fit),
+            "arms": a_arms, "artifacts": [a_artifacts]},
+        "composition_panel": {
+            "fixture_version": 2, "seed": RC2_SEED, "ops": n_ops, "class_modulus": k,
+            "binding_relation_budget": binding_budget, "witness_element": witness,
+            "dev_cells": comp_dev.len(), "held_out_cells": comp_test.len(),
+            "fit_h4": dsd_fit_json(&b_h4_fit), "fit_c120": dsd_fit_json(&b_c120_fit),
+            "development_probe_split": {
+                "fit_examples": b_fit_ex.len(), "probe_examples": b_probe_ex.len(),
+                "fit_cells": b_cells.iter().zip(b_mask.iter()).filter(|(_, m)| **m).map(|(c, _)| *c).collect::<Vec<_>>(),
+                "probe_cells": b_cells.iter().zip(b_mask.iter()).filter(|(_, m)| !**m).map(|(c, _)| *c).collect::<Vec<_>>(),
+                "h4_probe_hits": model_hits(&b_h4, &b_probe_ex).0,
+                "c120_probe_hits": model_hits(&b_c120, &b_probe_ex).0,
+            },
+            "arms": b_arms, "artifacts": b_artifacts,
+            "decoder_only_hits": {
+                "dev": {"h4": h4_dev_only.0, "total": h4_dev_only.1, "c120": c120_dev_only.0},
+                "held_out": {"h4": h4_held_only.0, "total": h4_held_only.1, "c120": c120_held_only.0},
+            },
+            "states": {"dev_distinct": b_dev_states.len(), "held_out_distinct": b_test_states.len(),
+                "held_out_states_shared_with_dev": b_test_shared,
+                "h4_grounded_states": b_h4.decoder.state_count(), "c120_grounded_states": b_c120.decoder.state_count()},
+            "interventions": interventions, "generated": generation,
+        },
+        "screen": screen,
+        "scope": "bounded authored instruments, exposed association regression seeds; the composition rule was constructed to be realisable by the served algebra, so a pass is a composition-circuit result, not unique geometric advantage or language capability. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "elapsed_s": started.elapsed().as_secs_f64(),
+    });
+    write_json(&root, "result.json", &result)?;
+    seal(&root).map_err(|e| format!("seal: {e}"))?;
+    let unlisted = verify(&root).map_err(|e| format!("verify: {e}"))?;
+    let a_final = a_arms.last().cloned().unwrap_or(json!(null));
+    println!(
+        "derived-state: association decoder dev {} tune {} final {} (dict final {}) | composition dev {} held-out {} best control {} | sealed {} unlisted | {:.1}s",
+        a_arms[0]["decoder_hits"], a_arms[1]["decoder_hits"], a_final["decoder_hits"],
+        a_final["selected_value_dictionary_hits"], b_hits("h4_derived_state", "dev_cells"), h4_test,
+        control_max, unlisted.len(), started.elapsed().as_secs_f32()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mode = std::env::args().any(|a| a == "--mode=utility-transfer");
     let ce = std::env::args().any(|a| a == "--mode=contextual-emission");
     let comp = std::env::args().any(|a| a == "--mode=relation-composition");
-    let result = if comp {
+    let dsd = std::env::args().any(|a| a == "--mode=derived-state-decoder");
+    let result = if dsd {
+        dsd_run()
+    } else if comp {
         rc2_run()
     } else if ce {
         contextual_emission_run()
