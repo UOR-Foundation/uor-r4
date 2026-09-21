@@ -1350,3 +1350,42 @@ Storage inventory measured **35420327936 bytes free**, below the 36766079385-byt
 **Prospective principal checks:** at most 600000 ms total for focused fail-closed/metadata runner repairs, fmt, touched-bin compilation and named boundary tests, including diagnosed retry; two compiler workers, `CARGO_INCREMENTAL=0`, shared target, peak RAM 8 GiB, at most 768 MiB new reusable build output and 2 MiB documents/receipts. Current physical space fits reserve+128MiB margin plus projection. No model extraction/fit/harness replay or external paid compute. Charge measured execution to the shared JSON. Stop before time/storage limits rather than claiming a later allowance write was prospective.
 
 **Completed principal validation:** fmt, fmt --check, two focused `confidence_boundary_tests` and offline competitive-reader check pass. Measured total **213795 ms**, charged once to the live JSON: **199837700/200900000 ms**, remaining **1062300 ms (~17.71 minutes)**. No extension beyond the reconciled prior allowance; no model replay/fit. Free space **39045300224 bytes (~39.05 GB)** after checks. Complete new evidence and prompt are linked from the [principal review](reader-confidence-review-2026-09-21.md).
+
+## Read-conditioned geometric emission step — September 21, 2026
+
+**Projection recorded before execution.** Bounded work: (1) a compact frozen-confidence **rollout**
+through the shared target-free predictor with complete emitted responses, ReadDisabled, the scored
+parent and local controls, plus empty/one/many/tie fixtures; (2) one learned **read-conditioned state
+update** `q1 = q0 * T(r) * V(v)` with the shared low-bit residual `u(q1) - u(q0)`, learned on a reduced
+non-copy instrument, with matched categorical, UpdateDisabled/ReadDisabled/changed-source controls and
+generated behavior; (3) scope corrections, documentation, issues, knowledge and delivery.
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **≤ 4,000,000 ms (~67 min)** | rollout + one learned update + matched controls + focused tests + delivery |
+| Compiler workers | ≤ 2, `CARGO_INCREMENTAL=0` | offline Rust build, shared target |
+| Model workers | 1 | single harness process |
+| Peak RSS | ≤ 8 GiB | existing harness |
+| New/temporary/retained storage | ≤ 1 GiB build, ≤ 16 MiB reports | shared target reuse; bounded scratch |
+| Free space at projection | `37788557312` bytes | above the 36,766,079,385-byte reserve and 128 MiB stop margin |
+
+**Extension taken.** Time increment **+4,000,000 ms**; **new cumulative limit 204,900,000 ms**
+(previous 200,900,000 ms). Reason: the primitive requires new serving-path code, a discrete learned
+operator, controls and generated behavior that the remaining 1,062,300 ms could not fund. The principal
+review's reconciliation (`199,837,700 ms`, full components) is preserved; this increment is recorded
+**before** the work, unlike the historical retrospective entries. No reserve reduction or paid compute.
+
+**Completed charges — read-conditioned emission step.** Measured: one complete harness run
+**386.5 s**; release build **91 s** (plus incremental check/fmt cycles); focused module test and
+compile iterations ~**600 s**. Estimated: context/source/literature recovery ~**900 s**; documentation,
+evidence, delivery and knowledge ~**1200 s**. **Charge 3,200,000 ms** (measured + estimated). Live
+allowance after the prospective increment: limit **204,900,000 ms**; **new cumulative 203,037,700 ms**;
+remaining **1,862,300 ms (~31 min)**. `CARGO_INCREMENTAL=0` throughout; free space **37,722,087,424
+bytes** at build time, above the 36,766,079,385-byte reserve plus the 128 MiB stop margin. No deletion
+of unique source, models, sealed evidence, research or other agents' work; no paid/external compute.
+
+**Delivered** under the claimed, sealed and verified root
+`.uor-models/realtext-prior-2026-09-20/read-conditioned-1` (0 unlisted; manifest
+`99f7416b1f87a25e5e92996371251e50f353d56ff6dc1de9c7b6319333a73e19`). The frozen-confidence rollout and
+the read-conditioned update are both recorded there; the bounded negative is preserved with its
+artifacts.

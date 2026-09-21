@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model — roadmap
 
-**September 21, after PR #1333:** [principal review](docs/integration/reader-confidence-review-2026-09-21.md) retains the confidence interface but corrects fresh joint-preservation failures and missing generated-behavior qualification. [Next](docs/integration/deepseek-read-conditioned-state-step-2026-09-21.md): compact frozen-reader rollout, then one learned Read -> geometric Update -> shared Emit residual that can change nonpayload predictions. Follow with dependent reads/derived composition and structural persistence where needed, broader language/executed Rust, then qualified scale/energy. No automatic stream-label feature or dimensional expansion.
+**September 21, after PR #1333:** the [read-conditioned result](docs/integration/read-conditioned-result-2026-09-21.md) closes the frozen-confidence rollout (length-64 dispatch after reload, degenerate text, exact selected occurrences) and implements one learned Read -> geometric Update -> shared Emit operator `q1 = (q0*T[r])*V[payload]` with an exact-zero disabled path. On a derived role-partner instrument the update is causally live but the **oracle ceiling is 0/60**: the frozen shared readout cannot emit an answer absent from the prefix, so accuracy is 0.000 for H4 and matched categorical. Next: one learned small shared low-bit output residual, then dependent reads/derived composition, structural persistence where needed, broader language/executed Rust, and qualified scale/energy. No dimensional expansion.
 
 ## Capability direction
 

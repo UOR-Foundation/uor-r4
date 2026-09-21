@@ -1,6 +1,20 @@
 # Current native geometric AI work
 
-## Active: retain confidence access; learn a read-conditioned geometric emission update
+## Active: read-conditioned rollout closed; the first update is a readout-capacity negative
+
+**Frozen-confidence rollout executed.** The actual retained confidence artifacts now run through the shared target-free predictor: length-64 opcode dispatch after reload, 45 reads over 84 steps with exact selected occurrences and served actions, read-disabled reproducing local, degenerate text consistent with the retained whole-model negative. [Result](read-conditioned-result-2026-09-21.md); [evidence](../evidence/read-conditioned-2026-09-21.json).
+
+**Corrected confidence criteria preserved (own parents, CE included).** Fresh population: H4 confidence 71/117 present emitted (own parent 73), present CE **+0.159790 bits/query**, absent reads **11/10**, text +0.037882, tune +0.061316; categorical 79/117 (own parent 81), **+0.152981**, **7/6**, +0.020116, +0.061381; whole-stream 178 (parent 364) and 184 (parent 378). Both meet the emitted-count margin and the fresh text screen and **both fail own-parent present CE and absence**. Retain the fitted expressivity gain; no promotion.
+
+**One learned read-conditioned geometric update — bounded negative at a diagnosed ceiling.** `q1 = (q0*T[r])*V[payload]`, `z1 = z_local + u(q1) - u(q0)`, `NoRead`/`UpdateDisabled` exactly zero. Instrument (derived role-partner; answer absent from every admitted payload; 60/60 local-wrong; 0 coverage violations): the **oracle ceiling is 0/60** — no frozen readout row can emit the required uncopied answer — so accuracy is 0.000 on dev/tune/fresh for H4 and the matched categorical arm. The update is causally live (28/30 fresh positions change state; changing the relation changes the emitted token at 9; answer CE falls ~0.25–0.30 bits) but cannot reach the answer.
+
+**Next:** the limitation is the **shared emission readout**, not admission, selection or update expressivity. Add one **learned small shared low-bit output residual** so a read-conditioned state can place mass on a token absent from the prefix; keep the transport/value maps, the exact-zero disabled path and the artifacts. Dependent Read -> Update -> Read/Emit follows only after a useful causal transformation. Whole-model prose remains degenerate; energy UNAVAILABLE; whole-path D0-b not claimed.
+
+Delivered root `.uor-models/realtext-prior-2026-09-20/read-conditioned-1` (sealed, verified, 0 unlisted, manifest `99f7416b1f87a25e5e92996371251e50f353d56ff6dc1de9c7b6319333a73e19`); `reload_failures = 0`; source hashes cover four modules including `read_conditioned.rs`. Ledger and charges: [resource ledger](resource-ledger-2026-09-19.md).
+
+### Previous active (superseded by the section above)
+
+## Former active: retain confidence access; learn a read-conditioned geometric emission update
 
 **PR #1333, independently reviewed and corrected:** the confidence sign restores fitted policy expressivity; both selected tables meet development-fit constraints. Fresh joint preservation fails for both: H4 present 71/117 versus parent 73, categorical 79 versus its own parent 81; present CE worsens **+0.159790/+0.152981 bits/query** above +.05, and absent reads rise **11/10 and 7/6**. Text deltas remain **+0.037882/+0.020116 bits/token**; both tune text screens fail. Confidence generation/intervention/timing are NOT_RUN. Preserve this useful interface component without promotion. [Principal review](reader-confidence-review-2026-09-21.md); [audit](../evidence/reader-confidence-principal-review-2026-09-21.json).
 
