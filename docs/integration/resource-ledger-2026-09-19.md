@@ -1329,3 +1329,14 @@ re-measured in the final entry below.
 `d81bda9e3dbff98a69ba5020631527698fbad83f3359611c1a15c5f3d6b0255f`). Superseded
 `reader-confidence-1`/`-2` and all prior roots are preserved. No deletion of unique material; no
 paid/external compute; no model promotion.
+
+**Delivery measurement and safe reclaim.** Read-only free space after the third run fell to
+**33,631,207,424 bytes**, below the 36,766,079,385-byte reserve, because the new isolated worktree
+required its own release/debug build fingerprint. With no active cargo/rustc build, removed only **318
+inactive Rust debug incremental cache directories** (`target/debug/incremental`), preserving built
+executables/dependencies, every model/artifact/research root, the source worktrees and downloads;
+free space rose to **35,460,845,568 bytes**. The remaining gap is reusable dependency build output, not
+unique material; it is not reclaimed here to avoid deleting built executables/dependencies, and the
+owner can recover it with `cargo clean` at the cost of rebuilds or by retiring superseded worktree
+checkouts. No reserve reduction is adopted; no model, source, research, negative candidate, owner work
+or download was deleted.
