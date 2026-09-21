@@ -12338,7 +12338,7 @@ const REL_FINAL_SEED: u64 = 0xC0F5_0101;
 /// A supplied memory world. Records are `(role, key, value)` token triples; the role token encodes
 /// the relation, and the request names the relation, so the role/relation correspondence must be
 /// learned rather than read off.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize)]
 struct RelWorld {
     records: Vec<(u32, u32, u32)>,
     entities: Vec<u32>,
@@ -12431,6 +12431,16 @@ struct RelLesion {
     reads_disabled: bool,
     freeze_relation_match: bool,
     freeze_continuation_to_continue: bool,
+    fixed_depth: Option<u8>,
+}
+
+#[derive(Default, serde::Serialize)]
+struct RelTrace {
+    selected_roles: Vec<u32>,
+    selected_abs: Vec<u32>,
+    retained: Vec<u32>,
+    actions: Vec<RelAction>,
+    events: Vec<serde_json::Value>,
 }
 
 struct RelOutcome {
@@ -12439,156 +12449,184 @@ struct RelOutcome {
     selected_abs: Vec<u32>,
     retained: Vec<u32>,
     actions: Vec<RelAction>,
+    events: Vec<serde_json::Value>,
     terminal: RelAction,
     hops: u8,
     frame_bytes: usize,
+    snapshots: Vec<Vec<u8>>,
+}
+
+fn rel_binding(model: &RelationalModel, world: &RelWorld) -> Result<RelBinding, String> {
+    let t = group_table();
+    let mut geometry = t.product.to_vec();
+    geometry.extend_from_slice(&t.inverse);
+    geometry.push(t.identity);
+    Ok(RelBinding {
+        model: sha256_bytes(&model.to_bytes()),
+        geometry: sha256_bytes(&geometry),
+        tokenizer: hex_to_bytes(DERIVED_SHA)?
+            .try_into()
+            .map_err(|_| "tokenizer digest length")?,
+        world_namespace: world.version,
+    })
+}
+
+/// The sole incremental session transition. It consumes the serialized phase and observed world;
+/// no selected candidate or previous relation is retained in the caller's control stack.
+fn rel_step(
+    model: &RelationalModel,
+    world: &RelWorld,
+    frame: &mut RelFrame,
+    lesion: RelLesion,
+    trace: &mut RelTrace,
+) -> Result<(), String> {
+    frame.validate(VOCAB, &rel_binding(model, world)?)?;
+    if frame.terminal.is_some() {
+        return Ok(());
+    }
+    let before = frame.clone();
+    match frame.pending.ok_or("session has no pending phase")? {
+        RelAction::Read => {
+            if frame.hops >= REL_MAX_HOPS {
+                frame.stop(RelAction::Exhausted);
+            } else if lesion.reads_disabled {
+                frame.stop(RelAction::Unresolved);
+            } else {
+                trace.actions.push(RelAction::Read);
+                let entity = frame.entity.ok_or("session lost query entity")?;
+                let relation = frame.relation.ok_or("session lost relation")?;
+                let admitted = world.admit(entity);
+                let pick = if lesion.freeze_relation_match {
+                    (!admitted.is_empty()).then_some(0)
+                } else {
+                    rank(
+                        model,
+                        relation,
+                        frame.retained.is_some_and(|v| world.entities.contains(&v)),
+                        &admitted,
+                    )
+                };
+                match pick {
+                    None => frame.stop(RelAction::Unresolved),
+                    Some(pick) => {
+                        let chosen = admitted[pick];
+                        // A relation-disabled lesion removes BOTH matching rank and matching gate.
+                        if !lesion.freeze_relation_match
+                            && model.relation_matches(relation, chosen.role) <= 0
+                        {
+                            frame.stop(RelAction::Unresolved);
+                        } else {
+                            let abs = world
+                                .records
+                                .iter()
+                                .position(|(r, k, v)| {
+                                    *r == chosen.role && *k == chosen.key && *v == chosen.value
+                                })
+                                .ok_or("selected candidate lost its exact occurrence")?
+                                as u32;
+                            frame.capture(CapturedPayload {
+                                seq: world.version,
+                                abs,
+                                payload: chosen.value,
+                                version: world.version,
+                            })?;
+                            trace.selected_roles.push(chosen.role);
+                            trace.selected_abs.push(abs);
+                            trace.retained.push(chosen.value);
+                        }
+                    }
+                }
+            }
+        }
+        RelAction::Continue => {
+            let value = frame.retained.ok_or("decision lost owned operand")?;
+            let relation = frame.relation.ok_or("decision lost request relation")?;
+            // Declared type registry is causal input, independent of whether any facts survive.
+            let content_is_entity = world.entities.contains(&value);
+            let proceed = if lesion.freeze_continuation_to_continue {
+                true
+            } else if let Some(depth) = lesion.fixed_depth {
+                frame.hops < depth
+            } else {
+                model.should_continue(content_is_entity)
+            };
+            if proceed {
+                match model.follow_of(relation) {
+                    Some(next) => {
+                        trace.actions.push(RelAction::Continue);
+                        frame.advance_relation(next)?;
+                    }
+                    None => frame.stop(RelAction::Unresolved),
+                }
+            } else {
+                frame.pending = Some(RelAction::Emit);
+            }
+        }
+        RelAction::Emit => {
+            frame.emit().map_err(|e| format!("emit failed: {e:?}"))?;
+            trace.actions.push(RelAction::Emit);
+        }
+        _ => return Err("unsupported active relational phase".into()),
+    }
+    if let Some(terminal) = frame.terminal {
+        trace.actions.push(terminal);
+    }
+    frame.validate(VOCAB, &rel_binding(model, world)?)?;
+    trace.events.push(json!({"before": before, "after": frame,
+        "observed_content_is_entity": before.retained.map(|v| world.entities.contains(&v))}));
+    Ok(())
+}
+
+fn rel_finish(
+    model: &RelationalModel,
+    world: &RelWorld,
+    mut frame: RelFrame,
+    lesion: RelLesion,
+    mut trace: RelTrace,
+    snapshots: Vec<Vec<u8>>,
+) -> Result<RelOutcome, String> {
+    // Each read can cause only one decision and one emission. Execution cap is distinct from Stop.
+    while frame.terminal.is_none() {
+        rel_step(model, world, &mut frame, lesion, &mut trace)?;
+    }
+    let frame_bytes = frame.to_bytes()?.len();
+    Ok(RelOutcome {
+        emitted: frame.emitted.first().copied(),
+        selected_roles: trace.selected_roles,
+        selected_abs: trace.selected_abs,
+        retained: trace.retained,
+        actions: trace.actions,
+        events: trace.events,
+        terminal: frame.terminal.ok_or("missing final reason")?,
+        hops: frame.hops,
+        frame_bytes,
+        snapshots,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
 fn rel_serve(
     model: &RelationalModel,
     world: &RelWorld,
-    roles: &[u32],
+    _roles: &[u32],
     relation: u32,
     entity: u32,
     lesion: RelLesion,
     resume_probe: bool,
 ) -> Result<RelOutcome, String> {
-    let mut frame = RelFrame::start(relation, entity);
-    let mut selected_roles = Vec::new();
-    let mut selected_abs = Vec::new();
-    let mut retained = Vec::new();
-    let mut actions = vec![RelAction::Read];
-    let mut frame_bytes = 0usize;
-    let keys = world.keys();
-    for _hop in 0..REL_MAX_HOPS {
-        if lesion.reads_disabled {
-            frame.stop(RelAction::Unresolved);
-            return Ok(RelOutcome {
-                emitted: None,
-                selected_roles,
-                selected_abs,
-                retained,
-                actions,
-                terminal: RelAction::Unresolved,
-                hops: frame.hops,
-                frame_bytes,
-            });
-        }
-        let entity = frame.entity.ok_or("session lost its query entity")?;
-        let admitted = world.admit(entity);
-        if admitted.is_empty() {
-            frame.stop(RelAction::Unresolved);
-            return Ok(RelOutcome {
-                emitted: None,
-                selected_roles,
-                selected_abs,
-                retained,
-                actions,
-                terminal: RelAction::Unresolved,
-                hops: frame.hops,
-                frame_bytes,
-            });
-        }
-        let relation = frame.relation.ok_or("session lost its relation")?;
-        let content_is_key = frame.retained.map(|v| keys.contains(&v)).unwrap_or(false);
-        let pick = if lesion.freeze_relation_match {
-            0
-        } else {
-            rank(model, relation, content_is_key, &admitted)
-                .ok_or("ranking produced no candidate")?
-        };
-        let chosen = admitted[pick];
-        // Learned compatibility gate: an admitted candidate that does not answer the requested
-        // relation leaves the request explicitly unresolved rather than emitting an incompatible
-        // fact. This is what makes a missing fact distinguishable from a present one.
-        if model.relation_matches(relation, chosen.role) <= 0 {
-            frame.stop(RelAction::Unresolved);
-            return Ok(RelOutcome {
-                emitted: None,
-                selected_roles,
-                selected_abs: Vec::new(),
-                retained,
-                actions,
-                terminal: RelAction::Unresolved,
-                hops: frame.hops,
-                frame_bytes,
-            });
-        }
-        let abs = world
-            .records
-            .iter()
-            .position(|(r, k, v)| *r == chosen.role && *k == chosen.key && *v == chosen.value)
-            .unwrap_or(0) as u32;
-        selected_roles.push(chosen.role);
-        selected_abs.push(abs);
-        frame.capture(CapturedPayload {
-            seq: world.version,
-            abs,
-            payload: chosen.value,
-            version: world.version,
-        });
-        retained.push(chosen.value);
-        if resume_probe {
-            // Save and restore mid-session; remaining work must continue from the frame.
-            let bytes = frame.to_bytes();
-            frame_bytes = bytes.len();
-            frame = RelFrame::from_bytes(&bytes, VOCAB)?;
-        }
-        let content_is_key_now = keys.contains(&chosen.value);
-        let proceed = if lesion.freeze_continuation_to_continue {
-            true
-        } else {
-            model.should_continue(content_is_key_now)
-        };
-        if proceed {
-            match model.follow_of(relation) {
-                Some(next) => {
-                    actions.push(RelAction::Continue);
-                    frame.advance_relation(next);
-                }
-                None => {
-                    frame.stop(RelAction::Unresolved);
-                    return Ok(RelOutcome {
-                        emitted: None,
-                        selected_roles,
-                        selected_abs,
-                        retained,
-                        actions,
-                        terminal: RelAction::Unresolved,
-                        hops: frame.hops,
-                        frame_bytes,
-                    });
-                }
-            }
-        } else {
-            let emitted = frame.emit().map(Some).unwrap_or(None);
-            frame.stop(RelAction::Stop);
-            actions.push(RelAction::Emit);
-            actions.push(RelAction::Stop);
-            return Ok(RelOutcome {
-                emitted,
-                selected_roles,
-                selected_abs,
-                retained,
-                actions,
-                terminal: RelAction::Stop,
-                hops: frame.hops,
-                frame_bytes,
-            });
-        }
+    let binding = rel_binding(model, world)?;
+    let mut frame = RelFrame::start(relation, entity, binding);
+    let mut trace = RelTrace::default();
+    if resume_probe {
+        rel_step(model, world, &mut frame, lesion, &mut trace)?;
+        let bytes = frame.to_bytes()?;
+        // Discard the live frame before calling the independent continuation entry.
+        drop(frame);
+        let restored = RelFrame::from_bytes(&bytes, VOCAB, &binding)?;
+        rel_finish(model, world, restored, lesion, trace, vec![bytes])
+    } else {
+        rel_finish(model, world, frame, lesion, trace, Vec::new())
     }
-    frame.stop(RelAction::Exhausted);
-    Ok(RelOutcome {
-        emitted: None,
-        selected_roles,
-        selected_abs,
-        retained,
-        actions,
-        terminal: RelAction::Exhausted,
-        hops: frame.hops,
-        frame_bytes,
-    })
 }
 
 fn rel_run() -> Result<ExitCode, String> {
@@ -12732,11 +12770,28 @@ fn rel_run() -> Result<ExitCode, String> {
                         second_role,
                         second_value: v2,
                         depth,
+                        content_is_entity: w.entities.contains(&v1),
                     });
                 }
             }
         }
     }
+    // Capable relation-only schedule fitted from the same development action labels.
+    let fixed_depth_by_relation: BTreeMap<u32, u8> = relations
+        .iter()
+        .map(|relation| {
+            let mut counts = BTreeMap::<u8, usize>::new();
+            for example in dev_examples.iter().filter(|e| e.relation == *relation) {
+                *counts.entry(example.depth).or_default() += 1;
+            }
+            let depth = counts
+                .into_iter()
+                .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+                .map(|(depth, _)| depth)
+                .unwrap_or(1);
+            (*relation, depth)
+        })
+        .collect();
     let (model, fit) = learn_relational_model(&dev_examples, false, false);
     let (categorical, cat_fit) = learn_relational_model(&dev_examples, false, true);
     let (cyclic_model, cyc_fit) = learn_relational_model(&dev_examples, true, false);
@@ -12836,6 +12891,7 @@ fn rel_run() -> Result<ExitCode, String> {
                         "retained": served.retained, "hops": served.hops,
                         "terminal": format!("{:?}", served.terminal),
                         "actions": served.actions.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>(),
+                        "events": served.events,
                         "correct": ok,
                     }));
                 }
@@ -12844,13 +12900,15 @@ fn rel_run() -> Result<ExitCode, String> {
         Ok((complete, total, depth_ok, rows))
     };
 
-    let (dev_ok, dev_total, dev_depth, _dev_rows) =
+    let (dev_ok, dev_total, dev_depth, dev_rows) =
         evaluate(&model, &dev_worlds, RelLesion::default())?;
     let (fin_ok, fin_total, fin_depth, fin_rows) =
         evaluate(&model, &final_worlds, RelLesion::default())?;
-    let (cat_ok, cat_total, _, _) = evaluate(&categorical, &final_worlds, RelLesion::default())?;
-    let (cyc_ok, cyc_total, _, _) = evaluate(&cyclic_model, &final_worlds, RelLesion::default())?;
-    let (no_rel_ok, _, _, _) = evaluate(
+    let (cat_ok, cat_total, _, cat_rows) =
+        evaluate(&categorical, &final_worlds, RelLesion::default())?;
+    let (cyc_ok, cyc_total, _, cyc_rows) =
+        evaluate(&cyclic_model, &final_worlds, RelLesion::default())?;
+    let (no_rel_ok, _, _, no_rel_rows) = evaluate(
         &model,
         &final_worlds,
         RelLesion {
@@ -12858,7 +12916,7 @@ fn rel_run() -> Result<ExitCode, String> {
             ..RelLesion::default()
         },
     )?;
-    let (always_ok, _, _, _) = evaluate(
+    let (always_ok, _, _, always_rows) = evaluate(
         &model,
         &final_worlds,
         RelLesion {
@@ -12866,7 +12924,7 @@ fn rel_run() -> Result<ExitCode, String> {
             ..RelLesion::default()
         },
     )?;
-    let (no_read_ok, _, _, _) = evaluate(
+    let (no_read_ok, _, _, no_read_rows) = evaluate(
         &model,
         &final_worlds,
         RelLesion {
@@ -12880,7 +12938,7 @@ fn rel_run() -> Result<ExitCode, String> {
         {"arm": "learned_relational", "split": "final", "complete": fin_ok, "total": fin_total, "depth_correct": fin_depth},
         {"arm": "categorical_control", "split": "final", "complete": cat_ok, "total": cat_total},
         {"arm": "cyclic_control", "split": "final", "complete": cyc_ok, "total": cyc_total},
-        {"arm": "relation_match_frozen", "split": "final", "complete": no_rel_ok, "total": fin_total},
+        {"arm": "relation_rank_and_gate_disabled", "split": "final", "complete": no_rel_ok, "total": fin_total},
         {"arm": "continuation_frozen_continue", "split": "final", "complete": always_ok, "total": fin_total},
         {"arm": "reads_disabled", "split": "final", "complete": no_read_ok, "total": fin_total},
     ]);
@@ -12959,31 +13017,39 @@ fn rel_run() -> Result<ExitCode, String> {
         RelLesion::default(),
         false,
     )?;
-    // Owned capture versus a live reference: overwrite the origin after capture.
-    let mut frame = RelFrame::start(req_rel, req_ent);
+    // Exact origin identity is separate from the validity of an immutable owned copy.
+    let binding = rel_binding(&model, w0)?;
+    let mut frame = RelFrame::start(req_rel, req_ent, binding);
     let owned = CapturedPayload {
         seq: w0.version,
         abs: pos as u32,
         payload: w0.records[pos].2,
         version: w0.version,
     };
-    frame.capture(owned);
-    let mut overwritten = w0.clone();
-    overwritten.records[pos].2 = literals[3];
-    let origin_now = overwritten.records[pos].2;
-    // Pause/resume: every final request must resume to the identical outcome.
+    frame.capture(owned)?;
+    let overwritten = CapturedPayload {
+        payload: literals[3],
+        version: w0.version + 1,
+        ..owned
+    };
+    let same_value_new_version = CapturedPayload {
+        version: w0.version + 1,
+        ..owned
+    };
+    let origin_now = overwritten.payload;
     let mut resume_identical = 0usize;
     let mut resume_total = 0usize;
+    let mut saved_snapshots = Vec::new();
     for w in final_worlds.iter() {
-        for (r, _) in relations.iter().enumerate() {
-            for e in entities.iter() {
+        for relation in relations.iter() {
+            for entity in entities.iter() {
                 resume_total += 1;
                 let plain = rel_serve(
                     &model,
                     w,
                     &roles,
-                    relations[r],
-                    *e,
+                    *relation,
+                    *entity,
                     RelLesion::default(),
                     false,
                 )?;
@@ -12991,8 +13057,8 @@ fn rel_run() -> Result<ExitCode, String> {
                     &model,
                     w,
                     &roles,
-                    relations[r],
-                    *e,
+                    *relation,
+                    *entity,
                     RelLesion::default(),
                     true,
                 )?;
@@ -13000,39 +13066,120 @@ fn rel_run() -> Result<ExitCode, String> {
                     && plain.hops == resumed.hops
                     && plain.selected_abs == resumed.selected_abs
                     && plain.terminal == resumed.terminal
+                    && plain.actions == resumed.actions
+                    && plain.events == resumed.events
                 {
                     resume_identical += 1;
+                }
+                for bytes in resumed.snapshots {
+                    let name = format!(
+                        "snapshots/world-{}-rel-{}-entity-{}.rlrf",
+                        w.version, relation, entity
+                    );
+                    write_checked(&root, &name, &bytes)?;
+                    saved_snapshots.push(
+                        json!({"path": name, "sha256": sha256_hex(&bytes), "bytes": bytes.len(),
+                        "world_namespace": w.version, "relation": relation, "entity": entity}),
+                    );
                 }
             }
         }
     }
-    // Interleaved independent sessions must not share mutable state.
-    let mut s1 = RelFrame::start(relations[0], entities[0]);
-    let mut s2 = RelFrame::start(relations[2], entities[1]);
-    s1.capture(CapturedPayload {
-        seq: 1,
-        abs: 0,
-        payload: entities[3],
-        version: 1,
-    });
-    let s2_before = s2.clone();
-    s2.capture(CapturedPayload {
-        seq: 1,
-        abs: 1,
-        payload: literals[1],
-        version: 1,
-    });
-    s2.advance_relation(relations[0]);
-    let interleaved_independent = s1.emitted.is_empty() && s1.retained == Some(entities[3]) && {
-        let mut probe = s2_before;
-        probe.capture(CapturedPayload {
-            seq: 1,
-            abs: 1,
-            payload: literals[1],
-            version: 1,
-        });
-        probe.retained == s2.retained
+    let mut s1 = RelFrame::start(relations[0], entities[0], binding);
+    let mut s2 = RelFrame::start(relations[2], entities[1], binding);
+    let mut tr1 = RelTrace::default();
+    let mut tr2 = RelTrace::default();
+    while s1.terminal.is_none() || s2.terminal.is_none() {
+        if s1.terminal.is_none() {
+            rel_step(&model, w0, &mut s1, RelLesion::default(), &mut tr1)?;
+        }
+        if s2.terminal.is_none() {
+            rel_step(&model, w0, &mut s2, RelLesion::default(), &mut tr2)?;
+        }
+    }
+    let isolated1 = rel_serve(
+        &model,
+        w0,
+        &roles,
+        relations[0],
+        entities[0],
+        RelLesion::default(),
+        false,
+    )?;
+    let isolated2 = rel_serve(
+        &model,
+        w0,
+        &roles,
+        relations[2],
+        entities[1],
+        RelLesion::default(),
+        false,
+    )?;
+    let interleaved_independent = s1.emitted.first().copied() == isolated1.emitted
+        && s2.emitted.first().copied() == isolated2.emitted
+        && tr1.events == isolated1.events
+        && tr2.events == isolated2.events;
+    let snapshot = frame.to_bytes()?;
+    let bad_binding = RelBinding {
+        model: [0; 32],
+        ..binding
     };
+    let wrong_model_rejected = RelFrame::from_bytes(&snapshot, VOCAB, &bad_binding).is_err();
+    let wrong_world_rejected = RelFrame::from_bytes(
+        &snapshot,
+        VOCAB,
+        &RelBinding {
+            world_namespace: binding.world_namespace + 1,
+            ..binding
+        },
+    )
+    .is_err();
+    let mut malformed = frame.clone();
+    malformed.terminal = Some(RelAction::Stop);
+    let malformed_phase_rejected =
+        RelFrame::from_bytes(&malformed.to_bytes()?, VOCAB, &binding).is_err();
+
+    // Development diagnostic: exactly the same request and record positions, but direct versus
+    // entity-valued content requires different depths. The declared entity registry stays fixed.
+    let mut direct = w0.clone();
+    direct.records[pos].2 = literals[0];
+    let middle = w0.records[pos].2;
+    let mut orphan = w0.clone();
+    orphan.records.retain(|(_, key, _)| *key != middle);
+    let cases = [
+        ("entity", w0.clone()),
+        ("direct_literal", direct),
+        ("orphan_entity", orphan),
+    ];
+    let mut content_diagnostic = Vec::new();
+    for (name, world) in cases {
+        let expected = rel_oracle(&world, &roles, 0, req_ent);
+        let mut rows = Vec::new();
+        for (arm, lesion) in [
+            ("learned_type_policy", RelLesion::default()),
+            (
+                "relation_only_fixed_depth",
+                RelLesion {
+                    fixed_depth: fixed_depth_by_relation.get(&req_rel).copied(),
+                    ..RelLesion::default()
+                },
+            ),
+        ] {
+            let result = rel_serve(&model, &world, &roles, req_rel, req_ent, lesion, false)?;
+            let expected_terminal = if expected.is_some() {
+                RelAction::Stop
+            } else {
+                RelAction::Unresolved
+            };
+            rows.push(json!({"arm": arm, "emitted": result.emitted, "hops": result.hops,
+                "terminal": result.terminal, "expected_answer": expected.map(|x| x.1),
+                "expected_terminal": expected_terminal,
+                "correct": result.emitted == expected.map(|x| x.1) && result.terminal == expected_terminal,
+                "selected_abs": result.selected_abs, "actions": result.actions, "events": result.events}));
+        }
+        content_diagnostic.push(json!({"case": name, "world": world,
+            "request": {"relation": req_rel, "entity": req_ent}, "rows": rows}));
+    }
     let mut unresolved_ok = 0usize;
     let mut unresolved_total = 0usize;
     for w in final_worlds.iter() {
@@ -13072,6 +13219,9 @@ fn rel_run() -> Result<ExitCode, String> {
             "value_before": w0.records[pos].2, "value_after": replacement,
             "emitted_before": base_out.emitted, "emitted_after": edited_out.emitted,
             "retained_before": base_out.retained, "retained_after": edited_out.retained,
+            "selected_abs_before": base_out.selected_abs, "selected_abs_after": edited_out.selected_abs,
+            "world_before": w0, "world_after": edited,
+            "events_before": base_out.events, "events_after": edited_out.events,
             "independent_expected_after": edited_oracle.map(|o| o.1),
             "answer_changed": base_out.emitted != edited_out.emitted,
             "matches_independent_expectation": edited_out.emitted == edited_oracle.map(|o| o.1),
@@ -13095,10 +13245,15 @@ fn rel_run() -> Result<ExitCode, String> {
         "owned_capture_versus_live_reference": {
             "owned_payload": owned.payload, "origin_now": origin_now,
             "owned_still_usable": frame.retained == Some(owned.payload),
-            "origin_is_live": frame.origin_is_live(Some(origin_now)),
+            "origin_is_live": frame.origin_is_live(Some(overwritten)),
+            "same_value_new_version_is_live": frame.origin_is_live(Some(same_value_new_version)),
         },
         "pause_resume_identical": {"identical": resume_identical, "total": resume_total},
         "interleaved_sessions_independent": interleaved_independent,
+        "interleaved_events": [tr1.events, tr2.events],
+        "snapshot_validation": {"wrong_model_rejected": wrong_model_rejected, "wrong_world_rejected": wrong_world_rejected, "malformed_phase_rejected": malformed_phase_rejected},
+        "same_request_content_diagnostic": content_diagnostic,
+        "saved_snapshots": saved_snapshots,
     });
 
     write_checked(
@@ -13113,7 +13268,7 @@ fn rel_run() -> Result<ExitCode, String> {
     )?;
 
     let result = json!({
-        "schema": "uor-r4.relational-session/1",
+        "schema": "uor-r4.relational-session/2",
         "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
         "running_source": {
             "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
@@ -13125,11 +13280,14 @@ fn rel_run() -> Result<ExitCode, String> {
             "group_digest": group_digest, "f_bits": parent.cfg.f_bits},
         "task": {
             "records": "role/key/value triples in a supplied world; the role token encodes the relation while the request names it",
-            "chain": "read the requested relation of the entity; if the retrieved value is itself a key of the world, follow the learned follow-up relation; otherwise emit and stop",
+            "chain": "read requested relation; observed declared entity type chooses learned continuation even when entity facts are missing; otherwise emit",
             "relations": relations, "roles": roles, "entities": entities, "literals": literals,
-            "authored_structure": "token layout, record triples and the follow-up convention are supplied; the role/relation correspondence, the ranking and the continuation decision are learned",
+            "authored_structure": "token layout, record triples, entity type registry and follow-up convention supplied; role/relation codes and follow map fitted; continuation fitted from observed type and separate action label; scorer coefficients fixed",
         },
-        "learning": {"primary": fit, "categorical": cat_fit, "cyclic": cyc_fit},
+        "learning": {"primary": fit, "categorical": cat_fit, "cyclic": cyc_fit, "fixed_score_coefficients": [1,1,0,0], "fitted_relation_only_depths": fixed_depth_by_relation},
+        "exposure": "Original worlds repeatedly exposed by PR1341; corrected replay and new same-request cases are development diagnostics, not fresh confirmation",
+        "worlds": {"development": dev_worlds, "exposed_original_final": final_worlds},
+        "all_arm_rows": {"development_primary": dev_rows, "exposed_primary": fin_rows, "categorical": cat_rows, "cyclic": cyc_rows, "relation_disabled": no_rel_rows, "always_continue": always_rows, "read_disabled": no_read_rows},
         "arms": arms,
         "artifacts": artifacts,
         "loaded_full_predictor_parity_requests": parity,
@@ -13147,6 +13305,160 @@ fn rel_run() -> Result<ExitCode, String> {
         no_read_ok, unlisted.len(), started.elapsed().as_secs_f32()
     );
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod relational_session_tests {
+    use super::*;
+
+    fn fixture() -> (RelationalModel, RelWorld, Vec<u32>, Vec<u32>) {
+        let relations = vec![200, 201, 202, 203];
+        let roles = vec![300, 301, 302, 303];
+        let entities: Vec<u32> = (10..18).collect();
+        let world = rel_make_world(71, &relations, &roles, &entities, &[40, 41, 42, 43], 7);
+        let mut examples = Vec::new();
+        for r in 0..4 {
+            for entity in &entities {
+                let (v1, v2, _, second_role, depth) =
+                    rel_oracle(&world, &roles, r, *entity).unwrap();
+                examples.push(RelExample {
+                    relation: relations[r],
+                    entity: *entity,
+                    first_role: roles[r],
+                    first_value: v1,
+                    follow_relation: if depth == 2 { relations[r + 2] } else { 0 },
+                    second_role,
+                    second_value: v2,
+                    depth,
+                    content_is_entity: world.entities.contains(&v1),
+                });
+            }
+        }
+        (
+            learn_relational_model(&examples, false, false).0,
+            world,
+            relations,
+            roles,
+        )
+    }
+
+    #[test]
+    fn frame_drives_resumed_and_interleaved_inference() {
+        let (model, world, relations, roles) = fixture();
+        let plain = rel_serve(
+            &model,
+            &world,
+            &roles,
+            relations[0],
+            10,
+            RelLesion::default(),
+            false,
+        )
+        .unwrap();
+        let resumed = rel_serve(
+            &model,
+            &world,
+            &roles,
+            relations[0],
+            10,
+            RelLesion::default(),
+            true,
+        )
+        .unwrap();
+        assert_eq!(plain.hops, 2);
+        assert_eq!(
+            plain
+                .actions
+                .iter()
+                .filter(|a| **a == RelAction::Read)
+                .count(),
+            2
+        );
+        assert_eq!(plain.events, resumed.events);
+        assert_eq!(plain.emitted, resumed.emitted);
+        let binding = rel_binding(&model, &world).unwrap();
+        let mut a = RelFrame::start(relations[0], 10, binding);
+        let mut b = RelFrame::start(relations[2], 11, binding);
+        let mut at = RelTrace::default();
+        let mut bt = RelTrace::default();
+        while a.terminal.is_none() || b.terminal.is_none() {
+            rel_step(&model, &world, &mut a, RelLesion::default(), &mut at).unwrap();
+            rel_step(&model, &world, &mut b, RelLesion::default(), &mut bt).unwrap();
+        }
+        assert_eq!(at.events, plain.events);
+        assert_eq!(a.emitted.first().copied(), plain.emitted);
+        let bplain = rel_serve(
+            &model,
+            &world,
+            &roles,
+            relations[2],
+            11,
+            RelLesion::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(bt.events, bplain.events);
+    }
+
+    #[test]
+    fn same_request_content_and_missing_entity_change_control() {
+        let (model, world, relations, roles) = fixture();
+        let entity = rel_serve(
+            &model,
+            &world,
+            &roles,
+            relations[0],
+            10,
+            RelLesion::default(),
+            false,
+        )
+        .unwrap();
+        let mut direct = world.clone();
+        direct.records[0].2 = 40;
+        let direct_out = rel_serve(
+            &model,
+            &direct,
+            &roles,
+            relations[0],
+            10,
+            RelLesion::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(entity.hops, 2);
+        assert_eq!((direct_out.hops, direct_out.emitted), (1, Some(40)));
+        let fixed = rel_serve(
+            &model,
+            &direct,
+            &roles,
+            relations[0],
+            10,
+            RelLesion {
+                fixed_depth: Some(2),
+                ..RelLesion::default()
+            },
+            false,
+        )
+        .unwrap();
+        assert_ne!(fixed.emitted, Some(40));
+        let mut orphan = world.clone();
+        orphan
+            .records
+            .retain(|(_, key, _)| *key != world.records[0].2);
+        let missing = rel_serve(
+            &model,
+            &orphan,
+            &roles,
+            relations[0],
+            10,
+            RelLesion::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(missing.terminal, RelAction::Unresolved);
+        assert_eq!(missing.emitted, None);
+        assert!(rel_oracle(&orphan, &roles, 0, 10).is_none());
+    }
 }
 
 fn main() -> ExitCode {

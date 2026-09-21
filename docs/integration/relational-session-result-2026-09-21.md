@@ -1,91 +1,37 @@
-# Learned relational access and content-dependent session control
+# Learned relational correspondence and corrected typed session control
 
-September 21, 2026. Executes the [learned relational-control brief](deepseek-learned-relation-control-step-2026-09-21.md)
-and the [grounded-session review](grounded-session-review-2026-09-21.md), based on the **reviewed head
-`5821c48d`** of PR #1340. That PR was still queued at the time of this work, so protection was
-preserved, the reviewed head was read directly, and this branch is based on it. Isolation worktree
-`.worktrees/learned-relation-control`; owner checkout untouched. New module
-`learner/relational_session.rs` and mode `--mode=relational-session`.
-[Evidence](../evidence/relational-session-2026-09-21.json).
+September 21, 2026. PR #1341 originally submitted as `84ba72cea9f1283c56e36471b59f348a6f8c06ba`. Its parent PR #1340 merged as `d9d896e8`; the complete merge tree equals reviewed `5821c48d`. The [principal review](relational-session-review-2026-09-21.md) corrects interpretation and the [next brief](deepseek-observed-text-session-step-2026-09-21.md) governs successor work. Original four reports/artifacts remain retained. [Original saved result](../evidence/relational-session-2026-09-21.json); [independent original audit](../evidence/relational-session-principal-review-2026-09-21.json).
 
-## The task
+## Retained submitted result and corrections
 
-A **supplied memory world** is a set of `(role, key, value)` token triples. The record's role token
-encodes the relation while the request names the relation, so the role/relation correspondence must be
-**learned**, not read off. Every entity has four plausible facts (one per relation), so matching the
-entity identity alone cannot resolve the request.
+Supplied `(role,key,value)` records and `(relation,entity)` requests test learned role/relation correspondence plus exact joins. Primary output labels match independently reconstructed expectations 128/128 on four reported-final worlds, 32 requests each; categorical and cyclic controls also report 128/128. The single first-record intervention changes next query entity 488→486, selected occurrence 14→6 and output 515→517 while all downstream records stay fixed. The follow relation 434 does not change.
 
-A request is `(relation, entity)`. The session:
+The emitted labels are `able`26, `ong`42, `ame`24 and `ear`36. These are complete typed-task labels, not natural-language responses. Original worlds were reused across four attempts, with a missing-source gate repaired after exposure: development-disjoint assignments, not untouched final qualification.
 
-1. admits records whose key **exactly equals** the request entity (an exact identity join, separate
-   from ranking);
-2. ranks the admitted candidates with the learned compatibility and picks one;
-3. **gates** on the learned compatibility: an admitted candidate that does not answer the requested
-   relation leaves the request explicitly unresolved rather than emitting an incompatible fact;
-4. reads the retrieved value; **if that value is itself a key of the world** it follows the learned
-   follow-up relation and continues, otherwise it emits and stops.
+Original fitting learned code correspondence and the follow map. Score coefficients were fixed `[1,1,0,0]`; the continuation table initialized already correct and its training feature was copied from its action label. Original initial/final policy metrics had different denominators. The original generator makes relation identity determine depth. H4 compatibility tested central minus identity (index0), not identity (index1), with learned antipodal codes compensating. This fixed-offset relation is expressively equivalent to categorical matching; no geometric advantage is established.
 
-The role/relation correspondence, the ranking weights, the follow-up map and the continuation policy
-are all learned from declared development traces; served inputs never contain a target, a gold hop
-count, a next-source pointer or a fixture family.
+Original resume retained host-loop locals, interleaving only mutated structs, origin liveness compared payload alone, and the action log omitted second reads. Only primary final item rows were retained; other arms had summary counts. Original report seals, source hashes and release executable are valid and preserved; these instrument limitations do not invalidate the independently reconstructed 128 primary outputs.
 
-## Results
+## Corrected execution
 
-| Arm | development /128 | **fresh final /128** | correct depths |
-| --- | ---: | ---: | ---: |
-| **learned relational (primary)** | **128** | **128** | **128** |
-| matched categorical compatibility | - | 128 | - |
-| matched cyclic (`mod 120`) | - | 128 | - |
-| relation match frozen (exact-key only) | - | **0** | - |
-| continuation frozen to always-continue | - | **0** | - |
-| reads disabled | - | **0** | - |
+The principal correction uses group-specific identity and model format RLRM2, fits the continuation table from an independently observed declared entity type with neutral initialization, compares pre/post accuracy on the same examples, and preserves fixed score coefficients honestly. The entity registry remains causal typed input even when all an entity's records are missing.
 
-Final worlds are a **fresh draw** with new record assignments, not the development worlds. Every
-request emits one decoded answer token (for example `able`, `ong`). The three lesions show each
-learned component is necessary: without the learned relation match the session cannot select the
-answering fact, without the content-dependent continuation it cannot stop on a literal fact, and with
-no read there is nothing to answer from.
+One state-driven `rel_step`/`rel_finish` path now performs ordinary, restored and interleaved inference. Frames bind model/geometry/tokenizer/world namespace and serialize their consumed action phase. Saved post-read frames continue without a hidden chosen-record variable. Exact origin diagnostics compare sequence, absolute position, version and payload; an immutable captured copy remains separately usable. Frame/version/domain validation rejects incompatible restored states. The frame currently uses versioned JSON, and execution remains in the experiment runner, ready to extract into a reusable library boundary.
 
-The matched categorical and cyclic controls reach the **same 128/128**. On this task the geometric
-compatibility is *equally* competent, not superior; that is reported as a tie rather than an
-advantage.
+All-arm rows, raw worlds, every attempted read, state transitions and actual checkpoint bytes are retained in the corrected report. The relation-disabled lesion removes both matching rank and matching gate. Three same-request development cases distinguish entity continuation, direct literal emission and orphan-entity absence, with a relation-only schedule fitted from the same development labels as the shortcut comparator.
 
-## Causal interventions
+Exact corrected counts, report/executable/source hashes, checkpoint footprint, validation and resources are in the [corrected replay audit](../evidence/relational-session-corrected-replay-audit-2026-09-21.json) and [principal checks](../evidence/relational-session-principal-checks-2026-09-21.json). This is corrected exposed component evidence and a small development diagnostic; it is not a fresh language qualification.
 
-| Intervention | Observed |
-| --- | --- |
-| one-position source edit (record index 0, all other records fixed) | first retained value, follow-up relation query, selected second occurrence and final answer all change together, matching the independently derived expectation |
-| request relation changed, entity and every record fixed | selected fact and answer change, matching the independent expectation |
-| required record removed | **explicitly unresolved, no emission** (16/16 worlds, and the single-case intervention) |
-| plausible distractor added (same key, unseen role) | answer and selected roles preserved |
-| pause/resume mid-session | identical on 128/128 requests |
-| two interleaved frames | independent; advancing one leaves the other unchanged |
-| owned capture vs live reference | the owned payload stays usable after its origin was overwritten, while the separate origin liveness check reports `false` |
+## Final corrected measurements
 
-## Composition, session and evidence discipline
+Corrected root `relational-session-principal-2` preserves 128/128 development and 128/128 exposed primary answers, with categorical/cyclic also 128/128. Relation rank+gate disabled, always-continue and reads-disabled each give 0/128. The observed-type policy improves **64/128 →128/128** on the same development examples. All 896 arm/request rows and 2,944 frame transitions independently recount without error. All 134 sealed files, seven source hashes and actual executable hash match.
 
-The model artifact is 140 bytes, exported and **independently reloaded with full-predictor parity on
-256 requests** before any reported result; the reload contract rejects malformed bytes, invalid action
-tags, out-of-vocabulary tokens and a terminal frame that still carries a pending action. The frame
-serializes request/control state, the owned operand, the retained result, the pending action and the
-output position, so restoring it continues the remaining work rather than rebuilding the answer.
-Per-request events record the world/version, relation, entity, selected occurrences, retained values,
-actions, emitted token and terminal reason, with decoded answers.
+All 128 actual saved checkpoints match the post-first-read frame and the next transition input; snapshot size 590–591 bytes. Two interleaved trajectories match isolated execution. The three same-request development cases give **3/3 observed-type versus 2/3 fitted relation-only depth**: both handle the dependent entity and orphan entity, but only the observed-type policy emits the direct literal correctly. This is one concrete shortcut counterexample, not a population-level advantage. The single-source edit preserves downstream records and follow relation while changing the next entity/occurrence and answer.
 
-## Deviations
+The final experiment records 12.575312458 seconds (debug, excluding compilation and investigation) and 18,392,066 retained bytes. Initial corrected root 1 is retained; final root 2 followed only the empty-Stop validation correction. Model artifact 140 bytes, version 2; bound frames and common assets are additional. The [checks receipt](../evidence/relational-session-principal-checks-2026-09-21.json) contains exact commands, measured/estimated resource components and cleanup receipts.
 
-I kept the constructive Q8 factorizer from `grounded_session.rs` as a retained component but did **not**
-force world relations into it: supervisor/office style relations are memory joins, and the review is
-explicit that non-injective world relations need exact memory plus typed operations. Geometry carries a
-relation as a group element and scores *relational compatibility*; it does not compute the fact. The
-follow-up relation is a learned finite map because a supplied-program schedule is what the previous
-milestone already had.
+## Remaining scope and next milestone
 
-## Not established
+Request/layout, semantic record fields, entity registry and follow-up convention remain supplied. Fitting a two-entry observed-type policy does not learn source semantics. The 140-byte model excludes shared assets, frames, allocations and runtime work. No whole-path D0-b, normalized compression, geometric superiority or energy advantage is established. Current-reference checking consumes a supplied capture descriptor; it is not a complete mutable ring/version service. Explicit pre/post full-predictor parity is primary-only; categorical/cyclic are independently loaded and evaluated.
 
-The token layout, record triples and follow-up convention are supplied; only the correspondence, the
-ranking and the continuation decision are learned. The world is small (8 entities, 4 relations, 4
-literals) and relations are single-hop joins. The categorical control ties the group arm, so no
-geometric advantage is claimed, and no encoding-normalized or whole-path cost advantage is claimed.
-Energy `UNAVAILABLE`; whole-path D0-b not claimed. Retained roots
-`relational-session-{1,2,3,4}` (0 unlisted each), with `-4` delivered.
+The next milestone is observed-text memory answers through one reused session engine: learned request/source-role observations, goal-preserving redirects, evidence-dependent read depth, exact multiword spans and complete phrase/EOS emission. Terminal answers may also be keys elsewhere, so key membership cannot replace learned continuation meaning. Reuse historical role/span/scheduler mechanisms with explicit BPE adaptation. Broader prose, durable corrections and executed Rust follow on that same path.

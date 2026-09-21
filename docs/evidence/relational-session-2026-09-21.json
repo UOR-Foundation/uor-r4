@@ -372,5 +372,23 @@
     "the world is small (8 entities, 4 relations, 4 literals) and relations are single-hop joins, so this is a bounded input format, not learned language parsing",
     "the categorical control ties the group arm on this task; no encoding-normalized or whole-path cost advantage is claimed",
     "no prose, no executed Rust task, and no whole-path energy or latency qualification"
-  ]
+  ],
+  "principal_review_annotation": {
+    "status": "ORIGINAL_SUBMISSION_RETAINED_WITH_CORRECTIONS",
+    "reviewed_head": "84ba72cea9f1283c56e36471b59f348a6f8c06ba",
+    "original_report_values_preserved": true,
+    "review": "docs/integration/relational-session-review-2026-09-21.md",
+    "audit": "docs/evidence/relational-session-principal-review-2026-09-21.json",
+    "limitations": [
+      "reported final repeatedly exposed",
+      "continuation initialized correct; feature derived from action label",
+      "fixed coefficients not fitted",
+      "H4 matches central -1 not identity",
+      "request relation confounds depth",
+      "original resume host-local dependent; interleave struct-only; origin value-only",
+      "primary final rows only; omitted second Read events"
+    ],
+    "original_primary_recount": 128,
+    "no_general_language_or_geometric_advantage": true
+  }
 }

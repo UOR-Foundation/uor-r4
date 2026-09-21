@@ -25,7 +25,7 @@ use super::group_table::{group_table, GROUP_ORDER, ROW_STRIDE};
 pub const REL_MAX_HOPS: u8 = 6;
 
 /// One typed session action or terminal reason.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RelAction {
     Read,
     Continue,
@@ -37,7 +37,7 @@ pub enum RelAction {
 
 /// An immutable owned payload snapshot with its provenance. The owned value remains usable after its
 /// origin is evicted; resolving the current ring is a separate liveness diagnostic.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CapturedPayload {
     pub seq: u32,
     pub abs: u32,
@@ -47,7 +47,7 @@ pub struct CapturedPayload {
 
 /// One declared development trace: the request, the facts a correct session must reach, and the
 /// observed intermediate roles. `depth` is the number of reads the task actually needs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RelExample {
     pub relation: u32,
     pub entity: u32,
@@ -57,6 +57,8 @@ pub struct RelExample {
     pub second_role: u32,
     pub second_value: u32,
     pub depth: u8,
+    /// Observed value type from the declared entity registry, independently of the action label.
+    pub content_is_entity: bool,
 }
 
 /// Receipt for one relational-policy fit.
@@ -74,7 +76,7 @@ pub struct RelFitReport {
     pub accepted_moves: usize,
 }
 
-/// The served relational model. Every served value is learned from declared development traces.
+/// Fitted relation codes, follow map and observed-type policy; score coefficients are fixed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationalModel {
     /// Additive `mod GROUP_ORDER` compatibility instead of the exact group relative element.
@@ -87,7 +89,7 @@ pub struct RelationalModel {
     pub role_code: Vec<u8>,
     /// Learned follow-up relation per request relation.
     pub follow: Vec<(u32, u32)>,
-    /// Learned scorer weights: `[relation match, exact key identity, content is a key, bias]`.
+    /// Fixed scorer weights: `[relation match, exact key identity, content is a key, bias]`.
     pub weights: [i32; 4],
     /// Learned continuation decision indexed by `content_is_key as usize`.
     pub continue_policy: [bool; 2],
@@ -144,8 +146,13 @@ impl RelationalModel {
                 _ => -1,
             }
         } else {
+            let identity = if self.cyclic {
+                0
+            } else {
+                group_table().identity as usize
+            };
             match self.relative(relation, role) {
-                Some(0) => 1,
+                Some(r) if r == identity => 1,
                 Some(_) => -1,
                 None => -1,
             }
@@ -175,7 +182,7 @@ impl RelationalModel {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut o = Vec::new();
         o.extend_from_slice(b"RLRM");
-        o.extend_from_slice(&1u32.to_le_bytes());
+        o.extend_from_slice(&2u32.to_le_bytes());
         o.push(u8::from(self.cyclic));
         o.push(u8::from(self.categorical));
         for domain in [&self.relation_domain, &self.role_domain] {
@@ -219,11 +226,16 @@ impl RelationalModel {
         if take(&mut c, 4)? != b"RLRM" {
             return Err("bad relational artifact magic".into());
         }
-        if u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) != 1 {
+        if u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) != 2 {
             return Err("unsupported relational artifact version".into());
         }
-        let cyclic = take(&mut c, 1)?[0] != 0;
-        let categorical = take(&mut c, 1)?[0] != 0;
+        let flag = |b: u8| match b {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err("invalid relational boolean".to_string()),
+        };
+        let cyclic = flag(take(&mut c, 1)?[0])?;
+        let categorical = flag(take(&mut c, 1)?[0])?;
         let mut domains = Vec::new();
         for _ in 0..2 {
             let n = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
@@ -256,6 +268,9 @@ impl RelationalModel {
         let role_domain = domains.remove(0);
         let relation_code = codes.remove(0);
         let role_code = codes.remove(0);
+        if role_domain.len() > 8 {
+            return Err("categorical role capacity exceeded".into());
+        }
         if relation_code.len() != relation_domain.len() || role_code.len() != role_domain.len() {
             return Err("relational code length disagrees with its domain".into());
         }
@@ -274,6 +289,9 @@ impl RelationalModel {
         for _ in 0..nf {
             let r = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
             let f = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
+            if !relation_domain.contains(&r) || !relation_domain.contains(&f) {
+                return Err("follow map refers outside the relation domain".into());
+            }
             follow.push((r, f));
         }
         if follow.windows(2).any(|w| w[0].0 >= w[1].0) {
@@ -283,7 +301,10 @@ impl RelationalModel {
         for w in weights.iter_mut() {
             *w = i32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
         }
-        let continue_policy = [take(&mut c, 1)?[0] != 0, take(&mut c, 1)?[0] != 0];
+        if weights != [1, 1, 0, 0] {
+            return Err("unsupported fixed score coefficients".into());
+        }
+        let continue_policy = [flag(take(&mut c, 1)?[0])?, flag(take(&mut c, 1)?[0])?];
         let nt = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
         if nt != relation_domain.len() {
             return Err("relational categorical table has the wrong row count".into());
@@ -313,9 +334,20 @@ impl RelationalModel {
     }
 }
 
-/// One resumable relational session frame.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+/// Identities required to restore a session. The namespace belongs to the supplied world;
+/// changing records does not invalidate an already owned payload, but a new namespace does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RelBinding {
+    pub model: [u8; 32],
+    pub geometry: [u8; 32],
+    pub tokenizer: [u8; 32],
+    pub world_namespace: u32,
+}
+
+/// All state consumed by the incremental runtime, including its next phase.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RelFrame {
+    pub binding: RelBinding,
     pub captured: Option<CapturedPayload>,
     pub relation: Option<u32>,
     pub entity: Option<u32>,
@@ -327,35 +359,45 @@ pub struct RelFrame {
 }
 
 impl RelFrame {
-    pub fn start(relation: u32, entity: u32) -> Self {
-        RelFrame {
+    pub fn start(relation: u32, entity: u32, binding: RelBinding) -> Self {
+        Self {
+            binding,
             relation: Some(relation),
             entity: Some(entity),
-            ..RelFrame::default()
+            captured: None,
+            retained: None,
+            hops: 0,
+            emitted: Vec::new(),
+            pending: Some(RelAction::Read),
+            terminal: None,
         }
     }
 
-    pub fn capture(&mut self, payload: CapturedPayload) {
+    pub fn capture(&mut self, payload: CapturedPayload) -> Result<(), String> {
+        if self.terminal.is_some() || self.pending != Some(RelAction::Read) {
+            return Err("capture requires the Read phase".into());
+        }
+        if payload.seq != self.binding.world_namespace || self.hops >= REL_MAX_HOPS {
+            return Err("capture namespace or hop bound mismatch".into());
+        }
         self.retained = Some(payload.payload);
         self.captured = Some(payload);
-        self.hops = self.hops.saturating_add(1);
+        self.hops += 1;
         self.pending = Some(RelAction::Continue);
+        Ok(())
     }
 
     pub fn emit(&mut self) -> Result<u32, RelAction> {
         if let Some(t) = self.terminal {
             return Err(t);
         }
-        match self.retained {
-            Some(v) => {
-                self.emitted.push(v);
-                Ok(v)
-            }
-            None => {
-                self.terminal = Some(RelAction::Unresolved);
-                Err(RelAction::Unresolved)
-            }
+        if self.pending != Some(RelAction::Emit) {
+            return Err(RelAction::Unresolved);
         }
+        let v = self.retained.ok_or(RelAction::Unresolved)?;
+        self.emitted.push(v);
+        self.stop(RelAction::Stop);
+        Ok(v)
     }
 
     pub fn stop(&mut self, reason: RelAction) {
@@ -363,157 +405,91 @@ impl RelFrame {
         self.pending = None;
     }
 
-    /// Advance the request relation for the next hop, keeping the retained operand owned.
-    pub fn advance_relation(&mut self, next_relation: u32) {
+    pub fn advance_relation(&mut self, next_relation: u32) -> Result<(), String> {
+        if self.terminal.is_some()
+            || self.pending != Some(RelAction::Continue)
+            || self.retained.is_none()
+        {
+            return Err("advance requires a captured operand in Continue phase".into());
+        }
         self.relation = Some(next_relation);
         self.entity = self.retained;
+        self.pending = Some(RelAction::Read);
+        Ok(())
     }
 
-    /// Does the owned payload still resolve to the same value at its origin? A separate diagnostic:
-    /// the owned value stays usable regardless.
-    pub fn origin_is_live(&self, current_payload_at_origin: Option<u32>) -> bool {
-        match (self.captured, current_payload_at_origin) {
-            (Some(c), Some(v)) => c.payload == v,
-            _ => false,
-        }
+    /// Exact provenance diagnostic; equality of values alone is not source identity.
+    pub fn origin_is_live(&self, current: Option<CapturedPayload>) -> bool {
+        self.captured.is_some() && self.captured == current
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut o = Vec::new();
-        o.extend_from_slice(b"RLRF");
-        o.extend_from_slice(&1u32.to_le_bytes());
-        match self.captured {
-            Some(c) => {
-                o.push(1);
-                o.extend_from_slice(&c.seq.to_le_bytes());
-                o.extend_from_slice(&c.abs.to_le_bytes());
-                o.extend_from_slice(&c.payload.to_le_bytes());
-                o.extend_from_slice(&c.version.to_le_bytes());
+    pub fn validate(&self, max_vocab: usize, expected: &RelBinding) -> Result<(), String> {
+        if &self.binding != expected {
+            return Err("relational snapshot binding mismatch".into());
+        }
+        if self.hops > REL_MAX_HOPS {
+            return Err("relational snapshot exceeds hop bound".into());
+        }
+        if self.relation.is_none() || self.entity.is_none() {
+            return Err("missing relational request state".into());
+        }
+        if self
+            .relation
+            .iter()
+            .chain(self.entity.iter())
+            .chain(self.retained.iter())
+            .chain(self.emitted.iter())
+            .any(|v| *v as usize >= max_vocab)
+        {
+            return Err("relational snapshot token outside vocabulary".into());
+        }
+        if let Some(c) = self.captured {
+            if c.seq != expected.world_namespace
+                || self.retained != Some(c.payload)
+                || c.payload as usize >= max_vocab
+                || self.hops == 0
+            {
+                return Err("inconsistent captured relational operand".into());
             }
-            None => o.push(0),
+        } else if self.retained.is_some() || self.hops != 0 {
+            return Err("missing captured relational operand".into());
         }
-        for f in [self.relation, self.entity, self.retained] {
-            match f {
-                Some(v) => {
-                    o.push(1);
-                    o.extend_from_slice(&v.to_le_bytes());
-                }
-                None => o.push(0),
-            }
+        match (self.pending, self.terminal) {
+            (Some(RelAction::Read), None) => {}
+            (Some(RelAction::Continue | RelAction::Emit), None) if self.captured.is_some() => {}
+            (None, Some(RelAction::Stop | RelAction::Unresolved | RelAction::Exhausted)) => {}
+            _ => return Err("invalid relational phase or terminal state".into()),
         }
-        o.push(self.hops);
-        o.extend_from_slice(&(self.emitted.len() as u32).to_le_bytes());
-        for t in self.emitted.iter() {
-            o.extend_from_slice(&t.to_le_bytes());
+        if self.emitted.len() > 1
+            || (!self.emitted.is_empty() && self.terminal != Some(RelAction::Stop))
+        {
+            return Err("inconsistent relational emission state".into());
         }
-        o.push(match self.pending {
-            None => 0,
-            Some(RelAction::Read) => 1,
-            Some(RelAction::Continue) => 2,
-            Some(RelAction::Emit) => 3,
-            Some(RelAction::Stop) => 4,
-            Some(RelAction::Unresolved) => 5,
-            Some(RelAction::Exhausted) => 6,
-        });
-        o.push(match self.terminal {
-            None => 0,
-            Some(RelAction::Read) => 1,
-            Some(RelAction::Continue) => 2,
-            Some(RelAction::Emit) => 3,
-            Some(RelAction::Stop) => 4,
-            Some(RelAction::Unresolved) => 5,
-            Some(RelAction::Exhausted) => 6,
-        });
-        o
+        if self.terminal == Some(RelAction::Stop)
+            && (self.emitted.len() != 1 || self.emitted.first().copied() != self.retained)
+        {
+            return Err("stopped frame has no matching emitted operand".into());
+        }
+        Ok(())
     }
 
-    pub fn from_bytes(bytes: &[u8], max_vocab: usize) -> Result<Self, String> {
-        let mut c = 0usize;
-        let take = |c: &mut usize, n: usize| -> Result<&[u8], String> {
-            let end = c.checked_add(n).ok_or("size overflow")?;
-            if end > bytes.len() {
-                return Err("truncated relational frame".into());
-            }
-            let s = &bytes[*c..end];
-            *c = end;
-            Ok(s)
-        };
-        if take(&mut c, 4)? != b"RLRF" {
-            return Err("bad relational frame magic".into());
+    pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
+        let mut bytes = b"RLRF\x02\x00\x00\x00".to_vec();
+        bytes.extend(serde_json::to_vec(self).map_err(|e| e.to_string())?);
+        Ok(bytes)
+    }
+
+    pub fn from_bytes(
+        bytes: &[u8],
+        max_vocab: usize,
+        expected: &RelBinding,
+    ) -> Result<Self, String> {
+        if bytes.get(..8) != Some(b"RLRF\x02\x00\x00\x00") {
+            return Err("bad relational frame magic/version".into());
         }
-        if u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) != 1 {
-            return Err("unsupported relational frame version".into());
-        }
-        let captured = if take(&mut c, 1)?[0] != 0 {
-            let seq = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
-            let abs = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
-            let payload = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
-            let version = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
-            if payload as usize >= max_vocab {
-                return Err("relational frame payload outside the vocabulary".into());
-            }
-            Some(CapturedPayload {
-                seq,
-                abs,
-                payload,
-                version,
-            })
-        } else {
-            None
-        };
-        let mut fields = [None; 3];
-        for f in fields.iter_mut() {
-            if take(&mut c, 1)?[0] != 0 {
-                let v = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
-                if v as usize >= max_vocab {
-                    return Err("relational frame token outside the vocabulary".into());
-                }
-                *f = Some(v);
-            }
-        }
-        let hops = take(&mut c, 1)?[0];
-        let n = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap()) as usize;
-        if n.checked_mul(4).ok_or("emissions overflow")? > bytes.len().saturating_sub(c) {
-            return Err("truncated relational emissions".into());
-        }
-        let mut emitted = Vec::with_capacity(n);
-        for _ in 0..n {
-            let t = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
-            if t as usize >= max_vocab {
-                return Err("relational emission outside the vocabulary".into());
-            }
-            emitted.push(t);
-        }
-        let decode = |b: u8| -> Result<Option<RelAction>, String> {
-            Ok(match b {
-                0 => None,
-                1 => Some(RelAction::Read),
-                2 => Some(RelAction::Continue),
-                3 => Some(RelAction::Emit),
-                4 => Some(RelAction::Stop),
-                5 => Some(RelAction::Unresolved),
-                6 => Some(RelAction::Exhausted),
-                _ => return Err("invalid relational action tag".into()),
-            })
-        };
-        let pending = decode(take(&mut c, 1)?[0])?;
-        let terminal = decode(take(&mut c, 1)?[0])?;
-        if c != bytes.len() {
-            return Err("trailing bytes in the relational frame".into());
-        }
-        if captured.is_some() && terminal.is_some() && pending.is_some() {
-            return Err("terminal relational frame still has a pending action".into());
-        }
-        Ok(RelFrame {
-            captured,
-            relation: fields[0],
-            entity: fields[1],
-            retained: fields[2],
-            hops,
-            emitted,
-            pending,
-            terminal,
-        })
+        let frame: Self = serde_json::from_slice(&bytes[8..]).map_err(|e| e.to_string())?;
+        frame.validate(max_vocab, expected)?;
+        Ok(frame)
     }
 }
 
@@ -530,7 +506,7 @@ fn majority(values: &[u32]) -> Option<u32> {
 
 /// A candidate as the ranker sees it: exact identity and observed content are separate from the
 /// learned compatibility score.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Candidate {
     pub role: u32,
     pub key: u32,
@@ -608,7 +584,7 @@ pub fn learn_relational_model(
         role_code,
         follow,
         weights: [1, 1, 0, 0],
-        continue_policy: [false, true],
+        continue_policy: [false, false],
         categorical_table: vec![[0u8; 8]; n_rel],
     };
     // Supervision: the observed role for each relation is compatible; the others are not.
@@ -701,14 +677,17 @@ pub fn learn_relational_model(
     // Learned continuation decision over `content is a key of the world`.
     let mut decisions: BTreeMap<bool, BTreeMap<bool, usize>> = BTreeMap::new();
     for e in examples {
-        let content_is_key = e.depth >= 2;
+        let content_is_key = e.content_is_entity;
         *decisions
             .entry(content_is_key)
             .or_default()
             .entry(e.depth >= 2)
             .or_default() += 1;
     }
-    let policy_initial = model.continue_policy.iter().filter(|v| **v).count();
+    let policy_initial = examples
+        .iter()
+        .filter(|e| model.should_continue(e.content_is_entity) == (e.depth >= 2))
+        .count();
     for (feature, counts) in decisions.iter() {
         if let Some((decision, _)) = counts.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))) {
             model.continue_policy[usize::from(*feature)] = *decision;
@@ -716,7 +695,7 @@ pub fn learn_relational_model(
     }
     let policy_final = examples
         .iter()
-        .filter(|e| model.should_continue(e.depth >= 2) == (e.depth >= 2))
+        .filter(|e| model.should_continue(e.content_is_entity) == (e.depth >= 2))
         .count();
     let report = RelFitReport {
         examples: examples.len(),
@@ -747,6 +726,7 @@ mod tests {
             second_role: role + 1,
             second_value: value + 100,
             depth,
+            content_is_entity: value < 40,
         }
     }
 
@@ -840,24 +820,66 @@ mod tests {
         let mut bad = m.to_bytes();
         bad.truncate(bad.len() - 1);
         assert!(RelationalModel::from_bytes(&bad, 4096).is_err());
-        let mut frame = RelFrame::start(200, 10);
-        frame.capture(CapturedPayload {
+        let binding = RelBinding {
+            world_namespace: 1,
+            ..RelBinding::default()
+        };
+        let mut frame = RelFrame::start(200, 10, binding);
+        let origin = CapturedPayload {
             seq: 1,
             abs: 4,
             payload: 11,
             version: 7,
-        });
-        frame.advance_relation(201);
-        frame.emit().unwrap();
-        frame.stop(RelAction::Stop);
-        let back = RelFrame::from_bytes(&frame.to_bytes(), 4096).unwrap();
+        };
+        frame.capture(origin).unwrap();
+        let bytes = frame.to_bytes().unwrap();
+        let mut back = RelFrame::from_bytes(&bytes, 4096, &binding).unwrap();
         assert_eq!(back, frame);
-        assert!(back.origin_is_live(Some(11)));
-        assert!(!back.origin_is_live(Some(99)));
-        // An owned payload stays usable even when its origin no longer resolves.
+        assert!(back.origin_is_live(Some(origin)));
+        assert!(!back.origin_is_live(Some(CapturedPayload {
+            version: 8,
+            ..origin
+        })));
+        assert!(!back.origin_is_live(Some(CapturedPayload { seq: 2, ..origin })));
         assert_eq!(back.retained, Some(11));
-        let mut bad = frame.to_bytes();
-        bad[4] = 9;
-        assert!(RelFrame::from_bytes(&bad, 4096).is_err());
+        back.pending = Some(RelAction::Emit);
+        assert_eq!(back.emit(), Ok(11));
+        assert!(back.capture(origin).is_err());
+        let other = RelBinding {
+            world_namespace: 2,
+            ..binding
+        };
+        assert!(RelFrame::from_bytes(&bytes, 4096, &other).is_err());
+        let mut malformed = frame.clone();
+        malformed.captured = None;
+        malformed.retained = None;
+        malformed.hops = 0;
+        malformed.terminal = Some(RelAction::Stop);
+        assert!(RelFrame::from_bytes(&malformed.to_bytes().unwrap(), 4096, &binding).is_err());
+        // Clearing the pending phase still cannot make an empty Stop a completed answer.
+        malformed.pending = None;
+        assert!(RelFrame::from_bytes(&malformed.to_bytes().unwrap(), 4096, &binding).is_err());
+    }
+
+    #[test]
+    fn group_identity_and_cyclic_zero_have_their_actual_meaning() {
+        let (mut m, _) = learn_relational_model(&dev(), false, false);
+        m.relation_code[0] = 7;
+        m.role_code[0] = 7;
+        assert_eq!(m.relative(200, 300), Some(group_table().identity as usize));
+        assert_eq!(m.relation_matches(200, 300), 1);
+        m.cyclic = true;
+        assert_eq!(m.relative(200, 300), Some(0));
+        assert_eq!(m.relation_matches(200, 300), 1);
+    }
+
+    #[test]
+    fn policy_features_are_not_reconstructed_from_action_labels() {
+        let mut ex = dev();
+        // A conflicting observation must remain visible instead of being rewritten from its label.
+        ex[0].content_is_entity = false;
+        let (_, report) = learn_relational_model(&ex, false, false);
+        assert_eq!(report.policy_initial, 4);
+        assert_eq!(report.policy_final, 7);
     }
 }
