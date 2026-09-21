@@ -7000,6 +7000,7 @@ struct CeItem {
     pair_id: usize,
     #[allow(dead_code)]
     member: usize,
+    expected_payload_abs: u32,
 }
 
 struct CePairSpec {
@@ -7084,6 +7085,8 @@ struct CePos {
     decisive: bool,
     absent: bool,
     target_margin: i32,
+    correct_source: bool,
+    correct_value: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -7094,16 +7097,20 @@ fn ce_extract(
     table: &ExactGroupTable,
     sel: &RelationalSelector,
     items: &[CeItem],
-) -> (Vec<CePos>, Vec<CeExample>, Vec<usize>) {
+) -> Result<(Vec<CePos>, Vec<CeExample>, Vec<usize>), String> {
     let mut positions = Vec::new();
     let mut examples = Vec::new();
     let mut pair_ids = Vec::new();
     for item in items.iter() {
+        if item.seq.tokens.len() < 4 {
+            return Err("contextual item lacks a complete query".into());
+        }
         let obs = observe_full(&item.seq);
         let want = item.seq.tokens.len() - 2;
-        let Some(o) = obs.iter().find(|o| o.ring.written() as usize == want) else {
-            continue;
-        };
+        let o = obs
+            .iter()
+            .find(|o| o.ring.written() as usize == want)
+            .ok_or("contextual decision point is missing")?;
         let z = local_logits(
             parent,
             local,
@@ -7113,11 +7120,10 @@ fn ce_extract(
             o.prev2,
             o.ring.written(),
         );
-        let rel = rels_for(sel, o, table, false);
-        let (r, payload, read) = match sel.choose_scored(&o.cands, &rel) {
-            Some((k, _)) => (rel[k], o.cands[k].payload, true),
-            None => (0usize, 0u32, false),
-        };
+        let selected = read_step(&o.ring, o.cur, o.prev, o.prev2, sel, table, true, &z);
+        let r = selected.rel;
+        let payload = selected.payload.unwrap_or(0);
+        let read = selected.action.is_some();
         let q0 = local.query_state(o.cur).min(u.len() - 1);
         let absent = !o.cands.iter().any(|c| c.payload == item.seq.answer);
         let t = (item.seq.answer as usize).min(z.len() - 1);
@@ -7138,6 +7144,8 @@ fn ce_extract(
             decisive: argmax_low(&z) as u32 != item.seq.answer,
             absent,
             target_margin: z[t] - best_other,
+            correct_source: selected.payload_abs == Some(item.expected_payload_abs),
+            correct_value: selected.payload == Some(item.value),
         });
         examples.push(CeExample {
             z_local: z,
@@ -7149,7 +7157,7 @@ fn ce_extract(
         });
         pair_ids.push(item.pair_id);
     }
-    (positions, examples, pair_ids)
+    Ok((positions, examples, pair_ids))
 }
 
 fn ce_logits(
@@ -7160,20 +7168,8 @@ fn ce_logits(
     rows: &[usize],
 ) -> Vec<i32> {
     let q1 = ex.q1(params, cyclic);
-    let d = res.delta(ex.q0, q1);
     let mut z = ex.z_local.clone();
-    if d.iter().any(|v| *v != 0) {
-        let scale = 1i64 << res.shift.min(20);
-        for &o in rows {
-            let mut acc = 0i64;
-            for j in 0..CE_WIDTH {
-                acc += i64::from(res.w[o][j]) * i64::from(d[j]);
-            }
-            z[o] = z[o].saturating_add(
-                (acc * scale).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
-            );
-        }
-    }
+    res.add_to_logits(ex.q0, q1, rows, &mut z);
     z
 }
 
@@ -7359,19 +7355,7 @@ fn ce_predict(
             };
         }
     }
-    if q1 != q0 {
-        let d = res.delta(q0, q1);
-        if d.iter().any(|v| *v != 0) {
-            let scale = 1i64 << res.shift.min(20);
-            for &o in rows {
-                let mut acc = 0i64;
-                for j in 0..CE_WIDTH {
-                    acc += i64::from(res.w[o][j]) * i64::from(d[j]);
-                }
-                z[o] = z[o].saturating_add((acc * scale) as i32);
-            }
-        }
-    }
+    res.add_to_logits(q0, q1, rows, &mut z);
     (z, r, q0, q1)
 }
 
@@ -7514,6 +7498,7 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
                     out: out_bank[vi],
                     pair_id: pid,
                     member,
+                    expected_payload_abs: (3 * spec.pos + 2) as u32,
                 });
             }
         }
@@ -7524,18 +7509,19 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
     let items_fresh = materialize(&specs_fresh);
 
     let parent_root = PathBuf::from(PARENT_ROOT);
-    let sel = RelationalArtifact::from_bytes(
-        &std::fs::read(parent_root.join("artifacts/relational_ctx.rlr2"))
-            .map_err(|e| format!("parent artifact: {e}"))?,
-        &sha256_bytes(&sb),
-        &raw_tok,
-    )?
-    .selector;
+    let selector_bytes = std::fs::read(parent_root.join("artifacts/relational_ctx.rlr2"))
+        .map_err(|e| format!("parent artifact: {e}"))?;
+    let selector_sha256 = sha256_hex(&selector_bytes);
+    if selector_sha256 != PARENT_SHA_RELATIONAL_CTX {
+        return Err("contextual selector hash mismatch".into());
+    }
+    let sel =
+        RelationalArtifact::from_bytes(&selector_bytes, &sha256_bytes(&sb), &raw_tok)?.selector;
 
-    let (dev_pos, dev_ex, dev_pairs) = ce_extract(&parent, &local, &u, &table, &sel, &items_dev);
-    let (tune_pos, tune_ex, _) = ce_extract(&parent, &local, &u, &table, &sel, &items_tune);
+    let (dev_pos, dev_ex, dev_pairs) = ce_extract(&parent, &local, &u, &table, &sel, &items_dev)?;
+    let (tune_pos, tune_ex, _) = ce_extract(&parent, &local, &u, &table, &sel, &items_tune)?;
     let (fresh_pos, fresh_ex, fresh_pairs) =
-        ce_extract(&parent, &local, &u, &table, &sel, &items_fresh);
+        ce_extract(&parent, &local, &u, &table, &sel, &items_fresh)?;
 
     let absent_ok = dev_pos
         .iter()
@@ -7556,6 +7542,35 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         .values()
         .filter(|v| v.len() == 2 && dev_pos[v[0]].z_local == dev_pos[v[1]].z_local)
         .count();
+    if dev_pos.len() != items_dev.len()
+        || tune_pos.len() != items_tune.len()
+        || fresh_pos.len() != items_fresh.len()
+    {
+        return Err("contextual extraction lost a declared position".into());
+    }
+    for (items, positions) in [
+        (&items_dev, &dev_pos),
+        (&items_tune, &tune_pos),
+        (&items_fresh, &fresh_pos),
+    ] {
+        for (pair, p) in items.chunks_exact(2).zip(positions.chunks_exact(2)) {
+            let end = pair[0].seq.tokens.len() - 1;
+            let differences: Vec<usize> = pair[0].seq.tokens[..end]
+                .iter()
+                .zip(&pair[1].seq.tokens[..end])
+                .enumerate()
+                .filter_map(|(i, (x, y))| (x != y).then_some(i))
+                .collect();
+            if differences != vec![pair[0].expected_payload_abs as usize]
+                || pair[0].out == pair[1].out
+                || p[0].z_local != p[1].z_local
+                || !p.iter().all(|x| x.absent && x.decisive)
+                || pair.iter().any(|it| it.seq.tokens[..end].contains(&it.out))
+            {
+                return Err("contextual paired instrument is invalid".into());
+            }
+        }
+    }
     let row_hits = dev_pos
         .iter()
         .filter(|p| {
@@ -7604,22 +7619,36 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         String,
     > {
         let params0 = base_params.clone();
-        let res0 = EmissionResidual::seeded(parent.cfg.vocab, 0x51E5_0000 ^ u64::from(cyclic));
-        let (w_f, nll_initial, nll_float) =
-            train_output_map(&dev_ex, &params0, &res0, cyclic, CE_EPOCHS, CE_LR);
+        let mut res0 = EmissionResidual::seeded(parent.cfg.vocab, 0x51E5_0000);
+        res0.shift = shift;
+        let (w_f, nll_initial, nll_float) = train_output_map(
+            &dev_ex,
+            &params0,
+            &res0,
+            cyclic,
+            CE_EPOCHS,
+            CE_LR,
+            parent.cfg.f_bits,
+        );
         let (w_q, rows) = ce_quantize_sparse(&w_f, CE_MAX_W_ROWS);
         let mut res = res0.clone();
         res.w = w_q;
         res.shift = shift;
-        let nll_quantized = served_nll_bits(&dev_ex, &params0, &res, cyclic, &rows);
+        let nll_quantized =
+            served_nll_bits(&dev_ex, &params0, &res, cyclic, &rows, parent.cfg.f_bits);
         let flips = refine_ternary_map(&dev_ex, &params0, &mut res, cyclic, &rows, 5);
-        let nll_refined = served_nll_bits(&dev_ex, &params0, &res, cyclic, &rows);
+        let nll_refined =
+            served_nll_bits(&dev_ex, &params0, &res, cyclic, &rows, parent.cfg.f_bits);
         let (params, accepted) = ce_search_maps(&dev_ex, &params0, &res, cyclic, &rows, 4);
-        let nll_final = served_nll_bits(&dev_ex, &params, &res, cyclic, &rows);
+        let nll_final = served_nll_bits(&dev_ex, &params, &res, cyclic, &rows, parent.cfg.f_bits);
         let report = json!({
             "algebra": if cyclic { "cyclic_c120" } else { "signed_h4" },
             "shift": shift,
+            "f_bits": parent.cfg.f_bits,
+            "loss_units": "bits after fixed-point normalization",
             "output_rows": rows.len(),
+            "embedding_seed": 0x51E5_0000u64,
+            "coefficient_storage": "one byte per ternary coefficient in RLCE; not bit-packed",
             "nonzero_coefficients": rows.iter().map(|o| res.w[*o].iter().filter(|v| **v != 0).count()).sum::<usize>(),
             "residual_range_bound": res.range_bound(),
             "nll_bits": {
@@ -7637,6 +7666,102 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
     };
     let (h4_rep, h4_params, h4_res, h4_rows) = learn(false)?;
     let (c120_rep, c120_params, c120_res, c120_rows) = learn(true)?;
+
+    // Serialize and independently load before any reported prediction. The sparse row set is
+    // recovered from the loaded artifact. A full predictor comparison fails closed on mismatch.
+    let reload = |name: &str,
+                  params: ReadConditionedParams,
+                  res: EmissionResidual,
+                  rows: Vec<usize>,
+                  cyclic: bool|
+     -> Result<
+        (
+            ReadConditionedParams,
+            EmissionResidual,
+            Vec<usize>,
+            serde_json::Value,
+        ),
+        String,
+    > {
+        let pbytes = params.to_bytes();
+        let rbytes = res.to_bytes();
+        let pp = format!("artifacts/{name}.rlrc");
+        let rp = format!("artifacts/{name}.rlce");
+        write_checked(&root, &pp, &pbytes)?;
+        write_checked(&root, &rp, &rbytes)?;
+        let loaded_p = ReadConditionedParams::from_bytes(
+            &std::fs::read(root.join(&pp)).map_err(|e| e.to_string())?,
+        )?;
+        let loaded_r = EmissionResidual::from_bytes(
+            &std::fs::read(root.join(&rp)).map_err(|e| e.to_string())?,
+            parent.cfg.vocab,
+        )?;
+        if params != loaded_p || res != loaded_r || loaded_r.w.len() != parent.cfg.vocab {
+            return Err("contextual independent artifact load mismatch".into());
+        }
+        let loaded_rows = loaded_r.active_rows();
+        let mut parity_positions = 0usize;
+        for it in items_dev.iter().chain(&items_tune).chain(&items_fresh) {
+            let prefix = &it.seq.tokens[..it.seq.tokens.len() - 1];
+            let ring = ring_before_current(prefix);
+            let i = prefix.len() - 1;
+            let before = ce_predict(
+                &ring,
+                prefix[i],
+                prefix[i - 1] as usize,
+                prefix[i - 2],
+                &sel,
+                &table,
+                &parent,
+                &local,
+                &u,
+                &params,
+                &res,
+                &rows,
+                cyclic,
+                true,
+                true,
+            );
+            let after = ce_predict(
+                &ring,
+                prefix[i],
+                prefix[i - 1] as usize,
+                prefix[i - 2],
+                &sel,
+                &table,
+                &parent,
+                &local,
+                &u,
+                &loaded_p,
+                &loaded_r,
+                &loaded_rows,
+                cyclic,
+                true,
+                true,
+            );
+            if before != after {
+                return Err("contextual loaded predictor parity failure".into());
+            }
+            parity_positions += 1;
+        }
+        let receipt = json!({"arm": name, "params_sha256": sha256_hex(&pbytes), "residual_sha256": sha256_hex(&rbytes),
+            "params_reload_identical": true, "residual_reload_identical": true,
+            "loaded_full_predictor_parity_positions": parity_positions, "loaded_objects_used_for_evaluation_and_generation": true,
+            "algebra": if cyclic {"cyclic_c120"} else {"signed_h4"}, "f_bits": parent.cfg.f_bits,
+            "selector_sha256": selector_sha256, "group_digest": group_digest});
+        Ok((loaded_p, loaded_r, loaded_rows, receipt))
+    };
+    let (h4_params, h4_res, h4_rows, h4_artifact) =
+        reload("h4_emission", h4_params, h4_res, h4_rows, false)?;
+    let (c120_params, c120_res, c120_rows, c120_artifact) = reload(
+        "cyclic_c120_emission",
+        c120_params,
+        c120_res,
+        c120_rows,
+        true,
+    )?;
+    let artifacts = vec![h4_artifact, c120_artifact];
+    let artifact_ok = true;
 
     let eval_arm = |params: &ReadConditionedParams,
                     res: &EmissionResidual,
@@ -7818,8 +7943,8 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         };
         let (fa, ra, ua) = first(a)?;
         let (fb, rb, ub) = first(b)?;
-        let za = ce_extract(&parent, &local, &u, &table, &sel, std::slice::from_ref(a)).0;
-        let zb = ce_extract(&parent, &local, &u, &table, &sel, std::slice::from_ref(b)).0;
+        let za = ce_extract(&parent, &local, &u, &table, &sel, std::slice::from_ref(a))?.0;
+        let zb = ce_extract(&parent, &local, &u, &table, &sel, std::slice::from_ref(b))?.0;
         pair_rows.push(json!({
             "pair": spec_idx,
             "value_a": a.value, "answer_a": a.out, "emitted_a": fa, "correct_a": fa == a.out, "read_a": ra, "updated_a": ua,
@@ -7867,32 +7992,8 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         }));
     }
 
-    let mut artifacts: Vec<serde_json::Value> = Vec::new();
-    for (name, params, res) in [
-        ("h4_emission", &h4_params, &h4_res),
-        ("cyclic_c120_emission", &c120_params, &c120_res),
-    ] {
-        let pbytes = params.to_bytes();
-        let rbytes = res.to_bytes();
-        write_checked(&root, &format!("artifacts/{name}.rlrc"), &pbytes)?;
-        write_checked(&root, &format!("artifacts/{name}.rlce"), &rbytes)?;
-        let p_ok = ReadConditionedParams::from_bytes(&pbytes)
-            .map(|x| x == *params)
-            .unwrap_or(false);
-        let r_ok = EmissionResidual::from_bytes(&rbytes, parent.cfg.vocab)
-            .map(|x| x == *res)
-            .unwrap_or(false);
-        artifacts.push(json!({
-            "arm": name, "params_sha256": sha256_hex(&pbytes), "residual_sha256": sha256_hex(&rbytes),
-            "params_reload_identical": p_ok, "residual_reload_identical": r_ok,
-        }));
-    }
-    let artifact_ok = artifacts.iter().all(|a| {
-        a["params_reload_identical"] == json!(true) && a["residual_reload_identical"] == json!(true)
-    });
-
     let result = json!({
-        "schema": "uor-r4.contextual-emission/1",
+        "schema": "uor-r4.contextual-emission/2",
         "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
         "running_source": {
             "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
@@ -7900,7 +8001,7 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
             "executable_sha256": executable_sha256,
             "source_files": source_files,
         },
-        "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA, "group_digest": group_digest},
+        "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA, "group_digest": group_digest, "selector_sha256": selector_sha256, "f_bits": parent.cfg.f_bits},
         "instrument": {
             "design": "paired prefixes identical in query role/key, recent suffix, relevant-block position, distractor roles/values/order; only the relevant source block's value changes",
             "answer": "learned output class of the selected value, from a bank disjoint from every prefix token and every admitted payload",
@@ -7909,7 +8010,12 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         },
         "validity": {
             "dev_positions": dev_pos.len(), "absent_targets_held": absent_ok,
-            "decisive_local_positions": decisive, "source_selected": reads,
+            "decisive_local_positions": decisive, "any_read": reads,
+            "source_selection_by_split": [
+                {"split": "dev", "positions": dev_pos.len(), "correct_occurrence": dev_pos.iter().filter(|p| p.correct_source).count(), "correct_value": dev_pos.iter().filter(|p| p.correct_value).count()},
+                {"split": "tune", "positions": tune_pos.len(), "correct_occurrence": tune_pos.iter().filter(|p| p.correct_source).count(), "correct_value": tune_pos.iter().filter(|p| p.correct_value).count()},
+                {"split": "reused_acceptance", "positions": fresh_pos.len(), "correct_occurrence": fresh_pos.iter().filter(|p| p.correct_source).count(), "correct_value": fresh_pos.iter().filter(|p| p.correct_value).count()},
+            ],
             "pairs_with_identical_local_logits": identical_local,
             "max_target_deficit_units": deficit, "declared_shift": shift,
         },
@@ -7925,7 +8031,7 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         "generated": gen_rows,
         "artifacts": artifacts,
         "artifact_reload_all_ok": artifact_ok,
-        "scope": "bounded authored context-required instrument; not general language or reasoning. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "scope": "bounded authored context-required instrument; not general language or reasoning. Fixed seeds are now reused development populations; a new held-out result requires separately frozen new data. Schema1 loss/optimizer receipts remain historical, not normalized CE or convergence evidence. Energy UNAVAILABLE; whole-path D0-b not claimed.",
         "elapsed_s": started.elapsed().as_secs_f64(),
     });
     write_json(&root, "result.json", &result)?;

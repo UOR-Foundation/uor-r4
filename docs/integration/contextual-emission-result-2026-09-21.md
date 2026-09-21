@@ -1,4 +1,6 @@
-# Contextual emission: a real but weak uncopied transformation, limited by readout capacity
+# Contextual emission: historical submitted result with principal corrections
+
+> **Principal correction, PR #1335:** the text below records the submitted design/report, not the current verdict. [The principal review](contextual-emission-review-2026-09-21.md) withdraws the capacity-only, optimizer-converged, adequate-range, perfect-source and calibrated-NLL claims. The population called fresh was exposed in attempt 1 before later design changes. Retain reported hit counts as historical aggregates, not independently reconstructed rows or an isolated geometry advantage. Next is [consistent same-width learning](deepseek-consistent-emission-step-2026-09-21.md), not an automatic capacity increase.
 
 September 21, 2026. Executed from reviewed parent `cfc5f7b6` (PR #1334). Prospective
 [design](contextual-emission-design-2026-09-21.md); [principal review](read-conditioned-review-2026-09-21.md);
