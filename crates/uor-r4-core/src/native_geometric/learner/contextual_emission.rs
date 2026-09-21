@@ -262,6 +262,17 @@ pub fn train_output_map(
         })
         .collect();
     let mut w = vec![[0.0f32; CE_WIDTH]; vocab];
+    // Train the **deployed** map: the forward pass uses the ternary weights that serving executes,
+    // while the gradient is passed straight through to the latent float weights.
+    let tern = |v: f32| -> f64 {
+        if v > 0.0 {
+            1.0
+        } else if v < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }
+    };
     let nll = |w: &[[f32; CE_WIDTH]]| -> f64 {
         let mut total = 0.0f64;
         for (ex, f) in examples.iter().zip(feats.iter()) {
@@ -271,7 +282,7 @@ pub fn train_output_map(
             for o in 0..vocab {
                 let mut s = 0.0f64;
                 for j in 0..CE_WIDTH {
-                    s += f64::from(w[o][j]) * f64::from(f[j]);
+                    s += tern(w[o][j]) * f64::from(f[j]);
                 }
                 logits[o] = ex.z_local[o] as f64 * logit_unit + s;
                 max = max.max(logits[o]);
@@ -294,7 +305,7 @@ pub fn train_output_map(
             for o in 0..vocab {
                 let mut s = 0.0f64;
                 for j in 0..CE_WIDTH {
-                    s += f64::from(w[o][j]) * f64::from(f[j]);
+                    s += tern(w[o][j]) * f64::from(f[j]);
                 }
                 logits[o] = ex.z_local[o] as f64 * logit_unit + s;
                 max = max.max(logits[o]);

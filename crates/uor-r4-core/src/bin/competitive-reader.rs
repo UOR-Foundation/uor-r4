@@ -6986,9 +6986,10 @@ const CE_N_DEV: usize = 90;
 const CE_N_TUNE: usize = 60;
 const CE_N_FRESH: usize = 60;
 const CE_DISTRACTORS: usize = 3;
-const CE_SEED_DEV: u64 = 0xC0F0_0001;
-const CE_SEED_TUNE: u64 = 0xC0F0_0002;
-const CE_SEED_FRESH: u64 = 0xC0F0_0003;
+const CE_SEED_DEV: u64 = 0xC0F0_0011;
+const CE_SEED_TUNE: u64 = 0xC0F0_0012;
+/// Untouched final draw: seeds 0xC0F00001..03 are the exposed regression populations.
+const CE_SEED_FINAL: u64 = 0xC0F0_0021;
 const CE_MAX_W_ROWS: usize = 64;
 const CE_EPOCHS: usize = 600;
 const CE_LR: f64 = 1.0;
@@ -7222,6 +7223,43 @@ fn ce_hits(
         .count()
 }
 
+/// Incompatible-output collisions: for the same `(q0, relation)`, distinct payloads that must
+/// produce different targets but share the same value state collapse the update. This is the
+/// diagnosed information loss, and it is a property of the value map, not of readout width.
+fn ce_collisions(examples: &[CeExample], params: &ReadConditionedParams) -> usize {
+    let mut m: std::collections::BTreeMap<(usize, usize), Vec<(u32, u32)>> =
+        std::collections::BTreeMap::new();
+    for ex in examples.iter().filter(|e| e.read) {
+        m.entry((ex.q0, ex.r % GROUP_ORDER))
+            .or_default()
+            .push((ex.payload, ex.target));
+    }
+    let mut c = 0usize;
+    for v in m.values() {
+        for i in 0..v.len() {
+            for j in (i + 1)..v.len() {
+                if v[i].1 != v[j].1 && params.value_state(v[i].0) == params.value_state(v[j].0) {
+                    c += 1;
+                }
+            }
+        }
+    }
+    c
+}
+
+/// The map-search objective: mean margin with a hard penalty on incompatible-output collisions, so
+/// the search cannot buy margin by merging value distinctions the task requires.
+fn ce_objective(
+    examples: &[CeExample],
+    params: &ReadConditionedParams,
+    res: &EmissionResidual,
+    cyclic: bool,
+    rows: &[usize],
+) -> f64 {
+    ce_mean_margin(examples, params, res, cyclic, rows)
+        - 1.0e6 * ce_collisions(examples, params) as f64
+}
+
 /// Discrete search over the transport and value maps on the mean-margin objective (strict gains).
 fn ce_search_maps(
     examples: &[CeExample],
@@ -7232,7 +7270,7 @@ fn ce_search_maps(
     passes: usize,
 ) -> (ReadConditionedParams, usize) {
     let mut p = params.clone();
-    let mut best = ce_mean_margin(examples, &p, res, cyclic, rows);
+    let mut best = ce_objective(examples, &p, res, cyclic, rows);
     let mut accepted = 0usize;
     let relations: Vec<usize> = {
         let mut v: Vec<usize> = examples
@@ -7252,7 +7290,7 @@ fn ce_search_maps(
             let mut local_val = saved;
             for cand in 0..GROUP_ORDER {
                 p.transport[*r] = cand as u8;
-                let m = ce_mean_margin(examples, &p, res, cyclic, rows);
+                let m = ce_objective(examples, &p, res, cyclic, rows);
                 if m > local_best + 1e-9 {
                     local_best = m;
                     local_val = cand as u8;
@@ -7271,7 +7309,7 @@ fn ce_search_maps(
             let mut local_val = saved;
             for cand in 0..GROUP_ORDER {
                 p.value_code[i] = cand as u8;
-                let m = ce_mean_margin(examples, &p, res, cyclic, rows);
+                let m = ce_objective(examples, &p, res, cyclic, rows);
                 if m > local_best + 1e-9 {
                     local_best = m;
                     local_val = cand as u8;
@@ -7454,7 +7492,7 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
     let values: Vec<u32> = banks.values_fit.iter().copied().take(8).collect();
     let specs_dev = make_ce_specs(&banks, CE_N_DEV, CE_SEED_DEV, &values);
     let specs_tune = make_ce_specs(&banks, CE_N_TUNE, CE_SEED_TUNE, &values);
-    let specs_fresh = make_ce_specs(&banks, CE_N_FRESH, CE_SEED_FRESH, &values);
+    let specs_fresh = make_ce_specs(&banks, CE_N_FRESH, CE_SEED_FINAL, &values);
     let mut used: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     for spec in specs_dev
         .iter()
@@ -7519,7 +7557,8 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         RelationalArtifact::from_bytes(&selector_bytes, &sha256_bytes(&sb), &raw_tok)?.selector;
 
     let (dev_pos, dev_ex, dev_pairs) = ce_extract(&parent, &local, &u, &table, &sel, &items_dev)?;
-    let (tune_pos, tune_ex, _) = ce_extract(&parent, &local, &u, &table, &sel, &items_tune)?;
+    let (tune_pos, tune_ex, tune_pairs) =
+        ce_extract(&parent, &local, &u, &table, &sel, &items_tune)?;
     let (fresh_pos, fresh_ex, fresh_pairs) =
         ce_extract(&parent, &local, &u, &table, &sel, &items_fresh)?;
 
@@ -7657,6 +7696,9 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
                 "served_after_discrete_refinement": nll_refined,
                 "served_final": nll_final,
             },
+            "collisions_dev_before": ce_collisions(&dev_ex, &params0),
+            "collisions_dev_after": ce_collisions(&dev_ex, &params),
+            "collisions_final_after": ce_collisions(&fresh_ex, &params),
             "accepted_ternary_flips": flips,
             "accepted_map_changes": accepted,
             "dev_hits": ce_hits(&dev_ex, &params, &res, cyclic, &rows),
@@ -7992,6 +8034,139 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         }));
     }
 
+    // Required controls: a development-fitted constant and a categorical selected-value emitter that
+    // uses only the observed selected payload (no intended value reaches serving).
+    let mut const_counts: std::collections::BTreeMap<u32, usize> =
+        std::collections::BTreeMap::new();
+    let mut cat_counts: std::collections::BTreeMap<u32, std::collections::BTreeMap<u32, usize>> =
+        std::collections::BTreeMap::new();
+    for p in dev_pos.iter() {
+        *const_counts.entry(p.target).or_default() += 1;
+        *cat_counts
+            .entry(p.payload)
+            .or_default()
+            .entry(p.target)
+            .or_default() += 1;
+    }
+    let const_target = const_counts
+        .iter()
+        .max_by_key(|(_, c)| **c)
+        .map(|(t, _)| *t)
+        .unwrap_or(0);
+    let cat_table: std::collections::BTreeMap<u32, u32> = cat_counts
+        .iter()
+        .map(|(payload, m)| {
+            (
+                *payload,
+                m.iter()
+                    .max_by_key(|(_, c)| **c)
+                    .map(|(t, _)| *t)
+                    .unwrap_or(const_target),
+            )
+        })
+        .collect();
+    let count_hits =
+        |poss: &[CePos], ids: &[usize], f: &dyn Fn(&CePos) -> u32| -> (usize, Vec<(usize, bool)>) {
+            let mut hits = 0usize;
+            let mut pp = Vec::new();
+            for (p, id) in poss.iter().zip(ids.iter()) {
+                let ok = f(p) == p.target;
+                if ok {
+                    hits += 1;
+                }
+                pp.push((*id, ok));
+            }
+            (hits, pp)
+        };
+    let (const_dev, const_dp) = count_hits(&dev_pos, &dev_pairs, &|_| const_target);
+    let (const_tune, _) = count_hits(&tune_pos, &tune_pairs, &|_| const_target);
+    let (const_final, const_fp) = count_hits(&fresh_pos, &fresh_pairs, &|_| const_target);
+    let cat_of = |p: &CePos| cat_table.get(&p.payload).copied().unwrap_or(const_target);
+    let (cat_dev, cat_dp) = count_hits(&dev_pos, &dev_pairs, &cat_of);
+    let (cat_tune, _) = count_hits(&tune_pos, &tune_pairs, &cat_of);
+    let (cat_final, cat_fp) = count_hits(&fresh_pos, &fresh_pairs, &cat_of);
+    comparisons.push(json!({
+        "arm": "development_constant",
+        "dev_hits": const_dev, "dev_positions": dev_pos.len(), "dev_pairs_both_correct": both(&const_dp),
+        "tune_hits": const_tune, "tune_positions": tune_pos.len(),
+        "fresh_hits": const_final, "fresh_positions": fresh_pos.len(),
+        "fresh_pairs_both_correct": both(&const_fp),
+        "learned_target": const_target,
+    }));
+    comparisons.push(json!({
+        "arm": "categorical_selected_value",
+        "dev_hits": cat_dev, "dev_positions": dev_pos.len(), "dev_pairs_both_correct": both(&cat_dp),
+        "tune_hits": cat_tune, "tune_positions": tune_pos.len(),
+        "fresh_hits": cat_final, "fresh_positions": fresh_pos.len(),
+        "fresh_pairs_both_correct": both(&cat_fp),
+        "table_entries": cat_table.len(),
+    }));
+
+    // Reader-localization: correct exact occurrence and correct payload value, per split.
+    let source_stratum = |poss: &[CePos]| -> serde_json::Value {
+        json!({
+            "positions": poss.len(),
+            "reads": poss.iter().filter(|p| p.read).count(),
+            "correct_exact_occurrence": poss.iter().filter(|p| p.correct_source).count(),
+            "correct_payload_value": poss.iter().filter(|p| p.correct_value).count(),
+        })
+    };
+
+    // Compact row file: one line per position with the exact served references and outcomes.
+    let mut rows_text = String::new();
+    let mut push_rows = |split: &str, poss: &[CePos], items: &[CeItem]| {
+        for (i, p) in poss.iter().enumerate() {
+            let it = items.get(i);
+            rows_text.push_str(&format!(
+                "{{\"split\":\"{split}\",\"pair\":{},\"value\":{},\"target\":{},\"selected_payload\":{},\"read\":{},\"correct_exact_occurrence\":{},\"correct_payload_value\":{},\"q0\":{},\"relation\":{},\"target_margin\":{}}}\n",
+                it.map(|x| x.pair_id).unwrap_or(0), it.map(|x| x.value).unwrap_or(0), p.target, p.payload,
+                p.read, p.correct_source, p.correct_value, p.q0, p.r, p.target_margin
+            ));
+        }
+    };
+    push_rows("dev", &dev_pos, &items_dev);
+    push_rows("tune", &tune_pos, &items_tune);
+    push_rows("final", &fresh_pos, &items_fresh);
+    write_checked(&root, "rows.jsonl", rows_text.as_bytes())?;
+
+    let h4_final = comparisons
+        .iter()
+        .find(|c| c["arm"] == json!("h4_read_conditioned"))
+        .cloned()
+        .unwrap_or(json!(null));
+    let final_pairs = h4_final["fresh_pairs_both_correct"].as_u64().unwrap_or(0);
+    let final_total_pairs = (fresh_pos.len() / 2).max(1) as u64;
+    let ctrl_pairs = |name: &str| -> u64 {
+        comparisons
+            .iter()
+            .find(|c| c["arm"] == json!(name))
+            .and_then(|c| c["fresh_pairs_both_correct"].as_u64())
+            .unwrap_or(0)
+    };
+    let controls_max = [
+        "local_noread",
+        "scalar_copy_parent",
+        "development_constant",
+        "categorical_selected_value",
+        "cyclic_c120_read_conditioned",
+    ]
+    .iter()
+    .map(|n| ctrl_pairs(n))
+    .max()
+    .unwrap_or(0);
+    let fraction = final_pairs as f64 / final_total_pairs as f64;
+    let screen = json!({
+        "declared_before_final": {"minimum_both_members_correct_fraction": 0.5,
+            "must_exceed": ["local_noread", "scalar_copy_parent", "development_constant", "categorical_selected_value", "cyclic_c120_read_conditioned"]},
+        "h4_final_pairs_both_correct": final_pairs,
+        "h4_final_pairs": final_total_pairs,
+        "h4_final_fraction": fraction,
+        "best_control_pairs_both_correct": controls_max,
+        "beats_controls": final_pairs > controls_max,
+        "met": fraction >= 0.5 && final_pairs > controls_max,
+        "note": "engineering screen, not a theorem or alpha threshold; a partial mechanism below it is retained with explicit limitations",
+    });
+
     let result = json!({
         "schema": "uor-r4.contextual-emission/2",
         "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
@@ -8027,6 +8202,8 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         },
         "learning": {"h4": h4_rep, "cyclic_c120": c120_rep},
         "comparisons": comparisons,
+        "correct_source_stratum": {"dev": source_stratum(&dev_pos), "tune": source_stratum(&tune_pos), "final": source_stratum(&fresh_pos)},
+        "screen": screen,
         "changed_source_pairs_fresh": pair_rows,
         "generated": gen_rows,
         "artifacts": artifacts,

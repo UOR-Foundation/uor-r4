@@ -1488,3 +1488,41 @@ Free after checks **37507620864 bytes**; physical reserve plus
 128 MiB remains intact. Exact command/resource/source receipts:
 [principal checks](../evidence/contextual-emission-principal-checks-2026-09-21.json).
 The owner checkout remains clean at `74fef0886ca3b14ff90943c8677d6b7815064198`.
+
+## Consistent-emission step — September 21, 2026
+
+**Projection recorded before implementation and execution.** One corrected, consistently-served
+geometric contextual emitter at the existing 120-state width-16 family: ternary straight-through
+training against the deployed quantized forward, the residual shift fixed before fitting, one
+target-free reader at extraction and serving, value-code distinction preservation, loaded-artifact
+evaluation and generation, and the required controls (local, scalar-copy, ReadDisabled/UpdateDisabled
+parity, H4 vs C120, a development-fitted constant and a categorical selected-value emitter).
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **≤ 6,000,000 ms (~100 min)** | corrected learner + fit + controls + loaded generation + evidence + delivery |
+| Compiler workers | ≤ 2, `CARGO_INCREMENTAL=0` | offline Rust build, shared target |
+| Model workers | 1 | single targeted process |
+| Peak RSS | ≤ 8 GiB | existing loaders plus the 4096x16 float latent map |
+| New/temporary/retained storage | ≤ 512 MiB build, ≤ 32 MiB reports | shared target reuse, bounded row file |
+| Free space at projection | `37507620864` bytes | above the 36,766,079,385-byte reserve plus the 128 MiB stop margin |
+
+**Extension taken.** Time increment **+6,000,000 ms**; **new cumulative limit 216,900,000 ms**
+(previous 210,900,000 ms; live **208,457,254 ms** after the reconciled principal checks). Reason: a
+corrected learning contract, a fresh untouched final population and consistent loaded-artifact
+evaluation cannot be implemented, fitted, evaluated and delivered within the remaining 2,442,746 ms.
+Recorded **before** the work. No reserve reduction and no paid/external compute.
+
+**Completed charges — consistent-emission step.** Measured: two targeted passes (**44.9 s**, **45.4 s**);
+release builds **~370 s** (1 m 34 s + incremental). Estimated: context/source/literature recovery
+~**900 s**; implementation and compile/fmt/test cycles ~**1800 s**; documentation, evidence, delivery
+and knowledge ~**1200 s**. **Charge 4,400,000 ms** (measured + estimated). Live allowance after the
+prospective increment: limit **216,900,000 ms**; **new cumulative 212,857,254 ms**; remaining
+**4,042,746 ms**. `CARGO_INCREMENTAL=0`; no reserve reduction, no deletion of unique material, no
+paid/external compute. Free space checked before and after; the reserve plus the 128 MiB stop margin
+is retained.
+
+**Delivered** under the claimed, sealed and verified root
+`.uor-models/realtext-prior-2026-09-20/consistent-emission-2` (0 unlisted; `result.json`,
+`rows.jsonl` with 420 per-position rows, four artifacts, manifest). Diagnostic
+`consistent-emission-1` is retained unchanged and never reused as the delivered root.

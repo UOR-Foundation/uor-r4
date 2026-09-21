@@ -1,6 +1,18 @@
 # Current native geometric AI work
 
-## Active: consistent contextual emission before expansion
+## Active: corrected geometric contextual emitter — decisive comparator, no geometric transfer on this task
+
+**The learning contract is repaired and the emitter is consistently served; the geometry does not win.** With calibrated fixed-point units, shift fixed before fitting, ternary straight-through training, one target-free reader at extraction and serving, injective value codes and a collision-aware objective, and independent artifact reload before evaluation, the H4 emitter scores **50/180** development, **36/120** tune and **25/120** on an **untouched** final draw with **5/90** and **1/60** pairs fully correct — while a plain **eight-entry categorical selected-value table** learned from development scores **164/180, 112/120, 108/120** with **81/90** and **54/60** pairs. Reader localisation is ~90 % correct exact occurrence; the frozen-row ceiling is 0/180; local/scalar-copy/UpdateDisabled/ReadDisabled are all zero. [Result](consistent-emission-result-2026-09-21.md); [contract](consistent-emission-design-2026-09-21.md).
+
+**The declared screen (>= 50 % pairs, beating the controls) is not met, and the categorical control wins decisively.** The concrete failure is emitter expressivity on an *arbitrary per-value association*, not source selection, value-code merging, units, shift, reader inconsistency, loading, or (per the review) width.
+
+**Next:** test the geometric emitter on a task whose required output is a **composition** of the retrieved evidence — the output class determined by the *relation between* the query role and the retrieved role, or a typed derived token absent from all payloads — because an arbitrary per-value lookup is already solved by a table and cannot discriminate geometry. Width expansion remains unjustified. Generated continuations and text integration are NOT_RUN; energy UNAVAILABLE; whole-path D0-b not claimed.
+
+Delivered root `.uor-models/realtext-prior-2026-09-20/consistent-emission-2` (sealed, 0 unlisted, `rows.jsonl` 420 rows); diagnostic `consistent-emission-1` retained. Resources: [ledger](resource-ledger-2026-09-19.md).
+
+### Previous active (superseded by the section above)
+
+## Former active: consistent contextual emission before expansion
 
 **PR #1335, independently reviewed:** the new older-payload pairs support a **reported noncopy signal**, H4 35/180 development and 13/120 exposed regression, with only 1/60 regression pairs both correct. Retain that signal; withdraw the readout-capacity-only diagnosis. The submitted coordinate optimizer loses accepted incumbents, raw-score loss omits fixed-point scaling, and fit/serve residual shifts differ. Any-read counts are not source correctness; final data were exposed before selection; the learned value map aliases required distinctions and loaded-artifact behavior is unqualified. [Principal review](contextual-emission-review-2026-09-21.md); [audit](../evidence/contextual-emission-principal-review-2026-09-21.json).
 
