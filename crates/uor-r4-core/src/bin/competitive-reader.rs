@@ -10903,7 +10903,7 @@ fn st_event(arm: &str, item: &StItem, served: &StServed) -> serde_json::Value {
         "intended_payload": item.value, "intended_payload_abs": if item.instruction_start == 3 { Some(2u32) } else { None },
         "local_token": served.local_token,
         "complete": st_complete(item, &served.response),
-        "state_scope": if arm == "h4_shared_transition" || arm == "c120_shared_transition" { "actual served algebra states" } else { "not an algebra-state arm" }})
+        "state_scope": if matches!(arm, "h4_shared_transition" | "c120_shared_transition" | "grounded_factorization" | "fitted_shared_recurrence") { "actual served algebra states" } else { "not an algebra-state arm" }})
 }
 
 fn st_event_complete(event: &serde_json::Value) -> bool {
@@ -11565,6 +11565,7 @@ fn gs_serve_with<F>(
 where
     F: Fn(Option<u32>, &[u32]) -> Response,
 {
+    let primitives = st_instructions(item)?;
     let ring = ring_before_current(&item.prefix);
     let i = item.prefix.len() - 1;
     let z = local_logits(
@@ -11588,7 +11589,7 @@ where
     );
     let local_token = argmax_low(&z) as u32;
     let response = if use_reader {
-        serve(r.payload, &item.primitives)
+        serve(r.payload, primitives)
     } else {
         Response {
             tokens: Vec::new(),
@@ -11633,7 +11634,7 @@ struct GsRead {
 
 fn gs_run() -> Result<ExitCode, String> {
     let mut root = PathBuf::from(
-        "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/grounded-session-1",
+        "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/grounded-session-principal-1",
     );
     let mut source_root: Option<PathBuf> = None;
     {
@@ -11694,6 +11695,7 @@ fn gs_run() -> Result<ExitCode, String> {
         .collect(),
         None => vec![json!({"path": "unspecified", "sha256": "UNAVAILABLE"})],
     };
+    let source_checkout = ce_source_checkout(source_root.as_deref());
     let executable_sha256 = hex_of(&sha256_bytes(
         &std::env::current_exe()
             .ok()
@@ -11767,6 +11769,28 @@ fn gs_run() -> Result<ExitCode, String> {
         &std::fs::read(root.join("artifacts/finite_transition.json")).map_err(|e| e.to_string())?,
         parent.cfg.vocab,
     )?;
+    if finite_loaded != finite {
+        return Err("finite transition reload mismatch".into());
+    }
+    let fitted_bytes = fitted.to_bytes();
+    write_checked(&root, "artifacts/fitted_recurrence.rlst", &fitted_bytes)?;
+    let fitted_loaded = SharedTransitionModel::from_bytes(
+        &std::fs::read(root.join("artifacts/fitted_recurrence.rlst")).map_err(|e| e.to_string())?,
+        parent.cfg.vocab,
+    )?;
+    if fitted_loaded != fitted {
+        return Err("fitted recurrence reload mismatch".into());
+    }
+    let gf = gf_loaded;
+    let finite = finite_loaded;
+    let fitted = fitted_loaded;
+    let gf_sha = sha256_hex(&gf_bytes);
+    let loaded_artifacts = json!([
+        {"arm":"grounded_factorization","sha256":gf_sha,"serialized_bytes":gf_bytes.len(),"parameter_bytes_estimate":gf.parameter_bytes(),"actual_loaded_object_used":true},
+        {"arm":"finite_transition_control","sha256":sha256_hex(&finite_bytes),"serialized_bytes":finite_bytes.len(),"actual_loaded_object_used":true},
+        {"arm":"fitted_shared_recurrence","sha256":sha256_hex(&fitted_bytes),"serialized_bytes":fitted_bytes.len(),"actual_loaded_object_used":true,
+            "fit_scope":"new all-development refit with two restarts and GS_SEED; not the retained previous-milestone artifact"}
+    ]);
     let mut panel1: Vec<serde_json::Value> = Vec::new();
     let mut events: Vec<serde_json::Value> = Vec::new();
     for (split, items) in [
@@ -11843,7 +11867,7 @@ fn gs_run() -> Result<ExitCode, String> {
         )?;
         events.extend(fit_events);
         for (label, sc, params) in [
-            ("grounded_factorization", gf_score, gf.parameter_bytes()),
+            ("grounded_factorization", gf_score, gf_bytes.len()),
             (
                 "finite_transition_control",
                 finite_score,
@@ -11857,7 +11881,7 @@ fn gs_run() -> Result<ExitCode, String> {
         ] {
             panel1.push(json!({"arm": label, "split": split, "items": items.len(),
                 "complete": sc.0, "token_hits": sc.1, "token_total": sc.2,
-                "stopped_correctly": sc.3, "artifact_bytes": params}));
+                "stopped_correctly": sc.3, "serialized_artifact_bytes": params}));
         }
     }
 
@@ -11889,205 +11913,375 @@ fn gs_run() -> Result<ExitCode, String> {
         }
         v
     };
+    // Checkpoints bind the existing RLSF payload to the actual loaded model and its
+    // declared geometry/tokenizer. The fixed continuation location is supplied protocol.
+    let checkpoint =
+        |name: &str, stage: &str, frame: &SessionFrame| -> Result<SessionFrame, String> {
+            frame.validate(&gf)?;
+            let bytes = frame.to_bytes();
+            let rel = format!("frames/{name}.json");
+            write_json(
+                &root,
+                &rel,
+                &json!({"schema":"uor-r4.grounded-checkpoint/1","stage":stage,
+            "model_sha256":gf_sha,"group_digest":group_digest,"tokenizer_sha256":DERIVED_SHA,
+            "frame_sha256":sha256_hex(&bytes),"frame_bytes":bytes}),
+            )?;
+            let stored: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(root.join(&rel)).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+            if stored["stage"] != json!(stage)
+                || stored["model_sha256"] != json!(gf_sha)
+                || stored["group_digest"] != json!(group_digest)
+                || stored["tokenizer_sha256"] != json!(DERIVED_SHA)
+            {
+                return Err("session checkpoint binding mismatch".into());
+            }
+            let bytes: Vec<u8> =
+                serde_json::from_value(stored["frame_bytes"].clone()).map_err(|e| e.to_string())?;
+            if stored["frame_sha256"] != json!(sha256_hex(&bytes)) {
+                return Err("session checkpoint byte digest mismatch".into());
+            }
+            let restored = SessionFrame::from_bytes(&bytes, parent.cfg.vocab)?;
+            restored.validate(&gf)?;
+            Ok(restored)
+        };
+    // One shared second-stage continuation consumes the restored computed outcome.
+    // It does not receive a first source, first key or first primitive and cannot rerun hop1.
+    let continue_from_first = |ring: &OccurrenceRing,
+                               frame: &mut SessionFrame,
+                               primitive: u32,
+                               second_reader: bool,
+                               second_update: bool,
+                               pause_name: Option<&str>|
+     -> Result<serde_json::Value, String> {
+        frame.validate(&gf)?;
+        let first_snapshot = frame.lease;
+        let first_state = frame.state;
+        let first = frame.outcome;
+        let Some(query) = first else {
+            if frame.terminal.is_none() {
+                frame.stop(Terminal::NoGrounding);
+            }
+            return Ok(
+                json!({"first":first,"second_query":null,"second_payload":null,"answer":null,
+                "terminal":format!("{:?}",frame.terminal),"second_read":false,
+                "first_snapshot":first_snapshot.map(|l|[l.seq,l.abs,l.payload])}),
+            );
+        };
+        let z = local_logits(
+            &parent,
+            &local,
+            &u,
+            query,
+            role_q as usize,
+            NO_TOKEN,
+            ring.written(),
+        );
+        let read = read_step(
+            ring,
+            query,
+            role_q,
+            NO_TOKEN,
+            &sel,
+            &table,
+            second_reader,
+            &z,
+        );
+        let mut second_snapshot = None;
+        let mut answer = None;
+        if let Some(payload) = read.payload {
+            let abs = read
+                .payload_abs
+                .ok_or("second read lacks an exact payload reference")?;
+            let snapshot = SourceLease::acquire(ring, abs).map_err(|t| format!("{t:?}"))?;
+            if snapshot.payload != payload {
+                return Err("second snapshot disagrees with selected payload".into());
+            }
+            second_snapshot = Some(snapshot);
+            if second_update {
+                frame.read(snapshot, &gf).map_err(|t| format!("{t:?}"))?;
+            }
+            frame
+                .apply_primitive(primitive, &gf)
+                .map_err(|t| format!("{t:?}"))?;
+            if let Some(name) = pause_name {
+                *frame = checkpoint(
+                    &format!("{name}-after-second"),
+                    "after_second_compute_before_emit",
+                    frame,
+                )?;
+            }
+            answer = Some(frame.emit().map_err(|t| format!("{t:?}"))?);
+            frame.stop(Terminal::Exhausted);
+        } else {
+            frame.stop(Terminal::NoRead);
+        }
+        Ok(
+            json!({"first":first,"first_state":first_state,"second_query":query,
+            "second_payload":read.payload,"answer":answer,"terminal":format!("{:?}",frame.terminal),
+            "second_read":read.action.is_some(),"second_source_abs":read.payload_abs,
+            "second_key_seq_abs":read.source.map(|r|[r.seq,r.abs]),
+            "first_snapshot":first_snapshot.map(|l|[l.seq,l.abs,l.payload]),
+            "second_snapshot":second_snapshot.map(|l|[l.seq,l.abs,l.payload]),
+            "active_snapshot":frame.lease.map(|l|[l.seq,l.abs,l.payload]),
+            "second_admitted":read.admitted,"second_scanned":read.scanned,
+            "second_update_enabled":second_update,"final_state":frame.state,
+            "emitted":frame.emitted,"phase":frame.phase}),
+        )
+    };
     let chain = |evidence: &[u32],
                  key1: u32,
-                 p1: u32,
-                 p2: u32,
-                 resume: bool,
-                 use_reader: bool|
+                 primitive1: u32,
+                 primitive2: u32,
+                 reader: bool,
+                 first_update: bool,
+                 second_reader: bool,
+                 second_update: bool,
+                 pause_name: Option<&str>|
      -> Result<serde_json::Value, String> {
         let mut ring = OccurrenceRing::new(RING_CAP);
-        for t in evidence.iter() {
-            ring.observe(*t);
+        for token in evidence {
+            ring.observe(*token);
         }
-        let written = ring.written();
-        // The declared query is `(role, key)` with no declared previous context, so candidate
-        // admission is driven by the key alone. The query role is deliberately not a record role.
-        let z1 = local_logits(
+        let z = local_logits(
             &parent,
             &local,
             &u,
             key1,
             role_q as usize,
             NO_TOKEN,
-            written,
+            ring.written(),
         );
-        let r1 = read_step(&ring, key1, role_q, NO_TOKEN, &sel, &table, use_reader, &z1);
+        let read = read_step(&ring, key1, role_q, NO_TOKEN, &sel, &table, reader, &z);
         let mut frame = SessionFrame::start();
-        let first = match r1.payload {
-            Some(p) => {
-                let lease = SourceLease {
-                    seq: ring.seq(),
-                    abs: r1.payload_abs.unwrap_or(0),
-                    payload: p,
-                };
-                frame.read(lease, &gf).map_err(|t| format!("{t:?}"))?;
-                if resume {
-                    frame = SessionFrame::from_bytes(&frame.to_bytes(), parent.cfg.vocab)?;
-                }
+        let mut first_snapshot = None;
+        if let Some(payload) = read.payload {
+            let abs = read
+                .payload_abs
+                .ok_or("first read lacks an exact payload reference")?;
+            let snapshot = SourceLease::acquire(&ring, abs).map_err(|t| format!("{t:?}"))?;
+            if snapshot.payload != payload {
+                return Err("first snapshot disagrees with selected payload".into());
+            }
+            first_snapshot = Some(snapshot);
+            frame.read(snapshot, &gf).map_err(|t| format!("{t:?}"))?;
+            if first_update {
                 frame
-                    .apply_primitive(p1, &gf)
+                    .apply_primitive(primitive1, &gf)
                     .map_err(|t| format!("{t:?}"))?;
-                frame.outcome
             }
-            None => {
-                frame.stop(Terminal::NoRead);
-                None
-            }
+        } else {
+            frame.stop(Terminal::NoRead);
+        }
+        let after_first = frame.clone();
+        let mut observed = if frame.terminal.is_none() {
+            continue_from_first(
+                &ring,
+                &mut frame,
+                primitive2,
+                second_reader,
+                second_update,
+                None,
+            )?
+        } else {
+            json!({"first":null,"second_query":null,"second_payload":null,"answer":null,
+            "terminal":format!("{:?}",frame.terminal),"second_read":false,"second_source_abs":null,
+            "first_snapshot":null,"second_snapshot":null})
         };
-        let Some(y1) = first else {
+        let mut resumed_identical = None;
+        if let Some(name) = pause_name {
+            if after_first.terminal.is_none() {
+                let mut restored = checkpoint(
+                    &format!("{name}-after-first"),
+                    "after_first_compute_before_second_read",
+                    &after_first,
+                )?;
+                let resumed = continue_from_first(
+                    &ring,
+                    &mut restored,
+                    primitive2,
+                    second_reader,
+                    second_update,
+                    Some(name),
+                )?;
+                resumed_identical = Some(resumed == observed && restored == frame);
+                if resumed_identical != Some(true) {
+                    return Err(
+                        "restored continuation differs from uninterrupted continuation".into(),
+                    );
+                }
+            }
+        }
+        observed["first_read"] = json!(read.action.is_some());
+        observed["first_source_abs"] = json!(read.payload_abs);
+        observed["first_key_seq_abs"] = json!(read.source.map(|r| [r.seq, r.abs]));
+        observed["first_snapshot"] = json!(first_snapshot.map(|l| [l.seq, l.abs, l.payload]));
+        observed["first_admitted"] = json!(read.admitted);
+        observed["first_scanned"] = json!(read.scanned);
+        Ok(
+            json!({"evidence":evidence,"request":{"key":key1,"primitives":[primitive1,primitive2]},
+            "observed":observed,"resumed_identical":resumed_identical,
+            "checkpoint_prefix":pause_name,
+            "scope":"supplied fixed two-hop protocol; restored continuation begins after first computation, never rereads hop1; completion is explicit program exhaustion"}),
+        )
+    };
+    // Independent evaluator: use the declared first-transition labels, not candidate outputs.
+    // Evidence is a supplied unique-key record layout; exact positions are evaluator metadata.
+    let expected_step = |value: u32, primitive: u32| -> Result<u32, String> {
+        let targets: std::collections::BTreeSet<u32> = dev_examples
+            .iter()
+            .filter(|e| e.payload == value && e.primitives.first() == Some(&primitive))
+            .filter_map(|e| e.targets.first().copied())
+            .collect();
+        if targets.len() != 1 {
+            return Err("independent transition expectation is missing or ambiguous".into());
+        }
+        targets
+            .iter()
+            .next()
+            .copied()
+            .ok_or("missing expected transition".into())
+    };
+    let expected_chain = |evidence: &[u32], key: u32| -> Result<serde_json::Value, String> {
+        let lookup = |query: u32| -> Option<(u32, u32)> {
+            evidence
+                .chunks_exact(3)
+                .enumerate()
+                .find(|(_, r)| r[1] == query)
+                .map(|(i, r)| ((3 * i + 2) as u32, r[2]))
+        };
+        let Some((first_abs, value)) = lookup(key) else {
             return Ok(
-                json!({"first": null, "second_query": null, "second_payload": null,
-                "answer": null, "terminal": format!("{:?}", frame.terminal),
-                "first_read": r1.action.is_some(), "second_read": false,
-                "first_source_abs": r1.payload_abs, "second_source_abs": null}),
+                json!({"first":null,"second_payload_abs":null,"second_payload":null,"answer":null}),
             );
         };
-        // The computed result forms the second query.
-        let z2 = local_logits(&parent, &local, &u, y1, role_q as usize, NO_TOKEN, written);
-        let r2 = read_step(&ring, y1, role_q, NO_TOKEN, &sel, &table, use_reader, &z2);
-        let answer = match r2.payload {
-            Some(p) => {
-                let lease = SourceLease {
-                    seq: ring.seq(),
-                    abs: r2.payload_abs.unwrap_or(0),
-                    payload: p,
-                };
-                frame.read(lease, &gf).map_err(|t| format!("{t:?}"))?;
-                if resume {
-                    frame = SessionFrame::from_bytes(&frame.to_bytes(), parent.cfg.vocab)?;
-                }
-                frame
-                    .apply_primitive(p2, &gf)
-                    .map_err(|t| format!("{t:?}"))?;
-                let emitted = frame.emit().map_err(|t| format!("{t:?}"))?;
-                frame.stop(Terminal::Stop);
-                Some(emitted)
-            }
-            None => None,
+        let first = expected_step(value, p1)?;
+        let Some((second_abs, value)) = lookup(first) else {
+            return Ok(
+                json!({"first":first,"first_payload_abs":first_abs,"second_payload_abs":null,"second_payload":null,"answer":null}),
+            );
         };
-        if resume {
-            let back = SessionFrame::from_bytes(&frame.to_bytes(), parent.cfg.vocab)?;
-            if back != frame {
-                return Err("session frame did not survive a resume round trip".into());
-            }
-        }
-        Ok(json!({
-            "first": first, "second_query": y1,
-            "second_payload": r2.payload, "answer": answer,
-            "terminal": format!("{:?}", frame.terminal),
-            "first_read": r1.action.is_some(), "second_read": r2.action.is_some(),
-            "first_source_abs": r1.payload_abs, "second_source_abs": r2.payload_abs,
-            "first_lease": frame.lease.map(|l| [l.seq, l.abs, l.payload]),
-            "emitted": frame.emitted, "phase": frame.phase,
-        }))
+        Ok(
+            json!({"first":first,"first_payload_abs":first_abs,"second_payload_abs":second_abs,
+            "second_payload":value,"answer":expected_step(value,p2)?}),
+        )
     };
-    let intended_first = |v: u32| -> u32 {
-        finite
-            .serve(Some(v), &[p1])
-            .tokens
-            .first()
-            .copied()
-            .unwrap_or(0)
-    };
-    let intended_second = |v: u32| -> u32 {
-        finite
-            .serve(Some(v), &[p2])
-            .tokens
-            .first()
-            .copied()
-            .unwrap_or(0)
-    };
-    let mut chain_rows: Vec<serde_json::Value> = Vec::new();
-    let mut first_ok = 0usize;
-    let mut second_ok = 0usize;
-    let mut answer_ok = 0usize;
-    let mut resume_ok = 0usize;
-    for j in 0..hop1_keys.len() {
-        let evidence = build_evidence(&hop1_keys, &g_values, false);
-        let r = chain(&evidence, hop1_keys[j], p1, p2, false, true)?;
-        let exp_first = intended_first(g_values[j]);
-        let exp_second_value = {
-            let m = outcomes.iter().position(|y| *y == exp_first).unwrap_or(0);
-            g_values[m % g_values.len()]
-        };
-        let exp_answer = intended_second(exp_second_value);
-        if r["first"].as_u64() == Some(exp_first as u64) {
-            first_ok += 1;
-        }
-        if r["second_payload"].as_u64() == Some(exp_second_value as u64) {
-            second_ok += 1;
-        }
-        if r["answer"].as_u64() == Some(exp_answer as u64) {
-            answer_ok += 1;
-        }
-        let resumed = chain(&evidence, hop1_keys[j], p1, p2, true, true)?;
-        if resumed == r {
-            resume_ok += 1;
-        }
-        chain_rows.push(json!({
-            "key1": hop1_keys[j], "expected_first": exp_first,
-            "expected_second_value": exp_second_value, "expected_answer": exp_answer,
-            "observed": r,
-            "resumed_identical": resumed == r,
-        }));
-    }
-    // Causal controls.
     let ev0 = build_evidence(&hop1_keys, &g_values, false);
-    let base = chain(&ev0, hop1_keys[0], p1, p2, false, true)?;
-    let alt_vals: Vec<u32> = {
-        let mut v = g_values.clone();
-        v[0] = g_values[1];
-        v
-    };
-    let ev_alt = build_evidence(&hop1_keys, &alt_vals, false);
-    let alt = chain(&ev_alt, hop1_keys[0], p1, p2, false, true)?;
-    let ev_removed = build_evidence(&hop1_keys, &g_values, true);
-    let removed = chain(&ev_removed, hop1_keys[0], p1, p2, false, true)?;
-    let ev_distractor: Vec<u32> = {
-        let mut v = ev0.clone();
-        v.push(role_rec);
-        v.push(banks.keys[banks.keys.len() - 1]);
-        v.push(g_values[2]);
-        v
-    };
-    let distractor = chain(&ev_distractor, hop1_keys[0], p1, p2, false, true)?;
-    let no_reader = chain(&ev0, hop1_keys[0], p1, p2, false, false)?;
+    let mut chain_rows = Vec::new();
+    let (mut first_ok, mut second_ok, mut answer_ok, mut resume_ok) = (0, 0, 0, 0);
+    for (j, key) in hop1_keys.iter().enumerate() {
+        let actual = chain(
+            &ev0,
+            *key,
+            p1,
+            p2,
+            true,
+            true,
+            true,
+            true,
+            Some(&format!("chain-{j}")),
+        )?;
+        let expected = expected_chain(&ev0, *key)?;
+        let observed = &actual["observed"];
+        first_ok += usize::from(
+            observed["first"] == expected["first"]
+                && observed["first_source_abs"] == expected["first_payload_abs"],
+        );
+        second_ok += usize::from(
+            observed["second_payload"] == expected["second_payload"]
+                && observed["second_source_abs"] == expected["second_payload_abs"],
+        );
+        answer_ok += usize::from(observed["answer"] == expected["answer"]);
+        resume_ok += usize::from(actual["resumed_identical"] == json!(true));
+        chain_rows.push(json!({"key1":key,"expected":expected,"actual":actual}));
+    }
+    let base = chain(&ev0, hop1_keys[0], p1, p2, true, true, true, true, None)?;
+    let mut ev_alt = ev0.clone();
+    ev_alt[2] = g_values[1]; // Exactly the first source payload; every hop2 record stays fixed.
+    let alt = chain(&ev_alt, hop1_keys[0], p1, p2, true, true, true, true, None)?;
+    let expected_base = expected_chain(&ev0, hop1_keys[0])?;
+    let expected_alt = expected_chain(&ev_alt, hop1_keys[0])?;
+    let mut ev_removed = ev0.clone();
+    ev_removed.drain(..3);
+    let removed = chain(
+        &ev_removed,
+        hop1_keys[0],
+        p1,
+        p2,
+        true,
+        true,
+        true,
+        true,
+        None,
+    )?;
+    let second_abs = expected_base["second_payload_abs"]
+        .as_u64()
+        .ok_or("missing expected second source")? as usize;
+    let mut ev_second_removed = ev0.clone();
+    ev_second_removed.drain(second_abs - 2..second_abs + 1);
+    let second_removed = chain(
+        &ev_second_removed,
+        hop1_keys[0],
+        p1,
+        p2,
+        true,
+        true,
+        true,
+        true,
+        None,
+    )?;
+    let mut ev_distractor = ev0.clone();
+    ev_distractor.extend([
+        role_rec,
+        *banks.keys.last().ok_or("no distractor key")?,
+        g_values[2],
+    ]);
+    let distractor = chain(
+        &ev_distractor,
+        hop1_keys[0],
+        p1,
+        p2,
+        true,
+        true,
+        true,
+        true,
+        None,
+    )?;
+    let no_reader = chain(&ev0, hop1_keys[0], p1, p2, false, true, true, true, None)?;
+    let no_second_reader = chain(&ev0, hop1_keys[0], p1, p2, true, true, false, true, None)?;
+    let no_first_update = chain(&ev0, hop1_keys[0], p1, p2, true, false, true, true, None)?;
+    let no_second_update = chain(&ev0, hop1_keys[0], p1, p2, true, true, true, false, None)?;
     let chain_interventions = json!({
-        "changed_first_source": {
-            "value_a": g_values[0], "value_b": g_values[1],
-            "observed_a": base, "observed_b": alt,
-            "first_changed": base["first"] != alt["first"],
-            "second_query_changed": base["second_query"] != alt["second_query"],
-            "second_selection_changed": base["second_source_abs"] != alt["second_source_abs"],
-            "answer_changed": base["answer"] != alt["answer"],
-        },
-        "irrelevant_distractor_added": {
-            "answer_preserved": base["answer"] == distractor["answer"],
-            "first_preserved": base["first"] == distractor["first"],
-            "second_preserved": base["second_payload"] == distractor["second_payload"],
-        },
-        "required_source_removed": {
-            "read": removed["first_read"], "terminal": removed["terminal"],
-            "answer": removed["answer"],
-        },
-        "read_disabled": {
-            "read": no_reader["first_read"], "terminal": no_reader["terminal"],
-        },
+        "changed_first_source": {"a":base,"b":alt,"expected_a":expected_base,"expected_b":expected_alt,
+            "changed_positions":ev0.iter().zip(&ev_alt).enumerate().filter(|(_, (a,b))|a!=b).map(|(i,_)|i).collect::<Vec<_>>(),
+            "first_changed":base["observed"]["first"]!=alt["observed"]["first"],
+            "second_query_changed":base["observed"]["second_query"]!=alt["observed"]["second_query"],
+            "second_selection_changed":base["observed"]["second_source_abs"]!=alt["observed"]["second_source_abs"],
+            "answer_changed":base["observed"]["answer"]!=alt["observed"]["answer"],
+            "both_answers_correct":base["observed"]["answer"]==expected_base["answer"] && alt["observed"]["answer"]==expected_alt["answer"]},
+        "irrelevant_distractor_added":{"base":base,"changed":distractor,
+            "answer_preserved":base["observed"]["answer"]==distractor["observed"]["answer"],
+            "first_preserved":base["observed"]["first"]==distractor["observed"]["first"],
+            "second_identity_preserved":base["observed"]["second_snapshot"]==distractor["observed"]["second_snapshot"]},
+        "required_first_source_removed":removed,"required_second_source_removed":second_removed,
+        "read_disabled":no_reader,"second_read_disabled":no_second_reader,
+        "first_computation_disabled":no_first_update,"second_payload_update_disabled":no_second_update,
+        "control_scope":"fixed supplied two-hop schedule; update controls change actual computation and do not train or qualify a learned controller"
     });
 
     let result = json!({
-        "schema": "uor-r4.grounded-session/1",
-        "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+        "schema": "uor-r4.grounded-session/2",
+        "parent_review_revision": "17d5072c",
         "running_source": {
-            "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
-            "git_dirty": std::env::var("UOR_GIT_DIRTY").unwrap_or_else(|_| "unknown".into()),
+            "source_checkout_observed_before_fit": source_checkout,
             "executable_sha256": executable_sha256,
             "source_files": source_files,
         },
         "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA,
             "group_digest": group_digest, "selector_sha256": selector_sha256, "f_bits": parent.cfg.f_bits},
         "factorization": gf_report,
+        "loaded_artifacts": loaded_artifacts,
         "panel1_program_completion": panel1,
         "panel1_events": events,
         "panel2_dependent_chain": {
@@ -12097,7 +12291,7 @@ fn gs_run() -> Result<ExitCode, String> {
             "chains": hop1_keys.len(),
             "rows": chain_rows,
             "controls": chain_interventions,
-            "note": "the second query is the first computed outcome, not a supplied reference; the answer is a label token absent from every record payload",
+            "note": "computed first outcome supplies second exact-key query; fixed two-hop schedule and record layout are supplied, not learned. Snapshots copy content and survive origin eviction; references are local to the owning ring. The final label is absent from record payloads but may occur as a record key.",
         },
         "fitted_recurrence_report": dsd_fit_json_st(&fitted_report),
         "scope": "bounded authored fixtures; a finite circuit result, not language capability. Energy UNAVAILABLE; whole-path D0-b not claimed.",

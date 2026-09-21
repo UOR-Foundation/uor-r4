@@ -2,8 +2,8 @@
 //!
 //! Three things are kept apart on purpose:
 //!
-//! * **exact evidence** - an owned occurrence lease (sequence, absolute position, payload) whose
-//!   validity is checkable against the live ring, never an integer position alone;
+//! * **exact evidence** - an immutable owned snapshot (sequence, absolute position, payload).
+//!   Its origin can be checked against its owning ring; copied content survives origin eviction;
 //! * **computed geometric value** - a retained result state advanced by shared primitive actions;
 //! * **response phase and terminal status** - a typed, serializable frame, so a paused run and an
 //!   uninterrupted run share the same transition.
@@ -27,6 +27,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::group_table::{group_table, GROUP_ORDER, ROW_STRIDE};
+use super::occurrence::{OccurrenceRef, OccurrenceRing};
 use super::shared_transition::{Response, StExample, StepKind};
 
 /// Typed terminal/degenerate status of a step or a frame.
@@ -102,6 +103,9 @@ impl GroundedFactorization {
     }
 
     pub fn apply(&self, state: usize, primitive: u32) -> Option<usize> {
+        if state >= GROUP_ORDER {
+            return None;
+        }
         let code = self
             .action_domain
             .iter()
@@ -270,11 +274,23 @@ impl GroundedFactorization {
         if m.outcome_index(reference_outcome).is_none() {
             return Err("grounded-factorization reference outcome is not grounded".into());
         }
+        if m.cyclic {
+            return Err("additive grounded factorization is not implemented".into());
+        }
+        if m.outcome_state
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .len()
+            != m.outcome_state.len()
+        {
+            return Err("grounded outcome states must be injective".into());
+        }
         Ok(m)
     }
 }
 
-/// Construct a factorization of the observed transition graph.
+/// Construct an exact factorization of a completely observed regular eight-outcome Q8 action.
 ///
 /// The observed primitives supply permutations of the typed outcomes; the initial observations
 /// supply `payload -> first outcome`. Any primitive or outcome not grounded by development is
@@ -283,6 +299,15 @@ pub fn factor_observed_graph(
     examples: &[StExample],
     cyclic: bool,
 ) -> Result<(GroundedFactorization, FactorReport), String> {
+    if cyclic {
+        return Err("additive grounded factorization is not implemented".into());
+    }
+    if examples
+        .iter()
+        .any(|e| e.primitives.len() != e.targets.len())
+    {
+        return Err("every declared primitive requires one observed outcome".into());
+    }
     let mut first: BTreeMap<(u32, u32), BTreeMap<u32, usize>> = BTreeMap::new();
     let mut recur: BTreeMap<(u32, u32), BTreeMap<u32, usize>> = BTreeMap::new();
     for ex in examples.iter() {
@@ -301,6 +326,13 @@ pub fn factor_observed_graph(
                     .or_default() += 1;
             }
         }
+    }
+    if first
+        .values()
+        .chain(recur.values())
+        .any(|counts| counts.len() != 1)
+    {
+        return Err("conflicting declared transitions cannot be factored exactly".into());
     }
     let majority = |m: &BTreeMap<u32, usize>| -> u32 {
         *m.iter()
@@ -523,6 +555,9 @@ pub fn factor_observed_graph(
             state = next;
         }
     }
+    if transitions_checked != transitions_consistent {
+        return Err("factorization did not reproduce every declared transition".into());
+    }
     let report = FactorReport {
         outcomes: n,
         primitives: perms.len(),
@@ -603,10 +638,11 @@ fn search_isomorphism(
             phi[order[k]] = usize::MAX;
         }
     }
+    let candidate_elements: Vec<usize> = cands.iter().map(|i| q8[*i]).collect();
     rec(
         0,
         order,
-        cands,
+        &candidate_elements,
         &mut phi,
         &mut used,
         &mut checked,
@@ -616,13 +652,32 @@ fn search_isomorphism(
     (found, checked)
 }
 
-/// An owned exact reference to selected evidence. An absolute position alone is not durable once a
-/// ring can wrap, so the sequence identity and the observed payload travel with it.
+/// An immutable owned-source snapshot; the legacy type name is retained. Its reference is
+/// local to the owning ring. Copied payload remains usable after origin eviction; an origin
+/// liveness check is a separate diagnostic, not a prerequisite for owned computation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SourceLease {
     pub seq: u32,
     pub abs: u32,
     pub payload: u32,
+}
+
+impl SourceLease {
+    pub fn acquire(ring: &OccurrenceRing, abs: u32) -> Result<Self, Terminal> {
+        let reference = ring.reference(abs).ok_or(Terminal::StaleLease)?;
+        let payload = ring.resolve(reference).ok_or(Terminal::StaleLease)?;
+        Ok(Self {
+            seq: reference.seq,
+            abs: reference.abs,
+            payload,
+        })
+    }
+    pub fn origin_is_live(&self, ring: &OccurrenceRing) -> bool {
+        ring.resolve(OccurrenceRef {
+            seq: self.seq,
+            abs: self.abs,
+        }) == Some(self.payload)
+    }
 }
 
 /// One resumable session frame: owned evidence, retained result, response phase and terminal status.
@@ -714,12 +769,45 @@ impl SessionFrame {
         self.terminal = Some(reason);
     }
 
-    /// Is the owned lease still valid against the live ring? A wrapped slot is an explicit loss.
-    pub fn lease_is_live(&self, seq: u32, ring_get: Option<u32>) -> bool {
-        match (self.lease, ring_get) {
-            (Some(l), Some(v)) => l.seq == seq && l.payload == v,
-            _ => false,
+    /// Whether the snapshot's original occurrence is still live in its owning ring.
+    /// A false result does not invalidate the copied payload.
+    pub fn lease_is_live(&self, ring: &OccurrenceRing) -> bool {
+        self.lease.is_some_and(|l| l.origin_is_live(ring))
+    }
+
+    /// Validate a restored frame against the actual loaded computation model. This is
+    /// semantic validation; callers separately bind saved bytes to their model artifact.
+    pub fn validate(&self, model: &GroundedFactorization) -> Result<(), String> {
+        if self.terminal == Some(Terminal::None) {
+            return Err("invalid explicit None terminal".into());
         }
+        if let Some(lease) = self.lease {
+            if model.initial_state(lease.payload).is_none() {
+                return Err("snapshot operand is not grounded by this model".into());
+            }
+        }
+        match self.state {
+            Some(state) if state >= GROUP_ORDER => {
+                return Err("frame state outside group domain".into())
+            }
+            Some(state) => {
+                if self.lease.is_none() || model.outcome_for_state(state) != self.outcome {
+                    return Err("frame result/outcome is inconsistent with its loaded model".into());
+                }
+            }
+            None if self.outcome.is_some() => {
+                return Err("frame outcome has no result state".into())
+            }
+            None => {}
+        }
+        if self
+            .emitted
+            .iter()
+            .any(|t| model.outcome_index(*t).is_none())
+        {
+            return Err("frame emission is not grounded by this model".into());
+        }
+        Ok(())
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -801,6 +889,9 @@ impl SessionFrame {
         } else {
             None
         };
+        if state.is_some_and(|s| s >= GROUP_ORDER) {
+            return Err("session state outside group domain".into());
+        }
         let outcome = if take(&mut c, 1)?[0] != 0 {
             let t = u32::from_le_bytes(take(&mut c, 4)?.try_into().unwrap());
             if t as usize >= max_vocab {
@@ -832,7 +923,8 @@ impl SessionFrame {
             5 => Some(Terminal::UnknownPrimitive),
             6 => Some(Terminal::NoGrounding),
             7 => Some(Terminal::StaleLease),
-            _ => Some(Terminal::None),
+            8 => Some(Terminal::None),
+            _ => return Err("unknown session terminal tag".into()),
         };
         if c != bytes.len() {
             return Err("trailing bytes in the session frame".into());
@@ -971,15 +1063,7 @@ mod tests {
             "an unrelated session must not share mutable state"
         );
         assert!(d.emitted.len() == 1 && c.emitted.is_empty());
-        assert!(a.lease_is_live(3, Some(0)));
-        assert!(
-            !a.lease_is_live(4, Some(0)),
-            "a different sequence is stale"
-        );
-        assert!(
-            !a.lease_is_live(3, Some(99)),
-            "an overwritten payload is stale"
-        );
+        // Actual ring-backed snapshot liveness and eviction are exercised separately below.
     }
 
     #[test]
@@ -992,5 +1076,124 @@ mod tests {
         assert_eq!(r.steps, vec![StepKind::NoRead]);
         let r = m.serve(Some(777), &[1]);
         assert_eq!(r.steps, vec![StepKind::UnknownValue]);
+    }
+
+    #[test]
+    fn isomorphism_uses_actual_elements_of_a_reordered_witness() {
+        let mut witness: Vec<usize> = super::super::shared_transition::q8_witness()
+            .unwrap()
+            .iter()
+            .map(|x| *x as usize)
+            .collect();
+        let t = group_table();
+        let mul = |a: usize, b: usize| t.product[a * ROW_STRIDE + b] as usize;
+        let group: Vec<Vec<usize>> = witness
+            .iter()
+            .map(|a| {
+                witness
+                    .iter()
+                    .map(|b| witness.iter().position(|x| *x == mul(*a, *b)).unwrap())
+                    .collect()
+            })
+            .collect();
+        let identity: Vec<usize> = (0..witness.len()).collect();
+        let id_group = group.iter().position(|g| *g == identity).unwrap();
+        witness.rotate_left(1); // Makes witness positions differ from served element IDs.
+        let id_witness = witness
+            .iter()
+            .position(|g| *g == t.identity as usize)
+            .unwrap();
+        let order: Vec<usize> = (0..group.len()).filter(|i| *i != id_group).collect();
+        let candidates: Vec<usize> = (0..witness.len()).filter(|i| *i != id_witness).collect();
+        let phi = search_isomorphism(
+            &group,
+            id_group,
+            &witness,
+            id_witness,
+            &order,
+            &candidates,
+            &mul,
+        )
+        .0
+        .unwrap();
+        for a in 0..group.len() {
+            for b in 0..group.len() {
+                let ab = group
+                    .iter()
+                    .position(|g| *g == compose(&group[a], &group[b]))
+                    .unwrap();
+                assert_eq!(mul(phi[a], phi[b]), phi[ab]);
+            }
+        }
+    }
+
+    #[test]
+    fn exact_factorization_rejects_conflicting_labels_and_unsupported_algebra() {
+        let mut examples = dihedral_examples();
+        assert!(factor_observed_graph(&examples, true).is_err());
+        let mut conflict = examples[0].clone();
+        conflict.targets[0] = (conflict.targets[0] + 1) % 8;
+        examples.push(conflict);
+        assert!(factor_observed_graph(&examples, false).is_err());
+    }
+
+    #[test]
+    fn factorization_is_invariant_to_observed_token_and_outcome_relabeling() {
+        let mut examples = dihedral_examples();
+        for ex in &mut examples {
+            ex.payload = 100 + (ex.payload * 3 + 1) % 8;
+            for p in &mut ex.primitives {
+                *p = 200 + (*p * 5 + 2) % 8;
+            }
+            for y in &mut ex.targets {
+                *y = 300 + (*y * 3 + 4) % 8;
+            }
+        }
+        let (model, report) = factor_observed_graph(&examples, false).unwrap();
+        assert_eq!(report.transitions_checked, report.transitions_consistent);
+        for ex in &examples {
+            assert_eq!(
+                model.serve(Some(ex.payload), &ex.primitives).tokens,
+                ex.targets
+            );
+        }
+    }
+
+    #[test]
+    fn owned_snapshot_survives_eviction_while_exact_origin_liveness_changes() {
+        let (model, _) = factor_observed_graph(&dihedral_examples(), false).unwrap();
+        let mut ring = OccurrenceRing::new(2);
+        ring.observe(0);
+        let snapshot = SourceLease::acquire(&ring, 0).unwrap();
+        let mut frame = SessionFrame::start();
+        frame.read(snapshot, &model).unwrap();
+        assert!(frame.lease_is_live(&ring));
+        let nonidentity = model
+            .action_domain
+            .iter()
+            .zip(&model.action_code)
+            .find(|(_, code)| **code as usize != group_table().identity as usize)
+            .map(|(p, _)| *p)
+            .unwrap();
+        frame.apply_primitive(nonidentity, &model).unwrap();
+        assert_ne!(frame.state, model.initial_state(snapshot.payload));
+        let saved = frame.to_bytes();
+        let mut resumed = SessionFrame::from_bytes(&saved, 4096).unwrap();
+        resumed.validate(&model).unwrap();
+        ring.observe(7);
+        ring.observe(0); // Same payload in wrapped slot must not resurrect abs 0.
+        assert!(!resumed.lease_is_live(&ring));
+        frame.apply_primitive(2, &model).unwrap();
+        resumed.apply_primitive(2, &model).unwrap();
+        assert_eq!(frame.emit().unwrap(), resumed.emit().unwrap());
+        assert_eq!(frame, resumed);
+        let mut bad = resumed.to_bytes();
+        *bad.last_mut().unwrap() = 255;
+        assert!(SessionFrame::from_bytes(&bad, 4096).is_err());
+        resumed.state = Some(GROUP_ORDER);
+        assert!(SessionFrame::from_bytes(&resumed.to_bytes(), 4096).is_err());
+        resumed.state = frame.state;
+        resumed.outcome = Some(4095);
+        assert!(resumed.validate(&model).is_err());
     }
 }

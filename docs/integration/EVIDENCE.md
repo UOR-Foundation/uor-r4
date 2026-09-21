@@ -1,5 +1,9 @@
 # EVIDENCE
 
+## September 21: PR #1340 principal grounded-session review
+
+Original [saved-data audit](../evidence/grounded-session-principal-review-2026-09-21.json) independently verifies all 1,440 arm/item records, 1,296 geometric products, 672 development transitions, four seals and actual source/executable identities. Exact factorization and finite control both 288/124/64; newly fitted recurrence 248/76/24. Serialized grounded artifact 137 B; 102 is a parameter estimate, 1668 B comparator JSON is not normalized packing. Original loaded-serving, first-source intervention and session claims required correction. [Principal review](grounded-session-review-2026-09-21.md), [corrected replay audit](../evidence/grounded-session-corrected-replay-audit-2026-09-21.json), [executed checks and resources](../evidence/grounded-session-principal-checks-2026-09-21.json). Fixed typed two-hop scope remains; learned relation/query/control is next. No fresh-final, general prose, whole-path D0-b or energy claim.
+
 ## September 21: PR #1339 principal correction and grounded-session direction
 
 **Corrected exposed replay:** H4 remains **186/288, 48/128 and 10/64**; the independently loaded finite shared-transition table reaches **288/288, 124/128 and 64/64** on the same development/length-four/reversal populations. The table uses its own preceding prediction at serving, not gold intermediate answers. Actual payload and order interventions produce correct changed responses; decoder-label perturbation changes emissions without changing states. The noncommuting latent witness still misses the reversed final answer. All 2,880 actual arm/item records and 8,316 step/terminal events are saved. This is a retained partial geometric component, not a superiority or general-continuation result.

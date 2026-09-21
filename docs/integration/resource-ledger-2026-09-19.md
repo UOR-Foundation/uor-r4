@@ -1807,3 +1807,17 @@ reserve reduction, no deletion of unique material, no paid/external compute.
 **Delivered** under the claimed, sealed and verified roots
 `.uor-models/realtext-prior-2026-09-20/grounded-session-{1,2,3,4}` (0 unlisted each), with `-4` the
 delivered primary. Earlier attempts are sealed and retained unchanged.
+
+## September 21: PR #1340 principal review projection
+
+Recorded 2026-09-21T22:05:25.833613+00:00 before builds/model execution: cumulative 255,357,806/258,900,000 ms, principal allowance 3,300,000 ms including 480,000 ms prior preparation estimate. Two compiler workers, one model worker, 8 GiB RAM, 3 GiB temporary builds and 64 MiB reports. Audit and repair concrete source/evidence defects, then one corrected exposed replay if needed; exact command projected before execution. No new qualification campaign or paid compute.
+
+Free space 37,561,561,088 bytes initially. Under existing owner cleanup authorization, removed 2,468 regenerable `target/debug/deps/*.rcgu.o` compiler intermediates, allocated size 3,601,883,136 bytes. No compiler was active; libraries, metadata, executables, unique source/research/models/reports and user folders preserved. After deletion free 40,899,280,896 bytes; preserve 36,766,079,385-byte reserve plus 128 MiB. Machine-wide free delta is not a precise exclusive deletion measure. Manifest `/tmp/uor-pr1340-removed-compiler-objects.json`, SHA256 `ed7568727e412fc51187670db4f95b58e7313e135e8ee31cb50aefde0a2fafbb`. No cumulative extension required for this projection.
+
+## September 21: PR #1340 principal corrections and delivery charge
+
+Prospective projection: 2026-09-21T22:05:25.833613+00:00, 3,300,000 ms including preparation/build/checks/audit and delivery, two compiler workers, one model worker, 8 GiB RAM, 3 GiB temporary builds and 64 MiB reports. Exact corrected exposed commands and source hashes were recorded before execution; [checks receipt](../evidence/grounded-session-principal-checks-2026-09-21.json) retains them. No fresh qualification campaign.
+
+Charge **1,960,021 ms** = 1,180,021 ms elapsed since projection + 480,000 ms preprojection preparation estimate + 300,000 ms delivery reserve. This includes focused checks and the 19.910024 s corrected debug experiment; do not add it again. DeepSeek's original approximate 13,000,000 ms charge remains preserved. Balance **257,317,827 / 258,900,000 ms**, remaining **1,582,173 ms**. No extension needed for this principal review.
+
+Cleanup removed only 2,468 disposable debug compiler objects: **3,601,883,136 allocated bytes** (3,596,704,840 logical bytes). Models, reports, source/research, original release executable, libraries/metadata, user files and Downloads preserved. Before/after cleanup free 37,561,561,088/40,899,280,896 bytes; after checks **38,696,255,488 bytes**. APFS free-space change is not attributed solely to these files. Preserve 36,766,079,385-byte reserve + 128 MiB margin. Full deletion manifest hash ed7568727e412fc51187670db4f95b58e7313e135e8ee31cb50aefde0a2fafbb. No paid compute. Energy UNAVAILABLE; debug experiment time is not optimized serving cost.

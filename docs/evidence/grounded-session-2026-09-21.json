@@ -349,5 +349,20 @@
     "completion is explicit program exhaustion, not learned semantic continuation",
     "the second-hop keys are the typed outcome labels, so the dependent read is exact-match key retrieval rather than semantic query formation",
     "no prose, no executed Rust task, and no whole-path energy measurement"
-  ]
+  ],
+  "principal_review": {
+    "status": "ORIGINAL_SUBMISSION_WITH_CORRECTIONS",
+    "review": "docs/integration/grounded-session-review-2026-09-21.md",
+    "independent_original_audit": "docs/evidence/grounded-session-principal-review-2026-09-21.json",
+    "corrected_replay_audit": "docs/evidence/grounded-session-corrected-replay-audit-2026-09-21.json",
+    "corrections": [
+      "Original102 is parameter estimate; serialized grounded artifact137 bytes. JSON finite comparator1668 is not encoding-normalized.",
+      "Fitted recurrence is new calibration/restart recipe, not prior artifact.",
+      "Original loaded objects were not used; corrected replay uses all independently loaded artifacts.",
+      "Original first-source intervention edited positions2,14,26; corrected version edits only2 and holds second bank fixed.",
+      "Original first_lease recorded second snapshot; copied payload is owned immutable content, not borrowed-current proof.",
+      "Original resume booleans lack retained snapshots; corrected exposed replay saves bound frames and resumes only remaining work.",
+      "Supplied fixed two-hop protocol with identity first primitive is not learned query/control or general language evidence."
+    ]
+  }
 }
