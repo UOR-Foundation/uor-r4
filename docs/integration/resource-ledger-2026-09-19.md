@@ -1073,7 +1073,7 @@ Authoritative JSON verified **178538565/180500000 ms**, remaining 1961435ms. Pre
 
 The [cleanup receipt](storage-cleanup-2026-09-20.md) records23.21decimalGB physical recovery and51.17GB free at completion. This is filesystem capacity, not deletion of research or a reset of model-storage/resource accounts. All release artifacts and research/model/session data remain. Main and current-worktree incremental build caches and unopened main debug dependency files were removed; the compatible current-worktree debug deps/release cache remains. Refresh actual build growth instead of assuming all caches warm.
 
-The [new prompt](deepseek-occurrence-reader-step-2026-09-20.md) proposes 10800000ms complete work and a standing-authorized increment 10800000ms to 191300000, headroom 12761435ms at this snapshot. **Not applied by this review; record before use.** Initial one worker, <=4 Cargo jobs, <=8GiB RSS, <=512MiB new model/report data plus <=2 GiB incremental build and 128 MiB protected margin. DeepSeek may revise this complete projection with reasons before consumption. Charge actual work once, not the reservation. No paid compute.
+The [new prompt](deepseek-occurrence-reader-step-2026-09-20.md) proposes 10800000ms complete work and a standing-authorized increment 10800000ms to 191300000, headroom 12761435ms at this snapshot. **Not applied by this review; record before use.** Initial one worker, <=4 Cargo jobs, <=8 GiB RSS, <=512 MiB new model/report data plus <=2 GiB incremental build and 128 MiB protected margin. DeepSeek may revise this complete projection with reasons before consumption. Charge actual work once, not the reservation. No paid compute.
 
 ## Charges recorded — learned relational reader step (2026-09-20)
 
@@ -1613,3 +1613,43 @@ paid/external compute.
 `relation-composition-5` (adaptive two-operation budget), each with 0 unlisted files. Attempts
 `relation-composition-{diag,diag2,3,4}` are empty claim directories created by superseded runs and hold
 no evidence; they are retained and never reused.
+
+
+## PR #1337 principal reconciliation and prospective review
+
+The absolute JSON correctly contains the prior +8000000-ms allowance and
+5200000-ms debit: 219761250/224900000 ms. The listed measured/estimated
+components sum to 5355900 ms, so conservatively add the 155900-ms difference
+once without repeating the allowance or prior debit. Verified atomic
+readback before principal builds: **219917150 /224900000 ms**.
+
+Principal projection: <=2700000 ms for source/evidence/math review, targeted
+fixture/diagnostic repairs, focused tests, documentation and protected delivery.
+Includes 180000-ms preprojection preparation estimate; later active elapsed
+work is measured. Two compiler workers, CARGO_INCREMENTAL=0, shared owner target,
+8 GiB RAM,512 MiB build plus 32 MiB reports. No full model fit planned. Free at
+projection 51214413824 bytes; preserve 36766079385 bytes plus 128 MiB stop margin.
+No principal deletion planned, no additional allowance or paid compute needed.
+
+Storage arithmetic correction: 36155400192 free is 610679193 bytes below the
+36766079385-byte reserve alone, or 744896921 bytes below reserve plus 128 MiB.
+The prior 744114585 figure does not equal either deficit. Preserve its reported
+13034090496-byte observed reclaim; the du-KiB product 13024559104 is allocated
+storage, not independently measured logical file bytes. The deleted cache files
+cannot be retrospectively re-inspected; these are the prior run's recorded
+cleanup receipts, not a new principal deletion.
+
+Principal verification and debit: **17 runner tests passed, 1 ignored**, including
+the five fixture/prediction-record tests; offline runner check, formatting and
+claim wording passed, with three pre-existing warnings. 934 relative document
+targets exist and 3 changed JSON documents parse. No new model fit or
+composition generation. Independent second source review found no must-fix issue.
+
+Principal charge **1481222 ms** = 180000-ms preparation estimate +
+1001222-ms measured elapsed review/check/document work + 300000-ms conservative
+final-delivery reserve. Build/check time is included, not charged twice. Atomic
+readback: **221398372 / 224900000 ms**; remaining
+**3501628 ms**. No allowance extension. Free after checks
+**51127488512 bytes** (projection: 51214413824); principal deleted **0 bytes**.
+The reserve plus 128 MiB margin remains intact. Idle external merge-queue waiting
+is not a new local model run. [Complete receipt](../evidence/geometric-computation-principal-checks-2026-09-21.json).

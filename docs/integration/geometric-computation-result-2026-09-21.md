@@ -1,4 +1,6 @@
-# Geometric computation: corrected association regression, composition instrument and the readout diagnosis
+# Geometric computation: improved association and corrected composition diagnosis
+
+**Principal correction:** read the [review](geometric-computation-review-2026-09-21.md) and [independent audit](../evidence/geometric-computation-principal-review-2026-09-21.json). Numerical tables retain the original runs. Zero feature aliases do not establish linear impossibility; the reduced composition rule and split were invalid for the claimed witness/transfer. Source corrections are unrun as a model experiment.
 
 September 21, 2026. Executes the [geometric-computation brief](deepseek-geometric-computation-step-2026-09-21.md) on
 reviewed `origin/main` at `036e9c4310ca3d8d2440ac367c577a1df7edf58f` (PR #1336, verified equal to the
@@ -6,7 +8,7 @@ merged head). Isolation worktree `.worktrees/geometric-computation-step`; owner 
 
 This run **executes the principal's repaired learner end to end for the first time** (the review states
 `No new complete model fit ... is claimed by these source repairs`), adds the **served-feature
-separability witness** the review required, and builds and runs a **relation-composition instrument**
+collision diagnostic** the review required, and builds and runs a **relation-composition instrument**
 for the successor capability. All populations are the already-exposed regression seeds; **no fresh
 final evaluation is claimed**.
 
@@ -60,30 +62,17 @@ actual feature `R(q0*T[r]*V[v]) - R(q0)`?* Measured on the deployed residual:
 | dev | 163 | 50 | **0** | **163 / 163 (100 %)** |
 | final | 108 | 46 | **0** | **108 / 108 (100 %)** |
 
-A per-feature table could recover every source-correct position, while the deployed **linear**
-ternary residual recovers 61/180 dev and 33/120 final. The association gap is therefore **not** a
-feature-alias or value-code-injectivity failure. It is the **readout family**: the served residual is
-the *linear* map `residual[o] = <W[o], d> << shift` over 16 ternary features, and no linear map of
-those features reaches the feature table's ceiling.
+A table refitted separately on each split's labels can label these observed source-correct features. This does not prove that a development-fitted decoder transfers, nor that a linear readout is infeasible. The complete residual predictor also receives example-dependent local logits. Optimization, coefficient/support constraints and output interface remain possible causes of the gap. The independent audit verifies receipt consistency, but the old association rows omit q1/full features for independent histogram reconstruction.
 
-A separate, smaller limitation is real and measured: `distinct_update_signatures` finds 8 ambiguous
-`(q0, relation, selected payload)` signatures covering 21/180 dev positions (6 and 17/120 final).
-Those positions demand different targets from an *identical* update input and are reader/input
-ambiguity that no readout can remove.
+`distinct_update_signatures` finds 8/6 ambiguous update signatures affecting **30/180 development and 23/120 final positions**. The original 21/17 summed distinct labels, not positions. These are equal update inputs; the whole predictor may still differ through local logits.
 
 ## 3. Relation composition: instrument, obstruction and negative
 
-New mode `--mode=relation-composition`. The answer is a function of the **query operation composed
-with the retrieved content** (`class = (op + vi) mod k`), so a payload-only table cannot represent it;
-held-out *value* combinations are evaluated after a development fit by all operations, and a fair
-two-input table is given the same relation and payload. The declared rule is realisable by the served
-algebra: `2I` contains an element of order 10 (witnessed element 74), and `T[rel(op)] = h^op`,
-`V[value(vi)] = h^vi` give the served state `q0 * h^class` (recorded focused tests).
+New mode `--mode=relation-composition` computes labels from query operation and retrieved content. The submitted reduced mode executed `(op+vi) mod 7`, while its tests and report cited an order-10 power witness. At (1,6), the witness gives h^7 rather than the required identity class. It also withholds values 6/7 under all operations, leaving their selected-value meanings untrained. These are not held-out combinations of familiar primitives. The repaired future fixture uses witnessed modulo 10 and balanced operation×value cells; it has not been fitted in this review.
 
 **Obstruction (measured).** The served geometric relation interface exposes only **2 distinct directed
 relative elements** across all 14 declared role pairs (`mode = Geometric`, descriptor roots are rich —
-119, 113, 82, 0, 77, 9, 78, 84, ... — but `inverse(root_q)*root_k` collapses to {80, 85}). An
-eight-operation composition is therefore **not representable** through `T[rel]`; the instrument
+119, 113, 82, 0, 77, 9, 78, 84, ... — but `inverse(root_q)*root_k` collapses to {80, 85}). Eight distinct operation labels cannot all be separately encoded through these two `T[rel]` inputs alone; the local predictor still receives query-role information. The instrument the instrument
 records `relation_budget_saturating = true` and the full relation-exposure table rather than
 asserting a wider budget.
 
@@ -98,40 +87,18 @@ At the reduced two-operation budget (class modulus 7, 4 repeated contexts per ce
 | payload-only table (blind to the operation) | 24 | 4 |
 | relation+payload two-input table | 48 | 4 |
 
-No held-out cell reached a state produced in development (`held_out_states_already_reached_in_dev = 0`),
-so no compositional code was discovered and the declared screen is not met. Here the feature table
-ceiling is 42/46 (91 %) while the linear residual reaches 15/48: the same **readout** limitation, on a
-task where the relation budget is also insufficient.
+No held-out state was reached in development. The saved feature-only oracle is 42/46 development and 16/16 held-out, fitted separately to those labels. Zero held-out features overlap development; a development-fitted feature table reaches 4/16 by fallback. The 0/16 model result on this malformed task is retained, without a linear-infeasibility or compositional-transfer conclusion.
 
-The earlier eight-operation construction (`relation-composition-1`, retained) shows the consequence of
-the collapse directly: 44 source-correct positions produce only **10 distinct service features**, and
-the feature-only ceiling is 12 — exactly the 12 that arm achieved. That arm is feature-limited *because*
-its declared operations collapsed at the relation interface, not because of readout capacity.
+The earlier eight-operation construction retains a narrower observed collision result: 44 source-correct positions produce 10 distinct features with a same-split feature-majority score of 12. Its total arm hit count also equals 12, but missing per-position outputs prevent establishing that these are the same successful positions or that the complete predictor is at a ceiling.
 
-## 4. Interpretation and next cause
+## 4. Corrected interpretation and next task
 
-Three separate findings, in the order the principal separated them:
-
-1. **Readout (lexical emission)** is the binding constraint on both instruments: the served linear
-   ternary residual falls far below the ceiling of a table on the very same feature (163 to 61 dev;
-   42 to 15 dev). The `categorical_selected_value` control's 108/120 is a *table* result. The brief's
-   option B — a **learned lexical decoder given the actual selected/derived state, with no target or
-   golden source at serving** — is the justified next component, not more geometric width.
-2. **Addressing/relation** is the binding constraint for *multi-operation* composition: the served
-   relation interface returns two distinct relative elements for fourteen role pairs, so an operation
-   cannot be routed into the update. A richer relation/operation signal (an explicit operation operand
-   in the update, or a relation learner trained to expose the required distinctions) is required
-   before a multi-operation composition can be tested. This is the brief's option C trigger, with a
-   concrete witness.
-3. **Representation** (feature aliasing) is **not** the association bottleneck. The principal
-   correction to the earlier expressivity diagnosis is supported for that instrument.
+The completed corrected fit and improved deployed association are useful. No general linear readout impossibility is established. A learned result decoder is a constructive candidate because lexicalization need not share the old difference-of-features interface. Use the actual relative computed state when the frame is nuisance, preserve meaningful context, and distinguish a valid identity result from NoRead. Separate observed-query operation from source-compatibility relation when more operation distinctions are needed. Test combinations of grounded primitive operands with an exact witness and actual causal generation controls. See the [next research brief](deepseek-derived-state-decoder-step-2026-09-21.md).
 
 ## Exclusions and scope
 
 Bounded authored instruments, not general language or reasoning. All populations are exposed
-regression seeds; the composition held-out values are new *cells* but the instrument, rule and output
-bank were authored, and the declared rule was constructed to be realisable by the group composition,
-so a pass would be a composition-circuit result, not a language-advantage claim. The
+regression seeds. The composition split and witness do not support the originally claimed familiar-primitive transfer test. A future valid pass would be a composition-circuit result, not a language-advantage claim. The
 composition-arm negative is at 48 development / 16 held-out positions and is exploratory. Energy
 `UNAVAILABLE`; whole-path D0-b not claimed. Sealed roots
 `.uor-models/realtext-prior-2026-09-20/{geometric-computation-1,geometric-computation-2,relation-composition-1,relation-composition-5}`

@@ -1,6 +1,16 @@
 # Current native geometric AI work
 
-## Active: readout-limited association and the measured relation-interface obstruction
+## Active: learned derived-state decoding and valid composition transfer
+
+**PR #1337, independently reviewed:** the corrected learner now executes output → maps → output and improves H4 to **33/120 exposed-final answers and 7/60 complete pairs**, from 25/120 and 1/60. The learned selected-value lookup remains 108/120 and 54/60. Four report seals and artifact hashes verify; short association generation remains degenerate. **Zero observed feature aliases does not prove linear impossibility.** The composition negative used modulo 7 with an order-10 witness and withheld whole operand meanings; it does not test combinations of familiar primitives. [Principal review](geometric-computation-review-2026-09-21.md); [independent audit](../evidence/geometric-computation-principal-review-2026-09-21.json).
+
+**Next:** [learn to decode the actual geometric result and test familiar-component composition](deepseek-derived-state-decoder-step-2026-09-21.md). Use an artifact-bound learned result decoder with explicit validity: a computed identity is a legitimate result, distinct from NoRead. When necessary, separate learned observed-query operation from source-compatibility relation. The principal runner repairs the composition witness/split and retains actual per-arm predictions for recounting; no new fit on the repaired task is claimed. Establish useful read → computation → emission, then dependent Read/Emit/Stop; structural scope/retention, relative Hopf/H4 and finite spectral features remain tools for concrete needs, with paired-H4/E8/S7 conditional. A cyclic-task tie with C120 can establish competence, not unique H4 advantage.
+
+**Research leadership and autonomy:** Codex owns holistic architecture, mathematical/evidence interpretation and roadmap revision after every returned run. DeepSeek owns substantive implementation/diagnostic decisions within that direction and may pursue justified follow-ons and standing-authorized local allowance extensions with prospective accounting. No arbitrary short timer or retry quota replaces scientific judgment, preservation or physical machine limits.
+
+[Executed principal checks](../evidence/geometric-computation-principal-checks-2026-09-21.json) validate instrument/source repairs, not a new model fit. The original association and composition roots remain sealed. The [ledger](resource-ledger-2026-09-19.md) reconciles the prior component debit and records principal costs/storage. Whole-path D0-b, general language and energy advantage remain unqualified.
+
+## Historical PR #1337 submission (diagnoses corrected above): readout-limited association and the measured relation-interface obstruction
 
 **Executed the corrected lifecycle for the first time** (PR #1336 source at `036e9c43`). The repaired learner runs end to end; every stage improves one committed served objective (H4 19.86 -> 7.87 bits, C120 19.86 -> 8.29), the post-map refit executes and is consumed, 64 serving rows and reload parity hold. On the exposed regression populations the deployed predictor improves to H4 61/180 dev, 41/120 tune, 33/120 final and 7/60 pairs (pre-repair 50/36/25 and 1/60). The declared screen still fails against the 108/120 selected-value table; the seeds are exposed and no fresh evaluation is claimed.
 
