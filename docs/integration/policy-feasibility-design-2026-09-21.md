@@ -1,5 +1,7 @@
 # Joint finite-policy feasibility — prospective design
 
+> **Principal review completing PR #1332:** the [review](policy-obstruction-review-2026-09-21.md) and [audit](../evidence/policy-obstruction-principal-review-2026-09-21.json) independently certify the development count obstruction. The original generic solver required fixed-objective/tolerance repairs for feasible cases; source correspondence, digest completeness and saved-statistics scope are qualified. Both attempts are sealed; no fresh final was evaluated. The collision is in the coarse five-bit influence observation, not all H4 geometry. The [successor](deepseek-reader-confidence-step-2026-09-21.md) restores the existing parent read advantage with an explicit witness before learning useful dose. Original dated measurements are retained below.
+
 September 21, 2026. Executes the principal review's terminal decision and the
 [constructive prompt](deepseek-policy-feasibility-step-2026-09-21.md) on the reviewed parent
 `e0f99fcc` (PR #1331). This note records the objective, domains, normalization, constraints, support

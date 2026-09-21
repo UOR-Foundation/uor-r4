@@ -117,8 +117,14 @@ pub fn position_action_outcomes(
             correct: emitted == target,
             read,
         };
+        // Saturation can make the effective boost smaller than the nominal action. Compare the
+        // identity against exactly the integer change served, widening before subtraction.
         let boost = if read {
-            (1i64 << shift) as f64 / (1i64 << f_bits) as f64
+            z.get(payload as usize)
+                .zip(z_local.get(payload as usize))
+                .map_or(0.0, |(after, before)| {
+                    (i64::from(*after) - i64::from(*before)) as f64 * (-(f_bits as f64)).exp2()
+                })
         } else {
             0.0
         };
@@ -191,7 +197,9 @@ fn normalize(p: &FeasProblem) -> (Vec<Vec<[f64; ACTS + 1]>>, Vec<f64>) {
                 c[j][b][a] = s * p.cons[j].coeff[b][a];
             }
         }
-        r[j] = s * p.cons[j].rhs;
+        // Every search and bound must use the same tolerated feasible set. A lower bound
+        // formed from the stricter, unrelaxed RHS can exceed a tolerance-feasible optimum.
+        r[j] = s * p.cons[j].rhs + p.cons[j].tol;
     }
     (c, r)
 }
@@ -325,19 +333,19 @@ pub fn realized(p: &FeasProblem, x: &[usize], j: usize) -> f64 {
     v
 }
 
-fn slack_ok(p: &FeasProblem, c: &[Vec<[f64; ACTS + 1]>], r: &[f64], x: &[usize]) -> bool {
+fn slack_ok(c: &[Vec<[f64; ACTS + 1]>], r: &[f64], x: &[usize]) -> bool {
     for j in 0..r.len() {
-        if norm_c_of(c, j, x) > r[j] + p.cons[j].tol {
+        if norm_c_of(c, j, x) > r[j] {
             return false;
         }
     }
     true
 }
 
-fn violation(p: &FeasProblem, c: &[Vec<[f64; ACTS + 1]>], r: &[f64], x: &[usize]) -> f64 {
+fn violation(c: &[Vec<[f64; ACTS + 1]>], r: &[f64], x: &[usize]) -> f64 {
     let mut v = 0.0f64;
     for j in 0..r.len() {
-        let over = norm_c_of(c, j, x) - r[j] - p.cons[j].tol;
+        let over = norm_c_of(c, j, x) - r[j];
         if over > 0.0 {
             v += over / (r[j].abs() + 1.0);
         }
@@ -394,11 +402,11 @@ fn greedy_incumbent(
     }
     let cap = nb * (ACTS + 1) * 12 + 128;
     for _ in 0..cap {
-        if violation(p, c, r, &x) <= 0.0 {
+        if violation(c, r, &x) <= 0.0 {
             break;
         }
         let mut best_move: Option<(usize, usize, f64)> = None;
-        let base_v = violation(p, c, r, &x);
+        let base_v = violation(c, r, &x);
         for b in 0..nb {
             if p.fixed[b].is_some() {
                 continue;
@@ -410,7 +418,7 @@ fn greedy_incumbent(
                 }
                 let saved = x[b];
                 x[b] = a;
-                let v = violation(p, c, r, &x);
+                let v = violation(c, r, &x);
                 x[b] = saved;
                 if v >= base_v {
                     continue;
@@ -453,7 +461,7 @@ impl<'a> Bnb<'a> {
             return;
         }
         if depth == self.free.len() {
-            if slack_ok(self.p, &self.c, &self.r, x) {
+            if slack_ok(&self.c, &self.r, x) {
                 let o = obj_of(self.p, x);
                 if self.best.as_ref().is_none_or(|(_, bo)| o < *bo - 1e-12) {
                     self.best = Some((x.to_vec(), o));
@@ -463,7 +471,7 @@ impl<'a> Bnb<'a> {
         }
         // Optimistic feasibility: can the remaining buckets still satisfy every constraint?
         for j in 0..self.r.len() {
-            if partial_c[j] + self.suf_c[j][depth] > self.r[j] + self.p.cons[j].tol + 1e-9 {
+            if partial_c[j] + self.suf_c[j][depth] > self.r[j] + 1e-9 {
                 return;
             }
         }
@@ -536,7 +544,7 @@ pub fn solve_feasible(p: &FeasProblem, time_cap_s: f64, node_cap: u64) -> FeasSo
     let mut best: Option<(Vec<usize>, f64)> = None;
     for seed in 0..2 {
         let x = greedy_incumbent(p, &c, &r, seed);
-        if slack_ok(p, &c, &r, &x) {
+        if slack_ok(&c, &r, &x) {
             let o = obj_of(p, &x);
             if best.as_ref().is_none_or(|(_, bo)| o < *bo - 1e-12) {
                 best = Some((x, o));
@@ -548,8 +556,10 @@ pub fn solve_feasible(p: &FeasProblem, time_cap_s: f64, node_cap: u64) -> FeasSo
         x0[b] = p.fixed[b].unwrap_or(0);
     }
     let mut pc = vec![0.0f64; r.len()];
+    let mut fixed_obj = 0.0f64;
     for b in 0..nb {
         if p.fixed[b].is_some() {
+            fixed_obj += p.obj[b][x0[b]];
             for j in 0..r.len() {
                 pc[j] += c[j][b][x0[b]];
             }
@@ -569,7 +579,9 @@ pub fn solve_feasible(p: &FeasProblem, time_cap_s: f64, node_cap: u64) -> FeasSo
         time_cap: time_cap_s,
         exhaustive: true,
     };
-    bnb.dfs(0, 0.0, &pc, &mut x0);
+    // Fixed buckets contribute to every full objective, including each subtree bound.
+    // Omitting a negative fixed cost raises the bound and can prune the true optimum.
+    bnb.dfs(0, fixed_obj, &pc, &mut x0);
     let feasible = bnb.best.is_some();
     let (actions, obj) = match bnb.best {
         Some((x, o)) => (x, o),
@@ -688,6 +700,131 @@ pub fn realized_outcome(
 mod tests {
     use super::*;
 
+    // Independent exhaustive truth for small programs: evaluate original constraint senses and
+    // tolerances, without reusing normalization, feasibility checks or bounds from the solver.
+    fn exhaustive_optimum(p: &FeasProblem) -> Option<(Vec<usize>, f64)> {
+        let mut best: Option<(Vec<usize>, f64)> = None;
+        for encoded in 0..(ACTS + 1).pow(p.obj.len() as u32) {
+            let mut digits = encoded;
+            let mut actions = Vec::new();
+            for _ in 0..p.obj.len() {
+                actions.push(digits % (ACTS + 1));
+                digits /= ACTS + 1;
+            }
+            if p.fixed
+                .iter()
+                .zip(&actions)
+                .any(|(fixed, action)| fixed.is_some_and(|f| f != *action))
+            {
+                continue;
+            }
+            let satisfies = p.cons.iter().all(|con| {
+                let value: f64 = actions
+                    .iter()
+                    .enumerate()
+                    .map(|(b, a)| con.coeff[b][*a])
+                    .sum();
+                match con.sense {
+                    ConSense::AtMost => value <= con.rhs + con.tol,
+                    ConSense::AtLeast => value >= con.rhs - con.tol,
+                }
+            });
+            if !satisfies {
+                continue;
+            }
+            let objective: f64 = actions.iter().enumerate().map(|(b, a)| p.obj[b][*a]).sum();
+            if best.as_ref().is_none_or(|(_, value)| objective < *value) {
+                best = Some((actions, objective));
+            }
+        }
+        best
+    }
+
+    fn assert_matches_exhaustive(p: &FeasProblem) -> FeasSolution {
+        let truth = exhaustive_optimum(p);
+        let solved = solve_feasible(p, 5.0, 100_000);
+        assert!(solved.exhaustive, "small search must finish: {solved:?}");
+        match truth {
+            Some((_, objective)) => {
+                assert!(solved.feasible, "missed a feasible table: {solved:?}");
+                assert_eq!(solved.status, "OPTIMAL");
+                assert!(
+                    (solved.obj - objective).abs() < 1e-9,
+                    "solver {} differs from exhaustive {objective}",
+                    solved.obj
+                );
+                assert!(
+                    solved.lower_bound <= objective + 1e-9,
+                    "bound {} exceeds exhaustive {objective}",
+                    solved.lower_bound
+                );
+            }
+            None => {
+                assert!(!solved.feasible, "invented a feasible table: {solved:?}");
+                assert_eq!(solved.status, "INFEASIBLE");
+            }
+        }
+        solved
+    }
+
+    #[test]
+    fn fixed_objective_is_included_in_every_subtree_bound() {
+        for fixed_cost in [-100.0, 0.0, 100.0] {
+            // Greedy repair first buys two units for one, then three more for three: cost four.
+            // The true optimum buys only three units: cost three. A negative fixed contribution
+            // must not raise the subtree bound and prune that improvement at the root.
+            let p = FeasProblem {
+                obj: vec![
+                    [0.0, 3.0, 3.0, 3.0],
+                    [0.0, 1.0, 1.0, 1.0],
+                    [900.0, 900.0, fixed_cost, 900.0],
+                ],
+                cons: vec![ConSpec {
+                    name: "preserved_units",
+                    coeff: vec![[0.0, 3.0, 3.0, 3.0], [0.0, 2.0, 2.0, 2.0], [0.0; 4]],
+                    sense: ConSense::AtLeast,
+                    rhs: 3.0,
+                    tol: 0.0,
+                }],
+                fixed: vec![None, None, Some(2)],
+                support: vec![100.0, 100.0, 0.0],
+            };
+            let solved = assert_matches_exhaustive(&p);
+            assert_eq!(solved.obj, fixed_cost + 3.0);
+            assert_eq!(solved.actions[1], 0);
+            assert_eq!(solved.actions[2], 2);
+        }
+    }
+
+    #[test]
+    fn bounds_and_acceptance_share_the_tolerated_feasible_set() {
+        for sense in [ConSense::AtMost, ConSense::AtLeast] {
+            let sign = if sense == ConSense::AtMost { 1.0 } else { -1.0 };
+            let mut p = FeasProblem {
+                obj: vec![[0.0, -1.0, -2.0, -2.5]],
+                cons: vec![ConSpec {
+                    name: "tolerance_boundary",
+                    coeff: vec![[0.0, sign, 1.25 * sign, 1.5 * sign]],
+                    sense,
+                    rhs: sign,
+                    tol: 0.25,
+                }],
+                fixed: vec![None],
+                support: vec![100.0],
+            };
+            // Action two is feasible exactly at tolerance; action three exceeds it. A dual bound
+            // using the strict RHS would incorrectly exclude action two from its feasible set.
+            let solved = assert_matches_exhaustive(&p);
+            assert_eq!(solved.actions, vec![2]);
+            p.cons[0].tol = 0.0;
+            assert_eq!(assert_matches_exhaustive(&p).actions, vec![1]);
+            p.fixed[0] = Some(2);
+            assert_matches_exhaustive(&p);
+            p.cons[0].tol = 0.25;
+            assert_eq!(assert_matches_exhaustive(&p).actions, vec![2]);
+        }
+    }
+
     #[test]
     fn integer_outcomes_match_the_ideal_identity() {
         // A small vocabulary with a clear payload/target structure at f_bits = 10.
@@ -702,6 +839,34 @@ mod tests {
                 assert!(out[a].read);
                 assert_eq!(out[a].correct, out[a].emitted == target);
             }
+        }
+    }
+
+    #[test]
+    fn saturated_boost_uses_its_effective_integer_change() {
+        let z = vec![i32::MAX - 32, i32::MAX - 96];
+        for target in [0u32, 1u32] {
+            let (out, residual) = position_action_outcomes(&z, 0, target, 10);
+            assert!(residual < 1e-9, "saturated identity residual {residual}");
+            // Every positive action saturates at MAX, so all three have the same effective
+            // 32/1024-nat boost, regardless of their nominal 64/1024, 1 or 8 nats.
+            for action in 1..=ACTS {
+                assert_eq!(out[action], out[1]);
+                assert_eq!(out[action].emitted, 0);
+                let ideal = action_loss(prob_of_int(&z, 0, 10), 32.0 / 1024.0, target == 0)
+                    / std::f64::consts::LN_2;
+                assert!((out[action].delta_bits - ideal).abs() < 1e-9);
+            }
+        }
+        let already_maximal = vec![i32::MAX, i32::MAX - 64];
+        let (out, residual) = position_action_outcomes(&already_maximal, 0, 1, 10);
+        assert!(residual < 1e-9);
+        for action in 1..=ACTS {
+            assert_eq!(out[action].delta_bits, 0.0);
+            assert!(
+                out[action].read,
+                "a zero effective boost remains a read action"
+            );
         }
     }
 

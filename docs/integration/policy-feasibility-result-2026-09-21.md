@@ -1,11 +1,13 @@
 # Joint finite-policy feasibility: a proven obstruction, not a mixture-weight question
 
+> **Principal review completing PR #1332:** the [review](policy-obstruction-review-2026-09-21.md) and [audit](../evidence/policy-obstruction-principal-review-2026-09-21.json) independently certify the development count obstruction. The original generic solver required fixed-objective/tolerance repairs for feasible cases; source correspondence, digest completeness and saved-statistics scope are qualified. Both attempts are sealed; no fresh final was evaluated. The collision is in the coarse five-bit influence observation, not all H4 geometry. The [successor](deepseek-reader-confidence-step-2026-09-21.md) restores the existing parent read advantage with an explicit witness before learning useful dose. Original dated measurements are retained below.
+
 September 21, 2026. Executed from reviewed parent `e0f99fcc` (PR #1331). Prospectively declared
 [design](policy-feasibility-design-2026-09-21.md); [principal review](policy-objective-review-2026-09-21.md);
 [constructive prompt](deepseek-policy-feasibility-step-2026-09-21.md). Delivered root
 `.uor-models/realtext-prior-2026-09-20/policy-feasibility-2` (sealed, verified, 0 unlisted, manifest
 `a28803c4e8c1e86049293eb74ad1fe35f5117e690db95e67461a7a548ed31fac`). The superseded attempt
-`policy-feasibility-1` holds identical measurements and is retained, unsealed-in-effect (its
+`policy-feasibility-1` holds identical measurements and is retained with a valid seal and a superseded reporting defect (its
 infeasible-arm reporting printed a non-selected search path); it is never reused as the delivered root.
 
 ## Decision
@@ -26,7 +28,7 @@ exactly those populations: **present emitted-correct 149/197**, present CE chang
 **absent reads 7/23**, absent CE change **+3.497 bits**. Translated preservation margin
 `m = ceil(2·197/121) = 4` correct answers; present loss margin `0.05·197 = 9.85` bits.
 
-| Constraint | Required | Best attainable (any table, buckets free) | Binding? |
+| Constraint | Required | H4 best attainable (any table, buckets free) | Binding? |
 | --- | ---: | ---: | --- |
 | present emitted-correct | >= 145 | 149 | no (alone) |
 | present CE change (bits) | <= −1921.47 | −1937.55 | no (alone) |
@@ -58,27 +60,25 @@ be preserved depend on reads inside that same bucket set. A single action per bu
 present positions while not reading the absent positions it shares a bucket with. The parent reaches
 149 present-correct with only 7 absent reads precisely because its scored path makes a **per-position**
 decision, not a per-bucket one — it has information (absolute source/NoRead confidence and the
-directed relation) that the four-bit bucket observation discards.
+directed relation) that the five-bit bucket observation discards.
 
 The fitted tables show the same failure directly on the development population: their realized absent
 reads are **23/23** (they read every absent position), versus the parent's 7. This is the mechanism
-behind the final run's reported 19/19 absent reads against the parent's 5 — an objective consequence,
-now explained, not a representation collision and not insufficient support.
+consistent with the previous exposed final panel's 19/19 absent reads against the parent's 5. The mixed objective selected that harmful policy, but objective changes alone cannot repair the frozen class: this is an information collision in the coarse influence representation. Freeing unsupported buckets leaves the obstruction; this does not establish an H4 capacity limitation.
 
 ## Text is not the blocker
 
 The text objective alone is satisfiable and slightly favourable: the per-bucket text optimum is
 **−0.0366** (`h4`) / **−0.0349** (`categorical`) bits/token, and the constant one-nat comparator gives
-−0.030979 / −0.030671, both improving on local. The behavioral constraints, not text, make the class
-infeasible. The scalar objective's real defect is that it never encoded the present/absent separation
-the served class cannot express.
+−0.030979 / −0.030671, both improving on local. The pair of present-emission and absent-read constraints already makes the class
+infeasible without text. This does not prove joint text/present feasibility. The scalar objective omitted preservation constraints, while the observation interface also discards the information needed to satisfy them.
 
 ## Verified mechanics
 
 - **Counterfactual identity.** The ideal score-space identity is asserted against the actual integer
   logits at every one of **5,442** extracted positions; maximum absolute residual **1.42e-13 bits**.
-  All four actions are recorded per position from the real integer path (integer argmax tie rule,
-  `saturating_add` boost), so no optimizer step needs a model pass.
+  All four actions are computed per position from the real integer path (integer argmax tie rule,
+  `saturating_add` boost), then aggregated into retained fit bucket/action matrices. Individual source/occurrence rows, tune matrices and per-document counterfactual arrays were not saved. The principal repair uses effective rather than nominal boost at saturation; original non-saturated measurements are retained.
 - **Control repair delivered.** An expected-manifest loader now verifies the on-disk byte hash, the
   fit-input identity, the configured feature contract and the vocabulary before returning a predictor.
   `expected_manifest_loader` records **0 failures**, and four rejections are exercised through that

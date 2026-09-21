@@ -4573,7 +4573,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
                 "lower_bound_bits": sol.lower_bound,
                 "meets_text_screen": text_per_token <= MARGIN_TEXT_BITS,
                 "obstruction_proved_by_bound": sol.lower_bound / fit_tokens.max(1) as f64 > MARGIN_TEXT_BITS,
-                "tune_text_bits_per_token": tune_text_per_token,
+                "tune_text_bits_per_token": sol.feasible.then_some(tune_text_per_token),
                 "wider_class_feasible": wide_sol.feasible,
                 "wider_class_text_bits_per_token": wide_sol.obj / fit_tokens.max(1) as f64,
             });

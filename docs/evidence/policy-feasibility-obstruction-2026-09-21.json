@@ -123,5 +123,17 @@
     "physical energy UNAVAILABLE",
     "whole-path D0-b not claimed",
     "no fresh final draw taken"
-  ]
+  ],
+  "principal_correction": {
+    "review": "docs/integration/policy-obstruction-review-2026-09-21.md",
+    "independent_audit": "docs/evidence/policy-obstruction-principal-review-2026-09-21.json",
+    "count_certificate": "VERIFIED_FROM_SAVED_FIT_COUNTS",
+    "recorded_base_revision": "STALE_NOT_EXECUTED_SOURCE_IDENTITY",
+    "recorded_checkout": "e0f99fcc91b5063c5ad15c1799d47ab4525d65e7",
+    "exact_executed_runner_correspondence": "UNRESOLVED",
+    "solver_repairs": "Fixed objective offset, consistent tolerance and effective saturated boost; focused tests pass; original sealed model run not repeated",
+    "statistics_scope": "Fit bucket/action aggregates only; individual/tune/document arrays unavailable",
+    "interpretation": "Coarse five-bit influence representation collision; not H4 capacity limit",
+    "next": "Restore exact retained parent Read-NoRead advantage, verify causal parity, then test useful compact influence; no new outcome claimed"
+  }
 }
