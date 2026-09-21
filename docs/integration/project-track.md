@@ -1,6 +1,14 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Active direction — grounded computation in an owned dependent session
+## Active direction — grounded factorization and an owned dependent session executed
+
+D0-b/D1/D2/D3 and geometric priority remain unchanged.
+
+**PR #1340, returned for review:** a **constructive factorization** of the observed transition graph (declared labels -> primitive permutations -> exhaustive isomorphism into a witnessed quaternion subgroup; coordinates from a reference-state orbit; initial coordinates checked across every primitive) reproduces all **672 declared development transitions** and matches the competent shared finite-state control on every panel - **288/288 development, 124/128 unseen length four, 64/64 unseen reversal** - at 102 serialized bytes against 1668. The previous fitted recurrence reaches 248/288 on the same supervision. An owned resumable `SessionFrame` (exact evidence lease, retained state, phase, typed terminal, `RLSF` v1) resumes identically and keeps sessions independent. A genuinely dependent read runs 4/4 on first hop, second selection and complete answer: changing the first source changes the second query key, the selected second occurrence and the answer together; removing the required record or disabling the reader returns `NoRead`; the answer is absent from every record payload. [Result](grounded-session-result-2026-09-21.md); [evidence](../evidence/grounded-session-2026-09-21.json).
+
+**Next:** learned continuation instead of supplied-program exhaustion, semantic query formation instead of exact-key retrieval, persistent source ownership across hops, then source-separated prose and an executed Rust task on one native path. Structural role/scope banks, relative H4/Spin and retained Hopf fiber remain tools for concrete needs; paired-H4/E8/S7 conditional.
+
+## Former direction — grounded computation in an owned dependent session
 
 D0-b/D1/D2/D3 and geometric priority remain unchanged.
 

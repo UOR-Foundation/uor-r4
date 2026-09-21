@@ -1772,3 +1772,38 @@ Prospective projection: 2026-09-21T20:41:20.935820+00:00, 2,700,000 ms inclusive
 Charge **1,958,296 ms** = 1,478,296 ms elapsed since projection + 180,000 ms preprojection preparation estimate + 300,000 ms final delivery reserve. This includes checks and the 49.754301 s corrected debug experiment; do not add it again. Original DeepSeek charge remains preserved, not recharged. Balance **242,357,806 / 243,900,000 ms**, remaining **1,542,194 ms**. No extension needed.
 
 Free after checks **43,314,593,792 bytes**, versus 45,340,524,544 at projection. Deleted **0 bytes**; owner checkout, source/research, all original six report roots, original release executable and new corrected report retained. Preserve 36,766,079,385-byte reserve plus 128 MiB stop margin. Whole-machine free-space change is not attributed solely to this build. No paid compute. Debug timing is functional experiment evidence, not optimized serving cost; energy UNAVAILABLE.
+
+## Grounded dependent-session step — September 21, 2026
+
+**Projection recorded before implementation and execution.** One constructive factorization module with
+session frames, an isomorphism/coordinate fit, a program-completion panel against the competent
+finite-state control, a dependent two-hop relation chain with causal controls, focused tests,
+evidence and delivery.
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **<= 15,000,000 ms (~250 min)** | context/knowledge recovery, factorization + session module, runner mode, compile cycles, four model runs, controls, evidence, delivery |
+| Compiler workers | <= 2, `CARGO_INCREMENTAL=0` | offline Rust build, shared owner target |
+| Model workers | 1 | single harness process |
+| Peak RSS | <= 8 GiB | existing loaders plus the 4096x16 latent map |
+| New/temporary/retained storage | <= 512 MiB build, <= 32 MiB reports | shared target reuse, bounded row files |
+| Free space at projection | `42093543424` bytes | above the 36,766,079,385-byte reserve plus the 128 MiB stop margin by 5,193,246,311 bytes |
+
+**Extension taken.** Time increment **+15,000,000 ms**; **new cumulative limit 258,900,000 ms**
+(previous 243,900,000 ms; live 242,357,806 ms). Reason: a constructive factorization with an
+exhaustive isomorphism search, a serializable session frame, a repaired runner boundary and four
+executed model runs cannot be funded by the remaining 1,542,194 ms. Recorded **before** the work. No
+reserve reduction and no paid/external compute.
+
+**Completed charges — grounded dependent-session step.** Measured: four targeted model runs (**2.9 s**
+each) plus superseded attempts; release builds and compile/fmt/test cycles (~**1500 s**). Estimated:
+context/source/knowledge recovery ~**1500 s**; factorization and session module ~**3600 s**; runner
+mode, dependent chain and controls ~**3600 s**; diagnosed repairs (isomorphism candidate mask, reader
+admission driven by key, test alphabet) ~**1800 s**; documentation, evidence, delivery and knowledge
+~**2000 s**. **Charge 13,000,000 ms** (measured + estimated). Live allowance limit **258,900,000 ms**;
+**new cumulative 255,357,806 ms**; remaining **3,542,194 ms**. `CARGO_INCREMENTAL=0` throughout; no
+reserve reduction, no deletion of unique material, no paid/external compute.
+
+**Delivered** under the claimed, sealed and verified roots
+`.uor-models/realtext-prior-2026-09-20/grounded-session-{1,2,3,4}` (0 unlisted each), with `-4` the
+delivered primary. Earlier attempts are sealed and retained unchanged.
