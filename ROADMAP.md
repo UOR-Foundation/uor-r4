@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model — roadmap
 
-**Current direction after PR #1334:** [principal review](docs/integration/read-conditioned-review-2026-09-21.md) retains verified short confidence generation and corrects the seeded/misindexed update diagnosis. [Next](docs/integration/deepseek-contextual-emission-step-2026-09-21.md): a genuinely context-required transformation plus learned shared low-bit emission, then dependent composition, needed structural persistence, broader language/executed Rust and qualified efficiency.
+**Current direction after the contextual-emission step:** the [paired instrument](docs/integration/contextual-emission-result-2026-09-21.md) is now valid (90/90 identical-local pairs, absent targets held, only the relevant older payload changes) and the learned read-conditioned update emits correct **uncopied** answers on 35/180 dev and 13/120 fresh, 6/90 and 1/60 pairs fully correct, versus **zero for every control** and a 0/180 frozen-row ceiling; served NLL 15561→7987 (H4) and 15561→8773 (cyclic C120). The limit is the bounded readout capacity — extra discrete optimizer passes change nothing. Next: a bounded readout-capacity increase with an **equal-capacity cyclic-C120 control**, then dependent reads/derived composition, needed structural persistence, broader language/executed Rust and qualified efficiency. No dimensional expansion.
 
 ## Capability direction
 

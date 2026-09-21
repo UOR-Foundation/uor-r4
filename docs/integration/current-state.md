@@ -1,6 +1,18 @@
 # Current native geometric AI work
 
-## Active: learn contextual transformation and shared emission at the correct boundary
+## Active: a real but weak uncopied contextual transformation, limited by readout capacity
+
+**The decisive question now has a measured positive signal with a diagnosed ceiling.** On a validated paired-prefix instrument (90/90 pairs with byte-identical local logits; 180/180 decisive; absent targets held; only the relevant older payload changes), the learned read-conditioned update emits correct **uncopied** answers on **35/180** development, **22/120** tune and **13/120** fresh positions, with **6/90** and **1/60** paired examples fully correct — while **every control (local, scalar-copy parent, UpdateDisabled, ReadDisabled) emits exactly zero** and the frozen-row ceiling is **0/180**. Served NLL falls 15561 → 7987 bits (H4) and 15561 → 8773 (matched cyclic C120). [Result](contextual-emission-result-2026-09-21.md); [design](contextual-emission-design-2026-09-21.md); [evidence](../evidence/contextual-emission-2026-09-21.json).
+
+**Diagnosis.** Not admission/selection (180/180 reads, identical local inputs), not input collision (only 6 ambiguous of 88 signatures), not residual range (bound 32768 ≥ deficit 16640), not optimizer (extra discrete passes change nothing): the limit is the **capacity of the bounded factorized readout** — 22 ternary rows of width 16 cannot reliably separate eight value→output mappings. This is a real but weak transformation, not yet a reliable learned contextual value transformation.
+
+**Next:** a bounded capacity increase in the shared readout (a wider learned derived feature or a small learned low-bit projection) with an **equal-capacity cyclic-C120 control**, since additional discrete optimizer passes demonstrably change nothing. Do not expand dimensions or architectures on this evidence. Generated continuations remain short token soup; prose is degenerate; energy UNAVAILABLE; whole-path D0-b not claimed.
+
+Delivered root `.uor-models/realtext-prior-2026-09-20/contextual-emission-4` (sealed, 0 unlisted); diagnostics `-1` (invalid first optimizer), `-2`, `-3` retained unchanged. Resources: [ledger](resource-ledger-2026-09-19.md).
+
+### Previous active (superseded by the section above)
+
+## Former active: learn contextual transformation and shared emission at the correct boundary
 
 **PR #1334, independently reviewed and corrected:** short frozen-confidence generation is verified: H4 23/42 reads, categorical 22/42, valid exact references and disabled/local token parity 7/7. The new update result is a **seeded frozen-row diagnostic with an invalid contextual instrument**: target depends on the query suffix, extraction omits its last key, accuracy-only search makes no parameter changes, and the alleged categorical arm is the same H4 algebra. The reported 0/60 ceiling is limited to those extracted positions, not a sole-readout diagnosis. Original confidence preservation failures remain exposed replays. [Principal review](read-conditioned-review-2026-09-21.md); [audit](../evidence/read-conditioned-principal-review-2026-09-21.json).
 
