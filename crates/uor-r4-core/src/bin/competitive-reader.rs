@@ -27,6 +27,7 @@ use uor_r4_core::native_geometric::learner::query_read::QueryHard;
 use uor_r4_core::native_geometric::learner::read_conditioned::*;
 use uor_r4_core::native_geometric::learner::realtext_support::*;
 use uor_r4_core::native_geometric::learner::relational::*;
+use uor_r4_core::native_geometric::learner::relational_session::*;
 use uor_r4_core::native_geometric::learner::result_decoder::*;
 use uor_r4_core::native_geometric::learner::shared_transition::*;
 use uor_r4_core::report_output::{claim, seal, verify};
@@ -12322,6 +12323,832 @@ fn gs_run() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+// ---------------------------------------------------------------------------
+// Learned relational access and content-dependent session control
+// ---------------------------------------------------------------------------
+
+const REL_N_ENTITIES: usize = 8;
+const REL_N_LITERALS: usize = 4;
+const REL_N_RELATIONS: usize = 4;
+const REL_DEV_WORLDS: u64 = 4;
+const REL_FINAL_WORLDS: u64 = 4;
+const REL_DEV_SEED: u64 = 0xC0F5_0001;
+const REL_FINAL_SEED: u64 = 0xC0F5_0101;
+
+/// A supplied memory world. Records are `(role, key, value)` token triples; the role token encodes
+/// the relation, and the request names the relation, so the role/relation correspondence must be
+/// learned rather than read off.
+#[derive(Clone)]
+struct RelWorld {
+    records: Vec<(u32, u32, u32)>,
+    entities: Vec<u32>,
+    version: u32,
+}
+
+impl RelWorld {
+    fn keys(&self) -> std::collections::BTreeSet<u32> {
+        self.records.iter().map(|(_, k, _)| *k).collect()
+    }
+    fn admit(&self, key: u32) -> Vec<Candidate> {
+        self.records
+            .iter()
+            .filter(|(_, k, _)| *k == key)
+            .map(|(role, k, v)| Candidate {
+                role: *role,
+                key: *k,
+                value: *v,
+                exact_key: true,
+            })
+            .collect()
+    }
+    fn record_abs(&self, index: usize) -> u32 {
+        index as u32
+    }
+}
+
+fn rel_make_world(
+    seed: u64,
+    relations: &[u32],
+    roles: &[u32],
+    entities: &[u32],
+    literals: &[u32],
+    version: u32,
+) -> RelWorld {
+    let mut st = seed | 1;
+    let mut records = Vec::new();
+    for e in entities.iter() {
+        for (r, role) in roles.iter().enumerate() {
+            let _ = relations;
+            let value = if r < 2 {
+                // Entity-valued relations: never a self loop, so the chain always advances.
+                let mut v = entities[(xorshift(&mut st) as usize) % entities.len()];
+                if v == *e {
+                    let i = entities.iter().position(|x| *x == v).unwrap_or(0);
+                    v = entities[(i + 1) % entities.len()];
+                }
+                v
+            } else {
+                literals[(xorshift(&mut st) as usize) % literals.len()]
+            };
+            records.push((*role, *e, value));
+        }
+    }
+    RelWorld {
+        records,
+        entities: entities.to_vec(),
+        version,
+    }
+}
+
+/// The declared task semantics, computed from the world alone: never from the model.
+fn rel_oracle(
+    world: &RelWorld,
+    roles: &[u32],
+    relation: usize,
+    entity: u32,
+) -> Option<(u32, u32, usize, u32, u8)> {
+    let first = world
+        .records
+        .iter()
+        .position(|(role, key, _)| *role == roles[relation] && *key == entity)?;
+    let value = world.records[first].2;
+    if world.entities.contains(&value) && relation < 2 {
+        let follow = relation + 2;
+        let second = world
+            .records
+            .iter()
+            .position(|(role, key, _)| *role == roles[follow] && *key == value)?;
+        Some((value, world.records[second].2, second, roles[follow], 2))
+    } else {
+        Some((value, value, first, 0, 1))
+    }
+}
+
+/// One step of the single causal serving path. `freeze` carries declared lesion switches; the
+/// production path uses the default.
+#[derive(Clone, Copy, Default)]
+struct RelLesion {
+    reads_disabled: bool,
+    freeze_relation_match: bool,
+    freeze_continuation_to_continue: bool,
+}
+
+struct RelOutcome {
+    emitted: Option<u32>,
+    selected_roles: Vec<u32>,
+    selected_abs: Vec<u32>,
+    retained: Vec<u32>,
+    actions: Vec<RelAction>,
+    terminal: RelAction,
+    hops: u8,
+    frame_bytes: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rel_serve(
+    model: &RelationalModel,
+    world: &RelWorld,
+    roles: &[u32],
+    relation: u32,
+    entity: u32,
+    lesion: RelLesion,
+    resume_probe: bool,
+) -> Result<RelOutcome, String> {
+    let mut frame = RelFrame::start(relation, entity);
+    let mut selected_roles = Vec::new();
+    let mut selected_abs = Vec::new();
+    let mut retained = Vec::new();
+    let mut actions = vec![RelAction::Read];
+    let mut frame_bytes = 0usize;
+    let keys = world.keys();
+    for _hop in 0..REL_MAX_HOPS {
+        if lesion.reads_disabled {
+            frame.stop(RelAction::Unresolved);
+            return Ok(RelOutcome {
+                emitted: None,
+                selected_roles,
+                selected_abs,
+                retained,
+                actions,
+                terminal: RelAction::Unresolved,
+                hops: frame.hops,
+                frame_bytes,
+            });
+        }
+        let entity = frame.entity.ok_or("session lost its query entity")?;
+        let admitted = world.admit(entity);
+        if admitted.is_empty() {
+            frame.stop(RelAction::Unresolved);
+            return Ok(RelOutcome {
+                emitted: None,
+                selected_roles,
+                selected_abs,
+                retained,
+                actions,
+                terminal: RelAction::Unresolved,
+                hops: frame.hops,
+                frame_bytes,
+            });
+        }
+        let relation = frame.relation.ok_or("session lost its relation")?;
+        let content_is_key = frame.retained.map(|v| keys.contains(&v)).unwrap_or(false);
+        let pick = if lesion.freeze_relation_match {
+            0
+        } else {
+            rank(model, relation, content_is_key, &admitted)
+                .ok_or("ranking produced no candidate")?
+        };
+        let chosen = admitted[pick];
+        // Learned compatibility gate: an admitted candidate that does not answer the requested
+        // relation leaves the request explicitly unresolved rather than emitting an incompatible
+        // fact. This is what makes a missing fact distinguishable from a present one.
+        if model.relation_matches(relation, chosen.role) <= 0 {
+            frame.stop(RelAction::Unresolved);
+            return Ok(RelOutcome {
+                emitted: None,
+                selected_roles,
+                selected_abs: Vec::new(),
+                retained,
+                actions,
+                terminal: RelAction::Unresolved,
+                hops: frame.hops,
+                frame_bytes,
+            });
+        }
+        let abs = world
+            .records
+            .iter()
+            .position(|(r, k, v)| *r == chosen.role && *k == chosen.key && *v == chosen.value)
+            .unwrap_or(0) as u32;
+        selected_roles.push(chosen.role);
+        selected_abs.push(abs);
+        frame.capture(CapturedPayload {
+            seq: world.version,
+            abs,
+            payload: chosen.value,
+            version: world.version,
+        });
+        retained.push(chosen.value);
+        if resume_probe {
+            // Save and restore mid-session; remaining work must continue from the frame.
+            let bytes = frame.to_bytes();
+            frame_bytes = bytes.len();
+            frame = RelFrame::from_bytes(&bytes, VOCAB)?;
+        }
+        let content_is_key_now = keys.contains(&chosen.value);
+        let proceed = if lesion.freeze_continuation_to_continue {
+            true
+        } else {
+            model.should_continue(content_is_key_now)
+        };
+        if proceed {
+            match model.follow_of(relation) {
+                Some(next) => {
+                    actions.push(RelAction::Continue);
+                    frame.advance_relation(next);
+                }
+                None => {
+                    frame.stop(RelAction::Unresolved);
+                    return Ok(RelOutcome {
+                        emitted: None,
+                        selected_roles,
+                        selected_abs,
+                        retained,
+                        actions,
+                        terminal: RelAction::Unresolved,
+                        hops: frame.hops,
+                        frame_bytes,
+                    });
+                }
+            }
+        } else {
+            let emitted = frame.emit().map(Some).unwrap_or(None);
+            frame.stop(RelAction::Stop);
+            actions.push(RelAction::Emit);
+            actions.push(RelAction::Stop);
+            return Ok(RelOutcome {
+                emitted,
+                selected_roles,
+                selected_abs,
+                retained,
+                actions,
+                terminal: RelAction::Stop,
+                hops: frame.hops,
+                frame_bytes,
+            });
+        }
+    }
+    frame.stop(RelAction::Exhausted);
+    Ok(RelOutcome {
+        emitted: None,
+        selected_roles,
+        selected_abs,
+        retained,
+        actions,
+        terminal: RelAction::Exhausted,
+        hops: frame.hops,
+        frame_bytes,
+    })
+}
+
+fn rel_run() -> Result<ExitCode, String> {
+    let mut root = PathBuf::from(
+        "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/relational-session-1",
+    );
+    let mut source_root: Option<PathBuf> = None;
+    {
+        let mut a = std::env::args().skip(1);
+        while let Some(k) = a.next() {
+            match k.as_str() {
+                "--root" => root = PathBuf::from(a.next().ok_or("--root value")?),
+                "--source-root" => source_root = Some(PathBuf::from(a.next().ok_or("value")?)),
+                other if other.starts_with("--mode") => {}
+                other => return Err(format!("unknown argument {other}")),
+            }
+        }
+    }
+    claim(&root).map_err(|e| format!("claim {}: {e}", root.display()))?;
+    let started = Instant::now();
+
+    let pb = std::fs::read(E_PATH).map_err(|e| format!("E: {e}"))?;
+    if sha256_hex(&pb) != E_SHA {
+        return Err("E sha mismatch".into());
+    }
+    let parent = PriorCore::from_bytes(&pb).map_err(|e| format!("load E: {e}"))?;
+    parent.validate()?;
+    let (parent_digest, _) = parent_hash_convention(&pb);
+    let sb = std::fs::read(S_PATH).map_err(|e| format!("S: {e}"))?;
+    if sha256_hex(&sb) != S_SHA {
+        return Err("S sha mismatch".into());
+    }
+    let tb = std::fs::read(DEFAULT_TOKENIZER).map_err(|e| format!("tokenizer: {e}"))?;
+    if sha256_hex(&tb) != TOKENIZER_SHA {
+        return Err("tokenizer sha mismatch".into());
+    }
+    let derived = sha256_hex(&derive_tokenizer_json(&tb, VOCAB).map_err(|e| format!("{e}"))?);
+    if derived != DERIVED_SHA {
+        return Err("derived tokenizer sha mismatch".into());
+    }
+    let tokenizer = derive_tokenizer(&tb, VOCAB).map_err(|e| format!("derive: {e}"))?;
+    let raw_tok: [u8; 32] = hex_to_bytes(&derived)?.try_into().unwrap();
+    let local = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
+        .map_err(|e| format!("load S: {e}"))?;
+    let u: Vec<Vec<i32>> = (0..120).map(|s| local.row_scores(s)).collect();
+    let table = ExactGroupTable::build().map_err(|e| format!("table: {e}"))?;
+    let group_digest = group_table_digest(&table);
+    let banks = build_banks(&tokenizer, parent.cfg.vocab)?;
+    let source_files: Vec<serde_json::Value> = match &source_root {
+        Some(sr) => [
+            "crates/uor-r4-core/src/native_geometric/learner/relational.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/read_conditioned.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/result_decoder.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/shared_transition.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/grounded_session.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/relational_session.rs",
+            "crates/uor-r4-core/src/bin/competitive-reader.rs",
+        ]
+        .iter()
+        .map(|rel| match std::fs::read(sr.join(rel)) {
+            Ok(b) => json!({"path": rel, "sha256": sha256_hex(&b)}),
+            Err(_) => json!({"path": rel, "sha256": "UNAVAILABLE"}),
+        })
+        .collect(),
+        None => vec![json!({"path": "unspecified", "sha256": "UNAVAILABLE"})],
+    };
+    let executable_sha256 = hex_of(&sha256_bytes(
+        &std::env::current_exe()
+            .ok()
+            .and_then(|p| std::fs::read(p).ok())
+            .unwrap_or_default(),
+    ));
+
+    // Banks: request relation names, record role tokens, entity values, literal values.
+    let relations: Vec<u32> = banks.keys.iter().copied().take(REL_N_RELATIONS).collect();
+    let roles: Vec<u32> = banks
+        .keys
+        .iter()
+        .copied()
+        .skip(REL_N_RELATIONS)
+        .take(REL_N_RELATIONS)
+        .collect();
+    let entities: Vec<u32> = banks
+        .values_fit
+        .iter()
+        .copied()
+        .take(REL_N_ENTITIES)
+        .collect();
+    let literals: Vec<u32> = banks
+        .values_fit
+        .iter()
+        .copied()
+        .skip(REL_N_ENTITIES)
+        .take(REL_N_LITERALS)
+        .collect();
+    if relations.len() < REL_N_RELATIONS
+        || roles.len() < REL_N_RELATIONS
+        || entities.len() < REL_N_ENTITIES
+        || literals.len() < REL_N_LITERALS
+    {
+        return Err("insufficient bank for the relational fixture".into());
+    }
+
+    let dev_worlds: Vec<RelWorld> = (0..REL_DEV_WORLDS)
+        .map(|i| {
+            rel_make_world(
+                REL_DEV_SEED + i * 0x9E37,
+                &relations,
+                &roles,
+                &entities,
+                &literals,
+                1 + i as u32,
+            )
+        })
+        .collect();
+    let final_worlds: Vec<RelWorld> = (0..REL_FINAL_WORLDS)
+        .map(|i| {
+            rel_make_world(
+                REL_FINAL_SEED + i * 0x9E37,
+                &relations,
+                &roles,
+                &entities,
+                &literals,
+                100 + i as u32,
+            )
+        })
+        .collect();
+
+    // Declared offline supervision: gold intermediate actions from the development worlds.
+    let mut dev_examples: Vec<RelExample> = Vec::new();
+    for w in dev_worlds.iter() {
+        for (r, _) in relations.iter().enumerate() {
+            for e in entities.iter() {
+                if let Some((v1, v2, _abs, second_role, depth)) = rel_oracle(w, &roles, r, *e) {
+                    dev_examples.push(RelExample {
+                        relation: relations[r],
+                        entity: *e,
+                        first_role: roles[r],
+                        first_value: v1,
+                        follow_relation: if depth >= 2 { relations[r + 2] } else { 0 },
+                        second_role,
+                        second_value: v2,
+                        depth,
+                    });
+                }
+            }
+        }
+    }
+    let (model, fit) = learn_relational_model(&dev_examples, false, false);
+    let (categorical, cat_fit) = learn_relational_model(&dev_examples, false, true);
+    let (cyclic_model, cyc_fit) = learn_relational_model(&dev_examples, true, false);
+
+    // Export and independently reload before any reported answer.
+    let mut artifacts: Vec<serde_json::Value> = Vec::new();
+    let mut reload = |name: &str, m: &RelationalModel| -> Result<RelationalModel, String> {
+        let bytes = m.to_bytes();
+        let rel = format!("artifacts/{name}.rlrm");
+        write_checked(&root, &rel, &bytes)?;
+        let loaded = RelationalModel::from_bytes(
+            &std::fs::read(root.join(&rel)).map_err(|e| e.to_string())?,
+            parent.cfg.vocab,
+        )?;
+        if loaded != *m {
+            return Err("relational artifact reload mismatch".into());
+        }
+        artifacts.push(json!({"arm": name, "artifact_sha256": sha256_hex(&bytes),
+            "artifact_bytes": bytes.len(), "reload_identical": true,
+            "algebra": if m.cyclic {"cyclic_c120"} else if m.categorical {"categorical"} else {"signed_h4"},
+            "group_digest": group_digest}));
+        Ok(loaded)
+    };
+    let model_pre = model.clone();
+    let model = reload("relational_primary", &model_pre)?;
+    let categorical = reload("relational_categorical_control", &categorical)?;
+    let cyclic_model = reload("relational_cyclic_control", &cyclic_model)?;
+
+    // Full-predictor parity: the pre-export and the independently loaded model must agree on every
+    // request of every world before any reported result.
+    let mut parity = 0usize;
+    for w in dev_worlds.iter().chain(final_worlds.iter()) {
+        for (r, _) in relations.iter().enumerate() {
+            for e in entities.iter() {
+                let a = rel_serve(
+                    &model_pre,
+                    w,
+                    &roles,
+                    relations[r],
+                    *e,
+                    RelLesion::default(),
+                    false,
+                )?;
+                let b = rel_serve(
+                    &model,
+                    w,
+                    &roles,
+                    relations[r],
+                    *e,
+                    RelLesion::default(),
+                    false,
+                )?;
+                if a.emitted != b.emitted
+                    || a.hops != b.hops
+                    || a.selected_abs != b.selected_abs
+                    || a.terminal != b.terminal
+                {
+                    return Err("loaded relational full-predictor parity failure".into());
+                }
+                parity += 1;
+            }
+        }
+    }
+
+    // ---------------- Evaluation ----------------
+    let evaluate = |m: &RelationalModel,
+                    worlds: &[RelWorld],
+                    lesion: RelLesion|
+     -> Result<(usize, usize, usize, Vec<serde_json::Value>), String> {
+        let mut complete = 0usize;
+        let mut total = 0usize;
+        let mut depth_ok = 0usize;
+        let mut rows = Vec::new();
+        for (wi, w) in worlds.iter().enumerate() {
+            for (r, _) in relations.iter().enumerate() {
+                for e in entities.iter() {
+                    total += 1;
+                    let expected = rel_oracle(w, &roles, r, *e);
+                    let served = rel_serve(m, w, &roles, relations[r], *e, lesion, false)?;
+                    let (want_answer, want_depth) = match expected {
+                        Some((_, answer, _, _, depth)) => (Some(answer), depth),
+                        None => (None, 0),
+                    };
+                    let ok = served.emitted == want_answer && served.terminal == RelAction::Stop;
+                    if ok {
+                        complete += 1;
+                    }
+                    if served.hops == want_depth {
+                        depth_ok += 1;
+                    }
+                    rows.push(json!({
+                        "world": wi, "world_version": w.version, "relation": relations[r],
+                        "entity": e, "expected_answer": want_answer, "expected_depth": want_depth,
+                        "emitted": served.emitted,
+                        "decoded": served.emitted.map(|t| tokenizer.decode(&[t])).unwrap_or_default(),
+                        "selected_roles": served.selected_roles, "selected_abs": served.selected_abs,
+                        "retained": served.retained, "hops": served.hops,
+                        "terminal": format!("{:?}", served.terminal),
+                        "actions": served.actions.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>(),
+                        "correct": ok,
+                    }));
+                }
+            }
+        }
+        Ok((complete, total, depth_ok, rows))
+    };
+
+    let (dev_ok, dev_total, dev_depth, _dev_rows) =
+        evaluate(&model, &dev_worlds, RelLesion::default())?;
+    let (fin_ok, fin_total, fin_depth, fin_rows) =
+        evaluate(&model, &final_worlds, RelLesion::default())?;
+    let (cat_ok, cat_total, _, _) = evaluate(&categorical, &final_worlds, RelLesion::default())?;
+    let (cyc_ok, cyc_total, _, _) = evaluate(&cyclic_model, &final_worlds, RelLesion::default())?;
+    let (no_rel_ok, _, _, _) = evaluate(
+        &model,
+        &final_worlds,
+        RelLesion {
+            freeze_relation_match: true,
+            ..RelLesion::default()
+        },
+    )?;
+    let (always_ok, _, _, _) = evaluate(
+        &model,
+        &final_worlds,
+        RelLesion {
+            freeze_continuation_to_continue: true,
+            ..RelLesion::default()
+        },
+    )?;
+    let (no_read_ok, _, _, _) = evaluate(
+        &model,
+        &final_worlds,
+        RelLesion {
+            reads_disabled: true,
+            ..RelLesion::default()
+        },
+    )?;
+
+    let arms = json!([
+        {"arm": "learned_relational", "split": "development", "complete": dev_ok, "total": dev_total, "depth_correct": dev_depth},
+        {"arm": "learned_relational", "split": "final", "complete": fin_ok, "total": fin_total, "depth_correct": fin_depth},
+        {"arm": "categorical_control", "split": "final", "complete": cat_ok, "total": cat_total},
+        {"arm": "cyclic_control", "split": "final", "complete": cyc_ok, "total": cyc_total},
+        {"arm": "relation_match_frozen", "split": "final", "complete": no_rel_ok, "total": fin_total},
+        {"arm": "continuation_frozen_continue", "split": "final", "complete": always_ok, "total": fin_total},
+        {"arm": "reads_disabled", "split": "final", "complete": no_read_ok, "total": fin_total},
+    ]);
+
+    // ---------------- Causal interventions ----------------
+    let w0 = &final_worlds[0];
+    let req_rel = relations[0];
+    let req_ent = entities[0];
+    let base_out = rel_serve(
+        &model,
+        w0,
+        &roles,
+        req_rel,
+        req_ent,
+        RelLesion::default(),
+        false,
+    )?;
+    // One-position source edit: change exactly the answering record's value, keep every other record
+    // fixed, and independently derive the expected continuation from the edited world.
+    let pos = w0
+        .records
+        .iter()
+        .position(|(role, key, _)| *role == roles[0] && *key == req_ent)
+        .ok_or("intervention could not locate the answering record")?;
+    let mut edited = w0.clone();
+    let mut replacement = entities[1];
+    if replacement == w0.records[pos].2 {
+        replacement = entities[2];
+    }
+    edited.records[pos].2 = replacement;
+    let edited_out = rel_serve(
+        &model,
+        &edited,
+        &roles,
+        req_rel,
+        req_ent,
+        RelLesion::default(),
+        false,
+    )?;
+    let edited_oracle = rel_oracle(&edited, &roles, 0, req_ent);
+    // Request relation change with the entity and every record held fixed.
+    let other_rel_out = rel_serve(
+        &model,
+        w0,
+        &roles,
+        relations[2],
+        req_ent,
+        RelLesion::default(),
+        false,
+    )?;
+    let other_rel_oracle = rel_oracle(w0, &roles, 2, req_ent);
+    // Required record removed.
+    let mut removed = w0.clone();
+    removed.records.remove(pos);
+    let removed_out = rel_serve(
+        &model,
+        &removed,
+        &roles,
+        req_rel,
+        req_ent,
+        RelLesion::default(),
+        false,
+    )?;
+    // Plausible distractor added: same key, an unseen role token.
+    let mut with_distractor = w0.clone();
+    let decoy_role = banks.keys[8];
+    with_distractor
+        .records
+        .push((decoy_role, req_ent, literals[0]));
+    let distractor_out = rel_serve(
+        &model,
+        &with_distractor,
+        &roles,
+        req_rel,
+        req_ent,
+        RelLesion::default(),
+        false,
+    )?;
+    // Owned capture versus a live reference: overwrite the origin after capture.
+    let mut frame = RelFrame::start(req_rel, req_ent);
+    let owned = CapturedPayload {
+        seq: w0.version,
+        abs: pos as u32,
+        payload: w0.records[pos].2,
+        version: w0.version,
+    };
+    frame.capture(owned);
+    let mut overwritten = w0.clone();
+    overwritten.records[pos].2 = literals[3];
+    let origin_now = overwritten.records[pos].2;
+    // Pause/resume: every final request must resume to the identical outcome.
+    let mut resume_identical = 0usize;
+    let mut resume_total = 0usize;
+    for w in final_worlds.iter() {
+        for (r, _) in relations.iter().enumerate() {
+            for e in entities.iter() {
+                resume_total += 1;
+                let plain = rel_serve(
+                    &model,
+                    w,
+                    &roles,
+                    relations[r],
+                    *e,
+                    RelLesion::default(),
+                    false,
+                )?;
+                let resumed = rel_serve(
+                    &model,
+                    w,
+                    &roles,
+                    relations[r],
+                    *e,
+                    RelLesion::default(),
+                    true,
+                )?;
+                if plain.emitted == resumed.emitted
+                    && plain.hops == resumed.hops
+                    && plain.selected_abs == resumed.selected_abs
+                    && plain.terminal == resumed.terminal
+                {
+                    resume_identical += 1;
+                }
+            }
+        }
+    }
+    // Interleaved independent sessions must not share mutable state.
+    let mut s1 = RelFrame::start(relations[0], entities[0]);
+    let mut s2 = RelFrame::start(relations[2], entities[1]);
+    s1.capture(CapturedPayload {
+        seq: 1,
+        abs: 0,
+        payload: entities[3],
+        version: 1,
+    });
+    let s2_before = s2.clone();
+    s2.capture(CapturedPayload {
+        seq: 1,
+        abs: 1,
+        payload: literals[1],
+        version: 1,
+    });
+    s2.advance_relation(relations[0]);
+    let interleaved_independent = s1.emitted.is_empty() && s1.retained == Some(entities[3]) && {
+        let mut probe = s2_before;
+        probe.capture(CapturedPayload {
+            seq: 1,
+            abs: 1,
+            payload: literals[1],
+            version: 1,
+        });
+        probe.retained == s2.retained
+    };
+    let mut unresolved_ok = 0usize;
+    let mut unresolved_total = 0usize;
+    for w in final_worlds.iter() {
+        for (r, _) in relations.iter().enumerate() {
+            let e = entities[r % entities.len()];
+            let Some(p) = w
+                .records
+                .iter()
+                .position(|(role, key, _)| *role == roles[r] && *key == e)
+            else {
+                continue;
+            };
+            let mut incomplete = w.clone();
+            incomplete.records.remove(p);
+            unresolved_total += 1;
+            let out = rel_serve(
+                &model,
+                &incomplete,
+                &roles,
+                relations[r],
+                e,
+                RelLesion::default(),
+                false,
+            )?;
+            if out.terminal == RelAction::Unresolved && out.emitted.is_none() {
+                unresolved_ok += 1;
+            }
+        }
+    }
+    let interventions = json!({
+        "incomplete_world_missing_required_fact": {
+            "unresolved_and_silent": unresolved_ok, "total": unresolved_total,
+            "note": "the required record is removed from the world; the session must stop unresolved with no emission",
+        },
+        "one_position_source_edit": {
+            "world": 0, "relation": req_rel, "entity": req_ent, "changed_record_index": pos,
+            "value_before": w0.records[pos].2, "value_after": replacement,
+            "emitted_before": base_out.emitted, "emitted_after": edited_out.emitted,
+            "retained_before": base_out.retained, "retained_after": edited_out.retained,
+            "independent_expected_after": edited_oracle.map(|o| o.1),
+            "answer_changed": base_out.emitted != edited_out.emitted,
+            "matches_independent_expectation": edited_out.emitted == edited_oracle.map(|o| o.1),
+        },
+        "request_relation_change_fixed_evidence": {
+            "relation_before": req_rel, "relation_after": relations[2], "entity": req_ent,
+            "emitted_before": base_out.emitted, "emitted_after": other_rel_out.emitted,
+            "independent_expected_after": other_rel_oracle.map(|o| o.1),
+            "selected_roles_before": base_out.selected_roles, "selected_roles_after": other_rel_out.selected_roles,
+            "changed": base_out.emitted != other_rel_out.emitted,
+            "matches_independent_expectation": other_rel_out.emitted == other_rel_oracle.map(|o| o.1),
+        },
+        "required_record_removed": {
+            "removed_index": pos, "terminal": format!("{:?}", removed_out.terminal),
+            "emitted": removed_out.emitted,
+        },
+        "plausible_distractor_added": {
+            "answer_preserved": distractor_out.emitted == base_out.emitted,
+            "selected_roles_preserved": distractor_out.selected_roles == base_out.selected_roles,
+        },
+        "owned_capture_versus_live_reference": {
+            "owned_payload": owned.payload, "origin_now": origin_now,
+            "owned_still_usable": frame.retained == Some(owned.payload),
+            "origin_is_live": frame.origin_is_live(Some(origin_now)),
+        },
+        "pause_resume_identical": {"identical": resume_identical, "total": resume_total},
+        "interleaved_sessions_independent": interleaved_independent,
+    });
+
+    write_checked(
+        &root,
+        "rows.jsonl",
+        fin_rows
+            .iter()
+            .map(|r| serde_json::to_string(r).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .as_bytes(),
+    )?;
+
+    let result = json!({
+        "schema": "uor-r4.relational-session/1",
+        "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+        "running_source": {
+            "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+            "git_dirty": std::env::var("UOR_GIT_DIRTY").unwrap_or_else(|_| "unknown".into()),
+            "executable_sha256": executable_sha256,
+            "source_files": source_files,
+        },
+        "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA,
+            "group_digest": group_digest, "f_bits": parent.cfg.f_bits},
+        "task": {
+            "records": "role/key/value triples in a supplied world; the role token encodes the relation while the request names it",
+            "chain": "read the requested relation of the entity; if the retrieved value is itself a key of the world, follow the learned follow-up relation; otherwise emit and stop",
+            "relations": relations, "roles": roles, "entities": entities, "literals": literals,
+            "authored_structure": "token layout, record triples and the follow-up convention are supplied; the role/relation correspondence, the ranking and the continuation decision are learned",
+        },
+        "learning": {"primary": fit, "categorical": cat_fit, "cyclic": cyc_fit},
+        "arms": arms,
+        "artifacts": artifacts,
+        "loaded_full_predictor_parity_requests": parity,
+        "interventions": interventions,
+        "generated_final": fin_rows.iter().filter(|r| r["correct"] == json!(true)).take(6).cloned().collect::<Vec<_>>(),
+        "scope": "bounded authored memory worlds; supplied layout and follow-up convention. Not broad language understanding. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "elapsed_s": started.elapsed().as_secs_f64(),
+    });
+    write_json(&root, "result.json", &result)?;
+    seal(&root).map_err(|e| format!("seal: {e}"))?;
+    let unlisted = verify(&root).map_err(|e| format!("verify: {e}"))?;
+    println!(
+        "relational-session: dev {}/{} final {}/{} depth {} | cat {} cyc {} | no-rel {} always {} no-read {} | sealed {} unlisted | {:.1}s",
+        dev_ok, dev_total, fin_ok, fin_total, fin_depth, cat_ok, cyc_ok, no_rel_ok, always_ok,
+        no_read_ok, unlisted.len(), started.elapsed().as_secs_f32()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mode = std::env::args().any(|a| a == "--mode=utility-transfer");
     let ce = std::env::args().any(|a| a == "--mode=contextual-emission");
@@ -12329,7 +13156,10 @@ fn main() -> ExitCode {
     let dsd = std::env::args().any(|a| a == "--mode=derived-state-decoder");
     let stm = std::env::args().any(|a| a == "--mode=shared-transition");
     let gsm = std::env::args().any(|a| a == "--mode=grounded-session");
-    let result = if gsm {
+    let rsm = std::env::args().any(|a| a == "--mode=relational-session");
+    let result = if rsm {
+        rel_run()
+    } else if gsm {
         gs_run()
     } else if stm {
         st_run()

@@ -1,6 +1,13 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Active direction — learned relational access and session control
+## Active direction — learned relational access and content-dependent control executed
+
+D0-b/D1/D2/D3 and geometric priority remain unchanged.
+
+**Work returned for review (based on the reviewed head 5821c48d of queued PR #1340):** a learned relational session over supplied memory worlds of `(role, key, value)` triples. Admission is an exact identity join on the key; ranking uses a learned relational compatibility with matched categorical and cyclic controls; a learned gate turns a missing fact into an explicit unresolved stop; and continuation is chosen from observed content (whether the retrieved value is a key of the world). On **fresh final worlds** the primary completes **128/128** (development 128/128, depths 128/128) with decoded answers. Freezing the relation match, freezing continuation, or disabling reads each gives **0/128**; removing the required record gives an unresolved silent stop in 16/16 worlds; one-position source edits change the retained value, the follow-up query, the second selected occurrence and the answer together; pause/resume and interleaving behave; an owned payload survives origin overwrite. The categorical and cyclic controls tie at 128/128, so no geometric advantage is claimed. [Result](relational-session-result-2026-09-21.md); [evidence](../evidence/relational-session-2026-09-21.json).
+
+**Next:** broaden to varied request renderings and source-separated prose, then an executed Rust task on the same native path; the supplied token layout, the small world and single-hop joins are the current limits. Structural role/scope banks and relative H4/Spin/Hopf remain tools for concrete needs; paired-H4/E8/S7 conditional.
+
 
 D0-b/D1/D2/D3 and geometric priority remain unchanged.
 
