@@ -82,6 +82,8 @@ const SEED_FINAL: u64 = 0x5C0F_F1A1;
 /// The **new** frozen seed for this run's final assessment. `SEED_FINAL` was inspected by PR #1328 and
 /// is retained as development/regression evidence only.
 const SEED_FINAL2: u64 = 0x5C0F_F2B2;
+/// Prospectively declared fresh construction seed for the read-confidence interface evaluation.
+const SEED_CONF_FRESH: u64 = 0x5C0F_C0DE;
 /// Declared window count per reader document before the preparation probe may extend it.
 const WINDOWS_PER_DOC: usize = 4;
 /// Declared minimum information target for natural-text fit positions.
@@ -975,6 +977,7 @@ fn run() -> Result<ExitCode, String> {
     let sources: Vec<serde_json::Value> = match &source_root {
         Some(sr) => [
             "crates/uor-r4-core/src/native_geometric/learner/relational.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/policy_feasibility.rs",
             "crates/uor-r4-core/src/bin/competitive-reader.rs",
         ]
         .iter()
@@ -3655,6 +3658,8 @@ struct FeasStats {
     absent_delta: Vec<[f64; ACTS + 1]>,
     /// Per-document text CE change in bits, for independently reconstructible intervals.
     text_docs: BTreeMap<usize, Vec<[f64; ACTS + 1]>>,
+    /// Candidate-bearing position count per address (the declared support mask input).
+    support: Vec<f64>,
     text_candidate_positions: usize,
     present_positions: usize,
     absent_positions: usize,
@@ -3663,14 +3668,15 @@ struct FeasStats {
 }
 
 impl FeasStats {
-    fn new() -> Self {
+    fn new(nb: usize) -> Self {
         FeasStats {
-            text_bits: vec![[0.0f64; ACTS + 1]; UTIL_BUCKETS],
-            present_correct: vec![[0.0f64; ACTS + 1]; UTIL_BUCKETS],
-            present_delta: vec![[0.0f64; ACTS + 1]; UTIL_BUCKETS],
-            absent_read: vec![[0.0f64; ACTS + 1]; UTIL_BUCKETS],
-            absent_delta: vec![[0.0f64; ACTS + 1]; UTIL_BUCKETS],
+            text_bits: vec![[0.0f64; ACTS + 1]; nb],
+            present_correct: vec![[0.0f64; ACTS + 1]; nb],
+            present_delta: vec![[0.0f64; ACTS + 1]; nb],
+            absent_read: vec![[0.0f64; ACTS + 1]; nb],
+            absent_delta: vec![[0.0f64; ACTS + 1]; nb],
             text_docs: BTreeMap::new(),
+            support: vec![0.0f64; nb],
             text_candidate_positions: 0,
             present_positions: 0,
             absent_positions: 0,
@@ -3682,7 +3688,7 @@ impl FeasStats {
         let mut v: Vec<(usize, f64)> = Vec::new();
         for (d, row) in self.text_docs.iter() {
             let mut s = 0.0f64;
-            for b in 0..UTIL_BUCKETS {
+            for b in 0..row.len() {
                 s += row[b][actions[b].min(ACTS)];
             }
             v.push((*d, s));
@@ -3717,6 +3723,7 @@ fn accumulate_feas(
     seqs: &[Seq],
     kind: &str,
     doc_of: Option<&[usize]>,
+    conf: bool,
     st: &mut FeasStats,
 ) -> Result<(), String> {
     let f_bits = parent.cfg.f_bits;
@@ -3739,8 +3746,16 @@ fn accumulate_feas(
                 o.ring.written(),
             );
             let rel = rels_for(sel, o, table, false);
-            let Some((top, bucket)) = sel.policy_bucket_with(cfg, &o.cands, &rel, &z) else {
-                continue;
+            let (top, bucket) = if conf {
+                match sel.confidence_address(&o.cands, &rel, &z) {
+                    Some((top, addr, _d)) => (top, addr),
+                    None => continue,
+                }
+            } else {
+                match sel.policy_bucket_with(cfg, &o.cands, &rel, &z) {
+                    Some((top, bucket)) => (top, bucket),
+                    None => continue,
+                }
             };
             let payload = o.cands[top].payload;
             let (out, resid) = position_action_outcomes(&z, payload, o.target, f_bits);
@@ -3751,7 +3766,9 @@ fn accumulate_feas(
             }
             st.max_resid = st.max_resid.max(resid);
             st.counterfactual_positions += 1;
-            let b = bucket.min(UTIL_BUCKETS - 1);
+            let nb = st.text_bits.len();
+            let b = bucket.min(nb - 1);
+            st.support[b] += 1.0;
             if kind == "text" {
                 st.text_candidate_positions += 1;
                 for a in 0..=ACTS {
@@ -3761,7 +3778,7 @@ fn accumulate_feas(
                     let row = st
                         .text_docs
                         .entry(d)
-                        .or_insert_with(|| vec![[0.0f64; ACTS + 1]; UTIL_BUCKETS]);
+                        .or_insert_with(|| vec![[0.0f64; ACTS + 1]; nb]);
                     for a in 0..=ACTS {
                         row[b][a] += out[a].delta_bits;
                     }
@@ -3842,6 +3859,104 @@ fn accumulate_parent(
     }
 }
 
+/// The witnessed parent rule on a confidence address: eight nats iff the parent's causal advantage
+/// is positive (odd address), otherwise NoRead.
+fn parent_rule_op(b: usize) -> usize {
+    if b % 2 == 1 {
+        3
+    } else {
+        0
+    }
+}
+
+fn parent_rule_table(nb: usize) -> Vec<usize> {
+    (0..nb).map(parent_rule_op).collect()
+}
+
+/// Test a table against the original constraint senses and tolerances.
+fn table_feasible(p: &FeasProblem, x: &[usize]) -> bool {
+    p.cons.iter().enumerate().all(|(j, c)| {
+        let v = realized(p, x, j);
+        match c.sense {
+            ConSense::AtMost => v <= c.rhs + c.tol,
+            ConSense::AtLeast => v >= c.rhs - c.tol,
+        }
+    })
+}
+
+fn table_obj(p: &FeasProblem, x: &[usize]) -> f64 {
+    x.iter().enumerate().map(|(b, a)| p.obj[b][*a]).sum()
+}
+
+/// Verify the parent-preserving witness: the configured selector's confidence sign must reproduce the
+/// frozen scored parent's own action on causal development prefixes (empty pool, one and many
+/// candidates, ties). Reporting only; no new model-quality claim.
+#[allow(clippy::too_many_arguments)]
+fn witness_parity(
+    configured: &RelationalSelector,
+    parent_sel: &RelationalSelector,
+    parent: &PriorCore,
+    local: &QueryHard,
+    u: &[Vec<i32>],
+    table: &ExactGroupTable,
+    obs: &[Vec<Obs>],
+) -> serde_json::Value {
+    let (mut checked, mut mismatches, mut parent_reads, mut d_pos) =
+        (0usize, 0usize, 0usize, 0usize);
+    let mut examples: Vec<serde_json::Value> = Vec::new();
+    for os in obs.iter() {
+        for o in os.iter() {
+            if o.cands.is_empty() {
+                continue;
+            }
+            let z = local_logits(
+                parent,
+                local,
+                u,
+                o.cur,
+                o.prev as usize,
+                o.prev2,
+                o.ring.written(),
+            );
+            let rel = rels_for(configured, o, table, false);
+            let Some((top, addr, d)) = configured.confidence_address(&o.cands, &rel, &z) else {
+                continue;
+            };
+            let actual = parent_sel.choose_scored(&o.cands, &rel);
+            let witness = if d > 0 { Some((top, 2usize)) } else { None };
+            checked += 1;
+            if d > 0 {
+                d_pos += 1;
+            }
+            if actual.is_some() {
+                parent_reads += 1;
+            }
+            let same = match (actual, witness) {
+                (None, None) => true,
+                (Some((k1, a1)), Some((k2, a2))) => k1 == k2 && a1 == a2,
+                _ => false,
+            };
+            if !same {
+                mismatches += 1;
+                if examples.len() < 5 {
+                    examples.push(json!({
+                        "cur": o.cur, "candidates": o.cands.len(),
+                        "actual": actual, "witness": witness, "address": addr, "d": d,
+                    }));
+                }
+            }
+        }
+    }
+    json!({
+        "checked_positions": checked,
+        "mismatches": mismatches,
+        "parent_reads": parent_reads,
+        "d_positive": d_pos,
+        "examples": examples,
+        "note": "witness = empty pool -> NoRead; otherwise the ungated top source at eight nats iff D>0; D uses the parent bucket and widened i64",
+    })
+}
+
 fn utility_transfer_run() -> Result<ExitCode, String> {
     // ---- arguments -------------------------------------------------------------
     let mut root = PathBuf::from(DEFAULT_UTIL_ROOT);
@@ -3908,6 +4023,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     let sources: Vec<serde_json::Value> = match &source_root {
         Some(sr) => [
             "crates/uor-r4-core/src/native_geometric/learner/relational.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/policy_feasibility.rs",
             "crates/uor-r4-core/src/bin/competitive-reader.rs",
         ]
         .iter()
@@ -4342,7 +4458,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             .get(name)
             .cloned()
             .unwrap_or((vec![0.0f64; UTIL_BUCKETS], 0usize));
-        let mut fit_stats = FeasStats::new();
+        let mut fit_stats = FeasStats::new(UTIL_BUCKETS);
         accumulate_feas(
             &parent,
             &local,
@@ -4354,6 +4470,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             &fit,
             "construction",
             None,
+            false,
             &mut fit_stats,
         )?;
         accumulate_feas(
@@ -4367,9 +4484,10 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             &fit_text_seqs,
             "text",
             Some(&fit_text_doc_pos),
+            false,
             &mut fit_stats,
         )?;
-        let mut tune_stats = FeasStats::new();
+        let mut tune_stats = FeasStats::new(UTIL_BUCKETS);
         accumulate_feas(
             &parent,
             &local,
@@ -4381,6 +4499,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             &tune,
             "construction",
             None,
+            false,
             &mut tune_stats,
         )?;
         accumulate_feas(
@@ -4394,6 +4513,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             &tune_text_seqs,
             "text",
             Some(&tune_text_doc_pos),
+            false,
             &mut tune_stats,
         )?;
 
@@ -4831,12 +4951,361 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     reload_failures += verify_failures;
     let h4_load = verified_arms["h4_policy"].clone();
     let cat_load = verified_arms["categorical_policy"].clone();
-    one_nat_load.verify_policy_contract(&policy_cfg)?;
+    // The served predictor is the one the expected-manifest consumer actually returned.
+    let one_nat_load = match load_expected_artifact(
+        &root,
+        &one_nat_exp,
+        &e_digest,
+        &raw_tok,
+        &policy_cfg,
+        parent.cfg.vocab,
+    ) {
+        Ok(sel) => sel,
+        Err(e) => {
+            eprintln!("verified one-nat load failed: {e}");
+            reload_failures += 1;
+            one_nat_load
+        }
+    };
     if one_nat_load != h4_one_nat {
         reload_failures += 1;
     }
     export_bytes.insert("h4_one_nat", one_nat_bytes);
     mark("export + reload", &mut marks);
+    // ---- learned read-confidence influence interface ----------------------------
+    // Restore the parent's learned Read/NoRead decision at the influence boundary: the address is the
+    // five-bit utility bucket plus the sign of the parent's own causal integer advantage D. The
+    // witnessed parent rule is an explicit candidate and the unsupported-entry fallback; a compact
+    // learned table may trade dose while preserving the parent-preserving construction witness.
+    let conf_t0 = Instant::now();
+    let configured_ctx = policy_cfg.apply(&relational_ctx_base);
+    let mut conf_arms: Vec<serde_json::Value> = Vec::new();
+    let mut conf_tables: BTreeMap<&'static str, (RelationalSelector, f64)> = BTreeMap::new();
+    let mut conf_fit_bytes: Vec<u8> = Vec::new();
+    conf_fit_bytes.extend_from_slice(&policy_cfg_digest);
+    for (name, configured, parent_sel) in [
+        ("h4_confidence", &configured_ctx, &relational_ctx_base),
+        ("categorical_confidence", &configured_cat, &categorical_base),
+    ] {
+        let witness = witness_parity(
+            configured, parent_sel, &parent, &local, &u, &table, &fit_obs,
+        );
+        let mut fit_stats = FeasStats::new(CONF_ADDRESSES);
+        accumulate_feas(
+            &parent,
+            &local,
+            &u,
+            &table,
+            &policy_cfg,
+            configured,
+            &fit_obs,
+            &fit,
+            "construction",
+            None,
+            true,
+            &mut fit_stats,
+        )?;
+        accumulate_feas(
+            &parent,
+            &local,
+            &u,
+            &table,
+            &policy_cfg,
+            configured,
+            &fit_text_obs,
+            &fit_text_seqs,
+            "text",
+            Some(&fit_text_doc_pos),
+            true,
+            &mut fit_stats,
+        )?;
+        let mut tune_stats = FeasStats::new(CONF_ADDRESSES);
+        accumulate_feas(
+            &parent,
+            &local,
+            &u,
+            &table,
+            &policy_cfg,
+            configured,
+            &tune_obs,
+            &tune,
+            "construction",
+            None,
+            true,
+            &mut tune_stats,
+        )?;
+        accumulate_feas(
+            &parent,
+            &local,
+            &u,
+            &table,
+            &policy_cfg,
+            configured,
+            &tune_text_obs,
+            &tune_text_seqs,
+            "text",
+            Some(&tune_text_doc_pos),
+            true,
+            &mut tune_stats,
+        )?;
+        let mut parent_fit = ParentAgg::default();
+        accumulate_parent(
+            &parent,
+            &local,
+            &u,
+            &table,
+            parent_sel,
+            &fit_obs,
+            &fit,
+            &mut parent_fit,
+        );
+        let mut parent_tune = ParentAgg::default();
+        accumulate_parent(
+            &parent,
+            &local,
+            &u,
+            &table,
+            parent_sel,
+            &tune_obs,
+            &tune,
+            &mut parent_tune,
+        );
+
+        let p_count = fit_stats.present_positions;
+        let margin_count = (2.0 * p_count as f64 / 121.0).ceil();
+        let present_loss_margin = MARGIN_PRESENT_BITS * p_count as f64;
+        let obj: Vec<[f64; ACTS + 1]> = (0..CONF_ADDRESSES)
+            .map(|b| fit_stats.text_bits[b])
+            .collect();
+        let cons = vec![
+            ConSpec {
+                name: "present_emitted_correct",
+                coeff: fit_stats.present_correct.clone(),
+                sense: ConSense::AtLeast,
+                rhs: parent_fit.present_correct - margin_count,
+                tol: 1e-6,
+            },
+            ConSpec {
+                name: "present_delta_bits",
+                coeff: fit_stats.present_delta.clone(),
+                sense: ConSense::AtMost,
+                rhs: parent_fit.present_delta + present_loss_margin,
+                tol: 1e-6,
+            },
+            ConSpec {
+                name: "absent_reads",
+                coeff: fit_stats.absent_read.clone(),
+                sense: ConSense::AtMost,
+                rhs: parent_fit.absent_read,
+                tol: 1e-6,
+            },
+            ConSpec {
+                name: "absent_delta_bits",
+                coeff: fit_stats.absent_delta.clone(),
+                sense: ConSense::AtMost,
+                rhs: parent_fit.absent_delta,
+                tol: 1e-6,
+            },
+        ];
+        let fixed: Vec<Option<usize>> = (0..CONF_ADDRESSES)
+            .map(|b| {
+                if fit_stats.support[b] >= UTIL_MIN_SUPPORT {
+                    None
+                } else {
+                    Some(parent_rule_op(b))
+                }
+            })
+            .collect();
+        let problem = FeasProblem {
+            obj: obj.clone(),
+            cons: cons.clone(),
+            fixed: fixed.clone(),
+            support: fit_stats.support.clone(),
+        };
+        let sol = solve_feasible(&problem, 45.0, 6_000_000);
+        // The witnessed parent rule is an explicit feasible candidate and the fallback.
+        let pr_table = parent_rule_table(CONF_ADDRESSES);
+        let pr_feasible = table_feasible(&problem, &pr_table);
+        // Select the feasible candidate with the lowest development text loss.
+        let mut chosen = pr_table.clone();
+        let mut chosen_src = "parent_rule";
+        if sol.feasible && (!pr_feasible || sol.obj < table_obj(&problem, &pr_table) - 1e-12) {
+            chosen = sol.actions.clone();
+            chosen_src = "solver_incumbent";
+        }
+        let chosen_feasible = table_feasible(&problem, &chosen);
+        let fit_tokens: usize = fit_text_obs.iter().map(|v| v.len()).sum();
+        let tune_tokens: usize = tune_text_obs.iter().map(|v| v.len()).sum();
+        let realized_row = |x: &[usize]| -> (f64, f64, f64, f64, f64) {
+            (
+                pick_mat(&fit_stats.text_bits, x) / fit_tokens.max(1) as f64,
+                pick_mat(&fit_stats.present_correct, x),
+                pick_mat(&fit_stats.present_delta, x),
+                pick_mat(&fit_stats.absent_read, x),
+                pick_mat(&fit_stats.absent_delta, x),
+            )
+        };
+        let (pr_text, pr_pc, pr_pd, pr_ar, pr_ad) = realized_row(&pr_table);
+        let (ch_text, ch_pc, ch_pd, ch_ar, ch_ad) = realized_row(&chosen);
+        let (_, tu_pc, tu_pd, tu_ar, tu_ad) = (
+            0.0,
+            pick_mat(&tune_stats.present_correct, &chosen),
+            pick_mat(&tune_stats.present_delta, &chosen),
+            pick_mat(&tune_stats.absent_read, &chosen),
+            pick_mat(&tune_stats.absent_delta, &chosen),
+        );
+        let tune_text = pick_mat(&tune_stats.text_bits, &chosen) / tune_tokens.max(1) as f64;
+        let supported = (0..CONF_ADDRESSES)
+            .filter(|b| fit_stats.support[*b] >= UTIL_MIN_SUPPORT)
+            .count();
+        conf_arms.push(json!({
+            "arm": name,
+            "addresses": CONF_ADDRESSES,
+            "supported_addresses": supported,
+            "witness_parity": witness,
+            "development_populations": {
+                "present_positions": p_count, "absent_positions": fit_stats.absent_positions,
+                "text_tokens": fit_tokens, "text_candidate_positions": fit_stats.text_candidate_positions,
+                "tune_present_positions": tune_stats.present_positions, "tune_absent_positions": tune_stats.absent_positions,
+            },
+            "parent_reference": {
+                "present_emitted_correct": parent_fit.present_correct,
+                "present_delta_bits": parent_fit.present_delta,
+                "absent_reads": parent_fit.absent_read,
+                "absent_delta_bits": parent_fit.absent_delta,
+                "tune_present_emitted_correct": parent_tune.present_correct,
+                "tune_absent_reads": parent_tune.absent_read,
+            },
+            "margins": {"present_count_margin": margin_count, "present_loss_margin_bits": present_loss_margin},
+            "solve": {
+                "status": sol.status, "feasible": sol.feasible, "exhaustive": sol.exhaustive,
+                "nodes": sol.nodes, "seconds": sol.seconds, "lower_bound_bits": sol.lower_bound,
+            },
+            "selected": {
+                "source": chosen_src,
+                "feasible": chosen_feasible,
+                "table": chosen,
+                "text_bits_per_token": ch_text,
+                "present_emitted_correct": ch_pc,
+                "present_delta_bits": ch_pd,
+                "absent_reads": ch_ar,
+                "absent_delta_bits": ch_ad,
+                "meets_text_screen": ch_text <= MARGIN_TEXT_BITS,
+                "improves_over_local": ch_text < 0.0,
+                "tune_text_bits_per_token": tune_text,
+                "tune_present_emitted_correct": tu_pc,
+                "tune_absent_reads": tu_ar,
+                "tune_present_delta_bits": tu_pd,
+                "tune_absent_delta_bits": tu_ad,
+            },
+            "witness_table_realized": {
+                "text_bits_per_token": pr_text, "present_emitted_correct": pr_pc,
+                "present_delta_bits": pr_pd, "absent_reads": pr_ar, "absent_delta_bits": pr_ad,
+                "feasible": pr_feasible,
+            },
+            "identity_max_residual_bits": fit_stats.max_resid.max(tune_stats.max_resid),
+            "counterfactual_positions": fit_stats.counterfactual_positions + tune_stats.counterfactual_positions,
+        }));
+        if chosen_feasible {
+            let mut sel = configured.clone();
+            sel.policy = chosen.iter().map(|a| *a as u8).collect();
+            sel.validate_for_vocab(parent.cfg.vocab)?;
+            sel.verify_policy_contract(&policy_cfg)?;
+            conf_tables.insert(name, (sel, ch_text));
+        }
+        // Bind the fit inputs that produced this interface (boundaries, references, addresses, D sign).
+        for o in fit_obs.iter().flatten() {
+            let z = local_logits(
+                &parent,
+                &local,
+                &u,
+                o.cur,
+                o.prev as usize,
+                o.prev2,
+                o.ring.written(),
+            );
+            let rel = rels_for(configured, o, &table, false);
+            conf_fit_bytes.extend_from_slice(&o.cur.to_le_bytes());
+            conf_fit_bytes.extend_from_slice(&o.prev.to_le_bytes());
+            conf_fit_bytes.extend_from_slice(&o.target.to_le_bytes());
+            conf_fit_bytes.extend_from_slice(&(o.cands.len() as u32).to_le_bytes());
+            if let Some((_top, addr, d)) = configured.confidence_address(&o.cands, &rel, &z) {
+                conf_fit_bytes.extend_from_slice(&(addr as u32).to_le_bytes());
+                conf_fit_bytes.extend_from_slice(&(u8::from(d > 0)).to_le_bytes());
+            }
+        }
+    }
+    let conf_fit_digest = sha256_bytes(&conf_fit_bytes);
+    // Export and independently reload the selected confidence operators.
+    let mut conf_load: BTreeMap<&'static str, RelationalSelector> = BTreeMap::new();
+    for (name, (sel, _tpt)) in conf_tables.iter() {
+        let bytes = RelationalArtifact {
+            selector: sel.clone(),
+            local_artifact_digest: e_digest,
+            tokenizer_digest: raw_tok,
+            data_digest: conf_fit_digest,
+        }
+        .to_bytes();
+        write_checked(&root, &format!("artifacts/{name}.rlr2"), &bytes)?;
+        let exp = ExpectedArtifact {
+            name: (*name).to_string(),
+            bytes_sha256: artifact_sha256(&bytes),
+            data_digest: conf_fit_digest,
+        };
+        match load_expected_artifact(
+            &root,
+            &exp,
+            &e_digest,
+            &raw_tok,
+            &policy_cfg,
+            parent.cfg.vocab,
+        ) {
+            Ok(got) => {
+                if got != *sel {
+                    reload_failures += 1;
+                }
+                conf_load.insert(name, got);
+            }
+            Err(e) => {
+                eprintln!("confidence load failed for {name}: {e}");
+                reload_failures += 1;
+            }
+        }
+        export_bytes.insert(name, bytes);
+    }
+    controls.push(json!({
+        "control": "read_confidence_interface",
+        "addresses": CONF_ADDRESSES,
+        "arms": conf_tables.keys().collect::<Vec<_>>(),
+        "reload_failures": reload_failures,
+        "note": "address = five-bit utility bucket plus the sign of the retained parent's learned integer advantage D; the witnessed parent rule is the unsupported-entry fallback and an explicit candidate",
+    }));
+
+    // Fresh, prospectively declared populations for the one selected evaluation.
+    let conf_fresh_pop = make_pop(&banks, N_FRESH, SEED_CONF_FRESH, &banks.values_held);
+    for s in conf_fresh_pop.iter() {
+        validate_fixture(s, &banks)?;
+    }
+    let conf_fresh_obs = observe_full_all(&conf_fresh_pop);
+    let conf_fresh_docs: Vec<usize> = dev[4 * TEXT_DOCS..].to_vec();
+    let conf_fresh_streams = build_streams(&conf_fresh_docs, per_doc);
+    let conf_fresh_seqs = to_seqs(&conf_fresh_streams, 0xF400);
+    let conf_fresh_text_obs = observe_full_all(&conf_fresh_seqs);
+    let conf_fresh_doc_pos = per_position_docs(&conf_fresh_streams, &conf_fresh_text_obs);
+    let conf_report = json!({
+        "design": "restore the parent's learned Read/NoRead decision at the influence boundary as a sixth address bit; minimize complete-stream development text loss subject to the same present-emission/loss and absent-read/loss constraints, with the witnessed parent rule as candidate and fallback",
+        "identity": "D = max_strength strength_score(candidate, relation, strength, parent_bucket) - noread_score(parent_bucket), widened i64; read iff D>0",
+        "arms": conf_arms,
+        "fresh_population": {
+            "construction_seed": SEED_CONF_FRESH,
+            "construction_sequences": conf_fresh_pop.len(),
+            "text_documents": conf_fresh_docs.len(),
+            "note": "previously used Dev documents are development history; only the remaining eligible Dev documents are used and disclosed as a small honest final population",
+        },
+        "seconds": conf_t0.elapsed().as_secs_f64(),
+        "scope": "Development selection plus one declared fresh evaluation; not generalization.",
+    });
+    mark("read-confidence interface", &mut marks);
 
     // ---- prepared streams, ring diagnostics, panels -----------------------------
     let prep_fit = prep_stream(&parent, &local, &u, &fit_obs);
@@ -4846,6 +5315,8 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     let prep_fit_text = prep_stream(&parent, &local, &u, &fit_text_obs);
     let prep_final_text = prep_stream(&parent, &local, &u, &final_text_obs);
     let prep_prev_text = prep_stream(&parent, &local, &u, &prev_final_obs);
+    let prep_conf_fresh = prep_stream(&parent, &local, &u, &conf_fresh_obs);
+    let prep_conf_fresh_text = prep_stream(&parent, &local, &u, &conf_fresh_text_obs);
     mark("prepared streams", &mut marks);
 
     let arms: Vec<(&'static str, Option<&RelationalSelector>)> = vec![
@@ -4857,6 +5328,11 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         ("h4_policy", Some(&h4_load)),
         ("categorical_policy", Some(&cat_load)),
         ("h4_one_nat_fixed", Some(&one_nat_load)),
+        ("h4_confidence", conf_load.get("h4_confidence")),
+        (
+            "categorical_confidence",
+            conf_load.get("categorical_confidence"),
+        ),
     ];
     let mut panels: Vec<serde_json::Value> = Vec::new();
     let mut agg_store: BTreeMap<(String, String), ArmAgg> = BTreeMap::new();
@@ -4916,6 +5392,22 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             &final_text_obs,
             &prep_final_text,
             Some(&final_text_doc_pos),
+        ),
+        (
+            "construction_confidence_fresh",
+            "construction",
+            &conf_fresh_pop,
+            &conf_fresh_obs,
+            &prep_conf_fresh,
+            None,
+        ),
+        (
+            "text_confidence_fresh",
+            "text",
+            &conf_fresh_seqs,
+            &conf_fresh_text_obs,
+            &prep_conf_fresh_text,
+            Some(&conf_fresh_doc_pos),
         ),
     ] {
         let mut rows = Vec::new();
@@ -5105,6 +5597,9 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     let mut iv_original_still_admitted = 0usize;
     let mut iv_pool_size_changed = 0usize;
     let mut iv_neighbor_changed = 0usize;
+    let mut iv_neighbors_added = 0usize;
+    let mut iv_neighbors_removed = 0usize;
+    let mut iv_lost_admission = 0usize;
     for (gi, seq) in final_pop.iter().enumerate() {
         let os = &final_obs[gi];
         let mut chosen: Option<(usize, usize)> = None;
@@ -5226,15 +5721,30 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         if o2.cands.len() != o.cands.len() {
             iv_pool_size_changed += 1;
         }
-        let neighbor_changed =
-            o.cands
-                .iter()
-                .any(|c| match o2.cands.iter().find(|d| d.abs == c.abs) {
-                    Some(d) => d.feats != c.feats || d.payload != c.payload,
-                    None => true,
-                });
+        // The deliberately edited occurrence is not a neighbour. Count changed, added and removed
+        // neighbours separately; count lost admission separately from a missing row and from NoRead.
+        let edited_abs = o.cands[k].abs;
+        let neighbor_changed = o.cands.iter().filter(|c| c.abs != edited_abs).any(|c| {
+            match o2.cands.iter().find(|d| d.abs == c.abs) {
+                Some(d) => d.feats != c.feats || d.payload != c.payload,
+                None => true,
+            }
+        });
         if neighbor_changed {
             iv_neighbor_changed += 1;
+        }
+        iv_neighbors_added += o2
+            .cands
+            .iter()
+            .filter(|d| !o.cands.iter().any(|c| c.abs == d.abs))
+            .count();
+        iv_neighbors_removed += o
+            .cands
+            .iter()
+            .filter(|c| c.abs != edited_abs && !o2.cands.iter().any(|d| d.abs == c.abs))
+            .count();
+        if !o2.cands.iter().any(|c| c.slot_ref == o.cands[k].slot_ref) {
+            iv_lost_admission += 1;
         }
         if argmax_low(&z_ec) as u32 == *alt {
             iv_emitted_follows += 1;
@@ -5256,8 +5766,11 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         "original_occurrence_still_admitted": iv_original_still_admitted,
         "candidate_pool_size_changed": iv_pool_size_changed,
         "neighbor_payload_or_feature_changed": iv_neighbor_changed,
+        "neighbors_added": iv_neighbors_added,
+        "neighbors_removed": iv_neighbors_removed,
+        "original_occurrence_lost_admission": iv_lost_admission,
         "enabled_emission_changed_by_the_intervention": iv_enabled_changes_emission,
-        "note": "four matched conditions on the same prefix: enabled-original, enabled-changed, disabled-original, disabled-changed; the replacement payload is absent from the whole sequence and the query is fixed; support loss and NoRead are counted rather than dropped",
+        "note": "four matched conditions on the same prefix: enabled-original, enabled-changed, disabled-original, disabled-changed; the replacement payload is absent from the whole sequence and the query is fixed; the deliberately edited occurrence is excluded from neighbour-change counts; lost admission, missing rows and NoRead are counted separately",
     }));
 
     // ---- generation from the reloaded artifacts --------------------------------
@@ -5408,7 +5921,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
     let full_binding = binding_digest(&fit_obs, &fit_text_obs, &tune_obs, &final_obs);
     let mut manifest = json!({
         "schema": "uor-r4.reader-utility-binding/2",
-        "base_revision": "0492926d",
+        "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
         "parent_root": parent_root.display().to_string(),
         "parents": parents_meta,
         "policy_config": {
@@ -5547,7 +6060,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         "result.json",
         &json!({
             "schema": "uor-r4.reader-utility/1",
-            "base_revision": "31972e34",
+            "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
             "running_source": {
                 "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
                 "git_dirty": std::env::var("UOR_GIT_DIRTY").unwrap_or_else(|_| "unknown".into()),
@@ -5561,6 +6074,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
             "preparation_probe": preparation_probe,
             "fit": fit_report,
             "feasibility": feasibility_report,
+            "read_confidence": conf_report,
             "panels": panels,
             "paired": paired,
             "text_intervals": text_intervals,
@@ -5655,6 +6169,7 @@ fn utility_transfer_run() -> Result<ExitCode, String> {
         "manifest_digest",
         "decision",
         "feasibility",
+        "read_confidence",
     ];
     let mut missing: Vec<&str> = Vec::new();
     for p in declared_paths {

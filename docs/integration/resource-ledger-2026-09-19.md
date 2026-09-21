@@ -1291,3 +1291,41 @@ Arithmetic reconciliation adds **14500 ms** to retain the full component estimat
 Focused solver tests passed **5/5** after a formatting-only repair. Measured fmt/check/test charges so far are **253909 ms**, including the initial failed fmt check; live cumulative **195865158/198900000 ms**. The pre-bin-check guard paused before execution because it conservatively reserved the entire original 768 MiB again after the test build had consumed about 525 MB of observed free space. Remaining bin check is projected at **256MiB** new reusable output, within about 793 MB combined observed/prospective growth and the original 768 MiB (=805306368-byte) budget. Current free space **37703491584 bytes** exceeds reserve + 128 MiB + 256 MiB. Retain the original total 900000 ms cap, two workers and no incremental output; no new extension or reserve reduction.
 
 **Completed principal checks:** cargo fmt after the formatting-only repair, cargo fmt --check, five focused policy-feasibility tests and offline competitive-reader bin check all pass. All five check invocations including the initial failed format check total **272856 ms**; this includes the previously recorded 253909 ms, not an additional charge of that subtotal. Live JSON is **195884105/198900000 ms**, remaining **3015895 ms (50.26 minutes)**. The 900000 ms check projection was not exhausted and no further extension was used. Free space after checks **37667663872 bytes** (about 37.67 GB), reserve unchanged. No new model fit, inference campaign, artifact promotion or physical energy measurement. Claim wording, JSON/local links and diff checks accompany delivery.
+
+## Read-confidence interface step — September 21, 2026
+
+**Projection recorded before execution.** One confidence-extended extraction pass over the frozen
+development populations, two bounded solves (64 addresses), one bounded fresh evaluation, focused
+tests and delivery.
+
+| Item | Projected | Reason |
+| --- | --- | --- |
+| Wall time | **≤ 3,600,000 ms (~60 min)** | recovery, extraction + solver + witness parity, focused tests, one fresh evaluation, documentation and delivery |
+| Compiler workers | ≤ 2 | offline Rust build with `CARGO_INCREMENTAL=0` |
+| Model workers | 1 | single harness process |
+| Peak RSS | ≤ 8 GiB | existing harness |
+| New/temporary/retained storage | ≤ 768 MiB build, ≤ 8 MiB reports | shared target reuse; checkpoint before breach |
+| Free space at projection | **37,673,967,616 bytes** | above the 36,766,079,385-byte reserve and the 128 MiB stop margin |
+
+**Extension taken.** Time increment **+2,000,000 ms**; **new cumulative limit 200,900,000 ms**
+(previous 198,900,000 ms). Reason: the interface requires a new address partition, a serving-path
+extension, an expected-manifest round trip and a fresh evaluation that the remaining 3,015,895 ms
+could not fund with delivery. Space was restored by removing only this author's own redundant,
+already-merged worktree `.worktrees/policy-feasibility` (no reserve reduction; other agents' worktrees,
+all models, artifacts, research and downloads preserved).
+
+**Completed charges — read-confidence interface step.** Measured: one extraction + solve per arm was
+inside the delivered run; three complete harness runs (369.4 s, 370.7 s, 389.7 s = **1129.8 s**);
+release builds 82 s + 8 s (rebuild); `cargo check`/`fmt`/focused tests ~**420 s** including one
+corrected test failure. Estimated: context/source recovery ~**900 s**, documentation, evidence and
+delivery ~**1200 s**. **Charge 3,440,000 ms** (measured + estimated). Live allowance after the
+prospective increment: limit **200,900,000 ms**; **new cumulative 199,324,105 ms**; remaining
+**1,575,895 ms (~26 min)**. Applied `CARGO_INCREMENTAL=0`. Space was restored before execution by
+removing only this author's own redundant, already-merged worktree; free space at delivery is
+re-measured in the final entry below.
+
+**Delivered** under the claimed, sealed and verified root
+`.uor-models/realtext-prior-2026-09-20/reader-confidence-3` (0 unlisted; manifest
+`d81bda9e3dbff98a69ba5020631527698fbad83f3359611c1a15c5f3d6b0255f`). Superseded
+`reader-confidence-1`/`-2` and all prior roots are preserved. No deletion of unique material; no
+paid/external compute; no model promotion.
