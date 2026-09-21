@@ -1,29 +1,15 @@
-# Consistent geometric emitter: corrected contract, decisive comparator, no geometric transfer on this task
+# Consistent geometric emitter: retained association result, learning and integration confounds
 
 September 21, 2026. Executed from reviewed parent `f07568f8` (PR #1335). [Contract](consistent-emission-design-2026-09-21.md);
 [principal review](contextual-emission-review-2026-09-21.md); [prompt](deepseek-consistent-emission-step-2026-09-21.md).
 Delivered root `.uor-models/realtext-prior-2026-09-20/consistent-emission-2` (sealed, verified, 0
-unlisted, 6 files incl. `rows.jsonl`). Diagnostic `consistent-emission-1` is retained unchanged.
+unlisted, 7 files incl. `rows.jsonl`). Diagnostic `consistent-emission-1` is retained unchanged.
 
-## Decision
+## Principal correction after source and saved-data review
 
-The learner is now numerically and causally consistent and preserves the required payload distinctions,
-but it **does not solve the context-required task**, and the required control shows why: a plain
-**eight-entry categorical selected-value table**, learned from development and using only the observed
-selected payload, scores **108/120** on the untouched final draw with **54/60** pairs fully correct,
-while the geometric emitter scores **25/120** and **1/60**. The declared screen (≥ 50 % paired, beating
-the controls) is **not met**, and the geometry adds **no transfer** beyond finite value association on
-this instrument.
+The historical screen remains failed. Retain the measured table/H4 gap and repaired units, injective artifact codes, shared reader and loaded execution. **The learner was not yet consistent with served row support:** fitting used all 4,096 rows, export retained 64. The required output refit after map search was omitted. Therefore the result does not isolate emitter expressivity. The direct lookup and bounded residual also use different emission interfaces. See the [principal review](consistent-emission-review-2026-09-21.md) and [independent audit](../evidence/consistent-emission-principal-review-2026-09-21.json).
 
-## Corrected contract actually executed
-
-Calibrated fixed-point units (`f_bits = 10`) in both the float objective and the served evaluation
-(old "15561 bits" → **19.86 → 10.11** bits); residual **shift fixed before fitting**; **ternary
-straight-through** training against the deployed map; **one target-free reader** (`read_step`) at
-extraction and serving with intended vs selected occurrence/value recorded separately; **injective
-value codes** plus a **collision-aware map objective**; **independent artifact reload before
-evaluation** with fail-closed full-predictor parity; fresh development/tune and one **untouched** final
-population (`0xC0F00011/12/21`; the old seeds are exposed regression data).
+One fresh seed draw was measured in attempt 1; attempt 2 is an unchanged-model/report-only replay. All eight value-to-answer associations recur in every split, so this is new-context association evaluation rather than compositional transfer. The original design's requirement to beat the categorical table remains a recorded failed criterion; it is not retained as a prerequisite for architectural progress.
 
 ## Results on identical rows
 
@@ -41,34 +27,15 @@ Reader localisation: correct exact occurrence **163/180** dev, **111/120** tune,
 payload: 36 → 36 dev (the residual collisions come from the ~10 % wrong-source positions, not from
 value-code merging, which the injective initialization and collision-aware objective prevent).
 
-## Diagnosis
+## Diagnosis and retained direction
 
-| Candidate | Evidence | Verdict |
-| --- | --- | --- |
-| Source selection | ~90 % correct occurrence on every split | secondary, not the main gap |
-| Value-code merging | injective codes forced; collisions unchanged by the search | repaired |
-| Units / shift / reader / loading | calibrated bits, shared shift, one reader, loaded parity | repaired |
-| Emitter expressivity on this task | table 108/120 vs H4 25/120 with the *same* observed inputs | **the concrete failure** |
+The selected payload carries the answer information: the learned table is correct on every correct selected value. The deployed geometric-emission pipeline fails to use it reliably. **Optimization, representation and the output integration interface remain confounded.** Original ternary-forward H4 loss 9.321115 rises to 12.868782 after selecting 64 rows; C120 9.625529 rises to 12.896118. Source selection cannot explain most of the remaining gap, and code injectivity alone does not prove actual feature separability.
 
-The task's required output is an **arbitrary eight-value association** applied to the selected payload.
-A direct table over the observed payload captures it; routing the same value through a ternary state
-embedding, a ternary transport and a ternary shared residual does not, at this width. This is a
-representational/optimisation limitation of the geometric path **on this task**, not the withdrawn
-width diagnosis, and not evidence about geometry in general: it says nothing about tasks whose required
-output is a *composition* rather than a per-value lookup.
+Principal source repairs now share sparse projection/hard forward, use calibrated CE, retain incumbents and execute output → maps → output. They have focused validation, not a newly executed full model result. Preserve both original artifacts and raw reports.
 
-## Retained and next
+**Successor:** [complete useful geometric computation](deepseek-geometric-computation-step-2026-09-21.md), carrying the corrected association regression through loaded execution, choosing a suitable learned lexical decoder or justified geometric emitter, then pursuing genuine query-and-content-dependent composition. Preserve equal-information/interface comparisons and the historical negative; do not require geometry to beat a dictionary on arbitrary labels.
 
-Retained: the corrected numerical/causal contract, ternary straight-through training, the
-collision-aware objective and value-distinction preservation, the loaded-artifact evaluation and
-generation path, both algebra artifacts (`h4_emission`, `cyclic_c120_emission`), the development
-constant and categorical comparators, the per-position `rows.jsonl`, and all failed criteria.
-
-**Successor (evidence-supported):** test the geometric emitter on a task whose required output is a
-**composition** of the retrieved evidence — e.g. the output class determined by the *relation between*
-the query role and the retrieved role, or a typed derived token absent from all payloads — because an
-arbitrary per-value association is already solved by a table and therefore cannot discriminate geometry.
-Width expansion remains unjustified. Generated continuations and text integration are NOT_RUN.
+**Generation correction:** three loaded three-token autoregressive traces were executed, with 1/3 correct first answers and degenerate continuations. Text integration is NOT_RUN; useful prose is unqualified. Saved rows omit full geometric outputs, so their aggregates remain runner-reported rather than independently reconstructed.
 
 Resources and charges: [resource ledger](resource-ledger-2026-09-19.md). Energy UNAVAILABLE;
 whole-path D0-b not claimed.

@@ -2746,6 +2746,33 @@ fn generate_step(
 mod tests {
     use super::*;
 
+    #[test]
+    fn contextual_map_search_uses_lexicographic_alias_priority() {
+        assert!(!ce_objective_better((1, 0.0), (0, 1.0e12)));
+        assert!(ce_objective_better((0, 1.0e12), (1, 0.0)));
+        assert!(ce_objective_better((0, 1.0), (0, 2.0)));
+        assert!(!ce_objective_better((0, 2.0), (0, 2.0)));
+        let mut p = ReadConditionedParams::identity();
+        p.value_domain = vec![10, 11];
+        p.value_code = vec![3, 3];
+        let ex = |payload, target| CeExample {
+            z_local: vec![0; 2],
+            q0: 0,
+            r: 0,
+            payload,
+            read: true,
+            target,
+        };
+        assert_eq!(
+            ce_collisions(&[ex(10, 0), ex(10, 1)], &p),
+            0,
+            "contradictory targets for the same selected payload are not a value-code alias"
+        );
+        assert_eq!(ce_collisions(&[ex(10, 0), ex(11, 1)], &p), 1);
+        p.value_code[1] = 4;
+        assert_eq!(ce_collisions(&[ex(10, 0), ex(11, 1)], &p), 0);
+    }
+
     fn banks() -> Banks {
         Banks {
             pairs: (0..14).map(|i| (10 + i, 30 + i)).collect(),
@@ -7174,42 +7201,6 @@ fn ce_logits(
     z
 }
 
-fn ce_margin(
-    ex: &CeExample,
-    params: &ReadConditionedParams,
-    res: &EmissionResidual,
-    cyclic: bool,
-    rows: &[usize],
-) -> f64 {
-    let z = ce_logits(ex, params, res, cyclic, rows);
-    let t = (ex.target as usize).min(z.len() - 1);
-    let best_other = z
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| *i != t)
-        .map(|(_, v)| *v)
-        .max()
-        .unwrap_or(i32::MIN);
-    (z[t] - best_other) as f64
-}
-
-fn ce_mean_margin(
-    examples: &[CeExample],
-    params: &ReadConditionedParams,
-    res: &EmissionResidual,
-    cyclic: bool,
-    rows: &[usize],
-) -> f64 {
-    if examples.is_empty() {
-        return f64::NAN;
-    }
-    examples
-        .iter()
-        .map(|ex| ce_margin(ex, params, res, cyclic, rows))
-        .sum::<f64>()
-        / examples.len() as f64
-}
-
 fn ce_hits(
     examples: &[CeExample],
     params: &ReadConditionedParams,
@@ -7238,7 +7229,10 @@ fn ce_collisions(examples: &[CeExample], params: &ReadConditionedParams) -> usiz
     for v in m.values() {
         for i in 0..v.len() {
             for j in (i + 1)..v.len() {
-                if v[i].1 != v[j].1 && params.value_state(v[i].0) == params.value_state(v[j].0) {
+                if v[i].0 != v[j].0
+                    && v[i].1 != v[j].1
+                    && params.value_state(v[i].0) == params.value_state(v[j].0)
+                {
                     c += 1;
                 }
             }
@@ -7247,20 +7241,30 @@ fn ce_collisions(examples: &[CeExample], params: &ReadConditionedParams) -> usiz
     c
 }
 
-/// The map-search objective: mean margin with a hard penalty on incompatible-output collisions, so
-/// the search cannot buy margin by merging value distinctions the task requires.
+/// Map search minimizes a lexicographic pair: first observed distinct-payload aliases, then the
+/// exact calibrated served CE. Same selected-payload contradictory targets are reader/input
+/// ambiguity, not a value-code alias. This is not universal injectivity or a full feature test.
 fn ce_objective(
     examples: &[CeExample],
     params: &ReadConditionedParams,
     res: &EmissionResidual,
     cyclic: bool,
     rows: &[usize],
-) -> f64 {
-    ce_mean_margin(examples, params, res, cyclic, rows)
-        - 1.0e6 * ce_collisions(examples, params) as f64
+    f_bits: u32,
+) -> (usize, f64) {
+    (
+        ce_collisions(examples, params),
+        served_nll_bits(examples, params, res, cyclic, rows, f_bits),
+    )
 }
 
-/// Discrete search over the transport and value maps on the mean-margin objective (strict gains).
+fn ce_objective_better(candidate: (usize, f64), incumbent: (usize, f64)) -> bool {
+    candidate.1.is_finite()
+        && (candidate.0 < incumbent.0
+            || (candidate.0 == incumbent.0 && candidate.1 < incumbent.1 - 1e-12))
+}
+
+/// Discrete search over update maps, preserving observed distinctions before minimizing served CE.
 fn ce_search_maps(
     examples: &[CeExample],
     params: &ReadConditionedParams,
@@ -7268,9 +7272,10 @@ fn ce_search_maps(
     cyclic: bool,
     rows: &[usize],
     passes: usize,
+    f_bits: u32,
 ) -> (ReadConditionedParams, usize) {
     let mut p = params.clone();
-    let mut best = ce_objective(examples, &p, res, cyclic, rows);
+    let mut best = ce_objective(examples, &p, res, cyclic, rows, f_bits);
     let mut accepted = 0usize;
     let relations: Vec<usize> = {
         let mut v: Vec<usize> = examples
@@ -7290,15 +7295,15 @@ fn ce_search_maps(
             let mut local_val = saved;
             for cand in 0..GROUP_ORDER {
                 p.transport[*r] = cand as u8;
-                let m = ce_objective(examples, &p, res, cyclic, rows);
-                if m > local_best + 1e-9 {
+                let m = ce_objective(examples, &p, res, cyclic, rows, f_bits);
+                if ce_objective_better(m, local_best) {
                     local_best = m;
                     local_val = cand as u8;
                 }
             }
             p.transport[*r] = local_val;
-            if local_best > best + 1e-9 {
-                best = local_best;
+            if ce_objective_better(local_best, best) {
+                best = ce_objective(examples, &p, res, cyclic, rows, f_bits);
                 accepted += 1;
                 improved = true;
             }
@@ -7309,15 +7314,15 @@ fn ce_search_maps(
             let mut local_val = saved;
             for cand in 0..GROUP_ORDER {
                 p.value_code[i] = cand as u8;
-                let m = ce_objective(examples, &p, res, cyclic, rows);
-                if m > local_best + 1e-9 {
+                let m = ce_objective(examples, &p, res, cyclic, rows, f_bits);
+                if ce_objective_better(m, local_best) {
                     local_best = m;
                     local_val = cand as u8;
                 }
             }
             p.value_code[i] = local_val;
-            if local_best > best + 1e-9 {
-                best = local_best;
+            if ce_objective_better(local_best, best) {
+                best = ce_objective(examples, &p, res, cyclic, rows, f_bits);
                 accepted += 1;
                 improved = true;
             }
@@ -7327,38 +7332,6 @@ fn ce_search_maps(
         }
     }
     (p, accepted)
-}
-
-/// Keep the `max_rows` largest-norm output rows as ternary coefficients; zero the rest.
-fn ce_quantize_sparse(
-    w_f: &[[f32; CE_WIDTH]],
-    max_rows: usize,
-) -> (Vec<[i8; CE_WIDTH]>, Vec<usize>) {
-    let mut norms: Vec<(f64, usize)> = w_f
-        .iter()
-        .enumerate()
-        .map(|(o, row)| (row.iter().map(|v| f64::from(*v).abs()).sum::<f64>(), o))
-        .collect();
-    norms.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    let keep: Vec<usize> = norms
-        .iter()
-        .take(max_rows)
-        .filter(|(n, _)| *n > 0.0)
-        .map(|(_, o)| *o)
-        .collect();
-    let mut w = vec![[0i8; CE_WIDTH]; w_f.len()];
-    for o in keep.iter() {
-        for j in 0..CE_WIDTH {
-            w[*o][j] = if w_f[*o][j] > 0.0 {
-                1
-            } else if w_f[*o][j] < 0.0 {
-                -1
-            } else {
-                0
-            };
-        }
-    }
-    (w, keep)
 }
 
 /// The one shared read -> update -> emit step used by evaluation, interventions and generation.
@@ -7660,7 +7633,8 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
         let params0 = base_params.clone();
         let mut res0 = EmissionResidual::seeded(parent.cfg.vocab, 0x51E5_0000);
         res0.shift = shift;
-        let (w_f, nll_initial, nll_float) = train_output_map(
+        // One serving-support projection and exact CE are used by every output-fitting forward.
+        let (res_before_maps, nll_initial, nll_before_maps, flips_before_maps) = fit_output_block(
             &dev_ex,
             &params0,
             &res0,
@@ -7668,18 +7642,44 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
             CE_EPOCHS,
             CE_LR,
             parent.cfg.f_bits,
+            CE_MAX_W_ROWS,
+            5,
         );
-        let (w_q, rows) = ce_quantize_sparse(&w_f, CE_MAX_W_ROWS);
-        let mut res = res0.clone();
-        res.w = w_q;
-        res.shift = shift;
-        let nll_quantized =
-            served_nll_bits(&dev_ex, &params0, &res, cyclic, &rows, parent.cfg.f_bits);
-        let flips = refine_ternary_map(&dev_ex, &params0, &mut res, cyclic, &rows, 5);
-        let nll_refined =
-            served_nll_bits(&dev_ex, &params0, &res, cyclic, &rows, parent.cfg.f_bits);
-        let (params, accepted) = ce_search_maps(&dev_ex, &params0, &res, cyclic, &rows, 4);
-        let nll_final = served_nll_bits(&dev_ex, &params, &res, cyclic, &rows, parent.cfg.f_bits);
+        let rows_before_maps = res_before_maps.active_rows();
+        let (params, accepted) = ce_search_maps(
+            &dev_ex,
+            &params0,
+            &res_before_maps,
+            cyclic,
+            &rows_before_maps,
+            4,
+            parent.cfg.f_bits,
+        );
+        let nll_after_maps = served_nll_bits(
+            &dev_ex,
+            &params,
+            &res_before_maps,
+            cyclic,
+            &rows_before_maps,
+            parent.cfg.f_bits,
+        );
+        // Consume the changed map and retain its incumbent output unless exact served CE improves.
+        // The final fitted residual below, rather than the stale pre-map residual, is serialized.
+        let (res, refit_initial, nll_final, flips_after_maps) = fit_output_block(
+            &dev_ex,
+            &params,
+            &res_before_maps,
+            cyclic,
+            CE_EPOCHS,
+            CE_LR,
+            parent.cfg.f_bits,
+            CE_MAX_W_ROWS,
+            5,
+        );
+        if (refit_initial - nll_after_maps).abs() > 1e-12 || nll_final > refit_initial + 1e-12 {
+            return Err("post-map output refit violated incumbent CE contract".into());
+        }
+        let rows = res.active_rows();
         let report = json!({
             "algebra": if cyclic { "cyclic_c120" } else { "signed_h4" },
             "shift": shift,
@@ -7691,15 +7691,20 @@ fn contextual_emission_run() -> Result<ExitCode, String> {
             "nonzero_coefficients": rows.iter().map(|o| res.w[*o].iter().filter(|v| **v != 0).count()).sum::<usize>(),
             "residual_range_bound": res.range_bound(),
             "nll_bits": {
-                "initial": nll_initial, "float_after_gradient_fit": nll_float,
-                "served_after_quantization": nll_quantized,
-                "served_after_discrete_refinement": nll_refined,
+                "initial": nll_initial, "served_output_before_map_search": nll_before_maps,
+                "served_after_map_search": nll_after_maps, "post_map_refit_incumbent": refit_initial,
                 "served_final": nll_final,
             },
-            "collisions_dev_before": ce_collisions(&dev_ex, &params0),
-            "collisions_dev_after": ce_collisions(&dev_ex, &params),
-            "collisions_final_after": ce_collisions(&fresh_ex, &params),
-            "accepted_ternary_flips": flips,
+            "distinct_payload_alias_pairs_dev_before": ce_collisions(&dev_ex, &params0),
+            "distinct_payload_alias_pairs_dev_after": ce_collisions(&dev_ex, &params),
+            "distinct_payload_alias_pairs_final_after": ce_collisions(&fresh_ex, &params),
+            "accepted_ternary_flips": flips_before_maps + flips_after_maps,
+            "accepted_ternary_flips_before_maps": flips_before_maps,
+            "accepted_ternary_flips_after_maps": flips_after_maps,
+            "post_map_output_refit_executed": true,
+            "output_before_maps_sha256": sha256_hex(&res_before_maps.to_bytes()),
+            "output_after_maps_refit_sha256": sha256_hex(&res.to_bytes()),
+            "optimization": "shared top-k ternary support; surrogate nats gradients; exact served bits for incumbent retention and coordinate search; observed alias count then CE for map search",
             "accepted_map_changes": accepted,
             "dev_hits": ce_hits(&dev_ex, &params, &res, cyclic, &rows),
             "tune_hits": ce_hits(&tune_ex, &params, &res, cyclic, &rows),
