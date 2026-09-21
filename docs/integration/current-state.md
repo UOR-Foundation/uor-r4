@@ -1,7 +1,20 @@
 # Current native geometric AI work
 
-## Active: reviewed relational component; observed-text session next
+## Active: observed-text memory answers through one reusable session boundary
 
+**Executed the observed-text session brief** on the reviewed head `6fc34c1f` of PR #1341, which was still queued, so protection was preserved and the reviewed head used directly as the base. New module `learner/observed_text_session.rs` and mode `--mode=observed-text-session`.
+
+**Task.** The serving input is observed statement tokens, an observed question clause, a declared clause delimiter and a declared entity registry - no gold role, extent, pointer, depth or target. Statements are `subject marker object` with disjoint marker vocabulary per role; a question is `subject marker` with no object. Worlds are coherent (for each goal the persons are partitioned into ordered chains). Learned from declared development text: marker roles (token votes), boundary trimming (span edges), action semantics per role and the goal per role; the policy starts from a declared uninformed all-emit table and moves 14/24 to 24/24 on the same units.
+
+**Result.** The primary completes **24/24 development and 24/24 final with 24/24 correct depths**, emitting the complete selected phrase (multiword where the fact is multiword) plus the declared terminator through the boundary. The same exact request answers at **one, two and three reads** in different worlds, and the three-read composition is withheld from development. The registry-membership shortcut gets **20/24** and a relation-only fixed-depth-two controller **18/24**, so neither entity membership nor a fixed depth substitutes for the learned semantics; disabling reads gives **0/24**.
+
+**Causal controls.** A one-position first-source edit changes entity, selected sources, depth and the complete answer together and matches an independently derived expectation, with the goal invariant across the redirect; a request-goal change with the same evidence selects different facts and both match their independent expectations; a removed required fact gives an explicit unresolved stop; a redirect cycle gives exhausted; pause/resume is identical on 48/48.
+
+**Next:** broaden the same boundary to varied request/source wording (the current final novelty is the three-read composition and new assignments, not new wording), then source-separated prose and an executed Rust task. [Result](observed-text-session-result-2026-09-21.md); [evidence](../evidence/observed-text-session-2026-09-21.json). Retained roots `observed-text-session-{1..8}` (0 unlisted). Energy UNAVAILABLE; whole-path D0-b not claimed.
+
+### Previous active (superseded by the section above)
+
+## Former active: 
 **PR #1341, principal review:** retain learned relation/role correspondence and dependent exact-memory reads on supplied typed worlds. The original 128/128 labels are independently reconstructed, but the original continuation policy started correct and used a label-derived feature; request relation predicted depth, and resume still depended on host locals. The original H4 match used central minus identity. Categorical/cyclic ties are expected for this fixed-offset correspondence. Original panels were repeatedly exposed, not untouched final evaluation. [Review](../integration/relational-session-review-2026-09-21.md); [original audit](../evidence/relational-session-principal-review-2026-09-21.json).
 
 **Corrected component and boundary:** actual group identity, observed-type policy fitting from neutral initialization, state-driven restore/interleaving, bound snapshots, exact origin diagnostics and complete read/arm events are exercised in the [corrected replay](../evidence/relational-session-corrected-replay-audit-2026-09-21.json) and [checks](../evidence/relational-session-principal-checks-2026-09-21.json). Supplied record layout, entity registry, follow convention and single-token labels remain explicit; this is not general language or a complete-path efficiency result. Shared Q8 computation from PR #1340 remains retained.

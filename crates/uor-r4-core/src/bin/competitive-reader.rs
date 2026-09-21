@@ -17,6 +17,7 @@ use serde_json::json;
 use uor_r4_core::native_geometric::learner::contextual_emission::*;
 use uor_r4_core::native_geometric::learner::grounded_session::*;
 use uor_r4_core::native_geometric::learner::group_table::{group_table, GROUP_ORDER, ROW_STRIDE};
+use uor_r4_core::native_geometric::learner::observed_text_session::*;
 use uor_r4_core::native_geometric::learner::occurrence::{OccurrenceRef, OccurrenceRing};
 use uor_r4_core::native_geometric::learner::policy_feasibility::*;
 use uor_r4_core::native_geometric::learner::prefix_artifact::{
@@ -13461,6 +13462,808 @@ mod relational_session_tests {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Observed-text memory answers through one reusable session boundary
+// ---------------------------------------------------------------------------
+
+const OB_PERSONS: usize = 4;
+const OB_DEV_WORLDS: u64 = 3;
+const OB_SEED: u64 = 0xC0F6_0001;
+const OB_FINAL_SEED: u64 = 0xC0F6_0101;
+const OB_EOS: u32 = u32::MAX - 1;
+
+struct ObVocab {
+    /// Disjoint marker tokens: office assertion, office redirect, project assertion, project redirect.
+    markers: [[u32; 2]; 4],
+    persons: Vec<Vec<u32>>,
+    offices: Vec<Vec<u32>>,
+    projects: Vec<Vec<u32>>,
+}
+
+impl ObVocab {
+    fn role_of(goal: Goal, redirect: bool) -> usize {
+        match (goal, redirect) {
+            (Goal::Office, false) => 0,
+            (Goal::Office, true) => 1,
+            (Goal::Project, false) => 2,
+            (Goal::Project, true) => 3,
+        }
+    }
+    fn assert_marker(&self, goal: Goal) -> Vec<u32> {
+        self.markers[Self::role_of(goal, false)].to_vec()
+    }
+    fn redirect_marker(&self, goal: Goal) -> Vec<u32> {
+        self.markers[Self::role_of(goal, true)].to_vec()
+    }
+    fn terminals(&self, goal: Goal) -> Vec<Vec<u32>> {
+        match goal {
+            Goal::Office => self.offices.clone(),
+            Goal::Project => self.projects.clone(),
+        }
+    }
+}
+
+/// A coherent world: for each goal the persons are partitioned into ordered chains, and within a
+/// chain each person has exactly one statement redirecting to the next, with the last asserting.
+struct ObWorld {
+    id: u32,
+    version: u32,
+    clauses: Vec<Clause>,
+    labels: Vec<ClauseLabel>,
+    oracle: Vec<((usize, Goal), (Vec<u32>, u8))>,
+}
+
+fn ob_make_world(
+    vocab: &ObVocab,
+    id: u32,
+    version: u32,
+    office_chains: &[Vec<usize>],
+    project_chains: &[Vec<usize>],
+    target_is_key: bool,
+    seed: u64,
+) -> ObWorld {
+    let mut st = seed | 1;
+    let mut clauses: Vec<Clause> = Vec::new();
+    let mut labels: Vec<ClauseLabel> = Vec::new();
+    let mut oracle = Vec::new();
+    let mut seg = 0u32;
+    for (goal, chains) in [
+        (Goal::Office, office_chains),
+        (Goal::Project, project_chains),
+    ] {
+        for chain in chains.iter() {
+            if chain.is_empty() {
+                continue;
+            }
+            let candidates = if target_is_key && goal == Goal::Office {
+                vocab.persons.clone()
+            } else {
+                vocab.terminals(goal)
+            };
+            let target = candidates[(xorshift(&mut st) as usize) % candidates.len()].clone();
+            for (hop, person) in chain.iter().enumerate() {
+                let last = hop + 1 == chain.len();
+                let marker = if last {
+                    vocab.assert_marker(goal)
+                } else {
+                    vocab.redirect_marker(goal)
+                };
+                let object = if last {
+                    target.clone()
+                } else {
+                    vocab.persons[chain[hop + 1]].clone()
+                };
+                let subject = vocab.persons[*person].clone();
+                let mut tokens = subject.clone();
+                tokens.extend(marker.iter().copied());
+                let object_start = tokens.len() as u32;
+                tokens.extend(object.iter().copied());
+                clauses.push(Clause { seg, tokens });
+                labels.push(ClauseLabel {
+                    seg,
+                    subject: (0, subject.len()),
+                    marker: (subject.len() as u32, marker.len()),
+                    object: Some((object_start, object.len())),
+                    role: ObVocab::role_of(goal, !last),
+                    goal,
+                    action: if last {
+                        RelAction::Emit
+                    } else {
+                        RelAction::Continue
+                    },
+                });
+                oracle.push((
+                    (*person, goal),
+                    (if last { target.clone() } else { Vec::new() }, 0),
+                ));
+                seg += 1;
+            }
+            // Fill in the depth of every person on the chain: depth = remaining hops to the assertion.
+            let len = chain.len();
+            for (hop, person) in chain.iter().enumerate() {
+                let depth = (len - hop) as u8;
+                if let Some(e) = oracle
+                    .iter_mut()
+                    .find(|((p, g), _)| *p == *person && *g == goal)
+                {
+                    e.1 .1 = depth;
+                }
+            }
+            // Every person on the chain except the last needs its terminal answer recorded too.
+            for (hop, person) in chain.iter().enumerate() {
+                if hop + 1 == len {
+                    continue;
+                }
+                if let Some(e) = oracle
+                    .iter_mut()
+                    .find(|((p, g), _)| *p == *person && *g == goal)
+                {
+                    e.1 .0 = target.clone();
+                }
+            }
+        }
+    }
+    ObWorld {
+        id,
+        version,
+        clauses,
+        labels,
+        oracle,
+    }
+}
+
+fn ob_question(vocab: &ObVocab, person: usize, goal: Goal) -> Clause {
+    let mut tokens = vocab.persons[person].clone();
+    tokens.extend(vocab.assert_marker(goal));
+    Clause { seg: 999, tokens }
+}
+
+#[derive(Clone, Copy, Default)]
+struct ObLesion {
+    reads_disabled: bool,
+    membership_continuation: bool,
+    fixed_depth_two: bool,
+}
+
+struct ObOutcome {
+    emitted: Vec<u32>,
+    actions: Vec<RelAction>,
+    reads: u8,
+    terminal: RelAction,
+    selected: Vec<u32>,
+    roles: Vec<u64>,
+}
+
+fn ob_serve(
+    model: &ObservedTextModel,
+    world: &ObWorld,
+    vocab: &ObVocab,
+    person: usize,
+    goal: Goal,
+    lesion: ObLesion,
+    resume: bool,
+) -> Result<ObOutcome, String> {
+    let statements: Vec<Observation> = world
+        .clauses
+        .iter()
+        .map(|c| observe_clause(model, c))
+        .collect::<Result<Vec<_>, _>>()?;
+    let q = observe_clause(model, &ob_question(vocab, person, goal))?;
+    let qgoal = q
+        .question_goal
+        .ok_or("question clause did not yield a goal")?;
+    if qgoal != goal {
+        return Err(format!(
+            "question goal {qgoal:?} disagrees with request {goal:?}"
+        ));
+    }
+    let binding = TextBinding {
+        model_sha256: "bound".into(),
+        tokenizer_sha256: "bound".into(),
+        world_id: world.id,
+        world_version: world.version,
+        doc_sha256: "bound".into(),
+    };
+    let mut session = TextSession::start(
+        binding.clone(),
+        goal,
+        TextObjective {
+            goal,
+            tokens: q.subject.clone(),
+        },
+    )
+    .with_eos(OB_EOS);
+    session.validate(&binding, VOCAB)?;
+    let mut actions = Vec::new();
+    let mut selected = Vec::new();
+    let mut roles = Vec::new();
+    let mut prev_was_read = false;
+    for step in 0..(2 * OB_MAX_READS as usize + 6) {
+        if session.terminal.is_some() {
+            break;
+        }
+        if lesion.reads_disabled && session.pending == RelAction::Read {
+            session.pending = RelAction::Stop;
+        }
+        // Shortcut control: continuation decided by registry membership rather than by the learned
+        // role semantics. Applied immediately after a read, so it replaces the learned decision.
+        if lesion.membership_continuation
+            && prev_was_read
+            && matches!(session.pending, RelAction::Continue | RelAction::Emit)
+        {
+            let is_person = vocab.persons.iter().any(|p| p == &session.captured_tokens);
+            session.pending = if is_person {
+                RelAction::Continue
+            } else {
+                RelAction::Emit
+            };
+        }
+        if lesion.fixed_depth_two && session.pending == RelAction::Read && session.reads >= 2 {
+            session.pending = RelAction::Emit;
+        }
+        let was_read = session.pending == RelAction::Read;
+        let effect = session.step(model, &statements)?;
+        prev_was_read = was_read;
+        actions.push(effect.action);
+        if let Some(role) = effect.selected_role {
+            roles.push(role as u64);
+        }
+        if let Some(seg) = effect.selected_segment {
+            if let Some(st) = statements.iter().find(|s| s.seg == seg) {
+                selected.push(st.subject.first().copied().unwrap_or(0));
+            }
+        }
+        if resume && step == 1 {
+            let bytes = serde_json::to_vec(&session).map_err(|e| e.to_string())?;
+            session = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+            session.validate(&binding, VOCAB)?;
+        }
+    }
+    Ok(ObOutcome {
+        emitted: session.emitted,
+        actions,
+        reads: session.reads,
+        terminal: session.terminal.unwrap_or(RelAction::Unresolved),
+        selected,
+        roles,
+    })
+}
+
+fn ob_run() -> Result<ExitCode, String> {
+    let mut root = PathBuf::from(
+        "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/observed-text-session-1",
+    );
+    let mut source_root: Option<PathBuf> = None;
+    {
+        let mut a = std::env::args().skip(1);
+        while let Some(k) = a.next() {
+            match k.as_str() {
+                "--root" => root = PathBuf::from(a.next().ok_or("--root value")?),
+                "--source-root" => source_root = Some(PathBuf::from(a.next().ok_or("value")?)),
+                other if other.starts_with("--mode") => {}
+                other => return Err(format!("unknown argument {other}")),
+            }
+        }
+    }
+    claim(&root).map_err(|e| format!("claim {}: {e}", root.display()))?;
+    let started = Instant::now();
+    let pb = std::fs::read(E_PATH).map_err(|e| format!("E: {e}"))?;
+    if sha256_hex(&pb) != E_SHA {
+        return Err("E sha mismatch".into());
+    }
+    let parent = PriorCore::from_bytes(&pb).map_err(|e| format!("load E: {e}"))?;
+    parent.validate()?;
+    let (parent_digest, _) = parent_hash_convention(&pb);
+    let sb = std::fs::read(S_PATH).map_err(|e| format!("S: {e}"))?;
+    if sha256_hex(&sb) != S_SHA {
+        return Err("S sha mismatch".into());
+    }
+    let tb = std::fs::read(DEFAULT_TOKENIZER).map_err(|e| format!("tokenizer: {e}"))?;
+    if sha256_hex(&tb) != TOKENIZER_SHA {
+        return Err("tokenizer sha mismatch".into());
+    }
+    let derived = sha256_hex(&derive_tokenizer_json(&tb, VOCAB).map_err(|e| format!("{e}"))?);
+    if derived != DERIVED_SHA {
+        return Err("derived tokenizer sha mismatch".into());
+    }
+    let tokenizer = derive_tokenizer(&tb, VOCAB).map_err(|e| format!("derive: {e}"))?;
+    let raw_tok: [u8; 32] = hex_to_bytes(&derived)?.try_into().unwrap();
+    let local = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
+        .map_err(|e| format!("load S: {e}"))?;
+    let _u: Vec<Vec<i32>> = (0..120).map(|s| local.row_scores(s)).collect();
+    let table = ExactGroupTable::build().map_err(|e| format!("table: {e}"))?;
+    let group_digest = group_table_digest(&table);
+    let banks = build_banks(&tokenizer, parent.cfg.vocab)?;
+    let source_files: Vec<serde_json::Value> = match &source_root {
+        Some(sr) => [
+            "crates/uor-r4-core/src/native_geometric/learner/relational_session.rs",
+            "crates/uor-r4-core/src/native_geometric/learner/observed_text_session.rs",
+            "crates/uor-r4-core/src/bin/competitive-reader.rs",
+        ]
+        .iter()
+        .map(|rel| match std::fs::read(sr.join(rel)) {
+            Ok(b) => json!({"path": rel, "sha256": sha256_hex(&b)}),
+            Err(_) => json!({"path": rel, "sha256": "UNAVAILABLE"}),
+        })
+        .collect(),
+        None => vec![json!({"path": "unspecified", "sha256": "UNAVAILABLE"})],
+    };
+    let executable_sha256 = hex_of(&sha256_bytes(
+        &std::env::current_exe()
+            .ok()
+            .and_then(|p| std::fs::read(p).ok())
+            .unwrap_or_default(),
+    ));
+    let kw = |i: usize| banks.values_held[i];
+    let ent = |i: usize| banks.values_fit[i];
+    let vocab = ObVocab {
+        markers: [
+            [kw(0), kw(1)], // office assertion
+            [kw(2), kw(3)], // office redirect
+            [kw(4), kw(5)], // project assertion
+            [kw(6), kw(7)], // project redirect
+        ],
+        persons: (0..OB_PERSONS).map(|i| vec![ent(i)]).collect(),
+        offices: vec![vec![ent(4), ent(5)], vec![ent(6), ent(7)], vec![ent(8)]],
+        projects: vec![vec![ent(9)], vec![ent(10), ent(11)]],
+    };
+
+    // Development: only one- and two-read chains. Final: a withheld three-read composition.
+    let dev_chain_sets: [[&[usize]; 2]; 2] = [[&[0, 1], &[2, 3]], [&[0], &[1]]];
+    let dev_worlds: Vec<ObWorld> = vec![
+        ob_make_world(
+            &vocab,
+            0,
+            10,
+            &[vec![0, 1], vec![2, 3]],
+            &[vec![0], vec![1, 2], vec![3]],
+            false,
+            OB_SEED,
+        ),
+        ob_make_world(
+            &vocab,
+            1,
+            11,
+            &[vec![0], vec![1, 2], vec![3]],
+            &[vec![0, 1], vec![2, 3]],
+            false,
+            OB_SEED + 0x9E37,
+        ),
+        ob_make_world(
+            &vocab,
+            2,
+            12,
+            &[vec![0, 1], vec![2, 3]],
+            &[vec![0, 2], vec![1, 3]],
+            false,
+            OB_SEED + 2 * 0x9E37,
+        ),
+    ];
+    let _ = dev_chain_sets;
+    let final_worlds: Vec<ObWorld> = vec![
+        ob_make_world(
+            &vocab,
+            100,
+            300,
+            &[vec![0, 1, 2], vec![3]],
+            &[vec![0], vec![1, 2, 3]],
+            false,
+            OB_FINAL_SEED,
+        ),
+        ob_make_world(
+            &vocab,
+            101,
+            301,
+            &[vec![0], vec![1, 2, 3]],
+            &[vec![0, 1, 2], vec![3]],
+            false,
+            OB_FINAL_SEED + 0x9E37,
+        ),
+        ob_make_world(
+            &vocab,
+            102,
+            302,
+            &[vec![0, 1, 2], vec![3]],
+            &[vec![0], vec![1, 2, 3]],
+            true,
+            OB_FINAL_SEED + 2 * 0x9E37,
+        ),
+    ];
+
+    // Segments must be globally unique across the development corpus: the fit resolves a label's
+    // clause by segment identity, so reusing a segment number across worlds would read the wrong text.
+    let mut dev_clauses: Vec<Clause> = Vec::new();
+    let mut dev_labels: Vec<ClauseLabel> = Vec::new();
+    for (wi, w) in dev_worlds.iter().enumerate() {
+        let base = wi as u32 * 100;
+        for c in w.clauses.iter() {
+            dev_clauses.push(Clause {
+                seg: c.seg + base,
+                tokens: c.tokens.clone(),
+            });
+        }
+        for l in w.labels.iter() {
+            let mut l2 = l.clone();
+            l2.seg += base;
+            dev_labels.push(l2);
+        }
+        for person in 0..OB_PERSONS {
+            for goal in [Goal::Office, Goal::Project] {
+                let mut q = ob_question(&vocab, person, goal);
+                q.seg = 900_000 + wi as u32 * 100 + (person as u32) * 2 + goal.index() as u32;
+                dev_clauses.push(q.clone());
+                dev_labels.push(ClauseLabel {
+                    seg: q.seg,
+                    subject: (0, vocab.persons[person].len()),
+                    marker: (
+                        vocab.persons[person].len() as u32,
+                        vocab.assert_marker(goal).len(),
+                    ),
+                    object: None,
+                    role: ObVocab::role_of(goal, false),
+                    goal,
+                    action: RelAction::Emit,
+                });
+            }
+        }
+    }
+    // Generator self-check: every declared marker extent must equal that role's declared marker.
+    for (clause, label) in dev_clauses.iter().zip(dev_labels.iter()) {
+        let (ms, ml) = label.marker;
+        let observed: Vec<u32> = clause
+            .tokens
+            .iter()
+            .skip(ms as usize)
+            .take(ml)
+            .copied()
+            .collect();
+        let redirect = label.role % 2 == 1;
+        let expected_marker = if redirect {
+            vocab.redirect_marker(label.goal)
+        } else {
+            vocab.assert_marker(label.goal)
+        };
+        if observed != expected_marker {
+            return Err(format!(
+                "generator self-check failed at seg {}: role {} goal {:?} observed marker {:?} expected {:?}",
+                label.seg, label.role, label.goal, observed, expected_marker
+            ));
+        }
+    }
+    let (model, fit) = fit_observed_text_model(&dev_clauses, &dev_labels);
+    let model_bytes = serde_json::to_vec(&model).map_err(|e| e.to_string())?;
+    write_checked(&root, "artifacts/observed_text_model.json", &model_bytes)?;
+    let model_loaded: ObservedTextModel = serde_json::from_slice(
+        &std::fs::read(root.join("artifacts/observed_text_model.json"))
+            .map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    if model_loaded != model {
+        return Err("observed-text model reload mismatch".into());
+    }
+
+    // Independent expectation walked from the declared labels, never from the model: follow the
+    // redirect chain for (person, goal) until the assertion, and count the reads it requires.
+    let expected_from_labels = |w: &ObWorld, person: usize, goal: Goal| -> Option<(Vec<u32>, u8)> {
+        let mut current = person;
+        for depth in 1..=OB_MAX_READS {
+            let clause_idx = w.labels.iter().position(|l| {
+                l.goal == goal
+                    && l.subject.1 == 1
+                    && w.clauses
+                        .iter()
+                        .find(|c| c.seg == l.seg)
+                        .and_then(|c| c.tokens.first().copied())
+                        == Some(vocab.persons[current][0])
+            })?;
+            let label = w.labels[clause_idx].clone();
+            let clause = w.clauses.iter().find(|c| c.seg == label.seg)?;
+            let (os, ol) = label.object?;
+            let object: Vec<u32> = clause.tokens[os as usize..os as usize + ol].to_vec();
+            if label.action == RelAction::Continue {
+                let next = vocab.persons.iter().position(|p| *p == object)?;
+                if next == current {
+                    return None;
+                }
+                current = next;
+                continue;
+            }
+            return Some((object, depth));
+        }
+        None
+    };
+    let expected = |w: &ObWorld, person: usize, goal: Goal| -> (Vec<u32>, u8) {
+        w.oracle
+            .iter()
+            .find(|((p, g), _)| *p == person && *g == goal)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    };
+
+    let evaluate = |w: &ObWorld,
+                    lesion: ObLesion,
+                    resume: bool|
+     -> Result<(usize, usize, usize, Vec<serde_json::Value>), String> {
+        let mut complete = 0usize;
+        let mut total = 0usize;
+        let mut depth_ok = 0usize;
+        let mut rows = Vec::new();
+        for person in 0..OB_PERSONS {
+            for goal in [Goal::Office, Goal::Project] {
+                total += 1;
+                let (want, want_depth) = expected(w, person, goal);
+                let out = ob_serve(&model_loaded, w, &vocab, person, goal, lesion, resume)?;
+                let mut want_eos = want.clone();
+                want_eos.push(OB_EOS);
+                let ok = out.emitted == want_eos && out.terminal == RelAction::Stop;
+                if ok {
+                    complete += 1;
+                }
+                if out.reads == want_depth {
+                    depth_ok += 1;
+                }
+                rows.push(json!({
+                    "world": w.id, "world_version": w.version, "person": person,
+                    "goal": format!("{goal:?}"), "expected_answer": want,
+                    "expected_answer_text": tokenizer.decode(&want), "expected_depth": want_depth,
+                    "emitted": out.emitted, "emitted_text": tokenizer.decode(&out.emitted),
+                    "reads": out.reads, "terminal": format!("{:?}", out.terminal),
+                    "selected_subjects": out.selected, "selected_roles": out.roles,
+                    "actions": out.actions.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>(),
+                    "correct": ok,
+                }));
+            }
+        }
+        Ok((complete, total, depth_ok, rows))
+    };
+
+    let mut arms: Vec<serde_json::Value> = Vec::new();
+    let mut final_rows_all: Vec<serde_json::Value> = Vec::new();
+    let mut dev_rows = 0usize;
+    let mut resume_ok = 0usize;
+    let mut resume_total = 0usize;
+    for (split, worlds) in [("development", &dev_worlds), ("final", &final_worlds)] {
+        let mut complete = 0usize;
+        let mut total = 0usize;
+        let mut depth_ok = 0usize;
+        for w in worlds.iter() {
+            let (c, t, d, rows) = evaluate(w, ObLesion::default(), false)?;
+            complete += c;
+            total += t;
+            depth_ok += d;
+            if split == "final" {
+                final_rows_all.extend(rows.clone());
+            } else {
+                dev_rows += rows.len();
+            }
+            let (_, _, _, rrows) = evaluate(w, ObLesion::default(), true)?;
+            for (a, b) in rows.iter().zip(rrows.iter()) {
+                resume_total += 1;
+                if a["emitted"] == b["emitted"] && a["terminal"] == b["terminal"] {
+                    resume_ok += 1;
+                }
+            }
+        }
+        arms.push(json!({"arm": "observed_text_session", "split": split,
+            "complete": complete, "total": total, "depth_correct": depth_ok}));
+    }
+    for (label, lesion) in [
+        (
+            "membership_continuation",
+            ObLesion {
+                membership_continuation: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "fixed_depth_two",
+            ObLesion {
+                fixed_depth_two: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "reads_disabled",
+            ObLesion {
+                reads_disabled: true,
+                ..Default::default()
+            },
+        ),
+    ] {
+        let mut complete = 0usize;
+        let mut total = 0usize;
+        let mut depth_ok = 0usize;
+        for w in final_worlds.iter() {
+            let (c, t, d, _) = evaluate(w, lesion, false)?;
+            complete += c;
+            total += t;
+            depth_ok += d;
+        }
+        arms.push(json!({"arm": label, "split": "final", "complete": complete, "total": total, "depth_correct": depth_ok}));
+    }
+
+    // ---------------- Causal interventions ----------------
+    let w0 = &final_worlds[0];
+    let base = ob_serve(
+        &model_loaded,
+        w0,
+        &vocab,
+        0,
+        Goal::Office,
+        ObLesion::default(),
+        false,
+    )?;
+    // One-position first-source edit: change only the object of the first office clause for person 0.
+    let mut edited = ObWorld {
+        id: w0.id,
+        version: w0.version,
+        clauses: w0.clauses.clone(),
+        labels: w0.labels.clone(),
+        oracle: w0.oracle.clone(),
+    };
+    let first_idx = w0
+        .labels
+        .iter()
+        .position(|l| l.subject.1 == vocab.persons[0].len() && l.goal == Goal::Office)
+        .ok_or("intervention could not locate the first office clause")?;
+    let (os, _) = edited.labels[first_idx]
+        .object
+        .ok_or("clause has no object")?;
+    let replacement = vocab.persons[OB_PERSONS - 1].clone();
+    let seg0 = edited.labels[first_idx].seg as usize;
+    edited.clauses[seg0].tokens.truncate(os as usize);
+    edited.clauses[seg0]
+        .tokens
+        .extend(replacement.iter().copied());
+    edited.labels[first_idx].object = Some((os, replacement.len()));
+    let edited_out = ob_serve(
+        &model_loaded,
+        &edited,
+        &vocab,
+        0,
+        Goal::Office,
+        ObLesion::default(),
+        false,
+    )?;
+    let other_goal = ob_serve(
+        &model_loaded,
+        w0,
+        &vocab,
+        0,
+        Goal::Project,
+        ObLesion::default(),
+        false,
+    )?;
+    let (want_office, _) = expected(w0, 0, Goal::Office);
+    let (want_project, _) = expected(w0, 0, Goal::Project);
+    // Required later fact removed: drop the terminal assertion of the longest project chain.
+    let mut removed = ObWorld {
+        id: w0.id,
+        version: w0.version,
+        clauses: w0.clauses.clone(),
+        labels: w0.labels.clone(),
+        oracle: w0.oracle.clone(),
+    };
+    let term_idx = w0
+        .labels
+        .iter()
+        .position(|l| l.goal == Goal::Project && l.action == RelAction::Emit)
+        .ok_or("intervention could not locate a terminal project clause")?;
+    let term_seg = removed.labels[term_idx].seg as usize;
+    removed.clauses.remove(term_seg);
+    for l in removed.labels.iter_mut() {
+        if l.seg as usize > term_seg {
+            l.seg -= 1;
+        }
+    }
+    removed.labels.remove(term_idx);
+    let removed_out = ob_serve(
+        &model_loaded,
+        &removed,
+        &vocab,
+        0,
+        Goal::Project,
+        ObLesion::default(),
+        false,
+    );
+    let mut want_office_eos = want_office.clone();
+    want_office_eos.push(OB_EOS);
+    let mut want_project_eos = want_project.clone();
+    want_project_eos.push(OB_EOS);
+    let interventions = json!({
+        "one_position_source_edit": {
+            "world": w0.id, "clause_index": first_idx, "goal": "Office", "person": 0,
+            "changed_object_to": replacement,
+            "emitted_before": base.emitted, "emitted_after": edited_out.emitted,
+            "reads_before": base.reads, "reads_after": edited_out.reads,
+            "selected_before": base.selected, "selected_after": edited_out.selected,
+            "answer_changed": base.emitted != edited_out.emitted,
+            "independent_expected_after": expected_from_labels(&edited, 0, Goal::Office).map(|(v, _)| v),
+            "matches_independent_expectation": expected_from_labels(&edited, 0, Goal::Office)
+                .map(|(v, _)| { let mut e = v.clone(); e.push(OB_EOS); e == edited_out.emitted })
+                .unwrap_or(false),
+            "goal_invariant": edited_out.actions.first() == Some(&RelAction::Continue),
+        },
+        "request_goal_change_fixed_evidence": {
+            "emitted_office": base.emitted, "emitted_project": other_goal.emitted,
+            "expected_office": want_office, "expected_project": want_project,
+            "changed": base.emitted != other_goal.emitted,
+            "office_matches": base.emitted == want_office_eos,
+            "project_matches": other_goal.emitted == want_project_eos,
+        },
+        "required_later_fact_removed": {
+            "removed_clause": term_idx,
+            "outcome": removed_out.as_ref().map(|o| json!({"terminal": format!("{:?}", o.terminal), "emitted": o.emitted})).unwrap_or_else(|e| json!({"error": e})),
+        },
+        "goal_preserved_across_redirect": {
+            "reads": base.reads, "terminal": format!("{:?}", base.terminal),
+        },
+        "resume_identical": {"identical": resume_ok, "total": resume_total},
+    });
+
+    write_checked(
+        &root,
+        "rows.jsonl",
+        final_rows_all
+            .iter()
+            .map(|r| serde_json::to_string(r).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .as_bytes(),
+    )?;
+
+    let result = json!({
+        "schema": "uor-r4.observed-text-session/1",
+        "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+        "running_source": {
+            "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
+            "git_dirty": std::env::var("UOR_GIT_DIRTY").unwrap_or_else(|_| "unknown".into()),
+            "executable_sha256": executable_sha256,
+            "source_files": source_files,
+        },
+        "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA,
+            "group_digest": group_digest, "f_bits": parent.cfg.f_bits},
+        "task": {
+            "serving_input": "observed statement tokens, an observed question clause, a declared clause delimiter and a declared entity registry; no gold role, extent, pointer, depth or target",
+            "markers": vocab.markers, "persons": vocab.persons, "offices": vocab.offices,
+            "projects": vocab.projects, "eos": OB_EOS,
+            "dev_office_depths": dev_worlds.iter().map(|w| w.oracle.iter().filter(|((_, g), _)| *g == Goal::Office).map(|(_, (_, d))| *d).collect::<Vec<u8>>()).collect::<Vec<_>>(),
+            "final_office_depths": final_worlds.iter().map(|w| w.oracle.iter().filter(|((_, g), _)| *g == Goal::Office).map(|(_, (_, d))| *d).collect::<Vec<u8>>()).collect::<Vec<_>>(),
+        },
+        "learning": fit,
+        "arms": arms,
+        "interventions": interventions,
+        "development_rows": dev_rows,
+        "final_rows": final_rows_all.len(),
+        "scope": "bounded authored memory domain rendered as observed tokens; declared clause layout, marker vocabulary and entity registry. Not broad language understanding. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "elapsed_s": started.elapsed().as_secs_f64(),
+    });
+    write_json(&root, "result.json", &result)?;
+    seal(&root).map_err(|e| format!("seal: {e}"))?;
+    let unlisted = verify(&root).map_err(|e| format!("verify: {e}"))?;
+    let find = |arm: &str, split: &str| -> (u64, u64) {
+        arms.iter()
+            .find(|a| a["arm"] == json!(arm) && a["split"] == json!(split))
+            .map(|a| {
+                (
+                    a["complete"].as_u64().unwrap_or(0),
+                    a["total"].as_u64().unwrap_or(0),
+                )
+            })
+            .unwrap_or((0, 0))
+    };
+    let (dc, dt) = find("observed_text_session", "development");
+    let (fc, ft) = find("observed_text_session", "final");
+    let (mc, _) = find("membership_continuation", "final");
+    let (xc, _) = find("fixed_depth_two", "final");
+    let (rc, _) = find("reads_disabled", "final");
+    println!(
+        "observed-text: dev {dc}/{dt} final {fc}/{ft} | membership {mc} fixed-depth {xc} no-read {rc} | sealed {} unlisted | {:.1}s",
+        unlisted.len(), started.elapsed().as_secs_f32()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let mode = std::env::args().any(|a| a == "--mode=utility-transfer");
     let ce = std::env::args().any(|a| a == "--mode=contextual-emission");
@@ -13469,7 +14272,10 @@ fn main() -> ExitCode {
     let stm = std::env::args().any(|a| a == "--mode=shared-transition");
     let gsm = std::env::args().any(|a| a == "--mode=grounded-session");
     let rsm = std::env::args().any(|a| a == "--mode=relational-session");
-    let result = if rsm {
+    let obm = std::env::args().any(|a| a == "--mode=observed-text-session");
+    let result = if obm {
+        ob_run()
+    } else if rsm {
         rel_run()
     } else if gsm {
         gs_run()

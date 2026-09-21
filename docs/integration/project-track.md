@@ -1,6 +1,13 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Active direction — observed-text memory through one reusable session
+## Active direction — observed-text memory answers in one reusable boundary
+
+D0-b/D1/D2/D3 and geometric priority remain unchanged.
+
+**Work returned for review (based on the reviewed head 6fc34c1f of queued PR #1341):** observed-text memory answers through one reusable `TextSession::step` boundary. Serving input is statement tokens, an observed question clause, a declared delimiter and a declared entity registry - no gold role, extent, pointer, depth or target. Marker roles, boundary trimming, per-role action semantics and the goal table are learned from declared development text (policy 14/24 to 24/24 on the same units). The primary completes **24/24 development and 24/24 final with 24/24 correct depths**, emitting the complete selected phrase plus the declared terminator, and the same request answers at one, two and three reads with the three-read composition withheld from development. Registry-membership continuation reaches 20/24 and a relation-only fixed-depth-two controller 18/24; reads disabled 0/24. One-position source edits change entity, selected sources, depth and answer together and match an independent expectation with the goal preserved. [Result](observed-text-session-result-2026-09-21.md); [evidence](../evidence/observed-text-session-2026-09-21.json).
+
+**Next:** varied request/source wording on the same boundary, then source-separated prose and an executed Rust task; structural role/scope state and relative H4/Spin/Hopf remain tools for concrete needs.
+
 
 D0-b/D1/D2/D3 and geometric priority remain unchanged.
 
