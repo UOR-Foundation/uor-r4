@@ -1,6 +1,14 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Active direction — learned result decoding and valid geometric composition
+## Active direction — derived-state decoding executed; composition limited by free operand codes
+
+D0-b/D1/D2/D3 and geometric priority remain unchanged.
+
+**PR #1338, returned for review:** the frame-free relative result `s = T_bind[r] * U_op[observed query role] * V[value]` now feeds a bounded learned per-state token shortlist (<= 16 grounded states, k = 4), with a computed identity emittable and **distinct from NoRead**, and the operation read from the actual observed query token. The selected-value-factor-only decoder reproduces the strongest selected-value dictionary exactly (final **104/120**) against the retained residual's 33/120; the full-factor decoder overfits development, so the binding/operation factors are nuisance on that task. On composition fixture v2 the declared screen is not met (held-out 8/64 H4, 20/64 matched additive C120) and the measured obstacle is that held-out `(operation, value)` combinations are free parameters for a per-operation/per-value code family, not an H4 capacity limit. Observed-operation change, payload change, distractor invariance, absence, read/update-disabled and identity-versus-absence all behave as declared on loaded models. [Result](derived-state-decoder-result-2026-09-21.md); [evidence](../evidence/derived-state-decoder-2026-09-21.json).
+
+**Next:** a composition task whose combination rule is forced by the observed inputs, or a structured one-parameter code family instead of eight free operand codes, before retrying multi-operation composition; then dependent Read/Emit/Stop once one read is useful. Structural scope/retention, relative Hopf/H4 and finite spectral features remain tools for concrete needs; paired-H4/E8/S7 conditional. A cyclic-task win or tie with C120 cannot establish unique H4 advantage.
+
+## Former direction — learned result decoding and valid geometric composition
 
 D0-b/D1/D2/D3 and geometric priority remain unchanged.
 
