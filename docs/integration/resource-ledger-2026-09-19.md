@@ -2018,10 +2018,12 @@ experiment and wrote 25 MiB into a misleadingly named root; after verifying it w
 output rather than unique research, that root was removed. Its compute is included in the charge and
 disclosed here rather than silently dropped.
 
-**Retained.** Attempt roots `ordinary-form-argument-binding-{1..7}` (127 MiB, latest sealed with 0
-unlisted files); the original #1344 five attempts and all earlier research, models, executables,
-conversations and Downloads remain untouched. The worktree's regenerable 1.0 GiB release build target
-was removed after the delivered run; the sealed receipt records the executable and source hashes.
+**Retained.** Attempt roots `ordinary-form-argument-binding-{1..8}` (latest, `-8`, is the delivered
+receipt with 0 unlisted files and the exact final source binding; `-8` cost 27.55 s of release
+recompilation plus an 11.1 s run, and reproduces the identical panels). The original #1344 five
+attempts and all earlier research, models, executables, conversations and Downloads remain untouched.
+The worktree's regenerable 1.0 GiB release build target was removed after the delivered run; the sealed
+receipt records the executable and source hashes.
 
 **Storage.** Free space at record time **32,540,135,424 B**. The recorded **36,766,079,385 B** physical
 reserve plus the 128 MiB stop margin is therefore **currently not met**, a shortfall of roughly 4.2 GB.

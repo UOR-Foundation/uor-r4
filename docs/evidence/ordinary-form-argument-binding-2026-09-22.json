@@ -44,6 +44,7 @@
   }
  ],
  "base": "origin/main 38314380297432f491415d30ca20d5a70bea25da (merged review/documentation delivery)",
+ "binding_note": "running_source.git_rev and the three source sha256 values bind the delivered commit; the release binary that produced this receipt is recorded by executable_sha256.",
  "controls": [
   {
    "arm": "membership_continuation",
@@ -68,12 +69,13 @@
   }
  ],
  "date_utc": "2026-09-22",
+ "delivery_pr": 1344,
  "development_complete": {
   "categorical_order": 48,
   "h4_hybrid": 48
  },
  "draft_head_before": "1df229178c6b56ae6dbf95273c9e4eae3282a66e (PR #1344 corrected draft)",
- "elapsed_s": 11.31327125,
+ "elapsed_s": 11.010322584,
  "identity": {
   "chain_cross_bpe": true,
   "chain_joins": [
@@ -383,14 +385,18 @@
  },
  "limitations": [
   "Small authored memory domain with 4 persons, 3 offices and 3 projects; the forms are authored, not learned from a corpus.",
-  "The precomputed interval features (not a dense encoder) are the serving representation: bounded categorical potentials plus optional exact 2I interval features; no multiplier-free whole-path or energy claim.",
-  "Order-aware categorical arm and H4 hybrid both reach the development/exposed/final ceiling: no measured geometric advantage, and none is claimed. The H4 arm's ordered codes were not improved by the bounded coordinate search (0 accepted moves).",
+  "The serving representation is bounded categorical/interval potentials, not a dense encoder; no multiplier-free whole-path or energy claim.",
+  "The order-aware categorical arm and the H4 hybrid both reach the development/exposed/final ceiling: no measured geometric advantage, and none claimed. The bounded code search accepted 0 improving moves over 5,880 evaluations.",
   "The membership control compares token vectors, so it keeps the weaker identity boundary and reaches 38/40 rather than 40/40.",
-  "The final draw is a fresh composition/style draw after design freeze, but it reuses the same vocabulary and form family; new lexical values and new structures are not tested.",
+  "The final draw is a fresh composition/style draw after design freeze but reuses the same vocabulary and form family; new lexical values and new structures are untested.",
   "Whole-target D0-b serving compliance, energy and broad language understanding remain unqualified."
  ],
  "primary_arm": "categorical_order",
  "primary_arm_selected_on": "development complete answers only; ties keep the order-aware categorical comparator. The final draw was made after the design was frozen and changed no development choice or fitted parameter.",
+ "prior_attempts": {
+  "note": "Attempts 1-6 are preserved failed/partial diagnostic runs. Attempt 7 produced identical panels and passed all checks, but its sealed runner source sha256 predates the removal of a test-only diagnostic function; attempt 8 is the delivered receipt and binds the exact final sources.",
+  "roots": "ordinary-form-argument-binding-1..7"
+ },
  "report_files": [
   {
    "blake3": "728a4b1ccdaab74d778f1c2f5e467a7c1daa5740a7edda53d59c112c034a48a7",
@@ -403,13 +409,13 @@
    "path": "artifacts/ordinary_forms_h4_hybrid.json"
   },
   {
-   "blake3": "ef9b487118e849e681e7e873469dbf0f724c6c8e2dcdfb3ba1eaf86d50beab22",
+   "blake3": "2060c61fb4baa4578880d3db18ee79f288e353939823cb00449a0a557ba08464",
    "bytes": 472,
    "path": "attempt.json"
   },
   {
-   "blake3": "7a73fd98bcac2627e1dd700c27f752498a35adce04ded34a9ebdb8f4501f3904",
-   "bytes": 1903299,
+   "blake3": "63ddd19b35ff8230a4ba997424650528aa9ae814c280f8c04075c4960d2375fb",
+   "bytes": 1903368,
    "path": "result.json"
   },
   {
@@ -423,7 +429,7 @@
    "path": "worlds.json"
   }
  ],
- "report_root": "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/ordinary-form-argument-binding-7",
+ "report_root": "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/ordinary-form-argument-binding-8",
  "row_summary": {
   "checkpoint_resumes_identical": 2426,
   "checkpoints": 2426,
@@ -431,9 +437,28 @@
   "rows": 344,
   "rows_with_resume_mismatch": 0
  },
+ "running_source": {
+  "executable_sha256": "75ac2ba1a96f5b89ed4d7792e7db4a8946cb58532ea606727ba1cfaab6463226",
+  "git_dirty": "false",
+  "git_rev": "5a6df770ce1490620fa5f391859590bae64781ec",
+  "source_files": [
+   {
+    "path": "crates/uor-r4-core/src/native_geometric/learner/observed_text_session.rs",
+    "sha256": "626d6fedbf3366b4c842d75f19a32172e5fd5b757434724f786547bb578190e4"
+   },
+   {
+    "path": "crates/uor-r4-core/src/native_geometric/learner/relational_session.rs",
+    "sha256": "1c89b2b48a4041542b8fadf58aa29a30deedde75d7161258155a7103070112e5"
+   },
+   {
+    "path": "crates/uor-r4-core/src/bin/competitive-reader.rs",
+    "sha256": "5774a1c1fa3b0c4ba08ee94bab8b7a5a9a1b837bf4875ced6fc904f600f80eb8"
+   }
+  ]
+ },
  "schema": "uor-r4.ordinary-form-argument-binding-evidence/1",
  "scope": "authored ordinary readable text over a small memory domain; declared bounded span proposals and a same-question causal session. Not broad language understanding, general reasoning or frontier capability. Membership control uses token identity, not the primary lexical key. Energy UNAVAILABLE; whole-path D0-b not claimed.",
- "source_commit": "3537280c (PR #1344: ordinary-form structured argument binding)",
+ "source_commit": "5a6df770ce1490620fa5f391859590bae64781ec",
  "step": "ordinary-form structured argument binding through the corrected loaded session",
  "unlisted_files": 0
 }

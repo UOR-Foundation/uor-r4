@@ -1,8 +1,10 @@
 # Ordinary-form structured argument binding — returned result
 
 September 22 UTC, 2026. Continuation of the corrected draft PR #1344 on top of the merged
-review/documentation delivery `38314380`. Source commit `3537280c`. Executed receipt:
-[evidence](../evidence/ordinary-form-argument-binding-2026-09-22.json).
+review/documentation delivery `38314380`. Source commits `3537280c` (implementation) and `5a6df770`
+(result, evidence, resources). Executed receipt: [evidence](../evidence/ordinary-form-argument-binding-2026-09-22.json),
+sealed root `ordinary-form-argument-binding-8` binding `observed_text_session.rs` `626d6fed…` and
+`competitive-reader.rs` `5774a1c1…` at `git_rev 5a6df770`, executable `75ac2ba1…`.
 
 ## What was asked and what changed
 
