@@ -2039,3 +2039,13 @@ is **byte-identical** to the receipt: SHA256
 `.uor-models/realtext-prior-2026-09-20/ordinary-form-argument-binding-delivery/competitive-reader-ordinary-form-binding-8`.
 This confirms reproducible release compilation for the pinned toolchain and preserves the served
 artifact as the project requires. The worktree build target was removed again after copying it out.
+
+## Ordinary-form principal review and storage recovery — September22 UTC
+
+Prior DeepSeek debit4,500,000ms undercounts the known03:42:02→05:08:05UTC merge-to-final-preservation-commit interval5,163,000ms. Add **663,000ms** to retain at least that known engineering wall interval; earlier/later unknown duration remains unavailable. This is not measuredCPU/model time or an exact full-session estimate. Balance after reconciliation320,577,509/333,700,000ms. Original eight saved report timers remain separately scoped.
+
+At 2026-09-22T05:20:09.686302+00:00 projected7,200,000ms full review/repair/checks/replay/delivery plus600,000ms prior preparation estimate,2compiler/1model worker,8GiB RAM,768MiB temporary build and64MiB retained data (narrowed before execution from128MiB because one~30MiB replay). No time extension required. No builds/models until physical reserve36,766,079,385B+128MiB restored; monitored free space during each command.
+
+Removed **4,576,190,464 allocated bytes** of explicitly inventoried regenerable caches and3owner-authorizedDMGinstallers. ManifestSHA256a9484730fa8c0846a4bb4cc8d3a305e40323d60fbf35b49ef13721b5e911d3cd. Excluded open/recent browser cache files; retained histories/profile, all research/reports/models and otherDownloads. Shared target release cache retained. Disk-free changes from other activity are not attributed to this cleanup. Original submitted executable and newly corrected executable are separately preserved outside sealed roots.
+
+Principalcharge **2,100,377ms** = 900,377ms elapsed engineering wall time +600,000ms preparation estimate +600,000ms delivery reserve estimate; parallel reviews countedonce. **Cumulative 322,677,886/333,700,000ms**, remaining11,022,114ms. Free atcharge **39,140,376,576B**. No paidcompute or reserve reduction. [Executedchecks](../evidence/ordinary-form-binding-principal-checks-2026-09-22.json):23module+23runnertestsPASS,1legacyignored,releasebuild and correctedexposedreplay; alloriginal344rowbehaviors/modelbytesretained, matchedlexicalmembership32/40, exactobjecteditsuffixpreserved,2,820checkpoints independentlyverified.

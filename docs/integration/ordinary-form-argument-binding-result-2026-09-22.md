@@ -1,5 +1,8 @@
 # Ordinary-form structured argument binding — returned result
 
+**Principal qualification, September22:** preserve this returned account at its submitted scope. The [independent review](ordinary-form-binding-review-2026-09-22.md) verifies the answer counts and cross-BPE joins but corrects three interpretations: root8 replays root7's first final panel; descriptor search cannot improve an already96/96 exact-hit objective; and the original source-object edit also removed trailing `downtown`. The matched lexical-membership control and isolated source edit are executed separately in the [principal checks](../evidence/ordinary-form-binding-principal-checks-2026-09-22.json). The next milestone is scoped correction-aware unfamiliar-entity memory; consumed Q8 is sequenced after that, not required in the same change.
+
+
 September 22 UTC, 2026. Continuation of the corrected draft PR #1344 on top of the merged
 review/documentation delivery `38314380`. Source commits `3537280c` (implementation) and `5a6df770`
 (result, evidence, resources). Executed receipt: [evidence](../evidence/ordinary-form-argument-binding-2026-09-22.json),
