@@ -2121,3 +2121,14 @@ paid or external compute; no unique artifact, sealed attempt or executable delet
 unlisted files, binding `git_rev a94c9dec`, `scoped_memory.rs` `ef217e2d…`, `grounded_session.rs`
 `cd0cb162…` unchanged, `competitive-reader.rs` `e33c4d02…`, executable `b25fcb13…`). All earlier roots,
 the principal's `scoped-correction-memory-*` roots and the preserved executables are untouched.
+
+
+## Consumed-state principal review and preservation correction, September22
+
+At `2026-09-22T15:26:26.719120+00:00`, the review projected7,200,000ms inclusive work,240,000ms preparation estimate,2 compiler workers/1 model worker and8GiB RAM. Standing authorization added7,200,000ms to the limit before use (337,300,000→344,500,000); the prior334,715,344ms charge was retained. Reuse of the current release target allowed a prospective storage refinement to384MiB temporary+32MiB retained.
+
+Principal charge **2,715,520ms** = 1,875,520ms elapsed review +240,000ms preparation estimate +600,000ms delivery reserve estimate, parallel work counted once. Live cumulative **337,430,864/344,500,000ms**. No paid compute. [Storage receipt](../evidence/consumed-geometric-state-storage-2026-09-22.json): **4,245,688,320 allocated bytes across19,926 disposable cache files** removed; free at charge **37,277,446,144B**. Preserved all executables, unique models/research/reports/histories and Downloads; physical reserve36,766,079,385B plus128MiB stop margin retained. Cleanup manifests/logs are preserved beside the original and corrected binaries.
+
+The submitted07:10Z projection timestamp is not reconciled with the parent review and actual15:03–15:19UTC seals. Its reported5,400,000ms engineering debit is retained at that scope; no unsupported duplicate or idle interval is charged. Seven submitted roots are partial/unsealed, nine sealed. All remain available.
+
+Executed27module+25runner tests (onelegacyignored), release build, corrected consumed-state and retained scoped-mode replays. Newcomputation fit17/38 versus migratedprior38/38: integration remains incomplete. Source6be7f8fc and exact evidence in [checks](../evidence/consumed-geometric-state-principal-checks-2026-09-22.json).

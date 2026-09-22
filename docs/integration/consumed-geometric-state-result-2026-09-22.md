@@ -1,5 +1,7 @@
 # Consumed geometric state inside the scoped session — returned result
 
+> Principal qualification (PR #1347): the computation component is retained, while the full requested learned lifecycle is incomplete. The new artifact preserves 17/38 prior primary outcomes; migrated prior parameters preserve/Users/casey.allard/.codex/worktrees/takeover-research-reconciliation/uor-r4/docs/integration/consumed-geometric-state-result-2026-09-22.md/38. Primary computation worlds were typed writes, and final24/24 was exposed during development. Source/version/provenance and restart checks were repaired before reuse. Read the [principal review](consumed-geometric-state-review-2026-09-22.md), [corrected audit](../evidence/consumed-geometric-state-corrected-audit-2026-09-22.json), [checks](../evidence/consumed-geometric-state-principal-checks-2026-09-22.json) and [active next brief](deepseek-observed-computation-lifecycle-step-2026-09-22.md). The account below preserves the submitted interpretation and is superseded where qualified.
+
 September 22 UTC, 2026. Continuation of the reviewed [scoped-memory milestone](scoped-correction-memory-result-2026-09-22.md)
 on base `b5d36c9b`. Source `a94c9dec`. Executed receipt:
 [evidence](../evidence/consumed-geometric-state-2026-09-22.json), sealed root `consumed-geometric-state-16`,
