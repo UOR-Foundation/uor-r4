@@ -1996,3 +1996,36 @@ Prior DeepSeek work was not debited: cumulative remained311,552,510ms while allo
 Principal projection5,400,000ms +180,000ms preparation estimate within existing allowance,2 compiler threads/1 model thread,8GiB RAM,512MiB temporary build after inactive debug cleanup,64MiB retained data, physical reserve36,766,079,385B +128MiB. Actual review charge **1,761,999ms** = 981,999ms elapsed +180,000ms prior preparation estimate +600,000ms delivery reserve estimate. Parallel investigators counted once. Balance **315,414,509/333,700,000ms**, remaining **18,285,491ms**. No further limit extension or paid compute.
 
 Removed702 inactive debug dependency archive/metadata files, **716,836,864 allocated bytes**. ManifestSHA2564c5429d74cefb49a1a9e38d39453ade7fcd257845d396806645f9f2b9ac29dd4. Preserved all executables, release cache, unique artifacts/research, AI histories and Downloads. Free **37,823,365,120B** at charge. [Source, executed checks and resource receipt](../evidence/structured-argument-binding-principal-checks-2026-09-22.json).
+
+## PR #1344 ordinary-form argument binding — September 22 UTC
+
+**Projection.** Two compiler threads and one model thread, 8 GiB RAM ceiling, about 1.2 GiB temporary
+build output, 127 MiB retained report data across seven attempt roots, no external or paid compute.
+No extension was required: the previous balance already covered this work, and no limit was raised.
+
+**Known interval.** Isolated worktree advanced to the corrected draft and merged `origin/main` at
+2026-09-22T03:42Z; the delivered sealed run completed at 2026-09-22T04:35Z — a known **3,180,000 ms**
+interval. The full session includes recovery before that interval and documentation/delivery after it.
+
+**Charge 4,500,000 ms**, recorded retrospectively because the incurred portion preceded its receipt:
+measured release builds, test compiles and eight runner executions (~2,400,000 ms, including one
+accidental default-mode run) plus estimated recovery, implementation, diagnosis, documentation and
+delivery (~2,100,000 ms). Balance **319,914,509 / 333,700,000 ms**; remaining **13,785,491 ms**. No
+extension requested; the standing owner authorization was not invoked and no paid compute was used.
+
+**Accidental artifact.** One invocation without `--mode=observed-text-session` executed the default
+experiment and wrote 25 MiB into a misleadingly named root; after verifying it was this session's own
+output rather than unique research, that root was removed. Its compute is included in the charge and
+disclosed here rather than silently dropped.
+
+**Retained.** Attempt roots `ordinary-form-argument-binding-{1..7}` (127 MiB, latest sealed with 0
+unlisted files); the original #1344 five attempts and all earlier research, models, executables,
+conversations and Downloads remain untouched. The worktree's regenerable 1.0 GiB release build target
+was removed after the delivered run; the sealed receipt records the executable and source hashes.
+
+**Storage.** Free space at record time **32,540,135,424 B**. The recorded **36,766,079,385 B** physical
+reserve plus the 128 MiB stop margin is therefore **currently not met**, a shortfall of roughly 4.2 GB.
+This step contributed 127 MiB of reports and 1.0 GiB of regenerable build output; the remainder is
+other worktrees (`uor-r4-worktrees` 8.9 GiB, `.codex` 4.5 GiB), the main checkout target (3.7 GiB) and
+pre-existing corpora under `.uor-models` (20 GiB). Flagged for the principal; no unique artifact was
+deleted to close it, and no broad deletion was performed.

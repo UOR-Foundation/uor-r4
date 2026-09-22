@@ -1,6 +1,16 @@
 # Current native geometric AI work
 
-## Active: complete the corrected structured-binding draft
+## Active: durable scope/correction state after ordinary-form binding
+
+**PR #1344 completed the ordinary-form argument-binding milestone** at source `3537280c`, on top of the merged review/documentation delivery `38314380`. The observation model now decodes and serves one declared structured objective over the joint hypothesis `(subject span, cue span, cue role, optional object span)` with learned singleton background potentials, argument roles sided relative to the cue, precomputed interval potentials, bounded ordered categorical features (so the categorical arm also receives order information) and a coherent alternating code-map/weight fit that retains an incumbent.
+
+**Executed:** development **48/48**, exposed regression **40/40** (design-informed; reported exposed), fresh post-freeze **final draw 24/24** — identically for the order-aware categorical arm and the H4 hybrid, correct depth on every exposed and final row, 2,426/2,426 checkpoint resumes identical, and all eight intervention checks passing (changed payload on the same path, valid redirect changing the path, required-fact removal, cycle, goal change, goal invariance). Cross-BPE identity is verified for the query join and both chain joins: different BPE sequences, one exact lexical key. Controls: membership 38/40 (token-vector identity boundary), maximum-two-read 30/40, reads disabled 0/40. [Result](ordinary-form-argument-binding-result-2026-09-22.md); [evidence](../evidence/ordinary-form-argument-binding-2026-09-22.json).
+
+**Measured comparison:** at this ceiling the ordered-H4 hybrid ties the order-aware categorical arm exactly (0 accepted code moves in 5,880 evaluations). No geometric advantage and no geometric disadvantage is claimed; the geometric arm is retained. Energy `UNAVAILABLE`; whole-path D0-b, new lexical values and broad language remain unqualified.
+
+**Next architectural decision:** durable role/scope/correction state and consumed Q8 computation results through this same session, then E/S prose and executed Rust. Structural banks, retained Hopf fiber, signed Spin-H4, paired-H4/icosian E8, S7 and harmonic/scalar fields remain available for a witnessed need.
+
+## Previous active: complete the corrected structured-binding draft
 
 **PR #1344, corrected draft:** retain the bounded any-order span representation, but the ordinary-form argument-binding milestone remains incomplete. The submitted old-fixture result was 23/24 because cue semantics were 47/48 despite 48/48 spans. Its byte-aligned path was exercised; the missing claim is a learned cross-BPE join. Source-edit/cycle failures came from stale text/alignment after token edits. [Principal review](structured-argument-binding-review-2026-09-22.md); [original audit](../evidence/structured-argument-binding-principal-review-2026-09-22.json).
 
