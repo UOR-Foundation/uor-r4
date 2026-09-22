@@ -2991,11 +2991,6 @@ impl ScopedMemoryRuntime {
                     self.terminate(session, ScopedTerminal::Complete);
                 }
             }
-            _ => {
-                return Err(ScopedMemoryError::Session(
-                    "unsupported active scoped phase".into(),
-                ))
-            }
         }
         self.validate(session)?;
         effect.next_action = if session.terminal.is_none() {
@@ -3726,14 +3721,19 @@ mod tests {
     #[test]
     fn tabulated_fit_is_independent_of_example_order_and_rejects_truncation() {
         let (f, _, _, labels) = q8_fixture();
+        let factorization = &f;
         let examples: Vec<_> = labels
             .iter()
             .flat_map(|label| {
-                [100, 200].into_iter().map(|op| StExample {
+                [100, 200].into_iter().map(move |op| StExample {
                     payload: *label,
                     primitives: vec![op],
-                    targets: vec![f
-                        .outcome_for_state(f.apply(f.initial_state(*label).unwrap(), op).unwrap())
+                    targets: vec![factorization
+                        .outcome_for_state(
+                            factorization
+                                .apply(factorization.initial_state(*label).unwrap(), op)
+                                .unwrap(),
+                        )
                         .unwrap()],
                 })
             })
