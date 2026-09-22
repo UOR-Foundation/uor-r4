@@ -2049,3 +2049,36 @@ At 2026-09-22T05:20:09.686302+00:00 projected7,200,000ms full review/repair/chec
 Removed **4,576,190,464 allocated bytes** of explicitly inventoried regenerable caches and3owner-authorizedDMGinstallers. ManifestSHA256a9484730fa8c0846a4bb4cc8d3a305e40323d60fbf35b49ef13721b5e911d3cd. Excluded open/recent browser cache files; retained histories/profile, all research/reports/models and otherDownloads. Shared target release cache retained. Disk-free changes from other activity are not attributed to this cleanup. Original submitted executable and newly corrected executable are separately preserved outside sealed roots.
 
 Principalcharge **2,100,377ms** = 900,377ms elapsed engineering wall time +600,000ms preparation estimate +600,000ms delivery reserve estimate; parallel reviews countedonce. **Cumulative 322,677,886/333,700,000ms**, remaining11,022,114ms. Free atcharge **39,140,376,576B**. No paidcompute or reserve reduction. [Executedchecks](../evidence/ordinary-form-binding-principal-checks-2026-09-22.json):23module+23runnertestsPASS,1legacyignored,releasebuild and correctedexposedreplay; alloriginal344rowbehaviors/modelbytesretained, matchedlexicalmembership32/40, exactobjecteditsuffixpreserved,2,820checkpoints independentlyverified.
+
+## Scoped correction memory — prospective projection, September 22 UTC
+
+At 2026-09-22T06:05Z the live balance is **322,677,886 / 333,700,000 ms** (remaining **11,022,114 ms**)
+and free space is **37,915,348,992 B**, above the recorded 36,766,079,385 B reserve plus 128 MiB stop
+margin. Projected for this step: **8,000,000 ms** covering context recovery, module and runner
+implementation, focused builds and tests, development diagnostics, controls, the held-out final
+population, save/reload verification, report sealing and protected delivery. Two compiler workers, one
+model worker, 8 GiB RAM ceiling, at most 768 MiB temporary build output and at most 64 MiB retained
+report data. Reuse the existing release cache where valid; no paid or external compute. The standing
+owner authorization covers a necessary local extension if the projection is exceeded, recorded
+prospectively with its reason before use. No packaged installer, sealed attempt or unique artifact is
+deleted to manufacture headroom.
+
+## Scoped correction memory — completed charge, September 22 UTC
+
+Projection recorded prospectively at 2026-09-22T05:49Z: 8,000,000 ms, two compiler workers, one model
+worker, 8 GiB RAM, at most 768 MiB temporary build output, at most 64 MiB retained report data.
+
+**Charge 4,000,000 ms**, within the projection and with no extension requested. Known interval
+2026-09-22T05:50Z (isolated worktree created off `b218058f`) to 2026-09-22T06:35Z (delivered sealed
+run `scoped-correction-memory-14`) is 45 minutes, plus about five minutes of prior context recovery and
+a delivery reserve for documentation, the protected PR, knowledge records and issue updates. The
+interval covers fourteen sealed or discarded attempts (one per diagnostic cycle, each preserved), about
+twelve release builds and four test compiles, the widened-supervision and copula-free-cue design
+change, and the fresh final population. Balance **326,677,886 / 333,700,000 ms**; remaining
+**7,022,114 ms**. No paid or external compute; no unique artifact deleted.
+
+**Retained.** Attempt roots `scoped-correction-memory-{1..14}` (the delivered receipt is `-14`, 0
+unlisted files, binding `git_rev c4bd440a`, `scoped_memory.rs` `6bdfde36…`, `observed_text_session.rs`
+`c6529239…` unchanged, `competitive-reader.rs` `e008b404…`, executable `7f610230…`). Root `-12` is the
+first fresh-final draw whose two failures informed the design change and is reported as exposed. All
+earlier roots, the principal's `ordinary-form-*` roots and the preserved executables are untouched.
