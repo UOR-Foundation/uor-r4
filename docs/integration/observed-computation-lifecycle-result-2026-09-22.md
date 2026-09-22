@@ -1,5 +1,7 @@
 # Observed computation lifecycle — returned result
 
+**Principal qualification:** [independent review](observed-computation-lifecycle-review-2026-09-22.md) retains the central result and corrects the account below:72/72 primary ingests;32-case first evaluation in attempt2 and exposed replay in4; independent audit replaces counter-only reconstruction; final grounding/consumption is atomic and child-reload store was typed constructed. Reported unrelated-test attribution remains unverified. The text below preserves the submitted account, not current scheduling or unqualified acceptance.
+
 September 22 UTC, 2026. Continuation of the [principal review of PR #1347](consumed-geometric-state-review-2026-09-22.md)
 on base `323040a4` (reviewed content `323040a43cc7169c8aff08f758b756d3bba4a0f8`). Source
 `de5991fd10fa9c50f7d3e95a3d94299fc3af45fe`. Sealed root
