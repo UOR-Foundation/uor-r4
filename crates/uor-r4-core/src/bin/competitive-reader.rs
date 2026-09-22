@@ -19337,3 +19337,497 @@ mod confidence_boundary_tests {
         assert!(require_witness_parity(20, 0).is_ok());
     }
 }
+
+#[cfg(test)]
+mod loaded_lifecycle_tests {
+    use super::*;
+
+    fn bytes(root: &Path, name: &str) -> Result<Vec<u8>, String> {
+        std::fs::read(root.join(name)).map_err(|e| format!("{name}: {e}"))
+    }
+    fn tokenizer() -> Result<HfBpeTokenizer, String> {
+        let bytes = std::fs::read(DEFAULT_TOKENIZER).map_err(|e| e.to_string())?;
+        if sha256_hex(&bytes) != TOKENIZER_SHA {
+            return Err("review tokenizer identity mismatch".into());
+        }
+        derive_tokenizer(&bytes, VOCAB).map_err(|e| e.to_string())
+    }
+    fn loaded(root: &Path, memory: Memory) -> Result<ScopedMemoryRuntime, String> {
+        let backend = cgs_backend_from_json(
+            &serde_json::from_slice(&bytes(root, "backend-signed_factorization.json")?)
+                .map_err(|e| e.to_string())?,
+        )?;
+        let lineage = memory.lineage;
+        ScopedMemoryRuntime::load_with_computation(
+            &bytes(root, "model.json")?,
+            &bytes(root, "intent.json")?,
+            Some(&bytes(root, "lexicon.json")?),
+            backend,
+            memory,
+            lineage,
+            MemoryControl::Normal,
+            VOCAB,
+            Some(CGS_EOS),
+        )
+        .map_err(|e| e.to_string())
+    }
+    fn ingest(
+        runtime: &mut ScopedMemoryRuntime,
+        tokenizer: &HfBpeTokenizer,
+        oracle: &mut ScmOracle,
+        form: ScmForm,
+        entity: &str,
+        value: &str,
+    ) -> Result<serde_json::Value, String> {
+        // Only the literal text and scope cross the serving boundary. Form/entity/value fields
+        // independently define the reference world, and never select the runtime's route.
+        let text: String = scm_ob_form(form, entity, Some(value))
+            .parts
+            .into_iter()
+            .map(|(_, s)| s)
+            .collect();
+        let clause = scm_raw_clause(tokenizer, &text)?;
+        let observed = runtime.observe(&clause).map_err(|e| e.to_string())?;
+        let expected_write = oracle.declared(0, form, entity, value);
+        let result = runtime
+            .ingest(&clause, b"alpha", oracle.commit)
+            .map_err(|e| e.to_string())?;
+        let wrote = matches!(result, IngestOutcome::Wrote(_));
+        if wrote != expected_write
+            || observed.entity_key != entity.as_bytes()
+            || observed.value_key.as_deref() != Some(value.as_bytes())
+            || observed.continues != form.is_redirect()
+        {
+            return Err(format!(
+                "loaded observation mismatch for {text:?}: {observed:?}"
+            ));
+        }
+        Ok(
+            json!({"text": text, "tokens": clause.tokens, "byte_lengths": clause.byte_lengths,
+            "entity": entity, "value": value, "continues": observed.continues,
+            "intent": observed.intent, "wrote": wrote, "commit": oracle.commit}),
+        )
+    }
+    fn derived(action: &CgsAction, operand: &str) -> Result<String, String> {
+        let label = CGS_LABELS
+            .iter()
+            .position(|l| *l == operand)
+            .ok_or("reference operand")?;
+        let mut state = action
+            .element_of_label(label as u32)
+            .ok_or("reference element")?;
+        for primitive in [100, 200] {
+            state = action.apply(state, primitive).ok_or("reference action")?;
+        }
+        Ok(CGS_LABELS[action.label_of_element(state).ok_or("reference result")? as usize].into())
+    }
+    fn expected(action: &CgsAction, oracle: &ScmOracle) -> Result<(String, u8), String> {
+        let first = oracle.answer(0, "Mara", 0, HistoryView::Current, oracle.commit);
+        let ScmExpected::Complete { value, hops } = first else {
+            return Err(format!("reference operand walk: {first:?}"));
+        };
+        let key = derived(action, &value)?;
+        let second = oracle.answer(0, &key, 0, HistoryView::Current, oracle.commit);
+        let ScmExpected::Complete { value, hops: after } = second else {
+            return Err(format!("reference derived walk: {second:?}"));
+        };
+        Ok((value, hops + after))
+    }
+
+    /// A separately invoked test process loads only persisted model/store/request/snapshots.
+    /// No expected answer or gold semantic query field is supplied to its runtime.
+    #[test]
+    #[ignore = "child of the explicitly invoked loaded-artifact lifecycle audit"]
+    fn child_restores_pinned_computation() -> Result<(), String> {
+        let root = PathBuf::from(std::env::var("UOR_LIFECYCLE_CHILD").map_err(|e| e.to_string())?);
+        let tokenizer = tokenizer()?;
+        let memory = Memory::from_bytes(&bytes(&root, "store.json")?).map_err(|e| e.to_string())?;
+        let runtime = loaded(&root.join("artifacts"), memory)?;
+        let request: serde_json::Value =
+            serde_json::from_slice(&bytes(&root, "request.json")?).map_err(|e| e.to_string())?;
+        if request.as_object().is_none_or(|v| v.len() != 2)
+            || request.get("text").and_then(|v| v.as_str()).is_none()
+            || request["scope"] != json!("alpha")
+        {
+            return Err("child needs only raw text and scope".into());
+        }
+        let clause = scm_raw_clause(&tokenizer, request["text"].as_str().ok_or("text")?)?;
+        let (_, _, _, fresh) = cgs_run_clause(&tokenizer, &runtime, &clause, "alpha")?;
+        let snapshots: Vec<Vec<u8>> =
+            serde_json::from_slice(&bytes(&root, "snapshots.json")?).map_err(|e| e.to_string())?;
+        let mut resumed = Vec::new();
+        for snapshot in snapshots {
+            let mut session = runtime.restore(&snapshot).map_err(|e| e.to_string())?;
+            runtime.run(&mut session).map_err(|e| e.to_string())?;
+            resumed.push(session);
+        }
+        write_json(
+            &root,
+            "child.json",
+            &json!({"fresh": fresh, "resumed": resumed}),
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires explicitly pinned PR1348 artifacts and UOR_LIFECYCLE_AUDIT_ROOT; no fitting"]
+    fn loaded_redirect_computation_retains_pins_across_relevant_corrections() -> Result<(), String>
+    {
+        let input =
+            PathBuf::from(std::env::var("UOR_LIFECYCLE_ARTIFACT_ROOT").map_err(|e| e.to_string())?);
+        let root =
+            PathBuf::from(std::env::var("UOR_LIFECYCLE_AUDIT_ROOT").map_err(|e| e.to_string())?);
+        claim(&root).map_err(|e| e.to_string())?;
+        let tokenizer = tokenizer()?;
+        let action = CgsAction::build()?;
+        let mut runtime = loaded(&input, Memory::new(1348, 8))?;
+        let mut oracle = ScmOracle::new(8);
+        let mut ingests = Vec::new();
+        for (label, dest) in CGS_LABELS.iter().zip(CGS_DEV_DESTS) {
+            ingests.push(ingest(
+                &mut runtime,
+                &tokenizer,
+                &mut oracle,
+                ScmForm::AssertOffice,
+                label,
+                dest,
+            )?);
+        }
+        // Alma is deliberately both a familiar geometric label and an entity reference.
+        // Its learned source role determines whether to follow it or apply immediately.
+        ingests.push(ingest(
+            &mut runtime,
+            &tokenizer,
+            &mut oracle,
+            ScmForm::CorrectOffice,
+            "Alma",
+            "Bert",
+        )?);
+        ingests.push(ingest(
+            &mut runtime,
+            &tokenizer,
+            &mut oracle,
+            ScmForm::RedirectOffice,
+            "Mara",
+            "Alma",
+        )?);
+        let old_derived = derived(&action, "Bert")?;
+        let immediate_derived = derived(&action, "Alma")?;
+        if old_derived == "Alma" || immediate_derived == "Alma" || old_derived == immediate_derived
+        {
+            return Err("reference fixture needs distinct non-Alma derived keys".into());
+        }
+        ingests.push(ingest(
+            &mut runtime,
+            &tokenizer,
+            &mut oracle,
+            ScmForm::RedirectOffice,
+            &old_derived,
+            "Oren",
+        )?);
+        ingests.push(ingest(
+            &mut runtime,
+            &tokenizer,
+            &mut oracle,
+            ScmForm::AssertOffice,
+            "Oren",
+            "Quarry",
+        )?);
+        let baseline_store = runtime.store_bytes().map_err(|e| e.to_string())?;
+        let clause = scm_raw_clause(&tokenizer, "Mara's office then i j")?;
+        let baseline_expected = expected(&action, &oracle)?;
+        let mut phase = runtime.ask(&clause, b"alpha").map_err(|e| e.to_string())?;
+        let mut snapshots = Vec::new();
+        let mut phases = Vec::new();
+        loop {
+            snapshots.push(runtime.snapshot(&phase).map_err(|e| e.to_string())?);
+            phases.push(json!({"pending": phase.pending, "hop": phase.hop,
+                "computation": phase.computation, "captured": phase.captured}));
+            if phase.terminal.is_some() {
+                break;
+            }
+            runtime.step(&mut phase).map_err(|e| e.to_string())?;
+        }
+        let baseline = phase;
+        if baseline.terminal != Some(ScopedTerminal::Complete)
+            || cgs_text(&tokenizer, &baseline) != baseline_expected.0
+            || baseline.hop + 1 != baseline_expected.1
+        {
+            return Err("baseline reference mismatch".into());
+        }
+        let corrected_operand = CGS_LABELS
+            .iter()
+            .copied()
+            .find(|label| {
+                *label != "Bert"
+                    && *label != "Alma"
+                    && derived(&action, label).is_ok_and(|key| key != "Alma" && key != old_derived)
+            })
+            .ok_or("need a distinct corrected operand")?;
+        let mut scenarios = Vec::new();
+        for (name, form, entity, value) in [
+            (
+                "operand_correction",
+                ScmForm::CorrectOffice,
+                "Alma",
+                corrected_operand,
+            ),
+            (
+                "downstream_correction",
+                ScmForm::CorrectOffice,
+                "Oren",
+                "Harbor",
+            ),
+            (
+                "same_key_role_change",
+                ScmForm::CorrectOffice,
+                "Mara",
+                "Alma",
+            ),
+        ] {
+            let dir = root.join(name);
+            let mut changed = loaded(
+                &input,
+                Memory::from_bytes(&baseline_store).map_err(|e| e.to_string())?,
+            )?;
+            let mut changed_oracle = ScmOracle {
+                chains: oracle.chains.clone(),
+                commit: oracle.commit,
+                capacity: oracle.capacity,
+            };
+            let observation = ingest(
+                &mut changed,
+                &tokenizer,
+                &mut changed_oracle,
+                form,
+                entity,
+                value,
+            )?;
+            let target = expected(&action, &changed_oracle)?;
+            let (answer, terminal, reads, fresh) =
+                cgs_run_clause(&tokenizer, &changed, &clause, "alpha")?;
+            if terminal != Some(ScopedTerminal::Complete)
+                || answer != target.0
+                || reads != target.1
+                || answer == baseline_expected.0
+            {
+                return Err(format!(
+                    "{name} changed-source reference mismatch: {answer:?} != {target:?}"
+                ));
+            }
+            let mut pinned = Vec::new();
+            for snapshot in &snapshots {
+                let mut resumed = changed
+                    .restore(snapshot)
+                    .map_err(|e| format!("{name}: {e}"))?;
+                changed.run(&mut resumed).map_err(|e| e.to_string())?;
+                if resumed != baseline {
+                    return Err(format!("{name}: pinned full-frame changed"));
+                }
+                pinned.push(resumed);
+            }
+            for filename in [
+                "model.json",
+                "intent.json",
+                "lexicon.json",
+                "backend-signed_factorization.json",
+            ] {
+                write_checked(
+                    &dir,
+                    &format!("artifacts/{filename}"),
+                    &bytes(&input, filename)?,
+                )?;
+            }
+            write_checked(
+                &dir,
+                "store.json",
+                &changed.store_bytes().map_err(|e| e.to_string())?,
+            )?;
+            write_json(
+                &dir,
+                "request.json",
+                &json!({"text": clause.text, "scope": "alpha"}),
+            )?;
+            write_json(&dir, "snapshots.json", &json!(snapshots))?;
+            let child =
+                std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+                    .args([
+                        "--exact",
+                        "loaded_lifecycle_tests::child_restores_pinned_computation",
+                        "--ignored",
+                    ])
+                    .env("UOR_LIFECYCLE_CHILD", &dir)
+                    .output()
+                    .map_err(|e| e.to_string())?;
+            write_checked(&dir, "child.stdout", &child.stdout)?;
+            write_checked(&dir, "child.stderr", &child.stderr)?;
+            if !child.status.success() {
+                return Err(format!("{name}: child failed"));
+            }
+            let checked: serde_json::Value =
+                serde_json::from_slice(&bytes(&dir, "child.json")?).map_err(|e| e.to_string())?;
+            if checked["fresh"] != json!(fresh) || checked["resumed"] != json!(pinned) {
+                return Err(format!("{name}: child full-frame mismatch"));
+            }
+            scenarios.push(json!({"name": name, "observation": observation,
+                "expected": target.0, "expected_reads": target.1, "fresh": fresh,
+                "pinned_resumes": pinned.len(), "separate_process_full_frame_parity": true}));
+        }
+        let artifact_hashes: BTreeMap<&str, String> = [
+            "model.json",
+            "intent.json",
+            "lexicon.json",
+            "backend-signed_factorization.json",
+        ]
+        .into_iter()
+        .map(|name| bytes(&input, name).map(|b| (name, sha256_hex(&b))))
+        .collect::<Result<_, _>>()?;
+        write_json(
+            &root,
+            "result.json",
+            &json!({"artifact_root": input,
+            "artifact_hashes": artifact_hashes, "ingests": ingests, "request": clause.text,
+            "baseline_expected": baseline_expected.0, "baseline": baseline, "phases": phases,
+            "scenarios": scenarios, "classification": "exposed principal interaction regression; no refit",
+            "phase_scope": "grounding and consumption are one atomic Apply; no separate between-state exists"}),
+        )?;
+        seal(&root).map_err(|e| e.to_string())?;
+        let unlisted = verify(&root).map_err(|e| e.to_string())?;
+        if !unlisted.is_empty() {
+            return Err("unlisted review evidence".into());
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires saved candidate and prior scoped evidence; no fitting"]
+    fn loaded_bundle_retains_scoped_control_matrix() -> Result<(), String> {
+        let input =
+            PathBuf::from(std::env::var("UOR_LIFECYCLE_ARTIFACT_ROOT").map_err(|e| e.to_string())?);
+        let root =
+            PathBuf::from(std::env::var("UOR_LIFECYCLE_CONTROL_ROOT").map_err(|e| e.to_string())?);
+        let prior =
+            PathBuf::from(std::env::var("UOR_LIFECYCLE_PRIOR_ROOT").map_err(|e| e.to_string())?);
+        claim(&root).map_err(|e| e.to_string())?;
+        let tokenizer = tokenizer()?;
+        let model = bytes(&input, "model.json")?;
+        let intent = bytes(&input, "intent.json")?;
+        let prior_rows = bytes(&prior, "rows.jsonl")?;
+        let mut old = BTreeMap::new();
+        for line in std::str::from_utf8(&prior_rows)
+            .map_err(|e| e.to_string())?
+            .lines()
+        {
+            let row: serde_json::Value = serde_json::from_str(line).map_err(|e| e.to_string())?;
+            let key = (
+                row["script"].to_string(),
+                row["control"].to_string(),
+                row["turn"].to_string(),
+                row["kind"].to_string(),
+            );
+            old.insert(key, row);
+        }
+        let scripts = [
+            ("development", scm_development_script(), 0x5C0F_0000_0001),
+            ("exposed_regression", scm_exposed_script(), 0x5C0F_0000_0003),
+            ("final", scm_final_script(), 0x5C0F_0000_0002),
+        ];
+        let mut rows = Vec::new();
+        let mut summaries = Vec::new();
+        for (name, control, capacity) in [
+            ("normal", MemoryControl::Normal, 8),
+            ("no_read", MemoryControl::NoRead, 8),
+            ("update_disabled", MemoryControl::UpdateDisabled, 8),
+            ("unpinned", MemoryControl::Unpinned, 8),
+            ("unscoped", MemoryControl::Unscoped, 8),
+            (
+                "parse_score_authority",
+                MemoryControl::ParseScoreAuthority,
+                8,
+            ),
+            ("capacity_2", MemoryControl::Normal, 2),
+        ] {
+            for (script_name, script, lineage) in &scripts {
+                if name == "capacity_2" && *script_name != "development" {
+                    continue;
+                }
+                let replay = scm_replay(
+                    &tokenizer,
+                    &model,
+                    &intent,
+                    *lineage,
+                    control.clone(),
+                    capacity,
+                    script,
+                    script_name,
+                    name,
+                )?;
+                summaries.push(json!({"script": script_name, "control": name,
+                    "questions": replay.questions, "matched": replay.complete,
+                    "intent_correct": replay.intent_correct, "intent_total": replay.intent_total,
+                    "branch_correct": replay.branch_correct, "branch_total": replay.branch_total,
+                    "nowrite_correct": replay.nowrite_correct, "nowrite_total": replay.nowrite_total}));
+                rows.extend(replay.rows);
+            }
+        }
+        // Different learned bytes and their history digests are expected. Compare every other
+        // observation, write, answer, exact selected source, action and final owned-frame field.
+        let semantic = |row: &serde_json::Value| {
+            let mut compared = row.clone();
+            if let Some(frame) = compared
+                .get_mut("final_frame")
+                .and_then(|v| v.as_object_mut())
+            {
+                frame.remove("binding");
+                frame.remove("view_sha256");
+            }
+            compared
+        };
+        let mut differences = Vec::new();
+        let mut missing = Vec::new();
+        for row in &rows {
+            let key = (
+                row["script"].to_string(),
+                row["control"].to_string(),
+                row["turn"].to_string(),
+                row["kind"].to_string(),
+            );
+            match old.get(&key) {
+                None => missing.push(json!(key)),
+                Some(previous) if semantic(row) != semantic(previous) => {
+                    differences.push(json!({"key": key, "prior": previous, "candidate": row}));
+                }
+                _ => {}
+            }
+        }
+        let encoded = rows
+            .iter()
+            .map(serde_json::to_string)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+            .join("\n");
+        write_checked(&root, "rows.jsonl", encoded.as_bytes())?;
+        write_json(
+            &root,
+            "result.json",
+            &json!({"artifact_root": input, "prior_root": prior,
+            "model_sha256": sha256_hex(&model), "intent_sha256": sha256_hex(&intent),
+            "prior_rows_sha256": sha256_hex(&prior_rows), "compared_rows": rows.len(),
+            "summaries": summaries, "missing_prior_rows": missing, "differences": differences,
+            "comparison_excludes": ["final_frame.binding", "final_frame.view_sha256"],
+            "scope": "same saved observation and intent parameters in unchanged ordinary scoped runtime; arithmetic backend absent because requests carry no operations; original scripted controls, not fresh language acceptance"}),
+        )?;
+        seal(&root).map_err(|e| e.to_string())?;
+        if !verify(&root).map_err(|e| e.to_string())?.is_empty() {
+            return Err("unlisted control evidence".into());
+        }
+        if !missing.is_empty() || !differences.is_empty() {
+            return Err(format!(
+                "retained matrix: {} missing, {} different rows; sealed for review",
+                missing.len(),
+                differences.len()
+            ));
+        }
+        Ok(())
+    }
+}
