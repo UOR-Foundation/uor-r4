@@ -1,6 +1,18 @@
 # Current native geometric AI work
 
-## Active: observed-text memory answers through one reusable session boundary
+## Active: reviewed token-span session; contextual ordinary-text roles next
+
+**PR #1342, principal review:** retain learned lexical-role tables and variable-depth exact-token memory answers. All original 24/24 primary answers and depths are independently reconstructed, including six three-read cases absent from fitting supervision. The final panel was repeatedly exposed; its BPE fragments are multi-token spans, not demonstrated multiword phrases or ordinary language. The 14/24 to 24/24 number measures gold-role action-table fit. [Review](../integration/observed-text-session-review-2026-09-22.md); [original audit](../evidence/observed-text-session-principal-review-2026-09-22.json).
+
+**Corrected reusable boundary:** `ObservedTextRuntime` owns actual loaded model/document/tokenizer bindings, receives observed question tokens, validates complete phase/capture/EOS state, and executes the learned Read/Continue/Emit/Stop path. Explicit controls, exact source spans and independent all-phase restores are recorded in the [corrected exposed replay audit](../evidence/observed-text-session-corrected-replay-audit-2026-09-22.json) and [executed checks/resources](../evidence/observed-text-session-principal-checks-2026-09-22.json). A supplied symbolic grammar remains; immutable source binding is not yet a durable mutable-memory service. No unique geometric, general-language or complete-path efficiency claim.
+
+**Next complete milestone:** [contextual roles and exact spans from ordinary observed text](../integration/deepseek-contextual-text-roles-step-2026-09-22.md), through that same session. Shared cue vocabulary, words used both in syntax and entity content, multiword overlapping entities and changed clause/question order must require occurrence context. Inspect ordered/full-relative H4 and existing role/span donors; compare a competent contextual baseline. More disjoint marker aliases cannot repair a global word-role collision. Broader durable memory, prose and executed Rust follow; structural banks, Hopf/Spin and conditional E8/S7/fields remain tools for witnessed needs.
+
+**Research leadership and autonomy:** Codex owns holistic mathematics/ML/systems architecture, evidence interpretation and roadmap revision. DeepSeek owns substantive implementation/diagnostic choices and complete lifecycle delivery, with prospectively accounted necessary local extensions. No arbitrary short timer or retry quota replaces scientific judgment, preservation or physical limits.
+
+## Historical submitted PR #1342 account (interpretation corrected above)
+
+### Original observed-text memory session submission
 
 **Executed the observed-text session brief** on the reviewed head `6fc34c1f` of PR #1341, which was still queued, so protection was preserved and the reviewed head used directly as the base. New module `learner/observed_text_session.rs` and mode `--mode=observed-text-session`.
 

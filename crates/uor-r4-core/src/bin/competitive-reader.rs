@@ -13622,7 +13622,21 @@ fn ob_question(vocab: &ObVocab, person: usize, goal: Goal) -> Clause {
 struct ObLesion {
     reads_disabled: bool,
     membership_continuation: bool,
-    fixed_depth_two: bool,
+    read_cap_two: bool,
+}
+
+fn ob_control(vocab: &ObVocab, lesion: ObLesion) -> TextControl {
+    if lesion.reads_disabled {
+        TextControl::ReadsDisabled
+    } else if lesion.membership_continuation {
+        TextControl::Membership {
+            entities: vocab.persons.clone(),
+        }
+    } else if lesion.read_cap_two {
+        TextControl::ReadCap { max_reads: 2 }
+    } else {
+        TextControl::Normal
+    }
 }
 
 struct ObOutcome {
@@ -13632,100 +13646,93 @@ struct ObOutcome {
     terminal: RelAction,
     selected: Vec<u32>,
     roles: Vec<u64>,
+    events: Vec<serde_json::Value>,
+    snapshots: Vec<serde_json::Value>,
+    final_frame: TextSession,
+    resume_identical: usize,
 }
 
+/// Evaluation adapter: the executable runtime sees only loaded parameters, document tokens,
+/// observed question and explicitly named control. Expected goal/person/answer stay outside it.
 fn ob_serve(
     model: &ObservedTextModel,
     world: &ObWorld,
-    vocab: &ObVocab,
-    person: usize,
-    goal: Goal,
-    lesion: ObLesion,
+    question: &Clause,
+    control: TextControl,
     resume: bool,
 ) -> Result<ObOutcome, String> {
-    let statements: Vec<Observation> = world
-        .clauses
-        .iter()
-        .map(|c| observe_clause(model, c))
-        .collect::<Result<Vec<_>, _>>()?;
-    let q = observe_clause(model, &ob_question(vocab, person, goal))?;
-    let qgoal = q
-        .question_goal
-        .ok_or("question clause did not yield a goal")?;
-    if qgoal != goal {
-        return Err(format!(
-            "question goal {qgoal:?} disagrees with request {goal:?}"
-        ));
+    let bytes = serde_json::to_vec(model).map_err(|e| e.to_string())?;
+    let runtime = ObservedTextRuntime::load(
+        &bytes,
+        DERIVED_SHA,
+        world.clauses.clone(),
+        world.id,
+        world.version,
+        VOCAB,
+        Some(OB_EOS),
+    )?
+    .with_control(control)?;
+    let mut session = runtime.start(question)?;
+    let mut snapshots = vec![runtime.snapshot(&session)?];
+    let mut events = Vec::new();
+    while session.terminal.is_none() {
+        let before = serde_json::to_value(&session).map_err(|e| e.to_string())?;
+        let effect = runtime.step(&mut session)?;
+        events.push(json!({"before":before,"effect":effect,"after":session}));
+        snapshots.push(runtime.snapshot(&session)?);
+        if events.len() > 3 * OB_MAX_READS as usize + OB_MAX_CLAUSE + 4 {
+            return Err("runtime exceeded declared read/phrase action bound".into());
+        }
     }
-    let binding = TextBinding {
-        model_sha256: "bound".into(),
-        tokenizer_sha256: "bound".into(),
-        world_id: world.id,
-        world_version: world.version,
-        doc_sha256: "bound".into(),
-    };
-    let mut session = TextSession::start(
-        binding.clone(),
-        goal,
-        TextObjective {
-            goal,
-            tokens: q.subject.clone(),
-        },
-    )
-    .with_eos(OB_EOS);
-    session.validate(&binding, VOCAB)?;
-    let mut actions = Vec::new();
-    let mut selected = Vec::new();
-    let mut roles = Vec::new();
-    let mut prev_was_read = false;
-    for step in 0..(2 * OB_MAX_READS as usize + 6) {
-        if session.terminal.is_some() {
-            break;
-        }
-        if lesion.reads_disabled && session.pending == RelAction::Read {
-            session.pending = RelAction::Stop;
-        }
-        // Shortcut control: continuation decided by registry membership rather than by the learned
-        // role semantics. Applied immediately after a read, so it replaces the learned decision.
-        if lesion.membership_continuation
-            && prev_was_read
-            && matches!(session.pending, RelAction::Continue | RelAction::Emit)
-        {
-            let is_person = vocab.persons.iter().any(|p| p == &session.captured_tokens);
-            session.pending = if is_person {
-                RelAction::Continue
-            } else {
-                RelAction::Emit
-            };
-        }
-        if lesion.fixed_depth_two && session.pending == RelAction::Read && session.reads >= 2 {
-            session.pending = RelAction::Emit;
-        }
-        let was_read = session.pending == RelAction::Read;
-        let effect = session.step(model, &statements)?;
-        prev_was_read = was_read;
-        actions.push(effect.action);
-        if let Some(role) = effect.selected_role {
-            roles.push(role as u64);
-        }
-        if let Some(seg) = effect.selected_segment {
-            if let Some(st) = statements.iter().find(|s| s.seg == seg) {
-                selected.push(st.subject.first().copied().unwrap_or(0));
+    let mut resume_identical = 0;
+    let mut saved_snapshots = Vec::new();
+    if resume {
+        // Each continuation is reconstructed from only the saved bytes and immutable runtime.
+        // No original loop counter, previous-read flag or pending source is carried across.
+        for (at, bytes) in snapshots.iter().enumerate() {
+            let mut restored = runtime.restore(bytes)?;
+            let mut suffix = Vec::new();
+            while restored.terminal.is_none() {
+                let before = serde_json::to_value(&restored).map_err(|e| e.to_string())?;
+                let effect = runtime.step(&mut restored)?;
+                suffix.push(json!({"before":before,"effect":effect,"after":restored}));
+                if suffix.len() > 3 * OB_MAX_READS as usize + OB_MAX_CLAUSE + 4 {
+                    return Err("restored runtime exceeded action bound".into());
+                }
             }
-        }
-        if resume && step == 1 {
-            let bytes = serde_json::to_vec(&session).map_err(|e| e.to_string())?;
-            session = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-            session.validate(&binding, VOCAB)?;
+            let identical = suffix == events[at..] && restored == session;
+            resume_identical += usize::from(identical);
+            saved_snapshots.push(json!({"checkpoint_index":at,
+                "snapshot_utf8":String::from_utf8(bytes.clone()).map_err(|e|e.to_string())?,
+                "snapshot_sha256":sha256_hex(bytes),"resumed_suffix":suffix,
+                "resumed_final_frame":restored,"identical":identical}));
         }
     }
+    let actions = events
+        .iter()
+        .map(|v| serde_json::from_value(v["effect"]["action"].clone()).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<RelAction>, _>>()?;
+    let selected = events
+        .iter()
+        .filter(|v| v["effect"]["action"] == "Read")
+        .filter_map(|v| v["effect"]["selected_segment"].as_u64().map(|n| n as u32))
+        .collect();
+    let roles = events
+        .iter()
+        .filter(|v| v["effect"]["action"] == "Read")
+        .filter_map(|v| v["effect"]["selected_role"].as_u64())
+        .collect();
     Ok(ObOutcome {
-        emitted: session.emitted,
+        emitted: session.emitted.clone(),
         actions,
         reads: session.reads,
-        terminal: session.terminal.unwrap_or(RelAction::Unresolved),
+        terminal: session.terminal.ok_or("missing runtime terminal")?,
         selected,
         roles,
+        events,
+        snapshots: saved_snapshots,
+        final_frame: session,
+        resume_identical,
     })
 }
 
@@ -13930,14 +13937,14 @@ fn ob_run() -> Result<ExitCode, String> {
             ));
         }
     }
-    let (model, fit) = fit_observed_text_model(&dev_clauses, &dev_labels);
+    let (model, fit) = fit_observed_text_model(&dev_clauses, &dev_labels)?;
     let model_bytes = serde_json::to_vec(&model).map_err(|e| e.to_string())?;
     write_checked(&root, "artifacts/observed_text_model.json", &model_bytes)?;
-    let model_loaded: ObservedTextModel = serde_json::from_slice(
+    let model_loaded = ObservedTextModel::from_bytes(
         &std::fs::read(root.join("artifacts/observed_text_model.json"))
             .map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
+        VOCAB,
+    )?;
     if model_loaded != model {
         return Err("observed-text model reload mismatch".into());
     }
@@ -13992,7 +13999,14 @@ fn ob_run() -> Result<ExitCode, String> {
             for goal in [Goal::Office, Goal::Project] {
                 total += 1;
                 let (want, want_depth) = expected(w, person, goal);
-                let out = ob_serve(&model_loaded, w, &vocab, person, goal, lesion, resume)?;
+                let question = ob_question(&vocab, person, goal);
+                let out = ob_serve(
+                    &model_loaded,
+                    w,
+                    &question,
+                    ob_control(&vocab, lesion),
+                    resume,
+                )?;
                 let mut want_eos = want.clone();
                 want_eos.push(OB_EOS);
                 let ok = out.emitted == want_eos && out.terminal == RelAction::Stop;
@@ -14006,9 +14020,11 @@ fn ob_run() -> Result<ExitCode, String> {
                     "world": w.id, "world_version": w.version, "person": person,
                     "goal": format!("{goal:?}"), "expected_answer": want,
                     "expected_answer_text": tokenizer.decode(&want), "expected_depth": want_depth,
-                    "emitted": out.emitted, "emitted_text": tokenizer.decode(&out.emitted),
+                    "question": question, "emitted": out.emitted, "emitted_text_without_eos": tokenizer.decode(&out.emitted.iter().copied().filter(|t| *t != OB_EOS).collect::<Vec<_>>()),
                     "reads": out.reads, "terminal": format!("{:?}", out.terminal),
-                    "selected_subjects": out.selected, "selected_roles": out.roles,
+                    "selected_segments": out.selected, "selected_roles": out.roles,
+                    "events":out.events,"snapshots":out.snapshots,"final_frame":out.final_frame,
+                    "resume_identical":out.resume_identical,
                     "actions": out.actions.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>(),
                     "correct": ok,
                 }));
@@ -14019,31 +14035,38 @@ fn ob_run() -> Result<ExitCode, String> {
 
     let mut arms: Vec<serde_json::Value> = Vec::new();
     let mut final_rows_all: Vec<serde_json::Value> = Vec::new();
+    let mut all_rows: Vec<serde_json::Value> = Vec::new();
     let mut dev_rows = 0usize;
     let mut resume_ok = 0usize;
     let mut resume_total = 0usize;
-    for (split, worlds) in [("development", &dev_worlds), ("final", &final_worlds)] {
+    for (split, worlds) in [
+        ("development", &dev_worlds),
+        ("exposed_regression", &final_worlds),
+    ] {
         let mut complete = 0usize;
         let mut total = 0usize;
         let mut depth_ok = 0usize;
         for w in worlds.iter() {
-            let (c, t, d, rows) = evaluate(w, ObLesion::default(), false)?;
+            let (c, t, d, mut rows) = evaluate(w, ObLesion::default(), true)?;
+            for row in &mut rows {
+                row["arm"] = json!("observed_text_session");
+                row["split"] = json!(split);
+            }
+            all_rows.extend(rows.clone());
             complete += c;
             total += t;
             depth_ok += d;
-            if split == "final" {
+            if split == "exposed_regression" {
                 final_rows_all.extend(rows.clone());
             } else {
                 dev_rows += rows.len();
             }
-            let (_, _, _, rrows) = evaluate(w, ObLesion::default(), true)?;
-            for (a, b) in rows.iter().zip(rrows.iter()) {
-                resume_total += 1;
-                if a["emitted"] == b["emitted"] && a["terminal"] == b["terminal"] {
-                    resume_ok += 1;
-                }
+            for row in &rows {
+                resume_total += row["snapshots"].as_array().map(|a| a.len()).unwrap_or(0);
+                resume_ok += row["resume_identical"].as_u64().unwrap_or(0) as usize;
             }
         }
+
         arms.push(json!({"arm": "observed_text_session", "split": split,
             "complete": complete, "total": total, "depth_correct": depth_ok}));
     }
@@ -14056,9 +14079,9 @@ fn ob_run() -> Result<ExitCode, String> {
             },
         ),
         (
-            "fixed_depth_two",
+            "read_cap_two",
             ObLesion {
-                fixed_depth_two: true,
+                read_cap_two: true,
                 ..Default::default()
             },
         ),
@@ -14074,12 +14097,17 @@ fn ob_run() -> Result<ExitCode, String> {
         let mut total = 0usize;
         let mut depth_ok = 0usize;
         for w in final_worlds.iter() {
-            let (c, t, d, _) = evaluate(w, lesion, false)?;
+            let (c, t, d, mut rows) = evaluate(w, lesion, true)?;
+            for row in &mut rows {
+                row["arm"] = json!(label);
+                row["split"] = json!("exposed_regression");
+            }
+            all_rows.extend(rows);
             complete += c;
             total += t;
             depth_ok += d;
         }
-        arms.push(json!({"arm": label, "split": "final", "complete": complete, "total": total, "depth_correct": depth_ok}));
+        arms.push(json!({"arm": label, "split": "exposed_regression", "complete": complete, "total": total, "depth_correct": depth_ok}));
     }
 
     // ---------------- Causal interventions ----------------
@@ -14087,10 +14115,8 @@ fn ob_run() -> Result<ExitCode, String> {
     let base = ob_serve(
         &model_loaded,
         w0,
-        &vocab,
-        0,
-        Goal::Office,
-        ObLesion::default(),
+        &ob_question(&vocab, 0, Goal::Office),
+        TextControl::Normal,
         false,
     )?;
     // One-position first-source edit: change only the object of the first office clause for person 0.
@@ -14119,53 +14145,65 @@ fn ob_run() -> Result<ExitCode, String> {
     let edited_out = ob_serve(
         &model_loaded,
         &edited,
-        &vocab,
-        0,
-        Goal::Office,
-        ObLesion::default(),
+        &ob_question(&vocab, 0, Goal::Office),
+        TextControl::Normal,
         false,
     )?;
     let other_goal = ob_serve(
         &model_loaded,
         w0,
-        &vocab,
-        0,
-        Goal::Project,
-        ObLesion::default(),
+        &ob_question(&vocab, 0, Goal::Project),
+        TextControl::Normal,
         false,
     )?;
     let (want_office, _) = expected(w0, 0, Goal::Office);
     let (want_project, _) = expected(w0, 0, Goal::Project);
-    // Required later fact removed: drop the terminal assertion of the longest project chain.
-    let mut removed = ObWorld {
+    // Remove the terminal fact actually used after two successful redirects. Exact remaining
+    // segment identities do not change; absence and failure-to-follow are distinct outcomes.
+    let term_seg = *base.selected.last().ok_or("no base selected path")?;
+    if base.reads < 3 {
+        return Err("downstream-removal witness must use three reads".into());
+    }
+    let removed = ObWorld {
+        id: w0.id,
+        version: w0.version,
+        clauses: w0
+            .clauses
+            .iter()
+            .filter(|c| c.seg != term_seg)
+            .cloned()
+            .collect(),
+        labels: w0
+            .labels
+            .iter()
+            .filter(|c| c.seg != term_seg)
+            .cloned()
+            .collect(),
+        oracle: Vec::new(),
+    };
+    let removed_out = ob_serve(
+        &model_loaded,
+        &removed,
+        &ob_question(&vocab, 0, Goal::Office),
+        TextControl::Normal,
+        true,
+    )?;
+    // Turn the first redirect into a self-cycle. Repeated occurrence must exhaust explicitly.
+    let mut cycle = ObWorld {
         id: w0.id,
         version: w0.version,
         clauses: w0.clauses.clone(),
         labels: w0.labels.clone(),
-        oracle: w0.oracle.clone(),
+        oracle: Vec::new(),
     };
-    let term_idx = w0
-        .labels
-        .iter()
-        .position(|l| l.goal == Goal::Project && l.action == RelAction::Emit)
-        .ok_or("intervention could not locate a terminal project clause")?;
-    let term_seg = removed.labels[term_idx].seg as usize;
-    removed.clauses.remove(term_seg);
-    for l in removed.labels.iter_mut() {
-        if l.seg as usize > term_seg {
-            l.seg -= 1;
-        }
-    }
-    removed.labels.remove(term_idx);
-    let removed_out = ob_serve(
+    cycle.clauses[first_idx].tokens[os as usize] = vocab.persons[0][0];
+    let cycle_out = ob_serve(
         &model_loaded,
-        &removed,
-        &vocab,
-        0,
-        Goal::Project,
-        ObLesion::default(),
-        false,
-    );
+        &cycle,
+        &ob_question(&vocab, 0, Goal::Office),
+        TextControl::Normal,
+        true,
+    )?;
     let mut want_office_eos = want_office.clone();
     want_office_eos.push(OB_EOS);
     let mut want_project_eos = want_project.clone();
@@ -14182,7 +14220,9 @@ fn ob_run() -> Result<ExitCode, String> {
             "matches_independent_expectation": expected_from_labels(&edited, 0, Goal::Office)
                 .map(|(v, _)| { let mut e = v.clone(); e.push(OB_EOS); e == edited_out.emitted })
                 .unwrap_or(false),
-            "goal_invariant": edited_out.actions.first() == Some(&RelAction::Continue),
+            "goal_invariant": edited_out.events.iter().all(|e|e["before"]["goal"]=="Office" && e["after"]["goal"]=="Office" && e["after"]["query"]["goal"]=="Office"),
+            "before_clauses":w0.clauses,"after_clauses":edited.clauses,
+            "before_events":base.events,"after_events":edited_out.events,
         },
         "request_goal_change_fixed_evidence": {
             "emitted_office": base.emitted, "emitted_project": other_goal.emitted,
@@ -14192,19 +14232,30 @@ fn ob_run() -> Result<ExitCode, String> {
             "project_matches": other_goal.emitted == want_project_eos,
         },
         "required_later_fact_removed": {
-            "removed_clause": term_idx,
-            "outcome": removed_out.as_ref().map(|o| json!({"terminal": format!("{:?}", o.terminal), "emitted": o.emitted})).unwrap_or_else(|e| json!({"error": e})),
+            "removed_segment": term_seg, "before_selected_segments":base.selected,
+            "after_clauses":removed.clauses,"successful_reads_before_absence":removed_out.reads,
+            "outcome":{"terminal":removed_out.terminal,"emitted":removed_out.emitted,"events":removed_out.events},
         },
         "goal_preserved_across_redirect": {
             "reads": base.reads, "terminal": format!("{:?}", base.terminal),
         },
+        "cycle":{"terminal":cycle_out.terminal,"emitted":cycle_out.emitted,"clauses":cycle.clauses,"events":cycle_out.events},
         "resume_identical": {"identical": resume_ok, "total": resume_total},
     });
 
+    write_json(
+        &root,
+        "worlds.json",
+        &json!({
+            "development":dev_worlds.iter().map(|w|json!({"id":w.id,"version":w.version,"clauses":w.clauses,"labels":w.labels,"oracle":w.oracle})).collect::<Vec<_>>(),
+            "exposed_regression":final_worlds.iter().map(|w|json!({"id":w.id,"version":w.version,"clauses":w.clauses,"labels":w.labels,"oracle":w.oracle})).collect::<Vec<_>>(),
+            "fit_clauses":dev_clauses,"fit_labels":dev_labels,
+        }),
+    )?;
     write_checked(
         &root,
         "rows.jsonl",
-        final_rows_all
+        all_rows
             .iter()
             .map(|r| serde_json::to_string(r).unwrap_or_default())
             .collect::<Vec<_>>()
@@ -14213,7 +14264,7 @@ fn ob_run() -> Result<ExitCode, String> {
     )?;
 
     let result = json!({
-        "schema": "uor-r4.observed-text-session/1",
+        "schema": "uor-r4.observed-text-session/2",
         "base_revision": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
         "running_source": {
             "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
@@ -14224,7 +14275,10 @@ fn ob_run() -> Result<ExitCode, String> {
         "inputs": {"E_sha256": E_SHA, "S_sha256": S_SHA, "tokenizer_derived": DERIVED_SHA,
             "group_digest": group_digest, "f_bits": parent.cfg.f_bits},
         "task": {
-            "serving_input": "observed statement tokens, an observed question clause, a declared clause delimiter and a declared entity registry; no gold role, extent, pointer, depth or target",
+            "serving_input": "validated loaded model, observed statement clauses and question tokens, tokenizer identity, world namespace/version, typed EOS; entity registry only in the explicitly labeled membership control",
+            "exposure":"Repeatedly exposed symbolic-token regression; no untouched final qualification",
+            "eos_contract":"Out-of-vocabulary typed response terminator, distinct from ordinary BPE tokens; excluded from text decoding",
+            "max_vocab":VOCAB,
             "markers": vocab.markers, "persons": vocab.persons, "offices": vocab.offices,
             "projects": vocab.projects, "eos": OB_EOS,
             "dev_office_depths": dev_worlds.iter().map(|w| w.oracle.iter().filter(|((_, g), _)| *g == Goal::Office).map(|(_, (_, d))| *d).collect::<Vec<u8>>()).collect::<Vec<_>>(),
@@ -14234,8 +14288,8 @@ fn ob_run() -> Result<ExitCode, String> {
         "arms": arms,
         "interventions": interventions,
         "development_rows": dev_rows,
-        "final_rows": final_rows_all.len(),
-        "scope": "bounded authored memory domain rendered as observed tokens; declared clause layout, marker vocabulary and entity registry. Not broad language understanding. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "exposed_regression_primary_rows": final_rows_all.len(),"all_arm_rows":all_rows.len(),
+        "scope": "Categorical lexical decoder in supplied symbolic-token grammar, not ordinary natural wording. Existing E/S are loaded for pinned input checks and bank construction, not executed as the answer generator. Multi-token spans are not evidence of multiword phrases. Energy UNAVAILABLE; whole-path D0-b not claimed.",
         "elapsed_s": started.elapsed().as_secs_f64(),
     });
     write_json(&root, "result.json", &result)?;
@@ -14253,12 +14307,12 @@ fn ob_run() -> Result<ExitCode, String> {
             .unwrap_or((0, 0))
     };
     let (dc, dt) = find("observed_text_session", "development");
-    let (fc, ft) = find("observed_text_session", "final");
-    let (mc, _) = find("membership_continuation", "final");
-    let (xc, _) = find("fixed_depth_two", "final");
-    let (rc, _) = find("reads_disabled", "final");
+    let (fc, ft) = find("observed_text_session", "exposed_regression");
+    let (mc, _) = find("membership_continuation", "exposed_regression");
+    let (xc, _) = find("read_cap_two", "exposed_regression");
+    let (rc, _) = find("reads_disabled", "exposed_regression");
     println!(
-        "observed-text: dev {dc}/{dt} final {fc}/{ft} | membership {mc} fixed-depth {xc} no-read {rc} | sealed {} unlisted | {:.1}s",
+        "observed-text: dev {dc}/{dt} exposed regression {fc}/{ft} | membership {mc} max-two-reads {xc} no-read {rc} | sealed {} unlisted | {:.1}s",
         unlisted.len(), started.elapsed().as_secs_f32()
     );
     Ok(ExitCode::SUCCESS)

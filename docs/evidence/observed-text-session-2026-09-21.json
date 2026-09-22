@@ -324,5 +324,19 @@
     "no geometric arm is claimed here: the marker observation is a learned categorical vote table, consistent with the principal finding that the fixed-equality relation test ties",
     "one read/compute/emit boundary is reused, but the earlier relational runner's frame is a sibling type rather than the same struct",
     "no prose, no executed Rust task, no whole-path latency or energy measurement"
-  ]
+  ],
+  "principal_correction": {
+    "at": "2026-09-22",
+    "status": "ORIGINAL_VALUES_PRESERVED_INTERPRETATION_SUPERSEDED",
+    "review": "docs/integration/observed-text-session-review-2026-09-22.md",
+    "audit": "docs/evidence/observed-text-session-principal-review-2026-09-22.json",
+    "corrections": [
+      "Final population repeatedly exposed across eight attempts; not untouched qualification",
+      "Multi-token BPE fragments, no whitespace in final answer strings; not multiword prose",
+      "14/24 to24/24 measures gold-role action-table fit, not initial/final end-to-end output",
+      "Runtime source hashes literal bound; gold Goal accepted by wrapper; incomplete EOS/restore/capture validation",
+      "fixed_depth_two is maximum-two-read control; removed later fact actually first/direct fact",
+      "Only primary24rows saved; all-arm/frame/snapshot evidence added in corrected exposed replay"
+    ]
+  }
 }

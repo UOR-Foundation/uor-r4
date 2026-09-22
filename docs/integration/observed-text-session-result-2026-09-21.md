@@ -1,5 +1,7 @@
 # Observed-text memory answers through one reusable session boundary
 
+> **Principal correction, September 22 UTC:** This is the preserved original submission account. The [source/evidence review](observed-text-session-review-2026-09-22.md) supersedes its fresh-final, multiword, target-free entry, bound-resume, fixed-depth and later-fact interpretations. Original 24/24 token answers are retained, on a repeatedly exposed symbolic-token panel. Original bindings are placeholders; the wrapper accepts the expected goal; completed EOS frames fail its validator. The corrected runtime and separately sealed replay are identified in the review and checks. Original numbers and historical text below are not silently rewritten.
+
 September 21, 2026. Executes the [observed-text session brief](deepseek-observed-text-session-step-2026-09-21.md)
 and the [relational-session review](relational-session-review-2026-09-21.md), based on the **reviewed
 head `6fc34c1f`** of PR #1341. That PR was still queued when this work started, so protection was
