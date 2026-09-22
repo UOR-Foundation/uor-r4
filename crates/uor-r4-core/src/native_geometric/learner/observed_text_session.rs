@@ -13,14 +13,15 @@
 //!   from a declared uninformed policy.
 //! * `goal_per_role`: the declared goal associated with each supervised role.
 //!
-//! Candidate admission is fixed: a nonempty subject prefix, a contiguous marker of at most four
-//! tokens, and the complete remaining suffix as the optional object. Arbitrary clause layouts and
-//! learned subject/object boundaries are not implemented. Local features distinguish some token
-//! permutations, but do not encode the order of a four-token marker's two interior tokens.
+//! Candidate support is bounded disjoint subject/cue/optional-object spans in any order. The cue
+//! remains at most four tokens because its retained role scorer has that feature bound. Unassigned
+//! tokens have fixed zero background score; background boundaries are not learned. Segment weights
+//! learn the argument extents, with optional ordered finite-group features. Interior categorical
+//! tokens are a bag, not an order encoding. General readable-language performance remains empirical.
 //!
 //! What is exact and typed: entity/answer spans keep full multiword token identity together with
-//! their occurrence `(segment, start, len)`, so a repeated word or a shared suffix cannot collapse two
-//! different spans, and a captured phrase stays usable after its origin is overwritten.
+//! their occurrence `(segment, start, len)`. Joins use tagged exact byte keys for adapter-validated
+//! aligned text, or explicitly legacy token keys. The source-bound document is immutable here.
 //!
 //! The loaded session boundary [`ObservedTextRuntime::step`] is the single causal implementation used by teacher
 //! forcing, generation, interventions, resumption and timing. `RelAction` is reused from the corrected predecessor; complete owned spans retain source provenance.
@@ -236,16 +237,23 @@ pub const G_H4_RIGHT: u64 = 26;
 /// different and the same name keeps one key across BPE boundary differences at sentence positions.
 /// The surface span remains the provenance and copy source; this key never replaces it.
 pub fn lexical_key(text: &str, byte_lengths: &[u32], start: usize, len: usize) -> Option<Vec<u8>> {
-    if len == 0 || start + len > byte_lengths.len() {
+    let end = start
+        .checked_add(len)
+        .filter(|end| len > 0 && *end <= byte_lengths.len())?;
+    if byte_lengths.contains(&0) {
         return None;
     }
-    let offset: usize = byte_lengths[..start].iter().map(|b| *b as usize).sum();
-    let span: usize = byte_lengths[start..start + len].iter().map(|b| *b as usize).sum();
-    let bytes = text.as_bytes();
-    if offset + span > bytes.len() {
+    let sum = |lengths: &[u32]| {
+        lengths
+            .iter()
+            .try_fold(0usize, |n, b| n.checked_add(*b as usize))
+    };
+    if sum(byte_lengths)? != text.len() {
         return None;
     }
-    let slice = &bytes[offset..offset + span];
+    let offset = sum(&byte_lengths[..start])?;
+    let span = sum(&byte_lengths[start..end])?;
+    let slice = text.as_bytes().get(offset..offset.checked_add(span)?)?;
     let lo = slice
         .iter()
         .position(|b| !b.is_ascii_whitespace())
@@ -255,18 +263,73 @@ pub fn lexical_key(text: &str, byte_lengths: &[u32], start: usize, len: usize) -
         .rposition(|b| !b.is_ascii_whitespace())
         .map(|i| i + 1)
         .unwrap_or(lo);
-    Some(slice[lo..hi].to_vec())
+    (lo < hi).then(|| slice[lo..hi].to_vec())
+}
+
+/// The adapter must additionally verify decoded token bytes against the original input. Lengths
+/// alone establish extents, not authenticity of a tokenizer/text pairing. Empty lengths explicitly
+/// select the legacy token-only regime; malformed supplied alignment is never silently downgraded.
+fn validate_alignment(clause: &Clause) -> Result<(), String> {
+    if clause.byte_lengths.is_empty() {
+        return Ok(());
+    }
+    if clause.byte_lengths.len() != clause.tokens.len()
+        || clause.byte_lengths.contains(&0)
+        || clause
+            .byte_lengths
+            .iter()
+            .try_fold(0usize, |n, b| n.checked_add(*b as usize))
+            != Some(clause.text.len())
+    {
+        return Err("supplied byte alignment does not tile the observed text".into());
+    }
+    Ok(())
+}
+
+fn identity_key(clause: &Clause, start: usize, len: usize) -> Result<Vec<u8>, String> {
+    let mut key;
+    if clause.byte_lengths.is_empty() {
+        key = vec![0]; // distinct from exact text bytes, even when payload bytes coincide
+        let end = start.checked_add(len).ok_or("token key extent overflow")?;
+        for token in clause
+            .tokens
+            .get(start..end)
+            .ok_or("token key outside clause")?
+        {
+            key.extend_from_slice(&token.to_le_bytes());
+        }
+    } else {
+        key = vec![1];
+        key.extend(
+            lexical_key(&clause.text, &clause.byte_lengths, start, len)
+                .ok_or("selected span has no non-whitespace lexical identity")?,
+        );
+    }
+    Ok(key)
+}
+
+fn valid_identity_key(key: &[u8]) -> bool {
+    match key.split_first() {
+        Some((0, rest)) => !rest.is_empty() && rest.len() % 4 == 0,
+        Some((1, rest)) => {
+            !rest.is_empty()
+                && !rest[0].is_ascii_whitespace()
+                && !rest[rest.len() - 1].is_ascii_whitespace()
+        }
+        _ => false,
+    }
 }
 
 /// Recover a segment's interval product from ordered group prefixes: `inverse(P[start]) * P[end]`.
-fn interval_product(prefix: &[usize], start: usize, end: usize) -> usize {
+fn interval_product(prefix: &[usize], start: usize, end: usize) -> Option<usize> {
     let t = super::group_table::group_table();
-    let a = prefix[start.min(prefix.len() - 1)];
-    let b = prefix[end.min(prefix.len() - 1)];
-    let inv = t.inverse[a] as usize;
-    t.product[inv * super::group_table::ROW_STRIDE + b] as usize
+    let a = *prefix.get(start)?;
+    let b = *prefix.get(end)?;
+    if start > end || a >= super::group_table::GROUP_ORDER || b >= super::group_table::GROUP_ORDER {
+        return None;
+    }
+    Some(t.product[t.inverse[a] as usize * super::group_table::ROW_STRIDE + b] as usize)
 }
-
 
 /// The relative group element between two interval products, `inverse(a) * b`.
 fn relative_element(a: usize, b: usize) -> usize {
@@ -282,9 +345,8 @@ pub struct Segmentation {
     pub subject: (usize, usize),
     pub cue: (usize, usize),
     pub object: Option<(usize, usize)>,
-    pub score: i32,
+    pub score: i64,
 }
-
 
 /// The learned observation model.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -336,7 +398,7 @@ impl ObservedTextModel {
     /// A declared uninformed start: no candidate weights, every role terminal office.
     pub fn uninformed() -> Self {
         ObservedTextModel {
-            version: 4,
+            version: 5,
             feature_weights: Vec::new(),
             segment_weights: Vec::new(),
             token_elements: Vec::new(),
@@ -353,7 +415,7 @@ impl ObservedTextModel {
     }
 
     fn validate_model(&self, max_vocab: usize) -> Result<(), String> {
-        if self.version != 4 {
+        if self.version != 5 {
             return Err("unsupported observed-text model version".into());
         }
         if max_vocab == 0 {
@@ -382,6 +444,43 @@ impl ObservedTextModel {
                 }
                 _ => {}
             }
+        }
+        if self.segment_weights.windows(2).any(|w| w[0].0 >= w[1].0)
+            || self.token_elements.windows(2).any(|w| w[0].0 >= w[1].0)
+        {
+            return Err("segment weights and token elements must have unique sorted keys".into());
+        }
+        for (key, weights) in &self.segment_weights {
+            let kind = key >> 40;
+            let value = key & ((1u64 << 40) - 1);
+            if !(G_FIRST..=G_H4_RIGHT).contains(&kind) || weights[SEG_BACKGROUND] != 0 {
+                return Err("unknown segment feature or nonzero fixed-background weight".into());
+            }
+            match kind {
+                G_FIRST..=G_RIGHT | G_INTERIOR
+                    if value > u32::MAX as u64 || value >= max_vocab as u64 =>
+                {
+                    return Err("segment token outside vocabulary".into())
+                }
+                G_LEN if value == 0 || value > OB_MAX_SEG as u64 => {
+                    return Err("segment length outside bound".into())
+                }
+                G_INITIAL | G_FINAL if value != 0 => {
+                    return Err("segment edge feature has a payload".into())
+                }
+                G_H4_INTERVAL..=G_H4_RIGHT
+                    if !self.use_h4 || value >= super::group_table::GROUP_ORDER as u64 =>
+                {
+                    return Err("invalid or disabled group feature".into())
+                }
+                _ => {}
+            }
+        }
+        if self.token_elements.iter().any(|(token, element)| {
+            *token as usize >= max_vocab || *element as usize >= super::group_table::GROUP_ORDER
+        }) || (!self.use_h4 && !self.token_elements.is_empty())
+        {
+            return Err("invalid token/group map".into());
         }
         for role in 0..OB_N_ROLES {
             let action = self.action_per_role[role];
@@ -441,10 +540,10 @@ impl ObservedTextModel {
     /// Learned per-token group element for the ordered interval features.
     pub fn token_element(&self, token: u32) -> usize {
         self.token_elements
-            .iter()
-            .find(|(t, _)| *t == token)
-            .map(|(_, e)| *e as usize)
-            .unwrap_or(0)
+            .binary_search_by_key(&token, |(t, _)| *t)
+            .ok()
+            .map(|i| self.token_elements[i].1 as usize)
+            .unwrap_or_else(|| super::group_table::group_table().identity as usize)
     }
 
     /// Ordered group prefixes `P[j] = g(x_0) ... g(x_{j-1})` for one clause.
@@ -455,8 +554,9 @@ impl ObservedTextModel {
         p.push(acc);
         for tok in tokens {
             acc = t.product[acc * super::group_table::ROW_STRIDE
-                + self.token_element(*tok).min(super::group_table::GROUP_ORDER - 1)]
-                as usize;
+                + self
+                    .token_element(*tok)
+                    .min(super::group_table::GROUP_ORDER - 1)] as usize;
             p.push(acc);
         }
         p
@@ -465,11 +565,26 @@ impl ObservedTextModel {
     /// The one segment observation extractor, used by fitting and serving. It adds every interior
     /// token and, when the arm enables them, the exact ordered interval element and its relative
     /// relations to the neighbouring intervals.
-    pub fn segment_features(&self, tokens: &[u32], start: usize, len: usize, prefix: &[usize]) -> Vec<u64> {
+    pub fn segment_features(
+        &self,
+        tokens: &[u32],
+        start: usize,
+        len: usize,
+        prefix: &[usize],
+    ) -> Vec<u64> {
         let n = tokens.len();
         let key = |kind: u64, value: u64| (kind << 40) | value;
         let mut f = Vec::with_capacity(12);
-        if len == 0 || start + len > n {
+        let Some(end) = start
+            .checked_add(len)
+            .filter(|end| len > 0 && len <= OB_MAX_SEG && *end <= n)
+        else {
+            return f;
+        };
+        if self.use_h4
+            && (prefix.len() != n + 1
+                || prefix.iter().any(|p| *p >= super::group_table::GROUP_ORDER))
+        {
             return f;
         }
         f.push(key(G_FIRST, u64::from(tokens[start])));
@@ -493,12 +608,16 @@ impl ObservedTextModel {
             f.push(key(G_FINAL, 0));
         }
         if self.use_h4 {
-            let interval = interval_product(prefix, start, start + len);
+            let Some(interval) = interval_product(prefix, start, end) else {
+                return Vec::new();
+            };
             f.push(key(G_H4_INTERVAL, interval as u64));
             if start == 0 {
                 f.push(key(G_H4_LEFT, interval as u64));
             } else {
-                let prev_interval = interval_product(prefix, start.saturating_sub(1), start);
+                let Some(prev_interval) = interval_product(prefix, start - 1, start) else {
+                    return Vec::new();
+                };
                 f.push(key(
                     G_H4_LEFT,
                     relative_element(prev_interval, interval) as u64,
@@ -507,7 +626,9 @@ impl ObservedTextModel {
             if start + len == n {
                 f.push(key(G_H4_RIGHT, interval as u64));
             } else {
-                let next_interval = interval_product(prefix, start + len, (start + len + 1).min(n));
+                let Some(next_interval) = interval_product(prefix, end, end + 1) else {
+                    return Vec::new();
+                };
                 f.push(key(
                     G_H4_RIGHT,
                     relative_element(interval, next_interval) as u64,
@@ -524,18 +645,21 @@ impl ObservedTextModel {
         len: usize,
         role: usize,
         prefix: &[usize],
-    ) -> i32 {
-        let mut acc = 0i32;
+    ) -> i64 {
+        if role == SEG_BACKGROUND || role >= OB_SEG_ROLES {
+            return 0;
+        }
+        let mut acc = 0i64;
         for key in self.segment_features(tokens, start, len, prefix) {
             if let Ok(i) = self.segment_weights.binary_search_by_key(&key, |(k, _)| *k) {
-                acc = acc.saturating_add(self.segment_weights[i].1[role.min(OB_SEG_ROLES - 1)]);
+                acc += i64::from(self.segment_weights[i].1[role]);
             }
         }
         acc
     }
 
     /// **Bounded structured decode.** Subject, cue and object spans may occur in any order and each
-    /// role at most once; tokens not covered by a role are a free background. The state is the set of
+    /// role at most once; tokens not covered by a role are fixed zero-score background. The state is the set of
     /// placed roles, so the decoder no longer fixes the subject to a prefix or the object to a suffix
     /// and admits a trailing adjunct after the answer and an object that precedes its subject.
     pub fn decode_segmentation(&self, tokens: &[u32]) -> Option<Segmentation> {
@@ -544,12 +668,13 @@ impl ObservedTextModel {
             return None;
         }
         let prefix = self.prefix_products(tokens);
-        const NEG: i32 = i32::MIN / 4;
+        // At most 24 segments, each with at most 32 i32-valued features: i64 is exact here.
+        const NEG: i64 = i64::MIN / 4;
         let mut best = vec![[NEG; 8]; n + 1];
         let mut choice: Vec<[Option<(usize, u8, usize)>; 8]> = vec![[None; 8]; n + 1];
         best[0][0] = 0;
-        // A semi-Markov tiling: every token belongs to exactly one segment, background included, so
-        // the decoder cannot invent a spurious role out of skipped material.
+        // Bounded disjoint role assignment with a unit zero-score background transition. Coverage
+        // alone does not prevent a spurious role; learned role potentials must distinguish it.
         for pos in 0..n {
             for mask in 0..8usize {
                 let cur = best[pos][mask];
@@ -558,13 +683,12 @@ impl ObservedTextModel {
                 }
                 for len in 1..=(n - pos).min(OB_MAX_SEG) {
                     let end = pos + len;
-                    let bg = self.segment_score(tokens, pos, len, SEG_BACKGROUND, &prefix);
-                    if cur.saturating_add(bg) > best[end][mask] {
-                        best[end][mask] = cur.saturating_add(bg);
-                        choice[end][mask] = Some((pos, 0, len));
+                    if len == 1 && cur > best[end][mask] {
+                        best[end][mask] = cur;
+                        choice[end][mask] = Some((pos, 0, 1));
                     }
                     for (bit, role) in [(1u8, SEG_SUBJECT), (2u8, SEG_CUE), (4u8, SEG_OBJECT)] {
-                        if mask & (bit as usize) != 0 {
+                        if mask & (bit as usize) != 0 || (role == SEG_CUE && len > OB_MAX_MARKER) {
                             continue;
                         }
                         let sc = self.segment_score(tokens, pos, len, role, &prefix);
@@ -680,42 +804,25 @@ fn observe_clause_inner(model: &ObservedTextModel, clause: &Clause) -> Result<Ob
     if clause.tokens.is_empty() || clause.tokens.len() > OB_MAX_CLAUSE {
         return Err("clause outside the declared token bound".into());
     }
-    // Byte alignment is used for exact lexical keys when it reproduces the observed text exactly.
-    // A clause whose recorded lengths disagree is treated as unaligned and keys fall back to exact
-    // token identity, rather than rejecting the document or inventing an approximate offset.
-    let aligned = !clause.byte_lengths.is_empty()
-        && clause.byte_lengths.len() == clause.tokens.len()
-        && clause.byte_lengths.iter().map(|b| *b as usize).sum::<usize>() == clause.text.len();
+    validate_alignment(clause)?;
     let seg = model
         .decode_segmentation(&clause.tokens)
         .ok_or("no legal structured span assignment in clause")?;
     let subject = clause.tokens[seg.subject.0..seg.subject.0 + seg.subject.1].to_vec();
     let role = model.cue_role(&clause.tokens, seg.cue.0, seg.cue.1);
-    let object = seg
-        .object
-        .map(|(s, l)| clause.tokens[s..s + l].to_vec());
+    let object = seg.object.map(|(s, l)| clause.tokens[s..s + l].to_vec());
     let question_goal = if object.is_none() {
         model.role_goal(role)
     } else {
         None
     };
-    let key_of = |start: usize, len: usize| -> Vec<u8> {
-        let text = if aligned { clause.text.as_str() } else { "" };
-        let lengths: &[u32] = if aligned { &clause.byte_lengths } else { &[] };
-        lexical_key(text, lengths, start, len).unwrap_or_else(|| {
-            // Legacy fixtures without byte lengths fall back to exact token identity.
-            clause.tokens[start..start + len]
-                .iter()
-                .flat_map(|t| t.to_le_bytes())
-                .collect()
-        })
-    };
     Ok(Observation {
         seg: clause.seg,
-        subject_key: key_of(seg.subject.0, seg.subject.1),
+        subject_key: identity_key(clause, seg.subject.0, seg.subject.1)?,
         object_key: seg
             .object
-            .map(|(s, l)| key_of(s, l)),
+            .map(|(s, l)| identity_key(clause, s, l))
+            .transpose()?,
         subject_start: seg.subject.0 as u32,
         marker_start: seg.cue.0 as u32,
         object_start: seg.object.map(|(s, _)| s as u32),
@@ -814,15 +921,11 @@ pub struct StepEffect {
 impl TextSession {
     fn start(binding: TextBinding, goal: Goal, key: Vec<u8>, tokens: Vec<u32>) -> Self {
         Self {
-            version: 2,
+            version: 3,
             eos: binding.eos,
             binding,
             goal,
-            query: TextObjective {
-                goal,
-                key,
-                tokens,
-            },
+            query: TextObjective { goal, key, tokens },
             captured: None,
             captured_span: None,
             captured_tokens: Vec::new(),
@@ -846,7 +949,7 @@ impl TextSession {
     }
 
     fn validate_structure(&self, expected: &TextBinding, max_vocab: usize) -> Result<(), String> {
-        if self.version != 2
+        if self.version != 3
             || &self.binding != expected
             || max_vocab != expected.max_vocab
             || self.eos != expected.eos
@@ -856,6 +959,7 @@ impl TextSession {
         if self.goal != self.query.goal
             || self.query.tokens.is_empty()
             || self.query.tokens.len() > OB_MAX_CLAUSE
+            || !valid_identity_key(&self.query.key)
         {
             return Err("inconsistent observed request objective".into());
         }
@@ -881,6 +985,7 @@ impl TextSession {
                 if capture.world_id != expected.world_id
                     || capture.world_version != expected.world_version
                     || capture.doc_sha256 != expected.doc_sha256
+                    || !valid_identity_key(&capture.key)
                     || capture.len == 0
                     || capture.len != self.captured_tokens.len()
                     || self.captured_span != Some((capture.segment, capture.start, capture.len))
@@ -1142,12 +1247,15 @@ impl ObservedTextRuntime {
         // consistency, not authentication of an external request or proof of ranking optimality.
         for pair in history.windows(2) {
             if self.action_after_read(pair[0])? != RelAction::Continue
-                || pair[0].object.as_ref() != Some(&pair[1].subject)
+                || pair[0].object_key.as_ref() != Some(&pair[1].subject_key)
             {
                 return Err("visited objects do not form a dependent continuation chain".into());
             }
         }
         if let Some(last) = history.last() {
+            if session.captured.as_ref().map(|capture| &capture.key) != last.object_key.as_ref() {
+                return Err("captured lexical identity disagrees with its bound source".into());
+            }
             let action = self.action_after_read(last)?;
             let followed = session.pending == RelAction::Read
                 || matches!(
@@ -1157,6 +1265,7 @@ impl ObservedTextRuntime {
             if followed {
                 if action != RelAction::Continue
                     || last.object_key.as_ref() != Some(&session.query.key)
+                    || last.object.as_ref() != Some(&session.query.tokens)
                 {
                     return Err("followed session does not preserve its dependent query".into());
                 }
@@ -1246,8 +1355,8 @@ impl ObservedTextRuntime {
                         {
                             continue;
                         }
-                        // Rank admitted statements by the same contextual candidate score that
-                        // selected their marker span, so observation and ranking agree.
+                        // Rank admitted statements by their retained categorical cue-role score.
+                        // Argument selection is a separate structured span objective.
                         let clause = self
                             .clauses
                             .iter()
@@ -1377,14 +1486,14 @@ impl ObservedTextRuntime {
 pub struct ObFitReport {
     pub clauses: usize,
     pub feature_weights: usize,
-    /// Exact bounded span-assignment matches on the same clauses.
+    /// Exact cue extent and cue-role matches on the same clauses (separate from all-span accuracy).
     pub cue_role_correct: usize,
     pub h4_enabled: bool,
     pub h4_moves: usize,
     pub candidate_updates: usize,
     pub epochs_run: usize,
-    /// Same-unit whole-clause (marker, role) accuracy with the declared uninformed start and after
-    /// fitting, on exactly the same development clauses.
+    /// Same-unit exact subject/cue/object extents with the uninformed start and after fitting.
+    /// The historical field names are retained; cue-role accuracy is reported separately.
     pub role_initial_correct: usize,
     pub role_final_correct: usize,
     /// Role-action table accounting on the same gold statement-action units as before.
@@ -1392,26 +1501,6 @@ pub struct ObFitReport {
     pub policy_final_correct: usize,
     pub policy_examples: usize,
     pub roles_observed: Vec<usize>,
-}
-
-/// Whole-clause (marker extent, role) accuracy of a fitted model on declared clauses.
-fn role_accuracy(model: &ObservedTextModel, clauses: &[Clause], labels: &[ClauseLabel]) -> usize {
-    let mut hits = 0usize;
-    for label in labels {
-        let Some(clause) = clauses.iter().find(|c| c.seg == label.seg) else {
-            continue;
-        };
-        let Some((start, len, votes)) = model.locate_marker(&clause.tokens) else {
-            continue;
-        };
-        let role = (0..OB_N_ROLES)
-            .max_by_key(|r| (votes[*r], std::cmp::Reverse(*r)))
-            .unwrap_or(0);
-        if start == label.marker.0 as usize && len == label.marker.1 && role == label.role {
-            hits += 1;
-        }
-    }
-    hits
 }
 
 /// Fit the observation model from declared development clauses and their gold labels.
@@ -1443,6 +1532,10 @@ fn fit_observed_text_model_inner(
     }
     let mut labeled = BTreeSet::new();
     let mut semantics: BTreeMap<usize, RelAction> = BTreeMap::new();
+    let mut role_goals: BTreeMap<usize, Goal> = BTreeMap::new();
+    for clause in clauses {
+        validate_alignment(clause)?;
+    }
     for label in labels {
         if !labeled.insert(label.seg) || label.role >= OB_N_ROLES {
             return Err("duplicate supervision or out-of-range role".into());
@@ -1465,8 +1558,31 @@ fn fit_observed_text_model_inner(
                 return Err("declared object is outside its clause".into());
             }
         }
-        if label.object.is_some() {
-            semantics.insert(label.role, label.action);
+        let mut extents = vec![label.subject, label.marker];
+        extents.extend(label.object);
+        extents.sort_by_key(|span| span.0);
+        if label.marker.1 > OB_MAX_MARKER
+            || extents
+                .windows(2)
+                .any(|pair| pair[0].0 as usize + pair[0].1 > pair[1].0 as usize)
+        {
+            return Err("gold spans overlap or cue exceeds its feature bound".into());
+        }
+        if !matches!(label.action, RelAction::Emit | RelAction::Continue) {
+            return Err("supervised role action must be Emit or Continue".into());
+        }
+        if role_goals
+            .insert(label.role, label.goal)
+            .is_some_and(|prior| prior != label.goal)
+        {
+            return Err("one observed role has conflicting supervised goals".into());
+        }
+        if label.object.is_some()
+            && semantics
+                .insert(label.role, label.action)
+                .is_some_and(|prior| prior != label.action)
+        {
+            return Err("one observed role has conflicting supervised actions".into());
         }
     }
     // The declared gold assignment per clause: exact subject, cue and optional object extents.
@@ -1487,9 +1603,14 @@ fn fit_observed_text_model_inner(
             let gold = gold_of(label);
             // Compare the assigned spans only: the decoded score is a real-valued potential, not a
             // label, so including it would make every exact span assignment unequal.
-            if model.decode_segmentation(&clause.tokens).is_some_and(|pred| {
-                pred.subject == gold.subject && pred.cue == gold.cue && pred.object == gold.object
-            }) {
+            if model
+                .decode_segmentation(&clause.tokens)
+                .is_some_and(|pred| {
+                    pred.subject == gold.subject
+                        && pred.cue == gold.cue
+                        && pred.object == gold.object
+                })
+            {
                 hits += 1;
             }
         }
@@ -1497,6 +1618,18 @@ fn fit_observed_text_model_inner(
     };
     let mut model = ObservedTextModel::uninformed();
     model.use_h4 = use_h4;
+    if use_h4 {
+        let vocab: BTreeSet<u32> = clauses
+            .iter()
+            .flat_map(|c| c.tokens.iter().copied())
+            .collect();
+        // Deterministic initial codes are installed before any feature weights are fitted. They
+        // carry no presumed semantics; accepted coordinate moves must improve the same decoder.
+        model.token_elements = vocab
+            .into_iter()
+            .map(|t| (t, (t as usize % super::group_table::GROUP_ORDER) as u8))
+            .collect();
+    }
     let initial_correct = exact(&model);
     // ---- structured perceptron over the bounded span assignment ----
     let epochs = 6usize;
@@ -1520,11 +1653,12 @@ fn fit_observed_text_model_inner(
                 continue;
             }
             let prefix = model.prefix_products(&clause.tokens);
-            let mut apply_seg = |m: &mut ObservedTextModel, seg: &Segmentation, delta: i32| {
-                let spans: Vec<((usize, usize), usize)> = [(seg.subject, SEG_SUBJECT), (seg.cue, SEG_CUE)]
-                    .into_iter()
-                    .chain(seg.object.map(|o| (o, SEG_OBJECT)))
-                    .collect();
+            let apply_seg = |m: &mut ObservedTextModel, seg: &Segmentation, delta: i32| {
+                let spans: Vec<((usize, usize), usize)> =
+                    [(seg.subject, SEG_SUBJECT), (seg.cue, SEG_CUE)]
+                        .into_iter()
+                        .chain(seg.object.map(|o| (o, SEG_OBJECT)))
+                        .collect();
                 for (span, role) in spans {
                     for key in m.segment_features(&clause.tokens, span.0, span.1, &prefix) {
                         match m.segment_weights.binary_search_by_key(&key, |(k, _)| *k) {
@@ -1555,17 +1689,11 @@ fn fit_observed_text_model_inner(
     // ---- ordered H4 interval elements, fitted by a bounded coordinate search ----
     let mut h4_moves = 0usize;
     if use_h4 {
-        let vocab: BTreeSet<u32> = clauses
-            .iter()
-            .flat_map(|c| c.tokens.iter().copied())
-            .collect();
-        model.token_elements = vocab.iter().map(|t| (*t, 1u8)).collect();
         let base = exact(&model);
         let mut best = base;
         for _pass in 0..2 {
             let mut improved = false;
-            let tokens_in_order: Vec<u32> =
-                model.token_elements.iter().map(|(t, _)| *t).collect();
+            let tokens_in_order: Vec<u32> = model.token_elements.iter().map(|(t, _)| *t).collect();
             for (idx, _token) in tokens_in_order.iter().enumerate() {
                 let saved = model.token_elements[idx].1;
                 let mut best_val = saved;
@@ -1590,40 +1718,57 @@ fn fit_observed_text_model_inner(
             }
         }
     }
-    // ---- retained categorical cue-role scorer on the selected cue span ----
-    for label in labels {
-        let clause = clauses
-            .iter()
-            .find(|c| c.seg == label.seg)
-            .ok_or("label lost its clause")?;
-        let (cs, cl) = label.marker;
-        let gold = (cs as usize, cl, label.role);
-        let pred = model.decode_segmentation(&clause.tokens).map(|s| {
-            (s.cue.0, s.cue.1, model.cue_role(&clause.tokens, s.cue.0, s.cue.1))
-        });
-        if pred == Some(gold) {
-            continue;
-        }
-        for key in candidate_features(&clause.tokens, gold.0, gold.1) {
-            match model.feature_weights.binary_search_by_key(&key, |(k, _)| *k) {
-                Ok(i) => {
-                    model.feature_weights[i].1[gold.2] =
-                        model.feature_weights[i].1[gold.2].saturating_add(1)
+    // ---- supervised categorical cue-role scoring on observed gold cue spans ----
+    // Span fitting and role classification are separate objectives. Multiple passes remove the
+    // last-example bias of the previous single pass, without using gold spans at serving.
+    for _epoch in 0..8 {
+        let mut changed = false;
+        for label in labels {
+            let clause = clauses
+                .iter()
+                .find(|c| c.seg == label.seg)
+                .ok_or("label lost its clause")?;
+            let (cs, cl) = label.marker;
+            let gold = (cs as usize, cl, label.role);
+            let pred = Some((
+                gold.0,
+                gold.1,
+                model.cue_role(&clause.tokens, gold.0, gold.1),
+            ));
+            if pred == Some(gold) {
+                continue;
+            }
+            changed = true;
+            for key in candidate_features(&clause.tokens, gold.0, gold.1) {
+                match model
+                    .feature_weights
+                    .binary_search_by_key(&key, |(k, _)| *k)
+                {
+                    Ok(i) => {
+                        model.feature_weights[i].1[gold.2] =
+                            model.feature_weights[i].1[gold.2].saturating_add(1)
+                    }
+                    Err(i) => {
+                        let mut w = [0i32; OB_N_ROLES];
+                        w[gold.2] = 1;
+                        model.feature_weights.insert(i, (key, w));
+                    }
                 }
-                Err(i) => {
-                    let mut w = [0i32; OB_N_ROLES];
-                    w[gold.2] = 1;
-                    model.feature_weights.insert(i, (key, w));
+            }
+            if let Some((ps, pl, pr)) = pred {
+                for key in candidate_features(&clause.tokens, ps, pl) {
+                    if let Ok(i) = model
+                        .feature_weights
+                        .binary_search_by_key(&key, |(k, _)| *k)
+                    {
+                        model.feature_weights[i].1[pr] =
+                            model.feature_weights[i].1[pr].saturating_sub(1);
+                    }
                 }
             }
         }
-        if let Some((ps, pl, pr)) = pred {
-            for key in candidate_features(&clause.tokens, ps, pl) {
-                if let Ok(i) = model.feature_weights.binary_search_by_key(&key, |(k, _)| *k) {
-                    model.feature_weights[i].1[pr] =
-                        model.feature_weights[i].1[pr].saturating_sub(1);
-                }
-            }
+        if !changed {
+            break;
         }
     }
     let cue_hits = labels
@@ -1633,44 +1778,18 @@ fn fit_observed_text_model_inner(
                 return false;
             };
             model.decode_segmentation(&clause.tokens).is_some_and(|s| {
-                model.cue_role(&clause.tokens, s.cue.0, s.cue.1) == label.role
+                s.cue == (label.marker.0 as usize, label.marker.1)
+                    && model.cue_role(&clause.tokens, s.cue.0, s.cue.1) == label.role
             })
         })
         .count();
     // ---- role semantics from the declared labels ----
-    let mut per_role_goal: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for label in labels {
-        per_role_goal
-            .entry(label.role)
-            .or_default()
-            .push(label.goal.index());
+    for (&role, &goal) in &role_goals {
+        model.goal_per_role[role] = goal.index() as u8;
     }
-    for (role, goals) in per_role_goal.iter() {
-        let mut counts: BTreeMap<usize, usize> = BTreeMap::new();
-        for g in goals {
-            *counts.entry(*g).or_default() += 1;
-        }
-        if let Some((g, _)) = counts.iter().max_by(|a, b| a.1.cmp(b.1).then(a.0.cmp(b.0))) {
-            model.goal_per_role[(*role).min(OB_N_ROLES - 1)] = *g as u8;
-        }
-    }
-    let mut per_role_action: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
-    for (role, action) in semantics.iter() {
-        per_role_action
-            .entry(*role)
-            .or_default()
-            .push(action_tag(*action));
-    }
-    for (role, actions) in per_role_action.iter() {
-        let mut counts: BTreeMap<u8, usize> = BTreeMap::new();
-        for a in actions {
-            *counts.entry(*a).or_default() += 1;
-        }
-        if let Some((tag, _)) = counts.iter().max_by(|a, b| a.1.cmp(b.1).then(a.0.cmp(b.0))) {
-            let r = (*role).min(OB_N_ROLES - 1);
-            model.action_per_role[r] = *tag;
-            model.redirect_per_role[r] = *tag == action_tag(RelAction::Continue);
-        }
+    for (&role, &action) in &semantics {
+        model.action_per_role[role] = action_tag(action);
+        model.redirect_per_role[role] = action == RelAction::Continue;
     }
     model.validate(usize::MAX).map_err(|e| e.to_string())?;
     let final_correct = exact(&model);
@@ -1682,10 +1801,7 @@ fn fit_observed_text_model_inner(
             continue;
         }
         examples += 1;
-        let want = semantics
-            .get(&label.role)
-            .copied()
-            .unwrap_or(RelAction::Emit);
+        let want = label.action;
         if want == RelAction::Emit {
             initial_action += 1;
         }
@@ -1698,13 +1814,13 @@ fn fit_observed_text_model_inner(
         feature_weights: model.segment_weights.len(),
         candidate_updates: updates,
         epochs_run,
-        /// Initial and final exact bounded span assignment, on the same clauses.
+        // Initial and final exact bounded span assignment, on the same clauses.
         role_initial_correct: initial_correct,
         role_final_correct: final_correct,
         policy_initial_correct: initial_action,
         policy_final_correct,
         policy_examples: examples,
-        roles_observed: per_role_goal.keys().copied().collect(),
+        roles_observed: role_goals.keys().copied().collect(),
         cue_role_correct: cue_hits,
         h4_enabled: use_h4,
         h4_moves,
@@ -1724,8 +1840,8 @@ mod tests {
             Clause::of(1, vec![10, 22, 23, 11]), // Mara office-follows Ivo
             Clause::of(2, vec![10, 24, 25, 31]), // Mara is-on-project Atlas
             Clause::of(3, vec![10, 26, 27, 12]), // Mara project-follows Nila
-            Clause::of(4, vec![10, 20, 21]), // Mara works-in ?
-            Clause::of(5, vec![10, 24, 25]), // Mara is-on-project ?
+            Clause::of(4, vec![10, 20, 21]),     // Mara works-in ?
+            Clause::of(5, vec![10, 24, 25]),     // Mara is-on-project ?
             Clause::of(6, vec![11, 20, 21, 32]), // Ivo works-in Fen
         ];
         let labels = vec![
@@ -1822,9 +1938,21 @@ mod tests {
     fn fit_reports_extractor_and_action_baselines_on_their_own_units() {
         let (clauses, labels) = dev();
         let (_, report) = fit_observed_text_model(&clauses, &labels, false).unwrap();
-        // With zero weights, the shortest/first marker candidate is one token; all gold markers
-        // have two tokens. This baseline is distinct from the three initially-correct Emit actions.
-        assert_eq!(report.role_initial_correct, 0);
+        // Baseline is computed on the new structured decoder, rather than borrowed from the old
+        // marker extractor. An all-zero decoder can correctly place some unlabeled spans by tie.
+        let zero = ObservedTextModel::uninformed();
+        let initial = clauses
+            .iter()
+            .zip(&labels)
+            .filter(|(clause, label)| {
+                zero.decode_segmentation(&clause.tokens).is_some_and(|seg| {
+                    seg.subject == (label.subject.0 as usize, label.subject.1)
+                        && seg.cue == (label.marker.0 as usize, label.marker.1)
+                        && seg.object == label.object.map(|(s, l)| (s as usize, l))
+                })
+            })
+            .count();
+        assert_eq!(report.role_initial_correct, initial);
         assert_eq!(report.role_final_correct, labels.len());
         assert_eq!(report.policy_initial_correct, 3);
         assert_eq!(report.policy_examples, 5);
@@ -1877,14 +2005,14 @@ mod tests {
     }
 
     #[test]
-    fn supervision_rejects_conflicts_and_spans_outside_the_candidate_grammar() {
+    fn supervision_rejects_conflicts_overlaps_and_unrepresentable_cues() {
         let (clauses, labels) = dev();
         for mutation in 0..6 {
             let mut bad = labels.clone();
             match mutation {
                 0 => bad[0].subject = (1, 1),
                 1 => bad[0].object = Some((2, 1)),
-                2 => bad[0].object = None,
+                2 => bad[0].subject = (u32::MAX, 1),
                 3 => bad[6].goal = Goal::Project,
                 4 => bad[6].action = RelAction::Continue,
                 _ => bad[0].action = RelAction::Read,
@@ -1914,9 +2042,25 @@ mod tests {
         ));
     }
 
+    /// These tests qualify source ownership, continuation and emission, not length generalization
+    /// from the one-token training fixture. Supply transparent boundary potentials for their known
+    /// prefix/cue/suffix inputs; separate tests above exercise actual learned span/role fitting.
     fn runtime(clauses: Vec<Clause>, eos: Option<u32>) -> ObservedTextRuntime {
         let (development, labels) = dev();
-        let (model, _) = fit_observed_text_model(&development, &labels, false).unwrap();
+        let (mut model, _) = fit_observed_text_model(&development, &labels, false).unwrap();
+        let mut potentials = BTreeMap::<u64, [i32; OB_SEG_ROLES]>::new();
+        potentials.entry(G_INITIAL << 40).or_default()[SEG_SUBJECT] = 10;
+        potentials.entry(G_FINAL << 40).or_default()[SEG_OBJECT] = 10;
+        potentials.entry((G_LEN << 40) | 2).or_default()[SEG_CUE] = 2;
+        for token in [20, 22, 24, 26] {
+            potentials.entry((G_RIGHT << 40) | token).or_default()[SEG_SUBJECT] = 20;
+            potentials.entry((G_FIRST << 40) | token).or_default()[SEG_CUE] = 20;
+        }
+        for token in [21, 23, 25, 27] {
+            potentials.entry((G_LEFT << 40) | token).or_default()[SEG_OBJECT] = 20;
+            potentials.entry((G_LAST << 40) | token).or_default()[SEG_CUE] = 20;
+        }
+        model.segment_weights = potentials.into_iter().collect();
         ObservedTextRuntime::load(
             &model.to_bytes().unwrap(),
             &"ab".repeat(32),
@@ -2223,10 +2367,7 @@ mod tests {
             Err(ObservedTextError::Serialization(_))
         ));
         assert!(matches!(
-            observe_clause(
-                &model,
-                &Clause::of(999, Vec::new())
-            ),
+            observe_clause(&model, &Clause::of(999, Vec::new())),
             Err(ObservedTextError::Observation(_))
         ));
         let mut invalid = model.clone();
@@ -2253,5 +2394,198 @@ mod tests {
             fit_observed_text_model(&clauses, &bad_labels, false),
             Err(ObservedTextError::Supervision(_))
         ));
+    }
+
+    #[test]
+    fn structured_decoder_admits_reordering_and_background_with_exact_scores() {
+        let mut model = ObservedTextModel::uninformed();
+        // Authored component test, not a learned-language result: object precedes subject and cue;
+        // a trailing token receives the fixed zero background score.
+        model.segment_weights = vec![
+            ((G_FIRST << 40) | 10, [0, i32::MAX, 0, 0]),
+            ((G_FIRST << 40) | 20, [0, 0, i32::MAX, 0]),
+            ((G_FIRST << 40) | 30, [0, 0, 0, i32::MAX]),
+            ((G_LEN << 40) | 1, [0, 1, 1, 1]),
+        ];
+        let loaded = ObservedTextModel::from_bytes(&model.to_bytes().unwrap(), 4096).unwrap();
+        let decoded = loaded.decode_segmentation(&[30, 10, 20, 99]).unwrap();
+        assert_eq!(decoded.subject, (1, 1));
+        assert_eq!(decoded.cue, (2, 1));
+        assert_eq!(decoded.object, Some((0, 1)));
+        assert_eq!(decoded.score, 3 * (i64::from(i32::MAX) + 1));
+        for (start, len) in [
+            (usize::MAX, 1),
+            (1, usize::MAX),
+            (0, 0),
+            (0, OB_MAX_SEG + 1),
+        ] {
+            assert!(model
+                .segment_features(&[10, 20], start, len, &[])
+                .is_empty());
+        }
+    }
+
+    #[test]
+    fn segment_model_loader_rejects_invalid_fields_and_nonzero_background() {
+        for key in [
+            G_LEN << 40,
+            (G_LEN << 40) | 25,
+            (G_FIRST << 40) | 4096,
+            (G_INITIAL << 40) | 1,
+            (G_FINAL << 40) | 1,
+            (G_H4_RIGHT + 1) << 40,
+            (G_H4_INTERVAL << 40) | 120,
+        ] {
+            let mut bad = ObservedTextModel::uninformed();
+            bad.segment_weights = vec![(key, [0; OB_SEG_ROLES])];
+            assert!(ObservedTextModel::from_bytes(&bad.to_bytes().unwrap(), 4096).is_err());
+        }
+        let mut bad = ObservedTextModel::uninformed();
+        bad.segment_weights = vec![(G_INITIAL << 40, [1, 0, 0, 0])];
+        assert!(bad.validate(4096).is_err());
+        bad.segment_weights = vec![(G_INITIAL << 40, [0; 4]); 2];
+        assert!(bad.validate(4096).is_err());
+        for elements in [
+            vec![(1, 120)],
+            vec![(4096, 0)],
+            vec![(1, 0), (1, 0)],
+            vec![(2, 0), (1, 0)],
+        ] {
+            bad = ObservedTextModel::uninformed();
+            bad.use_h4 = true;
+            bad.token_elements = elements;
+            assert!(bad.validate(4096).is_err());
+        }
+        bad = ObservedTextModel::uninformed();
+        bad.token_elements = vec![(1, 0)];
+        assert!(bad.validate(4096).is_err());
+    }
+
+    #[test]
+    fn lexical_keys_are_exact_and_identity_regimes_are_disjoint() {
+        assert_eq!(lexical_key(" Ivo", &[2, 2], 0, 2), Some(b"Ivo".to_vec()));
+        assert_eq!(lexical_key("Ivo", &[3], 0, 1), Some(b"Ivo".to_vec()));
+        assert_ne!(
+            lexical_key("Ivo", &[3], 0, 1),
+            lexical_key("ivo", &[3], 0, 1)
+        );
+        assert_ne!(
+            lexical_key("Cedar Annex", &[5, 6], 0, 2),
+            lexical_key("CedarAnnex", &[5, 5], 0, 2)
+        );
+        assert_eq!(lexical_key("Ivo", &[1, 1], 0, 1), None);
+        assert_eq!(lexical_key("Ivo", &[3], usize::MAX, 2), None);
+        assert_eq!(lexical_key("Ivo", &[3], 0, usize::MAX), None);
+        let raw = Clause {
+            seg: 0,
+            tokens: vec![1],
+            text: "abcd".into(),
+            byte_lengths: vec![4],
+        };
+        let legacy = Clause::of(1, vec![u32::from_le_bytes(*b"abcd")]);
+        assert_ne!(
+            identity_key(&raw, 0, 1).unwrap(),
+            identity_key(&legacy, 0, 1).unwrap()
+        );
+        let rt = runtime(vec![Clause::of(1, vec![10, 20, 21, 30])], None);
+        let mut invalid = Clause {
+            seg: 0,
+            tokens: vec![10, 20, 21],
+            text: "Mara works".into(),
+            byte_lengths: vec![1, 1, 1],
+        };
+        assert!(rt.start(&invalid).is_err());
+        invalid.byte_lengths.clear(); // explicitly legacy token-only is still supported
+        assert!(rt.start(&invalid).is_ok());
+    }
+
+    #[test]
+    fn byte_identity_joins_distinct_token_forms_and_restore_binds_capture_key() {
+        // Token IDs deliberately differ across the first redirect object and the next subject.
+        // This component test supplies verified extents; the real tokenizer adapter owns the
+        // token-byte authenticity check and is exercised by the runner, not assumed here.
+        let clauses = vec![
+            Clause {
+                seg: 1,
+                tokens: vec![10, 22, 23, 11],
+                text: "Mara office follows Ivo".into(),
+                byte_lengths: vec![4, 7, 8, 4],
+            },
+            Clause {
+                seg: 2,
+                tokens: vec![12, 20, 21, 30],
+                text: "Ivo works in Fen".into(),
+                byte_lengths: vec![3, 6, 3, 4],
+            },
+        ];
+        let rt = runtime(clauses, Some(u32::MAX - 1));
+        let q = Clause {
+            seg: 999,
+            tokens: vec![13, 20, 21],
+            text: "Mara works in".into(),
+            byte_lengths: vec![4, 6, 3],
+        };
+        let mut session = rt.start(&q).unwrap();
+        rt.step(&mut session).unwrap();
+        assert_eq!(session.pending, RelAction::Continue);
+        let mut forged = session.clone();
+        forged.captured.as_mut().unwrap().key = [vec![1], b"Fen".to_vec()].concat();
+        assert!(rt.restore(&serde_json::to_vec(&forged).unwrap()).is_err());
+        loop {
+            let bytes = rt.snapshot(&session).unwrap();
+            let mut loaded = rt.restore(&bytes).unwrap();
+            let mut same = session.clone();
+            assert_eq!(rt.run(&mut loaded).unwrap(), rt.run(&mut same).unwrap());
+            assert_eq!(loaded, same);
+            if session.terminal.is_some() {
+                break;
+            }
+            rt.step(&mut session).unwrap();
+        }
+        assert_eq!(session.reads, 2);
+        assert_eq!(session.emitted, vec![30, u32::MAX - 1]);
+    }
+
+    #[test]
+    fn ordered_interval_products_equal_direct_noncommutative_composition() {
+        let t = super::super::group_table::group_table();
+        let mut pair = None;
+        for a in 0..super::super::group_table::GROUP_ORDER {
+            for b in 0..super::super::group_table::GROUP_ORDER {
+                if t.product[a * super::super::group_table::ROW_STRIDE + b]
+                    != t.product[b * super::super::group_table::ROW_STRIDE + a]
+                {
+                    pair = Some((a, b));
+                    break;
+                }
+            }
+            if pair.is_some() {
+                break;
+            }
+        }
+        let (a, b) = pair.unwrap();
+        let mut model = ObservedTextModel::uninformed();
+        model.use_h4 = true;
+        model.token_elements = vec![(10, a as u8), (20, b as u8)];
+        let tokens = [10, 20, 10, 20];
+        let prefix = model.prefix_products(&tokens);
+        for start in 0..=tokens.len() {
+            let mut direct = t.identity as usize;
+            for end in start..=tokens.len() {
+                assert_eq!(interval_product(&prefix, start, end), Some(direct));
+                if end < tokens.len() {
+                    direct = t.product[direct * super::super::group_table::ROW_STRIDE
+                        + model.token_element(tokens[end])] as usize;
+                }
+            }
+        }
+        let reversed = model.prefix_products(&[20, 10]);
+        assert_ne!(
+            interval_product(&prefix, 0, 2),
+            interval_product(&reversed, 0, 2)
+        );
+        assert_eq!(interval_product(&[], 0, 0), None);
+        assert!(model.segment_features(&tokens, 0, 2, &[]).is_empty());
+        assert_eq!(model.token_element(999), t.identity as usize);
     }
 }

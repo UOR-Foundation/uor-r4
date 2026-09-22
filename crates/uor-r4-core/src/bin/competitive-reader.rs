@@ -2752,6 +2752,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn observed_byte_alignment_checks_content_and_preserves_lexical_identity() {
+        let raw = std::fs::read(DEFAULT_TOKENIZER).expect("required local tokenizer fixture");
+        assert_eq!(sha256_hex(&raw), TOKENIZER_SHA);
+        let tokenizer = derive_tokenizer(&raw, VOCAB).unwrap();
+        let plain = tokenizer.encode("Ivo");
+        let spaced = tokenizer.encode(" Ivo");
+        assert_ne!(
+            plain, spaced,
+            "the identity test must cross a real BPE boundary"
+        );
+        let a = ob_byte_lengths(&tokenizer, "Ivo", &plain).unwrap();
+        let b = ob_byte_lengths(&tokenizer, " Ivo", &spaced).unwrap();
+        assert_eq!(
+            lexical_key("Ivo", &a, 0, plain.len()),
+            lexical_key(" Ivo", &b, 0, spaced.len())
+        );
+        assert!(ob_byte_lengths(&tokenizer, " Ova", &spaced).is_err());
+        for text in ["Cedar", " Cedar Annex", " café", " naïve"] {
+            let tokens = tokenizer.encode(text);
+            let lengths = ob_byte_lengths(&tokenizer, text, &tokens).unwrap();
+            assert_eq!(
+                lexical_key(text, &lengths, 0, tokens.len()).unwrap(),
+                text.trim_matches(|c: char| c.is_ascii_whitespace())
+                    .as_bytes()
+            );
+        }
+    }
+
+    #[test]
     fn contextual_map_search_uses_lexicographic_alias_priority() {
         assert!(!ce_objective_better((1, 0.0), (0, 1.0e12)));
         assert!(ce_objective_better((0, 1.0e12), (1, 0.0)));
@@ -13517,18 +13546,24 @@ struct ObWorld {
 
 /// Encode one readable clause and locate its declared spans by exact sub-sequence identity. The cue
 /// and the object are encoded as they appear after a space, and the located extents are checked.
-/// Per-token byte lengths, only when they exactly reproduce the observed text. A tokenizer whose
-/// per-token bytes do not tile the original input leaves the clause without byte alignment, and the
-/// module then falls back to exact token identity rather than an approximate key.
-fn ob_byte_lengths(tokenizer: &HfBpeTokenizer, text: &str, tokens: &[u32]) -> Vec<u32> {
+/// Verify actual token bytes against the original input, not merely the total byte length.
+/// This authored-text adapter requires exact alignment; legacy token-only input is explicit elsewhere.
+fn ob_byte_lengths(
+    tokenizer: &HfBpeTokenizer,
+    text: &str,
+    tokens: &[u32],
+) -> Result<Vec<u32>, String> {
     let lens: Vec<u32> = tokens
         .iter()
         .map(|t| tokenizer.decode_bytes(&[*t]).len() as u32)
         .collect();
-    if lens.iter().map(|b| *b as usize).sum::<usize>() == text.len() {
-        lens
+    if lens.iter().all(|n| *n > 0)
+        && tokenizer.decode_bytes(tokens) == text.as_bytes()
+        && lens.iter().map(|b| *b as usize).sum::<usize>() == text.len()
+    {
+        Ok(lens)
     } else {
-        Vec::new()
+        Err("observed token bytes do not exactly reproduce source text".into())
     }
 }
 
@@ -13587,7 +13622,7 @@ fn ob_clause(
             seg,
             tokens: tokens.clone(),
             text: text.clone(),
-            byte_lengths: ob_byte_lengths(&tokenizer, &text, &tokens),
+            byte_lengths: ob_byte_lengths(&tokenizer, &text, &tokens)?,
         },
         ClauseLabel {
             seg,
@@ -13695,7 +13730,7 @@ fn ob_question(
     if tokens.is_empty() || tokens.len() > OB_MAX_CLAUSE {
         return Err("question outside the declared bound".into());
     }
-    let byte_lengths = ob_byte_lengths(&tokenizer, &text, &tokens);
+    let byte_lengths = ob_byte_lengths(&tokenizer, &text, &tokens)?;
     Ok(Clause {
         seg: 999,
         tokens,
@@ -14066,8 +14101,8 @@ fn ob_run() -> Result<ExitCode, String> {
             }
         }
     }
-    let (model, fit) =
-        fit_observed_text_model(&dev_clauses, &dev_labels, false).map_err(|e| format!("fit: {e}"))?;
+    let (model, fit) = fit_observed_text_model(&dev_clauses, &dev_labels, false)
+        .map_err(|e| format!("fit: {e}"))?;
     let model_bytes = model.to_bytes().map_err(|e| format!("{e}"))?;
     write_checked(&root, "artifacts/contextual_roles_model.json", &model_bytes)?;
     let reloaded = ObservedTextModel::from_bytes(
@@ -14206,6 +14241,12 @@ fn ob_run() -> Result<ExitCode, String> {
             .ok_or("missing source clause")?;
         clause.tokens.truncate(start as usize);
         clause.tokens.extend_from_slice(replacement);
+        clause.text = String::from_utf8(tokenizer.decode_bytes(&clause.tokens))
+            .map_err(|e| format!("edited source UTF-8: {e}"))?;
+        if tokenizer.encode(&clause.text) != clause.tokens {
+            return Err("edited source tokenization changed the declared span boundaries".into());
+        }
+        clause.byte_lengths = ob_byte_lengths(&tokenizer, &clause.text, &clause.tokens)?;
         label.object = Some((start, replacement.len()));
         Ok(ObWorld {
             id: w0.id,
@@ -14253,6 +14294,9 @@ fn ob_run() -> Result<ExitCode, String> {
     let mut swapped = q0.clone();
     let n = swapped.tokens.len();
     swapped.tokens.swap(n - 1, n - 2);
+    swapped.text = String::from_utf8(tokenizer.decode_bytes(&swapped.tokens))
+        .map_err(|e| format!("perturbed input UTF-8: {e}"))?;
+    swapped.byte_lengths = ob_byte_lengths(&tokenizer, &swapped.text, &swapped.tokens)?;
     let perturbation = match ob_serve(&reloaded, w0, &swapped, TextControl::Normal, true) {
         Ok(out) => ob_outcome_record(&out),
         Err(e) => json!({"error":e}),
@@ -14263,22 +14307,18 @@ fn ob_run() -> Result<ExitCode, String> {
             .all(|e| e["before"]["goal"] == e["after"]["goal"])
     };
     let checks = json!({"base_matches":ob_check_oracle(&base,&base_expected),"source_edit_matches":ob_check_oracle(&edit,&edit_expected),"source_edit_changes_successful_answer":edit.terminal==RelAction::Stop && edit.emitted!=base.emitted && edit.selected!=base.selected,"goal_invariant":goal_invariant(&base)&&goal_invariant(&edit),"later_absence_matches":ob_check_oracle(&absent,&removed_expected)&&absent.reads==2,"cycle_matches":ob_check_oracle(&cycle,&cycle_expected),"goal_change_matches":ob_check_oracle(&project,&project_expected)&&project.selected!=base.selected});
-    // The intervention outcomes are recorded rather than asserted: a differing outcome under a new
-    // observation contract is a measurement to report, not a reason to discard the run.
+    // Preserve diagnostics even on failure, then return failure after the complete report is sealed.
     let interventions_all_expected = checks
         .as_object()
         .map(|m| m.values().all(|v| v == &json!(true)))
         .unwrap_or(false);
-    if false {
-        return Err(format!("intervention contract failed: {checks}"));
-    }
     let interventions = json!({"one_source_object_span_edit":{"segment":first_seg,"replacement":names.persons[3],"before_clauses":w0.clauses,"after_clauses":edited.clauses,"before_expected":base_expected,"after_expected":edit_expected,"before":ob_outcome_record(&base),"after":ob_outcome_record(&edit)},"required_terminal_fact_removed":{"removed_segment":terminal_seg,"clauses":removed.clauses,"expected":removed_expected,"outcome":ob_outcome_record(&absent)},"cycle":{"clauses":cycle_world.clauses,"expected":cycle_expected,"outcome":ob_outcome_record(&cycle)},"request_goal_change":{"question":q_project,"expected":project_expected,"outcome":ob_outcome_record(&project)},"subword_order_perturbation":{"question":swapped,"decoded":tokenizer.decode(&swapped.tokens),"outcome":perturbation,"scope":"Perturbation only; no claim of semantic word-order generalization"},"checks":checks});
 
     let world_record = |w: &ObWorld| json!({"id":w.id,"version":w.version,"clauses":w.clauses,"texts":w.clauses.iter().map(|c|tokenizer.decode(&c.tokens)).collect::<Vec<_>>(),"labels_for_evaluation_only":w.labels,"oracle_for_evaluation_only":w.oracle});
     write_json(
         &root,
         "worlds.json",
-        &json!({"development":dev_worlds.iter().map(world_record).collect::<Vec<_>>(),"exposed_regression":final_worlds.iter().map(world_record).collect::<Vec<_>>(),"fit_clauses":dev_clauses,"fit_labels":dev_labels,"membership_entities":membership_entities,"identity_convention":"Exact BPE span equality under declared leading-space input convention; not normalization or learned coreference"}),
+        &json!({"development":dev_worlds.iter().map(world_record).collect::<Vec<_>>(),"exposed_regression":final_worlds.iter().map(world_record).collect::<Vec<_>>(),"fit_clauses":dev_clauses,"fit_labels":dev_labels,"membership_entities":membership_entities,"identity_convention":"Tokenizer-verified raw byte alignment; exterior ASCII whitespace excluded from lexical keys, case and internal bytes preserved. This retained fixture still uses a leading-space convention; no cross-BPE join or learned coreference qualification."}),
     )?;
 
     write_checked(
@@ -14329,6 +14369,9 @@ fn ob_run() -> Result<ExitCode, String> {
     write_json(&root, "result.json", &result)?;
     seal(&root).map_err(|e| format!("seal: {e}"))?;
     let unlisted = verify(&root).map_err(|e| format!("verify: {e}"))?;
+    if !interventions_all_expected {
+        return Err(format!("sealed intervention contract failure: {checks}"));
+    }
     let find = |arm: &str, split: &str| -> (u64, u64) {
         arms.iter()
             .find(|a| a["arm"] == json!(arm) && a["split"] == json!(split))

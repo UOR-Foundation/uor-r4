@@ -1,5 +1,8 @@
 # Structured argument binding: partial implementation and honest status
 
+> Principal correction, September22: the original aligned-byte path **was exercised**; the missing test is a learned join across different BPE boundaries. The original23/24 answer loss was cue-role47/48 despite48/48 extents. Corrected draft restores24/24 answers and causal instruments, with18 module and22 runner tests passing (one legacy test ignored). Real supervision/identity/loader/restore regressions were repaired; original reports remain preserved. Ordinary-form and H4-comparison milestone remains incomplete and this PR remains draft. The principal review and completion brief are delivered separately to main; live PR #1344 owns corrected source status. The original account below is historical and corrected by the source-linked review.
+
+
 September 22 UTC, 2026. **Partial.** This records what was implemented, what was measured, and what
 remains unfinished. It does not claim the milestone.
 
