@@ -1,6 +1,16 @@
 # Current native geometric AI work
 
-## Active — principal review of scoped correction memory, September22
+## Active — consumed geometric state inside the scoped session, September22
+
+**Completed step (source `a94c9dec`):** [consumed geometric state](consumed-geometric-state-result-2026-09-22.md) now runs inside the corrected scoped session. A typed **Apply** phase calls the retained `initial_state`/`apply`/`outcome_for_state` at the session step boundary, so an observed request selects a scoped source, a shared finite computation produces an owned result, and that result is consumed as the next exact read address and changes the complete emitted answer. A learned `GroundingLexicon` binds **exact lexical bytes** to opaque artifact identifiers, so BPE variation cannot change an operand, and each identifier's group element is recovered constructively from observed transitions rather than declared by position or token id. The retained memory-only constructor and the corrected scoped-memory runner are untouched.
+
+**Executed:** development **56/56** and final **24/24** complete requests; constructive recovery 48/48 transitions with noncommuting witness (100,200); a changed operand changes the computed key (Alma→Bert) and the answer (Bramble→Quarry); reversing a noncommuting pair changes the retained state and answer while the central-sign fold gives the same key and answer for both; identity leaves the state unchanged; consumption disabled changes the answer with the state still computed; snapshot mid-computation restored into a fresh runtime, a disk reload and a **separate process** all reproduce identical answers. Controls (40 each): NoRead 0, Unscoped 0, ApplyDisabled 12, ConsumeDisabled 12, folded 24, fitted shared-transition 26, **directly tabulated finite control 40**.
+
+**Geometric contribution measured: competence and reuse, not superiority** — the directly tabulated finite permutation control ties the signed exact-factorization arm exactly (40/40). The fold control shows the precise role retained signed state plays. No compactness, efficiency or cost advantage is claimed.
+
+**Next complete milestone:** integrate retained E/S language prediction through this same session so broader source-separated prose and conversation, then executed Rust, run through one artifact; complete laptop inference cost, API and kernel qualification follows useful integrated behaviour.
+
+## Previous active — principal review of scoped correction memory, September22
 
 **PR #1346, principal review:** retain learned scoped correction memory with exact version authority. Submitted primary 38/38 is expected-outcome agreement over 34 language questions and 4 explicit API queries (36 Complete, one NoHistory, one Unresolved). Final 10 language + 1 API queries use unfamiliar whole lexical strings in the exposed interaction structure; root 13 first evaluates them and root 14 replays them. [Review](../integration/scoped-memory-review-2026-09-22.md) and [independent audit](../evidence/scoped-memory-submission-audit-2026-09-22.json) own qualifications.
 

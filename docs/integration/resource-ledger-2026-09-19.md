@@ -2092,3 +2092,32 @@ Free space began at35,698,626,560B, below the36,766,079,385B physical reserve pl
 Principal charge **2,637,458ms** = 1,677,458ms elapsed review wall time +360,000ms preparation estimate +600,000ms delivery reserve estimate, parallel reviews counted once. **Cumulative 329,315,344/337,300,000ms**, remaining7,984,656ms. Free at charge38,016,589,824B. [Checks and exact receipts](../evidence/scoped-memory-principal-checks-2026-09-22.json) include the introduced-EOS failed attempt, corrected17module+25runner passes (one legacy ignored), actual replay and metadata correction. Original root1–8 are partial/unsealed,9–14 sealed; all remain retained. Principal root1 failed,2 and3 are corrected exposed replays, not fresh finals.
 
 The submitted narrative has conflicting05:49/06:05 projection times; available records do not resolve the discrepancy, so neither is silently asserted as the actual prospective timestamp. The submitted4,000,000ms debit covers its known45-minute interval plus preparation/delivery estimates; no unsupported duplicate supplement is charged. Long idle time between sessions is not model work. Submitted implementation commit was06:34:57UTC, delivery-doc commit06:36:05UTC, PR creation06:36:22UTC; an opened PR was not a completed protected merge.
+
+## Consumed geometric state — prospective projection, September 22 UTC
+
+At 2026-09-22T07:10Z the live balance is **329,315,344 / 337,300,000 ms** (remaining **7,984,656 ms**)
+and free space is **38,001,520,640 B**, above the recorded reserve plus the 128 MiB stop margin.
+Projected for this step: **6,000,000 ms** covering context recovery, the grounding adapter and session
+extension, focused builds and tests, development diagnostics, the causal comparisons, the fresh final
+population, report sealing and protected delivery. Two compiler workers, one model worker, 8 GiB RAM
+ceiling, at most 768 MiB temporary build output and at most 64 MiB retained report data. Reuse the
+release cache; no paid or external compute. The standing owner authorization covers a necessary local
+extension recorded prospectively with reason and increment before use. No sealed attempt, unique
+artifact or executable is deleted to manufacture headroom.
+
+## Consumed geometric state — completed charge, September 22 UTC
+
+Projection recorded prospectively at 2026-09-22T07:10Z: 6,000,000 ms, two compiler workers, one model
+worker, 8 GiB RAM, at most 768 MiB temporary build output, at most 64 MiB retained report data.
+
+**Charge 5,400,000 ms**, within the projection and with no extension requested. The interval covers
+context recovery and verification of the reviewed `b5d36c9b` tree, the session-wide typed Apply phase
+and the grounding lexicon, the matched finite and fold controls, sixteen sealed or discarded attempts
+(one per diagnostic cycle, each preserved), focused builds and test cycles, the causal comparisons and
+the separate-process reload. Balance **334,715,344 / 337,300,000 ms**; remaining **2,584,656 ms**. No
+paid or external compute; no unique artifact, sealed attempt or executable deleted.
+
+**Retained.** Attempt roots `consumed-geometric-state-{1..16}` (the delivered receipt is `-16`, 0
+unlisted files, binding `git_rev a94c9dec`, `scoped_memory.rs` `ef217e2d…`, `grounded_session.rs`
+`cd0cb162…` unchanged, `competitive-reader.rs` `e33c4d02…`, executable `b25fcb13…`). All earlier roots,
+the principal's `scoped-correction-memory-*` roots and the preserved executables are untouched.
