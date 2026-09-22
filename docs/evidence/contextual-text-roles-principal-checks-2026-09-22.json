@@ -262,16 +262,16 @@
     "elapsed_ms": 1181912,
     "preprojection_preparation_estimate_ms": 180000,
     "delivery_reserve_ms": 300000,
-    "principal_charge_ms": 1661912,
+    "principal_charge_ms": 1961912,
     "before": {
       "cumulative_ms": 309590598,
       "limit_ms": 316700000
     },
     "after": {
-      "cumulative_ms": 311252510,
+      "cumulative_ms": 311552510,
       "limit_ms": 316700000
     },
-    "remaining_ms": 5447490,
+    "remaining_ms": 5147490,
     "extension_ms": 3600000,
     "free_after_bytes": 38651015168,
     "cleanup": {
@@ -285,7 +285,9 @@
       "manifest_sha256": "ef270a80311ebd191d163fd9dffb7e1529a1176e80ef5efdb862efd268f7240c"
     },
     "parallel_work": "Included once in elapsed review wall time",
-    "paid_compute": false
+    "paid_compute": false,
+    "additional_delivery_reserve_ms": 300000,
+    "additional_delivery_recorded_at": "2026-09-22T02:25:39.316867+00:00"
   },
   "limits": [
     "Fixed prefix-marker-suffix support",
