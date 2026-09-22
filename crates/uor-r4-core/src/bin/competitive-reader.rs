@@ -2781,6 +2781,57 @@ mod tests {
     }
 
     #[test]
+    fn object_intervention_preserves_suffix_and_rebases_later_roles() {
+        let raw = std::fs::read(DEFAULT_TOKENIZER).expect("required local tokenizer fixture");
+        assert_eq!(sha256_hex(&raw), TOKENIZER_SHA);
+        let tokenizer = derive_tokenizer(&raw, VOCAB).unwrap();
+        let names = ObNames {
+            persons: ["Mara", "Ivo", "Cedar", "Oren"],
+            offices: ["Fen", "Office Park", "Cedar Annex"],
+            projects: ["Atlas", "Lumen", "Project Bay"],
+        };
+        for style in 0..3 {
+            let (clause, label) = ob_build_clause(
+                &tokenizer,
+                7,
+                &ob_assert_form(&names, Goal::Office, "Mara", "Fen", style),
+            )
+            .unwrap();
+            let world = ObWorld {
+                id: 1,
+                version: 1,
+                clauses: vec![clause],
+                labels: vec![label],
+                oracle: vec![],
+                texts: vec![],
+            };
+            let edited = ob_edit_object(&world, &tokenizer, 7, "Cedar Annex").unwrap();
+            assert_eq!(
+                edited.clauses[0].text,
+                world.clauses[0].text.replace("Fen", "Cedar Annex")
+            );
+            let c = &edited.clauses[0];
+            let l = &edited.labels[0];
+            for (span, expected) in [
+                (l.subject, "Mara"),
+                (l.marker, "office"),
+                (l.object.unwrap(), "Cedar Annex"),
+            ] {
+                assert_eq!(
+                    lexical_key(&c.text, &c.byte_lengths, span.0 as usize, span.1).unwrap(),
+                    expected.as_bytes()
+                );
+            }
+            assert_eq!(tokenizer.encode(&c.text), c.tokens);
+            assert_eq!(edited.texts, vec![c.text.clone()]);
+            let restored = ob_edit_object(&edited, &tokenizer, 7, "Fen").unwrap();
+            assert_eq!(restored.clauses[0].text, world.clauses[0].text);
+            assert_eq!(restored.labels[0].subject, world.labels[0].subject);
+            assert_eq!(restored.labels[0].marker, world.labels[0].marker);
+        }
+    }
+
+    #[test]
     fn contextual_map_search_uses_lexicographic_alias_priority() {
         assert!(!ce_objective_better((1, 0.0), (0, 1.0e12)));
         assert!(ce_objective_better((0, 1.0e12), (1, 0.0)));
@@ -14162,11 +14213,36 @@ fn ob_edit_object(
         .iter_mut()
         .find(|c| c.seg == seg)
         .ok_or("missing source clause")?;
-    let old = tokenizer.decode_bytes(&clause.tokens[start as usize..start as usize + len]);
+    let end = (start as usize)
+        .checked_add(len)
+        .filter(|end| len > 0 && *end <= clause.tokens.len())
+        .ok_or("source object extent is invalid")?;
+    let old = tokenizer.decode_bytes(&clause.tokens[start as usize..end]);
     let lead = if old.first() == Some(&b' ') { " " } else { "" };
     let new_tokens = tokenizer.encode(&format!("{lead}{replacement}"));
-    clause.tokens.truncate(start as usize);
-    clause.tokens.extend_from_slice(&new_tokens);
+    if new_tokens.is_empty() {
+        return Err("edited source object is empty".into());
+    }
+    // Replace only the object. Trailing adjuncts and a later subject/cue are causal controls,
+    // not disposable suffixes. Rebase all later supervised extents by the actual token delta.
+    for span in [&mut label.subject, &mut label.marker] {
+        let span_end = (span.0 as usize)
+            .checked_add(span.1)
+            .ok_or("source argument extent overflow")?;
+        if (span.0 as usize) < end && span_end > start as usize {
+            return Err("edited object overlaps another declared argument".into());
+        }
+        if span.0 as usize >= end {
+            span.0 = u32::try_from(span.0 as usize - len + new_tokens.len())
+                .map_err(|_| "edited argument offset overflow")?;
+        }
+    }
+    clause
+        .tokens
+        .splice(start as usize..end, new_tokens.iter().copied());
+    if clause.tokens.len() > OB_MAX_CLAUSE {
+        return Err("edited clause exceeds the declared token bound".into());
+    }
     clause.text = String::from_utf8(tokenizer.decode_bytes(&clause.tokens))
         .map_err(|e| format!("edited source UTF-8: {e}"))?;
     if tokenizer.encode(&clause.text) != clause.tokens {
@@ -14174,13 +14250,14 @@ fn ob_edit_object(
     }
     clause.byte_lengths = ob_byte_lengths(tokenizer, &clause.text, &clause.tokens)?;
     label.object = Some((start, new_tokens.len()));
+    let texts = clauses.iter().map(|c| c.text.clone()).collect();
     Ok(ObWorld {
         id: world.id,
         version: world.version,
         clauses,
         labels,
         oracle: Vec::new(),
-        texts: Vec::new(),
+        texts,
     })
 }
 
@@ -14567,6 +14644,16 @@ fn ob_run() -> Result<ExitCode, String> {
                 entities: membership_entities.clone(),
             },
         ),
+        (
+            "lexical_membership_continuation",
+            TextControl::LexicalMembership {
+                entities: names
+                    .persons
+                    .iter()
+                    .map(|p| p.as_bytes().to_vec())
+                    .collect(),
+            },
+        ),
         ("maximum_two_read", TextControl::ReadCap { max_reads: 2 }),
         ("reads_disabled", TextControl::ReadsDisabled),
     ] {
@@ -14873,6 +14960,7 @@ fn ob_run() -> Result<ExitCode, String> {
             "fit_clauses": dev_clauses,
             "fit_labels": dev_labels,
             "membership_entities": membership_entities,
+            "lexical_membership_entities": names.persons,
             "forms": {
                 "assertion_styles": ["{P}'s office is {T}", "{T} is {P}'s office", "{P}'s office is {T} downtown"],
                 "redirect": "{P} office follows {Q}",
@@ -14917,7 +15005,7 @@ fn ob_run() -> Result<ExitCode, String> {
         },
         "learning": {"categorical_order": cat_fit, "h4_hybrid": h4_fit},
         "primary_arm": primary_arm,
-        "primary_arm_selected_on": "development complete answers only; ties keep the order-aware categorical comparator. The final draw was made after the design was frozen and changed no development choice or fitted parameter.",
+        "primary_arm_selected_on": "development complete answers only; ties keep the order-aware categorical comparator. The final composition panel first appeared after fitting/design selection in historical attempt7; subsequent executions are exposed replays, not new independent final draws.",
         "development_complete": {"categorical_order": dev_complete[0], "h4_hybrid": dev_complete[1]},
         "arms": arms,
         "controls": controls,
@@ -14926,7 +15014,7 @@ fn ob_run() -> Result<ExitCode, String> {
         "interventions_all_expected": interventions_all_expected,
         "all_arm_rows": all_rows.len(),
         "exposed_depth_by_arm": {"categorical_order": depth_by_arm[0], "h4_hybrid": depth_by_arm[1]},
-        "scope": "authored ordinary readable text over a small memory domain; declared bounded span proposals and a same-question causal session. Not broad language understanding, general reasoning or frontier capability. Membership control uses token identity, not the primary lexical key. Energy UNAVAILABLE; whole-path D0-b not claimed.",
+        "scope": "authored ordinary readable text over a small memory domain; declared bounded span proposals and a same-question causal session. This corrected execution replays the exposed final composition panel. Not broad language understanding, general reasoning or frontier capability. Historical membership uses token identity; lexical_membership_continuation uses the same exact lexical boundary as the primary. Energy UNAVAILABLE; whole-path D0-b not claimed.",
         "elapsed_s": started.elapsed().as_secs_f64(),
     });
     write_json(&root, "result.json", &result)?;

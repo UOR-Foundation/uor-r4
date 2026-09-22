@@ -92,6 +92,9 @@ pub fn candidate_features(tokens: &[u32], start: usize, len: usize) -> Vec<u64> 
     let n = tokens.len();
     let key = |kind: u64, value: u64| (kind << 40) | value;
     let mut f = Vec::with_capacity(9);
+    if tokens.iter().any(|token| *token as usize >= OB_MAX_VOCAB) {
+        return f;
+    }
     let Some(end) = start
         .checked_add(len)
         .filter(|end| len > 0 && len <= OB_MAX_MARKER && *end <= n)
@@ -252,6 +255,9 @@ pub const G_POS: u64 = 27;
 pub const G_BIGRAM: u64 = 28;
 /// Shift used by the ordered categorical feature payloads.
 pub const G_ORDER_SHIFT: u64 = 16;
+/// The feature packing uses two disjoint 16-bit token fields. This is an explicit model domain,
+/// not a truncation: larger vocabularies require a new packing/format before they can be served.
+pub const OB_MAX_VOCAB: usize = 1usize << G_ORDER_SHIFT;
 
 /// Exact lexical key of a selected span: the span's original bytes with only exterior ASCII
 /// whitespace removed. Case and all interior bytes are preserved, so `Cedar` and `Cedar Annex` stay
@@ -385,7 +391,7 @@ impl Segmentation {
 /// Per-clause potentials prepared once before the bounded decode. `seg[start * stride + end]` is the
 /// span potential for a segment role; `role[start * stride + end]` is the cue role potential.
 /// Indexing is by half-open token interval `[start, end)`.
-pub struct Potentials {
+struct Potentials {
     stride: usize,
     seg: Vec<[i64; OB_SEG_ROLES]>,
     role: Vec<[i64; OB_N_ROLES]>,
@@ -472,8 +478,8 @@ impl ObservedTextModel {
         if self.version != 6 {
             return Err("unsupported observed-text model version".into());
         }
-        if max_vocab == 0 {
-            return Err("empty vocabulary".into());
+        if max_vocab == 0 || max_vocab > OB_MAX_VOCAB {
+            return Err("vocabulary must fit the declared 16-bit token feature domain".into());
         }
         if self.feature_weights.windows(2).any(|w| w[0].0 >= w[1].0) {
             return Err("observed-text feature weights must have unique sorted keys".into());
@@ -572,14 +578,20 @@ impl ObservedTextModel {
         serde_json::to_vec(self).map_err(|e| ObservedTextError::Serialization(e.to_string()))
     }
 
-    /// The one candidate scorer. Fitting and serving both call it through [`candidate_features`].
+    /// Historical narrow score view. The joint decoder uses the exact wide scores below; it never
+    /// clips role potentials before choosing the winning hypothesis.
     pub fn candidate_scores(&self, tokens: &[u32], start: usize, len: usize) -> [i32; OB_N_ROLES] {
-        let mut out = [0i32; OB_N_ROLES];
+        self.cue_scores_wide(tokens, start, len)
+            .map(|score| score.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32)
+    }
+
+    fn cue_scores_wide(&self, tokens: &[u32], start: usize, len: usize) -> [i64; OB_N_ROLES] {
+        let mut out = [0i64; OB_N_ROLES];
         for key in candidate_features(tokens, start, len) {
             if let Ok(i) = self.feature_weights.binary_search_by_key(&key, |(k, _)| *k) {
                 let row = self.feature_weights[i].1;
                 for r in 0..OB_N_ROLES {
-                    out[r] = out[r].saturating_add(row[r]);
+                    out[r] += i64::from(row[r]);
                 }
             }
         }
@@ -642,6 +654,11 @@ impl ObservedTextModel {
         let n = tokens.len();
         let key = |kind: u64, value: u64| (kind << 40) | value;
         let mut f = Vec::with_capacity(12);
+        if tokens.len() > OB_MAX_CLAUSE
+            || tokens.iter().any(|token| *token as usize >= OB_MAX_VOCAB)
+        {
+            return f;
+        }
         let Some(end) = start
             .checked_add(len)
             .filter(|end| len > 0 && len <= OB_MAX_SEG && *end <= n)
@@ -742,7 +759,7 @@ impl ObservedTextModel {
     /// Precompute every interval potential once per clause. The bounded decode then performs only
     /// table reads, instead of repeating interior scans and sparse lookups inside each
     /// position/mask/length/role loop.
-    pub fn interval_potentials(&self, tokens: &[u32], prefix: &[usize]) -> Potentials {
+    fn interval_potentials(&self, tokens: &[u32], prefix: &[usize]) -> Potentials {
         let n = tokens.len();
         let stride = n + 1;
         let mut seg = vec![[0i64; OB_SEG_ROLES]; stride * stride];
@@ -755,10 +772,7 @@ impl ObservedTextModel {
                     seg[idx][r] = self.segment_score(tokens, start, len, r, prefix);
                 }
                 if len <= OB_MAX_MARKER {
-                    let scores = self.candidate_scores(tokens, start, len);
-                    for r in 0..OB_N_ROLES {
-                        role[idx][r] = i64::from(scores[r]);
-                    }
+                    role[idx] = self.cue_scores_wide(tokens, start, len);
                 }
             }
         }
@@ -767,11 +781,12 @@ impl ObservedTextModel {
 
     /// **One declared structured objective** over the joint hypothesis
     /// `(subject span, cue span, cue role, optional object span)`. Subject/cue/object may occur in any
-    /// order and each at most once; tokens not covered by a role have fixed zero background score.
+    /// order and each at most once; uncovered tokens contribute learned singleton background scores.
     /// Span selection and role choice are one argmax, so fitting and serving optimise the same score.
     pub fn decode_segmentation(&self, tokens: &[u32]) -> Option<Segmentation> {
         let n = tokens.len();
-        if n == 0 || n > OB_MAX_CLAUSE {
+        if n == 0 || n > OB_MAX_CLAUSE || tokens.iter().any(|token| *token as usize >= OB_MAX_VOCAB)
+        {
             return None;
         }
         let prefix = self.prefix_products(tokens);
@@ -781,7 +796,7 @@ impl ObservedTextModel {
 
     /// The learned four-way cue role of an observed cue span, from the retained categorical scorer.
     pub fn cue_role(&self, tokens: &[u32], start: usize, len: usize) -> usize {
-        let scores = self.candidate_scores(tokens, start, len);
+        let scores = self.cue_scores_wide(tokens, start, len);
         (0..OB_N_ROLES)
             .max_by_key(|r| (scores[*r], std::cmp::Reverse(*r)))
             .unwrap_or(0)
@@ -966,7 +981,7 @@ pub struct Observation {
     pub role: usize,
     /// The joint structured score of this clause's decoded hypothesis.
     pub score: i64,
-    /// Present when the clause is a question clause (the marker ends the clause).
+    /// Present when the winning hypothesis has no object span, including interior-cue questions.
     pub question_goal: Option<Goal>,
 }
 
@@ -1033,8 +1048,14 @@ pub enum TextControl {
     #[default]
     Normal,
     ReadsDisabled,
+    /// Historical control with exact token-vector membership, retained at its original boundary.
     Membership {
         entities: Vec<Vec<u32>>,
+    },
+    /// Matched-identity control. Entries are exact original lexical bytes with exterior ASCII
+    /// whitespace removed, without the internal identity-mode tag. Only aligned text is eligible.
+    LexicalMembership {
+        entities: Vec<Vec<u8>>,
     },
     ReadCap {
         max_reads: u8,
@@ -1313,6 +1334,22 @@ impl ObservedTextRuntime {
                     "invalid membership-control input".into(),
                 ))
             }
+            TextControl::LexicalMembership { entities } => {
+                if entities.iter().any(|e| {
+                    e.is_empty()
+                        || e.first().is_some_and(u8::is_ascii_whitespace)
+                        || e.last().is_some_and(u8::is_ascii_whitespace)
+                }) || self
+                    .observations
+                    .iter()
+                    .filter_map(|o| o.object_key.as_ref())
+                    .any(|key| key.first() != Some(&1))
+                {
+                    return Err(ObservedTextError::Observation(
+                        "lexical membership requires nonempty canonical raw keys and aligned source objects".into(),
+                    ));
+                }
+            }
             TextControl::ReadCap { max_reads } if *max_reads == 0 || *max_reads > OB_MAX_READS => {
                 return Err(ObservedTextError::Session(
                     "invalid read-cap control".into(),
@@ -1474,6 +1511,18 @@ impl ObservedTextRuntime {
         Ok(match &self.control {
             TextControl::Membership { entities } => {
                 if entities.contains(object) {
+                    RelAction::Continue
+                } else {
+                    RelAction::Emit
+                }
+            }
+            TextControl::LexicalMembership { entities } => {
+                let raw_key = observed
+                    .object_key
+                    .as_deref()
+                    .and_then(|key| key.strip_prefix(&[1]))
+                    .ok_or("lexical membership requires an aligned source object's exact key")?;
+                if entities.iter().any(|key| key.as_slice() == raw_key) {
                     RelAction::Continue
                 } else {
                     RelAction::Emit
@@ -1829,8 +1878,8 @@ fn exact_spans(model: &ObservedTextModel, clauses: &[Clause], labels: &[ClauseLa
 }
 
 /// The one declared-objective fit: a structured perceptron over the joint hypothesis. The update is
-/// the scored feature difference, and the retained model is the best snapshot by that same decoded
-/// objective, so a late oscillation cannot lower the retained quality.
+/// the scored feature difference. Model selection retains the best exact joint-hypothesis count on
+/// the fitting clauses; this discrete selection metric differs from the linear inference score.
 fn fit_joint_model(
     model: &mut ObservedTextModel,
     clauses: &[Clause],
@@ -1873,9 +1922,9 @@ fn fit_joint_model(
     (updates, epochs_run)
 }
 
-/// Bounded coordinate search over the ordered group code map, evaluated by the **same** decoded
-/// objective. Only clauses containing the changed token are re-decoded, so the search is exact and
-/// local, and a code move is accepted only when it strictly improves the incumbent.
+/// Bounded coordinate search over the ordered group code map, selected by exact fitting-clause
+/// joint-hypothesis count. Only affected clauses are re-decoded. At perfect fitting accuracy no
+/// strictly improving move exists; zero moves there do not diagnose geometric expressiveness.
 fn coordinate_search_codes(
     model: &mut ObservedTextModel,
     clauses: &[Clause],
@@ -1954,8 +2003,12 @@ fn fit_observed_text_model_inner(
         if !segments.insert(clause.seg)
             || clause.tokens.is_empty()
             || clause.tokens.len() > OB_MAX_CLAUSE
+            || clause
+                .tokens
+                .iter()
+                .any(|token| *token as usize >= OB_MAX_VOCAB)
         {
-            return Err("duplicate segment or invalid clause bound in fitting".into());
+            return Err("duplicate segment or invalid clause/token bound in fitting".into());
         }
         validate_alignment(clause)?;
     }
@@ -2076,7 +2129,7 @@ fn fit_observed_text_model_inner(
         model.action_per_role[role] = action_tag(action);
         model.redirect_per_role[role] = action == RelAction::Continue;
     }
-    model.validate(usize::MAX).map_err(|e| e.to_string())?;
+    model.validate(OB_MAX_VOCAB).map_err(|e| e.to_string())?;
     let span_final_correct = exact_spans(&model, clauses, labels);
     let final_correct = exact_hypotheses(&model, clauses, labels);
     let mut initial_action = 0usize;
@@ -2962,44 +3015,194 @@ mod tests {
 
     #[test]
     fn joint_decode_matches_exhaustive_enumeration_of_the_declared_space() {
-        let mut model = ObservedTextModel::uninformed();
-        // Deterministic, non-degenerate weights so the optimum is not a tie.
-        let mut weights = Vec::new();
-        for i in 0..12u64 {
-            let token = 10 + i;
-            weights.push((
-                (G_FIRST << 40) | token,
-                [1 + i as i32, -2 * i as i32, i as i32, -1, 2, -2],
-            ));
-            weights.push((
-                (G_LAST << 40) | token,
-                [-1, 1 + i as i32, -1 - i as i32, 1, i as i32, -1],
-            ));
-            weights.push((
-                (G_POS << 40) | ((i % 3) << G_ORDER_SHIFT) | token,
-                [i as i32, 1, 1, 1, 1, 1],
-            ));
+        // Enumerate several tiny score landscapes with nonzero semantic-role and background
+        // potentials. The oracle enumerates assignments, not the recurrence's states/transitions.
+        for variant in 0..4i32 {
+            let mut model = ObservedTextModel::uninformed();
+            let mut weights = Vec::new();
+            let mut role_weights = Vec::new();
+            for i in 0..6u64 {
+                let token = 10 + i;
+                weights.push((
+                    (G_FIRST << 40) | token,
+                    [1 + i as i32 - variant, -2 * i as i32, i as i32, -1, 2, -2],
+                ));
+                weights.push((
+                    (G_LAST << 40) | token,
+                    [-1 - variant, 1 + i as i32, -1 - i as i32, 1, i as i32, -1],
+                ));
+                weights.push((
+                    (G_POS << 40) | ((i % 3) << G_ORDER_SHIFT) | token,
+                    [i as i32, 1, 1, 1, 1, 1],
+                ));
+                let mut roles = [0; OB_N_ROLES];
+                roles[((i as usize) + variant as usize) % OB_N_ROLES] = 11 + i as i32;
+                role_weights.push(((F_FIRST << 40) | token, roles));
+            }
+            weights.sort_by_key(|(k, _)| *k);
+            model.segment_weights = weights;
+            model.feature_weights = role_weights;
+            for tokens in [&[10u32, 11, 12][..], &[14u32, 12, 10, 13, 11][..]] {
+                let dp = model.decode_segmentation(tokens).unwrap();
+                let all = all_legal(&model, tokens);
+                let best = all.iter().map(|s| s.score).max().unwrap();
+                assert_eq!(dp.score, best, "variant {variant}, {tokens:?}");
+                assert!(all
+                    .iter()
+                    .any(|s| s.same_hypothesis(&dp) && s.score == dp.score));
+            }
         }
-        weights.sort_by_key(|(k, _)| *k);
-        weights.dedup_by_key(|(k, _)| *k);
-        model.segment_weights = weights;
-        let tokens = [10u32, 11, 12, 13, 14];
-        let dp = model
-            .decode_segmentation(&tokens)
-            .expect("a legal hypothesis exists");
-        let best = all_legal(&model, &tokens)
-            .into_iter()
-            .map(|s| s.score)
-            .max()
-            .expect("nonempty hypothesis space");
-        assert_eq!(
-            dp.score, best,
-            "the recurrence must find the declared optimum"
-        );
-        // The decoded hypothesis must itself be legal and reproduce the optimum.
-        assert!(all_legal(&model, &tokens)
+        // Explicit tie policy and an i32-overflow witness for cue score accumulation.
+        let mut zero = ObservedTextModel::uninformed();
+        let tied = zero.decode_segmentation(&[10, 11, 12]).unwrap();
+        assert_eq!(tied.object, None);
+        assert_eq!(tied.role, 0);
+        zero.feature_weights = vec![
+            ((F_FIRST << 40) | 11, [0, i32::MAX, i32::MAX, 0]),
+            ((F_LAST << 40) | 11, [0, 1, 2, 0]),
+        ];
+        let decoded = zero.decode_segmentation(&[10, 11]).unwrap();
+        assert_eq!(decoded.role, 2);
+        assert_eq!(decoded.score, i64::from(i32::MAX) + 2);
+    }
+
+    #[test]
+    fn joint_update_equals_the_declared_scored_feature_difference() {
+        let mut model = ObservedTextModel::uninformed();
+        let clause = Clause::of(0, vec![10, 11, 12, 13, 14, 15]);
+        let gold = Segmentation {
+            subject: (0, 1),
+            cue: (2, 1),
+            role: 2,
+            object: Some((4, 1)),
+            score: 0,
+        };
+        let pred = Segmentation {
+            subject: (4, 1),
+            cue: (2, 1),
+            role: 1,
+            object: None,
+            score: 0,
+        };
+        let prefix = model.prefix_products(&clause.tokens);
+        // Independently collect the declared feature multiset of each complete assignment. The
+        // shared extractor is intentional; scoring/update multiplicity and role attribution are
+        // what this check proves, including both cue sides and uncovered singleton tokens.
+        let features = |seg: &Segmentation| {
+            let mut counts = BTreeMap::<(bool, u64, usize), i32>::new();
+            let mut spans = vec![
+                (
+                    seg.subject,
+                    if seg.subject.0 < seg.cue.0 {
+                        SEG_SUBJECT_LEFT
+                    } else {
+                        SEG_SUBJECT_RIGHT
+                    },
+                ),
+                (seg.cue, SEG_CUE),
+            ];
+            if let Some(obj) = seg.object {
+                spans.push((
+                    obj,
+                    if obj.0 < seg.cue.0 {
+                        SEG_OBJECT_LEFT
+                    } else {
+                        SEG_OBJECT_RIGHT
+                    },
+                ));
+            }
+            for (span, role) in &spans {
+                for feature in model.segment_features(&clause.tokens, span.0, span.1, &prefix) {
+                    *counts.entry((false, feature, *role)).or_default() += 1;
+                }
+            }
+            for i in 0..clause.tokens.len() {
+                if spans
+                    .iter()
+                    .any(|(span, _)| i >= span.0 && i < span.0 + span.1)
+                {
+                    continue;
+                }
+                for feature in model.segment_features(&clause.tokens, i, 1, &prefix) {
+                    *counts.entry((false, feature, SEG_BACKGROUND)).or_default() += 1;
+                }
+            }
+            for feature in candidate_features(&clause.tokens, seg.cue.0, seg.cue.1) {
+                *counts.entry((true, feature, seg.role)).or_default() += 1;
+            }
+            counts
+        };
+        let mut expected = features(&gold);
+        for (key, value) in features(&pred) {
+            *expected.entry(key).or_default() -= value;
+        }
+        let norm_squared: i64 = expected.values().map(|v| i64::from(*v).pow(2)).sum();
+        apply_segmentation(&mut model, &clause, &gold, &prefix, 1);
+        apply_segmentation(&mut model, &clause, &pred, &prefix, -1);
+        for ((is_role, key, role), value) in &expected {
+            let actual = if *is_role {
+                model
+                    .feature_weights
+                    .iter()
+                    .find(|(k, _)| k == key)
+                    .unwrap()
+                    .1[*role]
+            } else {
+                model
+                    .segment_weights
+                    .iter()
+                    .find(|(k, _)| k == key)
+                    .unwrap()
+                    .1[*role]
+            };
+            assert_eq!(actual, *value);
+        }
+        let assignments = all_legal(&model, &clause.tokens);
+        let gold_score = assignments
             .iter()
-            .any(|s| s.same_hypothesis(&dp) && s.score == dp.score));
+            .find(|x| x.same_hypothesis(&gold))
+            .unwrap()
+            .score;
+        let pred_score = assignments
+            .iter()
+            .find(|x| x.same_hypothesis(&pred))
+            .unwrap()
+            .score;
+        assert_eq!(gold_score - pred_score, norm_squared);
+    }
+
+    #[test]
+    fn ordered_feature_token_domain_is_explicit_at_every_boundary() {
+        let model = ObservedTextModel::uninformed();
+        assert!(model.validate(OB_MAX_VOCAB).is_ok());
+        assert!(model.validate(OB_MAX_VOCAB + 1).is_err());
+        let bad = [0, OB_MAX_VOCAB as u32, 2];
+        assert!(candidate_features(&bad, 1, 1).is_empty());
+        assert!(model.segment_features(&bad, 0, 3, &[]).is_empty());
+        assert!(model.decode_segmentation(&bad).is_none());
+        assert!(observe_clause(&model, &Clause::of(0, bad.to_vec())).is_err());
+        let label = ClauseLabel {
+            seg: 0,
+            subject: (0, 1),
+            marker: (1, 1),
+            object: Some((2, 1)),
+            role: 0,
+            goal: Goal::Office,
+            action: RelAction::Emit,
+        };
+        assert!(fit_observed_text_model(&[Clause::of(0, bad.to_vec())], &[label], false).is_err());
+        // This pair used to alias via the upper token bits entering the adjacent packed field.
+        assert_eq!((1u64 << G_ORDER_SHIFT) | 65536, (1u64 << G_ORDER_SHIFT) | 0);
+        let valid = [u16::MAX as u32, 0];
+        assert!(!model.segment_features(&valid, 0, 2, &[]).is_empty());
+        let mut malformed = model.clone();
+        malformed.segment_weights = vec![(
+            (G_BIGRAM << 40) | ((OB_MAX_VOCAB as u64) << G_ORDER_SHIFT),
+            [0; OB_SEG_ROLES],
+        )];
+        assert!(malformed.validate(OB_MAX_VOCAB).is_err());
+        let rt = runtime(vec![Clause::of(1, vec![10, 20, 21, 30])], None);
+        assert!(rt.start(&Clause::of(999, bad.to_vec())).is_err());
     }
 
     #[test]
@@ -3015,5 +3218,102 @@ mod tests {
         assert!(p.contains(&((G_BIGRAM << 40) | (20 << G_ORDER_SHIFT) | 30)));
         assert!(p.contains(&((G_POS << 40) | 20)));
         assert!(!p.contains(&((G_BIGRAM << 40) | (20 << G_ORDER_SHIFT) | 40)));
+    }
+
+    #[test]
+    fn lexical_membership_matches_identity_but_does_not_replace_role_semantics() {
+        let clauses = vec![
+            Clause {
+                seg: 1,
+                tokens: vec![10, 22, 23, 11],
+                text: "Mara office follows Ivo".into(),
+                byte_lengths: vec![4, 7, 8, 4],
+            },
+            Clause {
+                seg: 2,
+                tokens: vec![12, 20, 21, 30],
+                text: "Ivo works in Fen".into(),
+                byte_lengths: vec![3, 6, 3, 4],
+            },
+        ];
+        let q = Clause {
+            seg: 999,
+            tokens: vec![13, 20, 21],
+            text: "Mara works in".into(),
+            byte_lengths: vec![4, 6, 3],
+        };
+        let primary = runtime(clauses.clone(), None);
+        let old = runtime(clauses.clone(), None)
+            .with_control(TextControl::Membership {
+                entities: vec![vec![12]],
+            })
+            .unwrap();
+        let matched = runtime(clauses.clone(), None)
+            .with_control(TextControl::LexicalMembership {
+                entities: vec![b"Ivo".to_vec()],
+            })
+            .unwrap();
+        let mut old_state = old.start(&q).unwrap();
+        old.run(&mut old_state).unwrap();
+        assert_eq!(old_state.emitted, vec![11]);
+        assert_eq!(old_state.reads, 1); // different token form defeats this historical control
+        let mut state = matched.start(&q).unwrap();
+        assert!(primary.restore(&matched.snapshot(&state).unwrap()).is_err());
+        loop {
+            let saved = matched.snapshot(&state).unwrap();
+            let mut resumed = matched.restore(&saved).unwrap();
+            let mut direct = state.clone();
+            assert_eq!(
+                matched.run(&mut resumed).unwrap(),
+                matched.run(&mut direct).unwrap()
+            );
+            assert_eq!(resumed, direct);
+            if state.terminal.is_some() {
+                break;
+            }
+            matched.step(&mut state).unwrap();
+        }
+        assert_eq!(state.emitted, vec![30]);
+        assert_eq!(state.reads, 2);
+        let mut normal = primary.start(&q).unwrap();
+        primary.run(&mut normal).unwrap();
+        assert_eq!(normal.emitted, state.emitted);
+        assert_eq!(normal.reads, state.reads);
+
+        // Same lexical value Ivo, but now the first record is an assertion. A matched membership
+        // policy still follows it incorrectly: identity normalization cannot learn Emit/Continue.
+        let mut terminal_world = clauses.clone();
+        terminal_world[0] = Clause {
+            seg: 1,
+            tokens: vec![10, 20, 21, 11],
+            text: "Mara works in Ivo".into(),
+            byte_lengths: vec![4, 6, 3, 4],
+        };
+        let terminal_primary = runtime(terminal_world.clone(), None);
+        let terminal_control = runtime(terminal_world, None)
+            .with_control(TextControl::LexicalMembership {
+                entities: vec![b"Ivo".to_vec()],
+            })
+            .unwrap();
+        let mut correct = terminal_primary.start(&q).unwrap();
+        terminal_primary.run(&mut correct).unwrap();
+        assert_eq!(correct.emitted, vec![11]);
+        assert_eq!(correct.reads, 1);
+        let mut overfollowed = terminal_control.start(&q).unwrap();
+        terminal_control.run(&mut overfollowed).unwrap();
+        assert_eq!(overfollowed.emitted, vec![30]);
+        assert_eq!(overfollowed.reads, 2);
+        for invalid_key in [Vec::new(), b" Ivo".to_vec(), b"Ivo ".to_vec()] {
+            assert!(runtime(clauses.clone(), None)
+                .with_control(TextControl::LexicalMembership {
+                    entities: vec![invalid_key]
+                })
+                .is_err());
+        }
+        assert!(runtime(vec![Clause::of(1, vec![10, 20, 21, 30])], None)
+            .with_control(TextControl::LexicalMembership {
+                entities: Vec::new()
+            })
+            .is_err());
     }
 }
