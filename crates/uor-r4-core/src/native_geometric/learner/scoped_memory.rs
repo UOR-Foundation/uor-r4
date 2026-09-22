@@ -3066,7 +3066,14 @@ impl ScopedMemoryRuntime {
     }
 
     pub fn restore(&self, bytes: &[u8]) -> Result<ScopedSession, ScopedMemoryError> {
-        let session: ScopedSession = serde_json::from_slice(bytes)
+        let value: serde_json::Value = serde_json::from_slice(bytes)
+            .map_err(|e| ScopedMemoryError::Serialization(e.to_string()))?;
+        if value["version"] != serde_json::json!(SCOPED_SESSION_VERSION) {
+            return Err(ScopedMemoryError::Session(
+                "unsupported session snapshot version".into(),
+            ));
+        }
+        let session: ScopedSession = serde_json::from_value(value)
             .map_err(|e| ScopedMemoryError::Serialization(e.to_string()))?;
         self.validate(&session)?;
         Ok(session)
@@ -3515,6 +3522,18 @@ mod tests {
         let mut unversioned = serde_json::to_value(&migrated).unwrap();
         unversioned["version"] = serde_json::json!(1);
         assert!(IntentModel::from_bytes(&serde_json::to_vec(&unversioned).unwrap(), 4096).is_err());
+    }
+
+    #[test]
+    fn older_session_versions_report_explicit_incompatibility_before_field_decoding() {
+        let rt = runtime(Memory::new(71, 2), None);
+        for version in [1, 2, 3] {
+            let bytes = serde_json::to_vec(&serde_json::json!({"version": version})).unwrap();
+            assert!(
+                matches!(rt.restore(&bytes), Err(ScopedMemoryError::Session(message))
+                if message == "unsupported session snapshot version")
+            );
+        }
     }
 
     #[test]
