@@ -498,5 +498,19 @@
       ],
       "unchanged_op": "e"
     }
-  ]
+  ],
+  "principal_review": {
+    "source_submission": "711334f50853d48b8a201539c07667014ae81c55",
+    "status": "EXPOSED_RECURRENT_COMPONENT_LEXICAL_MILESTONE_INCOMPLETE",
+    "review": "docs/integration/state-conditioned-lexical-review-2026-09-22.md",
+    "audit": "docs/evidence/state-lexical-principal-audit-2026-09-22.json",
+    "checks": "docs/evidence/state-lexical-principal-checks-2026-09-22.json",
+    "qualifications": [
+      "Original measurements retained; finite0/31 comparison misfitted emitted-count key.",
+      "Insert-slot and Copy-class feedback; no copied-token feedback or post-copy language evidence.",
+      "All computed cases fitting worlds; eight other cases unfamiliar values with familiar forms; finalroot exposed after slx-sweep.",
+      "Computed address inequality is not downstream value inequality or a committed historical mutation.",
+      "LegacyWords loads no lexical artifact; same-candidate preservation incomplete."
+    ]
+  }
 }

@@ -1,4 +1,8 @@
-# Truthful state-conditioned lexical realization — executed result
+# Truthful state-conditioned lexical realization — submitted executed result, qualified by principal review
+
+**PR #1351, principal review:** retain a learned seven-slot ternary recurrent realizer as an exposed component. The submitted 31/31 matches authored targets (23 fitting cases, eight unfamiliar-value cases); every computed contrast is fitted, and all targets put vocabulary before copying. Feedback distinguishes Insert slots but merges all copied tokens into one Copy symbol. The submitted finite reference 0/31 is invalid as a comparison because its training emission count was fixed at zero. Computed `became`/`still` compares route changes on self-valued fixtures; it does not establish truthful temporal mutation. [Principal review](state-conditioned-lexical-review-2026-09-22.md), [independent audit](../evidence/state-lexical-principal-audit-2026-09-22.json) and [corrected checks](../evidence/state-lexical-principal-checks-2026-09-22.json) own the corrected scope. Original artifacts remain preserved.
+
+The remaining sections preserve the submitted interpretation for comparison. In particular, “actual emitted-token feedback,” “truthful” computation language, “source-separated text,” and the cause assigned to finite-table 0/31 are superseded by the principal review. No historical learned artifact or sealed result is rewritten. The current next action is the transferable lexical brief, not immediate executed-Rust expansion.
 
 September 22, 2026. Supersedes the exposed four-word construction in the [PR #1349 submission](grounded-lexical-realization-review-2026-09-22.md) at the exact scope below. Base merge `6295510d20509c2af604781fe374ab0beb477665`; isolated full worktree; owner checkout preserved. Sealed root `.uor-models/realtext-prior-2026-09-20/state-lexical-1`; [evidence summary](../evidence/state-lexical-2026-09-22.json).
 
