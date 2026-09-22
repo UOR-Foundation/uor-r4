@@ -16807,7 +16807,7 @@ fn scm_run() -> Result<ExitCode, String> {
             "cycle": {"complete": cycle.complete, "questions": cycle.questions},
             "save_reload": {"disk_reload_identical": disk_reload_identical,
                 "fresh_process_identical": fresh_process_identical,
-                "child_status": child.status.code()},
+                "child_status": child.status.code(),"raw_text_entry":true,"child":child_json},
         },
         "all_rows": all_rows.len(),
         "elapsed_s": started.elapsed().as_secs_f64(),
@@ -17373,16 +17373,12 @@ fn cgs_worlds(
     scope: &'static str,
     redirect_at: usize,
 ) -> Vec<CgsWorld> {
-    let mut assignment: Vec<usize> = match id_base {
-        0 => vec![0, 3, 5, 7],
-        _ => vec![1, 4, 6, 2],
+    // Preserve the actually evaluated worlds: the former equal-length test overrode
+    // both development assignments because both people arrays have length four.
+    let assignment = match id_base {
+        4 => vec![0, 5, 2, 7],
+        _ => vec![6, 1, 4, 3],
     };
-    if people.len() == CGS_FINAL_PEOPLE.len() {
-        assignment = match id_base {
-            4 => vec![0, 5, 2, 7],
-            _ => vec![6, 1, 4, 3],
-        };
-    }
     let mut office: Vec<Option<usize>> = (0..8).map(Some).collect();
     // One label redirects to another label, so a derived read can require a second hop.
     office[redirect_at] = None;
@@ -17486,18 +17482,39 @@ fn cgs_reload_check(dir: &std::path::Path) -> Result<ExitCode, String> {
         Some(CGS_EOS),
     )
     .map_err(|e| e.to_string())?;
-    let clause: Clause =
-        serde_json::from_value(request["clause"].clone()).map_err(|e| e.to_string())?;
-    let scope = request["scope"].as_str().unwrap_or_default();
+    let object = request.as_object().ok_or("request must be an object")?;
+    if object.keys().any(|k| k != "text" && k != "scope") {
+        return Err("raw request contains fields beyond text and scope".into());
+    }
+    let text = request["text"].as_str().ok_or("missing raw request text")?;
+    let scope = request["scope"].as_str().ok_or("missing request scope")?;
+    let tb = std::fs::read(DEFAULT_TOKENIZER).map_err(|e| e.to_string())?;
+    if sha256_hex(&tb) != TOKENIZER_SHA {
+        return Err("tokenizer sha mismatch".into());
+    }
+    let tokenizer = derive_tokenizer(&tb, VOCAB).map_err(|e| e.to_string())?;
+    let clause = scm_raw_clause(&tokenizer, text)?;
     let mut session = runtime
         .ask(&clause, scope.as_bytes())
         .map_err(|e| e.to_string())?;
     runtime.run(&mut session).map_err(|e| e.to_string())?;
+    let snapshots: Vec<Vec<u8>> = serde_json::from_slice(
+        &std::fs::read(dir.join("checkpoints.json")).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let mut resumed = Vec::new();
+    for bytes in snapshots {
+        let mut restored = runtime.restore(&bytes).map_err(|e| e.to_string())?;
+        let phase = restored.pending;
+        runtime.run(&mut restored).map_err(|e| e.to_string())?;
+        resumed.push(json!({"phase":phase,"matches":restored == session,
+            "emitted":restored.emitted,"terminal":restored.terminal,"computed":restored.computation,"final_frame":restored}));
+    }
     println!(
         "{}",
         serde_json::to_string(&serde_json::json!({
             "emitted": session.emitted, "terminal": session.terminal, "hop": session.hop,
-            "computed": session.computation,
+            "computed": session.computation, "resumed":resumed,"final_frame":session,
         }))
         .map_err(|e| e.to_string())?
     );
@@ -17506,68 +17523,188 @@ fn cgs_reload_check(dir: &std::path::Path) -> Result<ExitCode, String> {
 
 /// Rebuild a computation artifact from its serialized identity (used by the fresh-process reload).
 fn cgs_backend_from_json(value: &serde_json::Value) -> Result<ComputationBackend, String> {
-    let name = value["name"].as_str().unwrap_or_default();
-    let read_u32 = |key: &str| -> Result<Vec<u32>, String> {
-        value[key]
-            .as_array()
-            .ok_or_else(|| format!("missing {key}"))?
-            .iter()
-            .map(|v| {
-                v.as_u64()
-                    .map(|n| n as u32)
-                    .ok_or_else(|| "bad integer".into())
-            })
-            .collect()
-    };
-    let read_u8 = |key: &str| -> Result<Vec<u8>, String> {
-        value[key]
-            .as_array()
-            .ok_or_else(|| format!("missing {key}"))?
-            .iter()
-            .map(|v| v.as_u64().map(|n| n as u8).ok_or_else(|| "bad byte".into()))
-            .collect()
-    };
-    let factorization = GroundedFactorization {
-        cyclic: false,
-        action_domain: read_u32("action_domain")?,
-        action_code: read_u8("action_code")?,
-        outcome_domain: read_u32("outcome_domain")?,
-        outcome_state: read_u8("outcome_state")?,
-        payload_domain: read_u32("payload_domain")?,
-        payload_state: read_u8("payload_state")?,
-        reference_outcome: 0,
-    };
-    match name {
-        "signed_factorization" => Ok(ComputationBackend::Signed(Box::new(factorization))),
-        "folded_central_sign" => {
-            let folded = FoldedGroup::recover(&factorization).map_err(|e| e.to_string())?;
-            Ok(ComputationBackend::Folded(
-                Box::new(factorization),
-                Box::new(folded),
-            ))
+    ComputationBackend::from_identity_json(value).map_err(|e| e.to_string())
+}
+
+/// Exposed preservation audit: both artifacts receive the same raw prior conversation scripts.
+/// Errors are retained per turn; a failed parser cannot shorten the denominator.
+fn cgs_prior_lifecycle(
+    tokenizer: &HfBpeTokenizer,
+    model: &[u8],
+    intent: &[u8],
+    lexicon: &[u8],
+    backend: &ComputationBackend,
+    artifact: &str,
+) -> Result<serde_json::Value, String> {
+    let mut rows = Vec::new();
+    let (mut questions, mut matched, mut language_questions, mut api_questions) = (0, 0, 0, 0);
+    let (mut ingest_total, mut ingest_correct, mut errors) = (0, 0, 0);
+    for (name, script) in [
+        ("development", scm_development_script()),
+        ("exposed_regression", scm_exposed_script()),
+        ("final_lexical_exposed", scm_final_script()),
+    ] {
+        let mut runtime = ScopedMemoryRuntime::load_with_computation(
+            model,
+            intent,
+            Some(lexicon),
+            backend.clone(),
+            Memory::new(801, 8),
+            801,
+            MemoryControl::Normal,
+            VOCAB,
+            Some(CGS_EOS),
+        )
+        .map_err(|e| format!("preservation load {artifact}: {e}"))?;
+        let mut oracle = ScmOracle::new(8);
+        for (turn, op) in script.iter().enumerate() {
+            match *op {
+                ScmOp::Ingest {
+                    scope,
+                    form,
+                    entity,
+                    value,
+                } => {
+                    let text = scm_clause(tokenizer, turn as u32, form, entity, Some(value))?
+                        .0
+                        .text;
+                    let clause = scm_raw_clause(tokenizer, &text)?;
+                    let expected_write = oracle.declared(scope, form, entity, value);
+                    let declared_intent = if form.is_question() {
+                        form.declared_question_intent()
+                    } else {
+                        form.declared_statement_intent()
+                    };
+                    let observed = runtime.observe(&clause);
+                    let observation_ok = observed.as_ref().is_ok_and(|o| {
+                        o.is_question == form.is_question()
+                            && Some(o.intent) == declared_intent
+                            && o.relation == form.relation()
+                            && o.entity_key == entity.as_bytes()
+                            && o.continues == form.is_redirect()
+                            && (!expected_write || o.value_key.as_deref() == Some(value.as_bytes()))
+                    });
+                    let observed_json = match &observed {
+                        Ok(o) => json!({"entity":String::from_utf8_lossy(&o.entity_key),
+                            "value":o.value_key.as_ref().map(|v|String::from_utf8_lossy(v).into_owned()),
+                            "relation":o.relation,"intent":o.intent,"is_question":o.is_question,"continues":o.continues}),
+                        Err(e) => json!({"error":e.to_string()}),
+                    };
+                    let outcome =
+                        runtime.ingest(&clause, SCM_SCOPES[scope as usize].as_bytes(), turn as u64);
+                    let wrote = matches!(&outcome, Ok(IngestOutcome::Wrote(_)));
+                    let ok = observation_ok && outcome.is_ok() && wrote == expected_write;
+                    ingest_total += 1;
+                    ingest_correct += usize::from(ok);
+                    errors += usize::from(outcome.is_err());
+                    rows.push(json!({"artifact":artifact,"script":name,"turn":turn,"kind":"ingest",
+                        "text":text,"scope":SCM_SCOPES[scope as usize],"expected_write":expected_write,
+                        "observed":observed_json,"wrote":wrote,"observation_and_write_match":ok,
+                        "error":outcome.as_ref().err().map(|e|e.to_string())}));
+                }
+                _ => {
+                    let (scope, entity, relation, history, kind, text, start) = match *op {
+                        ScmOp::Ask {
+                            scope,
+                            form,
+                            entity,
+                        } => {
+                            let text = scm_clause(tokenizer, turn as u32, form, entity, None)?
+                                .0
+                                .text;
+                            let clause = scm_raw_clause(tokenizer, &text)?;
+                            let start = runtime.ask(&clause, SCM_SCOPES[scope as usize].as_bytes());
+                            language_questions += 1;
+                            (
+                                scope,
+                                entity,
+                                form.relation(),
+                                form.history().ok_or("history missing")?,
+                                "ask",
+                                text,
+                                start,
+                            )
+                        }
+                        ScmOp::AskView {
+                            scope,
+                            entity,
+                            relation,
+                            history,
+                        } => {
+                            api_questions += 1;
+                            let start = runtime.ask_view(
+                                SCM_SCOPES[scope as usize].as_bytes(),
+                                relation,
+                                entity.as_bytes(),
+                                history,
+                            );
+                            (
+                                scope,
+                                entity,
+                                relation,
+                                history,
+                                "ask_view",
+                                format!("exact {history:?} of {entity:?} relation {relation}"),
+                                start,
+                            )
+                        }
+                        ScmOp::Ingest { .. } => return Err("unexpected ingest branch".into()),
+                    };
+                    let expected = oracle.answer(scope, entity, relation, history, oracle.commit);
+                    let actual = start.and_then(|mut session| {
+                        let effects = runtime.run(&mut session)?;
+                        Ok((session, effects))
+                    });
+                    questions += 1;
+                    let (ok, answer, terminal, frame, effects, error) = match actual {
+                        Ok((session, effects)) => {
+                            let answer = cgs_text(tokenizer, &session);
+                            let ok = match (&expected, session.terminal) {
+                                (
+                                    ScmExpected::Complete { value, hops },
+                                    Some(ScopedTerminal::Complete),
+                                ) => answer == *value && session.hop + 1 == *hops,
+                                (_, Some(terminal)) => terminal == scm_terminal_of(&expected),
+                                _ => false,
+                            };
+                            (
+                                ok,
+                                answer,
+                                serde_json::to_value(session.terminal)
+                                    .map_err(|e| e.to_string())?,
+                                serde_json::to_value(session).map_err(|e| e.to_string())?,
+                                serde_json::to_value(effects).map_err(|e| e.to_string())?,
+                                None,
+                            )
+                        }
+                        Err(e) => {
+                            errors += 1;
+                            (
+                                false,
+                                String::new(),
+                                json!(null),
+                                json!(null),
+                                json!([]),
+                                Some(e.to_string()),
+                            )
+                        }
+                    };
+                    matched += usize::from(ok);
+                    rows.push(json!({"artifact":artifact,"script":name,"turn":turn,"kind":kind,
+                        "text":text,"scope":SCM_SCOPES[scope as usize],"expected":format!("{expected:?}"),
+                        "matched":ok,"answer":answer,"terminal":terminal,"final_frame":frame,
+                        "effects":effects,"error":error}));
+                }
+            }
         }
-        "tabulated_finite" => {
-            let rows = value["action_perm"]
-                .as_array()
-                .ok_or("missing action_perm")?
-                .iter()
-                .map(|row| {
-                    row.as_array()
-                        .ok_or("bad action_perm row".to_string())?
-                        .iter()
-                        .map(|v| v.as_u64().map(|n| n as u8).ok_or("bad byte".to_string()))
-                        .collect::<Result<Vec<u8>, String>>()
-                })
-                .collect::<Result<Vec<Vec<u8>>, String>>()?;
-            Ok(ComputationBackend::Tabulated(Box::new(TabulatedControl {
-                value_domain: read_u32("value_domain")?,
-                value_state: read_u8("value_state")?,
-                action_domain: read_u32("action_domain")?,
-                action_perm: rows,
-            })))
-        }
-        other => Err(format!("unsupported artifact in reload: {other}")),
     }
+    Ok(
+        json!({"artifact":artifact,"questions":questions,"matched":matched,
+        "language_questions":language_questions,"api_questions":api_questions,
+        "ingest_total":ingest_total,"ingest_observation_and_write_correct":ingest_correct,
+        "errors":errors,"all_preserved":matched==questions && ingest_correct==ingest_total && errors==0,
+        "rows":rows}),
+    )
 }
 
 fn cgs_run() -> Result<ExitCode, String> {
@@ -17653,6 +17790,15 @@ fn cgs_run() -> Result<ExitCode, String> {
         TabulatedControl::fit(&examples).map_err(|e| format!("tabulated control: {e}"))?,
     ));
 
+    // Every compared computation backend is independently serialized and loaded below.
+    for backend in [&signed, &folded, &finite, &tabulated] {
+        write_json(
+            &root,
+            &format!("artifacts/backend-{}.json", backend.name()),
+            &backend.identity_json(),
+        )?;
+    }
+
     // ---- the learned lexicon over exact lexical bytes ----
     let mut surface: Vec<(Vec<u8>, u32)> = CGS_OPS
         .iter()
@@ -17726,11 +17872,17 @@ fn cgs_run() -> Result<ExitCode, String> {
                 backend: &ComputationBackend|
      -> Result<ScopedMemoryRuntime, String> {
         let lineage = memory.lineage;
+        let serialized: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(root.join(format!("artifacts/backend-{}.json", backend.name())))
+                .map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        let loaded_backend = cgs_backend_from_json(&serialized)?;
         ScopedMemoryRuntime::load_with_computation(
             &model_bytes,
             &intent_bytes,
             Some(&lexicon_bytes),
-            backend.clone(),
+            loaded_backend,
             memory,
             lineage,
             control,
@@ -17872,7 +18024,7 @@ fn cgs_run() -> Result<ExitCode, String> {
     fresh_rt
         .run(&mut restored)
         .map_err(|e| format!("resume run: {e}"))?;
-    let resume_ok = restored.emitted == s_ij.emitted && restored.terminal == s_ij.terminal;
+    let resume_ok = restored == s_ij;
 
     // (6) A real disk reload and a separate process reproduce the same answer.
     let reload_dir = root.join("reload");
@@ -17889,15 +18041,25 @@ fn cgs_run() -> Result<ExitCode, String> {
     write_json(
         &root,
         "reload/request.json",
-        &serde_json::json!({"clause": q_ij, "scope": scope}),
+        &serde_json::json!({"text": q_ij.text, "scope": scope}),
     )?;
+    let mut phase = rt.ask(&q_ij, scope.as_bytes()).map_err(|e| e.to_string())?;
+    let mut snapshots = Vec::<Vec<u8>>::new();
+    loop {
+        snapshots.push(rt.snapshot(&phase).map_err(|e| e.to_string())?);
+        if phase.terminal.is_some() {
+            break;
+        }
+        rt.step(&mut phase).map_err(|e| e.to_string())?;
+    }
+    write_json(&root, "reload/checkpoints.json", &json!(snapshots))?;
     let disk_memory = Memory::from_bytes(
         &std::fs::read(root.join("reload/store.json")).map_err(|e| e.to_string())?,
     )
     .map_err(|e| format!("{e}"))?;
     let disk_rt = load(disk_memory, MemoryControl::Normal, &signed)?;
-    let (a_disk, t_disk, c_disk, _) = cgs_ask(&tokenizer, &disk_rt, &q_ij, scope)?;
-    let disk_ok = a_disk == a_ij && t_disk == t_ij && c_disk == c_ij;
+    let (a_disk, t_disk, c_disk, s_disk) = cgs_ask(&tokenizer, &disk_rt, &q_ij, scope)?;
+    let disk_ok = a_disk == a_ij && t_disk == t_ij && c_disk == c_ij && s_disk == s_ij;
     let child = std::process::Command::new(
         std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?,
     )
@@ -17912,7 +18074,13 @@ fn cgs_run() -> Result<ExitCode, String> {
     let child_ok = child.status.success()
         && child_json["emitted"] == serde_json::json!(s_ij.emitted)
         && child_json["terminal"]
-            == serde_json::to_value(s_ij.terminal).map_err(|e| e.to_string())?;
+            == serde_json::to_value(s_ij.terminal).map_err(|e| e.to_string())?
+        && child_json["final_frame"] == json!(s_ij)
+        && child_json["computed"] == json!(s_ij.computation)
+        && child_json["hop"] == json!(s_ij.hop)
+        && child_json["resumed"].as_array().is_some_and(|rs| {
+            rs.len() == snapshots.len() && rs.iter().all(|r| r["matches"] == json!(true))
+        });
 
     // ---- ordinary memory lifecycle through the learned path (preservation panel) ----
     let ordinary = cgs_ordinary(
@@ -17921,6 +18089,35 @@ fn cgs_run() -> Result<ExitCode, String> {
         &intent_bytes,
         &lexicon_bytes,
         &signed,
+    )?;
+
+    // Test the actual new artifact against every prior primary interaction, not the two-assertion smoke.
+    let preservation = cgs_prior_lifecycle(
+        &tokenizer,
+        &model_bytes,
+        &intent_bytes,
+        &lexicon_bytes,
+        &signed,
+        "new_computation_artifact",
+    )?;
+    let prior_root = PathBuf::from("/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/scoped-memory-principal-3");
+    let prior_model =
+        std::fs::read(prior_root.join("artifacts/binder.json")).map_err(|e| e.to_string())?;
+    let prior_intent =
+        std::fs::read(prior_root.join("artifacts/intent.json")).map_err(|e| e.to_string())?;
+    let prior_preservation = cgs_prior_lifecycle(
+        &tokenizer,
+        &prior_model,
+        &prior_intent,
+        &lexicon_bytes,
+        &signed,
+        "prior_v1_intent_migrated",
+    )?;
+    write_json(
+        &root,
+        "preservation.json",
+        &json!({"candidate":preservation,"prior_migrated":prior_preservation,
+        "prior_model_sha256":sha256_hex(&prior_model),"prior_intent_sha256":sha256_hex(&prior_intent)}),
     )?;
 
     let consumption = serde_json::json!({
@@ -17942,7 +18139,7 @@ fn cgs_run() -> Result<ExitCode, String> {
             "consumed": c_skip.as_ref().map(|c| c.consumed)},
         "resume": {"mid": mid_state, "identical": resume_ok},
         "reload": {"disk": disk_ok, "fresh_process": child_ok,
-            "child_status": child.status.code()},
+            "child_status": child.status.code(),"raw_text_entry":true,"child":child_json},
     });
 
     let checks = serde_json::json!({
@@ -17954,18 +18151,25 @@ fn cgs_run() -> Result<ExitCode, String> {
         "fold_loses_the_order_distinction": fc_ij.as_ref().map(|c| c.derived_key.clone())
             == fc_ji.as_ref().map(|c| c.derived_key.clone()),
         "identity_unchanged": identity_ok,
-        "consume_disabled_changes_answer": !c_skip.as_ref().is_some_and(|c| c.consumed),
+        "consume_disabled_changes_answer": a_skip != a_ij && t_skip == t_ij
+            && !c_skip.as_ref().is_some_and(|c| c.consumed)
+            && c_skip.as_ref().map(|c| c.state) == c_ij.as_ref().map(|c| c.state),
         "owned_resume_identical": resume_ok,
         "disk_reload_identical": disk_ok,
         "fresh_process_identical": child_ok,
-        "ordinary_lifecycle": ordinary["ok"] == serde_json::json!(true),
+        "ordinary_smoke": ordinary["ok"] == serde_json::json!(true),
+        "prior_model_migration_preserves_lifecycle": prior_preservation["all_preserved"] == json!(true),
     });
     let all_expected = checks
         .as_object()
         .map(|m| m.values().all(|v| v == &serde_json::json!(true)))
         .unwrap_or(false);
     let result = serde_json::json!({
-        "schema": "uor-r4.consumed-geometric-state/1",
+        "schema": "uor-r4.consumed-geometric-state/2",
+        "evaluation_scope": "Corrected exposed replay; selected final first appeared before design/comparator selection. Prior same-artifact lifecycle measured separately, not included in computation-component success.",
+        "same_artifact_lifecycle_preserved": preservation["all_preserved"],
+        "same_artifact_lifecycle_matches": preservation["matched"],
+        "integration_complete": all_expected && preservation["all_preserved"] == json!(true),
         "base": "origin/main b5d36c9b8318e4fe2084ef49cc75cff55c1b2b6f",
         "running_source": {
             "git_rev": std::env::var("UOR_GIT_REV").unwrap_or_else(|_| "unset".into()),
@@ -17993,6 +18197,7 @@ fn cgs_run() -> Result<ExitCode, String> {
         "controls": controls,
         "consumption": consumption,
         "ordinary_lifecycle": ordinary,
+        "all_backend_arms_loaded_from_saved_artifacts": true,
         "checks": checks,
         "checks_all_expected": all_expected,
         "all_rows": all_rows.len(),
@@ -18013,32 +18218,7 @@ fn cgs_run() -> Result<ExitCode, String> {
 }
 
 fn backend_identity_json(backend: &ComputationBackend) -> serde_json::Value {
-    match backend {
-        ComputationBackend::Signed(f) | ComputationBackend::Folded(f, _) => serde_json::json!({
-            "name": backend.name(),
-            "action_domain": f.action_domain,
-            "action_code": f.action_code,
-            "outcome_domain": f.outcome_domain,
-            "outcome_state": f.outcome_state,
-            "payload_domain": f.payload_domain,
-            "payload_state": f.payload_state,
-        }),
-        ComputationBackend::Finite(m) => serde_json::json!({
-            "name": backend.name(),
-            "value_domain": m.value_domain,
-            "value_state": m.value_state,
-            "action_domain": m.action_domain,
-            "action_code": m.action_code,
-        }),
-        ComputationBackend::Tabulated(table) => serde_json::json!({
-            "name": backend.name(),
-            "value_domain": table.value_domain,
-            "value_state": table.value_state,
-            "action_domain": table.action_domain,
-            "action_perm": table.action_perm,
-        }),
-        ComputationBackend::Absent => serde_json::json!({"name": "absent"}),
-    }
+    backend.identity_json()
 }
 
 /// Ask one request and return (emitted text, terminal, computed result).
