@@ -85,6 +85,13 @@ Learned ingest: **48/48** observed world assertions committed with the declared 
 and continuation, and **0** row disagreements against the typed-record comparator on every evaluated
 request.
 
+**Saved-state continuation.** Ten checkpoint phases (`Read`, three `Apply`, `Read`, three `Emit`,
+two `Stop`) are restored in a **separate process** from the persisted store and raw request text, and
+every phase reproduces the complete final frame — covering before the computation starts, during a
+nonempty operation sequence, after grounding and before consumption, and after the later source capture.
+An in-process restored runtime mid-operation-sequence also finishes identically, and a disk reload
+reproduces the same answer.
+
 **Mixed session, 7/7 checks:** 12/12 ingest, 6/6 ordinary and historical questions, 2/2 computations,
 3/3 post-correction questions, 3/3 after reload; the pinned in-flight answer stayed `Quarry` across a
 correction whose fresh answers read `Harbor`; the question-offered-as-input committed nothing.

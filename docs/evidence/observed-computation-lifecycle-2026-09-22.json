@@ -3403,6 +3403,29 @@
       }
     ]
   },
+  "saved_state_restore": {
+    "covers": [
+      "before the computation starts",
+      "during a nonempty operation sequence (after each applied operation)",
+      "after grounding and before consumption",
+      "after the later source capture"
+    ],
+    "disk_reload": true,
+    "every_phase_reproduces_the_complete_final_frame": true,
+    "restore_phases": [
+      "Read",
+      "Apply",
+      "Apply",
+      "Apply",
+      "Read",
+      "Emit",
+      "Emit",
+      "Emit",
+      "Stop",
+      "Stop"
+    ],
+    "separate_process": true
+  },
   "schema": "uor-r4.observed-computation-lifecycle-evidence/1",
   "scope": "authored ordinary readable requests over a small declared state world; one loaded path consumes a shared finite computation whose grounded result selects the next exact read. Not broad language understanding, general reasoning, frontier capability or a whole-program dictionary. Energy UNAVAILABLE; whole-path D0-b not claimed.",
   "step": "one learned observed-text artifact composing ordinary scoped memory with the retained consumed geometric computation",

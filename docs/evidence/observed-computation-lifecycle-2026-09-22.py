@@ -120,6 +120,22 @@ def main():
             "reload": mixed["reload"],
             "pinned_answer": mixed["pinned_answer"],
         },
+        "saved_state_restore": {
+            "separate_process": result["consumption"]["reload"]["fresh_process"],
+            "disk_reload": result["consumption"]["reload"]["disk"],
+            "restore_phases": [
+                r["phase"] for r in result["consumption"]["reload"]["child"]["resumed"]
+            ],
+            "every_phase_reproduces_the_complete_final_frame": all(
+                r["matches"] for r in result["consumption"]["reload"]["child"]["resumed"]
+            ),
+            "covers": [
+                "before the computation starts",
+                "during a nonempty operation sequence (after each applied operation)",
+                "after grounding and before consumption",
+                "after the later source capture",
+            ],
+        },
         "learned_ingest": {
             "receipts": len(ingest["receipts"]),
             "all_committed": ingest["all_committed"],
