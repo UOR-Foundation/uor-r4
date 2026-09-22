@@ -16585,6 +16585,12 @@ fn scm_run() -> Result<ExitCode, String> {
             entity: "Cedar",
             value: "Oren",
         },
+        ScmOp::Ingest {
+            scope: 0,
+            form: ScmForm::CorrectOffice,
+            entity: "Ivo",
+            value: "Cedar Annex",
+        },
         ScmOp::Ask {
             scope: 0,
             form: ScmForm::AskPreviousOffice,
@@ -16620,7 +16626,7 @@ fn scm_run() -> Result<ExitCode, String> {
         .collect();
     let historical_ok = historical.complete == 3
         && historical.questions == 3
-        && historical_answers == ["Fen", "Fen", "Office Park"];
+        && historical_answers == ["Cedar Annex", "Cedar Annex", "Office Park"];
     all_rows.extend(historical.rows);
 
     // ---- save / reload ----

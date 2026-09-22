@@ -527,6 +527,27 @@ impl Memory {
     /// Exact lookup under one pinned view. Version order alone decides eligibility; a parse score or a
     /// physical position never does.
     pub fn lookup(&self, key: &[u8], view: u64, history: HistoryView) -> Lookup<'_> {
+        // Preserve the declared conservative public policy: a previous-distinct query does not
+        // traverse a released predecessor. Internal identity verification still uses its retained
+        // lexical metadata so an already-owned historical capture survives later eviction.
+        if history == HistoryView::PreviousDistinctValue {
+            let mut visible = self
+                .chain(key)
+                .iter()
+                .rev()
+                .filter_map(|id| self.record_ref(*id))
+                .filter(|record| record.commit <= view);
+            if let Some(head) = visible.next() {
+                for previous in visible {
+                    if previous.evicted {
+                        return Lookup::Evicted;
+                    }
+                    if previous.value != head.value {
+                        break;
+                    }
+                }
+            }
+        }
         match self.lookup_identity(key, view, history) {
             Lookup::Found(record) if record.evicted => Lookup::Evicted,
             result => result,
@@ -904,9 +925,22 @@ impl ScopedSession {
         let Some(capture) = &self.captured else {
             return false;
         };
-        // The capture stores its exact record key; the value is the payload, not the address.
+        if memory.lineage != self.binding.lineage
+            || memory.history_sha256(self.view).ok().as_deref() != Some(self.view_sha256.as_str())
+        {
+            return false;
+        }
+        // IDs are scoped to committed history; a foreign store can reuse the same integer ID.
         match memory.head(&capture.key) {
-            Lookup::Found(record) => record.id == capture.record_id,
+            Lookup::Found(record) => {
+                record.id == capture.record_id
+                    && record.commit == capture.commit
+                    && encode_key(&record.scope, &record.entity, record.relation) == capture.key
+                    && record.value == capture.value
+                    && record.continues == capture.continues
+                    && record.payload == capture.payload
+                    && record.payload_sha256 == payload_sha256(&capture.payload)
+            }
             _ => false,
         }
     }
@@ -986,14 +1020,15 @@ impl ScopedMemoryRuntime {
             .map_err(|e| ScopedMemoryError::Model(e.to_string()))?;
         let intent = IntentModel::from_bytes(intent_bytes, max_vocab)?;
         memory.validate()?;
-        if eos.is_some_and(|token| token as usize >= max_vocab)
-            || memory
-                .records
-                .iter()
-                .any(|r| r.payload.iter().any(|t| *t as usize >= max_vocab))
+        // EOS is an explicitly bound protocol terminator and may be outside the lexical vocabulary.
+        // Owned source payloads must still consist entirely of valid lexical token IDs.
+        if memory
+            .records
+            .iter()
+            .any(|r| r.payload.iter().any(|t| *t as usize >= max_vocab))
         {
             return Err(ScopedMemoryError::Store(
-                "stored token or EOS outside vocabulary".into(),
+                "stored token outside vocabulary".into(),
             ));
         }
         let binding = MemoryBinding {
@@ -2143,5 +2178,116 @@ mod tests {
             .write(b"alpha", b"Ova", 0, b"A", &[1], 1, Update::Assert, false, 0)
             .is_err());
         assert_eq!(saturated, before);
+    }
+
+    #[test]
+    fn public_previous_distinct_keeps_eviction_barrier_for_equal_tombstone() {
+        let mut memory = Memory::new(18, 1);
+        write(&mut memory, "Ova", "A", Update::Assert);
+        write(&mut memory, "Ova", "A", Update::Assert);
+        let key = encode_key(b"alpha", b"Ova", 0);
+        assert!(matches!(
+            memory.lookup(&key, memory.commit, HistoryView::PreviousDistinctValue),
+            Lookup::Evicted
+        ));
+        assert!(matches!(
+            memory.lookup_identity(&key, memory.commit, HistoryView::PreviousDistinctValue),
+            Lookup::NoHistory
+        ));
+    }
+
+    #[test]
+    fn owned_previous_distinct_capture_survives_new_public_eviction_barrier() {
+        let mut memory = Memory::new(19, 2);
+        write(&mut memory, "Ova", "A", Update::Assert);
+        write(&mut memory, "Ova", "B", Update::Correct);
+        let mut runtime = runtime(memory, None);
+        let mut session = runtime
+            .ask_view(b"alpha", 0, b"Ova", HistoryView::PreviousDistinctValue)
+            .unwrap();
+        runtime.step(&mut session).unwrap();
+        assert_eq!(session.captured.as_ref().unwrap().record_id, 1);
+        let snapshot = runtime.snapshot(&session).unwrap();
+        write(&mut runtime.memory, "Ova", "B", Update::Correct);
+        assert!(matches!(
+            runtime.memory.lookup(
+                &encode_key(b"alpha", b"Ova", 0),
+                session.view,
+                HistoryView::PreviousDistinctValue
+            ),
+            Lookup::Evicted
+        ));
+        let mut restored = runtime.restore(&snapshot).unwrap();
+        runtime.run(&mut restored).unwrap();
+        assert_eq!(restored.terminal, Some(ScopedTerminal::Complete));
+        assert_eq!(restored.emitted, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn origin_liveness_checks_lineage_history_and_owned_contents() {
+        let mut memory = Memory::new(20, 2);
+        write(&mut memory, "Ova", "A", Update::Assert);
+        write(&mut memory, "Rin", "B", Update::Assert);
+        let runtime = runtime(memory.clone(), None);
+        let mut session = runtime
+            .ask_view(b"alpha", 0, b"Ova", HistoryView::Current)
+            .unwrap();
+        runtime.step(&mut session).unwrap();
+        assert!(session.origin_is_live(&memory));
+
+        let mut foreign_lineage = memory.clone();
+        foreign_lineage.lineage += 1;
+        assert!(!session.origin_is_live(&foreign_lineage));
+        let mut foreign_history = memory.clone();
+        foreign_history.records[1].value = b"different".to_vec();
+        assert!(!session.origin_is_live(&foreign_history));
+        let mut changed_payload = memory.clone();
+        changed_payload.records[0].payload[0] = 9;
+        assert!(!session.origin_is_live(&changed_payload));
+        let mut changed_capture = session.clone();
+        changed_capture.captured.as_mut().unwrap().value = b"different".to_vec();
+        assert!(!changed_capture.origin_is_live(&memory));
+
+        memory.records.reverse();
+        assert!(session.origin_is_live(&memory));
+        write(&mut memory, "Rin", "C", Update::Correct);
+        assert!(session.origin_is_live(&memory));
+        write(&mut memory, "Ova", "C", Update::Correct);
+        assert!(!session.origin_is_live(&memory));
+    }
+
+    #[test]
+    fn bound_out_of_band_eos_is_valid_but_out_of_vocabulary_payload_is_not() {
+        let mut memory = Memory::new(21, 2);
+        write(&mut memory, "Ova", "A", Update::Assert);
+        let eos = u32::MAX - 1;
+        let runtime = runtime(memory.clone(), Some(eos));
+        let mut session = runtime
+            .ask_view(b"alpha", 0, b"Ova", HistoryView::Current)
+            .unwrap();
+        runtime.run(&mut session).unwrap();
+        assert_eq!(session.emitted, vec![1, 2, 3, eos]);
+        assert_eq!(
+            runtime
+                .restore(&runtime.snapshot(&session).unwrap())
+                .unwrap(),
+            session
+        );
+        let mut wrong_eos = session.clone();
+        *wrong_eos.emitted.last_mut().unwrap() = eos - 1;
+        assert!(runtime.validate(&wrong_eos).is_err());
+
+        memory.records[0].payload = vec![4096];
+        memory.records[0].payload_sha256 = payload_sha256(&memory.records[0].payload);
+        assert!(ScopedMemoryRuntime::load(
+            &ObservedTextModel::uninformed().to_bytes().unwrap(),
+            &IntentModel::uninformed().to_bytes().unwrap(),
+            memory,
+            21,
+            MemoryControl::Normal,
+            4096,
+            Some(eos),
+        )
+        .is_err());
     }
 }
