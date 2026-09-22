@@ -21369,9 +21369,9 @@ fn slx_slot_of(slots: &[u32], token: u32) -> Result<u8, String> {
         .ok_or_else(|| format!("declared response word {token} is not a learned slot"))
 }
 
-/// The declared, truthful response sentence for one meaning. Past tense follows a **historical
-/// request**; `became` is used only when the consumed computation actually changed which office
-/// applies; `still` reports that it did not. A reasserted same value needs no different wording.
+/// Historical authored target sentences, retained for exposed replay. Current/history wording is
+/// explicit; computed `became`/`still` distinguish route keys on self-valued fixtures, not a
+/// committed temporal change. These targets do not constitute an independent semantic oracle.
 fn slx_render(view: SlxView, derived: bool, changed: bool, value: &str) -> String {
     match (view, derived) {
         (SlxView::Initial, false) => format!("at first it was {value}"),
@@ -21550,9 +21550,8 @@ fn slx_load(
     .map_err(|e| e.to_string())
 }
 
-/// The independent semantic oracle: from the requested view and the *actual* computation effect it
-/// returns the token sequence the declared language requires. It reads the meaning from the selected
-/// record and the consumed result, never from the decoder's own flags.
+/// Historical fixture target membership. Shares target design with `slx_render`; it does not
+/// independently establish truthful meaning for arbitrary downstream computed values.
 fn slx_oracle(
     slots: &[u32],
     view: SlxView,
@@ -21728,6 +21727,8 @@ fn slx_case(
         "learned_stop": stop_from_table,
         "stop_steps": stop_total,
         "sl_state_len": session.sl_state.len(),
+        "final_session": session,
+        "effects": effects,
         "text": cgs_text(tokenizer, &session),
     }))
 }
@@ -21754,6 +21755,7 @@ fn slx_run() -> Result<ExitCode, String> {
     );
     let mut source_root: Option<PathBuf> = None;
     let mut reload_dir: Option<PathBuf> = None;
+    let mut reuse_root: Option<PathBuf> = None;
     {
         let mut a = std::env::args().skip(1);
         while let Some(k) = a.next() {
@@ -21761,6 +21763,9 @@ fn slx_run() -> Result<ExitCode, String> {
                 "--root" => root = PathBuf::from(a.next().ok_or("--root value")?),
                 "--source-root" => source_root = Some(PathBuf::from(a.next().ok_or("value")?)),
                 "--reload-check" => reload_dir = Some(PathBuf::from(a.next().ok_or("value")?)),
+                "--reuse-artifact-root" => {
+                    reuse_root = Some(PathBuf::from(a.next().ok_or("value")?))
+                }
                 other if other.starts_with("--mode") => {}
                 other => return Err(format!("unknown argument {other}")),
             }
@@ -21960,37 +21965,69 @@ fn slx_run() -> Result<ExitCode, String> {
         stop_weight: slx_env_f32("SLX_STOP", 4.0),
         insert_weight: slx_env_f32("SLX_INS", 2.0),
     };
-    let tries = slx_env_usize("SLX_TRIES", 12);
-    let mut best: Option<SlFitOutcome> = None;
-    for k in 0..tries {
-        let mut attempt = cfg;
-        attempt.seed = cfg
-            .seed
-            .wrapping_add((k as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
-        let out = fit_state_lexical(
-            &fit_sequences,
-            VOCAB,
-            slots.clone(),
-            SLX_MAX_INSERT,
-            &attempt,
-        )
-        .map_err(|e| format!("state-lexical fit: {e}"))?;
-        // Selection is on the declared *training* objective only; the evaluation cases below are not
-        // consulted. A tiny ternary objective is seed-sensitive, so the best of a few declared seeds
-        // is taken rather than a single draw.
-        let better = match &best {
-            None => true,
-            Some(b) => {
-                out.report.action_correct > b.report.action_correct
-                    || (out.report.action_correct == b.report.action_correct
-                        && out.report.served_loss < b.report.served_loss)
-            }
-        };
-        if better {
-            best = Some(out);
+    let outcome = if let Some(parent) = &reuse_root {
+        let unlisted = verify(parent).map_err(|e| format!("parent seal: {e}"))?;
+        if !unlisted.is_empty() {
+            return Err(format!("parent has unlisted files: {unlisted:?}"));
         }
-    }
-    let outcome = best.ok_or("no state-lexical fit attempt")?;
+        let result: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(parent.join("result.json")).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        for (name, bytes) in [
+            ("model.json", model_bytes.as_slice()),
+            ("intent.json", intent_bytes.as_slice()),
+            ("lexicon.json", lexicon_bytes.as_slice()),
+        ] {
+            if std::fs::read(parent.join("artifacts").join(name)).map_err(|e| e.to_string())?
+                != bytes
+            {
+                return Err(format!("reconstructed parent {name} differs"));
+            }
+        }
+        SlFitOutcome {
+            model: StateLexicalModel::from_bytes(
+                &std::fs::read(parent.join("artifacts/state_lexical.json"))
+                    .map_err(|e| e.to_string())?,
+                VOCAB,
+            )
+            .map_err(|e| e.to_string())?,
+            // Historical diagnostics are preserved as inherited, never labelled as a new fit.
+            report: serde_json::from_value(result["fit"].clone()).map_err(|e| e.to_string())?,
+        }
+    } else {
+        let tries = slx_env_usize("SLX_TRIES", 12);
+        let mut best: Option<SlFitOutcome> = None;
+        for k in 0..tries {
+            let mut attempt = cfg;
+            attempt.seed = cfg
+                .seed
+                .wrapping_add((k as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+            let out = fit_state_lexical(
+                &fit_sequences,
+                VOCAB,
+                slots.clone(),
+                SLX_MAX_INSERT,
+                &attempt,
+            )
+            .map_err(|e| format!("state-lexical fit: {e}"))?;
+            // Selection is on the declared *training* objective only; the evaluation cases below are not
+            // consulted. A tiny ternary objective is seed-sensitive, so the best of a few declared seeds
+            // is taken rather than a single draw.
+            let better = match &best {
+                None => true,
+                Some(b) => {
+                    out.report.action_correct > b.report.action_correct
+                        || (out.report.action_correct == b.report.action_correct
+                            && out.report.served_loss < b.report.served_loss)
+                }
+            };
+            if better {
+                best = Some(out);
+            }
+        }
+        best.ok_or("no state-lexical fit attempt")?
+    };
     let realization_bytes = outcome.model.to_bytes().map_err(|e| e.to_string())?;
     write_checked(&root, "artifacts/state_lexical.json", &realization_bytes)?;
     let reloaded = StateLexicalModel::from_bytes(
@@ -22002,10 +22039,13 @@ fn slx_run() -> Result<ExitCode, String> {
         return Err("state-lexical artifact reload mismatch".into());
     }
 
+    let teacher_forced_replay = reloaded.teacher_forced_agreement(&fit_sequences);
+
     // ---- the retained finite-table comparator, fitted on the same declared text ----
     let mut comparator_examples: Vec<RealizationExample> = Vec::new();
     for ex in &fit_sequences {
         let stages = ex.copy_stages();
+        let mut inserted = 0usize;
         for (i, action) in ex.actions.iter().enumerate() {
             comparator_examples.push(RealizationExample {
                 context: RealizationContext {
@@ -22015,10 +22055,13 @@ fn slx_run() -> Result<ExitCode, String> {
                     prior_differs: ex.prior_differs,
                     evidence_class: 0,
                     copy_stage: stages[i],
-                    emitted_bucket: 0,
+                    emitted_bucket: inserted.min(3) as u8,
                 },
                 action: *action,
             });
+            if matches!(action, RealizationAction::Insert(_)) {
+                inserted += 1;
+            }
         }
     }
     let comparator = fit_realization(&comparator_examples, VOCAB, slots.clone(), 8)
@@ -22189,7 +22232,7 @@ fn slx_run() -> Result<ExitCode, String> {
                 "unchanged_op": u.op, "changed_op": c.op,
                 "unchanged_emitted": u_emitted, "changed_emitted": c_emitted,
                 "differ": u_emitted != c_emitted,
-                "content_differs": u_state != c_state,
+                "final_recurrent_state_differs": u_state != c_state,
             }));
         }
     }
@@ -22220,14 +22263,17 @@ fn slx_run() -> Result<ExitCode, String> {
         )
         .map_err(|e| e.to_string())?;
     // Collect a snapshot at every boundary, then restore each and run to completion.
-    let mut frames: Vec<(Vec<u8>, Vec<u32>)> = Vec::new();
+    let mut frames: Vec<(Vec<u8>, serde_json::Value)> = Vec::new();
     loop {
         let bytes = restart_runtime
             .snapshot(&session)
             .map_err(|e| e.to_string())?;
         let mut copy = restart_runtime.restore(&bytes).map_err(|e| e.to_string())?;
-        restart_runtime.run(&mut copy).map_err(|e| e.to_string())?;
-        frames.push((bytes, copy.emitted.clone()));
+        let remaining = restart_runtime.run(&mut copy).map_err(|e| e.to_string())?;
+        frames.push((
+            bytes,
+            json!({"session": copy, "remaining_effects": remaining}),
+        ));
         if session.terminal.is_some() {
             break;
         }
@@ -22236,7 +22282,9 @@ fn slx_run() -> Result<ExitCode, String> {
             .map_err(|e| e.to_string())?;
     }
     let final_emitted = session.emitted.clone();
-    let restart_ok = frames.iter().all(|(_, emitted)| *emitted == final_emitted);
+    let restart_ok = frames
+        .iter()
+        .all(|(_, continuation)| continuation["session"] == json!(session));
     // Persist the frames and the artifacts so a separate process can resume them.
     let restart_dir = root.join("restart");
     std::fs::create_dir_all(&restart_dir).map_err(|e| e.to_string())?;
@@ -22248,12 +22296,12 @@ fn slx_run() -> Result<ExitCode, String> {
     let snapshots: Vec<serde_json::Value> = frames
         .iter()
         .enumerate()
-        .map(|(i, (bytes, _))| {
+        .map(|(i, (bytes, continuation))| -> Result<serde_json::Value, String> {
             let name = format!("restart/frame-{i:03}.json");
-            write_checked(&root, &name, bytes).expect("write frame");
-            json!({"index": i, "frame": format!("frame-{i:03}.json")})
+            write_checked(&root, &name, bytes)?;
+            Ok(json!({"index": i, "frame": format!("frame-{i:03}.json"), "continuation": continuation}))
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
     write_json(
         &root,
         "restart/manifest.json",
@@ -22284,6 +22332,36 @@ fn slx_run() -> Result<ExitCode, String> {
         json!({"error": String::from_utf8_lossy(&child.stderr).to_string()})
     };
 
+    // Exact representational diagnostics on the loaded candidate, not language acceptance.
+    let unknown: Vec<u32> = (0..VOCAB as u32)
+        .filter(|t| !reloaded.content_tokens.contains(t))
+        .take(2)
+        .collect();
+    let known: Vec<u32> = reloaded.content_tokens.iter().copied().take(4).collect();
+    let mut reversed = known.clone();
+    reversed.reverse();
+    let mut longer = known.clone();
+    if let Some(t) = known.get(1) {
+        longer.push(*t);
+    }
+    let unknown_alias = if unknown.len() == 2 {
+        Some(
+            reloaded.content_feature(&unknown[..1], &unknown[..1])
+                == reloaded.content_feature(&unknown[..1], &unknown[1..]),
+        )
+    } else {
+        None
+    };
+    let representation_diagnostics = json!({
+        "unknown_token_ids": unknown,
+        "equal_and_unequal_unknown_pairs_alias": unknown_alias,
+        "known_token_ids": known,
+        "reordered_known_tokens_alias": reloaded.content_feature(&known, &[]) == reloaded.content_feature(&reversed, &[]),
+        "suffix_after_four_tokens_alias": if known.len() == 4 { Some(reloaded.content_feature(&known, &[]) == reloaded.content_feature(&longer, &[])) } else { None },
+        "copy_token_feedback": "one shared action symbol; copied token identity absent",
+        "scope": "loaded representation witnesses only; not a language-quality panel",
+    });
+
     // ---- checks ----
     let holds = |name: &str| panels[name]["complete"] == json!(true);
     let checks = json!({
@@ -22308,6 +22386,13 @@ fn slx_run() -> Result<ExitCode, String> {
     let payload = json!({
         "schema": "uor-r4.state-lexical/1",
         "source_files": source_files,
+        "executable_sha256": sha256_hex(&std::fs::read(std::env::current_exe().map_err(|e| e.to_string())?).map_err(|e| e.to_string())?),
+        "reuse_artifact_root": reuse_root,
+        "fit_diagnostics_inherited_without_neural_refit": reuse_root.is_some(),
+        "teacher_forced_replay": {"correct": teacher_forced_replay.0, "total": teacher_forced_replay.1},
+        "evaluation_exposure": "exposed authored panel; replay is not a fresh acceptance draw",
+        "finite_comparator_fit": "actual inserted-count bucket, matched to serving",
+
         "artifact_sha256": {
             "model.json": sha256_hex(&model_bytes),
             "intent.json": sha256_hex(&intent_bytes),
@@ -22340,6 +22425,7 @@ fn slx_run() -> Result<ExitCode, String> {
         },
         "panels": panels,
         "value_sensitive": value_sensitive,
+        "representation_diagnostics": representation_diagnostics,
         "restart": {
             "boundaries": frames.len(),
             "all_equal_final": restart_ok,
@@ -22349,7 +22435,7 @@ fn slx_run() -> Result<ExitCode, String> {
         "cases": cases,
         "checks": checks,
         "checks_all_expected": checks.as_object().map(|m| m.values().all(|v| v == &json!(true))).unwrap_or(false),
-        "scope": "authored truthful development responses over a small declared state world; a learned low-bit state-conditioned decoder selects shared vocabulary words around the exact owned span, from the symbols it actually emitted and a content embedding of the selected evidence. Not general prose, no geometric advantage claimed, and the held-out-document panel transfers entity/value strings rather than the value-sensitive computation association.",
+        "scope": "exposed authored response fixture over a small declared state world; a learned low-bit state-conditioned decoder selects shared vocabulary words around the exact owned span, from Insert-slot/Copy-class feedback and a truncated fitted-token content embedding of the selected evidence. Not general prose, no geometric advantage claimed, and the held-out-document panel transfers entity/value strings rather than the value-sensitive computation association.",
     });
     write_json(&root, "result.json", &payload)?;
     seal(&root).map_err(|e| format!("seal: {e}"))?;
@@ -22414,12 +22500,14 @@ fn slx_reload_check(dir: &std::path::Path) -> Result<ExitCode, String> {
             lineage,
         )?;
         let mut session = runtime.restore(&bytes).map_err(|e| e.to_string())?;
-        runtime.run(&mut session).map_err(|e| e.to_string())?;
-        let ok = json!(session.emitted) == expected;
+        let remaining = runtime.run(&mut session).map_err(|e| e.to_string())?;
+        let continuation = json!({"session": session, "remaining_effects": remaining});
+        let full_parity = entry.get("continuation").map(|v| *v == continuation);
+        let ok = json!(session.emitted) == expected && full_parity.unwrap_or(true);
         if ok {
             frames_ok += 1;
         }
-        frames.push(json!({"index": entry["index"], "emitted": session.emitted, "ok": ok}));
+        frames.push(json!({"index": entry["index"], "emitted": session.emitted, "ok": ok, "full_continuation_equal": full_parity, "continuation": continuation}));
     }
     write_json(
         dir,
@@ -22432,5 +22520,8 @@ fn slx_reload_check(dir: &std::path::Path) -> Result<ExitCode, String> {
             "pid": std::process::id(),
         }),
     )?;
+    if frames.is_empty() || frames_ok != frames.len() {
+        return Err("state-lexical child continuation mismatch".into());
+    }
     Ok(ExitCode::SUCCESS)
 }

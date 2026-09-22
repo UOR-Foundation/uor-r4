@@ -19,7 +19,7 @@
 //! h_0     = learned_init(c)
 //! a_t     = learned_readout(h_t, c, exact_copy_state)
 //! x_t     = execute(a_t)          // a generated token, an exact owned token, or Stop
-//! h_(t+1) = learned_transition(h_t, x_t, actual_boundary_event, c)
+//! h_(t+1) = learned_transition(h_t, action_symbol(a_t))
 //! ```
 //!
 //! * `c` is a *content* vector: a learned embedding of the selected owned payload tokens and, for a
@@ -27,9 +27,10 @@
 //!   therefore an input, not a reported class, so changing the value can change an uncopied word with
 //!   the provenance flags held equal. It is not a supplied `changed` flag: the learner must discover
 //!   the composition from declared text.
-//! * `h_t` is a bounded integer state vector. `learned_transition` consumes the *actual emitted
-//!   symbol* `x_t`, so a copied token and an inserted word advance the state differently and two
-//!   equal-length prefixes over different symbols reach different states.
+//! * `h_t` is a bounded integer state vector. `learned_transition` consumes the executed insert-slot
+//!   or Copy action. Different inserted slots can advance state differently, but every copied token
+//!   has the same Copy symbol. This version does not supply copied-token identity or ordering to the
+//!   recurrence. The content feature is a truncated bag of fitted tokens, not an exact identity.
 //!
 //! Exact copy identity, cursor and payload bytes stay separately owned by the scoped session; this
 //! decoder never replaces identity with lossy state. `Copy` enters the recurrence as one symbol whose
@@ -47,8 +48,10 @@
 //!
 //! Fitting is offline and explicitly floating point: a small recurrent decoder is trained by teacher
 //! forcing with Adam and *quantisation-aware* straight-through estimators, so the served integer model
-//! is the model the objective actually optimised. This is a bounded low-bit recurrence, not a dense
-//! RNN: the state width is declared by `SlFitConfig` and every parameter is ternary or 4-bit.
+//! has the same quantized affine arithmetic used by the fitting forward pass. This is a dense
+//! recurrent model implemented with bounded low-bit additive maps: the state width is declared by
+//! `SlFitConfig`, map codes are ternary, embeddings are 4-bit, and biases are integer accumulators.
+//! It is not a geometric-routing mechanism; no geometric advantage follows from this representation.
 #![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};
@@ -227,8 +230,8 @@ pub struct StateLexicalModel {
     pub vocab: usize,
     /// Learned shared insert vocabulary, one token per slot.
     pub slots: Vec<u32>,
-    /// Content-token index: position `i` holds the token id whose learned row is row `i`. Row 0 is
-    /// the learned out-of-vocabulary row, so an unseen value token still has a defined embedding.
+    /// Content-token index: position `i` holds the token id whose learned row is row `i`.
+    /// Unseen tokens contribute zero; row 0 is the ordinary token-0 row, not an OOV embedding.
     pub content_tokens: Vec<u32>,
     pub h_dim: usize,
     pub e_dim: usize,
@@ -289,10 +292,10 @@ impl StateLexicalModel {
     }
 
     /// The declared number of content coordinates on which the selected value and the consumed
-    /// operand disagree. It is exactly zero when the computation left the same value in force, so the
-    /// change distinction is represented rather than left to a summed-embedding accident. The block is
-    /// a fixed comparison over content, not a supplied answer or response-family selector; whether a
-    /// disagreement is *reported* and how it is worded remain learned.
+    /// operand disagree. Equal token sequences produce zero, but zero does not establish equality:
+    /// truncation, bag ordering, unknown-token omission and learned collisions can also erase a
+    /// distinction. This is a comparison over lossy content features, not an exact change witness;
+    /// whether a disagreement is reported and how it is worded remain learned.
     fn disagreement(&self, m: &[i32]) -> i32 {
         let half = self.e_dim / 2;
         (0..half).filter(|i| m[*i] != m[half + *i]).count() as i32
@@ -387,7 +390,8 @@ impl StateLexicalModel {
         logits
     }
 
-    /// `h_(t+1) = learned_transition(h_t, x_t)` for the actual emitted symbol.
+    /// `h_(t+1) = learned_transition(h_t, action_symbol)` for the executed action event.
+    /// All copied token identities share one symbol in this artifact version.
     pub fn transition(&self, h: &[i32], symbol: usize) -> Vec<i32> {
         let mut input = Vec::with_capacity(self.transition_cols());
         input.extend_from_slice(h);
@@ -481,7 +485,27 @@ impl StateLexicalModel {
         {
             return Err("state-lexical artefact declares inconsistent feature widths".into());
         }
-        if self.e.len() != self.content_tokens.len() * (self.e_dim / 2) {
+        let half = self.e_dim / 2;
+        let embedding_len = self
+            .content_tokens
+            .len()
+            .checked_mul(half)
+            .ok_or("state-lexical embedding dimensions overflow")?;
+        let init_cols = self
+            .e_dim
+            .checked_add(half)
+            .and_then(|n| n.checked_add(1 + Self::flag_dim()))
+            .ok_or("state-lexical input dimensions overflow")?;
+        let transition_cols = self
+            .h_dim
+            .checked_add(Self::symbol_dim(self.slots.len()))
+            .ok_or("state-lexical transition dimensions overflow")?;
+        let readout_cols = self
+            .h_dim
+            .checked_add(init_cols)
+            .and_then(|n| n.checked_add(Self::copy_dim()))
+            .ok_or("state-lexical readout dimensions overflow")?;
+        if self.e.len() != embedding_len {
             return Err("state-lexical embedding table shape disagrees with its index".into());
         }
         if self.e.iter().any(|v| (*v as i32).abs() > SL_EMB_BOUND) {
@@ -492,11 +516,11 @@ impl StateLexicalModel {
         }
         let n = self.n_actions();
         if self.wi.rows != self.h_dim
-            || self.wi.cols != self.init_cols()
+            || self.wi.cols != init_cols
             || self.wt.rows != self.h_dim
-            || self.wt.cols != self.transition_cols()
+            || self.wt.cols != transition_cols
             || self.wo.rows != n
-            || self.wo.cols != self.readout_cols()
+            || self.wo.cols != readout_cols
         {
             return Err("state-lexical linear map shapes are inconsistent".into());
         }
@@ -510,9 +534,34 @@ impl StateLexicalModel {
             if map.shift.iter().any(|s| *s > SL_MAX_SHIFT) {
                 return Err("state-lexical scale exceeds the declared serving bound".into());
             }
-            // Reconstructing the map verifies the packed length without executing it.
+            // Check products before the older generic constructor performs its shape arithmetic.
+            let weights = map
+                .rows
+                .checked_mul(map.cols)
+                .ok_or("state-lexical packed dimensions overflow")?;
+            if map.packed.len() != weights.div_ceil(4) {
+                return Err("state-lexical packed length disagrees with dimensions".into());
+            }
             map.to_ternary()?;
         }
+        // Certify the accumulator before executing add/sub/shift and adding a bias. A shift
+        // bound alone is insufficient: a valid-shaped artifact can contain i32::MAX biases or
+        // an unsafe recurrent clamp. These conservative absolute bounds cover every causal input.
+        let content_bound = self
+            .m_clamp
+            .min(SL_EMB_BOUND * SL_MAX_CONTENT_TOKENS as i32);
+        let mut context_bounds = vec![content_bound as u128; self.e_dim];
+        context_bounds.extend(vec![2 * content_bound as u128; half]);
+        context_bounds.push(half as u128);
+        context_bounds.extend([1; 6]);
+        validate_affine_range(&self.wi, &self.bi, &context_bounds)?;
+        let mut transition_bounds = vec![self.h_clamp as u128; self.h_dim];
+        transition_bounds.extend(vec![1; Self::symbol_dim(self.slots.len())]);
+        validate_affine_range(&self.wt, &self.bt, &transition_bounds)?;
+        let mut readout_bounds = vec![self.h_clamp as u128; self.h_dim];
+        readout_bounds.extend(context_bounds);
+        readout_bounds.extend([1; 3]);
+        validate_affine_range(&self.wo, &self.bo, &readout_bounds)?;
         if self.max_insert_words == 0 || self.max_insert_words > SL_MAX_SLOTS as u8 {
             return Err("state-lexical insert-word bound is out of range".into());
         }
@@ -551,6 +600,29 @@ impl StateLexicalModel {
         }
         (correct, total)
     }
+}
+
+/// Certify all additions and the final shift/bias without running the i32 kernel.
+fn validate_affine_range(map: &SlLinear, bias: &[i32], bounds: &[u128]) -> Result<(), String> {
+    let weights = map.to_ternary()?;
+    for (r, b) in bias.iter().enumerate() {
+        let mut sum = 0u128;
+        for (c, bound) in bounds.iter().enumerate() {
+            if weights.weight(r, c) != 0 {
+                sum = sum
+                    .checked_add(*bound)
+                    .ok_or("state-lexical accumulator bound overflow")?;
+            }
+        }
+        let shifted = sum
+            .checked_shl(map.shift[r])
+            .and_then(|n| n.checked_add(i64::from(*b).unsigned_abs() as u128))
+            .ok_or("state-lexical shifted bound overflow")?;
+        if sum > i32::MAX as u128 || shifted > i32::MAX as u128 {
+            return Err("state-lexical affine map exceeds its safe i32 accumulator range".into());
+        }
+    }
+    Ok(())
 }
 
 fn clamp_in_place(v: &mut [i32], bound: i32) {
@@ -606,6 +678,26 @@ fn q_ternary(w: &[f32], rows: usize, cols: usize) -> Vec<f32> {
         );
     }
     out
+}
+
+/// Offline QAT affine evaluation. Bias rounding uses an identity STE in backward, matching
+/// the integer biases exported to serving rather than changing them only at export time.
+fn quantized_affine(weights: &[f32], input: &[f32], bias: &[f32]) -> Vec<f32> {
+    weights
+        .chunks_exact(input.len())
+        .zip(bias)
+        .map(|(row, b)| row.iter().zip(input).map(|(w, x)| w * x).sum::<f32>() + b.round())
+        .collect()
+}
+
+/// Derivative of the declared globally normalized weighted action cross entropy.
+fn weighted_target_gradient(p: &[f32], target: usize, weight: f32, total_weight: f32) -> Vec<f32> {
+    p.iter()
+        .enumerate()
+        .map(|(i, probability)| {
+            (probability - if i == target { 1.0 } else { 0.0 }) * weight / total_weight
+        })
+        .collect()
 }
 
 /// Deterministic xorshift64* RNG for reproducible initialisation.
@@ -752,9 +844,8 @@ pub struct SlFitOutcome {
 
 /// Fit the state-conditioned decoder by teacher forcing with Adam and quantisation-aware STEs.
 ///
-/// The content-token index is taken from the examples: token 0 of `content_tokens` is the learned
-/// out-of-vocabulary row, and every distinct token in any example's selected payload or operand adds
-/// one row.
+/// The content-token index is taken from the examples, with an ordinary token-0 row retained.
+/// Every distinct observed token adds one row; unknown serving tokens are omitted from the feature.
 pub fn fit_state_lexical(
     examples: &[SlSequence],
     vocab: usize,
@@ -765,9 +856,74 @@ pub fn fit_state_lexical(
     if examples.is_empty() {
         return Err("state-lexical fit requires at least one example".into());
     }
-    if slots.len() > SL_MAX_SLOTS {
-        return Err("state-lexical slot count exceeds the declared bound".into());
+    if slots.len() > SL_MAX_SLOTS
+        || slots.iter().any(|t| *t as usize >= vocab)
+        || vocab == 0
+        || max_insert_words == 0
+        || max_insert_words > SL_MAX_SLOTS as u8
+        || cfg.h_dim == 0
+        || cfg.e_dim == 0
+        || cfg.e_dim % 2 != 0
+        || cfg.epochs == 0
+        || !cfg.lr.is_finite()
+        || cfg.lr <= 0.0
+        || !cfg.stop_weight.is_finite()
+        || cfg.stop_weight <= 0.0
+        || !cfg.insert_weight.is_finite()
+        || cfg.insert_weight <= 0.0
+    {
+        return Err(
+            "state-lexical fit has invalid vocabulary, dimensions or optimizer configuration"
+                .into(),
+        );
     }
+    // These are authored action sequences, including content-blanked controls; their Copies need
+    // not equal sel.len(), but every sequence must have exactly one final Stop and valid slots.
+    if examples.iter().any(|ex| {
+        ex.history > 3
+            || ex.sel.iter().chain(&ex.res).any(|t| *t as usize >= vocab)
+            || ex.actions.last() != Some(&RealizationAction::Stop)
+            || ex.actions[..ex.actions.len().saturating_sub(1)]
+                .iter()
+                .any(|a| matches!(a, RealizationAction::Stop))
+            || ex
+                .actions
+                .iter()
+                .any(|a| matches!(a, RealizationAction::Insert(s) if *s as usize >= slots.len()))
+    }) {
+        return Err("state-lexical fit has an invalid supervised sequence".into());
+    }
+    let total_weight: f32 = examples
+        .iter()
+        .flat_map(|ex| &ex.actions)
+        .map(|a| action_weight(*a, cfg.stop_weight, cfg.insert_weight))
+        .sum();
+    if !total_weight.is_finite() || total_weight <= 0.0 {
+        return Err("state-lexical objective weight is not finite and positive".into());
+    }
+    let init_cols = cfg
+        .e_dim
+        .checked_add(cfg.e_dim / 2)
+        .and_then(|n| n.checked_add(7))
+        .ok_or("state-lexical fit input dimensions overflow")?;
+    let transition_cols = cfg
+        .h_dim
+        .checked_add(SL_SYM_INSERT_BASE + slots.len())
+        .ok_or("state-lexical fit transition dimensions overflow")?;
+    let readout_cols = cfg
+        .h_dim
+        .checked_add(init_cols)
+        .and_then(|n| n.checked_add(3))
+        .ok_or("state-lexical fit readout dimensions overflow")?;
+    cfg.h_dim
+        .checked_mul(init_cols)
+        .ok_or("state-lexical fit initialization size overflows")?;
+    cfg.h_dim
+        .checked_mul(transition_cols)
+        .ok_or("state-lexical fit transition size overflows")?;
+    (SL_INSERT_BASE + slots.len())
+        .checked_mul(readout_cols)
+        .ok_or("state-lexical fit readout size overflows")?;
     let mut content_tokens = vec![0u32];
     for ex in examples {
         for t in ex.sel.iter().chain(ex.res.iter()) {
@@ -777,6 +933,9 @@ pub fn fit_state_lexical(
         }
     }
     let content_len = content_tokens.len();
+    content_len
+        .checked_mul(cfg.e_dim / 2)
+        .ok_or("state-lexical fit embedding size overflows")?;
     let content_row = |t: u32| content_tokens.iter().position(|c| *c == t).unwrap_or(0);
 
     let mut rng = Rng(cfg.seed);
@@ -837,7 +996,6 @@ pub fn fit_state_lexical(
                 let fi = StateLexicalModel::flags(ex.history, ex.derived, ex.prior_differs);
                 fi.iter().map(|v| *v as f32).collect()
             };
-            let mut h = vec![0f32; fm.h_dim];
             let mut u0 = vec![0f32; wi_cols];
             u0[..fm.e_dim].copy_from_slice(&m);
             for i in 0..half {
@@ -845,13 +1003,7 @@ pub fn fit_state_lexical(
             }
             u0[fm.e_dim + half] = (0..half).filter(|i| m[*i] != m[half + *i]).count() as f32;
             u0[fm.e_dim + half + 1..].copy_from_slice(&f);
-            for r in 0..fm.h_dim {
-                let mut acc = 0.0f32;
-                for c in 0..wi_cols {
-                    acc += wi_q[r * wi_cols + c] * u0[c];
-                }
-                h[r] = acc + fm.bi[r];
-            }
+            let mut h = quantized_affine(&wi_q, &u0, &fm.bi);
             let mut h_hist: Vec<Vec<f32>> = Vec::with_capacity(ex.actions.len() + 1);
             let mut h_masks: Vec<Vec<bool>> = Vec::with_capacity(ex.actions.len() + 1);
             let mut masks = Vec::with_capacity(fm.h_dim);
@@ -878,15 +1030,9 @@ pub fn fit_state_lexical(
                 let mut copy = vec![0f32; fm.c_dim];
                 copy[(stages[i] as usize).min(2)] = 1.0;
                 z.extend_from_slice(&copy);
-                let mut logits = vec![0f32; fm.n_actions];
-                for r in 0..fm.n_actions {
-                    let mut acc = 0.0f32;
-                    for c in 0..wo_cols {
-                        acc += wo_q[r * wo_cols + c] * z[c];
-                    }
-                    logits[r] = acc + fm.bo[r];
-                }
+                let mut logits = quantized_affine(&wo_q, &z, &fm.bo);
                 let max = logits.iter().fold(f32::NEG_INFINITY, |a, b| a.max(*b));
+                let target_logit = logits[y];
                 let mut sum = 0.0f32;
                 for l in logits.iter_mut() {
                     *l = (*l - max).exp();
@@ -894,7 +1040,7 @@ pub fn fit_state_lexical(
                 }
                 let p: Vec<f32> = logits.iter().map(|l| l / sum).collect();
                 let weight = action_weight(*action, cfg.stop_weight, cfg.insert_weight);
-                epoch_loss -= weight * p[y].max(1e-9).ln();
+                epoch_loss += weight * ((max - target_logit) + sum.ln());
                 weight_sum += weight;
                 cache.push((z, p, y, weight));
 
@@ -904,15 +1050,7 @@ pub fn fit_state_lexical(
                 let mut xs = vec![0f32; SL_SYM_INSERT_BASE + fm.n_slots];
                 xs[x] = 1.0;
                 input.extend_from_slice(&xs);
-                let mut next = vec![0f32; fm.h_dim];
-                for r in 0..fm.h_dim {
-                    let mut acc = 0.0f32;
-                    for c in 0..wt_cols {
-                        acc += wt_q[r * wt_cols + c] * input[c];
-                    }
-                    next[r] = acc + fm.bt[r];
-                }
-                h = next;
+                h = quantized_affine(&wt_q, &input, &fm.bt);
                 let mut mask = Vec::with_capacity(fm.h_dim);
                 for r in 0..fm.h_dim {
                     mask.push(h[r].abs() < fm.h_clamp);
@@ -927,12 +1065,9 @@ pub fn fit_state_lexical(
             let mut gm = vec![0f32; fm.e_dim];
             for t in (0..cache.len()).rev() {
                 let (z, p, y, weight) = &cache[t];
+                let output_gradient = weighted_target_gradient(p, *y, *weight, total_weight);
                 for r in 0..fm.n_actions {
-                    let mut dlogit = p[r];
-                    if r == *y {
-                        dlogit -= 1.0;
-                    }
-                    dlogit *= *weight / weight_sum.max(1e-9);
+                    let dlogit = output_gradient[r];
                     if dlogit == 0.0 {
                         continue;
                     }
@@ -1135,12 +1270,12 @@ fn served_cross_entropy(
             let max = logits.iter().copied().max().unwrap_or(0);
             let mut sum = 0.0f64;
             for l in &logits {
-                sum += ((*l - max) as f64).exp();
+                sum += (f64::from(*l) - f64::from(max)).exp();
             }
             let y = action_index(*action);
-            let p = ((logits[y] - max) as f64).exp() / sum;
+            let nll = f64::from(max) - f64::from(logits[y]) + sum.ln();
             let w = action_weight(*action, stop_weight, insert_weight);
-            loss -= w * (p.max(1e-12)).ln() as f32;
+            loss += w * nll as f32;
             weight_sum += w;
             h = model.transition(&h, StateLexicalModel::symbol_of(*action));
         }
@@ -1273,6 +1408,154 @@ mod tests {
             h = model.transition(&h, StateLexicalModel::symbol_of(action));
         }
         actions
+    }
+
+    fn arithmetic_fixture() -> StateLexicalModel {
+        let map = |rows, cols| {
+            SlLinear::from_ternary(&TernaryLinear::quantize(
+                &vec![1.0; rows * cols],
+                rows,
+                cols,
+            ))
+        };
+        StateLexicalModel {
+            version: SL_VERSION,
+            vocab: 4096,
+            slots: vec![101],
+            content_tokens: vec![11],
+            h_dim: 1,
+            e_dim: 2,
+            f_dim: 6,
+            c_dim: 3,
+            h_clamp: 255,
+            m_clamp: 255,
+            e: vec![1],
+            wi: map(1, 10),
+            wt: map(1, 4),
+            wo: map(3, 14),
+            bi: vec![0],
+            bt: vec![0],
+            bo: vec![0; 3],
+            max_insert_words: 4,
+        }
+    }
+
+    #[test]
+    fn artifact_load_rejects_overflowing_dimensions_biases_and_recurrent_ranges() {
+        let model = arithmetic_fixture();
+        model.validate(4096).unwrap();
+        for kind in 0..4 {
+            let mut broken = model.clone();
+            match kind {
+                0 => broken.e_dim = usize::MAX - 1,
+                1 => broken.h_dim = usize::MAX,
+                2 => broken.bi[0] = i32::MAX,
+                _ => broken.h_clamp = i32::MAX,
+            }
+            let bytes = broken.to_bytes().unwrap();
+            assert!(
+                StateLexicalModel::from_bytes(&bytes, 4096).is_err(),
+                "case {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn quantized_training_affine_matches_integer_export_with_fractional_biases() {
+        let weights = vec![0.8, -1.1, 0.1, -1.4, 0.2, 0.9];
+        let biases = vec![0.6, -0.6];
+        let input = vec![2, -3, 1];
+        let trained = quantized_affine(
+            &q_ternary(&weights, 2, 3),
+            &input.iter().map(|x| *x as f32).collect::<Vec<_>>(),
+            &biases,
+        );
+        let mut served = TernaryLinear::quantize(&weights, 2, 3).forward_i32(&input);
+        for (value, bias) in served.iter_mut().zip(&biases) {
+            *value += bias.round() as i32;
+        }
+        assert_eq!(
+            trained,
+            served.iter().map(|x| *x as f32).collect::<Vec<_>>()
+        );
+        // Raw fractional biases would differ here, which was the previous fit/export mismatch.
+        assert!(trained.iter().all(|x| x.fract() == 0.0));
+    }
+
+    #[test]
+    fn weighted_objective_gradient_matches_finite_difference_and_example_permutation() {
+        let examples = [(1.0f32, 0usize, 1.0f32), (-2.0, 1, 7.0)];
+        let total_weight: f32 = examples.iter().map(|x| x.2).sum();
+        let gradient = |theta: f32, reversed: bool| {
+            let mut sum = 0.0;
+            let order = if reversed { [1, 0] } else { [0, 1] };
+            for i in order {
+                let (x, y, weight) = examples[i];
+                let p0 = 1.0 / (1.0 + (-theta * x).exp());
+                sum += weighted_target_gradient(&[p0, 1.0 - p0], y, weight, total_weight)[0] * x;
+            }
+            sum
+        };
+        let loss = |theta: f32| {
+            examples
+                .iter()
+                .map(|(x, y, weight)| {
+                    let p0 = 1.0 / (1.0 + (-theta * x).exp());
+                    -weight * if *y == 0 { p0.ln() } else { (1.0 - p0).ln() }
+                })
+                .sum::<f32>()
+                / total_weight
+        };
+        let theta = 0.3;
+        let finite = (loss(theta + 0.001) - loss(theta - 0.001)) / 0.002;
+        assert!((gradient(theta, false) - finite).abs() < 0.0001);
+        assert_eq!(gradient(theta, false), gradient(theta, true));
+    }
+
+    #[test]
+    fn served_action_loss_keeps_large_finite_errors_without_probability_floor() {
+        let mut model = arithmetic_fixture();
+        for map in [&mut model.wi, &mut model.wt, &mut model.wo] {
+            map.packed.fill(0);
+        }
+        model.bo = vec![i32::MAX, 0, -i32::MAX];
+        model.validate(4096).unwrap();
+        let example = SlSequence {
+            sel: Vec::new(),
+            res: Vec::new(),
+            history: 0,
+            derived: false,
+            prior_differs: false,
+            actions: vec![RealizationAction::Stop],
+        };
+        let loss = served_cross_entropy(&model, &[example], 1.0, 1.0);
+        assert!(
+            loss.is_finite() && loss > 1.0e9,
+            "clipped or invalid loss: {loss}"
+        );
+    }
+
+    #[test]
+    fn malformed_fit_inputs_return_errors_before_entering_the_optimizer() {
+        let valid = direct(&[11]);
+        let cfg = SlFitConfig {
+            epochs: 1,
+            h_dim: 1,
+            e_dim: 2,
+            ..Default::default()
+        };
+        let mut no_stop = valid.clone();
+        no_stop.actions.pop();
+        let mut bad_slot = valid.clone();
+        bad_slot.actions[0] = RealizationAction::Insert(255);
+        for ex in [no_stop, bad_slot] {
+            assert!(fit_state_lexical(&[ex], 4096, slots(), 4, &cfg).is_err());
+        }
+        let invalid_cfg = SlFitConfig {
+            lr: f32::NAN,
+            ..cfg
+        };
+        assert!(fit_state_lexical(&[valid], 4096, slots(), 4, &invalid_cfg).is_err());
     }
 
     #[test]

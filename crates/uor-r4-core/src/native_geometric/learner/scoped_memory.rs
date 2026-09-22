@@ -147,8 +147,8 @@ pub enum OutputContract {
     LegacyWords,
     RealizedV1,
     /// A learned state-conditioned lexical decoder: the same exact owned span, interleaved with
-    /// learned vocabulary words chosen by a bounded integer recurrent state that consumes the symbols
-    /// the session actually emits and a content embedding of the selected evidence. Supersedes
+    /// learned vocabulary words chosen by a bounded integer recurrent state that consumes executed
+    /// insert-slot/Copy events and a content embedding of the selected evidence. Supersedes
     /// `RealizedV1` as the richer contract; `RealizedV1` remains retained and loadable.
     StateLexicalV1,
 }
@@ -2495,9 +2495,16 @@ impl ScopedMemoryRuntime {
                     "state-lexical contract without a state-lexical artifact".into(),
                 )
             })?;
-            if !session.sl_state.is_empty() && session.sl_state.len() != model.h_dim {
+            if !session.sl_state.is_empty()
+                && (session.sl_state.len() != model.h_dim
+                    || session
+                        .sl_state
+                        .iter()
+                        .any(|v| i64::from(*v).abs() > i64::from(model.h_clamp)))
+            {
                 return Err(ScopedMemoryError::Session(
-                    "retained decoder state disagrees with the bound artifact width".into(),
+                    "retained decoder state disagrees with the bound artifact width or clamp"
+                        .into(),
                 ));
             }
         } else if !session.sl_state.is_empty() {
@@ -2760,6 +2767,27 @@ impl ScopedMemoryRuntime {
                 .ok_or_else(|| {
                     ScopedMemoryError::Session("computed source record is missing".into())
                 })?;
+            // Older non-state-lexical snapshots did not retain this field. They do not consume
+            // it as lexical input, so their default empty value remains compatible. Whenever an
+            // operand payload is supplied, and always for StateLexicalV1, bind its exact tokens to
+            // the source's retained witness even after the live payload has been evicted.
+            if self.contract == OutputContract::StateLexicalV1
+                || !computed.operand_payload.is_empty()
+            {
+                if computed.operand_payload.is_empty()
+                    || computed.operand_payload.len() > SCOPED_MAX_ANSWER
+                    || computed
+                        .operand_payload
+                        .iter()
+                        .any(|token| *token as usize >= self.max_vocab)
+                    || payload_sha256(&computed.operand_payload) != source.payload_sha256
+                    || (!source.evicted && computed.operand_payload != source.payload)
+                {
+                    return Err(ScopedMemoryError::Session(
+                        "computed operand payload disagrees with its exact source witness".into(),
+                    ));
+                }
+            }
             if computed.source_commit != source.commit
                 || computed.source_entity != source.entity
                 || computed.source_key != encode_key(&source.scope, &source.entity, source.relation)
@@ -3017,6 +3045,7 @@ impl ScopedMemoryRuntime {
                 || session.cursor != 0
                 || session.vocabulary_words != 0
                 || session.prelude_words != 0
+                || !session.sl_state.is_empty()
             {
                 return Err(ScopedMemoryError::Session(
                     "lexical progress precedes an emission-capable capture".into(),
@@ -3043,6 +3072,7 @@ impl ScopedMemoryRuntime {
                 && replay.prelude_words == session.prelude_words
                 && replay.pending == session.pending
                 && replay.terminal == session.terminal
+                && replay.sl_state == session.sl_state
             {
                 return Ok(());
             }
@@ -3593,9 +3623,9 @@ impl ScopedMemoryRuntime {
     /// The learned state-conditioned decoder chooses, at every emission position, between completing
     /// the exact owned token (`Copy`), inserting one learned vocabulary word, and `Stop`. The same
     /// owned structural invariants as `RealizedV1` keep the span exact: `Copy` is forced inside the
-    /// payload and `Stop` is forced before it is complete. The decoder's state advances with the
-    /// symbol it actually emitted, so the reachability replay and a restored snapshot agree with
-    /// serving.
+    /// payload; a premature Stop is replaced with Copy. The decoder's state advances with the
+    /// executed insert-slot/Copy event, so the reachability replay and a restored snapshot agree
+    /// with serving. Copied-token identity is not part of this artifact's recurrent feedback.
     fn state_lexical_emit(
         &self,
         session: &mut ScopedSession,
@@ -3665,8 +3695,8 @@ impl ScopedMemoryRuntime {
                 session.pending = SessionAction::Stop;
             }
         }
-        // `h_(t+1) = learned_transition(h_t, actual emitted symbol, c)`. The recurrence control holds
-        // the initial state, so an emitted symbol no longer advances the decoder.
+        // Advance by the executed action event. Copy uses one shared symbol regardless of its token;
+        // the recurrence control holds the initial state instead.
         if !matches!(action, RealizationAction::Stop)
             && !matches!(self.control, MemoryControl::RecurrenceDisabled)
         {
@@ -4201,7 +4231,7 @@ mod tests {
         for prior in [false, true] {
             for history in [0u8, 1, 2, 3] {
                 for derived in [false, true] {
-                    let second = if prior || history > 0 { 2 } else { 1 };
+                    let second = if history > 0 { 2 } else { 1 };
                     let mut actions = vec![
                         RealizationAction::Insert(0),
                         RealizationAction::Insert(second),
@@ -4251,6 +4281,153 @@ mod tests {
         .unwrap()
     }
 
+    /// A deterministic Copy/Stop policy used only to exercise snapshot authority. No fitted
+    /// language or score claim is attached to this fixture.
+    fn safety_state_lexical() -> StateLexicalModel {
+        use super::super::state_lexical::{SlLinear, SL_VERSION};
+        let zero = |rows: usize, cols: usize| SlLinear {
+            rows,
+            cols,
+            packed: vec![0; (rows * cols).div_ceil(4)],
+            shift: vec![0; rows],
+        };
+        let mut wo = zero(3, 14);
+        // Stop beats Copy only when the complete-copy-stage feature is one.
+        let stop_complete = 14 + 13;
+        wo.packed[stop_complete >> 2] |= 1 << ((stop_complete & 3) * 2);
+        StateLexicalModel {
+            version: SL_VERSION,
+            vocab: 4096,
+            slots: vec![11],
+            content_tokens: vec![11],
+            h_dim: 1,
+            e_dim: 2,
+            f_dim: 6,
+            c_dim: 3,
+            h_clamp: 255,
+            m_clamp: 255,
+            e: vec![1],
+            wi: zero(1, 10),
+            wt: zero(1, 4),
+            wo,
+            bi: vec![0],
+            bt: vec![0],
+            bo: vec![0, 0, -1],
+            max_insert_words: 1,
+        }
+    }
+
+    fn safety_lexical_runtime() -> ScopedMemoryRuntime {
+        let old = computation_runtime(MemoryControl::Normal);
+        ScopedMemoryRuntime::load_grounded(
+            &old.model.to_bytes().unwrap(),
+            &old.intent.to_bytes().unwrap(),
+            Some(&old.lexicon.to_bytes().unwrap()),
+            old.backend.clone(),
+            Some(&safety_state_lexical().to_bytes().unwrap()),
+            OutputContract::StateLexicalV1,
+            old.memory.clone(),
+            old.memory.lineage,
+            MemoryControl::Normal,
+            4096,
+            Some(4095),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn state_lexical_restore_binds_exact_recurrent_state_at_every_phase() {
+        let rt = safety_lexical_runtime();
+        let mut session = rt
+            .ask_compute(b"alpha", 0, b"Mara", vec![b"i".to_vec()])
+            .unwrap();
+        loop {
+            let saved = rt.snapshot(&session).unwrap();
+            assert_eq!(rt.restore(&saved).unwrap(), session);
+            let mut forged = session.clone();
+            forged.sl_state = vec![1]; // Correct width and clamp, but unreachable from this prefix.
+            assert!(rt.restore(&serde_json::to_vec(&forged).unwrap()).is_err());
+            if !session.sl_state.is_empty() {
+                let mut omitted = session.clone();
+                omitted.sl_state.clear();
+                assert!(rt.restore(&serde_json::to_vec(&omitted).unwrap()).is_err());
+                let mut huge = session.clone();
+                huge.sl_state[0] = i32::MAX;
+                assert!(rt.restore(&serde_json::to_vec(&huge).unwrap()).is_err());
+            }
+            if session.terminal.is_some() {
+                break;
+            }
+            rt.step(&mut session).unwrap();
+        }
+    }
+
+    #[test]
+    fn computed_operand_payload_is_bound_after_source_eviction_with_legacy_compatibility() {
+        let rt = safety_lexical_runtime();
+        let mut session = rt
+            .ask_compute(b"alpha", 0, b"Mara", vec![b"i".to_vec()])
+            .unwrap();
+        while !session.derived || session.pending != SessionAction::Emit {
+            rt.step(&mut session).unwrap();
+        }
+        let source_id = session.computation.as_ref().unwrap().source_record;
+        let mut memory = rt.memory.clone();
+        for i in 0..3 {
+            memory
+                .write(
+                    b"alpha",
+                    b"Mara",
+                    0,
+                    b"L2",
+                    &[12],
+                    100 + i,
+                    Update::Correct,
+                    false,
+                    0,
+                )
+                .unwrap();
+        }
+        assert!(memory.record_ref(source_id).unwrap().evicted);
+        let newer = rt.with_memory(memory, MemoryControl::Normal).unwrap();
+        assert_eq!(
+            newer.restore(&rt.snapshot(&session).unwrap()).unwrap(),
+            session
+        );
+        for payload in [
+            vec![],
+            vec![12],
+            vec![4096],
+            vec![11; SCOPED_MAX_ANSWER + 1],
+        ] {
+            let mut forged = session.clone();
+            forged.computation.as_mut().unwrap().operand_payload = payload;
+            assert!(newer
+                .restore(&serde_json::to_vec(&forged).unwrap())
+                .is_err());
+        }
+        let mut retained = session.clone();
+        newer.run(&mut retained).unwrap();
+        assert_eq!(retained.terminal, Some(ScopedTerminal::Complete));
+
+        let legacy = computation_runtime(MemoryControl::Normal);
+        let mut old = legacy
+            .ask_compute(b"alpha", 0, b"Mara", vec![b"i".to_vec()])
+            .unwrap();
+        legacy.step(&mut old).unwrap();
+        legacy.step(&mut old).unwrap();
+        let mut omitted = serde_json::to_value(&old).unwrap();
+        omitted["computation"]
+            .as_object_mut()
+            .unwrap()
+            .remove("operand_payload");
+        assert!(legacy
+            .restore(&serde_json::to_vec(&omitted).unwrap())
+            .is_ok());
+        old.computation.as_mut().unwrap().operand_payload = vec![12];
+        assert!(legacy.restore(&serde_json::to_vec(&old).unwrap()).is_err());
+    }
+
     #[test]
     fn state_lexical_contract_emits_learned_words_around_the_exact_span_and_restores() {
         // Direct: prior_differs is false, so the present connective is learned.
@@ -4279,8 +4456,8 @@ mod tests {
             assert_eq!(restored, session);
         }
 
-        // Superseded: a different predecessor flips the uncopied word to the past connective while
-        // the exact owned span and its placement are unchanged.
+        // A current value stays present even when a different predecessor exists. History intent,
+        // not the prior-difference flag, controls tense in this declared fixture.
         let mut sup_memory = Memory::new(62, 2);
         write(&mut sup_memory, "Ova", "A", Update::Assert);
         write(&mut sup_memory, "Ova", "B", Update::Correct);
@@ -4289,7 +4466,7 @@ mod tests {
             .ask_view(b"alpha", 0, b"Ova", HistoryView::Current)
             .unwrap();
         let effects = sup.run(&mut session).unwrap();
-        assert_eq!(session.emitted, vec![11, 13, 1, 2, 3, 4095]);
+        assert_eq!(session.emitted, vec![11, 12, 1, 2, 3, 4095]);
         // The retained decoder state is carried in the frames and is non-trivial at the last step.
         assert_eq!(session.sl_state.len(), 20);
         assert!(effects.iter().any(|e| e.realization.is_some()));
