@@ -1,5 +1,11 @@
 # EVIDENCE
 
+## September22 — submitted: one learned observed computation lifecycle
+
+**Delivered, principal review pending:** one learned observed-text artifact composes ordinary scoped memory with the retained consumed signed Q8 computation. Actual loaded path: development **56/56**, exposed composition **24/24**, **fresh withheld 32/32** (disjoint people/destinations, operation orders absent from every earlier population, person-level redirect so the operand needs a followed read). The same artifact retains the prior primary lifecycle **38/38** (34 language questions + 4 API queries), 37/37 ingestion checks, no errors, while the retained **computation-forms-only ablation** reproduces the reviewed **17/38** — the causal attribution is combined supervision support. [Result](observed-computation-lifecycle-result-2026-09-22.md), [evidence](../evidence/observed-computation-lifecycle-2026-09-22.json), [independent reconstruction](../evidence/observed-computation-lifecycle-2026-09-22.py), sealed root `observed-computation-lifecycle-4` (19 files, 0 unlisted).
+
+**Constructions and controls:** primary worlds built by the candidate's own `observe`+`ingest` (48/48 assertions committed, zero disagreements with the typed-record comparator arm). NoRead 0/40, ApplyDisabled 12/40, ConsumeDisabled 12/40, folded central sign 24/40, fitted shared-transition 26/40, directly tabulated finite 40/40 (ties signed). Mixed session 7/7 including a pinned in-flight answer held across a correction and identical continuation after save/reload. No geometric code search was re-run; the ordered categorical binder already reaches 132/132 exact joint hypotheses. No compactness/efficiency/energy advantage; whole-path D0-b and broad language unqualified.
+
 ## September22: consumed-state principal review — useful component, integration incomplete
 
 **PR #1347, principal review:** retain consumed signed Q8 computation at authored-task scope. Development 56/56 and exposed composition 24/24 contain 16 ordinary plus 64 computed requests; the competent finite table ties, while central-sign projection loses an answer-relevant distinction. Primary worlds still supply typed records and continuation flags. [Review](consumed-geometric-state-review-2026-09-22.md) and [independent audit](../evidence/consumed-geometric-state-submission-audit-2026-09-22.json) own the qualifications.

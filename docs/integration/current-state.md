@@ -1,6 +1,19 @@
 # Current native geometric AI work
 
-## Active — complete the learned observed computation lifecycle
+## Active — submitted: one learned observed computation lifecycle
+
+**Milestone submitted (principal review pending):** one learned observed-text artifact now composes ordinary scoped memory with the retained consumed geometric computation. The reviewed gap was *combined supervision*, not arithmetic: the submitted candidate fitted its binder and intent tables on the computation forms alone, so explicit correction, declared nonassertion, the project relation and the previous/initial question intents had no learned support. [Returned result](observed-computation-lifecycle-result-2026-09-22.md), [evidence](../evidence/observed-computation-lifecycle-2026-09-22.json) and its [independent reconstruction](../evidence/observed-computation-lifecycle-2026-09-22.py) bind the sealed attempt `observed-computation-lifecycle-4`.
+
+**Measured (actual loaded path):** development **56/56**, exposed composition **24/24**, **fresh withheld 32/32** (disjoint people/destinations, three-operation orders absent from every earlier population, and a person-level redirect so the operation operand needs a followed read first). The same artifact now retains the prior primary lifecycle **38/38** (34 language questions + 4 API queries) with 37/37 ingestion checks and no errors, while the retained **computation-forms-only ablation** reproduces the reviewed baseline exactly (**17/38**, 22/37, 4 errors) — the causal attribution. Mixed-session check 7/7: observed ingest, ordinary/historical questions, redirect-to-operand computation, a pinned in-flight answer held across a correction, and identical continuation after save/reload. Primary worlds are now built by the candidate's own `observe`+`ingest` path (48/48 assertions committed, zero disagreements with the typed-record comparator).
+
+**Controls:** NoRead 0/40, ApplyDisabled 12/40, ConsumeDisabled 12/40, folded central sign 24/40, fitted shared-transition 26/40, directly tabulated finite 40/40 (ties the signed arm). No geometric code search was re-run: the ordered categorical binder already reaches 132/132 exact joint hypotheses on the combined support and the H4 descriptor objective was saturated. Competence and reuse only; no compactness, efficiency or energy advantage claimed.
+
+**Next:** integrate the retained E/S donor as an explicit local emission option through this same session (source-separated text, equal recent tails with changed older evidence, no over-strong copy boosts). Then durable scopes, executed Rust generation, and matched-cost laptop/API qualification. Q8 consumption is retained rather than extended; Hopf fiber, E8/S7 and harmonic mechanisms remain conditional tools for a witnessed need.
+
+**Research leadership and autonomy:** Codex owns principal mathematics/ML/systems review; DeepSeek owns substantive implementation and diagnosis within the objective. Necessary local extensions remain prospectively authorized with cumulative accounting and physical reserve. No arbitrary short timer or retry quota replaces judgment. Preserve original/negative artifacts and separate exact infrastructure, learned interpretation and supplied fixtures.
+
+## Previous active — review of consumed geometric state, September 22
+
 
 **PR #1347, principal review:** retain consumed signed Q8 computation at authored-task scope. Development 56/56 and exposed composition 24/24 contain 16 ordinary plus 64 computed requests; the competent finite table ties, while central-sign projection loses an answer-relevant distinction. Primary worlds still supply typed records and continuation flags. [Review](consumed-geometric-state-review-2026-09-22.md) and [independent audit](../evidence/consumed-geometric-state-submission-audit-2026-09-22.json) own the qualifications.
 

@@ -2144,3 +2144,38 @@ workers, one model worker, 8 GiB RAM ceiling, at most 384 MiB temporary build ou
 32 MiB retained report data. Reuse the release cache; no paid or external compute. The standing owner
 authorization covers a necessary local extension recorded prospectively with reason and increment
 before use. No sealed attempt, unique artifact or executable is deleted to manufacture headroom.
+
+### Observed computation lifecycle — actual charge, September 22 UTC
+
+Actual elapsed work covers recovery and verification of `323040a4`, reading the principal review and the
+active brief, the combined-support diagnosis, two implementation steps, the release rebuild, the focused
+test runs, four sealed attempts, evidence reconstruction, documentation and delivery. Measured wall
+clock from the first recovery command to delivery is **~2,400,000 ms**; the prospective **6,000,000 ms**
+projection recorded above was **not exceeded**, so no standing-authorized increment was consumed and the
+shared limit is untouched. One compiler worker at a time, 8 GiB ceiling, no paid compute.
+
+Storage: four sealed attempt roots were retained (`observed-computation-lifecycle-1..4`, **~9.0 MB**
+total, inside the projected 32 MiB retained allowance). Build and test output for the changed path
+exceeded the prospective 384 MiB temporary refinement by roughly 324 MB because the release test
+binaries for `uor-r4-core` are large; that overage is disclosed rather than absorbed silently. It was
+more than offset by reclaiming **1,468,719,104 B** of inactive compiler output belonging to three
+finished, already-merged branches
+(`.worktrees/{consumed-geometric-state,geometric-query-read,scoped-correction-memory}/target`), recorded
+in `observed-computation-lifecycle-delivery/uor-observed-cleanup{,-manifest}.json`. Free space after the
+reclaim is **33,527,676,928 B**.
+
+**Disclosed shortfall:** free space was already **32,794,578,944 B** before this step — about 3.97 GB
+**below** the recorded physical reserve of 36,766,079,385 B — so the shortfall predates this work and is
+not repaired by it. After the reclaim the remaining shortfall is **3,238,402,457 B**. Reclaiming further
+inactive compiler output is possible but was not taken: this step added ~0.73 GB net and no deletion of
+sealed roots, delivered executables, unique research, models, corpora or histories was performed. The
+delivered executable, build/test/fmt/claims logs and receipts are preserved in
+`observed-computation-lifecycle-delivery/`.
+
+Executed **27** `scoped_memory` + **23** `observed_text_session` module tests and **25** runner tests
+(one legacy artifact-dependent test ignored), `cargo fmt --check` clean, release build and actual loaded
+execution of the sealed attempt including the separate-process raw-text restart. Four library tests in
+untouched modules (`geometric_attention`, `lowbit_attention`) fail; the diff under `native_geometric/`
+is empty, so they are pre-existing and unrelated. Combined support restores the prior **38/38** while the
+retained computation-forms-only ablation reproduces **17/38**; fresh withheld **32/32**. Source
+`de5991fd`, exact evidence in [evidence](../evidence/observed-computation-lifecycle-2026-09-22.json).
