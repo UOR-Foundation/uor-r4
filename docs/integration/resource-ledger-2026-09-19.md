@@ -2220,3 +2220,31 @@ reserve is not reported restored. Restore headroom and avoid debug incremental r
 larger future work. Final review charge/check receipts own the final balance and free bytes.
 
 Principal correction charge at 2026-09-22T19:18:12.595947+00:00: **1,673,595ms**, comprising1,253,595ms measured since the recorded recovery clock,120,000ms earlier recovery estimate and300,000ms delivery allowance. New cumulative **355,471,846/366,700,000ms**; no limit increase. This is a conservative charge, not a claim that both estimates were measured. [Charge receipt](../evidence/grounded-lexical-realization-principal-charge-2026-09-22.json). Focused32+5+25 tests and one explicit loaded-artifact parent test/seven child processes pass;62parent+62child frames/effects retained in86 sealed files. Free after tests:28,355,604,480B.
+
+## Truthful state-conditioned lexical realization — projection and charge, 2026-09-22
+
+This run was authorized by the owner's continuous task and the [execution brief](deepseek-state-conditioned-lexical-step-2026-09-22.md). The live JSON read
+`{"cumulative_ms":355471846,"limit_ms":366700000}` at recovery, leaving `11228154 ms`.
+
+**Projection.** One isolated full worktree; one declared source-separated corpus over a small state
+world; offline floating-point fitting of a bounded low-bit decoder with a fixed seed and a declared
+seed-selection set; actual loaded Rust generation, controls, restart and a separate-process resume;
+documentation and protected delivery. Planned limits: one compiler worker, `CARGO_INCREMENTAL=0`,
+the shared release target directory, 8 GiB peak RAM, under 512 MiB of new retained report output, and
+the 128 MiB storage stop margin. **No limit increase is requested or used**, so no prospective
+extension is recorded; the projection above is a retrospective reconciliation and is stated as such
+rather than presented as a pre-execution receipt.
+
+**Charge. `6,000,000 ms`** — build, test and run time measured across the executed session
+(seven `uor-r4-core` library test builds, eight `competitive-reader` release builds and checks, and
+about forty declared experiment runs, the longest being 68.8 s), plus the remaining documentation,
+knowledge-store update and protected delivery. It is an estimate anchored to the observed build
+durations and run counts, not a second-by-second measurement.
+
+**New cumulative `361,471,846 / 366,700,000 ms`.** Remaining `5,228,154 ms`.
+
+**Physical space.** The sealed root `.uor-models/realtext-prior-2026-09-20/state-lexical-1` retains
+25 files / 232 KiB (a claim-scoped report root, `claim` created it exclusively and `verify` returned
+no unlisted file). Free space measured at the charge was `29,161,600 KiB` (about 27.8 GiB), above the
+adopted 24 GiB plus 128 MiB reserve. No executable, model, artifact, report, unique research, source,
+worktree or Downloads entry was removed. No paid or external compute was used.

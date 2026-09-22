@@ -1,6 +1,14 @@
 # Current native geometric AI work
 
-## Active — truthful state-conditioned lexical realization
+## Active — truthful state-conditioned lexical realization executed
+
+**Executed, all declared checks pass.** One learned, state-conditioned lexical decoder is served through the retained scoped session under the new prospectively versioned `OutputContract::StateLexicalV1`. The decoder consumes the symbols it **actually emitted** and a content embedding of the selected evidence and consumed computation, and it says what is true: past tense follows the requested history, and `still`/`became` report the computation's actual effect on the consumed address rather than a predecessor's existence. On the declared material the learned decoder is **31/31** (fit documents **23/23**, held-out source documents **8/8**), the retained copy contract is unchanged **31/31**, and 322/322 teacher-forced steps agree through the exported integer artifact. With `derived`/`history`/`prior_differs` held equal, changing only the consumed computation changes an uncopied word in **4/4** documents. The recurrence ablation reproduces the exposed clipped-count aliasing (`it it it it it it <value>`, **0/31**); the context ablation gives 7/31; the retained finite table fitted on the same text gives **0/31** because its key omits emitted symbols and content. Ten in-process boundaries and ten frames resumed in a **separate process** reach the identical complete answer. [Result](state-conditioned-lexical-result-2026-09-22.md); [evidence](../evidence/state-lexical-2026-09-22.json). Sealed root `.uor-models/realtext-prior-2026-09-20/state-lexical-1`.
+
+**Boundaries:** authored development scope over a small declared world; not general prose; no geometric advantage claimed; the E/S donor was not loaded as a comparator; whole-path D0-b not measured; energy UNAVAILABLE; no paid compute. The change/`still` distinction is a learned association over fitted content embeddings and does not transfer to wholly unfamiliar computed values.
+
+**Next:** broaden to declared source-separated prose/conversation with a much larger learned vocabulary and carry a computed result into executed Rust through the same native path; reintroduce geometry only for a witnessed aliasing, interference or cost problem, measured against an equal-information ordinary mechanism.
+
+## Previous active — the truthful state-conditioned lexical brief (addressed above)
 
 **PR #1349, principal review:** retain the learned Copy/Insert/Stop interface as an exposed four-word construction. It changes uncopied words from a history/provenance flag, but the authored targets misuse tense (`was` for the current value; `now` for computation). Correct temporal language and the lexical milestone remain **incomplete**. The 392 retained rows bypass the realizer; five explicit legacy cases do load it. [Review](grounded-lexical-realization-review-2026-09-22.md) and [independent audit](../evidence/grounded-lexical-realization-principal-audit-2026-09-22.json) distinguish implementation, semantic validity, exposure and same-artifact scope.
 
