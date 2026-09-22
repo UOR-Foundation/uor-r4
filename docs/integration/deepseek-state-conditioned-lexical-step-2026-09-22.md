@@ -8,6 +8,8 @@ Build **one truthful, learned state-conditioned lexical interface** through the 
 
 Codex remains principal mathematics/ML/systems investigator and reviewer. You are a substantive research and implementation contributor. Choose and improve the representation, training objective, data, optimization and implementation when the source or a reduced experiment supports your judgment. Explain the missing distinction, expected benefit, cost and falsifier. Necessary diagnosis, corrections and successive tasks within this milestone are authorized. Do not let an arbitrary timer, retry count or bookkeeping task truncate useful work or delivery. Equally, do not spend repeated runs enlarging a representation whose reduced form cannot express the needed dependency.
 
+Do not finish this run after changing tense targets or adding output slots alone. Those are development steps inside the complete lexical-learning milestone. A substantive negative is acceptable when the intended mechanism and decisive comparison have actually been exercised and the failure is localized; a compiled helper or a self-labelled fixture score is not that result.
+
 The result need not establish unrestricted prose or frontier capability. It must move beyond the exposed four-word interface witness to a small learned language component with truthful grounded responses and meaningful held-out text evidence. A near miss on an empirical quality screen can remain valuable when its causal mechanism is sound. Incorrect version/scope, false temporal propositions, damaged exact spans and target leakage are correctness problems, not acceptable fluency tradeoffs.
 
 ## Recover relevant authority and history
@@ -129,6 +131,8 @@ Inspect further primary work when it resolves a concrete design uncertainty. Pre
 ## Resources and full delivery
 
 Refresh the shared cumulative ledger, machine load, artifact paths and measured free space. Project the full preparation/build/fit/development/retry/evaluation/reload/delivery work, including peak RAM, threads and temporary/retained storage, before expensive execution. Necessary local time/storage extensions are already owner-authorized: record the reason, increment and updated cumulative limits prospectively, preserve prior charges, and continue useful work. The existing physical reserve is a declared planning choice; verify the current review receipt instead of inheriting an old free-space number. Retain the 128 MiB stop margin. No paid/external compute or deletion of unique research/models/reports/executables is authorized. Reclaim only verified inactive disposable caches when useful.
+
+Default to the shared release build cache, one compiler worker and `CARGO_INCREMENTAL=0`. The prior all-core debug build grew the cache by roughly9GiB and breached its own physical reserve; sharing a target directory does not make its growth free. A different build plan is allowed when projected and justified. Preserve executable provenance and clean only verified inactive intermediates.
 
 Measure complete answer latency, parameter/state traffic, initialization/cache cost and memory use on the named machine. E/S full readout can dominate a small selector, and repeated history scans or payload hashing can dominate tiny arithmetic. Profile before advertising cache residence or energy savings. Energy remains UNAVAILABLE without an actual measurement.
 

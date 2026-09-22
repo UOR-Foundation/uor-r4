@@ -2218,3 +2218,5 @@ was removed. The review explicitly adopts24GiB plus128MiB temporary physical res
 bounded correction, under the standing necessary-local-storage authorization; the prior30GiB
 reserve is not reported restored. Restore headroom and avoid debug incremental regrowth before
 larger future work. Final review charge/check receipts own the final balance and free bytes.
+
+Principal correction charge at 2026-09-22T19:18:12.595947+00:00: **1,673,595ms**, comprising1,253,595ms measured since the recorded recovery clock,120,000ms earlier recovery estimate and300,000ms delivery allowance. New cumulative **355,471,846/366,700,000ms**; no limit increase. This is a conservative charge, not a claim that both estimates were measured. [Charge receipt](../evidence/grounded-lexical-realization-principal-charge-2026-09-22.json). Focused32+5+25 tests and one explicit loaded-artifact parent test/seven child processes pass;62parent+62child frames/effects retained in86 sealed files. Free after tests:28,355,604,480B.

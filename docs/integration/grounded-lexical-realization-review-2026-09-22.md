@@ -57,6 +57,8 @@ The original realizer recomputed `prior_differs` through payload-liveness lookup
 
 Restore previously accepted any declared vocabulary slot around the copied span. Swapping `is` for `was`, relocating EOS or jumping to Stop could pass despite being unreachable under the bound policy. Validation now replays the bounded lexical prefix through the same emission operation and checks tokens, cursor, counters and reachable phase. It also rejects lexical counters before capture and an EOS token declared as a vocabulary slot. This validates causal consistency, not cryptographic authenticity, and adds bounded replay work; complete-path efficiency remains unqualified.
 
+Executed correction checks: **32 scoped-memory tests,5 lexical-policy tests and25 ordinary runner tests pass**;6 artifact-dependent tests remain ignored by default. The explicitly invoked saved-artifact test passes and launches7 child processes. Its86-file sealed report contains6 exposed realized outputs,5 bound-realizer legacy outputs and **62 parent +62 child checkpoint frames/effect sequences** with exact agreement, including the post-eviction pinned-context witness. All86 file sizes/Blake3 hashes independently verify. This does not extend the full392-row campaign to a bound realizer, or repair the old model's temporal meaning.
+
 Learned bytes and the original flawed targets are preserved. These source repairs do not silently convert old output semantics into positive evidence. Focused tests and actual saved-artifact reload execution are recorded in [principal checks](../evidence/grounded-lexical-realization-principal-checks-2026-09-22.json).
 
 ## How this connects to the full geometry programme
