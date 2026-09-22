@@ -21855,9 +21855,42 @@ fn slx_run() -> Result<ExitCode, String> {
     //
     // Each tag records the declared *meaning* the sentence expresses, so the training set can be
     // balanced and the unidentified-content regime exercised without inventing targets.
-    let mut tagged: Vec<(SlSequence, &'static str)> = Vec::new();
+    let mut tagged: Vec<(SlSequence, &'static str, RealizationContext)> = Vec::new();
     let mut fit_text_receipts = Vec::new();
     for doc in SLX_DOCS.iter().filter(|d| d.fit) {
+        // Observe the comparator's actual serving context from the same loaded session. Its
+        // capture/history observations come from serving, rather than the authored answer family;
+        // a historical capture can itself have a different predecessor.
+        let context_for = |view: SlxView, op: Option<&str>| -> Result<RealizationContext, String> {
+            let mut runtime = slx_load(
+                &model_bytes,
+                &intent_bytes,
+                &lexicon_bytes,
+                &backend,
+                None,
+                OutputContract::LegacyWords,
+                MemoryControl::Normal,
+                &stores[doc.name],
+                doc.lineage,
+            )?;
+            let mut session = if let Some(op) = op {
+                let (clause, _) = cgs_clause(&tokenizer, 0, CgsForm::Compute, doc.entity, op)?;
+                runtime
+                    .ask(&clause, doc.scope.as_bytes())
+                    .map_err(|e| e.to_string())?
+            } else {
+                runtime
+                    .ask_view(
+                        doc.scope.as_bytes(),
+                        0,
+                        doc.entity.as_bytes(),
+                        view.history(),
+                    )
+                    .map_err(|e| e.to_string())?
+            };
+            runtime.run(&mut session).map_err(|e| e.to_string())?;
+            Ok(runtime.realization_context(&session))
+        };
         let prior_differs = doc.values.len() >= 2
             && doc.values[doc.values.len() - 2] != doc.values[doc.values.len() - 1];
         // current
@@ -21873,7 +21906,7 @@ fn slx_run() -> Result<ExitCode, String> {
             prior_differs,
         )?;
         fit_text_receipts.push(json!({"document": doc.name, "case": "current", "text": slx_render(SlxView::Current, false, false, current)}));
-        tagged.push((seq, "flag"));
+        tagged.push((seq, "flag", context_for(SlxView::Current, None)?));
         // previous and initial
         if doc.values.len() >= 2 {
             let prev = doc.values[doc.values.len() - 2];
@@ -21888,7 +21921,7 @@ fn slx_run() -> Result<ExitCode, String> {
                 false,
             )?;
             fit_text_receipts.push(json!({"document": doc.name, "case": "previous", "text": slx_render(SlxView::Previous, false, false, prev)}));
-            tagged.push((seq, "flag"));
+            tagged.push((seq, "flag", context_for(SlxView::Previous, None)?));
         }
         let first = doc.values[0];
         let seq = slx_text_sequence(
@@ -21902,7 +21935,7 @@ fn slx_run() -> Result<ExitCode, String> {
             false,
         )?;
         fit_text_receipts.push(json!({"document": doc.name, "case": "initial", "text": slx_render(SlxView::Initial, false, false, first)}));
-        tagged.push((seq, "flag"));
+        tagged.push((seq, "flag", context_for(SlxView::Initial, None)?));
         // consumed computations discovered through the retained session
         for probe in probes.get(doc.name).map(Vec::as_slice).unwrap_or(&[]) {
             let answer = cgs_decode_trim(&tokenizer, &probe.payload);
@@ -21925,7 +21958,7 @@ fn slx_run() -> Result<ExitCode, String> {
                 "document": doc.name, "case": if probe.changed {"derived_changed"} else {"derived_unchanged"},
                 "op": probe.op, "text": slx_render(SlxView::Current, true, probe.changed, &answer),
             }));
-            tagged.push((seq, tag));
+            tagged.push((seq, tag, context_for(SlxView::Current, Some(probe.op))?));
         }
     }
     // Two declared balancing decisions, made before fitting and reported with the corpus:
@@ -21936,23 +21969,28 @@ fn slx_run() -> Result<ExitCode, String> {
     //   rather than left for the majority class to drown.
     let declared_sequences = tagged.len();
     let mut fit_sequences: Vec<SlSequence> = Vec::new();
-    for (seq, tag) in &tagged {
+    let mut comparator_contexts = Vec::new();
+    for (seq, tag, context) in &tagged {
         fit_sequences.push(seq.clone());
+        comparator_contexts.push(*context);
         if *tag == "flag" {
             let mut blank = seq.clone();
             blank.sel.clear();
             blank.res.clear();
             fit_sequences.push(blank);
+            comparator_contexts.push(*context);
         }
         if *tag == "unchanged" {
             for _ in 0..3 {
                 fit_sequences.push(seq.clone());
+                comparator_contexts.push(*context);
             }
         }
         if *tag == "changed" {
             // The moving operations are twice as frequent as the identity one, so the identity branch
             // is repeated above and the moving branch once here to reach the same order.
             fit_sequences.push(seq.clone());
+            comparator_contexts.push(*context);
         }
     }
 
@@ -22043,19 +22081,16 @@ fn slx_run() -> Result<ExitCode, String> {
 
     // ---- the retained finite-table comparator, fitted on the same declared text ----
     let mut comparator_examples: Vec<RealizationExample> = Vec::new();
-    for ex in &fit_sequences {
+    assert_eq!(fit_sequences.len(), comparator_contexts.len());
+    for (ex, context) in fit_sequences.iter().zip(&comparator_contexts) {
         let stages = ex.copy_stages();
         let mut inserted = 0usize;
         for (i, action) in ex.actions.iter().enumerate() {
             comparator_examples.push(RealizationExample {
                 context: RealizationContext {
-                    relation: 0,
-                    history: ex.history,
-                    derived: ex.derived,
-                    prior_differs: ex.prior_differs,
-                    evidence_class: 0,
                     copy_stage: stages[i],
                     emitted_bucket: inserted.min(3) as u8,
+                    ..*context
                 },
                 action: *action,
             });
@@ -22391,7 +22426,8 @@ fn slx_run() -> Result<ExitCode, String> {
         "fit_diagnostics_inherited_without_neural_refit": reuse_root.is_some(),
         "teacher_forced_replay": {"correct": teacher_forced_replay.0, "total": teacher_forced_replay.1},
         "evaluation_exposure": "exposed authored panel; replay is not a fresh acceptance draw",
-        "finite_comparator_fit": "actual inserted-count bucket, matched to serving",
+        "finite_comparator_fit": "shared runtime causal context; actual inserted-count and copy-stage progress",
+        "finite_comparator_training_contexts": comparator_contexts,
 
         "artifact_sha256": {
             "model.json": sha256_hex(&model_bytes),

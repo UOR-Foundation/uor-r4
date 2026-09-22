@@ -3453,7 +3453,9 @@ impl ScopedMemoryRuntime {
     }
 
     /// The causal, target-free context that indexes the realization table for the current capture.
-    fn realization_context(&self, session: &ScopedSession) -> RealizationContext {
+    /// Offline fitting may observe this same context on an executed session. Targets must not
+    /// manufacture provenance/history flags that differ from this serving observation.
+    pub fn realization_context(&self, session: &ScopedSession) -> RealizationContext {
         let len = session.captured_payload_len();
         let cursor = session.cursor;
         let copy_stage = if cursor == 0 {
