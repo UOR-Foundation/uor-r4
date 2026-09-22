@@ -2031,3 +2031,11 @@ This step contributed 127 MiB of reports and 1.0 GiB of regenerable build output
 other worktrees (`uor-r4-worktrees` 8.9 GiB, `.codex` 4.5 GiB), the main checkout target (3.7 GiB) and
 pre-existing corpora under `.uor-models` (20 GiB). Flagged for the principal; no unique artifact was
 deleted to close it, and no broad deletion was performed.
+
+**Executable preservation.** The delivered release binary was rebuilt from the committed source and
+is **byte-identical** to the receipt: SHA256
+`75ac2ba1a96f5b89ed4d7792e7db4a8946cb58532ea606727ba1cfaab6463226`, matching
+`result.json.running_source.executable_sha256`. It is retained outside the sealed root at
+`.uor-models/realtext-prior-2026-09-20/ordinary-form-argument-binding-delivery/competitive-reader-ordinary-form-binding-8`.
+This confirms reproducible release compilation for the pinned toolchain and preserves the served
+artifact as the project requires. The worktree build target was removed again after copying it out.
