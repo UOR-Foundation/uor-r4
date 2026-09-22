@@ -17142,10 +17142,11 @@ struct CgsSupervision {
 
 fn cgs_development_supervision(
     tokenizer: &HfBpeTokenizer,
+    seg_start: u32,
 ) -> Result<(Vec<Clause>, Vec<CgsSupervision>), String> {
     let mut clauses = Vec::new();
     let mut supervision = Vec::new();
-    let mut seg = 0u32;
+    let mut seg = seg_start;
     let mut push = |clauses: &mut Vec<Clause>,
                     supervision: &mut Vec<CgsSupervision>,
                     seg: &mut u32,
@@ -17221,6 +17222,30 @@ fn cgs_development_supervision(
             STMT_ASSERT,
         )?;
     }
+    Ok((clauses, supervision))
+}
+
+/// **One combined supervision set** over both retained form families: the scoped
+/// correction/history/relationship forms and the consumed-computation forms. One binder and one
+/// intent table therefore have to bind ordinary arguments *and* observe an operation request, which is
+/// what lets a single loaded artifact compose them. The submitted design fitted the same two heads on
+/// the computation forms alone; that ablation is retained below as a named comparison.
+fn combined_development_supervision(
+    tokenizer: &HfBpeTokenizer,
+) -> Result<(Vec<Clause>, Vec<CgsSupervision>), String> {
+    let (mut clauses, scm) = scm_development_supervision(tokenizer)?;
+    let mut supervision: Vec<CgsSupervision> = scm
+        .into_iter()
+        .map(|s| CgsSupervision {
+            label: s.label,
+            question: s.question,
+            intent: s.intent,
+        })
+        .collect();
+    let seg_start = clauses.iter().map(|c| c.seg).max().map_or(0, |m| m + 1);
+    let (cgs_clauses, cgs) = cgs_development_supervision(tokenizer, seg_start)?;
+    clauses.extend(cgs_clauses);
+    supervision.extend(cgs);
     Ok((clauses, supervision))
 }
 
@@ -17452,6 +17477,91 @@ fn cgs_memory(tokenizer: &HfBpeTokenizer, world: &CgsWorld) -> Result<Memory, St
     }
     memory.validate().map_err(|e| e.to_string())?;
     Ok(memory)
+}
+
+/// The declared assertions of a serving world, in the order they are observed.
+fn cgs_world_facts(world: &CgsWorld) -> Vec<(CgsForm, &'static str, &'static str)> {
+    let mut facts: Vec<(CgsForm, &'static str, &'static str)> = Vec::new();
+    for (person_index, label_index) in world.assignment.iter().enumerate() {
+        facts.push((
+            CgsForm::AssertOffice,
+            world.people[person_index],
+            CGS_LABELS[*label_index],
+        ));
+    }
+    for (label_index, office) in world.office.iter().enumerate() {
+        let label = CGS_LABELS[label_index];
+        match office {
+            Some(dest) => facts.push((CgsForm::AssertOffice, label, world.dests[*dest])),
+            None => facts.push((
+                CgsForm::RedirectOffice,
+                label,
+                CGS_LABELS[world.redirect[label_index]],
+            )),
+        }
+    }
+    facts
+}
+
+/// Build one serving world by passing its **actual observed assertions** through the candidate's
+/// loaded ingest path. What the panel then reads is what the learned interface actually committed,
+/// not a typed construction: the raw text, tokenizer alignment, learned relation/intent and the
+/// committed record are all retained as receipts. `cgs_memory` remains available as the named
+/// typed-record comparator that localizes an observed-ingest failure from a computation failure.
+#[allow(clippy::too_many_arguments)]
+fn cgs_ingest_world(
+    tokenizer: &HfBpeTokenizer,
+    model: &[u8],
+    intent: &[u8],
+    lexicon: &[u8],
+    backend: &ComputationBackend,
+    control: &MemoryControl,
+    world: &CgsWorld,
+) -> Result<(ScopedMemoryRuntime, Vec<serde_json::Value>), String> {
+    let mut runtime = ScopedMemoryRuntime::load_with_computation(
+        model,
+        intent,
+        Some(lexicon),
+        backend.clone(),
+        Memory::new(world.id as u64, 16),
+        world.id as u64,
+        control.clone(),
+        VOCAB,
+        Some(CGS_EOS),
+    )
+    .map_err(|e| e.to_string())?;
+    let mut receipts = Vec::with_capacity(16);
+    for (turn, (form, entity, tail)) in cgs_world_facts(world).into_iter().enumerate() {
+        let (clause, _) = cgs_clause(tokenizer, 0, form, entity, tail)?;
+        let observed = runtime.observe(&clause).map_err(|e| e.to_string())?;
+        let outcome = runtime
+            .ingest(&clause, world.scope.as_bytes(), turn as u64 + 1)
+            .map_err(|e| e.to_string())?;
+        let recorded = match &outcome {
+            IngestOutcome::Wrote(written) => Some(serde_json::json!({
+                "id": written.id, "commit": written.commit, "superseded": written.superseded,
+                "revision": written.revision, "action": format!("{:?}", written.action),
+            })),
+            _ => None,
+        };
+        receipts.push(serde_json::json!({
+            "turn": turn,
+            "text": clause.text,
+            "declared_form": format!("{form:?}"),
+            "declared_entity": entity,
+            "declared_value": tail,
+            "declared_continues": matches!(form, CgsForm::RedirectOffice),
+            "entity": String::from_utf8_lossy(&observed.entity_key),
+            "value": observed.value_key.as_ref().map(|v| String::from_utf8_lossy(v).into_owned()),
+            "relation": observed.relation,
+            "intent": observed.intent,
+            "role": observed.role,
+            "continues": observed.continues,
+            "outcome": format!("{outcome:?}").chars().take(40).collect::<String>(),
+            "committed": recorded,
+        }));
+    }
+    Ok((runtime, receipts))
 }
 
 fn cgs_reload_check(dir: &std::path::Path) -> Result<ExitCode, String> {
@@ -17815,8 +17925,8 @@ fn cgs_run() -> Result<ExitCode, String> {
     let lexicon = GroundingLexicon::from_observations(&surface, &canonical)
         .map_err(|e| format!("lexicon: {e}"))?;
 
-    // ---- the learned binder and intent tables ----
-    let (dev_clauses, supervision) = cgs_development_supervision(&tokenizer)?;
+    // ---- the learned binder and intent tables: ONE combined bundle over both form families ----
+    let (dev_clauses, supervision) = combined_development_supervision(&tokenizer)?;
     let labels: Vec<ClauseLabel> = supervision.iter().map(|s| s.label.clone()).collect();
     let (model, fit) = fit_observed_text_model(&dev_clauses, &labels, false)
         .map_err(|e| format!("binder fit: {e}"))?;
@@ -17833,6 +17943,32 @@ fn cgs_run() -> Result<ExitCode, String> {
         .collect();
     let (intent, intent_fit) = fit_intent_model(&dev_clauses, &cue_spans, &intent_examples, VOCAB)
         .map_err(|e| format!("intent fit: {e}"))?;
+
+    // ---- retained ablation: the submitted design fitted the same two heads on the computation
+    // forms alone. Fitting both on identical inputs makes "combined support" a measured change, not
+    // an assertion, and keeps the previous candidate's scope reproducible. ----
+    let (cgs_only_clauses, cgs_only_sup) = cgs_development_supervision(&tokenizer, 0)?;
+    let cgs_only_labels: Vec<ClauseLabel> =
+        cgs_only_sup.iter().map(|s| s.label.clone()).collect();
+    let (cgs_only_model, cgs_only_fit) =
+        fit_observed_text_model(&cgs_only_clauses, &cgs_only_labels, false)
+            .map_err(|e| format!("cgs-only binder fit: {e}"))?;
+    let cgs_only_spans: Vec<(usize, usize)> = cgs_only_sup
+        .iter()
+        .map(|s| (s.label.marker.0 as usize, s.label.marker.1))
+        .collect();
+    let cgs_only_examples: Vec<IntentExample> = cgs_only_sup
+        .iter()
+        .map(|s| IntentExample {
+            question: s.question,
+            intent: s.intent,
+        })
+        .collect();
+    let (cgs_only_intent, cgs_only_intent_fit) =
+        fit_intent_model(&cgs_only_clauses, &cgs_only_spans, &cgs_only_examples, VOCAB)
+            .map_err(|e| format!("cgs-only intent fit: {e}"))?;
+    let cgs_only_model_bytes = cgs_only_model.to_bytes().map_err(|e| format!("{e}"))?;
+    let cgs_only_intent_bytes = cgs_only_intent.to_bytes().map_err(|e| format!("{e}"))?;
     let model_bytes = model.to_bytes().map_err(|e| format!("{e}"))?;
     let intent_bytes = intent.to_bytes().map_err(|e| format!("{e}"))?;
     let lexicon_bytes = lexicon.to_bytes().map_err(|e| format!("{e}"))?;
@@ -17867,17 +18003,21 @@ fn cgs_run() -> Result<ExitCode, String> {
     let final_worlds = cgs_worlds(4, &CGS_FINAL_PEOPLE, &CGS_FINAL_DESTS, "alpha", 3);
     let final_world_beta = cgs_worlds(5, &CGS_FINAL_PEOPLE, &CGS_FINAL_DESTS, "beta", 6);
 
-    let load = |memory: Memory,
-                control: MemoryControl,
-                backend: &ComputationBackend|
-     -> Result<ScopedMemoryRuntime, String> {
-        let lineage = memory.lineage;
+    // Every compared backend is loaded from its own serialized identity before it is used.
+    let load_backend = |backend: &ComputationBackend| -> Result<ComputationBackend, String> {
         let serialized: serde_json::Value = serde_json::from_slice(
             &std::fs::read(root.join(format!("artifacts/backend-{}.json", backend.name())))
                 .map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
-        let loaded_backend = cgs_backend_from_json(&serialized)?;
+        cgs_backend_from_json(&serialized)
+    };
+    let load = |memory: Memory,
+                control: MemoryControl,
+                backend: &ComputationBackend|
+     -> Result<ScopedMemoryRuntime, String> {
+        let lineage = memory.lineage;
+        let loaded_backend = load_backend(backend)?;
         ScopedMemoryRuntime::load_with_computation(
             &model_bytes,
             &intent_bytes,
@@ -17891,10 +18031,29 @@ fn cgs_run() -> Result<ExitCode, String> {
         )
         .map_err(|e| e.to_string())
     };
+    // The primary serving world is built by the candidate's own loaded ingest path.
+    let ingest_world = |world: &CgsWorld,
+                        control: &MemoryControl,
+                        backend: &ComputationBackend|
+     -> Result<(ScopedMemoryRuntime, Vec<serde_json::Value>), String> {
+        let loaded_backend = load_backend(backend)?;
+        cgs_ingest_world(
+            &tokenizer,
+            &model_bytes,
+            &intent_bytes,
+            &lexicon_bytes,
+            &loaded_backend,
+            control,
+            world,
+        )
+    };
 
     let mut arms = Vec::<serde_json::Value>::new();
     let mut all_rows = Vec::<serde_json::Value>::new();
     let mut panels = Vec::<serde_json::Value>::new();
+    let mut ingest_receipts = Vec::<serde_json::Value>::new();
+    let mut typed_arm = Vec::<serde_json::Value>::new();
+    let mut ingest_disagreements = Vec::<serde_json::Value>::new();
     for (panel, worlds, seqs) in [
         (
             "development",
@@ -17909,8 +18068,10 @@ fn cgs_run() -> Result<ExitCode, String> {
     ] {
         let (mut requests, mut complete) = (0usize, 0usize);
         for world in worlds {
-            let memory = cgs_memory(&tokenizer, world)?;
-            let runtime = load(memory, MemoryControl::Normal, &signed)?;
+            // Primary: the world itself is constructed by the candidate's loaded ingest path.
+            let (runtime, receipts) =
+                ingest_world(world, &MemoryControl::Normal, &signed)?;
+            ingest_receipts.extend(receipts);
             let result = cgs_panel(
                 &tokenizer,
                 &runtime,
@@ -17922,6 +18083,31 @@ fn cgs_run() -> Result<ExitCode, String> {
             )?;
             requests += result.requests;
             complete += result.complete;
+            // Named comparator arm on the identical requests, to localize an observed-ingest
+            // failure from a computation/consumption failure.
+            let typed = load(cgs_memory(&tokenizer, world)?, MemoryControl::Normal, &signed)?;
+            let typed_result = cgs_panel(
+                &tokenizer,
+                &typed,
+                &action,
+                world,
+                &seqs,
+                panel,
+                "typed_records_only",
+            )?;
+            typed_arm.push(serde_json::json!({
+                "panel": panel, "world": world.id, "requests": typed_result.requests,
+                "complete": typed_result.complete,
+            }));
+            // Row-by-row agreement between the two constructions.
+            for (a, b) in result.rows.iter().zip(typed_result.rows.iter()) {
+                if a["matched"] != b["matched"] || a["answer"] != b["answer"] {
+                    ingest_disagreements.push(serde_json::json!({
+                        "panel": panel, "world": world.id, "request": a["request"],
+                        "learned": a["answer"], "typed": b["answer"],
+                    }));
+                }
+            }
             all_rows.extend(result.rows);
         }
         panels.push(serde_json::json!({
@@ -17944,8 +18130,7 @@ fn cgs_run() -> Result<ExitCode, String> {
         let mut requests = 0usize;
         let mut complete = 0usize;
         for world in [&dev_worlds[0], &final_worlds[0]] {
-            let memory = cgs_memory(&tokenizer, world)?;
-            let runtime = load(memory, control.clone(), backend)?;
+            let (runtime, _) = ingest_world(world, &control, backend)?;
             let seqs: Vec<&[&str]> = if world.id >= 4 {
                 CGS_FINAL_SEQS.to_vec()
             } else {
@@ -18100,6 +18285,16 @@ fn cgs_run() -> Result<ExitCode, String> {
         &signed,
         "new_computation_artifact",
     )?;
+    // The submitted design's ablation on the identical prior panel: computation-forms-only
+    // supervision, so "combined support" is measured rather than asserted.
+    let ablation = cgs_prior_lifecycle(
+        &tokenizer,
+        &cgs_only_model_bytes,
+        &cgs_only_intent_bytes,
+        &lexicon_bytes,
+        &signed,
+        "ablation_computation_forms_only",
+    )?;
     let prior_root = PathBuf::from("/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/scoped-memory-principal-3");
     let prior_model =
         std::fs::read(prior_root.join("artifacts/binder.json")).map_err(|e| e.to_string())?;
@@ -18117,6 +18312,7 @@ fn cgs_run() -> Result<ExitCode, String> {
         &root,
         "preservation.json",
         &json!({"candidate":preservation,"prior_migrated":prior_preservation,
+        "ablation_computation_forms_only":ablation,
         "prior_model_sha256":sha256_hex(&prior_model),"prior_intent_sha256":sha256_hex(&prior_intent)}),
     )?;
 
@@ -18142,6 +18338,16 @@ fn cgs_run() -> Result<ExitCode, String> {
             "child_status": child.status.code(),"raw_text_entry":true,"child":child_json},
     });
 
+    // Every observed world assertion must be committed by the learned ingest path with the declared
+    // entity/value/relation/continuation ownership.
+    let ingest_ok = ingest_receipts.iter().all(|r| {
+        r["committed"].is_object()
+            && r["entity"] == r["declared_entity"]
+            && r["value"] == r["declared_value"]
+            && r["continues"] == r["declared_continues"]
+            && r["relation"] == json!(0)
+            && r["intent"] == json!(STMT_ASSERT)
+    });
     let checks = serde_json::json!({
         "development_complete": panels[0]["complete"] == panels[0]["requests"],
         "final_complete": panels[1]["complete"] == panels[1]["requests"],
@@ -18159,6 +18365,16 @@ fn cgs_run() -> Result<ExitCode, String> {
         "fresh_process_identical": child_ok,
         "ordinary_smoke": ordinary["ok"] == serde_json::json!(true),
         "prior_model_migration_preserves_lifecycle": prior_preservation["all_preserved"] == json!(true),
+        // The milestone: the same candidate that consumes the computation must retain the earlier
+        // correction/history/relationship lifecycle, and its primary worlds must be built by the
+        // learned ingest path rather than by typed construction.
+        "combined_support_restores_prior_lifecycle": preservation["all_preserved"] == json!(true),
+        "learned_ingest_commits_every_assertion": ingest_ok,
+        "learned_ingest_matches_typed_records": ingest_disagreements.is_empty(),
+        // Falsifier for attributing the repair to combined support: the submitted
+        // computation-forms-only supervision must *not* restore the prior lifecycle.
+        "ablation_computation_forms_only_does_not_restore_prior_lifecycle":
+            ablation["all_preserved"] == json!(false),
     });
     let all_expected = checks
         .as_object()
@@ -18192,7 +18408,17 @@ fn cgs_run() -> Result<ExitCode, String> {
         },
         "learning": {"binder": fit, "intent": intent_fit, "factorization": factor_report,
             "finite_control_shape": {"values": finite_shape.0, "actions": finite_shape.1},
-            "finite_control_fit": finite_summary},
+            "finite_control_fit": finite_summary,
+            "ablation_computation_forms_only": {"binder": cgs_only_fit, "intent": cgs_only_intent_fit}},
+        "learned_ingest": {
+            "path": "ScopedMemoryRuntime::observe + ingest over the observed assertion text",
+            "receipts": ingest_receipts,
+            "all_committed": ingest_ok,
+        },
+        "localization": {
+            "typed_records_only": typed_arm,
+            "learned_vs_typed_disagreements": ingest_disagreements,
+        },
         "panels": panels,
         "controls": controls,
         "consumption": consumption,

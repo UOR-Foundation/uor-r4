@@ -2132,3 +2132,15 @@ Principal charge **2,715,520ms** = 1,875,520ms elapsed review +240,000ms prepara
 The submitted07:10Z projection timestamp is not reconciled with the parent review and actual15:03–15:19UTC seals. Its reported5,400,000ms engineering debit is retained at that scope; no unsupported duplicate or idle interval is charged. Seven submitted roots are partial/unsealed, nine sealed. All remain available.
 
 Executed27module+25runner tests (onelegacyignored), release build, corrected consumed-state and retained scoped-mode replays. Newcomputation fit17/38 versus migratedprior38/38: integration remains incomplete. Source6be7f8fc and exact evidence in [checks](../evidence/consumed-geometric-state-principal-checks-2026-09-22.json).
+
+## Observed computation lifecycle — prospective projection, September 22 UTC
+
+At 2026-09-22T16:20Z the live balance is **337,430,864 / 344,500,000 ms** (remaining **7,069,136 ms**)
+and free space is **37,285,060,608 B**, above the recorded reserve plus the 128 MiB stop margin.
+Projected for this step: **6,000,000 ms** covering context recovery, one combined observation/intent
+bundle, the learned-ingest primary path, the routing policy, focused builds and tests, the early
+mixed-session check, the preservation and final campaigns and protected delivery. Two compiler
+workers, one model worker, 8 GiB RAM ceiling, at most 384 MiB temporary build output and at most
+32 MiB retained report data. Reuse the release cache; no paid or external compute. The standing owner
+authorization covers a necessary local extension recorded prospectively with reason and increment
+before use. No sealed attempt, unique artifact or executable is deleted to manufacture headroom.
