@@ -1,5 +1,7 @@
 # Scoped correction-aware conversation memory — returned result
 
+> Principal qualification: this returned account is preserved as submitted. The [independent review](scoped-memory-review-2026-09-22.md) corrects aggregate language/API/terminal counts, final replay scope, shared capacity-oracle defect, raw-language child reload claim and fractured-read claim. Use the [principal checks](../evidence/scoped-memory-principal-checks-2026-09-22.json) for corrected execution. Original store/session v1 and executable remain retained; corrected store/session v2 are intentionally incompatible.
+
 September 22 UTC, 2026. Continuation of the reviewed ordinary-form milestone
 ([principal review](ordinary-form-binding-review-2026-09-22.md), merge `b218058f`). Source commit
 `c4bd440a`. Executed receipt: [evidence](../evidence/scoped-correction-memory-2026-09-22.json), sealed

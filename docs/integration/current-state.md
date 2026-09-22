@@ -1,6 +1,17 @@
 # Current native geometric AI work
 
-## Active: consume a geometric derived result through the scoped session
+## Active — principal review of scoped correction memory, September22
+
+**PR #1346, principal review:** retain learned scoped correction memory with exact version authority. Submitted primary 38/38 is expected-outcome agreement over 34 language questions and 4 explicit API queries (36 Complete, one NoHistory, one Unresolved). Final 10 language + 1 API queries use unfamiliar whole lexical strings in the exposed interaction structure; root 13 first evaluates them and root 14 replays them. [Review](../integration/scoped-memory-review-2026-09-22.md) and [independent audit](../evidence/scoped-memory-submission-audit-2026-09-22.json) own qualifications.
+
+The principal source correction repairs repeated capacity eviction, store/capture/emission/restore integrity, raw-text restart interpretation, and the pin/control instruments. Seventeen module tests, 25 runner tests (one legacy test ignored), release build and corrected exposed execution pass. Exact executed status is in the [checks receipt](../evidence/scoped-memory-principal-checks-2026-09-22.json); original artifacts remain retained. Capacity bounds token payloads per address, not all history bytes. Learned parameters, general scheduling, whole-path D0-b and energy claims are separate.
+
+**Next:** [consume one Q8-derived value inside this same session](../integration/deepseek-consumed-geometric-state-step-2026-09-22.md), so learned observed operations and a selected source change a later exact query and complete answer. Preserve scope/history/correction and actual restart. E/S prose/conversation and executed Rust follow, then integrated artifact/laptop qualification. Signed Q8 already supplies an order/sign witness; Hopf fiber, E8/S7 and harmonic/scalar mechanisms remain available for a measured need.
+
+## Historical submitted state (qualified by the principal review above)
+
+
+## Submitted direction before principal qualification
 
 **Completed step (source `c4bd440a`):** [correction-aware scoped conversation memory](scoped-correction-memory-result-2026-09-22.md) now runs on one loaded path. The retained joint binder observes ordinary assertions about unfamiliar entities; a separately fitted intent table reads the cue span for assert / explicit correction / declared nonasserting and for current / previous / initial questions. Addresses are injective length-delimited `(scope, entity lexical key, relation)` records with exact id, predecessor, global commit, source and owned payload; version order, equality and predecessor traversal are exact infrastructure and **a parse score never decides which fact is current**. Declared before fitting: same-value reassertion appends a revision without deduplication, a contradictory bare assertion becomes current and is marked `conflict`, an explicit correction supersedes without conflict, `previous` is the previous assertion while the previous distinct value is a separate exact query, `initial` is the earliest revision and an evicted one is typed, and a historical dependent request applies its view to the first hop only.
 
