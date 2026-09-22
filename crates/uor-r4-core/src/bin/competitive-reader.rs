@@ -18754,12 +18754,12 @@ fn cgs_mixed_session(
     // ---- ordinary, historical and redirect-following questions ----
     let mut question_total = 0usize;
     let mut question_matched = 0usize;
-    let mut ask = |rows: &mut Vec<serde_json::Value>,
-                   runtime: &ScopedMemoryRuntime,
-                   oracle: &ScmOracle,
-                   view: u64,
-                   form: ScmForm,
-                   entity: &str|
+    let ask = |rows: &mut Vec<serde_json::Value>,
+               runtime: &ScopedMemoryRuntime,
+               oracle: &ScmOracle,
+               view: u64,
+               form: ScmForm,
+               entity: &str|
      -> Result<bool, String> {
         let (clause, _) = scm_clause(tokenizer, 0, form, entity, None)?;
         let history = form
@@ -18850,11 +18850,11 @@ fn cgs_mixed_session(
     };
     let mut computation_total = 0usize;
     let mut computation_matched = 0usize;
-    let mut compute = |rows: &mut Vec<serde_json::Value>,
-                       runtime: &ScopedMemoryRuntime,
-                       oracle: &ScmOracle,
-                       person: &str,
-                       ops: &[&str]|
+    let compute = |rows: &mut Vec<serde_json::Value>,
+                   runtime: &ScopedMemoryRuntime,
+                   oracle: &ScmOracle,
+                   person: &str,
+                   ops: &[&str]|
      -> Result<bool, String> {
         let text = ops.join(" ");
         let (clause, _) = cgs_clause(tokenizer, 0, CgsForm::Compute, person, &text)?;
