@@ -81,8 +81,10 @@ impl From<ScopedMemoryError> for String {
     }
 }
 
-/// On-disk format version for the intent model and the store.
+/// The intent format is unchanged; store/session v2 adds immutable payload/history witnesses.
 pub const SCOPED_VERSION: u8 = 1;
+pub const SCOPED_STORE_VERSION: u8 = 2;
+pub const SCOPED_SESSION_VERSION: u8 = 2;
 /// Statement intents: assert, explicit correction, declared nonasserting.
 pub const N_STMT_INTENT: usize = 3;
 /// Learned statement intent indices.
@@ -203,8 +205,10 @@ impl IntentModel {
                 "unsupported intent model version".into(),
             ));
         }
-        if max_vocab == 0 {
-            return Err(ScopedMemoryError::Intent("empty vocabulary".into()));
+        if max_vocab == 0 || max_vocab > super::observed_text_session::OB_MAX_VOCAB {
+            return Err(ScopedMemoryError::Intent(
+                "vocabulary exceeds the 16-bit feature domain".into(),
+            ));
         }
         for table in [&self.statement, &self.question] {
             if table.windows(2).any(|w| w[0].0 >= w[1].0) {
@@ -273,6 +277,7 @@ pub fn fit_intent_model(
     examples: &[IntentExample],
     max_vocab: usize,
 ) -> Result<(IntentModel, IntentFitReport), ScopedMemoryError> {
+    IntentModel::uninformed().validate(max_vocab)?;
     if clauses.len() != examples.len() || clauses.len() != cue_spans.len() {
         return Err(ScopedMemoryError::Intent(
             "intent supervision does not align with its clauses".into(),
@@ -401,6 +406,14 @@ fn add_intent_row<const N: usize>(
     }
 }
 
+fn payload_sha256(payload: &[u32]) -> String {
+    let bytes: Vec<u8> = payload
+        .iter()
+        .flat_map(|token| token.to_le_bytes())
+        .collect();
+    sha256_hex(&bytes)
+}
+
 /// Injective, length-delimited key encoding. Delimiter concatenation can collide; this cannot.
 pub fn encode_key(scope: &[u8], entity: &[u8], relation: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(scope.len() + entity.len() + 9);
@@ -423,6 +436,8 @@ pub struct Record {
     pub relation: u8,
     pub value: Vec<u8>,
     pub payload: Vec<u32>,
+    /// Immutable witness retained when capacity releases the owned token buffer.
+    pub payload_sha256: String,
     /// 0 for the first record of a chain.
     pub predecessor: u64,
     pub commit: u64,
@@ -480,7 +495,7 @@ pub struct Written {
 impl Memory {
     pub fn new(lineage: u64, capacity: usize) -> Self {
         Memory {
-            version: SCOPED_VERSION,
+            version: SCOPED_STORE_VERSION,
             lineage,
             records: Vec::new(),
             chains: Vec::new(),
@@ -512,6 +527,15 @@ impl Memory {
     /// Exact lookup under one pinned view. Version order alone decides eligibility; a parse score or a
     /// physical position never does.
     pub fn lookup(&self, key: &[u8], view: u64, history: HistoryView) -> Lookup<'_> {
+        match self.lookup_identity(key, view, history) {
+            Lookup::Found(record) if record.evicted => Lookup::Evicted,
+            result => result,
+        }
+    }
+
+    // Metadata and lexical values remain available as tombstones. Selection identity therefore
+    // survives payload release, while the public lookup reports Evicted for a required payload.
+    fn lookup_identity(&self, key: &[u8], view: u64, history: HistoryView) -> Lookup<'_> {
         let Some(index) = self.chain_index(key) else {
             return Lookup::Absent;
         };
@@ -525,21 +549,11 @@ impl Memory {
             return Lookup::Absent;
         };
         match history {
-            HistoryView::Current => {
-                if head.evicted {
-                    Lookup::Evicted
-                } else {
-                    Lookup::Found(head)
-                }
-            }
+            HistoryView::Current => Lookup::Found(head),
             HistoryView::PreviousAssertion => match visible.len().checked_sub(2) {
                 Some(position) => {
                     let record = visible[position];
-                    if record.evicted {
-                        Lookup::Evicted
-                    } else {
-                        Lookup::Found(record)
-                    }
+                    Lookup::Found(record)
                 }
                 None => Lookup::NoHistory,
             },
@@ -550,11 +564,6 @@ impl Memory {
                         position -= 1;
                         continue;
                     }
-                    if previous.evicted {
-                        // Its value cannot be proven equal or different, so an earlier distinct value
-                        // cannot be ruled out. Report the release rather than a false absence.
-                        return Lookup::Evicted;
-                    }
                     if previous.value != head.value {
                         return Lookup::Found(previous);
                     }
@@ -564,11 +573,7 @@ impl Memory {
             }
             HistoryView::Initial => {
                 let record = visible[0];
-                if record.evicted {
-                    Lookup::Evicted
-                } else {
-                    Lookup::Found(record)
-                }
+                Lookup::Found(record)
             }
         }
     }
@@ -605,6 +610,14 @@ impl Memory {
                 "an owned payload must have at least one token".into(),
             ));
         }
+        let next_id = self
+            .next_id
+            .checked_add(1)
+            .ok_or_else(|| ScopedMemoryError::Store("record id exhausted".into()))?;
+        let next_commit = self
+            .commit
+            .checked_add(1)
+            .ok_or_else(|| ScopedMemoryError::Store("commit counter exhausted".into()))?;
         let key = encode_key(scope, entity, relation);
         if self.chain_index(&key).is_none() {
             self.chains.push((key.clone(), Vec::new()));
@@ -623,8 +636,8 @@ impl Memory {
         };
         let revision = self.chains[index].1.len() as u64 + 1;
         let id = self.next_id;
-        self.next_id += 1;
-        self.commit += 1;
+        self.next_id = next_id;
+        self.commit = next_commit;
         self.records.push(Record {
             id,
             scope: scope.to_vec(),
@@ -632,6 +645,7 @@ impl Memory {
             relation,
             value: value.to_vec(),
             payload: payload.to_vec(),
+            payload_sha256: payload_sha256(payload),
             predecessor: head_id,
             commit: self.commit,
             source,
@@ -644,10 +658,11 @@ impl Memory {
         self.chains[index].1.push(id);
         // Declared capacity releases the oldest owned payload as a visible tombstone.
         if self.chains[index].1.len() > self.capacity {
-            let oldest = self.chains[index].1[0];
+            let expired = self.chains[index].1.len() - self.capacity - 1;
+            let oldest = self.chains[index].1[expired];
             if let Some(record) = self.records.iter_mut().find(|r| r.id == oldest) {
                 record.evicted = true;
-                record.payload.clear();
+                record.payload = Vec::new();
             }
         }
         Ok(Written {
@@ -671,56 +686,116 @@ impl Memory {
         Ok(memory)
     }
 
+    /// Bind an answer to immutable history rather than a caller-reused lineage/counter alone.
+    /// Payload eviction is excluded, so an owned capture remains valid after capacity release.
+    pub fn history_sha256(&self, view: u64) -> Result<String, ScopedMemoryError> {
+        if view > self.commit {
+            return Err(ScopedMemoryError::Store(
+                "view exceeds committed history".into(),
+            ));
+        }
+        let mut records: Vec<_> = self.records.iter().filter(|r| r.commit <= view).collect();
+        records.sort_by_key(|r| r.id);
+        let evidence: Vec<_> = records
+            .iter()
+            .map(|r| {
+                (
+                    r.id,
+                    &r.scope,
+                    &r.entity,
+                    r.relation,
+                    &r.value,
+                    &r.payload_sha256,
+                    r.predecessor,
+                    r.commit,
+                    r.source,
+                    r.action,
+                    r.conflict,
+                    r.continues,
+                    r.parse_score,
+                )
+            })
+            .collect();
+        let bytes = serde_json::to_vec(&("scoped-history-v2", self.lineage, view, evidence))
+            .map_err(|e| ScopedMemoryError::Serialization(e.to_string()))?;
+        Ok(sha256_hex(&bytes))
+    }
+
     pub fn validate(&self) -> Result<(), ScopedMemoryError> {
-        if self.version != SCOPED_VERSION {
-            return Err(ScopedMemoryError::Store("unsupported store version".into()));
+        let bad = |message: &str| ScopedMemoryError::Store(message.into());
+        if self.version != SCOPED_STORE_VERSION {
+            return Err(bad("unsupported store version"));
         }
         if self.capacity == 0 {
-            return Err(ScopedMemoryError::Store("capacity must be positive".into()));
+            return Err(bad("capacity must be positive"));
         }
-        if self.records.len() as u64 + 1 != self.next_id {
-            return Err(ScopedMemoryError::Store(
-                "record ids are not a dense exact sequence".into(),
-            ));
+        let count = u64::try_from(self.records.len()).map_err(|_| bad("too many records"))?;
+        if count.checked_add(1) != Some(self.next_id) || self.commit != count {
+            return Err(bad("record ids and commits must be a dense exact sequence"));
         }
-        if self.chains.windows(2).any(|w| w[0].0 >= w[1].0) {
-            return Err(ScopedMemoryError::Store(
-                "chains must have unique sorted keys".into(),
-            ));
-        }
-        for (key, ids) in &self.chains {
-            if ids.is_empty() {
-                return Err(ScopedMemoryError::Store("empty chain".into()));
-            }
-            let mut previous_commit = 0u64;
-            for id in ids {
-                let record = self.records.iter().find(|r| r.id == *id).ok_or_else(|| {
-                    ScopedMemoryError::Store("chain references a missing id".into())
-                })?;
-                if record.commit <= previous_commit {
-                    return Err(ScopedMemoryError::Store(
-                        "chain commits are not strictly increasing".into(),
-                    ));
-                }
-                previous_commit = record.commit;
-                if &encode_key(&record.scope, &record.entity, record.relation) != key {
-                    return Err(ScopedMemoryError::Store(
-                        "record address disagrees with its chain key".into(),
-                    ));
-                }
-                if record.evicted && !record.payload.is_empty() {
-                    return Err(ScopedMemoryError::Store(
-                        "an evicted record retained its owned payload".into(),
-                    ));
-                }
-            }
-        }
+        let mut by_id = std::collections::BTreeMap::new();
         for record in &self.records {
-            if record.commit == 0 || record.commit > self.commit {
-                return Err(ScopedMemoryError::Store(
-                    "record commit is outside the store history".into(),
+            if record.id == 0
+                || record.id > count
+                || record.commit != record.id
+                || by_id.insert(record.id, record).is_some()
+            {
+                return Err(bad(
+                    "record id/commit is duplicate or outside the exact sequence",
                 ));
             }
+            if record.scope.is_empty() || record.entity.is_empty() || record.value.is_empty() {
+                return Err(bad("record has an empty address or value"));
+            }
+            if record.payload_sha256.len() != 64
+                || !record.payload_sha256.bytes().all(|b| b.is_ascii_hexdigit())
+                || (record.evicted && !record.payload.is_empty())
+                || (!record.evicted
+                    && (record.payload.is_empty()
+                        || record.payload_sha256 != payload_sha256(&record.payload)))
+            {
+                return Err(bad("record payload does not match its immutable witness"));
+            }
+        }
+        if self.chains.windows(2).any(|w| w[0].0 >= w[1].0) {
+            return Err(bad("chains must have unique sorted keys"));
+        }
+        let mut covered = std::collections::BTreeSet::new();
+        for (key, ids) in &self.chains {
+            if ids.is_empty() {
+                return Err(bad("empty chain"));
+            }
+            let mut previous: Option<&Record> = None;
+            for (position, id) in ids.iter().enumerate() {
+                let record = *by_id
+                    .get(id)
+                    .ok_or_else(|| bad("chain references a missing id"))?;
+                if !covered.insert(*id) {
+                    return Err(bad("record occurs more than once in chains"));
+                }
+                if &encode_key(&record.scope, &record.entity, record.relation) != key
+                    || record.predecessor != previous.map_or(0, |r| r.id)
+                    || previous.is_some_and(|r| record.commit <= r.commit)
+                {
+                    return Err(bad(
+                        "record address/predecessor/order disagrees with its chain",
+                    ));
+                }
+                let expected_conflict = record.action == Update::Assert
+                    && previous.is_some_and(|r| r.value != record.value);
+                if record.conflict != expected_conflict {
+                    return Err(bad(
+                        "record conflict flag disagrees with its predecessor/action",
+                    ));
+                }
+                if record.evicted != (position < ids.len().saturating_sub(self.capacity)) {
+                    return Err(bad("retained payloads violate the declared chain capacity"));
+                }
+                previous = Some(record);
+            }
+        }
+        if covered.len() != self.records.len() {
+            return Err(bad("store contains an orphan record"));
         }
         Ok(())
     }
@@ -794,6 +869,8 @@ pub struct ScopedSession {
     pub version: u8,
     pub binding: MemoryBinding,
     pub view: u64,
+    /// Immutable committed-history witness, independent of physical order and later appends.
+    pub view_sha256: String,
     pub scope: Vec<u8>,
     pub relation: u8,
     pub history: HistoryView,
@@ -831,16 +908,6 @@ impl ScopedSession {
         match memory.head(&capture.key) {
             Lookup::Found(record) => record.id == capture.record_id,
             _ => false,
-        }
-    }
-
-    fn captured_payload_prefix(&self) -> &[u32] {
-        match &self.captured {
-            Some(capture) => capture
-                .payload
-                .get(..self.cursor)
-                .unwrap_or(&capture.payload),
-            None => &[],
         }
     }
 
@@ -919,6 +986,16 @@ impl ScopedMemoryRuntime {
             .map_err(|e| ScopedMemoryError::Model(e.to_string()))?;
         let intent = IntentModel::from_bytes(intent_bytes, max_vocab)?;
         memory.validate()?;
+        if eos.is_some_and(|token| token as usize >= max_vocab)
+            || memory
+                .records
+                .iter()
+                .any(|r| r.payload.iter().any(|t| *t as usize >= max_vocab))
+        {
+            return Err(ScopedMemoryError::Store(
+                "stored token or EOS outside vocabulary".into(),
+            ));
+        }
         let binding = MemoryBinding {
             model_sha256: sha256_hex(model_bytes),
             intent_sha256: sha256_hex(intent_bytes),
@@ -1139,9 +1216,10 @@ impl ScopedMemoryRuntime {
             ));
         }
         let session = ScopedSession {
-            version: SCOPED_VERSION,
+            version: SCOPED_SESSION_VERSION,
             binding: self.binding.clone(),
             view: self.memory.commit,
+            view_sha256: self.memory.history_sha256(self.memory.commit)?,
             scope: scope.to_vec(),
             relation,
             history,
@@ -1160,12 +1238,15 @@ impl ScopedMemoryRuntime {
     }
 
     pub fn validate(&self, session: &ScopedSession) -> Result<(), ScopedMemoryError> {
-        if session.version != SCOPED_VERSION || session.binding != self.binding {
+        if session.version != SCOPED_SESSION_VERSION || session.binding != self.binding {
             return Err(ScopedMemoryError::Session(
                 "session version or runtime binding mismatch".into(),
             ));
         }
-        if session.view > self.memory.commit || session.eos != self.binding.eos {
+        if session.view > self.memory.commit
+            || session.eos != self.binding.eos
+            || session.view_sha256 != self.memory.history_sha256(session.view)?
+        {
             return Err(ScopedMemoryError::Session(
                 "session view is outside the committed history".into(),
             ));
@@ -1190,25 +1271,89 @@ impl ScopedMemoryRuntime {
         }
         match &session.captured {
             Some(capture) => {
-                // The unpinned control deliberately reads the latest commit, so its capture may lie
-                // beyond the pinned view; every pinned control must stay inside the view.
+                let record = self.memory.record_ref(capture.record_id).ok_or_else(|| {
+                    ScopedMemoryError::Session("capture references a missing record".into())
+                })?;
                 let beyond_pin = capture.commit > session.view
                     && !matches!(self.control, MemoryControl::Unpinned);
+                let failure = session.terminal.is_some()
+                    && session.terminal != Some(ScopedTerminal::Complete);
+                let follows_capture = session.pending == RelAction::Read || failure;
+                let (captured_entity, capture_hop) = if follows_capture {
+                    let entity = session.visited.last().ok_or_else(|| {
+                        ScopedMemoryError::Session(
+                            "continued capture lacks a visited source".into(),
+                        )
+                    })?;
+                    if !capture.continues || session.query_entity != capture.value {
+                        return Err(ScopedMemoryError::Session(
+                            "continued capture/value disagree".into(),
+                        ));
+                    }
+                    (
+                        entity,
+                        session.hop.checked_sub(1).ok_or_else(|| {
+                            ScopedMemoryError::Session("continued capture has no hop".into())
+                        })?,
+                    )
+                } else {
+                    (&session.query_entity, session.hop)
+                };
                 if capture.payload.is_empty()
-                    || capture.key.is_empty()
+                    || capture.payload.len() + usize::from(session.eos.is_some())
+                        > SCOPED_MAX_ANSWER
+                    || capture
+                        .payload
+                        .iter()
+                        .any(|token| *token as usize >= self.max_vocab)
+                    || capture.key
+                        != self.address(&session.scope, captured_entity, session.relation)
+                    || capture.key != encode_key(&record.scope, &record.entity, record.relation)
+                    || capture.commit != record.commit
                     || beyond_pin
-                    || (session.terminal != Some(ScopedTerminal::Complete)
-                        && session.captured_payload_prefix() != &capture.payload[..session.cursor])
+                    || capture.value != record.value
+                    || capture.continues != record.continues
+                    || payload_sha256(&capture.payload) != record.payload_sha256
+                    || (!record.evicted && capture.payload != record.payload)
                 {
                     return Err(ScopedMemoryError::Session(
-                        "captured payload disagrees with the emitted prefix".into(),
+                        "capture disagrees with its exact owned record".into(),
+                    ));
+                }
+                // Pinned exact selection remains stable even when a payload was later evicted.
+                if matches!(
+                    self.control,
+                    MemoryControl::Normal | MemoryControl::UpdateDisabled | MemoryControl::Unscoped
+                ) {
+                    let history = if capture_hop == 0 {
+                        session.history
+                    } else {
+                        HistoryView::Current
+                    };
+                    if !matches!(self.memory.lookup_identity(&capture.key, session.view, history),
+                        Lookup::Found(selected) if selected.id == capture.record_id)
+                    {
+                        return Err(ScopedMemoryError::Session(
+                            "capture is not eligible at its pinned view".into(),
+                        ));
+                    }
+                }
+                let mut expected = capture.payload[..session.cursor].to_vec();
+                if session.terminal == Some(ScopedTerminal::Complete) {
+                    if let Some(eos) = session.eos {
+                        expected.push(eos);
+                    }
+                }
+                if session.emitted != expected {
+                    return Err(ScopedMemoryError::Session(
+                        "emissions disagree with the owned payload prefix/EOS".into(),
                     ));
                 }
             }
             None => {
-                if session.cursor != 0 || !session.emitted.is_empty() {
+                if session.cursor != 0 || !session.emitted.is_empty() || session.hop != 0 {
                     return Err(ScopedMemoryError::Session(
-                        "session has emissions without an owned capture".into(),
+                        "session has progress without an owned capture".into(),
                     ));
                 }
             }
@@ -1219,7 +1364,7 @@ impl ScopedMemoryRuntime {
         match session.terminal {
             Some(ScopedTerminal::Complete) => {
                 if session.pending != RelAction::Stop
-                    || session.captured.is_none()
+                    || !session.captured.as_ref().is_some_and(|c| !c.continues)
                     || session.cursor == 0
                     || session.cursor != session.captured_payload_len()
                     || session.emitted.len() != session.cursor + terminators
@@ -1237,11 +1382,16 @@ impl ScopedMemoryRuntime {
                 }
             }
             None => match session.pending {
-                RelAction::Read if session.cursor == 0 => {}
-                RelAction::Continue if session.captured.is_some() && session.cursor == 0 => {}
-                RelAction::Emit if session.captured.is_some() => {}
+                RelAction::Read if session.cursor == 0 && session.emitted.is_empty() => {}
+                RelAction::Continue
+                    if session.captured.as_ref().is_some_and(|c| c.continues)
+                        && session.cursor == 0
+                        && session.emitted.is_empty() => {}
+                RelAction::Emit
+                    if session.captured.as_ref().is_some_and(|c| !c.continues)
+                        && session.cursor < session.captured_payload_len() => {}
                 RelAction::Stop
-                    if session.captured.is_some()
+                    if session.captured.as_ref().is_some_and(|c| !c.continues)
                         && session.cursor > 0
                         && session.cursor == session.captured_payload_len() => {}
                 _ => {
@@ -1302,6 +1452,11 @@ impl ScopedMemoryRuntime {
                                     self.terminate(session, ScopedTerminal::Exhausted);
                                 } else if record.payload.is_empty() {
                                     self.terminate(session, ScopedTerminal::Evicted);
+                                } else if record.payload.len() + usize::from(session.eos.is_some())
+                                    > SCOPED_MAX_ANSWER
+                                {
+                                    // Reject before any token escapes; typed failure terminals are silent.
+                                    self.terminate(session, ScopedTerminal::Exhausted);
                                 } else {
                                     effect.selected_record = Some(record.id);
                                     effect.selected_commit = Some(record.commit);
@@ -1725,5 +1880,268 @@ mod tests {
         let mut early = memory.clone();
         early.records[1].commit = early.records[0].commit;
         assert!(early.validate().is_err());
+    }
+
+    fn runtime(memory: Memory, eos: Option<u32>) -> ScopedMemoryRuntime {
+        ScopedMemoryRuntime::load(
+            &ObservedTextModel::uninformed().to_bytes().unwrap(),
+            &IntentModel::uninformed().to_bytes().unwrap(),
+            memory.clone(),
+            memory.lineage,
+            MemoryControl::Normal,
+            4096,
+            eos,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn capacity_releases_each_expired_payload_after_multiple_overflows() {
+        let mut memory = Memory::new(11, 2);
+        for turn in 0..8 {
+            write(
+                &mut memory,
+                "Ova",
+                &format!("value-{turn}"),
+                Update::Correct,
+            );
+            memory.validate().unwrap();
+            assert_eq!(
+                memory.records.iter().filter(|r| !r.evicted).count(),
+                (turn + 1).min(2)
+            );
+            for record in memory.records.iter().filter(|r| r.evicted) {
+                assert!(record.payload.is_empty());
+                assert_eq!(record.payload.capacity(), 0);
+                assert_eq!(record.payload_sha256, payload_sha256(&[1, 2, 3]));
+            }
+        }
+        let key = encode_key(b"alpha", b"Ova", 0);
+        assert!(matches!(
+            memory.lookup(&key, 2, HistoryView::Current),
+            Lookup::Evicted
+        ));
+        assert_eq!(
+            value_of(memory.lookup(&key, 8, HistoryView::PreviousAssertion)).as_deref(),
+            Some("value-6")
+        );
+    }
+
+    #[test]
+    fn reload_rejects_id_predecessor_coverage_capacity_and_payload_corruption() {
+        let mut valid = Memory::new(12, 2);
+        write(&mut valid, "Ova", "A", Update::Assert);
+        write(&mut valid, "Ova", "B", Update::Correct);
+        write(&mut valid, "Ova", "C", Update::Correct);
+        let mut broken = Vec::new();
+        let mut m = valid.clone();
+        m.records[1].id = 1;
+        broken.push(m);
+        let mut m = valid.clone();
+        m.records[1].predecessor = 0;
+        broken.push(m);
+        let mut m = valid.clone();
+        m.chains[0].1.remove(1);
+        broken.push(m);
+        let mut m = valid.clone();
+        m.commit += 1;
+        broken.push(m);
+        let mut m = valid.clone();
+        m.records[1].commit = 1;
+        broken.push(m);
+        let mut m = valid.clone();
+        m.records[1].payload[0] = 99;
+        broken.push(m);
+        let mut m = valid.clone();
+        m.records[1].evicted = true;
+        m.records[1].payload.clear();
+        broken.push(m);
+        let mut m = valid.clone();
+        m.records[0].payload_sha256.clear();
+        broken.push(m);
+        let mut m = valid.clone();
+        m.records[1].conflict = true;
+        broken.push(m);
+        let mut m = valid.clone();
+        m.version = 1;
+        broken.push(m);
+        for m in broken {
+            assert!(Memory::from_bytes(&m.to_bytes().unwrap()).is_err());
+        }
+        valid.records.reverse();
+        assert!(Memory::from_bytes(&valid.to_bytes().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn snapshot_enforces_owned_prefix_eos_capture_and_phase_at_each_step() {
+        let mut memory = Memory::new(13, 2);
+        write(&mut memory, "Ova", "A", Update::Assert);
+        let runtime = runtime(memory, Some(4095));
+        let mut session = runtime
+            .ask_view(b"alpha", 0, b"Ova", HistoryView::Current)
+            .unwrap();
+        assert_eq!(
+            runtime
+                .restore(&runtime.snapshot(&session).unwrap())
+                .unwrap(),
+            session
+        );
+        runtime.step(&mut session).unwrap();
+        let mut tampered = session.clone();
+        tampered.captured.as_mut().unwrap().payload[0] = 9;
+        assert!(runtime
+            .restore(&serde_json::to_vec(&tampered).unwrap())
+            .is_err());
+        let mut tampered = session.clone();
+        tampered.captured.as_mut().unwrap().record_id = 999;
+        assert!(runtime.validate(&tampered).is_err());
+        let mut tampered = session.clone();
+        tampered.captured.as_mut().unwrap().value = b"other".to_vec();
+        assert!(runtime.validate(&tampered).is_err());
+        let mut tampered = session.clone();
+        tampered.captured.as_mut().unwrap().key = encode_key(b"beta", b"Ova", 0);
+        assert!(runtime.validate(&tampered).is_err());
+        let mut tampered = session.clone();
+        tampered.pending = RelAction::Continue;
+        assert!(runtime.validate(&tampered).is_err());
+        let mut old = session.clone();
+        old.version = 1;
+        assert!(runtime.restore(&serde_json::to_vec(&old).unwrap()).is_err());
+        while session.terminal.is_none() {
+            runtime.step(&mut session).unwrap();
+            assert_eq!(
+                runtime
+                    .restore(&runtime.snapshot(&session).unwrap())
+                    .unwrap(),
+                session
+            );
+            if !session.emitted.is_empty() {
+                let mut tampered = session.clone();
+                tampered.emitted[0] = 99;
+                assert!(runtime.validate(&tampered).is_err());
+            }
+        }
+        assert_eq!(session.emitted, vec![1, 2, 3, 4095]);
+        let mut bad_eos = session.clone();
+        *bad_eos.emitted.last_mut().unwrap() = 4094;
+        assert!(runtime.validate(&bad_eos).is_err());
+    }
+
+    #[test]
+    fn pinned_history_rejects_a_same_lineage_fork_but_capture_survives_eviction() {
+        let mut memory = Memory::new(14, 1);
+        write(&mut memory, "Ova", "A", Update::Assert);
+        let mut original = runtime(memory.clone(), None);
+        let mut session = original
+            .ask_view(b"alpha", 0, b"Ova", HistoryView::Current)
+            .unwrap();
+        original.step(&mut session).unwrap();
+        let snapshot = original.snapshot(&session).unwrap();
+        let mut fork = memory;
+        fork.records[0].value = b"foreign".to_vec();
+        let foreign = runtime(fork, None);
+        assert_eq!(foreign.binding(), original.binding());
+        assert!(foreign.restore(&snapshot).is_err());
+        write(&mut original.memory, "Ova", "B", Update::Correct);
+        assert!(original.memory.records[0].evicted);
+        assert!(!session.origin_is_live(original.memory()));
+        let mut restored = original.restore(&snapshot).unwrap();
+        original.run(&mut restored).unwrap();
+        assert_eq!(restored.emitted, vec![1, 2, 3]);
+        assert_eq!(restored.terminal, Some(ScopedTerminal::Complete));
+    }
+
+    #[test]
+    fn dependent_snapshot_preserves_one_history_and_rejects_capture_retargeting() {
+        let mut memory = Memory::new(15, 4);
+        memory
+            .write(
+                b"alpha",
+                b"Ova",
+                0,
+                b"Rin",
+                &[1],
+                1,
+                Update::Assert,
+                true,
+                0,
+            )
+            .unwrap();
+        memory
+            .write(
+                b"alpha",
+                b"Rin",
+                0,
+                b"answer",
+                &[2, 3],
+                2,
+                Update::Assert,
+                false,
+                0,
+            )
+            .unwrap();
+        let mut runtime = runtime(memory, None);
+        let mut session = runtime
+            .ask_view(b"alpha", 0, b"Ova", HistoryView::Current)
+            .unwrap();
+        for _ in 0..2 {
+            runtime.step(&mut session).unwrap();
+            session = runtime
+                .restore(&runtime.snapshot(&session).unwrap())
+                .unwrap();
+        }
+        assert_eq!(session.pending, RelAction::Read);
+        assert_eq!(session.query_entity, b"Rin");
+        runtime
+            .memory
+            .write(
+                b"alpha",
+                b"Rin",
+                0,
+                b"new",
+                &[4],
+                3,
+                Update::Correct,
+                false,
+                0,
+            )
+            .unwrap();
+        runtime.run(&mut session).unwrap();
+        assert_eq!(session.emitted, vec![2, 3]);
+        let mut wrong = session.clone();
+        wrong.captured.as_mut().unwrap().commit = 3;
+        assert!(runtime.validate(&wrong).is_err());
+    }
+
+    #[test]
+    fn oversized_answer_is_rejected_before_emission_and_counters_do_not_wrap() {
+        let mut memory = Memory::new(16, 2);
+        memory
+            .write(
+                b"alpha",
+                b"Ova",
+                0,
+                b"long",
+                &[1; SCOPED_MAX_ANSWER],
+                1,
+                Update::Assert,
+                false,
+                0,
+            )
+            .unwrap();
+        let runtime = runtime(memory, Some(4095));
+        let mut session = runtime
+            .ask_view(b"alpha", 0, b"Ova", HistoryView::Current)
+            .unwrap();
+        runtime.run(&mut session).unwrap();
+        assert_eq!(session.terminal, Some(ScopedTerminal::Exhausted));
+        assert!(session.emitted.is_empty());
+        let mut saturated = Memory::new(17, 2);
+        saturated.next_id = u64::MAX;
+        let before = saturated.clone();
+        assert!(saturated
+            .write(b"alpha", b"Ova", 0, b"A", &[1], 1, Update::Assert, false, 0)
+            .is_err());
+        assert_eq!(saturated, before);
     }
 }
