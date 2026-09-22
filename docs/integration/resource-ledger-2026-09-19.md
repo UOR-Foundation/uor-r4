@@ -1976,3 +1976,13 @@ reserve reduction, no paid/external compute.
 **Delivered** under the claimed, sealed and verified roots
 `.uor-models/realtext-prior-2026-09-20/contextual-text-roles-{1,2,3}` (0 unlisted each), with `-3` the
 delivered primary.
+
+## PR #1343 principal review prospective projection — September 22 UTC
+
+At 2026-09-22T01:59:56.552746+00:00, balance309,590,598/313,100,000ms. Project5,400,000ms full review/repair/checks/replay/delivery plus180,000ms prior preparation estimate, two compiler workers, one model worker,8GiB RAM,1.5GiB temporary build/64MiB reports. Necessary standing-authorized +3,600,000ms extension recorded before use; limit316,700,000ms. Preserve36,766,079,385-byte physical reserve+128MiB stop margin, prior charges and all unique artifacts. Disposable cache inventory precedes any build. No paid compute. Final debit will include elapsed review once plus preparation/delivery reserve, without double charging parallel tasks.
+
+## PR #1343 principal correction final charge — September22 UTC
+
+Charge **1,661,912ms** = 1,181,912ms elapsed review +180,000ms prior preparation estimate +300,000ms delivery reserve. Includes independent investigators, source/doc repairs, release checks and corrected replay once. Balance **311,252,510/316,700,000ms**, remaining **5,447,490ms**. +3,600,000ms necessary local extension recorded prospectively; no paid compute.13 focused module and21 touched-runner tests pass (one legacy ignored), offline release build and actual exposed generation; independent audit/format/claim/doc checks in [receipt](../evidence/contextual-text-roles-principal-checks-2026-09-22.json). Original15,000,000ms DeepSeek debit retained at its reported estimated/measured scope; saved five attempts total approximately0.7803s and do not replace full engineering costs.
+
+Removed four regenerable prior debug-profile core library/metadata files,907,038,720 allocated bytes, after verifying no active compiler. Current release cache and all unique research/models/reports/executables/Downloads retained. Manifest SHA256 ef270a80311ebd191d163fd9dffb7e1529a1176e80ef5efdb862efd268f7240c. Free after execution **38,651,015,168 bytes**, preserve36,766,079,385-byte reserve+128MiB. No broad AI-folder deletion.

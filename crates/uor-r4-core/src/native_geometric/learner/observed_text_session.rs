@@ -7,11 +7,16 @@
 //!
 //! What is learned from declared development text:
 //!
-//! * `token_votes`: which observed marker tokens vote for which role (so a familiar word in a new
-//!   combination still scores), used to locate the marker run inside a clause;
-//! * `edge_votes`: which observed tokens are boundary fillers rather than part of an entity span;
+//! * `feature_weights`: signed categorical weights for a candidate marker's endpoints, nearby
+//!   tokens, length and clause-edge flags, fitted by a structured perceptron;
 //! * `action_per_role`: the action semantics of each role, fitted from declared gold actions starting
 //!   from a declared uninformed policy.
+//! * `goal_per_role`: the declared goal associated with each supervised role.
+//!
+//! Candidate admission is fixed: a nonempty subject prefix, a contiguous marker of at most four
+//! tokens, and the complete remaining suffix as the optional object. Arbitrary clause layouts and
+//! learned subject/object boundaries are not implemented. Local features distinguish some token
+//! permutations, but do not encode the order of a four-token marker's two interior tokens.
 //!
 //! What is exact and typed: entity/answer spans keep full multiword token identity together with
 //! their occurrence `(segment, start, len)`, so a repeated word or a shared suffix cannot collapse two
@@ -77,28 +82,31 @@ pub fn candidate_features(tokens: &[u32], start: usize, len: usize) -> Vec<u64> 
     let n = tokens.len();
     let key = |kind: u64, value: u64| (kind << 40) | value;
     let mut f = Vec::with_capacity(9);
-    if len == 0 || start + len > n {
+    let Some(end) = start
+        .checked_add(len)
+        .filter(|end| len > 0 && len <= OB_MAX_MARKER && *end <= n)
+    else {
         return f;
-    }
+    };
     f.push(key(F_FIRST, u64::from(tokens[start])));
-    f.push(key(F_LAST, u64::from(tokens[start + len - 1])));
+    f.push(key(F_LAST, u64::from(tokens[end - 1])));
     f.push(key(F_LEN, len as u64));
     if start > 0 {
         f.push(key(F_LEFT, u64::from(tokens[start - 1])));
     }
-    if start + len < n {
-        f.push(key(F_RIGHT, u64::from(tokens[start + len])));
+    if end < n {
+        f.push(key(F_RIGHT, u64::from(tokens[end])));
     }
     if start >= 2 {
         f.push(key(F_LEFT2, u64::from(tokens[start - 2])));
     }
-    if start + len + 1 < n {
-        f.push(key(F_RIGHT2, u64::from(tokens[start + len + 1])));
+    if let Some(right2) = end.checked_add(1).filter(|right2| *right2 < n) {
+        f.push(key(F_RIGHT2, u64::from(tokens[right2])));
     }
     if start == 0 {
         f.push(key(F_INITIAL, 0));
     }
-    if start + len == n {
+    if end == n {
         f.push(key(F_FINAL, 0));
     }
     f
@@ -186,8 +194,8 @@ pub struct ObservedTextModel {
     pub version: u8,
     /// Sparse learned candidate-feature weights, sorted by feature key. A candidate is scored from
     /// its **ordered local context** (its own first/last tokens, the tokens immediately before and
-    /// after it, its length and its clause-relative position), so a permutation of the same tokens
-    /// scores differently and the same token can be syntax in one occurrence and content in another.
+    /// after it, its length and its clause-relative position). These observations can distinguish
+    /// some permutations and contextual roles; four-token marker interior order is not represented.
     pub feature_weights: Vec<(u64, [i32; OB_N_ROLES])>,
     /// Learned action semantics per role, fitted from declared gold actions.
     pub action_per_role: [u8; OB_N_ROLES],
@@ -220,7 +228,7 @@ fn action_from_tag(t: u8) -> RelAction {
 }
 
 impl ObservedTextModel {
-    /// A declared uninformed start: no marker votes, no boundary votes, every role terminal office.
+    /// A declared uninformed start: no candidate weights, every role terminal office.
     pub fn uninformed() -> Self {
         ObservedTextModel {
             version: 3,
@@ -252,9 +260,19 @@ impl ObservedTextModel {
             if !(F_FIRST..=F_FINAL).contains(&kind) {
                 return Err("unknown observed-text feature kind".into());
             }
-            if kind != F_LEN && kind != F_INITIAL && kind != F_FINAL && value as usize >= max_vocab
-            {
-                return Err("observed-text feature token is outside the vocabulary".into());
+            match kind {
+                F_LEN if value == 0 || value > OB_MAX_MARKER as u64 => {
+                    return Err(
+                        "observed-text feature length is outside the candidate bound".into(),
+                    );
+                }
+                F_INITIAL | F_FINAL if value != 0 => {
+                    return Err("observed-text edge feature has a nonzero payload".into());
+                }
+                F_FIRST..=F_RIGHT2 if value > u32::MAX as u64 || value >= max_vocab as u64 => {
+                    return Err("observed-text feature token is outside the vocabulary".into());
+                }
+                _ => {}
             }
         }
         for role in 0..OB_N_ROLES {
@@ -314,12 +332,12 @@ impl ObservedTextModel {
 
     /// Locate the marker candidate with the best contextual score. Bounded contiguous candidates
     /// must leave a nonempty observed prefix, which is declared candidate scaffolding.
-    pub fn locate_marker(&self, tokens: &[u32]) -> Option<(usize, usize, [i16; OB_N_ROLES])> {
+    pub fn locate_marker(&self, tokens: &[u32]) -> Option<(usize, usize, [i32; OB_N_ROLES])> {
         if tokens.len() > OB_MAX_CLAUSE || tokens.len() < 2 {
             return None;
         }
         let n = tokens.len();
-        let mut best: Option<(i32, usize, usize, [i16; OB_N_ROLES])> = None;
+        let mut best: Option<(i32, usize, usize, [i32; OB_N_ROLES])> = None;
         for start in 1..n {
             for len in 1..=(n - start).min(OB_MAX_MARKER) {
                 let scores = self.candidate_scores(tokens, start, len);
@@ -329,11 +347,7 @@ impl ObservedTextModel {
                     Some((bs, _, blen, _)) => score > bs || (score == bs && len < blen),
                 };
                 if better {
-                    let mut v = [0i16; OB_N_ROLES];
-                    for r in 0..OB_N_ROLES {
-                        v[r] = scores[r].clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-                    }
-                    best = Some((score, start, len, v));
+                    best = Some((score, start, len, scores));
                 }
             }
         }
@@ -774,25 +788,89 @@ impl ObservedTextRuntime {
         session.validate(&self.binding, self.binding.max_vocab)?;
         // Every retained source reference denotes an actually parsed object for the active goal.
         // A substring that happens to match raw document bytes is not sufficient provenance.
+        let mut history = Vec::with_capacity(session.visited.len());
         for &(segment, start, len) in &session.visited {
-            if !self.observations.iter().any(|observed| {
-                observed.seg == segment
-                    && observed.object_start == Some(start)
-                    && observed
-                        .object
-                        .as_ref()
-                        .is_some_and(|tokens| tokens.len() == len)
-                    && self.model.role_goal(observed.role) == Some(session.goal)
-            }) {
-                return Err(
-                    "visited reference is not an observed object for the active goal".into(),
-                );
-            }
+            let observed = self
+                .observations
+                .iter()
+                .find(|observed| {
+                    observed.seg == segment
+                        && observed.object_start == Some(start)
+                        && observed
+                            .object
+                            .as_ref()
+                            .is_some_and(|tokens| tokens.len() == len)
+                        && self.model.role_goal(observed.role) == Some(session.goal)
+                })
+                .ok_or("visited reference is not an observed object for the active goal")?;
+            history.push(observed);
         }
         if session.captured.is_some() && !self.origin_is_live(session) {
             return Err("captured phrase disagrees with its bound source occurrence".into());
         }
+        if matches!(self.control, TextControl::ReadsDisabled) && !history.is_empty() {
+            return Err("read-disabled session contains a read history".into());
+        }
+        if let TextControl::ReadCap { max_reads } = self.control {
+            if session.reads > max_reads {
+                return Err("session history exceeds its bound read control".into());
+            }
+        }
+        // The original question is not retained: these checks establish internal chain and phase
+        // consistency, not authentication of an external request or proof of ranking optimality.
+        for pair in history.windows(2) {
+            if self.action_after_read(pair[0])? != RelAction::Continue
+                || pair[0].object.as_ref() != Some(&pair[1].subject)
+            {
+                return Err("visited objects do not form a dependent continuation chain".into());
+            }
+        }
+        if let Some(last) = history.last() {
+            let action = self.action_after_read(last)?;
+            let followed = session.pending == RelAction::Read
+                || matches!(
+                    session.terminal,
+                    Some(RelAction::Unresolved | RelAction::Exhausted)
+                );
+            if followed {
+                if action != RelAction::Continue
+                    || last.object.as_ref() != Some(&session.query.tokens)
+                {
+                    return Err("followed session does not preserve its dependent query".into());
+                }
+            } else {
+                let expected_action = if session.pending == RelAction::Continue {
+                    RelAction::Continue
+                } else {
+                    RelAction::Emit
+                };
+                if action != expected_action || last.subject != session.query.tokens {
+                    return Err(
+                        "session phase disagrees with its captured source role/control".into(),
+                    );
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// The fixed control and the learned role table determine the next phase in both step and
+    /// restoration validation. The membership registry is available only to that named control.
+    fn action_after_read(&self, observed: &Observation) -> Result<RelAction, String> {
+        let object = observed
+            .object
+            .as_ref()
+            .ok_or("selected fact lacks an object")?;
+        Ok(match &self.control {
+            TextControl::Membership { entities } => {
+                if entities.contains(object) {
+                    RelAction::Continue
+                } else {
+                    RelAction::Emit
+                }
+            }
+            _ => self.model.role_action(observed.role),
+        })
     }
 
     pub fn snapshot(&self, session: &TextSession) -> Result<Vec<u8>, ObservedTextError> {
@@ -890,16 +968,7 @@ impl ObservedTextRuntime {
                             });
                             session.captured_span = Some(span);
                             session.captured_tokens = object.clone();
-                            session.pending = match &self.control {
-                                TextControl::Membership { entities } => {
-                                    if entities.contains(object) {
-                                        RelAction::Continue
-                                    } else {
-                                        RelAction::Emit
-                                    }
-                                }
-                                _ => self.model.role_action(observed.role),
-                            };
+                            session.pending = self.action_after_read(observed)?;
                         }
                     } else {
                         session.terminate(RelAction::Unresolved);
@@ -1040,6 +1109,7 @@ fn fit_observed_text_model_inner(
     }
     let mut labeled = BTreeSet::new();
     let mut semantics: BTreeMap<usize, RelAction> = BTreeMap::new();
+    let mut role_goals: BTreeMap<usize, Goal> = BTreeMap::new();
     for label in labels {
         if !labeled.insert(label.seg) || label.role >= OB_N_ROLES {
             return Err("duplicate supervision or out-of-range role".into());
@@ -1057,19 +1127,46 @@ fn fit_observed_text_model_inner(
         if !within(label.subject) || !within(label.marker) || label.marker.0 == 0 {
             return Err("declared span is outside its clause".into());
         }
+        let marker_start = label.marker.0 as usize;
+        let marker_end = marker_start + label.marker.1; // checked by within above
+        if label.subject.0 != 0 || label.subject.1 != marker_start || label.marker.1 > OB_MAX_MARKER
+        {
+            return Err(
+                "supervision is outside the subject-prefix/marker candidate grammar".into(),
+            );
+        }
         if let Some(object) = label.object {
-            if !within(object) {
-                return Err("declared object is outside its clause".into());
+            if !within(object)
+                || object.0 as usize != marker_end
+                || object.1 != clause.tokens.len() - marker_end
+            {
+                return Err("declared object must be the complete suffix after its marker".into());
             }
+        } else if marker_end != clause.tokens.len() {
+            return Err("question marker must end its observed clause".into());
+        }
+        if !matches!(label.action, RelAction::Emit | RelAction::Continue) {
+            return Err("supervised role action must be Emit or Continue".into());
+        }
+        if role_goals
+            .insert(label.role, label.goal)
+            .is_some_and(|prior| prior != label.goal)
+        {
+            return Err("one observed role has conflicting supervised goals".into());
         }
         if label.object.is_some() {
-            semantics.insert(label.role, label.action);
+            if semantics
+                .insert(label.role, label.action)
+                .is_some_and(|prior| prior != label.action)
+            {
+                return Err("one observed role has conflicting supervised actions".into());
+            }
         }
     }
     let mut model = ObservedTextModel::uninformed();
-    let initial_correct = role_accuracy(&model, clauses, labels);
+    let role_initial_correct = role_accuracy(&model, clauses, labels);
     let mut weights: BTreeMap<u64, [i32; OB_N_ROLES]> = BTreeMap::new();
-    let mut predictions = |tokens: &[u32], weights: &BTreeMap<u64, [i32; OB_N_ROLES]>| {
+    let predictions = |tokens: &[u32], weights: &BTreeMap<u64, [i32; OB_N_ROLES]>| {
         let n = tokens.len();
         let mut best: Option<(i32, usize, usize, usize)> = None;
         for start in 1..n {
@@ -1134,43 +1231,16 @@ fn fit_observed_text_model_inner(
     model.feature_weights = weights.into_iter().collect();
     let final_correct = role_accuracy(&model, clauses, labels);
     // Role semantics: goal and action per role come from the declared labels, never from serving.
-    let mut per_role_goal: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for label in labels {
-        per_role_goal
-            .entry(label.role)
-            .or_default()
-            .push(label.goal.index());
+    for (&role, &goal) in &role_goals {
+        model.goal_per_role[role] = goal.index() as u8;
     }
-    for (role, goals) in per_role_goal.iter() {
-        let mut counts: BTreeMap<usize, usize> = BTreeMap::new();
-        for g in goals {
-            *counts.entry(*g).or_default() += 1;
-        }
-        if let Some((g, _)) = counts.iter().max_by(|a, b| a.1.cmp(b.1).then(a.0.cmp(b.0))) {
-            model.goal_per_role[(*role).min(OB_N_ROLES - 1)] = *g as u8;
-        }
-    }
-    let mut per_role_action: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
-    for (role, action) in semantics.iter() {
-        per_role_action
-            .entry(*role)
-            .or_default()
-            .push(action_tag(*action));
-    }
-    for (role, actions) in per_role_action.iter() {
-        let mut counts: BTreeMap<u8, usize> = BTreeMap::new();
-        for a in actions {
-            *counts.entry(*a).or_default() += 1;
-        }
-        if let Some((tag, _)) = counts.iter().max_by(|a, b| a.1.cmp(b.1).then(a.0.cmp(b.0))) {
-            let r = (*role).min(OB_N_ROLES - 1);
-            model.action_per_role[r] = *tag;
-            model.redirect_per_role[r] = *tag == action_tag(RelAction::Continue);
-        }
+    for (&role, &action) in &semantics {
+        model.action_per_role[role] = action_tag(action);
+        model.redirect_per_role[role] = action == RelAction::Continue;
     }
     model.validate(usize::MAX).map_err(|e| e.to_string())?;
     // Same-unit accounting for the role-action table (statement units only).
-    let mut initial_correct = 0usize;
+    let mut policy_initial_correct = 0usize;
     let mut policy_final_correct = 0usize;
     let mut examples = 0usize;
     for label in labels {
@@ -1178,12 +1248,9 @@ fn fit_observed_text_model_inner(
             continue;
         }
         examples += 1;
-        let want = semantics
-            .get(&label.role)
-            .copied()
-            .unwrap_or(RelAction::Emit);
+        let want = label.action;
         if want == RelAction::Emit {
-            initial_correct += 1;
+            policy_initial_correct += 1;
         }
         if model.role_action(label.role) == want {
             policy_final_correct += 1;
@@ -1194,12 +1261,12 @@ fn fit_observed_text_model_inner(
         feature_weights: model.feature_weights.len(),
         candidate_updates: updates,
         epochs_run,
-        role_initial_correct: initial_correct,
+        role_initial_correct,
         role_final_correct: final_correct,
-        policy_initial_correct: initial_correct,
+        policy_initial_correct,
         policy_final_correct,
         policy_examples: examples,
-        roles_observed: per_role_goal.keys().copied().collect(),
+        roles_observed: role_goals.keys().copied().collect(),
     };
     Ok((model, report))
 }
@@ -1329,6 +1396,111 @@ mod tests {
                 assert_eq!(obs.question_goal, Some(label.goal));
             }
         }
+    }
+
+    #[test]
+    fn fit_reports_extractor_and_action_baselines_on_their_own_units() {
+        let (clauses, labels) = dev();
+        let (_, report) = fit_observed_text_model(&clauses, &labels).unwrap();
+        // With zero weights, the shortest/first marker candidate is one token; all gold markers
+        // have two tokens. This baseline is distinct from the three initially-correct Emit actions.
+        assert_eq!(report.role_initial_correct, 0);
+        assert_eq!(report.role_final_correct, labels.len());
+        assert_eq!(report.policy_initial_correct, 3);
+        assert_eq!(report.policy_examples, 5);
+        assert_eq!(report.policy_final_correct, 5);
+    }
+
+    #[test]
+    fn full_width_candidate_scores_preserve_the_winning_role_and_ties() {
+        for weights in [[40_000, 50_000, 0, 0], [-40_000, -35_000, -50_000, -60_000]] {
+            let mut model = ObservedTextModel::uninformed();
+            model.feature_weights = vec![((F_FIRST << 40) | 20, weights)];
+            let loaded = ObservedTextModel::from_bytes(&model.to_bytes().unwrap(), 4096).unwrap();
+            let clause = Clause {
+                seg: 1,
+                tokens: vec![10, 20],
+            };
+            assert_eq!(loaded.candidate_scores(&clause.tokens, 1, 1), weights);
+            assert_eq!(loaded.locate_marker(&clause.tokens), Some((1, 1, weights)));
+            assert_eq!(observe_clause(&loaded, &clause).unwrap().role, 1);
+        }
+        let mut model = ObservedTextModel::uninformed();
+        model.feature_weights = vec![((F_FIRST << 40) | 20, [50_000, 50_000, 0, 0])];
+        let clause = Clause {
+            seg: 1,
+            tokens: vec![10, 20, 20],
+        };
+        assert_eq!(
+            model.locate_marker(&clause.tokens).map(|(s, l, _)| (s, l)),
+            Some((1, 1))
+        );
+        assert_eq!(observe_clause(&model, &clause).unwrap().role, 0);
+    }
+
+    #[test]
+    fn candidate_and_feature_bounds_reject_unrepresentable_inputs() {
+        let tokens = [10, 20, 30, 40, 50, 60];
+        for (start, len) in [(usize::MAX, 1), (1, usize::MAX), (0, 0), (6, 1), (0, 5)] {
+            assert!(candidate_features(&tokens, start, len).is_empty());
+        }
+        for key in [
+            F_LEN << 40,
+            (F_LEN << 40) | (OB_MAX_MARKER as u64 + 1),
+            (F_INITIAL << 40) | 1,
+            (F_FINAL << 40) | 1,
+            (F_FIRST << 40) | 4096,
+            (F_FIRST << 40) | (u32::MAX as u64 + 1),
+            (F_FINAL + 1) << 40,
+        ] {
+            let mut model = ObservedTextModel::uninformed();
+            model.feature_weights = vec![(key, [0; OB_N_ROLES])];
+            assert!(matches!(
+                ObservedTextModel::from_bytes(&model.to_bytes().unwrap(), 4096),
+                Err(ObservedTextError::Model(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn supervision_rejects_conflicts_and_spans_outside_the_candidate_grammar() {
+        let (clauses, labels) = dev();
+        for mutation in 0..6 {
+            let mut bad = labels.clone();
+            match mutation {
+                0 => bad[0].subject = (1, 1),
+                1 => bad[0].object = Some((2, 1)),
+                2 => bad[0].object = None,
+                3 => bad[6].goal = Goal::Project,
+                4 => bad[6].action = RelAction::Continue,
+                _ => bad[0].action = RelAction::Read,
+            }
+            assert!(
+                matches!(
+                    fit_observed_text_model(&clauses, &bad),
+                    Err(ObservedTextError::Supervision(_))
+                ),
+                "mutation {mutation}"
+            );
+        }
+        // A valid in-clause span can still be outside the candidate admission bound.
+        let clause = Clause {
+            seg: 1,
+            tokens: vec![10, 20, 21, 22, 23, 24, 30],
+        };
+        let label = ClauseLabel {
+            seg: 1,
+            subject: (0, 1),
+            marker: (1, 5),
+            object: Some((6, 1)),
+            role: 0,
+            goal: Goal::Office,
+            action: RelAction::Emit,
+        };
+        assert!(matches!(
+            fit_observed_text_model(&[clause], &[label]),
+            Err(ObservedTextError::Supervision(_))
+        ));
     }
 
     fn runtime(clauses: Vec<Clause>, eos: Option<u32>) -> ObservedTextRuntime {
@@ -1585,17 +1757,74 @@ mod tests {
     }
 
     #[test]
-    fn candidate_scores_depend_on_ordered_context_not_a_global_token_sign() {
-        // The same token in a different slot scores differently, and permuting a candidate's tokens
-        // changes its features. This is the property the global-vote/global-edge model lacked.
-        let a = candidate_features(&[10, 20, 30, 40], 1, 1);
-        let b = candidate_features(&[10, 20, 30, 40], 2, 1);
-        assert_ne!(a, b, "identical tokens in different positions must differ");
+    fn restore_rejects_forged_role_phases_and_unrelated_valid_source_history() {
+        let clauses = vec![
+            Clause {
+                seg: 10,
+                tokens: vec![10, 22, 23, 11],
+            },
+            Clause {
+                seg: 11,
+                tokens: vec![11, 20, 21, 32],
+            },
+            Clause {
+                seg: 12,
+                tokens: vec![12, 20, 21, 33],
+            },
+        ];
+        let rt = runtime(clauses.clone(), Some(u32::MAX - 1));
+        let q = question(vec![10], &[20, 21]);
+        let mut session = rt.start(&q).unwrap();
+        rt.step(&mut session).unwrap();
+        assert_eq!(session.pending, RelAction::Continue);
+        let mut forged = session.clone();
+        forged.pending = RelAction::Emit;
+        assert!(rt.restore(&serde_json::to_vec(&forged).unwrap()).is_err());
+        rt.step(&mut session).unwrap();
+        rt.step(&mut session).unwrap();
+        assert_eq!(session.pending, RelAction::Emit);
+        forged = session.clone();
+        forged.pending = RelAction::Continue;
+        assert!(rt.restore(&serde_json::to_vec(&forged).unwrap()).is_err());
+        forged = session.clone();
+        // The unrelated source is a genuine same-goal object, but not a predecessor of the capture.
+        forged.visited[0] = (12, 3, 1);
+        assert!(rt.restore(&serde_json::to_vec(&forged).unwrap()).is_err());
+        rt.run(&mut session).unwrap();
+        assert_eq!(session.emitted, vec![32, u32::MAX - 1]);
+
+        // Explicit controls may legitimately override the role table; restoration must agree with
+        // the bound control instead of hard-coding the primary's role decision.
+        let membership = runtime(clauses, Some(u32::MAX - 1))
+            .with_control(TextControl::Membership {
+                entities: Vec::new(),
+            })
+            .unwrap();
+        let mut controlled = membership.start(&q).unwrap();
+        membership.step(&mut controlled).unwrap();
+        assert_eq!(controlled.pending, RelAction::Emit);
+        let mut restored = membership
+            .restore(&membership.snapshot(&controlled).unwrap())
+            .unwrap();
+        membership.run(&mut restored).unwrap();
+        assert_eq!(restored.emitted, vec![11, u32::MAX - 1]);
+    }
+
+    #[test]
+    fn candidate_features_distinguish_local_order_but_not_four_token_interiors() {
+        // The token is identical, while its observed neighbors differ.
+        let a = candidate_features(&[10, 20, 30, 20, 40], 1, 1);
+        let b = candidate_features(&[10, 20, 30, 20, 40], 3, 1);
+        assert_ne!(a, b);
+        // This is an actual permutation: token identity and bag are preserved.
         let fwd = candidate_features(&[10, 20, 30, 40], 1, 2);
-        let rev = candidate_features(&[10, 21, 30, 40], 1, 2);
-        assert_ne!(
-            fwd, rev,
-            "changed token order/content must change the features"
+        let rev = candidate_features(&[10, 30, 20, 40], 1, 2);
+        assert_ne!(fwd, rev);
+        // Endpoints and external context cannot distinguish this interior permutation. Record the
+        // representation limit instead of claiming every permutation changes the model's score.
+        assert_eq!(
+            candidate_features(&[10, 20, 30, 40, 50, 60], 1, 4),
+            candidate_features(&[10, 20, 40, 30, 50, 60], 1, 4)
         );
         let inner = candidate_features(&[10, 20, 30, 40], 1, 1);
         let outer = candidate_features(&[10, 20, 30, 40], 0, 1);

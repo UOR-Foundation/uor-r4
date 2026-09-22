@@ -336,5 +336,21 @@
     "no geometric arm was added: the milestone asked for the contextual interface first, and the earlier finding that a fixed identity/central offset reduces to a paired categorical code still applies",
     "the final panel withholds the three-read composition and uses new assignments, but shares names, cues and clause forms with development",
     "no prose, no executed Rust task, no whole-path latency or energy measurement"
-  ]
+  ],
+  "principal_correction": {
+    "review": "docs/integration/contextual-text-roles-review-2026-09-22.md",
+    "audit": "docs/evidence/contextual-text-roles-principal-review-2026-09-22.json",
+    "retained": "24/24 primary source-reconstructed; seven multiword outputs",
+    "role_initial_correct": 0,
+    "original_14_scope": "statement-action baseline, not marker-role baseline",
+    "final_scope": "exposed regression; depth3 absent fitting",
+    "limitations": [
+      "fixed prefix-marker-suffix support",
+      "static endpoints/length signatures sufficient on fixture",
+      "membership whitespace mismatch",
+      "source edit parsed wrong object; absence direct not downstream",
+      "all-arm/frame/snapshot evidence omitted"
+    ],
+    "successor": "learned structured argument spans and separate surface/lexical identity"
+  }
 }

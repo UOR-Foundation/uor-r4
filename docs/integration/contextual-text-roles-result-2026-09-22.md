@@ -1,5 +1,7 @@
 # Contextual occurrence roles and exact spans from readable text
 
+> **Principal correction:** This preserved submission account is superseded where noted by the [principal review](contextual-text-roles-review-2026-09-22.md), [original independent audit](../evidence/contextual-text-roles-principal-review-2026-09-22.json) and [corrected replay](../evidence/contextual-text-roles-corrected-replay-audit-2026-09-22.json). Retain24/24 primary answers and genuine multiword output; true initial marker-role count0/48, not14/48. Final panels were exposed. Cue endpoint signatures already distinguish the fixture; membership whitespace, source-edit parsing, later-fact and snapshot retention claims needed correction. The primary is already categorical; next learned argument-span support and surface/identity separation, not a second categorical-only comparator. Original counts below remain historical evidence.
+
 September 22 UTC, 2026. Executes the [contextual text roles brief](deepseek-contextual-text-roles-step-2026-09-22.md)
 and the [observed-text review](observed-text-session-review-2026-09-22.md). Base: the **corrected head
 `f5919d8e`** of PR #1342, which was still open at recovery; `origin/main` was `d9d896e8` and did **not**
