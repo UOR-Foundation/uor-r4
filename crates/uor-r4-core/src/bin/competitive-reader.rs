@@ -18002,8 +18002,7 @@ fn cgs_run() -> Result<ExitCode, String> {
     // forms alone. Fitting both on identical inputs makes "combined support" a measured change, not
     // an assertion, and keeps the previous candidate's scope reproducible. ----
     let (cgs_only_clauses, cgs_only_sup) = cgs_development_supervision(&tokenizer, 0)?;
-    let cgs_only_labels: Vec<ClauseLabel> =
-        cgs_only_sup.iter().map(|s| s.label.clone()).collect();
+    let cgs_only_labels: Vec<ClauseLabel> = cgs_only_sup.iter().map(|s| s.label.clone()).collect();
     let (cgs_only_model, cgs_only_fit) =
         fit_observed_text_model(&cgs_only_clauses, &cgs_only_labels, false)
             .map_err(|e| format!("cgs-only binder fit: {e}"))?;
@@ -18018,9 +18017,13 @@ fn cgs_run() -> Result<ExitCode, String> {
             intent: s.intent,
         })
         .collect();
-    let (cgs_only_intent, cgs_only_intent_fit) =
-        fit_intent_model(&cgs_only_clauses, &cgs_only_spans, &cgs_only_examples, VOCAB)
-            .map_err(|e| format!("cgs-only intent fit: {e}"))?;
+    let (cgs_only_intent, cgs_only_intent_fit) = fit_intent_model(
+        &cgs_only_clauses,
+        &cgs_only_spans,
+        &cgs_only_examples,
+        VOCAB,
+    )
+    .map_err(|e| format!("cgs-only intent fit: {e}"))?;
     let cgs_only_model_bytes = cgs_only_model.to_bytes().map_err(|e| format!("{e}"))?;
     let cgs_only_intent_bytes = cgs_only_intent.to_bytes().map_err(|e| format!("{e}"))?;
     let model_bytes = model.to_bytes().map_err(|e| format!("{e}"))?;
@@ -18142,8 +18145,7 @@ fn cgs_run() -> Result<ExitCode, String> {
         let (mut requests, mut complete) = (0usize, 0usize);
         for world in worlds {
             // Primary: the world itself is constructed by the candidate's loaded ingest path.
-            let (runtime, receipts) =
-                ingest_world(world, &MemoryControl::Normal, &signed)?;
+            let (runtime, receipts) = ingest_world(world, &MemoryControl::Normal, &signed)?;
             ingest_receipts.extend(receipts);
             let result = cgs_panel(
                 &tokenizer,
@@ -18158,7 +18160,11 @@ fn cgs_run() -> Result<ExitCode, String> {
             complete += result.complete;
             // Named comparator arm on the identical requests, to localize an observed-ingest
             // failure from a computation/consumption failure.
-            let typed = load(cgs_memory(&tokenizer, world)?, MemoryControl::Normal, &signed)?;
+            let typed = load(
+                cgs_memory(&tokenizer, world)?,
+                MemoryControl::Normal,
+                &signed,
+            )?;
             let typed_result = cgs_panel(
                 &tokenizer,
                 &typed,
@@ -18656,7 +18662,12 @@ fn cgs_run_clause(
         .map_err(|e| e.to_string())?;
     runtime.run(&mut session).map_err(|e| e.to_string())?;
     let reads = session.hop + 1;
-    Ok((cgs_text(tokenizer, &session), session.terminal, reads, session))
+    Ok((
+        cgs_text(tokenizer, &session),
+        session.terminal,
+        reads,
+        session,
+    ))
 }
 
 /// The cheap actual-loaded multi-turn check, run as soon as a candidate is constructed. One
@@ -18720,8 +18731,7 @@ fn cgs_mixed_session(
         let ok = declared_write == wrote
             && observed.relation == form.relation()
             && observed.continues == form.is_redirect()
-            && (!declared_write
-                || observed.value_key.as_deref() == Some(value.as_bytes()));
+            && (!declared_write || observed.value_key.as_deref() == Some(value.as_bytes()));
         ingest_total += 1;
         ingest_ok += usize::from(ok);
         rows.push(serde_json::json!({
@@ -18752,7 +18762,9 @@ fn cgs_mixed_session(
                    entity: &str|
      -> Result<bool, String> {
         let (clause, _) = scm_clause(tokenizer, 0, form, entity, None)?;
-        let history = form.history().ok_or("question form has no declared history")?;
+        let history = form
+            .history()
+            .ok_or("question form has no declared history")?;
         let expected = oracle.answer(0, entity, form.relation(), history, view);
         let (answer, terminal, reads, _) = cgs_run_clause(tokenizer, runtime, &clause, scope)?;
         let ok = match (&expected, terminal) {
@@ -18789,46 +18801,53 @@ fn cgs_mixed_session(
     }
 
     // ---- a requested computation whose operand is reached through an observed redirect ----
-    let compute_expect =
-        |oracle: &ScmOracle, view: u64, entity: &str, ops: &[&str]| -> Result<(String, u8), String> {
-            let first = oracle.answer(0, entity, 0, HistoryView::Current, view);
-            let ScmExpected::Complete { value, hops: h1 } = first else {
-                return Err(format!("mixed computation operand walk: {first:?}"));
-            };
-            let label = CGS_LABELS
-                .iter()
-                .position(|l| *l == value.as_str())
-                .ok_or_else(|| format!("operand {value} is not a grounded label"))?;
-            let mut state = action
-                .element_of_label(label as u32)
-                .ok_or("operand label has no element")?;
-            for op in ops {
-                let primitive = CGS_OPS
-                    .iter()
-                    .find(|(w, _)| w == op)
-                    .map(|(_, p)| *p)
-                    .ok_or_else(|| format!("unknown operation {op}"))?;
-                state = action
-                    .apply(state, primitive)
-                    .ok_or("declared action rejected the operation")?;
-            }
-            let derived = action
-                .label_of_element(state)
-                .ok_or("derived element is unlabelled")?;
-            let second = oracle.answer(
-                0,
-                CGS_LABELS[derived as usize],
-                0,
-                HistoryView::Current,
-                view,
-            );
-            let ScmExpected::Complete { value: answer, hops: h2 } = second else {
-                return Err(format!("mixed computation derived walk: {second:?}"));
-            };
-            // The derived read is one further read at the same relation, exactly as the declared
-            // reference walk counts it.
-            Ok((answer, h1 + h2))
+    let compute_expect = |oracle: &ScmOracle,
+                          view: u64,
+                          entity: &str,
+                          ops: &[&str]|
+     -> Result<(String, u8), String> {
+        let first = oracle.answer(0, entity, 0, HistoryView::Current, view);
+        let ScmExpected::Complete { value, hops: h1 } = first else {
+            return Err(format!("mixed computation operand walk: {first:?}"));
         };
+        let label = CGS_LABELS
+            .iter()
+            .position(|l| *l == value.as_str())
+            .ok_or_else(|| format!("operand {value} is not a grounded label"))?;
+        let mut state = action
+            .element_of_label(label as u32)
+            .ok_or("operand label has no element")?;
+        for op in ops {
+            let primitive = CGS_OPS
+                .iter()
+                .find(|(w, _)| w == op)
+                .map(|(_, p)| *p)
+                .ok_or_else(|| format!("unknown operation {op}"))?;
+            state = action
+                .apply(state, primitive)
+                .ok_or("declared action rejected the operation")?;
+        }
+        let derived = action
+            .label_of_element(state)
+            .ok_or("derived element is unlabelled")?;
+        let second = oracle.answer(
+            0,
+            CGS_LABELS[derived as usize],
+            0,
+            HistoryView::Current,
+            view,
+        );
+        let ScmExpected::Complete {
+            value: answer,
+            hops: h2,
+        } = second
+        else {
+            return Err(format!("mixed computation derived walk: {second:?}"));
+        };
+        // The derived read is one further read at the same relation, exactly as the declared
+        // reference walk counts it.
+        Ok((answer, h1 + h2))
+    };
     let mut computation_total = 0usize;
     let mut computation_matched = 0usize;
     let mut compute = |rows: &mut Vec<serde_json::Value>,
@@ -18840,7 +18859,8 @@ fn cgs_mixed_session(
         let text = ops.join(" ");
         let (clause, _) = cgs_clause(tokenizer, 0, CgsForm::Compute, person, &text)?;
         let (expected, hops) = compute_expect(oracle, oracle.commit, person, ops)?;
-        let (answer, terminal, reads, session) = cgs_run_clause(tokenizer, runtime, &clause, scope)?;
+        let (answer, terminal, reads, session) =
+            cgs_run_clause(tokenizer, runtime, &clause, scope)?;
         let routed_hops = session.captured.as_ref().map(|c| c.read_hop);
         let ok = terminal == Some(ScopedTerminal::Complete)
             && answer == expected
@@ -18865,8 +18885,7 @@ fn cgs_mixed_session(
     // ---- pinned in-flight answer across a later correction ----
     let (pinned_clause, _) = scm_clause(tokenizer, 0, ScmForm::AskCurrentOffice, "Oren", None)?;
     let pinned_view = oracle.commit;
-    let pinned_expect =
-        oracle.answer(0, "Oren", 0, HistoryView::Current, pinned_view);
+    let pinned_expect = oracle.answer(0, "Oren", 0, HistoryView::Current, pinned_view);
     let mut pinned_session = runtime
         .ask(&pinned_clause, scope.as_bytes())
         .map_err(|e| e.to_string())?;
@@ -18940,13 +18959,7 @@ fn cgs_mixed_session(
         )?);
     }
     reload_total += 1;
-    reload_matched += usize::from(compute(
-        &mut rows,
-        &reloaded,
-        &oracle,
-        "Mara",
-        &["i"],
-    )?);
+    reload_matched += usize::from(compute(&mut rows, &reloaded, &oracle, "Mara", &["i"])?);
 
     let checks = serde_json::json!({
         "ingest_declared_write_and_observation": ingest_ok == ingest_total,
