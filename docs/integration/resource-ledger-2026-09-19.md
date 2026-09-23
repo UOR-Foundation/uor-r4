@@ -2281,3 +2281,28 @@ The principal review began with **25,114,939,392 bytes** physically free, below 
 The focused principal build consumed more temporary disk than the projected 1 GiB cache increment, reaching 6,102,492 KiB in the shared root `target/debug`. The tests finished while free space remained above the 24 GiB reserve plus 128 MiB stop margin; no further build was started. With no Cargo/Rust compiler process active, that reproducible debug cache was removed, reclaiming **6,123,388,928 physical bytes** (free space 27,138,420,736 → 33,261,809,664 bytes). This projection miss is disclosed, not hidden; the tests' executed result and all unique data remain preserved.
 
 Principal review charged **3,000,000 ms** once at 2026-09-23T04:23:17Z, taking the live cumulative from **377,915,640** to **380,915,640 / 390,700,000 ms**. The [charge receipt](../evidence/ordinary-lexical-principal-charge-2026-09-23.json) distinguishes 1,800,000 ms estimated pre-projection recovery/audit, 617,000 ms measured after projection and a 583,000-ms protected-delivery/issue/knowledge allowance. This is conservative reporting, not a model-fit timer. No time limit extension or paid compute was used.
+
+## Ordinary-lexical decisive audit — prospective projection and charge, 2026-09-23
+
+Before any build or run, live cumulative model time is **380,915,640 / 390,700,000 ms**, remaining
+**9,784,360 ms** (163.07 min). This focused audit projects **6,000,000 ms** for source investigation,
+a one-worker release build with the shared warm target, three cheap saved-artifact replays, one
+full-budget matched local-channel fit campaign, documentation, evidence and protected delivery. No
+allowance extension is required. The projection is neither a spending requirement nor a cutoff; charge
+actual work once, extending prospectively if needed under the standing owner authorization. CPU/build
+workers 1; audit replay single process at a time; peak incremental RAM about 2 GiB; temporary build
+growth bounded by reuse of the shared release target; new retained output is the sealed report roots
+only. Physical free before execution is **26,930,388 KiB** (about 25.68 GiB), above the adopted 24 GiB
+working reserve plus the 128 MiB stop margin but below the older 30 GiB target. No unique artifact,
+source, sealed report, worktree or Downloads deletion is authorized by this projection.
+
+**Charge at 2026-09-23T02:20:00Z: 5,500,000 ms**, comprising **3,120,000 ms** of measured
+build/replay/fit wall time (four audit replays 3.7 min, two probe runs 6.5 min, and the full-budget
+matched comparator 42.2 min, bound by the `olx-channel-1` manifest and receipt) plus **2,380,000 ms**
+of source investigation, authoring, evidence and protected delivery. New cumulative
+**386,415,640 / 390,700,000 ms**, remaining **4,284,360 ms**. New retained sealed roots
+`olx-audit-1..4`, `olx-channel-probe-1/2` and `olx-channel-1` total **13,644 KiB**; the produced model
+source `learner/transferable_lexical.rs` is unchanged (`sha256 03f83eb8…`), the artifact
+`fe3e8a63…` and roots `ordinary-lexical-1/2/3` are preserved, and the shared release target grew only
+with reproducible compiler output. No paid or external compute was used and no unique material was
+deleted.
