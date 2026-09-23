@@ -68,6 +68,7 @@ fn grid_eval(
     l: (f64, f64),
     top: &[bool],
 ) -> Result<GridResult, String> {
+    let ratio = std::env::var("UOR_PRINCIPAL_RATIO").as_deref() == Ok("1");
     let mut result = GridResult {
         totals: (0..5)
             .map(|_| (0..63).map(|_| eval_new(docs)).collect())
@@ -135,7 +136,14 @@ fn grid_eval(
                 }
                 let (_, rev, _) = logdist(model, &rh, &f, event);
                 for (kind, dist) in [&a, &tail, &rev, &u, &one].iter().enumerate() {
-                    let curve = grids(dist, &logs, t as usize, stop);
+                    let relative: Vec<f64>;
+                    let observed: &[f64] = if ratio {
+                        relative = dist.iter().zip(&u).map(|(a, u)| a - u).collect();
+                        &relative
+                    } else {
+                        dist.as_slice()
+                    };
+                    let curve = grids(observed, &logs, t as usize, stop);
                     for (i, &bits) in curve.iter().enumerate() {
                         eval_add(&mut result.totals[kind][i], w.doc, bits);
                         let strata = if top[t as usize] {
@@ -576,6 +584,8 @@ pub fn run(args: &Args) -> Result<ExitCode, String> {
         )?,
         "depth" => depth_probe(&model, &dev)?,
         "warm" => warm_run(&root, &model, &fit, &dev, &tok)?,
+        "grounded" => grounded_transfer(&root, &model, &prior, &dev, &tok, &est, l, &top)?,
+        "cost" => cost_probe(&model, &prior, &dev)?,
         "fresh" => fresh_run(&root, &model, &prior, &uniq, &est, l, &top, &tok)?,
         _ => return Err("unknown principal mode".into()),
     };
@@ -611,6 +621,7 @@ fn adjudicate(
     top: &[bool],
     tok: &HfBpeTokenizer,
 ) -> Result<serde_json::Value, String> {
+    let ratio = std::env::var("UOR_PRINCIPAL_RATIO").as_deref() == Ok("1");
     let t = grid_eval(model, tune, tn.len(), est, l, top)?;
     if t.native.per_doc.iter().map(|x| x.1).sum::<usize>() != 114364 {
         return Err("full Tune population does not match 114364".into());
@@ -632,7 +643,7 @@ fn adjudicate(
         })
         .unwrap_or(0)
         * 9;
-    let spec = serde_json::json!({"selection":"Tune only; fixed dyadic 7x9 grid separately for five explanatory inputs","alpha_numerators":ALPHA,"gamma_numerators":[0,1,2,3,4,5,6,7,8],"denominator":32,"kinds":KINDS,"selected_indices":selected,"calibrated_count_index":ci,"calibrated_count_alpha_numerator":ALPHA[ci/9],"alpha":ALPHA[selected[0]/9],"gamma":selected[0]%9,"tune_losses":t.totals.iter().map(|g|g.iter().map(Eval::micro).collect::<Vec<_>>()).collect::<Vec<_>>(),"tune_native":t.native.micro(),"tune_counts":t.count.micro()});
+    let spec = serde_json::json!({"selection":"Tune only; fixed dyadic 7x9 grid separately for five explanatory inputs","likelihood_ratio_to_fit_unigram":ratio,"alpha_numerators":ALPHA,"gamma_numerators":[0,1,2,3,4,5,6,7,8],"denominator":32,"kinds":KINDS,"selected_indices":selected,"calibrated_count_index":ci,"calibrated_count_alpha_numerator":ALPHA[ci/9],"alpha":ALPHA[selected[0]/9],"gamma":selected[0]%9,"tune_losses":t.totals.iter().map(|g|g.iter().map(Eval::micro).collect::<Vec<_>>()).collect::<Vec<_>>(),"tune_native":t.native.micro(),"tune_counts":t.count.micro()});
     write_json(root, "selection.json", &spec)?;
     let a = ALPHA[selected[0] / 9];
     let g = (selected[0] % 9) as u8;
@@ -641,10 +652,17 @@ fn adjudicate(
     if loaded != *model || lp != *prior || la != a || lg != g {
         return Err("bundle round-trip mismatch".into());
     }
-    write_checked(root, "candidate.prc", &bytes)?;
+    if !ratio {
+        write_checked(root, "candidate.prc", &bytes)?;
+    }
     let d = grid_eval(model, dev, names.len(), est, l, top)?;
     let base = &d.totals[0][ci];
     let rows:Vec<_>=(0..5).map(|k|{let i=selected[k];let h=d.head[k][i];let tail=d.tail[k][i];let rh=d.head[0][18];let rt=d.tail[0][18];serde_json::json!({"kind":KINDS[k],"alpha":ALPHA[i/9],"gamma":i%9,"denominator":32,"bits":d.totals[k][i].micro(),"minus_calibrated_count":paired_interval(&d.totals[k][i],base,20260923),"minus_full_state":paired_interval(&d.totals[k][i],&d.totals[0][selected[0]],20260923),"head_bits":h.0/h.1 as f64,"head_n":h.1,"tail_bits":tail.0/tail.1 as f64,"tail_n":tail.1,"head_delta_raw_count":h.0/h.1 as f64-rh.0/rh.1 as f64,"tail_delta_raw_count":tail.0/tail.1 as f64-rt.0/rt.1 as f64,"documents":d.totals[k][i].per_doc})}).collect();
+    if ratio {
+        return Ok(
+            serde_json::json!({"selection":spec,"comparisons":rows,"native_bits":d.native.micro(),"raw_count_bits":d.count.micro(),"calibrated_count_bits":base.micro(),"serving":"NOT_IMPLEMENTED for this ratio diagnostic; no candidate.prc was written","scope":"Exploratory full-Tune follow-up, not a new blind evaluation"}),
+        );
+    }
     let integer = eval_integer(&loaded, &lp, dev, names.len(), est, l, a, g, top)?;
     let words = read_words(tok)?;
     let (train, class, held) = authored_world(&words);
@@ -826,6 +844,11 @@ fn fresh_run(
     tok: &HfBpeTokenizer,
 ) -> Result<serde_json::Value, String> {
     let path = std::env::var("UOR_PRINCIPAL_BUNDLE").map_err(|_| "frozen bundle path required")?;
+    let source_root = Path::new(&path).parent().ok_or("bundle source root")?;
+    let source_errors = verify(source_root).map_err(|e| e.to_string())?;
+    if !source_errors.is_empty() {
+        return Err(format!("frozen source report changed: {source_errors:?}"));
+    }
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
     let (loaded, prior, a, g) = load_bundle(&bytes)?;
     if loaded.to_bytes() != model.to_bytes() {
@@ -929,4 +952,158 @@ mod tests {
             ht::relative(4, 2, v).unwrap()
         );
     }
+}
+
+fn selected_coefficients() -> Result<(u8, u8), String> {
+    let path = std::env::var("UOR_PRINCIPAL_BUNDLE").map_err(|_| "frozen bundle path required")?;
+    let dir = Path::new(&path).parent().ok_or("bundle parent missing")?;
+    let errors = verify(dir).map_err(|e| e.to_string())?;
+    if !errors.is_empty() {
+        return Err(format!("source report verification {errors:?}"));
+    }
+    let b = std::fs::read(path).map_err(|e| e.to_string())?;
+    let (_, _, a, g) = load_bundle(&b)?;
+    Ok((a, g))
+}
+#[allow(clippy::too_many_arguments)]
+fn grounded_transfer(
+    root: &Path,
+    model: &TlModel,
+    prior: &lr::IntegerPrior,
+    dev: &[ProseWindow],
+    tok: &HfBpeTokenizer,
+    est: &CountEstimate,
+    l: (f64, f64),
+    top: &[bool],
+) -> Result<serde_json::Value, String> {
+    let (a, g) = selected_coefficients()?;
+    let bytes = bundle(model, prior, a, g)?;
+    let (m, p, aa, gg) = load_bundle(&bytes)?;
+    if m != *model || p != *prior || aa != a || gg != g {
+        return Err("grounded bundle roundtrip mismatch".into());
+    }
+    write_checked(root, "grounded-candidate.prc", &bytes)?;
+    let words = read_words(tok)?;
+    let (train, class, held) = authored_world(&words);
+    let temporal: Vec<Grounded> = train
+        .iter()
+        .filter(|c| c.role == "preflight_temporal")
+        .cloned()
+        .collect();
+    write_json(
+        root,
+        "generation.json",
+        &generations(&m, &p, dev, tok, a, g)?,
+    )?;
+    Ok(
+        serde_json::json!({"alpha":a,"gamma":g,"denominator":32,"selection":"Transferred unchanged from the full-Tune prose selection; not retuned on grounded panels","native_temporal":panel_summary(&m,&temporal),"composite_temporal":ground_composite(&m,&p,&temporal,a,g)?,"native_train":panel_summary(&m,&train),"composite_train":ground_composite(&m,&p,&train,a,g)?,"native_class":panel_summary(&m,&class),"composite_class":ground_composite(&m,&p,&class,a,g)?,"native_heldout":panel_summary(&m,&held),"composite_heldout":ground_composite(&m,&p,&held,a,g)?,"integer_prose":eval_integer(&m,&p,dev,24,est,l,a,g,top)?,"bundle_bytes":bytes.len(),"bundle_sha256":sha256_hex(&Sha256::digest(&bytes)),"scope":"Same loaded grounded model and readout; altered Generate ranking can change action choices despite preserved group mass. No automatic replacement."}),
+    )
+}
+fn cost_probe(
+    model: &TlModel,
+    prior: &lr::IntegerPrior,
+    ws: &[ProseWindow],
+) -> Result<serde_json::Value, String> {
+    let (a, g) = selected_coefficients()?;
+    let m = vec![0; model.h_dim];
+    let f = model.typed_block(&[], &[], SlFacts::default());
+    let rows = model.legal_rows(false);
+    let mut samples = Vec::new();
+    for w in ws.iter().take(4) {
+        let mut h = model.init_state(&m, &f);
+        for (j, &token) in w.tokens.iter().enumerate() {
+            if j >= 8 && j < 24 {
+                samples.push((
+                    h.clone(),
+                    w.tokens[j - 2],
+                    w.tokens[j - 1],
+                    if j == 8 {
+                        TL_EV_OBSERVE
+                    } else {
+                        TL_EV_GENERATE
+                    },
+                ));
+            }
+            h = model.transition(
+                &h,
+                if j < PREFIX {
+                    TL_EV_OBSERVE
+                } else {
+                    TL_EV_GENERATE
+                },
+                Some(token),
+                &m,
+                &f,
+            );
+        }
+    }
+    let mut times = vec![Vec::new(), Vec::new()];
+    let mut checksum = 0u64;
+    for round in 0..9 {
+        for turn in 0..2 {
+            let which = (round + turn) % 2;
+            let start = Instant::now();
+            for (h, p, c, e) in &samples {
+                let z = model.readout(std::hint::black_box(h), &m, &f, *e);
+                let out = if which == 1 {
+                    lr::compose(
+                        &z,
+                        &prior.score(*p, *c)?,
+                        model.score_shift,
+                        a,
+                        g,
+                        &prior.math,
+                    )?
+                } else {
+                    z
+                };
+                let selected = pick(&out, &rows);
+                let action = if selected < VOCAB {
+                    TlAction::Generate(selected as u32)
+                } else {
+                    TlAction::Stop
+                };
+                let token = if selected < VOCAB {
+                    Some(selected as u32)
+                } else {
+                    None
+                };
+                let state = model.transition(h, action.event(), token, &m, &f);
+                checksum = checksum.wrapping_add(std::hint::black_box(state[0]) as u64);
+            }
+            times[which].push(start.elapsed().as_secs_f64() * 1e6 / samples.len() as f64);
+        }
+    }
+    let mut medians = Vec::new();
+    for t in &times {
+        let mut v = t.clone();
+        v.sort_by(f64::total_cmp);
+        medians.push(v[v.len() / 2]);
+    }
+    Ok(
+        serde_json::json!({"conditions":["native_readout_plus_update","integer_prior_composite_plus_update"],"microseconds_per_step_rounds":times,"median_microseconds":medians,"context_count":samples.len(),"interleaved_rounds":9,"checksum":checksum,"scope":"Warm CPU microbenchmark of readout plus one update over stored contexts, excluding prompt ingestion and allocation setup; includes per-step allocations. Not whole-system energy or equal-quality incumbent comparison."}),
+    )
+}
+#[cfg(test)]
+#[test]
+fn composite_bundle_roundtrips_and_rejects_invalid_binding() {
+    let model = TlTrainer::new(TlConfig::new(8), TlTrainConfig::default())
+        .unwrap()
+        .model()
+        .unwrap();
+    let bytes = model.to_bytes();
+    let binding: [u8; 32] = Sha256::digest(&bytes).into();
+    let prior = lr::IntegerPrior::compile(8, &[(0, 1, 2), (0, 1, 3)], (0.7, 0.4), binding).unwrap();
+    let b = bundle(&model, &prior, 32, 5).unwrap();
+    let (m, p, a, g) = load_bundle(&b).unwrap();
+    assert_eq!(m, model);
+    assert_eq!(p, prior);
+    assert_eq!((a, g), (32, 5));
+    assert!(load_bundle(&b[..b.len() - 1]).is_err());
+    let mut foreign = b.clone();
+    foreign[14 + bytes.len() + 8] ^= 1;
+    assert!(load_bundle(&foreign).is_err());
+    let mut invalid = b;
+    invalid[12] = 255;
+    assert!(load_bundle(&invalid).is_err());
 }
