@@ -357,6 +357,17 @@ pub fn compose(
     gamma: u8,
     math: &LogAdd,
 ) -> Result<Vec<i32>, String> {
+    compose_in_frame(native, count, None, score_shift, alpha, gamma, math)
+}
+fn compose_in_frame(
+    native: &[i32],
+    count: &[i32],
+    unigram: Option<&[i32]>,
+    score_shift: u32,
+    alpha: u8,
+    gamma: u8,
+    math: &LogAdd,
+) -> Result<Vec<i32>, String> {
     let v = count.len();
     if v == 0 || v > 4096 || native.len() != v + 2 || score_shift > 20 || alpha > 64 || gamma > 32 {
         return Err("invalid composite dimensions/coefficients".into());
@@ -376,10 +387,16 @@ pub fn compose(
     if count.iter().any(|x| !(-256 * ONE..=ONE).contains(x)) {
         return Err("count score outside envelope".into());
     }
+    if let Some(u) = unigram {
+        if u.len() != v || u.iter().any(|x| !(-256 * ONE..=0).contains(x)) {
+            return Err("invalid unigram correction shape or bounds".into());
+        }
+    }
     let original = math.sum(&z[..v]);
     let mut r = Vec::with_capacity(v);
     for i in 0..v {
-        r.push(scale(count[i], alpha)? + scale(z[i], gamma)?);
+        let correction = z[i] - unigram.map(|u| u[i]).unwrap_or(0);
+        r.push(scale(count[i], alpha)? + scale(correction, gamma)?);
     }
     let total = math.sum(&r);
     for i in 0..v {
@@ -454,4 +471,39 @@ fn find_row(level: &[Row], key: u32) -> Option<&Row> {
         .binary_search_by_key(&key, |r| r.key)
         .ok()
         .map(|i| &level[i])
+}
+
+/// Marginal-relative correction, with native Generate mass retained independently.
+pub fn compose_ratio(
+    native: &[i32],
+    count: &[i32],
+    unigram: &[i32],
+    score_shift: u32,
+    alpha: u8,
+    gamma: u8,
+    math: &LogAdd,
+) -> Result<Vec<i32>, String> {
+    compose_in_frame(
+        native,
+        count,
+        Some(unigram),
+        score_shift,
+        alpha,
+        gamma,
+        math,
+    )
+}
+#[cfg(test)]
+#[test]
+fn marginal_relative_correction_does_not_repeat_unigram_and_preserves_action_mass() {
+    let math = LogAdd::compile();
+    let u = [-ONE, -3 * ONE];
+    let c = [qlog(0.3), qlog(0.7)];
+    let native = [u[0], u[1], -4 * ONE, -5 * ONE];
+    let result = compose_ratio(&native, &c, &u, FRAC, 32, 8, &math).unwrap();
+    let count_only = compose(&native, &c, FRAC, 32, 0, &math).unwrap();
+    assert_eq!(result, count_only);
+    assert_eq!(&result[2..], &native[2..]);
+    assert_eq!(math.sum(&result[..2]), math.sum(&native[..2]));
+    assert!(compose_ratio(&native, &c, &u[..1], FRAC, 32, 8, &math).is_err());
 }
