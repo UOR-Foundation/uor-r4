@@ -28,6 +28,8 @@
 mod observer_blend;
 #[path = "support/observer_transport.rs"]
 mod observer_transport;
+#[path = "support/principal_continuation.rs"]
+mod principal_continuation;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -6045,6 +6047,9 @@ fn embedding_decode(model: &TlModel, states: &[ServedState], idx: &[usize]) -> E
 }
 
 fn state_probe_mode(args: &Args) -> Result<ExitCode, String> {
+    if std::env::var("UOR_PRINCIPAL_RUN").is_ok() {
+        return principal_continuation::run(args);
+    }
     let root = args.state_probe.clone().unwrap_or_default();
     if root.as_os_str().is_empty() {
         return Err("--state-probe needs a new report root".into());
