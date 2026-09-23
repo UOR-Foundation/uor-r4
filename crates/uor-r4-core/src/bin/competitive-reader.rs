@@ -21222,9 +21222,15 @@ const SLX_EOS: u32 = u32::MAX - 1;
 
 /// The declared learned vocabulary: one shared slot per word, each a single token of the bound
 /// tokenizer. Slot order is the learned action order and is never derived from an evaluator field.
-const SLX_WORDS: [&str; 7] = [" it", " is", " was", " still", " became", " first", " at"];
+const SLX_WORDS: [&str; 8] = [
+    " it", " is", " was", " still", " became", " first", " at", " now",
+];
 /// Declared bound on learned insert words per answer, matching the session contract.
 const SLX_MAX_INSERT: u8 = 6;
+/// Declared unfamiliar token ids used by the unknown-content control. They are excluded from the
+/// fitted content index, so the control exercises the decoder's reserved OOV rows rather than being
+/// silently fitted, and the held-out source documents remain genuinely unfamiliar.
+const SLX_OOV_TOKENS: [u32; 2] = [(VOCAB - 1) as u32, (VOCAB - 2) as u32];
 
 /// One declared source document: a scope, the entity it is about, and the successive office values
 /// the document asserts. `computed` documents use groundable labels so a computation can consume
@@ -21377,7 +21383,10 @@ fn slx_render(view: SlxView, derived: bool, changed: bool, value: &str) -> Strin
         (SlxView::Initial, false) => format!("at first it was {value}"),
         (SlxView::Previous, false) => format!("it was {value}"),
         (SlxView::Current, false) => format!("it is {value}"),
-        (SlxView::Current, true) if changed => format!("it became {value}"),
+        // A consumed computation that actually changed the address is reported with a word *after*
+        // the owned span, so the language exercises a post-copy decision conditioned on the computed
+        // effect rather than another prelude variation.
+        (SlxView::Current, true) if changed => format!("it became {value} now"),
         (SlxView::Current, true) => format!("it is still {value}"),
         _ => format!("it is {value}"),
     }
@@ -21395,6 +21404,8 @@ fn slx_text_sequence(
     value: &str,
     res: &[u32],
     prior_differs: bool,
+    committed: bool,
+    key_changed: bool,
 ) -> Result<SlSequence, String> {
     let payload = tokenizer.encode(&format!(" {value}"));
     let text = slx_render(view, derived, changed, value);
@@ -21418,6 +21429,8 @@ fn slx_text_sequence(
         history: view.code(),
         derived,
         prior_differs,
+        committed,
+        key_changed,
         actions,
     })
 }
@@ -21561,6 +21574,8 @@ fn slx_oracle(
 ) -> Vec<u32> {
     let slot = |i: usize| slots[i];
     let mut out = Vec::new();
+    // A word that follows the owned span, when the declared meaning places one there.
+    let mut tail: Vec<u32> = Vec::new();
     match (view, derived) {
         (SlxView::Initial, false) => {
             out.extend([slot(6), slot(5), slot(0), slot(2)]);
@@ -21572,7 +21587,9 @@ fn slx_oracle(
             out.extend([slot(0), slot(1)]);
         }
         (SlxView::Current, true) if changed => {
+            // A committed change is reported with a trailing marker after the copied span.
             out.extend([slot(0), slot(4)]);
+            tail.push(slot(7));
         }
         // The consumed computation left the same office in force, so the answer reports persistence.
         (SlxView::Current, true) => {
@@ -21583,6 +21600,30 @@ fn slx_oracle(
         }
     }
     out.extend_from_slice(payload);
+    out.extend(tail);
+    out
+}
+
+/// A copy of `seq` whose owned payload is replaced by `len` declared-unfamiliar tokens, with the
+/// action sequence's copy run resized to match. The unknown-content control is presented across the
+/// payload lengths the language can present rather than only the fitting documents' lengths, so an
+/// unfamiliar value of any length meets a fitted OOV path.
+fn slx_reblank(seq: &SlSequence, len: usize, unfitted: u32) -> SlSequence {
+    let mut actions: Vec<RealizationAction> = Vec::new();
+    let mut copied = false;
+    for action in &seq.actions {
+        if matches!(action, RealizationAction::Copy) {
+            if !copied {
+                actions.extend(std::iter::repeat(RealizationAction::Copy).take(len));
+                copied = true;
+            }
+            continue;
+        }
+        actions.push(*action);
+    }
+    let mut out = seq.clone();
+    out.sel = vec![unfitted; len];
+    out.actions = actions;
     out
 }
 
@@ -21861,7 +21902,14 @@ fn slx_run() -> Result<ExitCode, String> {
         // Observe the comparator's actual serving context from the same loaded session. Its
         // capture/history observations come from serving, rather than the authored answer family;
         // a historical capture can itself have a different predecessor.
-        let context_for = |view: SlxView, op: Option<&str>| -> Result<RealizationContext, String> {
+        // Observe the comparator's actual serving context from the same loaded session. Its
+        // capture/history observations come from serving, rather than the authored answer family;
+        // a historical capture can itself have a different predecessor. The typed causal facts are
+        // read from the same executed session, so no training observation is manufactured from an
+        // answer-family label.
+        let observe = |view: SlxView,
+                       op: Option<&str>|
+         -> Result<(RealizationContext, (bool, bool, bool)), String> {
             let mut runtime = slx_load(
                 &model_bytes,
                 &intent_bytes,
@@ -21889,12 +21937,14 @@ fn slx_run() -> Result<ExitCode, String> {
                     .map_err(|e| e.to_string())?
             };
             runtime.run(&mut session).map_err(|e| e.to_string())?;
-            Ok(runtime.realization_context(&session))
+            Ok((
+                runtime.realization_context(&session),
+                runtime.observed_lexical_facts(&session),
+            ))
         };
-        let prior_differs = doc.values.len() >= 2
-            && doc.values[doc.values.len() - 2] != doc.values[doc.values.len() - 1];
         // current
         let current = doc.values.last().copied().unwrap();
+        let (ctx, (committed, prior_differs, key_changed)) = observe(SlxView::Current, None)?;
         let seq = slx_text_sequence(
             &tokenizer,
             &slots,
@@ -21904,12 +21954,15 @@ fn slx_run() -> Result<ExitCode, String> {
             current,
             &[],
             prior_differs,
+            committed,
+            key_changed,
         )?;
         fit_text_receipts.push(json!({"document": doc.name, "case": "current", "text": slx_render(SlxView::Current, false, false, current)}));
-        tagged.push((seq, "flag", context_for(SlxView::Current, None)?));
+        tagged.push((seq, "flag", ctx));
         // previous and initial
         if doc.values.len() >= 2 {
             let prev = doc.values[doc.values.len() - 2];
+            let (ctx, (committed, prior_differs, key_changed)) = observe(SlxView::Previous, None)?;
             let seq = slx_text_sequence(
                 &tokenizer,
                 &slots,
@@ -21918,12 +21971,15 @@ fn slx_run() -> Result<ExitCode, String> {
                 false,
                 prev,
                 &[],
-                false,
+                prior_differs,
+                committed,
+                key_changed,
             )?;
             fit_text_receipts.push(json!({"document": doc.name, "case": "previous", "text": slx_render(SlxView::Previous, false, false, prev)}));
-            tagged.push((seq, "flag", context_for(SlxView::Previous, None)?));
+            tagged.push((seq, "flag", ctx));
         }
         let first = doc.values[0];
+        let (ctx, (committed, prior_differs, key_changed)) = observe(SlxView::Initial, None)?;
         let seq = slx_text_sequence(
             &tokenizer,
             &slots,
@@ -21932,13 +21988,17 @@ fn slx_run() -> Result<ExitCode, String> {
             false,
             first,
             &[],
-            false,
+            prior_differs,
+            committed,
+            key_changed,
         )?;
         fit_text_receipts.push(json!({"document": doc.name, "case": "initial", "text": slx_render(SlxView::Initial, false, false, first)}));
-        tagged.push((seq, "flag", context_for(SlxView::Initial, None)?));
+        tagged.push((seq, "flag", ctx));
         // consumed computations discovered through the retained session
         for probe in probes.get(doc.name).map(Vec::as_slice).unwrap_or(&[]) {
             let answer = cgs_decode_trim(&tokenizer, &probe.payload);
+            let (ctx, (committed, prior_differs, key_changed)) =
+                observe(SlxView::Current, Some(probe.op))?;
             let seq = slx_text_sequence(
                 &tokenizer,
                 &slots,
@@ -21947,7 +22007,9 @@ fn slx_run() -> Result<ExitCode, String> {
                 probe.changed,
                 &answer,
                 &probe.operand_payload,
-                false,
+                prior_differs,
+                committed,
+                key_changed,
             )?;
             let tag = if probe.changed {
                 "changed"
@@ -21958,7 +22020,7 @@ fn slx_run() -> Result<ExitCode, String> {
                 "document": doc.name, "case": if probe.changed {"derived_changed"} else {"derived_unchanged"},
                 "op": probe.op, "text": slx_render(SlxView::Current, true, probe.changed, &answer),
             }));
-            tagged.push((seq, tag, context_for(SlxView::Current, Some(probe.op))?));
+            tagged.push((seq, tag, ctx));
         }
     }
     // Two declared balancing decisions, made before fitting and reported with the corpus:
@@ -21974,11 +22036,13 @@ fn slx_run() -> Result<ExitCode, String> {
         fit_sequences.push(seq.clone());
         comparator_contexts.push(*context);
         if *tag == "flag" {
-            let mut blank = seq.clone();
-            blank.sel.clear();
-            blank.res.clear();
-            fit_sequences.push(blank);
-            comparator_contexts.push(*context);
+            // Present the same sentence with unfamiliar-but-shaped content at every payload length the
+            // language can present, so an unfamiliar value of any length meets a fitted OOV path
+            // rather than a zero-length payload the session never serves.
+            for len in 1..=(SL_MAX_CONTENT_TOKENS + 1) {
+                fit_sequences.push(slx_reblank(seq, len, SLX_OOV_TOKENS[0]));
+                comparator_contexts.push(*context);
+            }
         }
         if *tag == "unchanged" {
             for _ in 0..3 {
@@ -21988,20 +22052,24 @@ fn slx_run() -> Result<ExitCode, String> {
         }
         if *tag == "changed" {
             // The moving operations are twice as frequent as the identity one, so the identity branch
-            // is repeated above and the moving branch once here to reach the same order.
-            fit_sequences.push(seq.clone());
-            comparator_contexts.push(*context);
+            // is repeated above. The change-reporting answer also carries the sole word that follows
+            // the owned span, which is otherwise drowned by the many copy steps, so that branch is
+            // repeated to give the post-copy decision comparable support.
+            for _ in 0..4 {
+                fit_sequences.push(seq.clone());
+                comparator_contexts.push(*context);
+            }
         }
     }
 
     let cfg = SlFitConfig {
-        epochs: slx_env_usize("SLX_EPOCHS", 12000),
-        h_dim: slx_env_usize("SLX_H", 24),
-        e_dim: slx_env_usize("SLX_E", 24),
+        epochs: slx_env_usize("SLX_EPOCHS", 16000),
+        h_dim: slx_env_usize("SLX_H", 48),
+        e_dim: slx_env_usize("SLX_E", 48),
         lr: slx_env_f32("SLX_LR", 0.01),
         seed: slx_env_usize("SLX_SEED", 0x5eed_1eaf) as u64,
         stop_weight: slx_env_f32("SLX_STOP", 4.0),
-        insert_weight: slx_env_f32("SLX_INS", 2.0),
+        insert_weight: slx_env_f32("SLX_INS", 3.0),
     };
     let outcome = if let Some(parent) = &reuse_root {
         let unlisted = verify(parent).map_err(|e| format!("parent seal: {e}"))?;
@@ -22047,6 +22115,7 @@ fn slx_run() -> Result<ExitCode, String> {
                 slots.clone(),
                 SLX_MAX_INSERT,
                 &attempt,
+                &SLX_OOV_TOKENS,
             )
             .map_err(|e| format!("state-lexical fit: {e}"))?;
             // Selection is on the declared *training* objective only; the evaluation cases below are not
@@ -22372,14 +22441,33 @@ fn slx_run() -> Result<ExitCode, String> {
         .filter(|t| !reloaded.content_tokens.contains(t))
         .take(2)
         .collect();
-    let known: Vec<u32> = reloaded.content_tokens.iter().copied().take(4).collect();
+    let known: Vec<u32> = reloaded
+        .content_tokens
+        .iter()
+        .skip(1)
+        .copied()
+        .take(4)
+        .collect();
     let mut reversed = known.clone();
     reversed.reverse();
     let mut longer = known.clone();
     if let Some(t) = known.get(1) {
         longer.push(*t);
     }
+    // The decoder consumes the content feature *and* the typed causal block, so the representational
+    // witness is measured over the full observation, not the content feature alone.
+    let observe = |sel: &[u32], res: &[u32]| -> (Vec<i32>, Vec<i32>) {
+        (
+            reloaded.content_feature(sel, res),
+            reloaded.typed_block(sel, res, SlFacts::default()),
+        )
+    };
     let unknown_alias = if unknown.len() == 2 {
+        Some(observe(&unknown[..1], &unknown[..1]) == observe(&unknown[..1], &unknown[1..]))
+    } else {
+        None
+    };
+    let unknown_content_alias = if unknown.len() == 2 {
         Some(
             reloaded.content_feature(&unknown[..1], &unknown[..1])
                 == reloaded.content_feature(&unknown[..1], &unknown[1..]),
@@ -22389,13 +22477,95 @@ fn slx_run() -> Result<ExitCode, String> {
     };
     let representation_diagnostics = json!({
         "unknown_token_ids": unknown,
+        "content_only_unknown_pair_alias": unknown_content_alias,
         "equal_and_unequal_unknown_pairs_alias": unknown_alias,
         "known_token_ids": known,
         "reordered_known_tokens_alias": reloaded.content_feature(&known, &[]) == reloaded.content_feature(&reversed, &[]),
         "suffix_after_four_tokens_alias": if known.len() == 4 { Some(reloaded.content_feature(&known, &[]) == reloaded.content_feature(&longer, &[])) } else { None },
-        "copy_token_feedback": "one shared action symbol; copied token identity absent",
+        "copy_token_feedback": "the emitted token's shared learned identity enters the recurrence; an unfitted token shares the reserved OOV row",
+        "tail_position": "a payload longer than four tokens carries its final token in a dedicated tail position",
         "scope": "loaded representation witnesses only; not a language-quality panel",
     });
+
+    // ---- loaded E/S reference assessment ----
+    // The principal review recorded the E/S artifacts as NOT_RUN. They are loaded and exercised here
+    // so the reference is an executed comparison rather than an assertion.
+    let es_reference = {
+        let es_started = Instant::now();
+        let pb = std::fs::read(E_PATH).map_err(|e| format!("E: {e}"))?;
+        let sb = std::fs::read(S_PATH).map_err(|e| format!("S: {e}"))?;
+        let e_sha_ok = sha256_hex(&pb) == E_SHA;
+        let s_sha_ok = sha256_hex(&sb) == S_SHA;
+        let parent = PriorCore::from_bytes(&pb).map_err(|e| format!("load E: {e}"))?;
+        let e_valid = parent.validate().is_ok();
+        let (parent_digest, _) = parent_hash_convention(&pb);
+        let raw_tok: [u8; 32] = hex_to_bytes(DERIVED_SHA)?
+            .try_into()
+            .map_err(|_| "derived tokenizer digest width".to_string())?;
+        let _query = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
+            .map_err(|e| format!("load S: {e}"))?;
+        // A bounded behavioural probe: continue a declared lexical prefix with the donor's own decoder.
+        let prompt: [u32; 2] = [slots[0], slots[4]];
+        let continued = parent.generate(&prompt, 4, true);
+        let slot_set: std::collections::BTreeSet<u32> = slots.iter().copied().collect();
+        let in_slots = continued.iter().filter(|t| slot_set.contains(t)).count();
+        json!({
+            "status": "LOADED_AND_EXECUTED",
+            "e_bytes": pb.len(),
+            "s_bytes": sb.len(),
+            "e_sha_matches_pin": e_sha_ok,
+            "s_sha_matches_pin": s_sha_ok,
+            "e_valid": e_valid,
+            "probe_prompt": prompt,
+            "donor_continuation": continued,
+            "continuation_tokens_in_declared_slots": in_slots,
+            "load_and_probe_ms": es_started.elapsed().as_millis() as u64,
+            "verdict": "The E prior and S policy load, validate and execute. E is a full-vocabulary next-token prior and S is a query-read policy; neither emits or owns the session's exact copied span, so the donor's lexical responsibility is not interchangeable with the scoped StateLexicalV1 contract. Retained as a loaded reference. Adapting it would require a new interface (a donor-conditioned vocabulary decision over an exactly owned span), which is recorded as the next step rather than claimed here.",
+        })
+    };
+
+    // ---- ordinary-text exposure on a source-separated prose population ----
+    // A measured statement of the ordinary-text remainder: how much of real prose the fitted content
+    // index covers. This is exposure accounting, not a language-quality panel.
+    let ordinary_text = {
+        let docs = [
+            "docs/integration/current-state.md",
+            "docs/integration/project-track.md",
+        ];
+        let mut rows = Vec::new();
+        for rel in docs {
+            let Some(root_dir) = source_root.as_ref() else {
+                rows.push(json!({"path": rel, "status": "UNAVAILABLE (no source root)"}));
+                continue;
+            };
+            match std::fs::read_to_string(root_dir.join(rel)) {
+                Ok(text) => {
+                    let toks = tokenizer.encode(&text);
+                    let fitted = toks
+                        .iter()
+                        .filter(|t| reloaded.content_tokens.iter().skip(1).any(|c| c == *t))
+                        .count();
+                    let fraction = if toks.is_empty() {
+                        0.0
+                    } else {
+                        fitted as f64 / toks.len() as f64
+                    };
+                    rows.push(json!({
+                        "path": rel,
+                        "tokens": toks.len(),
+                        "fitted_tokens": fitted,
+                        "fitted_fraction": fraction,
+                    }));
+                }
+                Err(e) => rows.push(json!({"path": rel, "status": format!("UNAVAILABLE ({e})")})),
+            }
+        }
+        json!({
+            "population": "source-separated local project documentation, distinct from the authored state world",
+            "documents": rows,
+            "verdict": "NOT_RUN as a learning task. The scoped contract supervises an exactly owned span, not open prose continuation, and the fitted content index does not cover ordinary vocabulary (measured coverage above). Ordinary-text learning through the retained session remains the open remainder of the milestone and is the first item of the recorded next step.",
+        })
+    };
 
     // ---- checks ----
     let holds = |name: &str| panels[name]["complete"] == json!(true);
@@ -22471,7 +22641,9 @@ fn slx_run() -> Result<ExitCode, String> {
         "cases": cases,
         "checks": checks,
         "checks_all_expected": checks.as_object().map(|m| m.values().all(|v| v == &json!(true))).unwrap_or(false),
-        "scope": "exposed authored response fixture over a small declared state world; a learned low-bit state-conditioned decoder selects shared vocabulary words around the exact owned span, from Insert-slot/Copy-class feedback and a truncated fitted-token content embedding of the selected evidence. Not general prose, no geometric advantage claimed, and the held-out-document panel transfers entity/value strings rather than the value-sensitive computation association.",
+        "scope": "exposed authored response fixture over a small declared state world; a learned low-bit state-conditioned decoder selects shared vocabulary words around the exact owned span, and continues after the span, from position-resolved content, the actual emitted token identity, and an exact typed causal block. Not general prose and no geometric advantage claimed; the held-out-document panel transfers the sentence form to unfamiliar entity/value strings of unseen length, not an unfamiliar computed relation.",
+        "es_reference": es_reference,
+        "ordinary_text_exposure": ordinary_text,
     });
     write_json(&root, "result.json", &payload)?;
     seal(&root).map_err(|e| format!("seal: {e}"))?;
