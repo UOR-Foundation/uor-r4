@@ -2,7 +2,7 @@
 use super::*;
 #[path = "observer_blend_math.rs"]
 mod math;
-use math::{blend_bits, logsum2};
+use math::{blend_bits, logsum2, residual_endpoints};
 use std::path::Path;
 use uor_r4_core::native_geometric::learner::realtext_support::{paired_interval, Agg};
 const BETA: [f64; 21] = [
@@ -25,6 +25,13 @@ fn evaluate(
     let mut count = vec![(0.0, 0usize); names.len()];
     let mut parity = 0.0f64;
     let kind = std::env::var("UOR_OBSERVER_BLEND_CONTROL").unwrap_or_else(|_| "artifact".into());
+    let alpha: f64 = std::env::var("UOR_OBSERVER_COUNT_EXPONENT")
+        .unwrap_or_else(|_| "1.0".into())
+        .parse()
+        .map_err(|_| "invalid count exponent")?;
+    if !alpha.is_finite() || !(0.0..=2.0).contains(&alpha) {
+        return Err("count exponent outside range".into());
+    }
     let mut records = Vec::new();
     let m = vec![0; model.h_dim];
     let f = model.typed_block(&[], &[], SlFacts::default());
@@ -60,6 +67,11 @@ fn evaluate(
                     -prob_of(&logits, &rows, *target as usize, model.score_shift).log2();
                 let zero = blend_bits(&a, &c, *target as usize, 0.0, stop_bits);
                 parity = parity.max((zero - canonical).abs());
+                let (a, c) = if kind == "residual" {
+                    residual_endpoints(&a, &c, alpha)?
+                } else {
+                    (a, c)
+                };
                 let a = match kind.as_str() {
                     "unigram" => (0..model.vocab).map(|v| uni.p(v as u32).log2()).collect(),
                     "uniform" => vec![0.0; model.vocab],
@@ -68,7 +80,7 @@ fn evaluate(
                             family_p(c1, c2, uni, prev, cur, v as u32, (lambdas.0, 0.0)).log2()
                         })
                         .collect(),
-                    "artifact" => a,
+                    "artifact" | "residual" => a,
                     _ => return Err("unknown calibration endpoint".into()),
                 };
                 let losses: Vec<f64> = betas
@@ -154,8 +166,10 @@ pub fn run(
     let complementarity =
         selected_beta > 0.0 && selected_beta < 1.0 && vs_endpoint.2 < 0.0 && vs_count.2 < 0.0;
     let summarize = |a: &Agg| serde_json::json!({"bits_per_target":a.micro(),"positions":a.total().1,"documents":a.rows});
-    let report = serde_json::json!({"schema":"uor-r4.observer-count-blend/2","metadata":metadata,
+    let report = serde_json::json!({"schema":"uor-r4.observer-count-blend/3","metadata":metadata,
         "readout_kind":std::env::var("UOR_OBSERVER_BLEND_CONTROL").unwrap_or_else(|_| "artifact".into()),
+        "count_exponent":std::env::var("UOR_OBSERVER_COUNT_EXPONENT").unwrap_or_else(|_| "1.0".into()),
+        "residual_strength_if_residual_mode":1.0-selected_beta,
         "beta_grid":beta,"selected_beta":selected_beta,"selection_split":"tune only",
         "tune_windows":tune.len(),"tune_documents":tune_names.len(),
         "tune_grid_bits":tune_grid.iter().map(Agg::micro).collect::<Vec<_>>(),
