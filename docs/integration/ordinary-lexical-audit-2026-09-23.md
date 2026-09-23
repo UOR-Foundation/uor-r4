@@ -112,8 +112,12 @@ The informative positive is the **recurrence-only** arm: a plain training-formul
 position, full preceding context, larger target batch, no grounded-only final phase) recovers about
 **1.17 bits/target** on the same targets against the delivered 7.3722 — **without any geometry**. The
 delivered deficit is therefore substantially an optimisation/curriculum/batching effect, exactly the
-cause the principal said to repair first. This arm is a **prose-only diagnostic** learner: it does not
-retain the grounded Copy/Stop behaviours and is **not** a successor artifact.
+cause the principal said to repair first. **Disclosed difference:** this per-position formulation feeds
+the preceding tokens with the `OBSERVE` event throughout, whereas the delivered window objective feeds
+them `OBSERVE` for the frozen prefix and `GENERATE` afterwards; the two arms are self-consistent and
+matched to each other, but their absolute values are not a like-for-like replay of the delivered path.
+This arm is a **prose-only diagnostic** learner: it does not retain the grounded Copy/Stop behaviours
+and is **not** a successor artifact.
 
 Whole-path cost, kept separate from the rollout timer: rollout-only 702.8 µs/token, whole-path
 (tokenize + rollout + decode) 695.2 µs/token, dense packed-coefficient inspections
