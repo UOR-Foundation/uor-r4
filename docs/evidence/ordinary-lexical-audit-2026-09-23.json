@@ -124,7 +124,7 @@
     "two_token_minus_recurrence_only": [-0.4693396183992986, -0.5266422043403312, -0.4098500167481758],
     "count_bits_per_target": 5.121720706100631,
     "conclusion": "the direct bounded two-token channel does not close the gap and degrades development loss; the recurrence-only full-context formulation recovers about 1.17 bits/target against the delivered 7.3722 on the same targets, so the deficit is substantially an optimization/curriculum/batching effect",
-    "disclosed_difference": "the per-position formulation feeds preceding tokens with the OBSERVE event throughout, whereas the delivered window objective uses OBSERVE for the frozen prefix and GENERATE afterwards; the two arms are matched to each other but their absolute values are not a like-for-like replay of the delivered path";
+    "disclosed_difference": "the per-position formulation feeds preceding tokens with the OBSERVE event throughout, whereas the delivered window objective uses OBSERVE for the frozen prefix and GENERATE afterwards; the two arms are matched to each other but their absolute values are not a like-for-like replay of the delivered path"
   },
   "whole_path_cost": {
     "rollout_only_us_per_token": 702.7892578125,
