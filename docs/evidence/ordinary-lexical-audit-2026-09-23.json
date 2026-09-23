@@ -26,6 +26,14 @@
       "tested_executable_sha256": "1cb7dce2cfc8271e003d6ec4d031616a1687ee53261dcacc4bf34ee4645b9ab4",
       "argv": ["--audit", "ordinary-lexical-3", "--root", "olx-audit-4", "--docs", "inputs/docs", "--source-rev", "5caecae5+audit4"]
     },
+    "olx-audit-5": {
+      "kind": "principal_denominator_correction",
+      "receipt_sha256": "2fd33edf787b53c771df0c7d7c4fd2f7c87ce2894d2faf1a4d427affdcb00647",
+      "manifest_sha256": "026b86d8e00415d2e609ec2ba186b554b7d95c03257032f056dc1115efd7374a",
+      "unlisted_files": 0,
+      "tested_executable_sha256": "9a74fa3c9fff1e42e4fde0f79765f2127b267f51d4750bb34d28bc30c7f76d89",
+      "runner_source_sha256": "2ffa551f568c29c37c16d353410b75a6e118bd5efd795a954c0c79d08f2da386"
+    },
     "olx-audit-1": {"receipt_sha256": "e05fb6b17d5f60bd7afadfc8516957afb54434097a6a9091700001ebb167a97f", "tested_executable_sha256": "983c7083b7f238276aef325f125336a92731bd7ae15022cf4622ce72d80c04eb"},
     "olx-audit-2": {"receipt_sha256": "95259bf1ebcb9279dfde79acdc00aec7a755e03d0ecad2ce72c732024edead2a", "tested_executable_sha256": "fd4dd5b39a80c584b524e093d91c31295b33cb2fd852f6a91dc654a307751d90"},
     "olx-audit-3": {"receipt_sha256": "0c8d49f1bfba5f7165841880b59eb9e177363d028d537540369f5cbd3066dac0", "tested_executable_sha256": "e8765dac54c80e67c5647f00d4edd2ea772c281c067eedbc5acf73e418990a39"},
@@ -51,7 +59,8 @@
     "preflight_a_total": 32,
     "preflight_a_route_key_contradictions": 16,
     "preflight_b_matches_stored": true,
-    "prose_token_conditional_bits_per_target": 7.372198274238398,
+    "prose_generate_action_bits_per_target": 7.372198274238398,
+    "prose_generate_conditional_bits_per_target": 7.371854924210011,
     "prose_stored_bits_per_target": 7.372198274238398,
     "generation_matches_stored": true,
     "mixed_session_matches_stored": true,
@@ -74,13 +83,16 @@
       "no_copy_event_matches_actual": true,
       "identity_erased_alias": true
     },
-    "interpretation": "the learned post-copy vocabulary decision is a function of the selected-source evidence fingerprint m; it does not depend on the token actually emitted by Copy; the delivered 2/2 is a content/fingerprint result, not a demonstrated role for emitted-token feedback"
+    "interpretation": "on this token pair, the post-copy top-1 choice tracks the selected-source evidence fingerprint m and does not change under the feedback-only swap; other contexts and sub-top-1 logit changes remain untested"
   },
   "prose_diagnosis_same_5376_dev_targets": {
     "full_action_bits_per_target": 7.372198274238398,
     "full_action_scored": 5376,
-    "token_conditional_bits_per_target": 7.372198274238398,
-    "token_conditional_targets": 5376,
+    "generate_action_bits_per_target": 7.372198274238398,
+    "generate_action_targets": 5376,
+    "generate_conditional_bits_per_target": 7.371854924210011,
+    "generate_conditional_targets": 5376,
+    "stop_normalization_bits_per_target": 0.000343350028387,
     "stop_targets": 0,
     "correct_stops": 0,
     "mean_stop_probability": 0.00022833907704396275,
@@ -88,13 +100,13 @@
     "hidden_clamp_saturation": 0.0,
     "fingerprint_clamp_saturation": 0.0,
     "action_accuracy": 0.14899553571428573,
-    "token_conditional_bits_by_context_frequency": {
+    "generate_action_bits_by_context_frequency": {
       "count_0": 8.488001398126354,
       "count_1": 8.405412374617528,
       "count_2_to_4": 7.744113649976632,
       "count_5_plus": 7.052861626351955
     },
-    "token_conditional_bits_by_position_bucket_8": [7.320061031411098, 7.203455568349298, 7.4819685247149215, 7.100891280270591, 7.4751234560027475, 7.587298504383766, 7.436589554536408],
+    "generate_action_bits_by_position_bucket_8": [7.320061031411098, 7.203455568349298, 7.4819685247149215, 7.100891280270591, 7.4751234560027475, 7.587298504383766, 7.436589554536408],
     "references_same_denominator": {
       "unigram_bits_per_target": 9.082669906101879,
       "tuned_two_token_count_bits_per_target": 5.121720706100631,
@@ -110,7 +122,7 @@
     "penultimate_swap_changes_state_digest_fraction": 1.0,
     "last_token_groups_same_penultimate": 527,
     "last_swap_changes_top1_fraction": 0.9259962049335864,
-    "interpretation": "the exact last two token identities are physically present in the state; the readout only partly exposes them"
+    "interpretation": "sampled swaps show state and top-1 sensitivity, not injective retention of exact token identities"
   },
   "matched_local_channel_comparator": {
     "root": "olx-channel-1",
@@ -121,7 +133,9 @@
     "recurrence_only_gain_vs_count": [-1.082155594692206, -1.2821691709880003, -0.8957245956869251],
     "recurrence_plus_two_token_bits_per_target": 6.673215919192136,
     "recurrence_plus_two_token_gain_vs_count": [-1.5514952130915045, -1.7518662528750601, -1.3612853718644118],
-    "two_token_minus_recurrence_only": [-0.4693396183992986, -0.5266422043403312, -0.4098500167481758],
+    "original_receipt_field_two_token_minus_recurrence_only_misnamed": [-0.4693396183992986, -0.5266422043403312, -0.4098500167481758],
+    "corrected_two_token_minus_recurrence_only": [0.4693396183992986, 0.4098500167481758, 0.5266422043403312],
+    "sign_note": "the immutable olx-channel-1 receipt calls its negative recurrence-only minus two-token interval 'two_token_minus_recurrence_only'; values here retain the raw field and state the correctly oriented difference",
     "count_bits_per_target": 5.121720706100631,
     "conclusion": "the direct bounded two-token channel does not close the gap and degrades development loss; the recurrence-only full-context formulation recovers about 1.17 bits/target against the delivered 7.3722 on the same targets, so the deficit is substantially an optimization/curriculum/batching effect",
     "disclosed_difference": "the per-position formulation feeds preceding tokens with the OBSERVE event throughout, whereas the delivered window objective uses OBSERVE for the frozen prefix and GENERATE afterwards; the two arms are matched to each other but their absolute values are not a like-for-like replay of the delivered path"

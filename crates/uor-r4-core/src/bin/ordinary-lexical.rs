@@ -1516,6 +1516,8 @@ fn count_clamp(v: &[i32], bound: i32) -> (usize, usize) {
 #[derive(Default)]
 struct WalkStats {
     stop_mass: f64,
+    generate_conditional_bits: f64,
+    generate_targets: usize,
     decisions: usize,
     stop_chosen: usize,
     h_entries: usize,
@@ -1553,7 +1555,14 @@ fn walk_stats(model: &TlModel, ex: &TlExample) -> WalkStats {
         let event = ex.prior_event(i);
         let logits = model.readout(&h, &m, &f, event);
         let rows = model.legal_rows(copy_legal);
-        st.stop_mass += prob_of(&logits, &rows, model.stop_row(), model.score_shift);
+        let p_stop = prob_of(&logits, &rows, model.stop_row(), model.score_shift);
+        st.stop_mass += p_stop;
+        if let TlAction::Generate(token) = ex.actions[i] {
+            let p_action = prob_of(&logits, &rows, model.token_row(token), model.score_shift);
+            st.generate_conditional_bits -=
+                (p_action / (1.0 - p_stop).max(1e-300)).max(1e-300).log2();
+            st.generate_targets += 1;
+        }
         st.decisions += 1;
         if matches!(model.decide(&h, &m, &f, event, copy_legal), TlAction::Stop) {
             st.stop_chosen += 1;
@@ -1739,6 +1748,8 @@ fn dev_denominators(
     let mut correct_stops = 0usize;
     let mut correct = 0usize;
     let mut stop_mass = 0f64;
+    let mut generate_conditional_bits = 0f64;
+    let mut generate_conditional_targets = 0usize;
     let mut decisions = 0usize;
     let mut stop_chosen = 0usize;
     let mut h_entries = 0usize;
@@ -1757,6 +1768,8 @@ fn dev_denominators(
         correct += s.correct;
         let ws = walk_stats(model, &ex);
         stop_mass += ws.stop_mass;
+        generate_conditional_bits += ws.generate_conditional_bits;
+        generate_conditional_targets += ws.generate_targets;
         decisions += ws.decisions;
         stop_chosen += ws.stop_chosen;
         h_entries += ws.h_entries;
@@ -1769,8 +1782,10 @@ fn dev_denominators(
     serde_json::json!({
         "full_action_bits_per_target": if all.1 == 0 { f64::NAN } else { all.0 / all.1 as f64 },
         "full_action_scored": all.1,
-        "token_conditional_bits_per_target": if gen.1 == 0 { f64::NAN } else { gen.0 / gen.1 as f64 },
-        "token_conditional_targets": gen.1,
+        "generate_action_bits_per_target": if gen.1 == 0 { f64::NAN } else { gen.0 / gen.1 as f64 },
+        "generate_action_targets": gen.1,
+        "generate_conditional_bits_per_target": if generate_conditional_targets == 0 { f64::NAN } else { generate_conditional_bits / generate_conditional_targets as f64 },
+        "generate_conditional_targets": generate_conditional_targets,
         "generated_actions": gen.1,
         "action_accuracy": if all.1 == 0 { f64::NAN } else { correct as f64 / all.1 as f64 },
         "stop_targets": stop_targets,
@@ -1779,15 +1794,16 @@ fn dev_denominators(
         "stop_chosen_fraction": if decisions == 0 { f64::NAN } else { stop_chosen as f64 / decisions as f64 },
         "hidden_clamp_saturation": if h_entries == 0 { f64::NAN } else { h_clamped as f64 / h_entries as f64 },
         "fingerprint_clamp_saturation": if m_entries == 0 { f64::NAN } else { m_clamped as f64 / m_entries as f64 },
-        "token_conditional_references_same_denominator": {
+        "token_only_references_same_target_population": {
             "unigram_bits_per_target": refs[1].micro(),
             "tuned_two_token_count_bits_per_target": refs[2].micro(),
             "donor_E_bits_per_target": refs[3].micro(),
         },
-        "denominator_note": "full-action NLL scores every supervised action (Generate, Copy, Stop) \
-                              over the legal action set; token-conditional NLL restricts to Generate \
-                              targets. The count and donor references are token-only and are compared \
-                              on the token-conditional denominator.",
+        "denominator_note": "full-action NLL scores every supervised action over legal rows; \
+                              generate-action NLL selects Generate targets but still normalizes over \
+                              Generate and Stop rows; generate-conditional NLL renormalizes over \
+                              Generate rows. Count and donor references are token-only on the same \
+                              target population as generate-conditional NLL.",
     })
 }
 
@@ -1848,9 +1864,9 @@ fn dev_stratified(model: &TlModel, dev: &[ProseWindow], c2: &Cond) -> serde_json
             .collect()
     };
     serde_json::json!({
-        "token_conditional_bits_by_position_bucket_8": rate(&by_pos),
+        "generate_action_bits_by_position_bucket_8": rate(&by_pos),
         "position_bucket_counts": by_pos.iter().map(|(_, n)| *n).collect::<Vec<usize>>(),
-        "token_conditional_bits_by_context_frequency": rate(&by_freq),
+        "generate_action_bits_by_context_frequency": rate(&by_freq),
         "context_frequency_counts": by_freq.iter().map(|(_, n)| *n).collect::<Vec<usize>>(),
         "context_frequency_buckets": "context = (previous token, current token), bucketed by its fit-split \
                                        occurrence count: 0, 1, 2-4, 5+",
@@ -2154,9 +2170,10 @@ fn audit_mode(args: &Args, src: &std::path::Path) -> Result<ExitCode, String> {
     let prose_matches = (model_bits - stored_model_bits).abs() < 1e-9;
     let denominators = dev_denominators(&model, &dev_windows, &uni, &c1, &c2, lambdas, &e_core);
     println!(
-        "prose: token-conditional {model_bits:.4} (stored {stored_model_bits:.4}, equal={prose_matches}); full-action {:.4} over {} scored",
+        "prose: Generate-action {model_bits:.4} (stored {stored_model_bits:.4}, equal={prose_matches}); full-action {:.4} over {} scored; Generate-conditional {:.4}",
         denominators["full_action_bits_per_target"].as_f64().unwrap_or(f64::NAN),
-        denominators["full_action_scored"]
+        denominators["full_action_scored"],
+        denominators["generate_conditional_bits_per_target"].as_f64().unwrap_or(f64::NAN)
     );
     let local = local_identity_report(&model, &dev_windows);
     println!("local identity: {local}");
@@ -2246,7 +2263,7 @@ fn audit_mode(args: &Args, src: &std::path::Path) -> Result<ExitCode, String> {
             "preflight_a_total": temporal.len(),
             "preflight_a_route_key_contradictions": route_key_failures,
             "preflight_b_matches_stored": pb_matches,
-            "prose_token_conditional_matches_stored": prose_matches,
+            "prose_generate_action_matches_stored": prose_matches,
             "prose_model_bits_per_target": model_bits,
             "prose_stored_bits_per_target": stored_model_bits,
             "generation_matches_stored": gen_matches,
@@ -2563,7 +2580,7 @@ fn local_channel_mode(args: &Args, root: &std::path::Path) -> Result<ExitCode, S
     let c1g = paired_interval(&cnt_e, &e1, 0xB0B);
     let u2 = paired_interval(&uni_e, &e2, 0xA11CE);
     let c2g = paired_interval(&cnt_e, &e2, 0xB0B);
-    let d21 = paired_interval(&e1, &e2, 0xC0FFEE);
+    let d21 = paired_interval(&e2, &e1, 0xC0FFEE);
     println!(
         "recurrence-only: bits {:.4} | gain vs unigram {:?} | gain vs count (ref-model) {:?}",
         e1.micro(),
@@ -2577,14 +2594,14 @@ fn local_channel_mode(args: &Args, root: &std::path::Path) -> Result<ExitCode, S
         c2g
     );
     println!(
-        "two-token arm minus recurrence-only (recurrence-only bits - two-token bits) {:?}",
+        "two-token arm minus recurrence-only (two-token bits - recurrence-only bits) {:?}",
         d21
     );
 
     let art1 = m1.to_bytes();
     let art2 = m2.to_bytes();
     let receipt = serde_json::json!({
-        "schema": "uor-r4.ordinary-lexical-local-channel/1",
+        "schema": "uor-r4.ordinary-lexical-local-channel/2",
         "tested_source_rev": args.source_rev,
         "tested_executable_sha256": exe_sha,
         "tokenizer_source_sha256": tok_sha,
@@ -2628,7 +2645,7 @@ fn local_channel_mode(args: &Args, root: &std::path::Path) -> Result<ExitCode, S
                      with a fixed order rotation) on the same full-context task and the same scored \
                      targets. Positive gain_vs_count means the reference has more bits than the arm (the \
                      arm is better). Positive two_token_minus_recurrence_only means the two-token arm \
-                     has fewer bits (is better).",
+                     has more bits (is worse).",
         "elapsed_seconds": started.elapsed().as_secs_f64(),
     });
     write_checked(root, "artifacts/recurrence_only.tlx", &art1)?;

@@ -2306,3 +2306,24 @@ source `learner/transferable_lexical.rs` is unchanged (`sha256 03f83eb8…`), th
 `fe3e8a63…` and roots `ordinary-lexical-1/2/3` are preserved, and the shared release target grew only
 with reproducible compiler output. No paid or external compute was used and no unique material was
 deleted.
+
+## Principal delivery correction and prospective denominator replay, 2026-09-23
+
+The preceding 5,500,000-ms charge was written to this ledger but **not** the owner checkout's
+authoritative `.uor-models/native-joint-learning-2026-09-04/model-time.json`. Before any further
+model execution, the owner JSON still read 380,915,640 / 390,700,000 ms. Under its lock, the
+principal reconciled that already-recorded charge **once** to 386,415,640 / 390,700,000 ms and
+read the value back. This is a bookkeeping repair, not an additional 5,500,000-ms charge.
+
+Source review also found that `bits_generate` scores Generate targets over legal Generate **and
+Stop** rows. Its equality with full-action NLL on a panel containing only Generate targets is an
+identity, not an independent conditional-denominator control. The local-channel receipt also
+misnames the sign of the paired difference: its saved negative value is recurrence-only minus
+two-token, while the key says two-token minus recurrence-only. Preserve the sealed receipts and
+correct the interpretation in a new audit root. Prospective complete replay/delivery projection:
+**600,000 ms** (source correction/build up to 240,000; loaded audit and checks up to 180,000;
+evidence/docs/PR/issue delivery up to 180,000), one compiler worker and one audit process, peak
+incremental RAM 2 GiB, at most 256 MiB temporary build growth and 16 MiB new retained sealed
+evidence. Physical free before this work is about 28 GiB, above the 24 GiB working reserve plus
+128 MiB stop margin. Current remaining model allowance is 4,284,360 ms; no time/storage
+extension or paid compute is required. Charge actual complete work once after the replay.
