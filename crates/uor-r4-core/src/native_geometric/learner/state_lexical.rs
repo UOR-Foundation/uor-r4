@@ -19,7 +19,7 @@
 //! h_0     = learned_init(c)
 //! a_t     = learned_readout(h_t, c, exact_copy_state)
 //! x_t     = execute(a_t)          // a generated token, an exact owned token, or Stop
-//! h_(t+1) = learned_transition(h_t, action_symbol(a_t))
+//! h_(t+1) = learned_transition(h_t, action_symbol(a_t), emitted_token_row, typed_facts)
 //! ```
 //!
 //! * `c` is a *content* vector: a position-resolved embedding of the selected owned payload tokens
@@ -1939,9 +1939,10 @@ mod tests {
     }
 
     #[test]
-    fn content_selects_the_uncopied_word_with_provenance_flags_held_equal() {
-        // Both probes are derived, current-history, prior_differs = false. Only the consumed operand
-        // content differs, and the learned decode must follow the declared language.
+    fn authored_derived_key_cases_select_different_uncopied_words() {
+        // Both probes are derived, current-history, prior_differs = false. Their
+        // content AND key_changed differ, so this checks fitted case behavior,
+        // not an isolated content effect.
         let (model, _) = fit();
         let unchanged = derived(&[11, 12], &[11, 12], true);
         let changed = derived(&[41, 42], &[11, 12], false);
@@ -1950,7 +1951,7 @@ mod tests {
         assert_ne!(
             rollout(&model, &unchanged),
             rollout(&model, &changed),
-            "content alone must be able to change an uncopied word"
+            "the authored derived-key cases must choose different words"
         );
     }
 

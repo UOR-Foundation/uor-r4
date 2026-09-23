@@ -21200,7 +21200,7 @@ mod loaded_realization_tests {
 }
 
 // ---------------------------------------------------------------------------
-// Truthful state-conditioned lexical realization
+// State-conditioned lexical realization on authored response targets
 //
 // The retained `RealizedV1` finite table changed a word from a history/provenance
 // *flag*: its key omitted the actual emitted symbols and the evidence content, so
@@ -21208,13 +21208,11 @@ mod loaded_realization_tests {
 // end the response; two values with identical flags could not differ, and the
 // authored targets used `was` for the current value and `now` for a computation.
 //
-// This section learns a **state-conditioned decoder** from declared, truthful
-// response *text* and serves it through the retained scoped session. The decoder
-// consumes the symbols the session actually emits and a content embedding of the
-// selected evidence, and its wording is tied to the requested history (past
-// tense follows a historical request) or to the computation's actual effect
-// (a consumed value that changed is reported as changed), never to a predecessor
-// alone.
+// This section learns a state-conditioned decoder from declared response text
+// and serves it through the retained scoped session. The decoder consumes the
+// actual emitted-token row and a content embedding of selected evidence. Its
+// computed-target wording is keyed to derived-address movement in self-valued
+// fixtures; this is not an independently validated temporal proposition.
 // ---------------------------------------------------------------------------
 
 /// The protocol terminator the session binds.
@@ -21383,9 +21381,8 @@ fn slx_render(view: SlxView, derived: bool, changed: bool, value: &str) -> Strin
         (SlxView::Initial, false) => format!("at first it was {value}"),
         (SlxView::Previous, false) => format!("it was {value}"),
         (SlxView::Current, false) => format!("it is {value}"),
-        // A consumed computation that actually changed the address is reported with a word *after*
-        // the owned span, so the language exercises a post-copy decision conditioned on the computed
-        // effect rather than another prelude variation.
+        // A changed derived address is marked after the owned span in this authored
+        // response family. The marker does not prove a committed temporal mutation.
         (SlxView::Current, true) if changed => format!("it became {value} now"),
         (SlxView::Current, true) => format!("it is still {value}"),
         _ => format!("it is {value}"),
@@ -21587,7 +21584,7 @@ fn slx_oracle(
             out.extend([slot(0), slot(1)]);
         }
         (SlxView::Current, true) if changed => {
-            // A committed change is reported with a trailing marker after the copied span.
+            // The authored route-change case has a trailing marker after the copied span.
             out.extend([slot(0), slot(4)]);
             tail.push(slot(7));
         }
@@ -22301,7 +22298,7 @@ fn slx_run() -> Result<ExitCode, String> {
         "recurrence_disabled": panel(&|c| c["control"] == json!("RecurrenceDisabled")),
     });
 
-    // ---- the value-sensitive comparison: derived answers with identical flags ----
+    // ---- paired computed requests: not a payload-only intervention ----
     let mut value_sensitive = Vec::new();
     for doc in SLX_DOCS.iter().filter(|d| d.fit && d.computed) {
         let doc_probes = probes.get(doc.name).map(Vec::as_slice).unwrap_or(&[]);
@@ -22332,7 +22329,7 @@ fn slx_run() -> Result<ExitCode, String> {
             let (c_emitted, c_state) = run(c)?;
             value_sensitive.push(json!({
                 "document": doc.name,
-                "flags_held_equal": "derived=true, history=current, prior_differs=false for both",
+                "legacy_flags_held_equal": "derived=true, history=current, prior_differs=false for both; key_changed and operation differ",
                 "unchanged_op": u.op, "changed_op": c.op,
                 "unchanged_emitted": u_emitted, "changed_emitted": c_emitted,
                 "differ": u_emitted != c_emitted,
@@ -22488,8 +22485,8 @@ fn slx_run() -> Result<ExitCode, String> {
     });
 
     // ---- loaded E/S reference assessment ----
-    // The principal review recorded the E/S artifacts as NOT_RUN. They are loaded and exercised here
-    // so the reference is an executed comparison rather than an assertion.
+    // Exercise each loaded donor at its own validated interface. This is a
+    // component probe, not a matched scoped-span or language-quality comparison.
     let es_reference = {
         let es_started = Instant::now();
         let pb = std::fs::read(E_PATH).map_err(|e| format!("E: {e}"))?;
@@ -22502,15 +22499,22 @@ fn slx_run() -> Result<ExitCode, String> {
         let raw_tok: [u8; 32] = hex_to_bytes(DERIVED_SHA)?
             .try_into()
             .map_err(|_| "derived tokenizer digest width".to_string())?;
-        let _query = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
+        let query = QueryHard::from_bytes(&sb, &parent, &parent_digest, &raw_tok)
             .map_err(|e| format!("load S: {e}"))?;
-        // A bounded behavioural probe: continue a declared lexical prefix with the donor's own decoder.
-        let prompt: [u32; 2] = [slots[0], slots[4]];
+        // Three prompt tokens make the S older-prefix query eligible on the
+        // first generated step. The row receipt proves S was actually invoked.
+        let prompt: [u32; 3] = [slots[0], slots[4], slots[1]];
+        let s_rows = query
+            .inference_rows_checked(&prompt, prompt.len() - 1)
+            .map_err(|e| format!("S inference rows: {e}"))?;
         let continued = parent.generate(&prompt, 4, true);
+        let s_continued = query
+            .generate_checked(&prompt, 4)
+            .map_err(|e| format!("S generation: {e}"))?;
         let slot_set: std::collections::BTreeSet<u32> = slots.iter().copied().collect();
         let in_slots = continued.iter().filter(|t| slot_set.contains(t)).count();
         json!({
-            "status": "LOADED_AND_EXECUTED",
+            "status": "E_AND_S_COMPONENT_PROBED",
             "e_bytes": pb.len(),
             "s_bytes": sb.len(),
             "e_sha_matches_pin": e_sha_ok,
@@ -22518,9 +22522,11 @@ fn slx_run() -> Result<ExitCode, String> {
             "e_valid": e_valid,
             "probe_prompt": prompt,
             "donor_continuation": continued,
+            "s_inference_rows": s_rows,
+            "s_continuation": s_continued,
             "continuation_tokens_in_declared_slots": in_slots,
             "load_and_probe_ms": es_started.elapsed().as_millis() as u64,
-            "verdict": "The E prior and S policy load, validate and execute. E is a full-vocabulary next-token prior and S is a query-read policy; neither emits or owns the session's exact copied span, so the donor's lexical responsibility is not interchangeable with the scoped StateLexicalV1 contract. Retained as a loaded reference. Adapting it would require a new interface (a donor-conditioned vocabulary decision over an exactly owned span), which is recorded as the next step rather than claimed here.",
+            "verdict": "E and S load and execute separate full-vocabulary continuation probes. S older-prefix inference rows are recorded. Neither donor emits or owns the session's exact copied span, and this is not a matched lexical-quality comparison. A donor-conditioned vocabulary decision over an exactly owned span remains an interface hypothesis.",
         })
     };
 

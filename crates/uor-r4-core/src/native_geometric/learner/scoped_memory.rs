@@ -3657,7 +3657,8 @@ impl ScopedMemoryRuntime {
     /// owned structural invariants as `RealizedV1` keep the span exact: `Copy` is forced inside the
     /// payload; a premature Stop is replaced with Copy. The decoder's state advances with the
     /// executed insert-slot/Copy event, so the reachability replay and a restored snapshot agree
-    /// with serving. Copied-token identity is not part of this artifact's recurrent feedback.
+    /// with serving. Fitted copied-token identity enters the recurrent feedback; unfitted copied
+    /// tokens still share one reserved OOV row.
     fn state_lexical_emit(
         &self,
         session: &mut ScopedSession,
