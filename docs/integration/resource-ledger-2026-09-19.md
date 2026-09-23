@@ -2437,7 +2437,7 @@ turned out to be under-converged. The owner ledger JSON was advanced **390,700,0
 08:25Z and **400,700,000 → 403,700,000** at 13:03Z, with the cumulative unchanged at 395,215,640 ms,
 before any of that work was used.
 
-**Final charge: 19,000,000 ms**, recorded once after the work completed. The milestone exceeded its two
+**Final charge: 19,500,000 ms** (raw elapsed 19,060,286 ms, charged as a declared block), recorded once after the work completed. The milestone exceeded its two
 projections by 12,000,000 ms because two *measured* instrument defects forced extra rounds — the first
 full probe was under-converged (a least-squares initialisation is a poor starting point at 1,024
 classes), and post-hoc re-pricing of a fitted readout into the servable alphabets turned out to be
@@ -2446,9 +2446,9 @@ implementation had begun. **Measured machine time was 5,864,000 ms of that**: `o
 `olx-probe-3` 1,292 s, `olx-probe-4` 1,160 s, four sealed smokes ≈ 1,120 s, the interrupted
 `olx-probe-1` attempt ≈ 840 s, builds and tests ≈ 400 s. The remainder is agent inference, independent
 review, interpretation and authoring. The owner ledger JSON advanced **403,700,000 → 414,300,000 ms**
-with the cumulative raised to **414,215,640 ms**, then **414,300,000 → 416,000,000 ms** prospectively to
-cover the protected delivery and handoff. Lesson recorded for the next milestone: sequence the
+with the cumulative raised to **414,715,640 ms**, then **414,300,000 → 416,000,000 ms** prospectively to
+cover the protected delivery and handoff, leaving 1,284,360 ms. Lesson recorded for the next milestone: sequence the
 independent review before implementation, and design for the instrument's convergence in its first
-version. Physical free after the runs is 53,814,480 KiB, far above the 24 GiB working reserve plus the
+version. Physical free after the work is 53,817,400 KiB, far above the 24 GiB working reserve plus the
 128 MiB stop margin. No paid or external compute, and no unique artifact or preserved root was modified;
 the diagnostic is a float instrument over recorded states and is not a serving or product dependency.
