@@ -583,6 +583,7 @@ pub fn run(args: &Args) -> Result<ExitCode, String> {
             &tok,
         )?,
         "depth" => depth_probe(&model, &dev)?,
+        "score" => score_recorded(&model, &dev, &names, &top, &tok)?,
         "warm" => warm_run(&root, &model, &fit, &dev, &tok)?,
         "grounded" => grounded_transfer(&root, &model, &prior, &dev, &tok, &est, l, &top)?,
         "cost" => cost_probe(&model, &prior, &dev)?,
@@ -763,13 +764,17 @@ fn warm_run(
     let (train, class, held) = authored_world(&words);
     let steps = 128usize;
     let mut order: Vec<usize> = (0..fit.len()).collect();
-    let mut seed = 20260923;
+    let run_seed: u64 = std::env::var("UOR_PRINCIPAL_WARM_SEED")
+        .unwrap_or_else(|_| "20260923".into())
+        .parse()
+        .map_err(|_| "invalid warm seed")?;
+    let mut seed = run_seed;
     shuffle(&mut order, &mut seed);
     let initial = serde_json::json!({"prose_bits":evaluate_single(model,dev),"train":panel_summary(model,&train),"class":panel_summary(model,&class),"heldout":panel_summary(model,&held),"crossed_feedback":crossed_feedback(model,&words)});
     write_json(
         root,
         "warm-plan.json",
-        &serde_json::json!({"steps_per_arm":steps,"prose_draws_per_step":4,"ground_draws_per_step":2,"ground_weight":4.0,"schedules":["constant 0.01","linear 0.02 to 0.002"],"initialization":"Exact served-weight expansion with fresh zero Adam moments; not a checkpoint resume or an imported refitted head","selection":"No dev-based winner promotion; both artifacts and all panels retained"}),
+        &serde_json::json!({"warm_seed":run_seed,"steps_per_arm":steps,"prose_draws_per_step":4,"ground_draws_per_step":2,"ground_weight":4.0,"schedules":["constant 0.01","linear 0.02 to 0.002"],"initialization":"Exact served-weight expansion with fresh zero Adam moments; not a checkpoint resume or an imported refitted head","selection":"No dev-based winner promotion; both artifacts and all panels retained"}),
     )?;
     let mut result = Vec::new();
     for schedule in 0..2 {
@@ -778,7 +783,7 @@ fn warm_run(
             model,
             TlTrainConfig {
                 lr: 0.01,
-                seed: 20260923,
+                seed: run_seed,
                 ..TlTrainConfig::default()
             },
         )?;
@@ -830,7 +835,7 @@ fn warm_run(
         result.push(serde_json::json!({"schedule":schedule,"steps":tr.step,"prose_examples":pseen,"ground_examples":gseen,"initialization_exact":true,"curve":curve,"prose_bits":evaluate_single(&loaded,dev),"train":panel_summary(&loaded,&train),"class":panel_summary(&loaded,&class),"heldout":panel_summary(&loaded,&held),"crossed_feedback":crossed_feedback(&loaded,&words),"artifact":file,"sha256":sha256_hex(&Sha256::digest(&bytes)),"seconds":timer.elapsed().as_secs_f64()}));
     }
     Ok(
-        serde_json::json!({"initial":initial,"arms":result,"capability_scope":"128-update matched fresh-optimizer experiments, not convergence or a global optimizer limitation"}),
+        serde_json::json!({"warm_seed":run_seed,"initial":initial,"arms":result,"capability_scope":"128-update matched fresh-optimizer experiments, not convergence or a global optimizer limitation"}),
     )
 }
 fn fresh_run(
@@ -1106,4 +1111,42 @@ fn composite_bundle_roundtrips_and_rejects_invalid_binding() {
     let mut invalid = b;
     invalid[12] = 255;
     assert!(load_bundle(&invalid).is_err());
+}
+
+fn score_recorded(
+    model: &TlModel,
+    dev: &[ProseWindow],
+    names: &[String],
+    top: &[bool],
+    tok: &HfBpeTokenizer,
+) -> Result<serde_json::Value, String> {
+    let states = record_served_states(model, dev);
+    let mut e = eval_new(names.len());
+    let (mut head, mut tail) = ((0.0, 0usize), (0.0, 0usize));
+    let mut clipped = 0usize;
+    for s in &states {
+        eval_add(&mut e, s.doc, s.bits);
+        let r = if top[s.target as usize] {
+            &mut head
+        } else {
+            &mut tail
+        };
+        r.0 += s.bits;
+        r.1 += 1;
+        clipped += s.h.iter().filter(|v| v.abs() >= model.h_clamp).count();
+    }
+    let independent = evaluate_single(model, dev);
+    if (e.micro() - independent).abs() > 1e-10 {
+        return Err("score recording and native scorer disagree".into());
+    }
+    let words = read_words(tok)?;
+    let (train, class, held) = authored_world(&words);
+    let temporal: Vec<Grounded> = train
+        .iter()
+        .filter(|x| x.role == "preflight_temporal")
+        .cloned()
+        .collect();
+    Ok(
+        serde_json::json!({"bits":e.micro(),"documents":e.per_doc.iter().enumerate().map(|(i,(bits,n))|serde_json::json!({"name":names[i],"bits_sum":bits,"targets":n})).collect::<Vec<_>>(),"head_bits":head.0/head.1 as f64,"head_n":head.1,"tail_bits":tail.0/tail.1 as f64,"tail_n":tail.1,"state_sha256":recorded_states_sha256(&states),"saturated_coordinates":clipped,"temporal":panel_summary(model,&temporal),"train":panel_summary(model,&train),"class":panel_summary(model,&class),"heldout":panel_summary(model,&held),"crossed_feedback":crossed_feedback(model,&words),"generated":native_generations(model,dev,tok)}),
+    )
 }
