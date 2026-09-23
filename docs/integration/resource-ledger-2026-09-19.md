@@ -2327,3 +2327,11 @@ incremental RAM 2 GiB, at most 256 MiB temporary build growth and 16 MiB new ret
 evidence. Physical free before this work is about 28 GiB, above the 24 GiB working reserve plus
 128 MiB stop margin. Current remaining model allowance is 4,284,360 ms; no time/storage
 extension or paid compute is required. Charge actual complete work once after the replay.
+
+At 2026-09-23T06:00Z, before the 600,000-ms projected block elapsed, principal review found
+that protected PR delivery and the public issue-body reconciliation would require more time than
+the original 180,000-ms delivery component. The complete projection is revised to **1,200,000 ms**
+(up to 300,000 build/replay; up to 300,000 evidence/source audit; up to 600,000 PR, queue,
+issue-body and handoff verification). The additional projection remains within the existing
+4,284,360-ms balance; there is no allowance extension or external spend. Keep the 16 MiB retained
+evidence and 256 MiB temporary build projections, 2 GiB incremental RAM and one worker/process.
