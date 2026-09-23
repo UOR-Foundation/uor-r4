@@ -20,3 +20,6 @@ A next geometric experiment should learn the observations that select shared rel
 - Greydanus, Dzamba and Yosinski, *Hamiltonian Neural Networks*, arXiv:1906.01563: learned energy-gradient dynamics are a separate meaning of Hamiltonian modeling and are not silently substituted here.
 
 Independent server-side checks of the three pure-axis generators, Q8 composition/associativity and the Hermitian relation are preserved with the session evidence. These are arithmetic results, not empirical evidence about a learned attention model.
+
+## Notation
+Hamilton's quaternion algebra is conventionally H; the Coxeter H4 root system is not that algebra. Its roots admit a quaternion realization through the binary icosahedral/spinorial construction. This corrects terminology without changing the owner's vector/Hamiltonian research lead. Primary context: Dechant, *Clifford algebra is the natural framework for root systems and Coxeter groups*, arXiv:1602.06003, and the quaternionic root-system construction in arXiv:1205.1451. These papers are mathematical context, not model-quality evidence.

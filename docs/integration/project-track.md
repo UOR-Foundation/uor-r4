@@ -1,6 +1,20 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Active direction — local prediction is bounded by an ordinary table; re-ask the local question
+## Active direction: retain recovered learning and test useful geometric transport
+
+The terminal owner-directed goal remains a fully transformerless geometric language model in which geometry replaces floating-point matrix multiplication, not merely a table-native output layer. The September23 principal continuation supplies controlled components toward that goal, not a replacement objective.
+
+**Retained lexical research candidate:** an exact served-weight warm start with a decaying learning-rate recipe reaches **6.27371 bits/target** while retaining authored temporal32/32, training36/36, class4/4 and held-out3/3. A second shuffle seed confirms the recipe; constant-rate candidates lose one held-out case. A separately loaded integer marginal-relative correction reaches **5.03801** on the original prose model and **5.01774** on the warm model with authored grounding retained. Full-Tune selection, matched controls, rare-tail accounting, actual generation and four source-family evaluations are recorded in [the executed result](principal-continuation-result-2026-09-23.md).
+
+**Do not conflate the outcomes:** the raw artifact/count product harms rare tokens; the ratio family improves both strata's point estimates, but a retuned reversed-history ratio ties it. Native post-copy feedback dependence and useful free prose remain unresolved. The Q8 vector/Hamilton component is an implemented arithmetic tool, not established semantic attention. A fresh clone still needs the ignored model/data store.
+
+**Independent constructive work:** repair and causally qualify emitted-token feedback; broaden source-separated prose/dialogue/code learning while preserving exact memory; learn query-relative geometric vector operations against matched ordinary controls; retain full optimizer checkpoints and test controlled schedules; qualify the same candidate through integrated sessions and complete hardware measurements. Do not turn the successful count instrument into the terminal architecture or postpone geometric learning behind an endless local calibration loop.
+
+[Current handoff](principal-handoff-2026-09-23.md) owns reproducible paths and exact remaining obligations. Historical directions below remain at their original experiment scope.
+
+---
+
+## Previous active direction — local prediction is bounded by an ordinary table; re-ask the local question
 
 **Current component, September 23 (`olx-count-blend-1`):** the named count-prior blend was measured with a default-off `--count-blend` diagnostic: the log-linear pool of the frozen artifact's token-conditional served readout with the tuned `(prev,cur)` count prior, with the exact oracle criterion, a tune-frozen `λ`, the `blend(E1,C)` and duplicate-count controls, and the K=1024 subpopulation. The exact criterion is satisfied (`mean_kl 2.115408 > gap 1.562381`) so an *in-sample* `λ` can beat `C`, but the milestone is a **scoped negative**: the tune-frozen pool is **+0.004928 [−0.026228, +0.040527]** against `C` on the full development split, the in-sample oracle gain is only **−0.025181**, the one-token control collapses to `C` exactly, and the pool is **≈+0.552 bits/target worse on the 422 rare targets outside the top-1024**. No material, tune-robust complementarity; **do not build an exact addressed local read inside the served readout on this evidence**. Model source unchanged (`03f83eb8…b250`); runner-only. [Result](ordinary-lexical-count-blend-result-2026-09-23.md) · [evidence](../evidence/ordinary-lexical-count-blend-2026-09-23.json).
 
@@ -87,7 +101,7 @@ The active milestone learns lexical realization conditioned on owned evidence in
 
 Representation experiments support witnessed needs rather than forming a mandatory ladder. Confidence dispatch and short rollout are measured; complete logit/changed-source qualification remains incomplete. The retained read-conditioned update now supplies a donor for learned relational control. Structural scope/lifetime state remains conditional on an older-context alias. Retain exact orientation/fiber where needed; compare S7/spinor/normalized E8 or harmonic summaries against equal-bit controls only for a demonstrated limitation. Do not hold useful composition behind endless dose calibration or assume a new stream-role feature is necessary.
 
-**Owner-supplied lead (2026-09-23), conditional:** the suggestion that "vectors and Hamiltonians" are the key maps onto the existing quaternionic substrate (`H4` = Hamilton's quaternions; 2I/icosian `Z[phi]`; `S3`/Hopf; spin/chirality). It is recorded as a **hypothesis to test**, not an adopted mechanism: a geometric parametrization is not evidence of predictive advantage, and it enters the toolbox only for a witnessed failure against an information- and compute-matched ordinary control.
+**Owner-supplied lead (2026-09-23), conditional:** the suggestion that "vectors and Hamiltonians" are the key maps onto the existing quaternionic substrate (Hamilton's quaternion algebra `H`, the quaternion realization of `H4` roots via 2I/icosian `Z[phi]`; `S3`/Hopf; spin/chirality). It is recorded as a **hypothesis to test**, not an adopted mechanism: a geometric parametrization is not evidence of predictive advantage, and it enters the toolbox only for a witnessed failure against an information- and compute-matched ordinary control.
 
 #973 owns bounded integration; #1139/#962 retain role-binding and durable-memory acceptance, #963 cost and #964 scoped invariants. Current state owns outcomes and selected next actions. Successful partial mechanisms may survive a negative larger experiment. Practical screens can change prospectively with reasons, preserving historical results and correctness. Project and charge later execution against live allowances; this review includes corrected exposed execution and small development diagnostics, charged once in its principal checks receipt.
 
