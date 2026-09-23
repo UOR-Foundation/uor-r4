@@ -1058,6 +1058,16 @@ fn grounded_transfer(
         return Err("grounded bundle roundtrip mismatch".into());
     }
     write_checked(root, "grounded-candidate.prc", &bytes)?;
+    let parent = std::env::var("UOR_PRINCIPAL_BUNDLE").map_err(|_| "source bundle required")?;
+    let selection = std::fs::read(
+        Path::new(&parent)
+            .parent()
+            .ok_or("source parent")?
+            .join("selection.json"),
+    )
+    .map_err(|e| e.to_string())?;
+    write_checked(root, "selection.json", &selection)?;
+
     let words = read_words(tok)?;
     let (train, class, held) = authored_world(&words);
     let temporal: Vec<Grounded> = train
