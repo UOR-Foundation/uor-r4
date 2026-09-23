@@ -24,6 +24,11 @@
 // the bin's default macro recursion limit is too small for it.
 #![recursion_limit = "512"]
 
+#[path = "support/observer_blend.rs"]
+mod observer_blend;
+#[path = "support/observer_transport.rs"]
+mod observer_transport;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -6198,6 +6203,61 @@ fn state_probe_mode(args: &Args) -> Result<ExitCode, String> {
     let top_mass: f64 = top_ids.iter().map(|t| uni.p(*t)).sum();
     if !(top_mass > 0.0) {
         return Err("the restricted unigram mass is zero; the null reference is undefined".into());
+    }
+
+    // Explicit offline-only diagnostic. The normal probe and serving paths are unchanged.
+    if std::env::var("UOR_OBSERVER_TRANSPORT").as_deref() == Ok("1") {
+        return observer_transport::run(
+            &root,
+            &model,
+            &dev_windows,
+            &dev_names,
+            &in_top,
+            &c1,
+            &c2,
+            &uni,
+            lambdas,
+            serde_json::json!({
+                "artifact_path":artifact_path,"artifact_sha256":artifact_sha,
+                "executable_sha256":exe_sha,"source_revision":args.source_rev,
+                "tokenizer_source_sha256":tok_sha,"tokenizer_derived_sha256":derived_sha,
+                "corpus_root":args.docs,"collected_documents":collected,
+                "fit_windows":fit_windows.len(),"tune_windows":tune_windows.len(),
+                "top_k":k_used,"fit_positions":uni.total,"no_training":true
+            }),
+        );
+    }
+
+    if std::env::var("UOR_OBSERVER_BLEND").as_deref() == Ok("1") {
+        let mut tune_sample = Vec::new();
+        let mut tune_names = Vec::new();
+        for &di in &tune_docs {
+            let wi = tune_names.len();
+            let ws = prose_windows(&tokenizer.encode(&uniq[di].text), wi);
+            if ws.is_empty() {
+                continue;
+            }
+            tune_names.push(uniq[di].path.clone());
+            tune_sample.extend(ws.into_iter().take(4));
+        }
+        return observer_blend::run(
+            &root,
+            &model,
+            &tune_sample,
+            &tune_names,
+            &dev_windows,
+            &dev_names,
+            &c1,
+            &c2,
+            &uni,
+            lambdas,
+            serde_json::json!({
+                "artifact_path":artifact_path,"artifact_sha256":artifact_sha,
+                "executable_sha256":exe_sha,"source_revision":args.source_rev,
+                "tokenizer_source_sha256":tok_sha,"tokenizer_derived_sha256":derived_sha,
+                "corpus_root":args.docs,"fit_positions":uni.total,"count_lambdas":lambdas
+            }),
+        );
     }
 
     // ---- record the served states of both splits ----
