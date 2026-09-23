@@ -1,0 +1,36 @@
+{
+  "schema": "uor-r4.observer-resource-close/1",
+  "started_at": "2026-09-23T18:52:45+00:00",
+  "closed_at": "2026-09-23T19:52:16.062969+00:00",
+  "complete_wall_charge_ms": 3571062,
+  "ledger_before": {
+    "cumulative_ms": 432908520,
+    "limit_ms": 437500000
+  },
+  "ledger_after": {
+    "cumulative_ms": 436479582,
+    "limit_ms": 437500000
+  },
+  "owner_files_hashed": 36,
+  "owner_files_changed": [],
+  "owner_status_identical": true,
+  "model_source_unchanged": true,
+  "model_source_sha256": "03f83eb8366d8fa710637e1941a2639c96ef603968cb0e8b31ce86d56fb2b250",
+  "physical_free_bytes": 39116955648,
+  "physical_reserve_bytes": 25904021504,
+  "allocated_sizes_bytes": {
+    "/Users/casey.allard/uor-r4-worktrees/observer-transport-20260923": 1250807808,
+    "/Users/casey.allard/uor-r4-investigations/observer-transport-20260923": 90505216,
+    "/Users/casey.allard/uor-r4-kimi/target/release": 541536256
+  },
+  "storage_conservative_upper_bound_bytes": 1882849280,
+  "storage_projection_bytes": 2147483648,
+  "storage_upper_bound_within_projection": true,
+  "incremental_peak_ram": "Not continuously sampled; 2 GiB was a configured projection, not a measured peak.",
+  "training": "NONE; frozen artifact diagnostics only",
+  "threads": 2,
+  "paid_compute": false,
+  "replay": "Primary probes and blend reproduced; selected independent residual replay matched exactly.",
+  "validation": "14 focused Rust tests passed; format and diff checks passed; no whole-repository test-suite claim.",
+  "unattributed_shared_ledger_advance_ms": 5992880
+}

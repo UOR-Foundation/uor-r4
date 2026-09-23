@@ -1,3 +1,11 @@
+## September 23, 2026: frozen-state observer correction and independent residual diagnostic
+
+On branch `codex/observer-transport-20260923`, not yet promoted or merged: the previous-token absence claim below is contradicted by a transport-aware observer (75.90% versus 2.06% on the same restricted form-2 states; replicated on form-4). An independently weighted count prior plus frozen readout scores 5.04142 bits/target versus calibrated counts at 5.07904, with tune-only coefficient selection and a paired-document interval below zero. This is an offline diagnostic, not a qualified successor or geometric-advantage claim.
+
+See [the complete scoped result](observer-transport-result-2026-09-23.md) and its evidence links. The next architectural question is a native addressed local prior plus an independently weighted learned correction, alongside fresh-source evaluation and explanatory controls. Earlier experiment records remain below with their original scope; a failed raw observer is not proof that information is absent.
+
+---
+
 # Current native geometric AI work
 
 ## Active — the joint fit does not recover the headroom: training budget is not the constraint, September 23

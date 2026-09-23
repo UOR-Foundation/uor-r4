@@ -1,0 +1,442 @@
+{
+  "schema": "uor-r4.independent-residual-summary/1",
+  "recorded_at": "2026-09-23T19:45:53.969568+00:00",
+  "source_revision": "0c1b715b9cdd75ce031d8ba8f21019bec2b1ac8d",
+  "selection": "Global minimum tune loss across 105 predefined pairs; no development-based selection.",
+  "selected": {
+    "root": "residual-alpha-1.0",
+    "alpha": 1.0,
+    "gamma": 0.15000000000000002,
+    "tune_loss": 5.147791645735072
+  },
+  "grid_tune_minima": [
+    {
+      "root": "residual-alpha-0.9",
+      "alpha": 0.9,
+      "gamma": 0.19999999999999996,
+      "tune_loss": 5.151930483849341
+    },
+    {
+      "root": "residual-alpha-1.0",
+      "alpha": 1.0,
+      "gamma": 0.15000000000000002,
+      "tune_loss": 5.147791645735072
+    },
+    {
+      "root": "residual-alpha-1.1",
+      "alpha": 1.1,
+      "gamma": 0.09999999999999998,
+      "tune_loss": 5.175939344292164
+    },
+    {
+      "root": "residual-alpha-1.2",
+      "alpha": 1.2,
+      "gamma": 0.050000000000000044,
+      "tune_loss": 5.233393270479122
+    },
+    {
+      "root": "residual-alpha-1.3",
+      "alpha": 1.3,
+      "gamma": 0.0,
+      "tune_loss": 5.3171194923899465
+    }
+  ],
+  "development_bits": 5.041423387452275,
+  "calibrated_count_bits": 5.079035180904403,
+  "minus_calibrated_count_95": [
+    -0.03761179345212786,
+    -0.05725357382889918,
+    -0.016462445706163207
+  ],
+  "minus_original_convex_blend_95": [
+    -0.05511931366658671,
+    -0.08070710031863493,
+    -0.027928290721622732
+  ],
+  "documents_improved_over_calibrated_count": 19,
+  "selected_document_losses": [
+    [
+      "integration/review-2026-09-16/README-FOR-AGENTS.md",
+      1212.5963525730017,
+      224
+    ],
+    [
+      "transformerless/LOCAL_ONLY.md",
+      1124.4535346650746,
+      224
+    ],
+    [
+      "prime_router_geometric_context_evidence.md",
+      1483.602872144889,
+      224
+    ],
+    [
+      "segment_lane_886_spotcheck.md",
+      1116.100370727567,
+      224
+    ],
+    [
+      "skipmix_gap_diagnostic_904.md",
+      1118.7085965421525,
+      224
+    ],
+    [
+      "native_geometric_query_owner_selection_973.md",
+      1045.7033248274797,
+      224
+    ],
+    [
+      "native_geometric_language_relation_973.md",
+      986.5629386700276,
+      224
+    ],
+    [
+      "native_geometric_role_read_1137.md",
+      1017.3293567629562,
+      224
+    ],
+    [
+      "context_horizon_424.md",
+      1178.2531741969733,
+      224
+    ],
+    [
+      "native_geometric_truncated_history_abstention_973.md",
+      1105.3857944599813,
+      224
+    ],
+    [
+      "native_geometric_occurrence_973.md",
+      1053.4813390293273,
+      224
+    ],
+    [
+      "serving_release_packaging_655_d.md",
+      1295.7257910889357,
+      224
+    ],
+    [
+      "r4_retained_assembly_1094_review.md",
+      1012.81153608152,
+      224
+    ],
+    [
+      "integration/model-direction-2026-09.md",
+      1069.9037741859217,
+      224
+    ],
+    [
+      "r4_isolated_runtime_readiness_1096.md",
+      1140.021317028637,
+      224
+    ],
+    [
+      "native_geometric_head_reassertion_973.md",
+      1442.1547946948344,
+      224
+    ],
+    [
+      "transformerless/PROOF.md",
+      1113.6458566546623,
+      224
+    ],
+    [
+      "r4_group_addressed_retention_973.md",
+      732.3237652422268,
+      224
+    ],
+    [
+      "r4_zoology_query_readout_1067.md",
+      1018.1972961195137,
+      224
+    ],
+    [
+      "r4_zoology_optimizer_clock_1055.md",
+      1068.993180830711,
+      224
+    ],
+    [
+      "w33_geometry_qualification_spec_845.md",
+      1033.9613320696308,
+      224
+    ],
+    [
+      "integration/handoff-2026-09-07.md",
+      1430.6135890457833,
+      224
+    ],
+    [
+      "integration/review-2026-09-16/02-architecture-as-implemented.md",
+      1146.1949809176247,
+      224
+    ],
+    [
+      "integration/review-2026-09-16/04-mathematics-audit.md",
+      1155.9672623839963,
+      224
+    ]
+  ],
+  "calibrated_count_document_losses": [
+    [
+      "integration/review-2026-09-16/README-FOR-AGENTS.md",
+      1215.6941720742316,
+      224
+    ],
+    [
+      "transformerless/LOCAL_ONLY.md",
+      1138.0265577647215,
+      224
+    ],
+    [
+      "prime_router_geometric_context_evidence.md",
+      1497.8885061156618,
+      224
+    ],
+    [
+      "segment_lane_886_spotcheck.md",
+      1131.9036883365516,
+      224
+    ],
+    [
+      "skipmix_gap_diagnostic_904.md",
+      1137.3943656018125,
+      224
+    ],
+    [
+      "native_geometric_query_owner_selection_973.md",
+      1029.6860099758833,
+      224
+    ],
+    [
+      "native_geometric_language_relation_973.md",
+      1001.0537621749206,
+      224
+    ],
+    [
+      "native_geometric_role_read_1137.md",
+      1039.827000009302,
+      224
+    ],
+    [
+      "context_horizon_424.md",
+      1188.1413871911516,
+      224
+    ],
+    [
+      "native_geometric_truncated_history_abstention_973.md",
+      1112.5405276703536,
+      224
+    ],
+    [
+      "native_geometric_occurrence_973.md",
+      1067.3111792998811,
+      224
+    ],
+    [
+      "serving_release_packaging_655_d.md",
+      1317.5498691418024,
+      224
+    ],
+    [
+      "r4_retained_assembly_1094_review.md",
+      1018.9541285129104,
+      224
+    ],
+    [
+      "integration/model-direction-2026-09.md",
+      1068.8276980985686,
+      224
+    ],
+    [
+      "r4_isolated_runtime_readiness_1096.md",
+      1162.5998461613203,
+      224
+    ],
+    [
+      "native_geometric_head_reassertion_973.md",
+      1442.1846650131224,
+      224
+    ],
+    [
+      "transformerless/PROOF.md",
+      1127.7155074062969,
+      224
+    ],
+    [
+      "r4_group_addressed_retention_973.md",
+      740.474059270684,
+      224
+    ],
+    [
+      "r4_zoology_query_readout_1067.md",
+      1030.3730599799312,
+      224
+    ],
+    [
+      "r4_zoology_optimizer_clock_1055.md",
+      1092.2279951065775,
+      224
+    ],
+    [
+      "w33_geometry_qualification_spec_845.md",
+      1024.76175435814,
+      224
+    ],
+    [
+      "integration/handoff-2026-09-07.md",
+      1441.6085348166446,
+      224
+    ],
+    [
+      "integration/review-2026-09-16/02-architecture-as-implemented.md",
+      1138.0639970632508,
+      224
+    ],
+    [
+      "integration/review-2026-09-16/04-mathematics-audit.md",
+      1140.084861398347,
+      224
+    ]
+  ],
+  "original_blend_document_losses": [
+    [
+      "integration/review-2026-09-16/README-FOR-AGENTS.md",
+      1218.1263227367158,
+      224
+    ],
+    [
+      "transformerless/LOCAL_ONLY.md",
+      1139.5562604857428,
+      224
+    ],
+    [
+      "prime_router_geometric_context_evidence.md",
+      1462.4465365055376,
+      224
+    ],
+    [
+      "segment_lane_886_spotcheck.md",
+      1131.126202803713,
+      224
+    ],
+    [
+      "skipmix_gap_diagnostic_904.md",
+      1134.3454833917938,
+      224
+    ],
+    [
+      "native_geometric_query_owner_selection_973.md",
+      1060.1025779322488,
+      224
+    ],
+    [
+      "native_geometric_language_relation_973.md",
+      1008.9093729351564,
+      224
+    ],
+    [
+      "native_geometric_role_read_1137.md",
+      1049.1752008181704,
+      224
+    ],
+    [
+      "context_horizon_424.md",
+      1182.6306153906594,
+      224
+    ],
+    [
+      "native_geometric_truncated_history_abstention_973.md",
+      1121.8967487426994,
+      224
+    ],
+    [
+      "native_geometric_occurrence_973.md",
+      1071.5821872737222,
+      224
+    ],
+    [
+      "serving_release_packaging_655_d.md",
+      1294.4747649993124,
+      224
+    ],
+    [
+      "r4_retained_assembly_1094_review.md",
+      1037.3981509035098,
+      224
+    ],
+    [
+      "integration/model-direction-2026-09.md",
+      1087.6988563459397,
+      224
+    ],
+    [
+      "r4_isolated_runtime_readiness_1096.md",
+      1153.6068644204915,
+      224
+    ],
+    [
+      "native_geometric_head_reassertion_973.md",
+      1424.2208118571884,
+      224
+    ],
+    [
+      "transformerless/PROOF.md",
+      1131.576346497593,
+      224
+    ],
+    [
+      "r4_group_addressed_retention_973.md",
+      773.6072563586317,
+      224
+    ],
+    [
+      "r4_zoology_query_readout_1067.md",
+      1045.62988712865,
+      224
+    ],
+    [
+      "r4_zoology_optimizer_clock_1055.md",
+      1090.4025475100113,
+      224
+    ],
+    [
+      "w33_geometry_qualification_spec_845.md",
+      1050.6255401683957,
+      224
+    ],
+    [
+      "integration/handoff-2026-09-07.md",
+      1412.3099661190595,
+      224
+    ],
+    [
+      "integration/review-2026-09-16/02-architecture-as-implemented.md",
+      1156.120436193776,
+      224
+    ],
+    [
+      "integration/review-2026-09-16/04-mathematics-audit.md",
+      1161.4446236962797,
+      224
+    ]
+  ],
+  "artifact_sha256": "f89d4499ec2a974c2b92aec31e0f363c21835b169b002b11db0175022be4aaa9",
+  "executable_sha256": "c80b738f12272eb08e1b3579296710af62003b7dcc53578cf141125ceb4fef40",
+  "scorer_parity_max_absolute_bits": 3.552713678800501e-15,
+  "count_endpoint_reproduces_temperature_control": true,
+  "population": {
+    "tune_positions": 8512,
+    "tune_documents": 38,
+    "dev_positions": 5376,
+    "dev_documents": 24
+  },
+  "bootstrap": "10000 paired document draws, seed 20260923, percentile interval",
+  "scope": "Frozen-artifact offline diagnostic on repeatedly inspected development data. No new served artifact or general language claim.",
+  "receipt_sha256": {
+    "residual-alpha-0.9": "9a074e0303b3e259363e37cc6434309bdb747581376dede062a6b995fa270079",
+    "residual-alpha-1.0": "9deb70567b9dbad5ff632c63904ca43874856a8dcc6fb105a0d814db3cf069d1",
+    "residual-alpha-1.1": "b2aa22c4e9aee894259ba5358b984c7bba0792785a60dcb679a43072c0a1b089",
+    "residual-alpha-1.2": "fe82045dcde996ae81fca860af8cdf29c6d68039371a4e51b80a135a7fecf355",
+    "residual-alpha-1.3": "7cf63305f58876b8e400df0c8a08650ee1a7b62ba4a60cc5cdce24619ec53b96"
+  }
+}

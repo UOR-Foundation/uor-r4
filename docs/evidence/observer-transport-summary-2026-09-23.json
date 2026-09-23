@@ -1,0 +1,575 @@
+{
+  "schema": "uor-r4.observer-investigation-summary/1",
+  "recorded_at": "2026-09-23T19:27:12.587952+00:00",
+  "branch": "codex/observer-transport-20260923",
+  "source_commit": "be40da9be6d047957212792084a7651d77c2e56e",
+  "base_commit": "34bbe2ae952763a0431b5b9dba3e0b2ead098a52",
+  "patch_sha256": "e05666229d9b98e98300077c7b414297bec8fa412a24d4f16b90e3196944f31b",
+  "history": {
+    "cutoff": "2026-09-18T18:52:45Z",
+    "main_commits": 83,
+    "initial_local_all_ref_commits": 293,
+    "scope": "All 83 main commit bodies read; changed-file history and critical-path code reviewed; all-ref titles inventoried. Full patches saved, not all reviewed line by line."
+  },
+  "probe_form2": {
+    "scores": {
+      "centered_cur_correct": {
+        "all": {
+          "accuracy": 0.9778645833333334,
+          "correct": 5257,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.9784768211920529,
+          "correct": 4137,
+          "total": 4228
+        }
+      },
+      "centered_pair_correct": {
+        "all": {
+          "accuracy": 0.7395833333333334,
+          "correct": 3976,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.7509460737937559,
+          "correct": 3175,
+          "total": 4228
+        }
+      },
+      "centered_prev_correct": {
+        "all": {
+          "accuracy": 0.7475818452380952,
+          "correct": 4019,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.7589877010406811,
+          "correct": 3209,
+          "total": 4228
+        }
+      },
+      "oracle_prev_correct": {
+        "all": {
+          "accuracy": 0.7598586309523809,
+          "correct": 4085,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.771050141911069,
+          "correct": 3260,
+          "total": 4228
+        }
+      },
+      "raw_cur_correct": {
+        "all": {
+          "accuracy": 0.9668898809523809,
+          "correct": 5198,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.967360454115421,
+          "correct": 4090,
+          "total": 4228
+        }
+      },
+      "raw_prev_correct": {
+        "all": {
+          "accuracy": 0.016555059523809524,
+          "correct": 89,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.02057710501419111,
+          "correct": 87,
+          "total": 4228
+        }
+      },
+      "rotated_label_correct": {
+        "all": {
+          "accuracy": 0.006696428571428571,
+          "correct": 36,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.007332071901608325,
+          "correct": 31,
+          "total": 4228
+        }
+      },
+      "self_pair_correct": {
+        "all": {
+          "accuracy": 0.7306547619047619,
+          "correct": 3928,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.7412488174077578,
+          "correct": 3134,
+          "total": 4228
+        }
+      },
+      "self_prev_correct": {
+        "all": {
+          "accuracy": 0.7405133928571429,
+          "correct": 3981,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.7516556291390728,
+          "correct": 3178,
+          "total": 4228
+        }
+      },
+      "uncentered_transport_correct": {
+        "all": {
+          "accuracy": 0.7005208333333334,
+          "correct": 3766,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.7036423841059603,
+          "correct": 2975,
+          "total": 4228
+        }
+      },
+      "wrong_frame_correct": {
+        "all": {
+          "accuracy": 0.0011160714285714285,
+          "correct": 6,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.0014191106906338694,
+          "correct": 6,
+          "total": 4228
+        }
+      }
+    },
+    "state_sha256": "c5334071ed4191be99e9c4b4a36c5b46ca53069308a8c440d852d7cc8fb6992f",
+    "metadata": {
+      "artifact_path": "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/olx-form-2/artifacts/model.tlx",
+      "artifact_sha256": "f89d4499ec2a974c2b92aec31e0f363c21835b169b002b11db0175022be4aaa9",
+      "collected_documents": 429,
+      "corpus_root": "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/inputs/docs",
+      "executable_sha256": "ff80325293153f42c2c6e17e67b293a88c07549e99ccdd36d901bb796638416c",
+      "fit_positions": 334796,
+      "fit_windows": 6000,
+      "no_training": true,
+      "source_revision": "be40da9be6d047957212792084a7651d77c2e56e",
+      "tokenizer_derived_sha256": "a7ac75b68aa997fe7cc338d25d843157f2dc9d4265fb2f958ee779bb04828d6f",
+      "tokenizer_source_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+      "top_k": 1024,
+      "tune_windows": 3856
+    }
+  },
+  "probe_form4": {
+    "scores": {
+      "centered_cur_correct": {
+        "all": {
+          "accuracy": 0.9484747023809523,
+          "correct": 5099,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.9463103122043519,
+          "correct": 4001,
+          "total": 4228
+        }
+      },
+      "centered_pair_correct": {
+        "all": {
+          "accuracy": 0.5805431547619048,
+          "correct": 3121,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.5747398297067171,
+          "correct": 2430,
+          "total": 4228
+        }
+      },
+      "centered_prev_correct": {
+        "all": {
+          "accuracy": 0.5970982142857143,
+          "correct": 3210,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.5922421948912016,
+          "correct": 2504,
+          "total": 4228
+        }
+      },
+      "oracle_prev_correct": {
+        "all": {
+          "accuracy": 0.6186755952380952,
+          "correct": 3326,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.6149479659413434,
+          "correct": 2600,
+          "total": 4228
+        }
+      },
+      "raw_cur_correct": {
+        "all": {
+          "accuracy": 0.8653273809523809,
+          "correct": 4652,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.8658940397350994,
+          "correct": 3661,
+          "total": 4228
+        }
+      },
+      "raw_prev_correct": {
+        "all": {
+          "accuracy": 0.015066964285714286,
+          "correct": 81,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.01868495742667928,
+          "correct": 79,
+          "total": 4228
+        }
+      },
+      "rotated_label_correct": {
+        "all": {
+          "accuracy": 0.004836309523809524,
+          "correct": 26,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.004966887417218543,
+          "correct": 21,
+          "total": 4228
+        }
+      },
+      "self_pair_correct": {
+        "all": {
+          "accuracy": 0.5284598214285714,
+          "correct": 2841,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.5260170293282876,
+          "correct": 2224,
+          "total": 4228
+        }
+      },
+      "self_prev_correct": {
+        "all": {
+          "accuracy": 0.5639880952380952,
+          "correct": 3032,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.5631504257332072,
+          "correct": 2381,
+          "total": 4228
+        }
+      },
+      "uncentered_transport_correct": {
+        "all": {
+          "accuracy": 0.44177827380952384,
+          "correct": 2375,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.43968779564806054,
+          "correct": 1859,
+          "total": 4228
+        }
+      },
+      "wrong_frame_correct": {
+        "all": {
+          "accuracy": 0.0009300595238095238,
+          "correct": 5,
+          "total": 5376
+        },
+        "legacy_restricted": {
+          "accuracy": 0.0011825922421948912,
+          "correct": 5,
+          "total": 4228
+        }
+      }
+    },
+    "metadata": {
+      "artifact_path": "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/olx-form-4/artifacts/model.tlx",
+      "artifact_sha256": "68b300984f5101b2cadcd05e5029eeb1123ee55a955f1f7aa04314a7c23211c1",
+      "collected_documents": 429,
+      "corpus_root": "/Users/casey.allard/uor-r4/.uor-models/realtext-prior-2026-09-20/inputs/docs",
+      "executable_sha256": "ff80325293153f42c2c6e17e67b293a88c07549e99ccdd36d901bb796638416c",
+      "fit_positions": 334796,
+      "fit_windows": 6000,
+      "no_training": true,
+      "source_revision": "be40da9be6d047957212792084a7651d77c2e56e",
+      "tokenizer_derived_sha256": "a7ac75b68aa997fe7cc338d25d843157f2dc9d4265fb2f958ee779bb04828d6f",
+      "tokenizer_source_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+      "top_k": 1024,
+      "tune_windows": 3856
+    }
+  },
+  "stop_matched_rescoring": [
+    {
+      "arm": "artifact",
+      "bits_per_target": 6.684104956536936,
+      "minus_artifact_95": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "documents_improved": 0
+    },
+    {
+      "arm": "exact_context_count",
+      "bits_per_target": 5.121723622015898,
+      "minus_artifact_95": [
+        -1.562381334521038,
+        -1.773897094954511,
+        -1.364683540735976
+      ],
+      "documents_improved": 24
+    },
+    {
+      "arm": "self_decoded_context_count",
+      "bits_per_target": 5.395585228421246,
+      "minus_artifact_95": [
+        -1.2885197281156915,
+        -1.4775851487264342,
+        -1.1125490148295851
+      ],
+      "documents_improved": 24
+    },
+    {
+      "arm": "centered_self_decoded_context_count",
+      "bits_per_target": 5.365482249511763,
+      "minus_artifact_95": [
+        -1.3186227070251726,
+        -1.5098117513234721,
+        -1.1394764426358968
+      ],
+      "documents_improved": 24
+    },
+    {
+      "arm": "oracle_current_decoded_previous_count",
+      "bits_per_target": 5.328223821533097,
+      "minus_artifact_95": [
+        -1.3558811350038396,
+        -1.544999075387962,
+        -1.1768586599519597
+      ],
+      "documents_improved": 24
+    }
+  ],
+  "mean_stop_bits": 2.915915267213638e-06,
+  "stop_sum_by_doc": [
+    0.000600363105575652,
+    0.0008096140402398255,
+    0.0008872143881974992,
+    0.0006962477538281497,
+    0.0005929460562226208,
+    0.0006862113379332291,
+    0.0006074377246731988,
+    0.0004873501225624022,
+    0.000418750672624979,
+    0.0007953075903190943,
+    0.0005993233147919552,
+    0.0006554973160959321,
+    0.0006603217140489503,
+    0.00076848924777706,
+    0.0005243389842612967,
+    0.0008213397288500124,
+    0.0007843829142615277,
+    0.0003192614635649793,
+    0.00047309144393214986,
+    0.0006306164018703431,
+    0.000584162692796264,
+    0.0009617245347011139,
+    0.0006331749292323163,
+    0.0006787929981799667
+  ],
+  "blend": {
+    "selected_beta": 0.9,
+    "bits": 5.096542701118861,
+    "native_minus_count_95": [
+      -0.025180920897038384,
+      -0.04132374985211751,
+      -0.00860003549339794
+    ]
+  },
+  "calibration_controls": {
+    "blend-unigram": {
+      "selected_beta": 1.0,
+      "bits_per_target": 5.1217236220158995,
+      "minus_primary_blend_95": [
+        0.02518092089703691,
+        0.007763267033991911,
+        0.04136951944134299
+      ],
+      "grid": [
+        0.0,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ]
+    },
+    "blend-uniform": {
+      "selected_beta": 1.0,
+      "bits_per_target": 5.1217236220158995,
+      "minus_primary_blend_95": [
+        0.02518092089703691,
+        0.007763267033991911,
+        0.04136951944134299
+      ],
+      "grid": [
+        0.0,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ]
+    },
+    "blend-curcount": {
+      "selected_beta": 1.0,
+      "bits_per_target": 5.1217236220158995,
+      "minus_primary_blend_95": [
+        0.02518092089703691,
+        0.007763267033991911,
+        0.04136951944134299
+      ],
+      "grid": [
+        0.0,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ]
+    },
+    "blend-temperature-wide": {
+      "selected_beta": 1.1,
+      "bits_per_target": 5.079035180904403,
+      "minus_primary_blend_95": [
+        -0.01750752021445885,
+        -0.04901113738754335,
+        0.01412526500808691
+      ],
+      "grid": [
+        0.0,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95,
+        1.0,
+        1.05,
+        1.1,
+        1.15,
+        1.2,
+        1.25,
+        1.3,
+        1.35,
+        1.4,
+        1.45,
+        1.5,
+        1.55,
+        1.6,
+        1.65,
+        1.7,
+        1.75,
+        1.8,
+        1.85,
+        1.9,
+        1.95,
+        2.0
+      ]
+    }
+  },
+  "auxiliary_bootstrap": "10000 standard-library draws, seed 20260923, 24 paired documents",
+  "checks": {
+    "final_runs_identical_to_first": true,
+    "state_hash_matches_legacy_probe": true,
+    "owner_dirty_files_hashed": 36,
+    "owner_files_changed": [],
+    "owner_status_identical": true,
+    "model_source_unchanged": true,
+    "model_source_sha256": "03f83eb8366d8fa710637e1941a2639c96ef603968cb0e8b31ce86d56fb2b250",
+    "source_commit_binary_bound": true
+  },
+  "receipt_sha256": {
+    "final-probe-form2": "90353500abb43a74560338b762abeb2005330951a883fe9949cc3d07dd45d91b",
+    "final-probe-form4": "ccdba75dcb50b79692dbece578f3c42bc5d343990e5b65d7f59fea8c2df70978",
+    "final-blend-form2": "779872d1bd889e46b20c7400a0f8afad715e1ae0ca642fb7f35695d3eff7505c",
+    "blend-unigram": "4dd75e043a8c0e2e240d93853608277dd05da1eccda4b243455f4cf78b5b29bd",
+    "blend-uniform": "9f9b10c00d13b6630a5f4ea829998f43d9402f3368a9d5c16c3b2363eed3b513",
+    "blend-curcount": "f2c754e0d07aabf3d50d1141fccd0afe07ed41f9dd4fd06e393a826447e1db24",
+    "blend-temperature-wide": "8a2232651ef78e966429917409e486860f651a2ba968a80354c456f4ab110c3d"
+  }
+}

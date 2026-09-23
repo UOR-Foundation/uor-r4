@@ -2556,3 +2556,11 @@ and the `current-state.md` rebuild). The cumulative advanced from **425,415,640*
 wait was the GitHub-hosted runner queue. No model compute was used, and no paid or external compute
 followed. origin/main is now `ba664585`; all four sealed evidence families and every prior root are
 untouched.
+
+## Frozen-state observer and independent residual investigation, 2026-09-23
+
+Complete prospective task allowance: 4,000,000 ms, two local threads, no training or paid compute, a 2 GiB incremental-memory projection and 2 GiB new-storage ceiling. The complete investigation through its final verification checkpoint was charged **3,571,062 ms**, from 18:52:45 to 19:52:16 UTC. The live cumulative balance at charge advanced from **432,908,520** to **436,479,582 / 437,500,000 ms**.
+
+Two standing-authorized allowance extensions, 4,000,000 and 2,000,000 ms, were recorded because the shared ledger advanced by 5,992,880 ms outside this investigation's own unposted charge. Those advances were preserved, not attributed or overwritten; the investigation's original 4,000,000-ms task cap did not increase. Exact original projection, both extension receipts and closure are retained in `/Users/casey.allard/uor-r4-investigations/observer-transport-20260923`.
+
+At closure, physical free space was 39,116,955,648 bytes, above the 25,904,021,504-byte reserve including the 128 MiB stop margin. A conservative allocated-storage upper bound, counting the whole new worktree, investigation directory and entire reused release cache, was 1,882,849,280 bytes, below the 2 GiB projection. Peak incremental RAM was not continuously sampled and is not claimed as measured. All 36 pre-existing modified/untracked owner files and model source remained unchanged. No unique artifact was deleted or overwritten. See [the resource receipt](../evidence/observer-resource-receipt-2026-09-23.json) and [result](observer-transport-result-2026-09-23.md).
