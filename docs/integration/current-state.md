@@ -7,7 +7,15 @@
 > Record: [direction-decision-2026-09-24.md](direction-decision-2026-09-24.md) · owner entries D4–D6 in
 > [DECISIONS.md](DECISIONS.md). The component results below retain their exact scope.
 
-## Active: KVAR — a gated overwrite addressed memory extends the horizon (M1 Part B′), September 24 UTC
+## Active: KVAR hard-selection successor — memory retained, hard-objective promotion rejected, September 24 UTC
+
+The [executed successor](kvar-hard-successor-result-2026-09-24.md) corrected empty hard reads, isolated the historical unscaled read-gate update as an explicit optimization surrogate, and compared hard-objective recipes on the same synthetic KVAR task. On a fresh seed-group-3 panel, the complete `(a,b,c)` report validated the controls (`C` 4/204 near 1/64 chance; hand-coded overwrite 204/204) and retained `(c)` soft-trained/hard-served at **0.8284/0.7451 accuracy** and **+3.8332/+3.5849 bits over C** (two seeds). `(a)` and `(b)` remain near chance; the complete sealed receipt returns `ACCEPT_MEMORY_MECHANISM`. The 0.1 hard-auxiliary recipe is worse in bits on both seeds (paired differences +1.2915 and +0.1064 bits, auxiliary minus retained), so it is **not promoted**. Direct and staged hard straight-through training also failed on the development panel. The native language model source is unchanged; the result is a standalone synthetic memory mechanism, not language or geometric attention qualification.
+
+The authoritative new root is `/Users/casey.allard/uor-r4-investigations/kvar-20260924/final-complete-sg3-v2`; all development/negative roots and the prior `run4` remain sealed. The quantized parameters and per-row predictions are retained, and the served prototype still inspects 8,771 parameter slots per token. **Next:** freeze and run equal-cost ordinary `(f)` versus geometric `(h)` with transport-off ablation, then integrate the retained memory into the native language path with changed-source/read-disabled/loaded-generation controls. No Q8/H4 or Hamiltonian advantage, energy saving, general prose or coding result follows yet.
+
+---
+
+## Previous: KVAR — a gated overwrite addressed memory extends the horizon (M1 Part B′), September 24 UTC
 
 The [executed KVAR result](kvar-recall-result-2026-09-24.md) runs the amended M1 Part B: a synthetic **keyed
 variable-lag retrieval with rebinding** panel (V=64, `K∈{4,8}`, `lag∈{4,16,64}`, every key rebound, answer = most
