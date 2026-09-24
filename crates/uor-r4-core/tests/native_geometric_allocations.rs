@@ -5448,3 +5448,40 @@ fn multi_head_vsa_attention_hot_path_has_zero_allocations() {
         "Multi-head VSA attention hot path must allocate zero heap bytes"
     );
 }
+
+/// Compilation and workspace ownership are outside the measured successful readout.
+#[test]
+fn compiled_lexical_readout_has_zero_allocations() {
+    use uor_r4_core::native_geometric::learner::state_lexical::SlFacts;
+    use uor_r4_core::native_geometric::learner::transferable_lexical::{
+        TlConfig, TlReadPlan, TlTrainConfig, TlTrainer,
+    };
+    let mut cfg = TlConfig::new(32);
+    cfg.h_dim = 8;
+    let mut model = TlTrainer::new(cfg, TlTrainConfig::default())
+        .unwrap()
+        .model()
+        .unwrap();
+    model.wo.packed.fill(0x19);
+    let plan = TlReadPlan::compile(&model).unwrap();
+    let h = vec![3; cfg.h_dim];
+    let m = vec![-2; cfg.h_dim];
+    let f = model.typed_block(&[], &[], SlFacts::default());
+    let mut scratch = vec![0; plan.workspace_len()];
+    let mut out = vec![0; plan.output_len()];
+    ALLOCATIONS.with(|n| n.set(0));
+    BYTES.with(|n| n.set(0));
+    MEASURING.with(|n| n.set(true));
+    let mut valid = true;
+    for i in 0..256 {
+        valid &= plan
+            .score_into(&h, &m, &f, i % 4, &mut scratch, &mut out)
+            .is_ok();
+        std::hint::black_box(&out);
+    }
+    MEASURING.with(|n| n.set(false));
+    assert!(valid);
+    assert_eq!(ALLOCATIONS.with(Cell::get), 0);
+    assert_eq!(BYTES.with(Cell::get), 0);
+    assert_eq!(out, model.readout(&h, &m, &f, 3));
+}
