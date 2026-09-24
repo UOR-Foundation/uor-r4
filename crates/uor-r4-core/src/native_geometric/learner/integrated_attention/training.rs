@@ -7,6 +7,7 @@
 use super::*;
 use encoder::{EncoderInput, EncoderTrainer};
 use output::OutputTrainer;
+use read_action::{ReadActionCandidate, ReadActionExample, ReadActionTrainConfig};
 use std::collections::HashMap;
 use training_support::{EnergyTrainer, SparseGateTrainer};
 
@@ -71,7 +72,26 @@ impl Default for FitConfig {
     }
 }
 
+/// Prospective A4 fit policy. Both treatment and continuation control use
+/// the same answer/Stop repetitions; only a version-3 model has a selector.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct A4FitConfig {
+    pub answers_head_repeats: u8,
+    pub natural_selector_stride: usize,
+    pub selector_margin: i32,
+}
+impl Default for A4FitConfig {
+    fn default() -> Self {
+        Self {
+            answers_head_repeats: 8,
+            natural_selector_stride: 256,
+            selector_margin: 2,
+        }
+    }
+}
+
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FitMetrics {
     pub positions: u64,
     pub surface_token_nll_nats: f64,
@@ -100,6 +120,19 @@ pub struct FitMetrics {
     pub read_gate_updates: u64,
     pub state_lane_updates: u64,
     pub energy_updates: u64,
+    pub answer_head_extra_updates: u64,
+    pub answer_forced_head_extra_updates: u64,
+    pub answer_no_read_extra_updates: u64,
+    pub answer_stop_extra_updates: u64,
+    pub read_action_updates: u64,
+    pub read_action_integer_edits: u64,
+    pub read_action_target_eligible: u64,
+    pub read_action_target_selected: u64,
+    pub read_action_target_not_admitted: u64,
+    pub read_action_skipped_unidentifiable: u64,
+    pub read_action_utility_examples: u64,
+    pub read_action_natural_utility_examples: u64,
+    pub read_action_answer_utility_examples: u64,
     pub access: AccessCounts,
 }
 impl FitMetrics {
@@ -129,6 +162,19 @@ impl FitMetrics {
         self.read_gate_updates += other.read_gate_updates;
         self.state_lane_updates += other.state_lane_updates;
         self.energy_updates += other.energy_updates;
+        self.answer_head_extra_updates += other.answer_head_extra_updates;
+        self.answer_forced_head_extra_updates += other.answer_forced_head_extra_updates;
+        self.answer_no_read_extra_updates += other.answer_no_read_extra_updates;
+        self.answer_stop_extra_updates += other.answer_stop_extra_updates;
+        self.read_action_updates += other.read_action_updates;
+        self.read_action_integer_edits += other.read_action_integer_edits;
+        self.read_action_target_eligible += other.read_action_target_eligible;
+        self.read_action_target_selected += other.read_action_target_selected;
+        self.read_action_target_not_admitted += other.read_action_target_not_admitted;
+        self.read_action_skipped_unidentifiable += other.read_action_skipped_unidentifiable;
+        self.read_action_utility_examples += other.read_action_utility_examples;
+        self.read_action_natural_utility_examples += other.read_action_natural_utility_examples;
+        self.read_action_answer_utility_examples += other.read_action_answer_utility_examples;
         self.access.add(other.access);
     }
     pub fn bits_per_token(&self) -> Option<f64> {
@@ -279,8 +325,10 @@ pub struct JointTrainer {
     pub output: OutputTrainer,
     pub read_gate: SparseGateTrainer,
     pub write_gate: SparseGateTrainer,
+    pub read_action: Option<ReadActionModel>,
     a2_head_exposures: u64,
     coarse_address_frozen: bool,
+    a4_fit: Option<A4FitConfig>,
 }
 impl JointTrainer {
     pub fn from_model(model: IntegratedModel) -> Result<Self, ModelError> {
@@ -294,8 +342,10 @@ impl JointTrainer {
             output: OutputTrainer::from_model(model.output)?,
             read_gate: SparseGateTrainer::from_model(model.read_gate)?,
             write_gate: SparseGateTrainer::from_model(model.write_gate)?,
+            read_action: model.read_action,
             a2_head_exposures: 0,
             coarse_address_frozen: false,
+            a4_fit: None,
         })
     }
     /// Preserve an offline-fitted hard coarse router during subsequent joint
@@ -306,6 +356,17 @@ impl JointTrainer {
     pub fn freeze_context_address_learning(&mut self, frozen: bool) {
         self.coarse_address_frozen = frozen;
     }
+    pub fn configure_a4(&mut self, config: A4FitConfig) -> Result<(), ModelError> {
+        if !(1..=32).contains(&config.answers_head_repeats)
+            || config.natural_selector_stride == 0
+            || !(1..=32).contains(&config.selector_margin)
+            || !self.encoder.model().context_addressing
+        {
+            return Err(ModelError::Configuration("A4 training policy bounds"));
+        }
+        self.a4_fit = Some(config);
+        Ok(())
+    }
     pub fn runtime(&self) -> Runtime<'_> {
         Runtime {
             config: &self.config,
@@ -315,12 +376,15 @@ impl JointTrainer {
             output: self.output.model(),
             read_gate: self.read_gate.model(),
             write_gate: self.write_gate.model(),
+            read_action: self.read_action.as_ref(),
             digest: [0; 32],
         }
     }
     pub fn export(self) -> IntegratedModel {
         IntegratedModel {
-            version: if self.encoder.model().context_addressing {
+            version: if self.read_action.is_some() {
+                3
+            } else if self.encoder.model().context_addressing {
                 2
             } else {
                 1
@@ -333,12 +397,15 @@ impl JointTrainer {
             output: self.output.export(),
             read_gate: self.read_gate.export(),
             write_gate: self.write_gate.export(),
+            read_action: self.read_action,
             digest: [0; 32],
         }
     }
     fn frozen_episode_model(&self) -> IntegratedModel {
         IntegratedModel {
-            version: if self.encoder.model().context_addressing {
+            version: if self.read_action.is_some() {
+                3
+            } else if self.encoder.model().context_addressing {
                 2
             } else {
                 1
@@ -351,8 +418,141 @@ impl JointTrainer {
             output: self.output.model().clone(),
             read_gate: self.read_gate.model().clone(),
             write_gate: self.write_gate.model().clone(),
+            read_action: self.read_action.clone(),
             digest: [0; 32],
         }
+    }
+
+    /// Fit labels are applied only to candidates admitted by the frozen causal
+    /// forward episode. A missing annotated source is not a NoRead example.
+    /// Natural and later-answer utility labels may accept multiple equally
+    /// useful actions, so equal values do not acquire conflicting lexical labels.
+    fn fit_read_action_step(
+        &mut self,
+        frozen: &IntegratedModel,
+        session: &Session,
+        read: &ReadTrace,
+        episode: &TrainingEpisode,
+        observed: &[ObservedTraining],
+        position: usize,
+        target: u16,
+        no_read_loss: f64,
+        metrics: &mut FitMetrics,
+    ) -> Result<(), ModelError> {
+        let (Some(policy), Some(selector)) = (self.a4_fit, self.read_action.as_mut()) else {
+            return Ok(());
+        };
+        let first_answer = episode.prompt_len == Some(position);
+        let utility_step = episode
+            .prompt_len
+            .map_or(position % policy.natural_selector_stride == 0, |prompt| {
+                position > prompt
+            });
+        if !first_answer && !utility_step {
+            return Ok(());
+        }
+        let none = features(&self.config, session.last_token, &session.state, None);
+        let candidates: Vec<ReadActionCandidate> = read.candidates[..read.candidate_count]
+            .iter()
+            .map(|candidate| ReadActionCandidate {
+                features: features(
+                    &self.config,
+                    session.last_token,
+                    &session.state,
+                    Some(candidate.token),
+                )
+                .as_slice()
+                .to_vec(),
+                relative: candidate.relative[..self.config.lanes].to_vec(),
+            })
+            .collect();
+        let mut example = ReadActionExample {
+            no_read_features: none.as_slice().to_vec(),
+            candidates,
+            target: None,
+        };
+        let acceptable = if first_answer {
+            let source_record = episode.source_targets[position]
+                .and_then(|source| observed.get(source))
+                .and_then(|source| source.record_id);
+            let Some(index) = source_record.and_then(|id| {
+                read.candidates[..read.candidate_count]
+                    .iter()
+                    .position(|c| c.record_id == id)
+            }) else {
+                metrics.read_action_target_not_admitted += 1;
+                return Ok(());
+            };
+            // Exact occurrence supervision cannot resolve equal served inputs.
+            if example
+                .candidates
+                .iter()
+                .enumerate()
+                .any(|(other, candidate)| {
+                    other != index
+                        && candidate.features == example.candidates[index].features
+                        && candidate.relative == example.candidates[index].relative
+                })
+            {
+                metrics.read_action_skipped_unidentifiable += 1;
+                return Ok(());
+            }
+            metrics.read_action_target_eligible += 1;
+            example.target = Some(index);
+            vec![Some(index)]
+        } else {
+            // Conditional gold-token loss is offline supervision, not a served
+            // feature. No future-target-derived recurrence pointer labels a read.
+            let mut token_losses = HashMap::<u16, f64>::new();
+            let mut losses = Vec::with_capacity(read.candidate_count + 1);
+            losses.push((None, no_read_loss));
+            for (index, candidate) in read.candidates[..read.candidate_count].iter().enumerate() {
+                let loss = if let Some(&loss) = token_losses.get(&candidate.token) {
+                    loss
+                } else {
+                    let loss = token_nll_offline(
+                        &frozen.output,
+                        &example.candidates[index].features,
+                        Some(candidate.token),
+                        target,
+                    )?;
+                    token_losses.insert(candidate.token, loss);
+                    loss
+                };
+                losses.push((Some(index), loss));
+            }
+            let best = losses
+                .iter()
+                .map(|(_, loss)| *loss)
+                .fold(f64::INFINITY, f64::min);
+            metrics.read_action_utility_examples += 1;
+            if episode.prompt_len.is_some() {
+                metrics.read_action_answer_utility_examples += 1;
+            } else {
+                metrics.read_action_natural_utility_examples += 1;
+            }
+            losses
+                .into_iter()
+                .filter_map(|(action, loss)| {
+                    (loss <= best + A2_UTILITY_MARGIN_NATS).then_some(action)
+                })
+                .collect()
+        };
+        let report = selector.train_acceptable(
+            &example,
+            &acceptable,
+            &ReadActionTrainConfig {
+                margin: policy.selector_margin,
+                max_steps: 4,
+            },
+        )?;
+        metrics.read_action_updates += 1;
+        metrics.read_action_integer_edits += report.coefficient_edits;
+        if first_answer {
+            metrics.read_action_target_selected +=
+                u64::from(acceptable.contains(&report.selected_after));
+        }
+        Ok(())
     }
     pub fn fit_episode(
         &mut self,
@@ -425,6 +625,16 @@ impl JointTrainer {
             }
             self.output
                 .train_token(feat.as_slice(), selected, target, fit.output_rate)?;
+            let answer_repeats = if episode.prompt_len.is_some_and(|prompt| position >= prompt) {
+                self.a4_fit.map_or(1, |policy| policy.answers_head_repeats)
+            } else {
+                1
+            };
+            for _ in 1..answer_repeats {
+                self.output
+                    .train_token(feat.as_slice(), selected, target, fit.output_rate)?;
+                metrics.answer_head_extra_updates += 1;
+            }
             if let Some(source_position) = episode.source_targets[position] {
                 let source = observed[source_position];
                 metrics.labeled_sources += 1;
@@ -475,6 +685,22 @@ impl JointTrainer {
                             target,
                             fit.output_rate,
                         )?;
+                        for _ in 1..answer_repeats {
+                            self.output.train_token(
+                                no_read_features.as_slice(),
+                                None,
+                                target,
+                                fit.output_rate * 0.5,
+                            )?;
+                            self.output.train_token(
+                                source_features.as_slice(),
+                                Some(source_token),
+                                target,
+                                fit.output_rate,
+                            )?;
+                            metrics.answer_no_read_extra_updates += 1;
+                            metrics.answer_forced_head_extra_updates += 1;
+                        }
                         if episode.prompt_len.is_some_and(|p| position >= p) {
                             self.a2_head_exposures += 1;
                         }
@@ -520,7 +746,7 @@ impl JointTrainer {
                                     metrics.query_key_updates += 1;
                                 }
                             }
-                            if strong {
+                            if strong && self.read_action.is_none() {
                                 // The annotation chooses a source for this
                                 // authored correction; candidate-conditioned
                                 // language loss scales (rather than replaces)
@@ -698,7 +924,18 @@ impl JointTrainer {
             }
             // Missing annotations are not evidence that reading is useless. A negative
             // gate label is used only when an actual selected read worsens token loss.
-            if gate_ready {
+            self.fit_read_action_step(
+                &frozen,
+                &session,
+                &read,
+                episode,
+                &observed,
+                position,
+                target,
+                no_read_loss,
+                &mut metrics,
+            )?;
+            if gate_ready && self.read_action.is_none() {
                 if let Some(best) = read.ranked {
                     let candidate = read.candidates[best];
                     let candidate_features = features(
@@ -788,6 +1025,17 @@ impl JointTrainer {
             Action::Stop,
             fit.output_rate,
         )?;
+        if episode.prompt_len.is_some() {
+            for _ in 1..self.a4_fit.map_or(1, |policy| policy.answers_head_repeats) {
+                self.output.train_action(
+                    feat.as_slice(),
+                    read.selected.is_some(),
+                    Action::Stop,
+                    fit.output_rate,
+                )?;
+                metrics.answer_stop_extra_updates += 1;
+            }
+        }
         Ok(metrics)
     }
 }

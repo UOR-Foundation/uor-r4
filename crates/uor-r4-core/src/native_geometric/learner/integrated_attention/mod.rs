@@ -9,6 +9,7 @@ pub mod encoder;
 pub mod geometry;
 pub mod memory;
 pub mod output;
+pub mod read_action;
 pub mod training;
 pub mod training_support;
 
@@ -18,11 +19,13 @@ use geometry::{
 };
 use memory::{ExactKey, ExactMemory, MemoryLimits, MemorySnapshot, ProductCode, RecordId};
 use output::{Action, OutputTrace, SparseOutput};
+use read_action::{ReadActionModel, ReadActionReadCounts};
 use serde::{Deserialize, Serialize};
 use training_support::{GateReadCounts, SparseGate};
 
 const MAGIC: &[u8; 8] = b"UORIA01\0";
 const MAGIC_A2: &[u8; 8] = b"UORIA02\0";
+const MAGIC_A4: &[u8; 8] = b"UORIA03\0";
 pub const MAX_ARTIFACT_BYTES: usize = 256 << 20;
 pub const MAX_LANES: usize = 4;
 /// A2 indexes an exact occurrence only after this much right context arrives.
@@ -38,6 +41,7 @@ pub enum ModelError {
     Memory(memory::MemoryError),
     Output(output::OutputError),
     Training(training_support::TrainingSupportError),
+    ReadAction(read_action::ReadActionError),
     Serialization(String),
 }
 
@@ -61,6 +65,7 @@ convert_error!(encoder::EncoderError, Encoder);
 convert_error!(memory::MemoryError, Memory);
 convert_error!(output::OutputError, Output);
 convert_error!(training_support::TrainingSupportError, Training);
+convert_error!(read_action::ReadActionError, ReadAction);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModelConfig {
@@ -143,6 +148,10 @@ pub struct IntegratedModel {
     pub output: SparseOutput,
     pub read_gate: SparseGate,
     pub write_gate: SparseGate,
+    /// A4 replaces sequential rank/gate with one candidate-or-NoRead decision.
+    /// Omission preserves the prior A1/A2 serialized payload layout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_action: Option<ReadActionModel>,
     #[serde(skip)]
     digest: [u8; 32],
 }
@@ -156,6 +165,7 @@ pub struct Runtime<'a> {
     pub output: &'a SparseOutput,
     pub read_gate: &'a SparseGate,
     pub write_gate: &'a SparseGate,
+    pub read_action: Option<&'a ReadActionModel>,
     pub digest: [u8; 32],
 }
 
@@ -197,6 +207,7 @@ impl IntegratedModel {
             output,
             read_gate,
             write_gate,
+            read_action: None,
             digest: [0; 32],
         })
     }
@@ -207,7 +218,24 @@ impl IntegratedModel {
             ));
         }
         self.encoder.enable_context_addressing()?;
-        self.version = 2;
+        self.version = if self.read_action.is_some() { 3 } else { 2 };
+        self.digest = [0; 32];
+        self.validate()
+    }
+    pub fn enable_read_actions(&mut self) -> Result<(), ModelError> {
+        if !self.encoder.context_addressing {
+            return Err(ModelError::Configuration(
+                "A4 requires contextual addressing",
+            ));
+        }
+        if self.read_action.is_none() {
+            self.read_action = Some(ReadActionModel::new(
+                self.config.vocabulary,
+                self.config.lanes as u8,
+                self.energy.edges().to_vec(),
+            )?);
+        }
+        self.version = 3;
         self.digest = [0; 32];
         self.validate()
     }
@@ -220,6 +248,7 @@ impl IntegratedModel {
             output: &self.output,
             read_gate: &self.read_gate,
             write_gate: &self.write_gate,
+            read_action: self.read_action.as_ref(),
             digest: self.digest,
         }
     }
@@ -228,7 +257,9 @@ impl IntegratedModel {
     }
     pub fn validate(&self) -> Result<(), ModelError> {
         if self.version
-            != if self.encoder.context_addressing {
+            != if self.read_action.is_some() {
+                3
+            } else if self.encoder.context_addressing {
                 2
             } else {
                 1
@@ -248,6 +279,16 @@ impl IntegratedModel {
         self.output.validate()?;
         self.read_gate.validate()?;
         self.write_gate.validate()?;
+        if let Some(action) = &self.read_action {
+            action.validate()?;
+            if !self.encoder.context_addressing
+                || action.vocabulary() != self.config.vocabulary
+                || usize::from(action.lanes()) != self.config.lanes
+                || action.feature_count() != self.config.feature_bank()
+            {
+                return Err(ModelError::Artifact("read action shape mismatch"));
+            }
+        }
         if usize::from(self.output.vocab) != self.config.vocabulary
             || usize::from(self.output.feature_bank) != self.config.feature_bank()
             || usize::from(self.energy.lanes()) != self.config.lanes
@@ -279,7 +320,11 @@ impl IntegratedModel {
             return Err(ModelError::Artifact("artifact exceeds byte bound"));
         }
         let mut bytes = Vec::with_capacity(40 + payload.len());
-        bytes.extend_from_slice(if self.version == 2 { MAGIC_A2 } else { MAGIC });
+        bytes.extend_from_slice(match self.version {
+            3 => MAGIC_A4,
+            2 => MAGIC_A2,
+            _ => MAGIC,
+        });
         bytes.extend_from_slice(blake3::hash(&payload).as_bytes());
         bytes.extend_from_slice(&payload);
         Ok(bytes)
@@ -287,7 +332,7 @@ impl IntegratedModel {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ModelError> {
         if bytes.len() < 40
             || bytes.len() > MAX_ARTIFACT_BYTES + 40
-            || (&bytes[..8] != MAGIC && &bytes[..8] != MAGIC_A2)
+            || (&bytes[..8] != MAGIC && &bytes[..8] != MAGIC_A2 && &bytes[..8] != MAGIC_A4)
         {
             return Err(ModelError::Artifact("invalid artifact envelope"));
         }
@@ -302,7 +347,12 @@ impl IntegratedModel {
             return Err(ModelError::Artifact("trailing artifact bytes"));
         }
         model.validate()?;
-        if (model.version == 2) != (&bytes[..8] == MAGIC_A2) {
+        let expected_magic = match model.version {
+            3 => MAGIC_A4,
+            2 => MAGIC_A2,
+            _ => MAGIC,
+        };
+        if &bytes[..8] != expected_magic {
             return Err(ModelError::Artifact(
                 "artifact envelope and schema disagree",
             ));
@@ -324,6 +374,10 @@ impl IntegratedModel {
             + self.energy.packed_bytes()
             + self.read_gate.parameter_bytes()
             + self.write_gate.parameter_bytes()
+            + self
+                .read_action
+                .as_ref()
+                .map_or(0, ReadActionModel::parameter_bytes)
     }
 }
 
@@ -339,6 +393,8 @@ pub struct AccessCounts {
     pub posting_entries_examined: u64,
     #[serde(default)]
     pub raw_context_events: u64,
+    #[serde(default)]
+    pub read_action_coefficients: u64,
 }
 impl AccessCounts {
     pub fn learned_coefficient_reads(&self) -> u64 {
@@ -346,6 +402,7 @@ impl AccessCounts {
             + self.gate_coefficients
             + self.energy_coefficients
             + self.output_coefficients
+            + self.read_action_coefficients
     }
     pub fn add(&mut self, other: Self) {
         self.encoder_coefficients += other.encoder_coefficients;
@@ -357,6 +414,7 @@ impl AccessCounts {
         self.pages_visited += other.pages_visited;
         self.posting_entries_examined += other.posting_entries_examined;
         self.raw_context_events += other.raw_context_events;
+        self.read_action_coefficients += other.read_action_coefficients;
     }
 }
 
@@ -368,6 +426,8 @@ pub struct CandidateView {
     pub key: [u8; 16],
     pub relative: [u8; 16],
     pub energy: i32,
+    /// Higher is better for A4; legacy empirical energy remains diagnostic.
+    pub action_score: Option<i32>,
 }
 
 pub struct ReadTrace {
@@ -378,6 +438,7 @@ pub struct ReadTrace {
     pub ranked: Option<usize>,
     pub selected: Option<usize>,
     pub gate_enabled: bool,
+    pub no_read_score: Option<i32>,
     pub search_incomplete: bool,
     pub access: AccessCounts,
 }
@@ -531,6 +592,7 @@ impl Session {
             ranked: None,
             selected: None,
             gate_enabled: false,
+            no_read_score: None,
             search_incomplete: false,
             access: AccessCounts {
                 encoder_coefficients: encoded.coefficient_reads as u64,
@@ -565,6 +627,12 @@ impl Session {
             || result.status.candidate_limit;
         let mut energy_reads = EnergyReadCounts::default();
         let mut group_reads = AlgebraReadCounts::default();
+        let mut action_reads = ReadActionReadCounts::default();
+        if let Some(action) = runtime.read_action {
+            let none_features = features(runtime.config, self.last_token, &self.state, None);
+            trace.no_read_score =
+                Some(action.score_none(none_features.as_slice(), &mut action_reads)?);
+        }
         let actions = [runtime.algebra.identity(); 16];
         for &id in result.candidates() {
             let record = self.memory.record(id)?;
@@ -592,10 +660,30 @@ impl Session {
                 &candidate.relative[..runtime.config.lanes],
                 &mut energy_reads,
             )?;
+            if let Some(action) = runtime.read_action {
+                let candidate_features = features(
+                    runtime.config,
+                    self.last_token,
+                    &self.state,
+                    Some(candidate.token),
+                );
+                candidate.action_score = Some(action.score_read(
+                    candidate_features.as_slice(),
+                    &candidate.relative[..runtime.config.lanes],
+                    &mut action_reads,
+                )?);
+            }
             let index = trace.candidate_count;
             trace.candidates[index] = candidate;
             trace.candidate_count += 1;
-            if trace.selected.is_none_or(|best| {
+            if runtime.read_action.is_some() {
+                if trace
+                    .ranked
+                    .is_none_or(|best| candidate.action_score > trace.candidates[best].action_score)
+                {
+                    trace.ranked = Some(index);
+                }
+            } else if trace.selected.is_none_or(|best| {
                 candidate.energy < trace.candidates[best].energy
                     || (candidate.energy == trace.candidates[best].energy
                         && id > trace.candidates[best].record_id)
@@ -606,6 +694,18 @@ impl Session {
         trace.access.energy_coefficients = energy_reads.coefficients;
         trace.access.energy_byte_reads = energy_reads.packed_bytes;
         trace.access.group_table_reads = group_reads.product_reads + group_reads.inverse_reads;
+        trace.access.read_action_coefficients = action_reads.coefficients;
+        if runtime.read_action.is_some() {
+            // A single action argmax: NoRead wins ties, then actual candidate
+            // iteration order resolves read ties. No second gate is applied.
+            if let Some(best) = trace.ranked {
+                if trace.candidates[best].action_score > trace.no_read_score {
+                    trace.selected = Some(best);
+                }
+            }
+            trace.gate_enabled = trace.selected.is_some();
+            return Ok(trace);
+        }
         trace.ranked = trace.selected;
         if let Some(index) = trace.ranked {
             let gate_features = features(
