@@ -88,3 +88,40 @@ Only focused causal, arithmetic, gradient and checkpoint checks precede the
 actual learning run. No expansion into unrelated test repairs is planned.
 Integer discretization, prime/zeta address admission and final serving costs
 remain subsequent rungs once joint language learning is demonstrated.
+
+## Full learning schedule frozen after measured profiling
+
+The corrected pinned CPU backend completes the B64/T64 profile at approximately
+3,650target visits/second, with a3.00GB measured peak process footprint. The
+full campaign uses **two concurrent CPU arms**, two threads per process, with an
+8GiB combined-RSS stop and the unchanged physical storage reserve plus128MiB
+margin. A supervisor requests a checkpoint between updates if a ceiling is
+reached. The five-hour cycle projection and prospective local time/storage
+extensions are in the budget receipt; the training-loop deadline is11500seconds
+per process with180seconds separately reserved for closeout.
+
+Each arm has7324updates ×64windows ×64targets = **29,999,104target visits**.
+The quaternion arm resumes the corrected backend's12-update profile with its
+optimizer and data cursor; those visits count within this total. The ordinary
+arm starts from the matched initialization at step0. Earlier implementation and
+backend profiles remain separate attempts, with their time and exposure charged.
+
+These are **independent64-token windows**: state and event tape reset per window.
+Only read ages1–63 receive language gradients. Ages64–255 remain initialized and
+subject to weight decay. The model's256-step development and generation remain
+unchanged; later positions therefore measure extension beyond the training
+horizon. Passing the existing gates supports this artifact's observed behavior;
+failure does not isolate a geometric cause. A128/256-window continuation remains
+the next same-graph option before claiming learned256-step credit.
+
+Save the midpoint at3662updates and the final artifact. Select the checkpoint
+with the lower full64-block tune-prefix NLL, with an exact tie choosing the
+earlier step; do this separately but identically for each arm. Then evaluate
+both selected checkpoints with reads enabled and whole-prefix NoRead on all976
+blocks and all frozen generation/source-edit probes. Preserve and report both
+candidate scores. No criterion or comparator is weakened for the shorter fit.
+
+Apple BLAS is explicitly enabled only in the offline tool. A pinned, licensed
+Candle0.9.2 source copy carries four corrected operand-slice lengths, verified
+against all103 upstream file hashes. See
+[the patch explanation](../../third_party/candle-core-0.9.2/UOR-PATCH.md).

@@ -31,6 +31,9 @@ pub struct Campaign {
     /// Deadline for starting another update, measured from process setup.
     /// Final evaluation/checkpoint/reload needs separately budgeted closeout time.
     pub max_process_seconds: u64,
+    /// Optional local supervisor request: stop between updates and checkpoint.
+    #[serde(default)]
+    pub stop_file: Option<PathBuf>,
     pub trial_scope: String,
 }
 
@@ -294,7 +297,9 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
     let mut step_times = Vec::new();
     let mut complete = begin;
     for step in begin..cfg.total_steps {
-        if started.elapsed().as_secs() >= cfg.max_process_seconds {
+        if started.elapsed().as_secs() >= cfg.max_process_seconds
+            || cfg.stop_file.as_ref().is_some_and(|path| path.exists())
+        {
             break;
         }
         let step_started = Instant::now();
@@ -405,6 +410,8 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
     let total_seconds: f64 = step_times.iter().sum();
     let steady_seconds: f64 = warm.iter().sum();
     report["status"] = json!(status);
+    report["supervisor_stop_requested"] =
+        json!(cfg.stop_file.as_ref().is_some_and(|path| path.exists()));
     report["completed_step"] = json!(complete);
     report["new_optimizer_steps"] = json!(complete - begin);
     report["new_sampled_target_visits"] = json!((complete - begin) * cfg.batch * cfg.context);
@@ -608,6 +615,7 @@ mod tests {
             development_blocks: 0,
             checkpoint_steps: vec![],
             max_process_seconds: 100,
+            stop_file: None,
             trial_scope: "sampler".into(),
         };
         let stores = vec![

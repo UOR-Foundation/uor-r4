@@ -14,11 +14,11 @@
     "limit_ms": 495000000
   },
   "reason": "Complete three-hour engineering/profile/paired-training/evaluation/delivery projection exceeds current96-minute balance. Standing local extensions apply; actual dose/device fixed after full-step throughput measurement before full training.",
-  "complete_cycle_limit_ms": 10800000,
+  "complete_cycle_limit_ms": 18000000,
   "phase_projection_seconds": {
     "engineering_and_review": 3600,
-    "build_and_integrity_throughput": 600,
-    "paired_training_and_evaluation": 6000,
+    "build_and_integrity_throughput": 1800,
+    "paired_training_and_evaluation": 11500,
     "delivery": 600
   },
   "profile_optimizer_steps_max_per_arm": 60,
@@ -33,7 +33,7 @@
   "aggregate_ram_target_bytes": 8589934592,
   "one_cargo_process": true,
   "one_metal_training_owner": true,
-  "cpu_threads": 2,
+  "cpu_threads": 4,
   "new_storage_limit_bytes": 671088640,
   "storage_projection_bytes": {
     "build_and_retained_binaries": 377487360,
@@ -67,5 +67,96 @@
     "increment_bytes": 167772160,
     "reason": "Corrected vendored backend compiler inputs require a bounded rebuild. Gross new-storage accounting retains canceled-build allocations; reclaim only its identified unexecuted objects before rebuild. Actual free-space reserve and128MiB margin remain fixed.",
     "reclaimed_logical_bytes": 99780915
+  },
+  "time_extension_for_full_fit": {
+    "recorded_utc": "2026-09-24T23:45:50.163982+00:00",
+    "ledger_before": {
+      "cumulative_ms": 482023963,
+      "limit_ms": 495000000
+    },
+    "increment_ms": 5400000,
+    "ledger_after": {
+      "cumulative_ms": 482023963,
+      "limit_ms": 500400000
+    },
+    "reason": "Measured corrected CPU backend supports the actual30M-visits paired learner but requires a longer campaign than the initial three-hour cycle. Run two CPU arms concurrently within measured RAM/thread limits; project up to3.2h per process plus completed preparation, evaluation and delivery. Standing local extensions apply; no external compute."
+  },
+  "cpu_threads_per_process": 2,
+  "concurrent_cpu_training_processes": 2,
+  "ram_expected_two_training_processes_bytes": 6010000000,
+  "ram_supervisor_stop_bytes": 8589934592,
+  "physical_supervisor_stop_bytes": 26105348096,
+  "closeout_reserve_seconds_per_process": 180,
+  "full_fit_launch_gate_satisfied": {
+    "recorded_utc": "2026-09-24T23:45:50.163982+00:00",
+    "profile_root": "/Users/casey.allard/uor-r4-investigations/joint-recurrent-20260924/profile-quaternion-accelerate-short-1",
+    "measured_profile": {
+      "actual_device": "Cpu",
+      "campaign": {
+        "batch": 64,
+        "checkpoint_steps": [],
+        "context": 64,
+        "data_seed": 240924,
+        "development_blocks": 0,
+        "development_every_steps": 0,
+        "evaluator_path": "/Users/casey.allard/uor-r4-worktrees/kvar-20260924/docs/integration/reference-evaluator-v2.json",
+        "max_process_seconds": 480,
+        "model": {
+          "context": 256,
+          "read_width": 64,
+          "seed": 240924,
+          "transport": "quaternion",
+          "vocab_size": 4096,
+          "width": 256
+        },
+        "optimizer": {
+          "allowed_missing_gradients": [],
+          "learning_rate": 0.001,
+          "parameter_abs_limit": 1000000.0,
+          "weight_decay": 0.01
+        },
+        "schema": "uor-r4.joint-recurrent-campaign/1",
+        "total_steps": 12,
+        "trial_scope": "INTEGRITY_THROUGHPUT_ONLY; resource profile of shorter learning unroll, same model and256-token evaluation; no language qualification"
+      },
+      "candle_source": "vendored0.9.2; four-line Accelerate operand slice correction; UPSTREAM.json",
+      "completed_step": 12,
+      "cpu_accelerate_compiled": true,
+      "deadline_scope": "max_process_seconds stops new updates; measured closeout allowance is budgeted separately",
+      "elapsed_seconds": 15.740428083,
+      "evaluator_sha256": "d2432fbba0e24ba51d7568700d6718c4e85d01ccc08e4fc3cc3fa2a77e928a62",
+      "executable_sha256": "861dfec38ddd5def20f77bd5dc952ed313c60a865a3dda1270d90d125931792f",
+      "final_development_nll": null,
+      "final_retained_batch_nll": 6.112104415893555,
+      "initial_development_nll": null,
+      "initial_retained_batch_nll": 7.445707321166992,
+      "mode": "joint-fit",
+      "new_optimizer_steps": 12,
+      "new_sampled_target_visits": 49152,
+      "parameter_count": 1678466,
+      "reload_absolute_delta": 0.0,
+      "reloaded_retained_batch_nll": 6.112104415893555,
+      "requested_device": "cpu",
+      "schema": "uor-r4.joint-recurrent-report/1",
+      "scope": "Offline continuous recurrent-memory learner; no transformer backbone, hard integer export, geometry promotion or energy claim",
+      "source_commit": "2ac8e1a3f89385f28a2cbea075c283c8e4821e02",
+      "starting_step": 0,
+      "status": "TARGET_COMPLETE",
+      "steady_complete_step_tokens_per_second": 3629.4969329874552,
+      "training_complete_steps_seconds": 13.636009625,
+      "training_sources": [
+        {
+          "bytes": 60000000,
+          "path": "/Users/casey.allard/uor-r4/.uor-models/research/issue-1014/tokens/train.u16",
+          "sha256": "8a438765856de5434961609c2ee4dc3f82c25295b9695c9b70b54e29dc8f7efc"
+        },
+        {
+          "bytes": 239992832,
+          "path": "/Users/casey.allard/uor-r4/.uor-models/research/issue-1017/tokens/train.u16",
+          "sha256": "7b12a8b0cad32689584d5b14e10aa60d449859dcb735c57cdec26bcddd2d4873"
+        }
+      ]
+    },
+    "schedule": "Two concurrent CPU jobs; each30Mvisits approximately; same arrays, windows, exposure and optimizer. Monitor summed RSS and disk; request per-job checkpoint on ceiling. Thirty-percent overlap/thermal allowance; deadline11500s plus180s closeout. Both jobs checkpoint safely if throughput does not reach target."
   }
 }
