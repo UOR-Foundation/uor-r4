@@ -7,7 +7,15 @@
 > Record: [direction-decision-2026-09-24.md](direction-decision-2026-09-24.md) · owner entries D4–D6 in
 > [DECISIONS.md](DECISIONS.md). The component results below retain their exact scope.
 
-## Active: KVAR hard-selection successor — memory retained, hard-objective promotion rejected, September 24 UTC
+## Active: KVAR relative-energy pilot negative; addressed memory remains the lever, September 24 UTC
+
+The [pre-registered matched residual pilot](kvar-relative-energy-result-2026-09-24.md) held each quantized `(c)` base fixed and compared ordinary C8 versus exact Q8 query/value read energies at equal residual parameter/access cost, with transport-off and kernel-off. On fresh seed-group-4 KVAR, controls were valid (count 2/204; overwrite 204/204), but the Q8 geometry gate **failed**: Q8 minus ordinary was **−0.1337 bits/query [−0.3708,+0.0980]** for seed 1 and **0 [0,0]** for seed 2, short of the frozen ≥0.5-bit margin and two-seed transport criterion. Seed 1's unmodified `(c)` was better than either residual; seed 2 learned a zero kernel. The retained sealed root is `/Users/casey.allard/uor-r4-investigations/kvar-relative-20260924/final1`. This retires only the query/value residual on random-pair KVAR. The original full ordinary `(f)` and end-to-end geometric `(h)` arms remain `NOT_RUN`; no geometric-attention, language or energy result follows. The base still inspects 8,771 parameter slots per token.
+
+**Next:** integrate the retained addressed memory into native language generation, with loaded-artifact changed-source/read-disabled controls and retained lexical/prose checks. Specify any later full `(f)/(h)` or frame-structured geometry comparison prospectively; do not count the residual pilot as that gate.
+
+---
+
+## Previous: KVAR hard-selection successor — memory retained, hard-objective promotion rejected, September 24 UTC
 
 The [executed successor](kvar-hard-successor-result-2026-09-24.md) corrected empty hard reads, isolated the historical unscaled read-gate update as an explicit optimization surrogate, and compared hard-objective recipes on the same synthetic KVAR task. On a fresh seed-group-3 panel, the complete `(a,b,c)` report validated the controls (`C` 4/204 near 1/64 chance; hand-coded overwrite 204/204) and retained `(c)` soft-trained/hard-served at **0.8284/0.7451 accuracy** and **+3.8332/+3.5849 bits over C** (two seeds). `(a)` and `(b)` remain near chance; the complete sealed receipt returns `ACCEPT_MEMORY_MECHANISM`. The 0.1 hard-auxiliary recipe is worse in bits on both seeds (paired differences +1.2915 and +0.1064 bits, auxiliary minus retained), so it is **not promoted**. Direct and staged hard straight-through training also failed on the development panel. The native language model source is unchanged; the result is a standalone synthetic memory mechanism, not language or geometric attention qualification.
 

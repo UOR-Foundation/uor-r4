@@ -35,6 +35,9 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use uor_r4_core::report_output::{claim, seal, verify};
 
+#[path = "kvar_relative_energy.rs"]
+mod kvar_relative_energy;
+
 /// Fixed panel vocabulary: `CONTENT` content tokens, then `BIND`, then `QUERY`.
 const CONTENT: usize = 64;
 const D: usize = 64;
@@ -897,7 +900,7 @@ fn quant_tern(vals: &[f32]) -> Vec<i8> {
         .collect()
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct QParams {
     wh: Vec<i8>,
     wf: Vec<i8>,
@@ -1011,6 +1014,26 @@ fn type_i32(x: u8, out: usize) -> [i32; NT] {
 /// `select_readout` is a diagnostic variant for store arms only: when the read gate
 /// fired at the final step, the store row is the answer instead of an additive term.
 fn serve_scores(q: &QParams, dims: Dims, ep: &Episode, select_readout: bool) -> (usize, Vec<i32>) {
+    let (pred, scores, _) = serve_scores_trace(q, dims, ep, select_readout);
+    (pred, scores)
+}
+
+#[derive(Clone)]
+struct TerminalTrace {
+    query: u8,
+    value: u8,
+    valid: bool,
+    gate_logit: i32,
+    base_scores: Vec<i32>,
+    target: usize,
+}
+
+fn serve_scores_trace(
+    q: &QParams,
+    dims: Dims,
+    ep: &Episode,
+    select_readout: bool,
+) -> (usize, Vec<i32>, TerminalTrace) {
     let d = dims.d;
     let out = dims.out;
     let n = ep.inputs.len();
@@ -1019,6 +1042,9 @@ fn serve_scores(q: &QParams, dims: Dims, ep: &Episode, select_readout: bool) -> 
     let mut valid = vec![false; out];
     let mut mem_last = vec![0i32; out];
     let mut last_read = false;
+    let mut terminal_gate_logit = 0i32;
+    let mut terminal_value = 0u8;
+    let mut terminal_valid = false;
     for t in 0..n {
         let hp = h.clone();
         let x = ep.inputs[t] as usize;
@@ -1056,6 +1082,13 @@ fn serve_scores(q: &QParams, dims: Dims, ep: &Episode, select_readout: bool) -> 
             if x < out {
                 let mut rgl = shl(q.cr[x] as i32, q.cr_sh);
                 rgl += qdot_t(&q.br[x * d..x * d + d], &hp);
+                if t + 1 == n {
+                    terminal_gate_logit = rgl;
+                    terminal_valid = valid[x];
+                    if valid[x] {
+                        terminal_value = argmax_i32(&ztab[x * out..(x + 1) * out]) as u8;
+                    }
+                }
                 if rgl > 0 && valid[x] {
                     last_read = true;
                     for v in 0..out {
@@ -1070,6 +1103,14 @@ fn serve_scores(q: &QParams, dims: Dims, ep: &Episode, select_readout: bool) -> 
     for v in 0..out {
         scores[v] = qdot_t(&q.wo[v * d..v * d + d], &h);
     }
+    let trace = TerminalTrace {
+        query: ep.inputs[n - 1],
+        value: terminal_value,
+        valid: terminal_valid,
+        gate_logit: terminal_gate_logit,
+        base_scores: scores.clone(),
+        target: ep.target as usize,
+    };
     if dims.store {
         if select_readout {
             if last_read {
@@ -1089,7 +1130,7 @@ fn serve_scores(q: &QParams, dims: Dims, ep: &Episode, select_readout: bool) -> 
             best = v;
         }
     }
-    (best, scores)
+    (best, scores, trace)
 }
 
 fn bits_at(scores: &[f32], target: usize, temp: f32) -> f64 {
@@ -1825,6 +1866,14 @@ fn run() -> Result<(), String> {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(2).map(String::as_str) == Some("--relative-energy") {
+        if let Err(e) = kvar_relative_energy::run(&args) {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(e) = run() {
         eprintln!("error: {e}");
         std::process::exit(1);

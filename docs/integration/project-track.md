@@ -25,10 +25,14 @@ serving invariant** (D5) and the current served path is recorded as dense/non-co
      0.7157** (two seeds) select-served, **+3.75 / +3.24 bits** over the order-2 count control, while the plain
      recurrence and gate-only recurrence are at chance → **`ACCEPT_MEMORY_MECHANISM`**; the lever is the
      memory/horizon, not the readout.
-   - **M1 Part B″ — active next.** Re-train (c) end-to-end with the hard-select readout as the objective; add the
-     deferred `(f)` equal-cost ordinary gated memory and `(h)` geometric parameterisation to run the **geometry
-     gate** (the owner's vectors/Hamiltonians lead; a tie is expected and retires the geometry claim, not the
-     memory).
+   - **M1 Part B″ — diagnostic work complete; full comparison open.** The
+     [hard-selection successor](kvar-hard-successor-result-2026-09-24.md) kept soft-trained/hard-served `(c)` but
+     rejected tested hard-objective recipes. A [matched C8/Q8 residual pilot](kvar-relative-energy-result-2026-09-24.md)
+     failed its pre-declared two-seed geometry gate and did not improve `(c)`; it does **not** replace the original
+     full `(f)` equal-cost ordinary gated memory or `(h)` end-to-end geometric parameterisation, both `NOT_RUN`.
+     Carry the accepted addressed-memory mechanism into native language generation with changed-source/read-disabled
+     controls, then require a prospectively specified full comparator on a panel where frame transport is identifiable
+     before any geometric advantage claim.
 3. **M2 — one-variable gate + capacity ablation, crossed with corpus**, endpointed on the M1 probe, `repository_bits`
    a `+0.05` guard only. (Only if M1 leaves the branch open.)
 4. **M3 — cross-window state + the long-range objective** — the first milestone that can claim a capability.
