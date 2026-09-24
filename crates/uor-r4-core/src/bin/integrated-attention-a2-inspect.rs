@@ -1,4 +1,4 @@
-//! Read-only diagnosis of a loaded A2 artifact's first answer decision.
+//! Read-only diagnosis of a loaded A2 or A3 artifact's first answer decision.
 //! The 4096-token scan below is offline analysis, never a serving decoder.
 use std::collections::BTreeMap;
 use std::fs;
@@ -12,6 +12,7 @@ use uor_r4_core::native_geometric::learner::integrated_attention::{
     features,
     output::{Action, OutputTrace},
     training::{token_nll_offline, TrainingEpisode},
+    training_support::GateReadCounts,
     IntegratedModel, Session,
 };
 use uor_r4_core::report_output;
@@ -23,6 +24,8 @@ mod integrated_attention_a2_data;
 type AnyResult<T> = Result<T, Box<dyn std::error::Error>>;
 const TOKENIZER_SHA: &str = "a7ac75b68aa997fe7cc338d25d843157f2dc9d4265fb2f958ee779bb04828d6f";
 const A2_MODEL_SOURCE: &str = "3b7d2f5811337483c2276ef77e4c9fe27c6a10ba";
+const A2_CORRECTED_MODEL_SOURCE: &str = "40542ede834fe223b5575feeeeae1b46677b3801";
+const A3_MODEL_SOURCE: &str = "626421e739e9aa4572496d3d9287ace7034e7483";
 const COLON_TOKEN: u16 = 42;
 
 struct Args {
@@ -216,6 +219,70 @@ fn inspect_episode(
             .and_then(|index| candidates.get(index))
             .is_some_and(|candidate| candidate.record_id == id)
     });
+    let source_relative = source_record_id.and_then(|id| {
+        candidates
+            .iter()
+            .find(|candidate| candidate.record_id == id)
+            .map(|candidate| &candidate.relative[..model.config.lanes])
+    });
+    let source_relative_collisions = source_relative.map(|relative| {
+        candidates
+            .iter()
+            .filter(|candidate| {
+                Some(candidate.record_id) != source_record_id
+                    && &candidate.relative[..model.config.lanes] == relative
+            })
+            .count()
+    });
+    let admitted_candidates: Vec<_> = candidates
+        .iter()
+        .enumerate()
+        .map(|(index, candidate)| {
+            json!({
+                "candidate_index":index,
+                "record_id":candidate.record_id,
+                "source_event_id":candidate.source_event_id,
+                "token":candidate.token,
+                "token_text":tokenizer.decode(&[u32::from(candidate.token)]),
+                "key":&candidate.key[..model.config.lanes],
+                "relative":&candidate.relative[..model.config.lanes],
+                "energy":candidate.energy,
+                "positive_match":Some(candidate.record_id)==source_record_id,
+                "ranked":read.ranked==Some(index),
+                "selected":read.selected==Some(index)
+            })
+        })
+        .collect();
+    let ranked_candidate = read.ranked.and_then(|index| candidates.get(index));
+    let ranked_gate = ranked_candidate
+        .map(|candidate| -> AnyResult<Value> {
+            let gate_features = features(
+                &model.config,
+                actual_session.last_token,
+                &actual_session.state,
+                Some(candidate.token),
+            );
+            let ids = gate_features.as_slice();
+            let mut reads = GateReadCounts::default();
+            let score = model.read_gate.score(ids, &mut reads)?;
+            let rows: Vec<_> = ids
+                .iter()
+                .map(|&id| -> AnyResult<Value> {
+                    Ok(json!({"feature":id,"weight":model.read_gate.get_weight(id)?}))
+                })
+                .collect::<AnyResult<_>>()?;
+            Ok(json!({
+                "score":score,
+                "threshold":0,
+                "enabled":score>=0,
+                "bias":model.read_gate.bias(),
+                "features_and_weights":rows,
+                "selected_token":candidate.token,
+                "selected_record_id":candidate.record_id,
+                "coefficient_reads":reads.coefficients
+            }))
+        })
+        .transpose()?;
     let (no_read_session, _) = prefill(model, episode, false)?;
     let no_read_trace = no_read_session.read(model.runtime(), false)?;
     Ok(json!({
@@ -240,8 +307,14 @@ fn inspect_episode(
         "source_admitted":source_admitted,
         "source_ranked":source_ranked,
         "source_selected":source_selected,
+        "source_relative_collision_count":source_relative_collisions,
+        "admitted_candidates":admitted_candidates,
+        "ranked_gate":ranked_gate,
         "gate_open":read.gate_enabled,
         "actual":head_probe(model,tokenizer,&actual_session,read.selected_token(),target)?,
+        "ranked_candidate_head":ranked_candidate
+            .map(|candidate|head_probe(model,tokenizer,&actual_session,Some(candidate.token),target))
+            .transpose()?,
         "forced_source":head_probe(model,tokenizer,&actual_session,Some(source_token),target)?,
         "no_read":head_probe(model,tokenizer,&no_read_session,no_read_trace.selected_token(),target)?
     }))
@@ -304,11 +377,13 @@ fn execute(a: &Args) -> AnyResult<()> {
     if model.version != 2
         || model.config.vocabulary != 4096
         || (model.binding.source_commit != A2_MODEL_SOURCE
+            && model.binding.source_commit != A2_CORRECTED_MODEL_SOURCE
+            && model.binding.source_commit != A3_MODEL_SOURCE
             && model.binding.source_commit != inspector_source)
         || model.binding.tokenizer_sha256 != TOKENIZER_SHA
         || model.binding.training_data_blake3 != data_hash
     {
-        return Err("loaded A2 artifact source/tokenizer/data/version binding mismatch".into());
+        return Err("loaded A2/A3 artifact source/tokenizer/data/version binding mismatch".into());
     }
     let bank = address_bank_delta(&model)?;
     let correction_episodes: Vec<_> = data.dev.iter().filter(|e| e.prompt_len.is_some()).collect();
@@ -320,8 +395,8 @@ fn execute(a: &Args) -> AnyResult<()> {
         rows.push(inspect_episode(&model, &tokenizer, episode)?);
     }
     let result = json!({
-        "schema":"uor-r4.integrated-attention-a2-inspect/1",
-        "scope":"read-only loaded A2 first-answer diagnostics on 24 new and 2 inherited exposed development prompts",
+        "schema":"uor-r4.integrated-attention-a2-a3-inspect/2",
+        "scope":"read-only loaded A2/A3 first-answer diagnostics on 24 new and 2 inherited exposed development prompts",
         "model_path":a.model,
         "model_sha256":sha(&artifact_bytes),
         "model_payload_blake3":hex::encode(model.digest()),
@@ -338,7 +413,7 @@ fn execute(a: &Args) -> AnyResult<()> {
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
-            "schema":"uor-r4.integrated-attention-a2-inspect/1",
+            "schema":"uor-r4.integrated-attention-a2-a3-inspect/2",
             "model_sha256":sha(&artifact_bytes),"episodes":26,
             "address_bank_change":result["address_bank_change"]
         }))?
