@@ -71,7 +71,8 @@ fn metadata(cfg: &Campaign, mode: &str, device_name: &str) -> Result<Value> {
         json!({"schema":"uor-r4.joint-recurrent-report/1", "mode":mode,
         "source_commit":source,"executable_sha256":sha256_file(&std::env::current_exe()?)?,
         "campaign":cfg,"requested_device":device_name,
-        "cpu_backend":"candle pinned Rust gemm; optional Accelerate not enabled",
+        "cpu_accelerate_compiled":cfg!(feature="cpu-accelerate"),
+        "candle_source":"vendored0.9.2; four-line Accelerate operand slice correction; UPSTREAM.json",
         "deadline_scope":"max_process_seconds stops new updates; measured closeout allowance is budgeted separately",
         "scope":"Offline continuous recurrent-memory learner; no transformer backbone, hard integer export, geometry promotion or energy claim"}),
     )
