@@ -378,7 +378,7 @@ fn execute(a: &Args) -> AnyResult<()> {
     let mut stop_reason = "replay";
     if let Some(kind) = a.kind {
         let mut model = IntegratedModel::new(ModelConfig::pilot(4096, 4)?, kind, SEED)?;
-        model.encoder.enable_context_addressing()?;
+        model.enable_context_addressing()?;
         model.binding = ArtifactBinding {source_commit:source.to_owned(),tokenizer_sha256:TOKENIZER_SHA.into(),
             training_data_blake3:data_hash.clone(),training_seed:SEED,training_updates:0,
             credit_assignment:format!("frozen hard forward model per episode; local marginal token CE; masked delayed-context contrastive query/key; fit-only positive-source and NoRead language warmup; positive-unlabeled all-write warmup; candidate utility and source energy/read-gate credit; one-step truncated state surrogate; {:?}; epochs={}; max_updates={}",fit_config,a.epochs,a.max_updates)};

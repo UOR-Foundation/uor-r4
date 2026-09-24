@@ -18,7 +18,7 @@ const MAX_NATURAL_DEV_TOKENS_PER_SOURCE: usize = 768;
 const MAX_EPISODE_TOKENS: usize = 512;
 const MAX_FIT_TOKENS: usize = 150_000;
 const MAX_DEV_TOKENS: usize = 16_000;
-const MIN_CORRECTION_LAG: usize = 16;
+const MIN_CORRECTION_LAG: usize = 17;
 const SOURCE_SNAPSHOT: &str = "b020f34a09816ba235984cedde1c50f4c8e9cae2";
 const TOKENIZER_SHA256: &str = "a7ac75b68aa997fe7cc338d25d843157f2dc9d4265fb2f958ee779bb04828d6f";
 
@@ -468,7 +468,7 @@ fn add_world_pair(
             .ok_or_else(|| format!("correction {name}/{style}/{polarity} has no source anchor"))?;
         if prompt_len.saturating_sub(source_token) < MIN_CORRECTION_LAG {
             return Err(format!(
-                "correction {name}/{style}/{polarity} source lag below 16"
+                "correction {name}/{style}/{polarity} source lag below 17"
             ));
         }
         anchors[polarity] = aligned.ids[source_token];

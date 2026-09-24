@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use training_support::{GateReadCounts, SparseGate};
 
 const MAGIC: &[u8; 8] = b"UORIA01\0";
+const MAGIC_A2: &[u8; 8] = b"UORIA02\0";
 pub const MAX_ARTIFACT_BYTES: usize = 256 << 20;
 pub const MAX_LANES: usize = 4;
 /// A2 indexes an exact occurrence only after this much right context arrives.
@@ -199,6 +200,17 @@ impl IntegratedModel {
             digest: [0; 32],
         })
     }
+    pub fn enable_context_addressing(&mut self) -> Result<(), ModelError> {
+        if self.config.memory.event_capacity < CONTEXT_TOKENS {
+            return Err(ModelError::Configuration(
+                "context window exceeds raw history",
+            ));
+        }
+        self.encoder.enable_context_addressing()?;
+        self.version = 2;
+        self.digest = [0; 32];
+        self.validate()
+    }
     pub fn runtime(&self) -> Runtime<'_> {
         Runtime {
             config: &self.config,
@@ -215,7 +227,13 @@ impl IntegratedModel {
         self.digest
     }
     pub fn validate(&self) -> Result<(), ModelError> {
-        if self.version != 1 {
+        if self.version
+            != if self.encoder.context_addressing {
+                2
+            } else {
+                1
+            }
+        {
             return Err(ModelError::Artifact("unsupported model version"));
         }
         self.config.validate()?;
@@ -261,13 +279,16 @@ impl IntegratedModel {
             return Err(ModelError::Artifact("artifact exceeds byte bound"));
         }
         let mut bytes = Vec::with_capacity(40 + payload.len());
-        bytes.extend_from_slice(MAGIC);
+        bytes.extend_from_slice(if self.version == 2 { MAGIC_A2 } else { MAGIC });
         bytes.extend_from_slice(blake3::hash(&payload).as_bytes());
         bytes.extend_from_slice(&payload);
         Ok(bytes)
     }
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ModelError> {
-        if bytes.len() < 40 || bytes.len() > MAX_ARTIFACT_BYTES + 40 || &bytes[..8] != MAGIC {
+        if bytes.len() < 40
+            || bytes.len() > MAX_ARTIFACT_BYTES + 40
+            || (&bytes[..8] != MAGIC && &bytes[..8] != MAGIC_A2)
+        {
             return Err(ModelError::Artifact("invalid artifact envelope"));
         }
         let digest = *blake3::hash(&bytes[40..]).as_bytes();
@@ -281,6 +302,11 @@ impl IntegratedModel {
             return Err(ModelError::Artifact("trailing artifact bytes"));
         }
         model.validate()?;
+        if (model.version == 2) != (&bytes[..8] == MAGIC_A2) {
+            return Err(ModelError::Artifact(
+                "artifact envelope and schema disagree",
+            ));
+        }
         let valid_digest = |s: &str| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
         if model.binding.source_commit.is_empty()
             || model.binding.credit_assignment.is_empty()
@@ -678,16 +704,21 @@ impl Session {
             Some(id) => self.memory.raw_event(id)?.token_id,
             None => token,
         };
+        let source_token_u16 =
+            u16::try_from(source_token).map_err(|_| ModelError::InvalidToken(source_token))?;
+        if usize::from(source_token_u16) >= runtime.config.vocabulary {
+            return Err(ModelError::InvalidToken(source_token));
+        }
         let key_input = EncoderInput {
             token: self.last_token,
             previous: self.state,
-            evidence: Some(source_token as u16),
+            evidence: Some(source_token_u16),
             kind: EncoderKind::Key,
             context,
             context_len,
         };
         let key = runtime.encoder.encode(key_input)?;
-        let gate_features = features(runtime.config, source_token as u16, &self.state, None);
+        let gate_features = features(runtime.config, source_token_u16, &self.state, None);
         let mut gate_reads = GateReadCounts::default();
         let write = indexed_source.is_some()
             && runtime
@@ -697,7 +728,11 @@ impl Session {
             let source =
                 indexed_source.ok_or(ModelError::Artifact("missing indexed occurrence"))?;
             let exact = ExactKey::new(&source.to_le_bytes(), runtime.config.memory.max_key_bytes)?;
-            let payload = self.memory.raw_event(source)?.bytes().to_vec();
+            let payload = if runtime.encoder.context_addressing {
+                std::borrow::Cow::Owned(self.memory.raw_event(source)?.bytes().to_vec())
+            } else {
+                std::borrow::Cow::Borrowed(raw_bytes)
+            };
             Some(
                 self.memory
                     .write(
@@ -794,7 +829,7 @@ mod context_tests {
     fn delayed_context_commit_preserves_occurrence_and_causal_cutoff() -> Result<(), ModelError> {
         let mut model =
             IntegratedModel::new(ModelConfig::pilot(64, 4)?, AlgebraKind::Cyclic120, 17)?;
-        model.encoder.enable_context_addressing()?;
+        model.enable_context_addressing()?;
         let mut session = Session::new(model.runtime(), 91)?;
         for token in 1..=16u32 {
             let observed = session.observe(model.runtime(), token, b"x", None)?;

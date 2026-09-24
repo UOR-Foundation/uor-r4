@@ -310,7 +310,11 @@ impl JointTrainer {
     }
     pub fn export(self) -> IntegratedModel {
         IntegratedModel {
-            version: 1,
+            version: if self.encoder.model().context_addressing {
+                2
+            } else {
+                1
+            },
             config: self.config,
             binding: self.binding,
             algebra: self.algebra,
@@ -324,7 +328,11 @@ impl JointTrainer {
     }
     fn frozen_episode_model(&self) -> IntegratedModel {
         IntegratedModel {
-            version: 1,
+            version: if self.encoder.model().context_addressing {
+                2
+            } else {
+                1
+            },
             config: self.config.clone(),
             binding: self.binding.clone(),
             algebra: self.algebra.clone(),
