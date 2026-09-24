@@ -211,8 +211,11 @@ fn outputs(
     Ok(serde_json::json!(rows))
 }
 fn span_panel(m: &TlModel, w: &Words) -> serde_json::Value {
+    span_lengths(m, w, &[1, 2, 3, 5, 8])
+}
+fn span_lengths(m: &TlModel, w: &Words, lengths: &[usize]) -> serde_json::Value {
     let mut rows = Vec::new();
-    for len in [1, 2, 3, 5, 8] {
+    for &len in lengths {
         for s in 0..4 {
             for f in 0..4 {
                 let src = (0..len).map(|i| w.values[(i + s) % 4]).collect::<Vec<_>>();
@@ -237,7 +240,7 @@ fn span_panel(m: &TlModel, w: &Words) -> serde_json::Value {
             }
         }
     }
-    serde_json::json!({"correct":rows.iter().filter(|r|r["correct"]==true).count(),"total":rows.len(),"by_length":([1,2,3,5,8]).iter().map(|&n|serde_json::json!({"length":n,"correct":rows.iter().filter(|r|r["length"]==n&&r["correct"]==true).count(),"total":16})).collect::<Vec<_>>(),"rows":rows,"scope":"Forced causal span-feedback diagnostic; no permission to copy unowned values. Length5,8 excluded from fit."})
+    serde_json::json!({"correct":rows.iter().filter(|r|r["correct"]==true).count(),"total":rows.len(),"by_length":lengths.iter().map(|&n|serde_json::json!({"length":n,"correct":rows.iter().filter(|r|r["length"]==n&&r["correct"]==true).count(),"total":16})).collect::<Vec<_>>(),"rows":rows,"scope":"Forced causal span-feedback diagnostic; no permission to copy unowned values. Length5,8 excluded from fit."})
 }
 pub fn run(
     root: &Path,
@@ -262,12 +265,15 @@ pub fn run(
     if mode == "cost" {
         return execution_audit(root, parent, dev, tok);
     }
+    if mode == "integrate" {
+        return integrate(root, parent, tok, th);
+    }
     if mode == "evaluate" {
         let values = ["37", "42", "105", "208", "317", "512", "1024", "2048"].map(str::to_string);
         let out = outputs(parent, tok, &values, 1)?;
         json(root, "generated.json", &out)?;
         return Ok(
-            serde_json::json!({"panels":retained(parent,&w),"span":span_panel(parent,&w),"repository_bits":evaluate_single(parent,dev),"generated":out}),
+            serde_json::json!({"panels":retained(parent,&w),"span":span_panel(parent,&w),"fresh_span":span_lengths(parent,&w,&[13,21,34]),"repository_bits":evaluate_single(parent,dev),"generated":out}),
         );
     }
     if mode != "train" {
@@ -283,6 +289,13 @@ pub fn run(
         .map_err(|_| "steps")?;
     if !(128..=2048).contains(&total) {
         return Err("training phase bound".into());
+    }
+    let max_span: usize = std::env::var("UOR_LANGUAGE_MAX_SPAN")
+        .unwrap_or_else(|_| "3".into())
+        .parse()
+        .map_err(|_| "span length")?;
+    if !(1..=32).contains(&max_span) {
+        return Err("span fit bound".into());
     }
     let broad_dir =
         PathBuf::from("/Users/casey.allard/uor-r4-investigations/causal-20260924T000007/data");
@@ -325,7 +338,7 @@ pub fn run(
             },
         )?;
     }
-    let metadata = serde_json::json!({"parent_model":hash(&parent.to_bytes()),"old_checkpoint":hash(&old),"arm":arm,"steps":total,"old_optimizer_step":start_step,"phase_lr":[0.01,0.001],"seed":20260925u64,"fit_numbers":"0..31","validation_numbers":[32,33,34,35],"gradient_span_lengths":[1,2,3],"broad_fit":broad_meta,"broad_tune":tune_meta,"sampling":"2 repo,2 broad,4 instruction,2 legacy grounded,2 crossed span examples","source":hash(include_bytes!("language_continuation.rs"))});
+    let metadata = serde_json::json!({"parent_model":hash(&parent.to_bytes()),"old_checkpoint":hash(&old),"arm":arm,"steps":total,"old_optimizer_step":start_step,"phase_lr":[0.01,0.001],"seed":20260925u64,"fit_numbers":"0..31","validation_numbers":[32,33,34,35],"gradient_span_lengths":(1..=max_span).collect::<Vec<_>>(),"broad_fit":broad_meta,"broad_tune":tune_meta,"sampling":"2 repo,2 broad,4 instruction,2 legacy grounded,2 crossed span examples","source":hash(include_bytes!("language_continuation.rs"))});
     let mut digest = Sha256::new();
     digest.update(serde_json::to_vec(&metadata).map_err(|e| e.to_string())?);
     for win in repo {
@@ -389,7 +402,7 @@ pub fn run(
             feedback.push(None);
         }
         for _ in 0..2 {
-            let len = 1 + next(&mut cursor.rng_state) as usize % 3;
+            let len = 1 + next(&mut cursor.rng_state) as usize % max_span;
             let src = (0..len)
                 .map(|_| w.values[next(&mut cursor.rng_state) as usize % 4])
                 .collect::<Vec<_>>();
@@ -523,4 +536,147 @@ mod tests {
             assert_eq!(ht::apply(a, ht::apply(inverse(a), q).unwrap()).unwrap(), q);
         }
     }
+}
+fn integrate(
+    root: &Path,
+    m: &TlModel,
+    tok: &HfBpeTokenizer,
+    th: [u8; 32],
+) -> Result<serde_json::Value, String> {
+    let path = PathBuf::from(
+        std::env::var("UOR_LANGUAGE_SELECTOR").map_err(|_| "selector path required")?,
+    );
+    let parent = path.parent().ok_or("selector root")?;
+    let errors = verify(parent).map_err(|e| e.to_string())?;
+    if !errors.is_empty() {
+        return Err("selector report is not sealed and intact".into());
+    }
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let selector = lt::LanguageTransport::from_bytes(&bytes, th)?;
+    write_checked(root, "selector.lqt", &bytes)?;
+    write_checked(root, "model.tlx", &m.to_bytes())?;
+    let exec = fast::Execution::compile(m)?;
+    let mut work = exec.workspace();
+    let mut tokens = vec![0; 128];
+    let mut acts = vec![TlAction::Stop; 128];
+    let values = ["37", "42", "105", "208", "317", "512", "1024", "2048"];
+    let mut rows = Vec::new();
+    let mut missing = 0;
+    let mut absent = 0;
+    let mut ordinary_equal = 0;
+    for world in 0..8 {
+        let owner = 1000 + world as u64;
+        for role in 0..4 {
+            let ex = geom_example(tok, role, 3, 301 + world as u64)?;
+            let shift = (301 + world) % 4;
+            let keys = ex
+                .keys
+                .iter()
+                .enumerate()
+                .map(|(i, &vector)| lt::OwnedKey {
+                    owner,
+                    occurrence: owner * 16 + i as u64,
+                    vector,
+                })
+                .collect::<Vec<_>>();
+            let selected = selector.select_owned(&ex.tokens, ex.query, owner, &keys)?;
+            let a = selector.action(&ex.tokens)?;
+            let mat: Vec<[i32; 4]> = (0..4)
+                .map(|c| {
+                    let mut e = [0; 4];
+                    e[c] = 1;
+                    ht::apply(a, e)
+                })
+                .collect::<Result<_, _>>()?;
+            let mut ordinary = 0;
+            let mut distance = i64::MAX;
+            for (i, key) in keys.iter().enumerate() {
+                let v: Vec<i64> = (0..4)
+                    .map(|r| {
+                        (0..4)
+                            .map(|c| i64::from(mat[c][r]) * i64::from(key.vector[c]))
+                            .sum()
+                    })
+                    .collect();
+                let d = v
+                    .iter()
+                    .zip(ex.query)
+                    .map(|(a, b)| (a - i64::from(b)).abs())
+                    .sum();
+                if d < distance {
+                    distance = d;
+                    ordinary = i;
+                }
+            }
+            ordinary_equal += usize::from(ordinary == selected);
+            let filtered = keys
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != ex.target)
+                .map(|(_, k)| *k)
+                .collect::<Vec<_>>();
+            missing += usize::from(
+                selector
+                    .select_owned(&ex.tokens, ex.query, owner, &filtered)
+                    .is_err(),
+            );
+            absent += usize::from(
+                selector
+                    .select_owned(&ex.tokens, ex.query, owner + 99, &keys)
+                    .is_err(),
+            );
+            for rust in [false, true] {
+                let index = (selected + shift) % 4;
+                let value = values[(world + index) % values.len()];
+                let target = values[(world + role) % values.len()];
+                let ins = instruction(tok, value, rust, 1);
+                let expected = instruction(tok, target, rust, 1);
+                let out = exec.run(
+                    &ins.sel,
+                    &[],
+                    ins.facts,
+                    &ins.observed,
+                    &ins.sel,
+                    false,
+                    false,
+                    &mut work,
+                    &mut tokens,
+                    &mut acts,
+                )?;
+                let actual_text = tok.decode(&tokens[..out.tokens]);
+                let native = m.rollout(
+                    &ins.sel,
+                    &[],
+                    ins.facts,
+                    &ins.observed,
+                    &ins.sel,
+                    128,
+                    false,
+                    false,
+                );
+                if native.tokens != tokens[..out.tokens] || native.actions != acts[..out.actions] {
+                    return Err("integrated native/compiled mismatch".into());
+                }
+                let altered_value = values[(world + index + 3) % values.len()];
+                let alt = instruction(tok, altered_value, rust, 1);
+                let changed = exec.run(
+                    &alt.sel,
+                    &[],
+                    alt.facts,
+                    &alt.observed,
+                    &alt.sel,
+                    false,
+                    false,
+                    &mut work,
+                    &mut tokens,
+                    &mut acts,
+                )?;
+                let altered_text = tok.decode(&tokens[..changed.tokens]);
+                rows.push(serde_json::json!({"world":world,"owner":owner,"role":ROLES[role],"kind":if rust{"rust"}else{"echo"},"source_index":selected,"expected_source_index":ex.target,"source_occurrence":keys[selected].occurrence,"query":tok.decode(&ex.tokens),"value":value,"expected_value":target,"text":actual_text,"actions":native.actions.iter().map(action_name).collect::<Vec<_>>(),"correct":selected==ex.target&&native.actions==expected.actions,"stopped":out.stopped,"changed_source_value":altered_value,"changed_text":altered_text,"changed_correct":acts[..changed.actions]==alt.actions}));
+            }
+        }
+    }
+    let report = serde_json::json!({"requests":rows.len(),"correct":rows.iter().filter(|r|r["correct"]==true).count(),"changed_source_correct":rows.iter().filter(|r|r["changed_correct"]==true).count(),"missing_relation_rejected":missing,"absent_owner_rejected":absent,"equivalent_explicit_signed_matrix_selection_agreements":ordinary_equal,"source_selection_requests":32,"selector_sha256":hash(&bytes),"model_sha256":hash(&m.to_bytes()),"rows":rows,"scope":"Finite learned role phrases and typed vector/owner inputs; response syntax generated by the loaded native model. No response renderer, no semantic owner parser, no general coding or geometric-superiority claim."});
+    json(root, "integrated-generated.json", &report)?;
+    Ok(report)
 }

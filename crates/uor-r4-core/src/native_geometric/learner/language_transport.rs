@@ -158,7 +158,7 @@ impl LanguageTransport {
         owner: u64,
         keys: &[OwnedKey],
     ) -> Result<usize, String> {
-        if keys.is_empty() || keys.len() > 1024 {
+        if action >= 8 || keys.is_empty() || keys.len() > 1024 {
             return Err("candidate bounds".into());
         }
         let mut choice = None;
@@ -179,6 +179,9 @@ impl LanguageTransport {
         }
         if tie {
             return Err("ambiguous owned source".into());
+        }
+        if choice.is_some() && nearest != 0 {
+            return Err("requested owned relation absent".into());
         }
         choice.ok_or_else(|| "requested owner absent".into())
     }
@@ -298,4 +301,16 @@ mod tests {
         assert!(m.action(&[128]).is_err());
         assert!(m.action(&[110]).is_err());
     }
+}
+
+#[cfg(test)]
+#[test]
+fn missing_owned_relation_does_not_select_an_approximate_neighbour() {
+    let key = OwnedKey {
+        owner: 1,
+        occurrence: 9,
+        vector: [1, 2, 4, 8],
+    };
+    let query = ht::apply(2, key.vector).unwrap();
+    assert!(LanguageTransport::select_action(0, query, 1, &[key]).is_err());
 }

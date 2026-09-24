@@ -61,6 +61,7 @@ pub struct Execution {
     wf: Map,
     wo: Map,
     rotations: [usize; TL_CONTENT_POSITIONS],
+    embedding_bases: Vec<usize>,
 }
 pub struct Workspace {
     pub state: Vec<i32>,
@@ -68,7 +69,7 @@ pub struct Workspace {
     pub facts: [i32; TL_F_DIM],
     pub logits: Vec<i32>,
     next: Vec<i32>,
-    offsets: Vec<i32>,
+    offsets: [Vec<i32>; TL_EVENTS],
     scratch: Vec<i32>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,6 +94,7 @@ impl Execution {
             wf: Map::compile(&model.wf),
             wo: Map::compile(&model.wo),
             rotations: std::array::from_fn(|p| (p * band) % half),
+            embedding_bases: (0..model.e.rows).map(|r| r * model.h_dim).collect(),
         })
     }
     pub fn workspace(&self) -> Workspace {
@@ -103,12 +105,19 @@ impl Execution {
             facts: [0; TL_F_DIM],
             logits: vec![0; self.model.vocab + 2],
             next: vec![0; h],
-            offsets: vec![0; h * TL_EVENTS],
+            offsets: std::array::from_fn(|_| vec![0; h]),
             scratch: vec![0; 2 * h + TL_F_DIM + TL_EVENTS],
         }
     }
     pub fn logical_plan_bytes(&self) -> usize {
-        self.wi.bytes() + self.wh.bytes() + self.wf.bytes() + self.wo.bytes()
+        self.wi.bytes()
+            + self.wh.bytes()
+            + self.wf.bytes()
+            + self.wo.bytes()
+            + self.embedding_bases.len() * std::mem::size_of::<usize>()
+    }
+    fn embedding(&self, row: usize, col: usize) -> i32 {
+        i32::from(self.model.e.codes[self.embedding_bases[row] + col]) << self.model.e.shift[row]
     }
     pub fn source(&self) -> &TlModel {
         &self.model
@@ -119,7 +128,7 @@ impl Execution {
             || w.meaning.len() != h
             || w.logits.len() != self.model.vocab + 2
             || w.next.len() != h
-            || w.offsets.len() != h * TL_EVENTS
+            || w.offsets.iter().any(|r| r.len() != h)
             || w.scratch.len() != 2 * h + TL_F_DIM + TL_EVENTS
         {
             return Err("foreign execution workspace".into());
@@ -166,7 +175,7 @@ impl Execution {
                 let k = self.rotations[p];
                 for c in 0..half {
                     let j = c + k;
-                    w.meaning[off + if j >= half { j - half } else { j }] += m.e.value(row, c);
+                    w.meaning[off + if j >= half { j - half } else { j }] += self.embedding(row, c);
                 }
             }
         }
@@ -207,7 +216,7 @@ impl Execution {
         for event in 0..TL_EVENTS {
             w.scratch[h + TL_F_DIM..h + TL_F_DIM + TL_EVENTS].fill(0);
             w.scratch[h + TL_F_DIM + event] = 1;
-            let dst = &mut w.offsets[event * h..(event + 1) * h];
+            let dst = &mut w.offsets[event];
             self.wf.apply(&w.scratch[..h + TL_F_DIM + TL_EVENTS], dst)?;
             for (x, &b) in dst.iter_mut().zip(&m.bh) {
                 *x = x.checked_add(b).ok_or("event offset overflow")?;
@@ -249,9 +258,9 @@ impl Execution {
         let row = token.map(|t| m.token_row(t)).unwrap_or(m.vocab);
         self.wh.apply(&w.state, &mut w.next)?;
         for (r, x) in w.next.iter_mut().enumerate() {
-            let v = i64::from(m.e.value(row, r))
+            let v = i64::from(self.embedding(row, r))
                 + i64::from(*x >> m.recurrent_shift)
-                + i64::from(w.offsets[event * m.h_dim + r]);
+                + i64::from(w.offsets[event][r]);
             *x = i32::try_from(v)
                 .map_err(|_| "state addition overflow")?
                 .clamp(-m.h_clamp, m.h_clamp);
