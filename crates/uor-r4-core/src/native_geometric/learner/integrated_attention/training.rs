@@ -473,7 +473,10 @@ impl JointTrainer {
                     // discriminating consequence. Requiring the same record
                     // on every later name/punctuation token would turn a
                     // grounding hint into false repeated-read supervision.
-                    let address_step = episode.prompt_len.map_or(true, |p| position == p);
+                    // Natural equal-bigram pointers were chosen using the eventual target.
+                    // They are useful head/copy hints, but do not identify a source
+                    // from the query. Only grounded first decisions supervise addresses.
+                    let address_step = episode.prompt_len.is_some_and(|p| position == p);
                     if address_step {
                         if let (Some(_), Some(positive_input), Some(source_key)) =
                             (source.record_id, source.key_input, source.key)
