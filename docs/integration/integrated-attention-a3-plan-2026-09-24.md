@@ -2,6 +2,8 @@
 
 September 24, 2026. References #973 and #820. Continues D7 Milestone A and open PR #1387.
 
+**Executed:** the [A3 result](integrated-attention-a3-result-2026-09-24.md) reports actual integer admission progress (1→17/24), failed selection/complete language, retained regressions and the next coupled candidate-or-NoRead decision. The text below remains the prospective protocol; it is not a second current-state authority.
+
 ## Authority and observed failure
 
 The owner directed continuation of the [A2 recommendation](integrated-attention-a2-result-2026-09-24.md#next-make-hard-admission-learn-in-the-integrated-model). Refreshed main remains the protected A1/programme delivery `b020f34a`; A2 head `d235fb60` is on open PR #1387. Extend that PR from its clean isolated worktree and preserve the A2 source-bound artifacts.

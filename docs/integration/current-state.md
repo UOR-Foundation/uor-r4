@@ -5,7 +5,21 @@
 > under #973/#820. D0-b and D4–D6 retain their arithmetic, geometry-evidence, sparse-access and long-range-objective
 > constraints. Earlier isolated-gate sequencing is superseded; prior results retain their exact scope.
 
-## Active: A2 contextual attention fitted and replayed; hard admission is the next learning boundary
+## Active: A3 integer routing improves admission; coupled evidence use and realization are next
+
+The [A3 continuation](integrated-attention-a3-result-2026-09-24.md) executes A2's recommended hard-routing change inside the same integrated native model. Both matched C120/2I fits complete eight epochs and 1,124,776 tokens, then export/reload and independently replay. Model source is `626421e7`; open protected [PR #1387](https://github.com/UOR-Foundation/uor-r4/pull/1387) now carries A2 and A3. Protected main remains the adopted programme/A1 delivery `b020f34a`; #973/#820 remain open.
+
+**Measured partial progress:** 174 exported integer coarse coefficients change; actual fit admission rises 6→167/192 and new development first-decision admission 1→17/24. Both loaded arms rank the correct source first on 2/24 and select it on 0/24; complete correct read-enabled answers remain **0/12**. Read-enabled bits/token is **6.929851 / 6.909304**, worse than corrected A2 by **+0.074974 / +0.111179**. Inherited answer-position admission gains three rows and loses two. Both full outputs and row-by-row regressions are retained in the [evidence](../evidence/integrated-attention-a3-result-2026-09-24.json). A3 is not the default model or a language/geometry qualification.
+
+The coarse bank remains concentrated in broad pages and the fine bank has zero net integer changes after joint fitting. Of 17 admitted positives, 15 have unique relative codes per arm; two collide. Exact inspection shows correctly ranked sources rejected by negative integer gate scores. Forced correct evidence improves first-token NLL but yields the target as vocabulary MAP on only 6/24 C120 and 2/24 2I, and the actual bounded greedy path on 1/24 and 0/24. Thus selection and output learning both remain unresolved. The 56 generated rows and complete evaluation/source/routing files reproduce in separate processes; this is reproducibility of a failed capability result.
+
+**Next within Milestone A:** learn one bounded **candidate-or-NoRead action**, coupling integer fine-code/relative-energy decisions to source-conditioned output utility and training the same language head. Use actual admitted candidates, provenance labels only offline, the same causal information/cost in both arms, and explicit balance between grounded consequences and natural text. Require a loaded changed-source effect on an appropriate uncopied token and improved complete answers; record every retained regression. If identity collisions block learning, reuse observed ordered span/role/version descriptors; if correct selection operates but output remains degenerate, shift work to evidence-to-output learning and bounded decoding. The [A3 result](integrated-attention-a3-result-2026-09-24.md#next-a-single-evidence-use-decision-coupled-to-realization) specifies the decision conditions. No new final draw or A4 fit has been run.
+
+31 focused checks, two optimized builds, two fits, two independent replays and two read-only loaded inspections executed. The [prospective budget](../evidence/integrated-attention-a3-budget-2026-09-24.json) and [cycle closeout](../evidence/integrated-attention-a3-closeout-2026-09-24.json) retain cumulative local costs, storage and scope. No paid compute or deletion was used. The known saturated-page/ring-eviction snapshot defect remains open before persistent-session qualification.
+
+---
+
+## Previous: A2 contextual attention fitted and replayed; hard admission was the next learning boundary
 
 Owner-requested PR [#1386](https://github.com/UOR-Foundation/uor-r4/pull/1386) is merged through the protected queue at main `b020f34a09816ba235984cedde1c50f4c8e9cae2`, with exact reviewed-tree equality. The incorporated #1380–#1385 PRs are closed with provenance. The complete programme is now on main; #973/#820 remain open.
 
