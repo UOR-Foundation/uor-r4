@@ -1,5 +1,13 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
+## Principal investigation — integrated attention-language proposal, September 24 UTC
+
+The owner requested a whole-project principal investigation and a complete route to geometric attention, exact input history and useful language. The [consolidated programme](principal-attention-plan-2026-09-24.md) joins an independent mathematics review, a computer-science/frontier literature review and an engineering/development review across current and dormant mechanisms. It preserves D0-b and D4–D6; it is a proposed implementation programme, not a new owner policy decision or model result.
+
+**Recommended next milestone: one integrated attention-language artifact.** Jointly build and train exact event capture plus learned semantic memory, contextual product-code admission, a mutable relative-frame energy, shared sparse geometric state operators and a normalized sparse Generate/Copy/Stop output. Develop a matched ordinary sparse arm at the same time. The existing RNN and rejected metadata gate remain controls/evidence. Acceptance is complete loaded language/memory/code behavior, source causality and measured parameter access; focused correctness checks support that endpoint. Do not resume tuning the exposed metadata gate or promote another isolated authored fixture.
+
+The proposal's Milestone A consolidates the remaining M1 learning/integration work and designs the later D5 execution constraint in from the start. Milestones B–E cover compositional sessions, quality scaling, complete-path laptop qualification and replacement claims by useful workload. Numerical effect thresholds and complete training/storage projections must be frozen before a new final draw or training launch. The historical ordering and results below remain intact for provenance; current investigation recommendations are in the linked synthesis and [current state](current-state.md).
+
 ## Adopted direction — 2026-09-24 (owner decision)
 
 The owner adopted the independent three-reviewer reassessment of [repo-review-direction-2026-09-23.md](repo-review-direction-2026-09-23.md).

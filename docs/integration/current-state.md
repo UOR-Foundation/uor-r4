@@ -7,11 +7,21 @@
 > Record: [direction-decision-2026-09-24.md](direction-decision-2026-09-24.md) · owner entries D4–D6 in
 > [DECISIONS.md](DECISIONS.md). The component results below retain their exact scope.
 
-## Active: loaded native sparse-read gate fails admission, September 24 UTC
+## Latest: whole-project principal investigation and integrated model proposal, September 24 UTC
+
+The [principal synthesis](principal-attention-plan-2026-09-24.md) reviews the history, current and dormant mechanisms, source paths and current primary literature with independent [mathematics](principal-attention-mathematics-2026-09-24.md), [computer-science](principal-attention-computer-science-2026-09-24.md) and [engineering](principal-attention-engineering-2026-09-24.md) reports plus cross-review. **No model was trained or replayed for this review.** The latest executed model result remains the failed loaded sparse-read gate below; source checkpoint `3101c060` and PRs #1380–#1384 were unmerged at review time, distinct from refreshed protected main `552d847d`.
+
+**Recommended next:** implement one jointly learned sparse memory-language model: exact event tape, learned product-geometric keys/admission, mutable relative-frame energy, shared selected state operators and sparse normalized Generate/Copy/Stop. Train a competent ordinary counterpart alongside it. Exact retention, learned retrieval and appropriate uncopied generation are separate obligations inside one artifact. Complete prose/memory/code tasks and full-path access costs are the decision endpoints. This planning proposal preserves current owner policy and prior negative evidence; it is not geometric advantage, general language or energy qualification.
+
+The full proposal includes parameter/optimizer/checkpoint sizing before any training: current disk headroom above the protected reserve is small, and packed model bytes substantially understate training storage. The [review packet](principal-attention-review-packet-2026-09-24.md) owns this investigation's resource and validation closeout. No implementation run is launched by this documentation change.
+
+---
+
+## Latest executed model result: loaded native sparse-read gate fails admission, September 24 UTC
 
 The [frozen loaded integration](native-sparse-read-result-2026-09-24.md) joins a causal bounded exact-pair store and a fitted/reloaded four-bit source gate to the unchanged `TlModel` sequence path. On two new public-domain prose sources the teacher-forced top-one counts are **NoRead 84 / ordinary recent 323 / learned gate 319 / count 115** out of 2,032; on two separate Rust modules they are **193 / 675 / 674 / 409** out of 2,032. The gate reads on 1,498 of 1,504 recent hits, chooses an older different source six times and corrects one recent-source error. It **fails the predeclared gate** on both families and is not promoted. Four source-only edits change copied first-token output while NoRead stays fixed, but **0/8 actual eight-token generated continuations are fully correct**. The selected prose openings include contents and headings. A selected copy skips the dense vocabulary head for that step; the native transition remains dense and whole-path D5/energy are unqualified. Evidence: sealed `final1` under `/Users/casey.allard/uor-r4-investigations/native-sparse-read-20260924/`.
 
-**Next:** freeze a source-disjoint, at-chance-order-2 long-range text/code panel and train content/role-dependent query-to-address and write/read decisions in the same native path, with exact typed memory, unchanged-source/read-disabled controls and a matched ordinary router. Require changed-source effects on an *uncopied* generated token and count per-token learned-parameter access before testing an equal-cost Hamiltonian/H4 parameterisation. Do not tune this gate on its exposed Dev sources or return to authored copy fixtures.
+**Result-specific next, consolidated by the principal proposal above:** freeze source-disjoint long-range memory episodes with a verified at-chance-order-2 controlled panel and companion natural prose/code. Train content/role-dependent query-to-address and write/read decisions in the same native path, with exact typed memory, unchanged-source/read-disabled controls and a matched ordinary router. Require changed-source effects on an *uncopied* generated token and count per-token learned-parameter access. The new proposal co-develops the equal-cost geometric parameterisation and ordinary arm from the start, retaining a separate promotion criterion. Do not tune this gate on its exposed Dev sources or return to authored copy fixtures.
 
 ---
 
