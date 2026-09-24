@@ -94,6 +94,7 @@ fn head_probe(
             token_nll_offline(&model.output, features, selected, token)?,
         ));
     }
+    let surface_probability_sum: f64 = top.iter().map(|(_, nll)| (-nll).exp()).sum();
     top.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
     let best = top.first().ok_or("empty vocabulary")?;
     let top_four: Vec<_> = top
@@ -130,6 +131,8 @@ fn head_probe(
         "target_surface_nll_nats":token_nll_offline(&model.output,features,selected,target)?,
         "stop_action_nll_nats":stop_nll,
         "stop_probability":(-stop_nll).exp(),
+        "surface_probability_sum":surface_probability_sum,
+        "stop_plus_surface_probability_sum":(-stop_nll).exp()+surface_probability_sum,
         "copy_action_nll_nats":copy.as_ref().map(OutputTrace::action_ce_offline),
         "copy_probability":copy.as_ref().map(|v|(-v.action_ce_offline()).exp()),
         "surface_map_token":best.0,
@@ -184,6 +187,9 @@ fn inspect_episode(
         .transpose()?;
     let source_coarse = source_code.as_ref().map(|code| code.as_slice()[0]);
     let lane = model.encoder.score_lane(read.input, 0)?;
+    if lane.best != read.query[0] {
+        return Err("query lane score disagrees with served coarse code".into());
+    }
     let mut coarse_order: Vec<_> = (0..120usize).collect();
     coarse_order.sort_by(|&a, &b| lane.scores[b].cmp(&lane.scores[a]).then_with(|| a.cmp(&b)));
     let positive_rank = source_coarse.and_then(|code| {
