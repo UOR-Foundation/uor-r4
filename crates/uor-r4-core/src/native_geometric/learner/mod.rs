@@ -3,6 +3,7 @@
 //! Continuous offline training using Adam, gradients, and JEPA latent state prediction.
 //! Discrete table export for zero-GEMM, zero-runtime-float, zero-heap-allocation inference.
 
+pub mod addressed_lexical_bridge;
 pub mod binary_model;
 pub mod chat;
 pub mod cold_prior;

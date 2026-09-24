@@ -30,9 +30,13 @@ serving invariant** (D5) and the current served path is recorded as dense/non-co
      rejected tested hard-objective recipes. A [matched C8/Q8 residual pilot](kvar-relative-energy-result-2026-09-24.md)
      failed its pre-declared two-seed geometry gate and did not improve `(c)`; it does **not** replace the original
      full `(f)` equal-cost ordinary gated memory or `(h)` end-to-end geometric parameterisation, both `NOT_RUN`.
-     Carry the accepted addressed-memory mechanism into native language generation with changed-source/read-disabled
-     controls, then require a prospectively specified full comparator on a panel where frame transport is identifiable
-     before any geometric advantage claim.
+     The [explicit-address lexical bridge](addressed-lexical-bridge-result-2026-09-24.md) now passes selected owned
+     memory records to loaded native generation and witnesses changed copied output under same-structure source
+     substitutions, independent reload and read-disabled/scope/history controls. This is an interface result:
+     neither KVAR's fitted gate nor learned text-to-address/write/read policy is integrated, and uncopied wording is
+     insensitive to the changed payload. Next learn those source/admission decisions and an uncopied lexical effect
+     on the same native path with retained controls. Require a prospectively specified full `(f)/(h)` comparator on
+     a panel where frame transport is identifiable before any geometric advantage claim.
 3. **M2 — one-variable gate + capacity ablation, crossed with corpus**, endpointed on the M1 probe, `repository_bits`
    a `+0.05` guard only. (Only if M1 leaves the branch open.)
 4. **M3 — cross-window state + the long-range objective** — the first milestone that can claim a capability.

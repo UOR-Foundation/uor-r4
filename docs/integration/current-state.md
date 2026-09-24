@@ -7,11 +7,19 @@
 > Record: [direction-decision-2026-09-24.md](direction-decision-2026-09-24.md) · owner entries D4–D6 in
 > [DECISIONS.md](DECISIONS.md). The component results below retain their exact scope.
 
-## Active: KVAR relative-energy pilot negative; addressed memory remains the lever, September 24 UTC
+## Active: explicit addressed-memory generation bridge, September 24 UTC
+
+The [pre-registered integration](addressed-lexical-bridge-result-2026-09-24.md) now passes an exact, typed scoped/versioned memory read into the **loaded** native `TlModel` Generate/Copy/Stop path. In the authoritative sealed `final4`/independent `replay4` panel, all **24 rows** agree across process and binary-memory reload; current/pinned/previous selection, read-disabled, unrelated edit, absent, evicted, no-history and wrong-scope controls pass. In two familiar single-token pairs, changing only the selected stored payload changes actual copied output (` green now` versus ` north now`; ` summer now` versus ` red now`). This witnesses explicit-address owned copying through the decoder. The uncopied `now` stays fixed; the unchanged ordinary-prose continuation remains degenerate. Writes, addresses and read permission are caller-supplied, KVAR's fitted gate is not transplanted, and the decoder still inspects **153,052** nonzero parameter slots per step. No learned natural-language request binding, semantic generalization, D5 sparse serving, geometric advantage, general prose, coding or energy result follows.
+
+**Next:** on this same native path, learn source admission and request-to-address/read/write decisions from observed text, with a fixed-flags same-structure intervention that changes an *uncopied* word after loaded generation. Keep the exact-memory, read-disabled, wrong-scope, absent/evicted and prior lexical/prose controls. A full ordinary `(f)` versus geometric `(h)` comparison remains `NOT_RUN` and needs its own prospective identifiable frame task.
+
+---
+
+## Previous: KVAR relative-energy pilot negative; addressed memory remains the lever, September 24 UTC
 
 The [pre-registered matched residual pilot](kvar-relative-energy-result-2026-09-24.md) held each quantized `(c)` base fixed and compared ordinary C8 versus exact Q8 query/value read energies at equal residual parameter/access cost, with transport-off and kernel-off. On fresh seed-group-4 KVAR, controls were valid (count 2/204; overwrite 204/204), but the Q8 geometry gate **failed**: Q8 minus ordinary was **−0.1337 bits/query [−0.3708,+0.0980]** for seed 1 and **0 [0,0]** for seed 2, short of the frozen ≥0.5-bit margin and two-seed transport criterion. Seed 1's unmodified `(c)` was better than either residual; seed 2 learned a zero kernel. The retained sealed root is `/Users/casey.allard/uor-r4-investigations/kvar-relative-20260924/final1`. This retires only the query/value residual on random-pair KVAR. The original full ordinary `(f)` and end-to-end geometric `(h)` arms remain `NOT_RUN`; no geometric-attention, language or energy result follows. The base still inspects 8,771 parameter slots per token.
 
-**Next:** integrate the retained addressed memory into native language generation, with loaded-artifact changed-source/read-disabled controls and retained lexical/prose checks. Specify any later full `(f)/(h)` or frame-structured geometry comparison prospectively; do not count the residual pilot as that gate.
+**Then next:** integrate the retained addressed memory into native language generation, with loaded-artifact changed-source/read-disabled controls and retained lexical/prose checks. That explicit-address bridge is reported above. Specify any later full `(f)/(h)` or frame-structured geometry comparison prospectively; do not count the residual pilot as that gate.
 
 ---
 
