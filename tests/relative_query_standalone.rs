@@ -156,7 +156,10 @@ fn relation_labels_are_resolved_through_the_learned_map() {
         for &key in &keys {
             assert_eq!(p.act(key), m.act(path, key));
         }
-        assert_eq!(p.select([9, 2, -8, 1], &keys), sequential(&m, path, [9, 2, -8, 1], &keys));
+        assert_eq!(
+            p.select([9, 2, -8, 1], &keys),
+            sequential(&m, path, [9, 2, -8, 1], &keys)
+        );
     }
 }
 
@@ -217,7 +220,10 @@ fn valid_compilation_and_both_selection_interfaces_allocate_nothing() {
     let keys = [[3, 7, -8, 11], [0; 4], [-9, 2, 5, 1]];
     let (result, calls) = allocation_census::measure(|| {
         let plan = CompiledRelativePath::compile(&m, &path)?;
-        Ok::<_, String>((plan.select([1, 2, 3, 4], &keys)?, m.select(&path, [1, 2, 3, 4], &keys)?))
+        Ok::<_, String>((
+            plan.select([1, 2, 3, 4], &keys)?,
+            m.select(&path, [1, 2, 3, 4], &keys)?,
+        ))
     });
     let (a, b) = result.unwrap();
     assert_eq!(a, b);
@@ -225,11 +231,12 @@ fn valid_compilation_and_both_selection_interfaces_allocate_nothing() {
     println!("SUCCESS_PATH_ALLOCATIONS={calls}");
 }
 
-#[test]
-fn measured_cpu_cost_is_reported_without_a_timing_pass_threshold() {
+fn measured_case(path_length: usize, candidate_count: i32) {
     let m = model();
-    let path: Vec<_> = (0..32).map(|i| (i * 5 + 2) % 8).collect();
-    let keys: Vec<_> = (0..256i32).map(|i| [i, 2 * i - 31, 3 - i, i % 7]).collect();
+    let path: Vec<_> = (0..path_length).map(|i| (i * 5 + 2) % 8).collect();
+    let keys: Vec<_> = (0..candidate_count)
+        .map(|i| [i, 2 * i - 31, 3 - i, i % 7])
+        .collect();
     let plan = CompiledRelativePath::compile(&m, &path).unwrap();
     let mut timing = [Vec::new(), Vec::new(), Vec::new()];
     let mut checksum = [0usize; 3];
@@ -254,5 +261,14 @@ fn measured_cpu_cost_is_reported_without_a_timing_pass_threshold() {
     for t in &mut timing {
         t.sort_unstable();
     }
-    println!("CPU_NS_PER_QUERY sequential={} integrated={} prepared={} candidates=256 path_length=32 rounds=11", timing[0][5], timing[1][5], timing[2][5]);
+    println!("CPU_NS_PER_QUERY sequential={} integrated={} prepared={} candidates={} path_length={} rounds=11", timing[0][5], timing[1][5], timing[2][5], candidate_count, path_length);
+}
+
+#[test]
+fn measured_cpu_cost_is_reported_without_a_timing_pass_threshold() {
+    for path_length in [0, 1, 6, 32] {
+        for candidate_count in [1, 16, 256] {
+            measured_case(path_length, candidate_count);
+        }
+    }
 }
