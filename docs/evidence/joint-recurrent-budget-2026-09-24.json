@@ -21,8 +21,8 @@
     "paired_training_and_evaluation": 6000,
     "delivery": 600
   },
-  "profile_optimizer_steps_max_per_arm": 12,
-  "profile_tokens_max_per_arm": 100000,
+  "profile_optimizer_steps_max_per_arm": 36,
+  "profile_tokens_max_per_arm": 400000,
   "intended_full_tokens_per_arm": 30000000,
   "full_fit_launch_gate": "Record measured full forward/backward/optimizer throughput, exact chosen graph/config/dose and projection before full fit; diagnose implementation failures within remaining budget.",
   "context_training_and_evaluation_max": 256,
@@ -45,5 +45,11 @@
   "stop_margin_bytes": 134217728,
   "resource_limits_preserve_all_previous_charges": true,
   "paid_external_compute": false,
-  "deletions_authorized": false
+  "deletions_authorized": false,
+  "profile_extension": {
+    "recorded_utc": "2026-09-24T23:22:54.453091+00:00",
+    "reason": "Initial Metal B16 complete steps take about10s (~400targets/s), incompatible with paired30M planning anchor. Permit bounded CPU/backend/batch diagnosis before freezing full campaign; reuse unchanged graph. Existing cycle/time/storage limits unchanged.",
+    "additional_profile_time_projection_seconds": 300,
+    "additional_retained_checkpoint_bytes_max": 44000000
+  }
 }

@@ -28,6 +28,8 @@ pub struct Campaign {
     pub development_every_steps: usize,
     pub development_blocks: usize,
     pub checkpoint_steps: Vec<usize>,
+    /// Deadline for starting another update, measured from process setup.
+    /// Final evaluation/checkpoint/reload needs separately budgeted closeout time.
     pub max_process_seconds: u64,
     pub trial_scope: String,
 }
@@ -69,6 +71,8 @@ fn metadata(cfg: &Campaign, mode: &str, device_name: &str) -> Result<Value> {
         json!({"schema":"uor-r4.joint-recurrent-report/1", "mode":mode,
         "source_commit":source,"executable_sha256":sha256_file(&std::env::current_exe()?)?,
         "campaign":cfg,"requested_device":device_name,
+        "cpu_accelerate_compiled":cfg!(feature="cpu-accelerate"),
+        "deadline_scope":"max_process_seconds stops new updates; measured closeout allowance is budgeted separately",
         "scope":"Offline continuous recurrent-memory learner; no transformer backbone, hard integer export, geometry promotion or energy claim"}),
     )
 }
