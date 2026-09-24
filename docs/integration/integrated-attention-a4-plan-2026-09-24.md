@@ -53,6 +53,14 @@ the matching A3 parent. Float optimizer state is reconstructed, not resumed.
 - Legacy energy is still calculated for diagnosis in A4; those reads remain in
   access accounting. No efficiency claim may omit that work.
 
+**Post-execution scope correction, September 24:** the paragraph above described
+the disabled *direct* fine-code training as a freeze of fine codes. That is too
+strong: State updates shared encoder rows used by fine Key/Query formation, and
+their causal inputs also change. Only the dedicated context-token coefficients
+and legacy energy are retained unchanged. The A4 result records this correction;
+the original source-bound reports are preserved. Neither suffix interference nor
+representation drift is isolated by these runs.
+
 ## Matched executions and decision endpoint
 
 Run C120 and binary-icosahedral (2I) A4 treatments and their own matched A3
