@@ -1,5 +1,8 @@
 //! Supervised finite relative-action learner. Exact payload identity is not a vector metric.
 use super::hamilton_transport as ht;
+#[path = "compiled_relative_query.rs"]
+mod compiled_relative_query;
+pub use compiled_relative_query::CompiledRelativePath;
 #[derive(Clone, Debug)]
 pub struct ActionExample {
     pub relation: usize,
