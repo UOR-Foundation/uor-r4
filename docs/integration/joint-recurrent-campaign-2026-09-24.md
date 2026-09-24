@@ -1,0 +1,90 @@
+# D8 rung 1: continuous recurrent memory learner
+
+Status: prospective implementation/profile protocol. References #973 and #820.
+This follows the completed [rung 0 comparison](reference-evaluator-v2.json).
+The programme remains [project-track.md](project-track.md); changing outcomes
+belong in [current-state.md](current-state.md).
+
+## Question and complete graph
+
+Can a compact recurrent model learn useful next-token prediction and causal
+memory access jointly from ordinary language, before discretizing its operators?
+This is offline floating-point Rust scaffolding for the native path. It has no
+transformer backbone. Dense affine training operators here are not a qualified
+integer serving export, a mutable Hamiltonian proof, or evidence of energy savings.
+
+The observed token and normalized prior state produce a candidate, write gate and
+four raw coordinates per R4 lane. A gated transported state produces the query.
+That query reads earlier contextual keys/values, with a learned age term and a
+NoRead option. The read then changes recurrent state; the resulting state writes
+the next key/value. A tied vocabulary head and normalized pointer mixture emit
+the next-token distribution. Targets enter only the loss, and its gradients reach
+all of these operations through the complete unroll. Exact token and occurrence
+identity remain separate from the learned compatibility score.
+
+Two arms share parameter shapes, initialization, data windows and optimization:
+left multiplication by a normalized unit quaternion, and an ordinary product of
+two Householder reflections. Four raw coordinates are retained in both arms.
+Identity-centered scales 0.1 and 0.1/sqrt(2) match local rotation magnitude; this
+does not make the families globally equivalent. Both have a radial gauge, and
+their composition families differ. Quaternion sign is retained. Finite floating
+point gives approximate norm preservation here, not exact runtime arithmetic.
+
+## Frozen decisions before learning
+
+- Vocabulary4096, width256, read width64, context256; one exploratory paired seed
+  240924. Width128 is a disclosed resource fallback, not a hidden comparison.
+- AdamW learning rate0.001, decay0.01, global gradient norm clip1; all named
+  variables must receive a finite gradient. Checkpoints retain both moments,
+  per-variable update counts, configuration and the stateless data cursor.
+- Use both retained #1014/#1017 training stores. Sample counter-seeded contiguous
+  windows uniformly over valid starts; never cross their file boundary. Train on
+  shifted language targets only. No new teacher or auxiliary selector labels.
+- First profile at batch16/context256 for12 updates, reporting full forward,
+  backward and optimizer time after two warmup steps. Freeze the full batch/dose
+  and resource projection after this measurement and before full training.
+  The planning anchor is30million target visits per arm. A resource interruption
+  preserves resumable state and is not relabeled a completed learning campaign.
+- Select among planned checkpoints using the exposed development prefix only.
+  Report the complete976block development population with the rung0 tokenizer,
+  reset and shift convention. These data are open development, not a final holdout.
+- Working-language evidence requires improved retained training likelihood,
+  loaded generation without collapse and comparison-tail NLL below the selected
+  count/cache baseline2.391786178860742. This is an engineering continuation gate,
+  not alpha or general reasoning qualification.
+- Run Enabled and whole-prefix NoRead from fresh state. A comparison-tail loss
+  increase of at least0.02nats when disabling reads is a prespecified indication
+  of useful read-path contribution; output changes alone are insufficient.
+- Preserve five historical prompt continuations with seeds2014..2018 and the
+  explicit probability-based Q32 sampler. Record all16 literal source-edit story
+  pairs in each fit attempt before model loading. These are exploratory task
+  transfer; exact noun-plus-period completion and first noun correctness are
+  separate. They do not establish general memory or diagnose every read failure.
+- One paired seed cannot promote a geometric advantage. At least three matched
+  seeds and a fresh final population follow a successful selected design.
+
+## Execution and independent review
+
+The [budget receipt](../evidence/joint-recurrent-budget-2026-09-24.json) charges
+engineering, builds, profile, training, evaluation, retries and delivery together.
+One Cargo process and one Metal training process own the laptop at a time.
+RDC launched two concurrent read-only DeepSeek sessions on the connected M1 Mac;
+this provided independent mathematics and systems reviews, not extra hardware.
+
+The systems review inspected pinned Candle0.9.2 source. Its material findings
+were full-unroll graph/stack cost, differentiable softmax requirements, Metal
+index-add layout, and measuring complete updates rather than forward throughput.
+These informed the implementation. The mathematics review confirmed the local
+scale relationship and normalized pointer mixture. Its suggestion that the
+transport families have identical global capacity or a strict set inclusion was
+not adopted: those assertions do not follow from a local norm calculation.
+
+Relevant mechanisms are supported by the original
+[Householder recurrent-network paper](https://proceedings.mlr.press/v70/mhammedi17a.html)
+and [Pointer Sentinel Mixture Models](https://arxiv.org/abs/1609.07843).
+Neither source establishes this combined architecture's language capability.
+
+Only focused causal, arithmetic, gradient and checkpoint checks precede the
+actual learning run. No expansion into unrelated test repairs is planned.
+Integer discretization, prime/zeta address admission and final serving costs
+remain subsequent rungs once joint language learning is demonstrated.
