@@ -13,7 +13,8 @@
 #![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::{Duration, Instant};
 
 pub const ENCODER_VERSION: u8 = 1;
 pub const GROUP_ORDER: usize = 120;
@@ -72,6 +73,8 @@ pub enum EncoderError {
     InvalidLearningRate,
     InvalidLoss,
     CorruptArtifact,
+    InvalidHardBatch,
+    InvalidHardConfig,
 }
 
 impl std::fmt::Display for EncoderError {
@@ -103,6 +106,96 @@ pub struct EncoderOutput {
     pub lanes: u8,
     /// Counts logical i8 learned coefficient reads; bytes equal slots here.
     pub coefficient_reads: u32,
+}
+
+/// One causal prefix in a fit-only, paired source edit. `committed_keys` are in
+/// actual commit order, not token or event order. The annotated source must
+/// already have committed before `query`; the caller establishes causality by
+/// replaying the prefix. Unlabeled keys affect page capacity only. Only the
+/// explicitly annotated wrong-entity keys are semantic negatives.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HardAddressWorld {
+    pub query: EncoderInput,
+    pub positive_index: usize,
+    pub negative_indices: Vec<usize>,
+    pub committed_keys: Vec<EncoderInput>,
+}
+
+/// Both source-value variants of one authored world. Every pair with the same
+/// `entity_group` shares a single latent coarse bucket across styles.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HardAddressPair {
+    pub entity_group: u16,
+    pub worlds: [HardAddressWorld; 2],
+}
+
+/// Explicit offline search ceilings. Page capacity must match the served
+/// memory limit. This greedy integer search has no global optimum guarantee.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct HardAddressConfig {
+    pub margin: i16,
+    pub page_capacity: usize,
+    pub max_pairs: usize,
+    pub max_keys_per_world: usize,
+    pub max_proposals: u64,
+    /// Counts latent-bucket evaluations, including the initial objective.
+    pub max_candidate_evaluations: u64,
+    pub max_accepted_edits: u64,
+    pub max_sweeps: u8,
+    pub max_duration_ms: u64,
+}
+
+impl Default for HardAddressConfig {
+    fn default() -> Self {
+        Self {
+            margin: 2,
+            page_capacity: 64,
+            max_pairs: 96,
+            max_keys_per_world: 256,
+            max_proposals: 20_000,
+            max_candidate_evaluations: 5_000_000,
+            max_accepted_edits: 4_096,
+            max_sweeps: 3,
+            max_duration_ms: 240_000,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct HardAddressSnapshot {
+    pub objective: i64,
+    pub admitted_worlds: u64,
+    pub overflow_worlds: u64,
+    pub wrong_entity_collisions: u64,
+    /// Largest requested coarse-page load across committed keys, including
+    /// keys refused after capacity. It is not physical stored posting length.
+    pub max_requested_page_load: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HardAddressStop {
+    CandidatesExhausted,
+    ProposalLimit,
+    CandidateEvaluationLimit,
+    AcceptedEditLimit,
+    DurationLimit,
+    SweepLimit,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HardAddressReport {
+    pub before: HardAddressSnapshot,
+    pub after: HardAddressSnapshot,
+    pub pairs: usize,
+    pub entity_groups: usize,
+    pub skipped_identical_negatives: u64,
+    pub proposals_evaluated: u64,
+    pub candidate_evaluations: u64,
+    pub accepted_edits: u64,
+    pub changed_address_coefficients: usize,
+    pub changed_observed_coarse_codes: usize,
+    pub elapsed_ms: u64,
+    pub stop: HardAddressStop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -539,6 +632,204 @@ fn splitmix64(value: u64) -> u64 {
     z ^ (z >> 31)
 }
 
+#[derive(Clone)]
+struct HardExample {
+    /// Only dedicated lane-zero address rows can be edited.
+    content_rows: Vec<usize>,
+    scores: [i16; GROUP_ORDER],
+    code: u8,
+    runner_up: u8,
+    group: usize,
+}
+
+struct HardWorldRef {
+    query: usize,
+    positive: usize,
+    committed: Vec<usize>,
+    negatives: Vec<usize>,
+    positive_index: usize,
+}
+
+#[derive(Clone, Copy, Default)]
+struct HardGroupOutcome {
+    objective: i64,
+    bucket: u8,
+    admitted_worlds: u64,
+    overflow_worlds: u64,
+    wrong_entity_collisions: u64,
+    max_requested_page_load: usize,
+}
+
+struct HardGroup {
+    worlds: Vec<usize>,
+    outcome: HardGroupOutcome,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct HardEdit {
+    row: usize,
+    action: usize,
+    delta: i8,
+}
+
+fn hard_best_other(example: &HardExample, excluded: usize) -> (i16, usize) {
+    let other = if usize::from(example.code) == excluded {
+        usize::from(example.runner_up)
+    } else {
+        usize::from(example.code)
+    };
+    (example.scores[other], other)
+}
+
+fn hard_group_outcome(
+    group: &HardGroup,
+    worlds: &[HardWorldRef],
+    examples: &[HardExample],
+    config: HardAddressConfig,
+) -> HardGroupOutcome {
+    // All terms below are integer functions of exported four-bit coefficients.
+    // The 128/16 constants prioritize actual page admission over a one-point
+    // margin improvement; they are declared loss weights, not a theorem.
+    const MISSED_ADMISSION_COST: i64 = 128;
+    const NEGATIVE_COLLISION_COST: i64 = 16;
+    const PAGE_OVERFLOW_COST: i64 = 128;
+    let mut common = HardGroupOutcome::default();
+    let mut counts_before = Vec::<[usize; GROUP_ORDER]>::with_capacity(group.worlds.len());
+    for &world_id in &group.worlds {
+        let world = &worlds[world_id];
+        let query_code = usize::from(examples[world.query].code);
+        let positive_code = usize::from(examples[world.positive].code);
+        let mut counts = [0usize; GROUP_ORDER];
+        let mut before = [0usize; GROUP_ORDER];
+        for (position, &key) in world.committed.iter().enumerate() {
+            if position == world.positive_index {
+                before = counts;
+            }
+            let code = usize::from(examples[key].code);
+            counts[code] += 1;
+            common.max_requested_page_load = common.max_requested_page_load.max(counts[code]);
+        }
+        common.overflow_worlds += u64::from(before[positive_code] >= config.page_capacity);
+        common.admitted_worlds +=
+            u64::from(query_code == positive_code && before[positive_code] < config.page_capacity);
+        common.wrong_entity_collisions += world
+            .negatives
+            .iter()
+            .filter(|&&negative| usize::from(examples[negative].code) == query_code)
+            .count() as u64;
+        counts_before.push(before);
+    }
+    let hard_penalty = MISSED_ADMISSION_COST
+        * (group.worlds.len() as i64 - common.admitted_worlds as i64)
+        + NEGATIVE_COLLISION_COST * common.wrong_entity_collisions as i64;
+    let mut best_cost = i64::MAX;
+    let mut best_bucket = 0u8;
+    for bucket in 0..GROUP_ORDER {
+        let mut cost = hard_penalty;
+        for (world_offset, &world_id) in group.worlds.iter().enumerate() {
+            let world = &worlds[world_id];
+            for anchor in [world.query, world.positive] {
+                let example = &examples[anchor];
+                let (other_score, _) = hard_best_other(example, bucket);
+                cost += i64::from((config.margin + other_score - example.scores[bucket]).max(0));
+            }
+            for &negative in &world.negatives {
+                let example = &examples[negative];
+                let (other_score, _) = hard_best_other(example, bucket);
+                cost += i64::from((config.margin + example.scores[bucket] - other_score).max(0));
+                cost +=
+                    NEGATIVE_COLLISION_COST * i64::from(examples[negative].code == bucket as u8);
+            }
+            let earlier = counts_before[world_offset][bucket];
+            if earlier >= config.page_capacity {
+                cost += PAGE_OVERFLOW_COST + (earlier - config.page_capacity + 1) as i64;
+            }
+        }
+        if cost < best_cost {
+            best_cost = cost;
+            best_bucket = bucket as u8;
+        }
+    }
+    HardGroupOutcome {
+        objective: best_cost,
+        bucket: best_bucket,
+        ..common
+    }
+}
+
+fn hard_snapshot(groups: &[HardGroup]) -> HardAddressSnapshot {
+    let mut snapshot = HardAddressSnapshot::default();
+    for group in groups {
+        let outcome = group.outcome;
+        snapshot.objective += outcome.objective;
+        snapshot.admitted_worlds += outcome.admitted_worlds;
+        snapshot.overflow_worlds += outcome.overflow_worlds;
+        snapshot.wrong_entity_collisions += outcome.wrong_entity_collisions;
+        snapshot.max_requested_page_load = snapshot
+            .max_requested_page_load
+            .max(outcome.max_requested_page_load);
+    }
+    snapshot
+}
+
+fn hard_candidates(
+    group: &HardGroup,
+    worlds: &[HardWorldRef],
+    examples: &[HardExample],
+) -> Vec<HardEdit> {
+    let bucket = usize::from(group.outcome.bucket);
+    let mut candidates = Vec::new();
+    let mut seen = BTreeSet::new();
+    for &world_id in &group.worlds {
+        let world = &worlds[world_id];
+        for example_id in [world.query, world.positive] {
+            let example = &examples[example_id];
+            let (_, other) = hard_best_other(example, bucket);
+            for &row in &example.content_rows {
+                for edit in [
+                    HardEdit {
+                        row,
+                        action: bucket,
+                        delta: 1,
+                    },
+                    HardEdit {
+                        row,
+                        action: other,
+                        delta: -1,
+                    },
+                ] {
+                    if seen.insert(edit) {
+                        candidates.push(edit);
+                    }
+                }
+            }
+        }
+        for &example_id in &world.negatives {
+            let example = &examples[example_id];
+            let (_, other) = hard_best_other(example, bucket);
+            for &row in &example.content_rows {
+                for edit in [
+                    HardEdit {
+                        row,
+                        action: bucket,
+                        delta: -1,
+                    },
+                    HardEdit {
+                        row,
+                        action: other,
+                        delta: 1,
+                    },
+                ] {
+                    if seen.insert(edit) {
+                        candidates.push(edit);
+                    }
+                }
+            }
+        }
+    }
+    candidates
+}
+
 /// Offline selected-row SGD. It supplies local code supervision and a one-step
 /// expected-loss surrogate; it does not perform sequence BPTT through hard
 /// decisions, memory indexing or the language head. The integrated trainer
@@ -570,6 +861,301 @@ impl EncoderTrainer {
 
     pub fn export(self) -> CodeEncoder {
         self.model
+    }
+
+    fn push_hard_example(
+        &self,
+        input: EncoderInput,
+        group: usize,
+        examples: &mut Vec<HardExample>,
+        incidence: &mut BTreeMap<usize, BTreeMap<usize, u8>>,
+    ) -> Result<usize, EncoderError> {
+        self.model.check_input(input)?;
+        let selected = self.model.selected_rows(input, 0)?;
+        let scored = self.model.score_lane(input, 0)?;
+        let index = examples.len();
+        let mut content_rows = Vec::new();
+        for &row in selected.as_slice() {
+            if row >= self.model.layout.row_count {
+                content_rows.push(row);
+                let count = incidence.entry(row).or_default().entry(index).or_default();
+                *count = count.checked_add(1).ok_or(EncoderError::InvalidHardBatch)?;
+            }
+        }
+        examples.push(HardExample {
+            content_rows,
+            scores: scored.scores,
+            code: scored.best,
+            runner_up: scored.runner_up,
+            group,
+        });
+        Ok(index)
+    }
+
+    /// Offline A3 greedy coordinate search over the *exported integer* coarse
+    /// address bank. Both worlds of every pair, and all styles with one
+    /// `entity_group`, choose one latent bucket. Only dedicated lane-zero
+    /// context-token coefficients receive bounded ±1 edits; the shared role
+    /// row, State actions and fine lanes are untouched. A proposal is accepted
+    /// only when the balanced hard batch's integer objective strictly falls.
+    /// The objective includes exact argmax admission and chronological 64-like
+    /// posting capacity, but it is a fit-only surrogate for real Session
+    /// replay; page count/eviction and downstream language still need checks.
+    /// Search is local, deterministic for a given input ordering, and bounded
+    /// by proposals, latent-bucket evaluations, accepted edits and elapsed time.
+    pub fn train_hard_address_batch(
+        &mut self,
+        pairs: &[HardAddressPair],
+        config: HardAddressConfig,
+    ) -> Result<HardAddressReport, EncoderError> {
+        if !self.model.context_addressing {
+            return Err(EncoderError::InvalidHardBatch);
+        }
+        if pairs.is_empty()
+            || pairs.len() > config.max_pairs
+            || !(1..=32).contains(&config.margin)
+            || !(1..=4096).contains(&config.page_capacity)
+            || !(1..=4096).contains(&config.max_keys_per_world)
+            || config.max_proposals == 0
+            || config.max_accepted_edits == 0
+            || !(1..=8).contains(&config.max_sweeps)
+            || config.max_duration_ms == 0
+            || config.max_candidate_evaluations == 0
+        {
+            return Err(EncoderError::InvalidHardConfig);
+        }
+        let started = Instant::now();
+        let duration = Duration::from_millis(config.max_duration_ms);
+        let mut group_ids = BTreeMap::<u16, usize>::new();
+        let mut groups = Vec::<HardGroup>::new();
+        let mut worlds = Vec::<HardWorldRef>::new();
+        let mut examples = Vec::<HardExample>::new();
+        let mut incidence = BTreeMap::<usize, BTreeMap<usize, u8>>::new();
+        let mut skipped_identical_negatives = 0u64;
+        for pair in pairs {
+            let group_id = if let Some(&id) = group_ids.get(&pair.entity_group) {
+                id
+            } else {
+                let id = groups.len();
+                group_ids.insert(pair.entity_group, id);
+                groups.push(HardGroup {
+                    worlds: Vec::new(),
+                    outcome: HardGroupOutcome::default(),
+                });
+                id
+            };
+            for world in &pair.worlds {
+                if world.query.kind != EncoderKind::Query
+                    || world.committed_keys.is_empty()
+                    || world.committed_keys.len() > config.max_keys_per_world
+                    || world.positive_index >= world.committed_keys.len()
+                    || world
+                        .committed_keys
+                        .iter()
+                        .any(|key| key.kind != EncoderKind::Key)
+                    || world.negative_indices.iter().any(|&index| {
+                        index >= world.committed_keys.len() || index == world.positive_index
+                    })
+                {
+                    return Err(EncoderError::InvalidHardBatch);
+                }
+                let query =
+                    self.push_hard_example(world.query, group_id, &mut examples, &mut incidence)?;
+                let mut committed = Vec::with_capacity(world.committed_keys.len());
+                for &key in &world.committed_keys {
+                    committed.push(self.push_hard_example(
+                        key,
+                        group_id,
+                        &mut examples,
+                        &mut incidence,
+                    )?);
+                }
+                let positive = committed[world.positive_index];
+                let mut positive_signature = examples[positive].content_rows.clone();
+                positive_signature.sort_unstable();
+                let mut negatives = Vec::new();
+                let mut seen_negatives = BTreeSet::new();
+                for &index in &world.negative_indices {
+                    if !seen_negatives.insert(index) {
+                        return Err(EncoderError::InvalidHardBatch);
+                    }
+                    let negative = committed[index];
+                    let mut signature = examples[negative].content_rows.clone();
+                    signature.sort_unstable();
+                    if signature == positive_signature {
+                        skipped_identical_negatives += 1;
+                    } else {
+                        negatives.push(negative);
+                    }
+                }
+                let world_id = worlds.len();
+                worlds.push(HardWorldRef {
+                    query,
+                    positive,
+                    committed,
+                    negatives,
+                    positive_index: world.positive_index,
+                });
+                groups[group_id].worlds.push(world_id);
+            }
+        }
+        let initial_evaluations = (groups.len() as u64)
+            .checked_mul(GROUP_ORDER as u64)
+            .ok_or(EncoderError::InvalidHardConfig)?;
+        if initial_evaluations > config.max_candidate_evaluations {
+            return Err(EncoderError::InvalidHardConfig);
+        }
+        let mut candidate_evaluations = initial_evaluations;
+        for group in &mut groups {
+            group.outcome = hard_group_outcome(group, &worlds, &examples, config);
+        }
+        let before = hard_snapshot(&groups);
+        let initial_codes: Vec<u8> = examples.iter().map(|example| example.code).collect();
+        let initial_bank = self.model.address_coefficients.clone();
+        let incidence: BTreeMap<usize, Vec<(usize, u8)>> = incidence
+            .into_iter()
+            .map(|(row, uses)| (row, uses.into_iter().collect()))
+            .collect();
+        let mut proposals_evaluated = 0u64;
+        let mut accepted_edits = 0u64;
+        let mut stop = HardAddressStop::CandidatesExhausted;
+        // Rebuild candidates after each sweep so a newly chosen shared bucket
+        // can generate a new local search direction. Every proposal and
+        // latent-code evaluation is separately capped.
+        'search: for sweep in 0..config.max_sweeps {
+            let candidates: Vec<Vec<HardEdit>> = groups
+                .iter()
+                .map(|group| hard_candidates(group, &worlds, &examples))
+                .collect();
+            let maximum = candidates.iter().map(Vec::len).max().unwrap_or(0);
+            let mut seen = BTreeSet::new();
+            let accepted_before_sweep = accepted_edits;
+            for position in 0..maximum {
+                // Round-robin prevents a proposal cap from starving later
+                // entities because of arbitrary lexical row order.
+                for group_candidates in &candidates {
+                    let Some(&edit) = group_candidates.get(position) else {
+                        continue;
+                    };
+                    if !seen.insert(edit) {
+                        continue;
+                    }
+                    if proposals_evaluated >= config.max_proposals {
+                        stop = HardAddressStop::ProposalLimit;
+                        break 'search;
+                    }
+                    if accepted_edits >= config.max_accepted_edits {
+                        stop = HardAddressStop::AcceptedEditLimit;
+                        break 'search;
+                    }
+                    if started.elapsed() >= duration {
+                        stop = HardAddressStop::DurationLimit;
+                        break 'search;
+                    }
+                    let Some(uses) = incidence.get(&edit.row) else {
+                        continue;
+                    };
+                    let mut affected = BTreeSet::new();
+                    for &(example, _) in uses {
+                        affected.insert(examples[example].group);
+                    }
+                    let required = (affected.len() as u64)
+                        .checked_mul(GROUP_ORDER as u64)
+                        .ok_or(EncoderError::InvalidHardConfig)?;
+                    if candidate_evaluations
+                        .checked_add(required)
+                        .is_none_or(|total| total > config.max_candidate_evaluations)
+                    {
+                        stop = HardAddressStop::CandidateEvaluationLimit;
+                        break 'search;
+                    }
+                    let index = (edit.row << 7) + edit.action;
+                    let old = *self
+                        .model
+                        .address_coefficients
+                        .get(index - self.model.coefficients.len())
+                        .ok_or(EncoderError::CorruptArtifact)?;
+                    let Some(new) = old.checked_add(edit.delta) else {
+                        continue;
+                    };
+                    if !(MIN_CODE..=MAX_CODE).contains(&new) {
+                        continue;
+                    }
+                    proposals_evaluated += 1;
+                    candidate_evaluations += required;
+                    let old_cost: i64 = affected
+                        .iter()
+                        .map(|&group| groups[group].outcome.objective)
+                        .sum();
+                    self.set_quantized(index, new)?;
+                    for &(example, count) in uses {
+                        let sample = &mut examples[example];
+                        sample.scores[edit.action] += i16::from(edit.delta) * i16::from(count);
+                        let ranked = rank_scores(sample.scores, 0);
+                        sample.code = ranked.best;
+                        sample.runner_up = ranked.runner_up;
+                    }
+                    let mut updated = Vec::with_capacity(affected.len());
+                    let mut new_cost = 0i64;
+                    for &group in &affected {
+                        let outcome =
+                            hard_group_outcome(&groups[group], &worlds, &examples, config);
+                        new_cost += outcome.objective;
+                        updated.push((group, outcome));
+                    }
+                    if new_cost < old_cost {
+                        for (group, outcome) in updated {
+                            groups[group].outcome = outcome;
+                        }
+                        *self
+                            .master
+                            .get_mut(index)
+                            .ok_or(EncoderError::CorruptArtifact)? = f32::from(new);
+                        accepted_edits += 1;
+                    } else {
+                        self.set_quantized(index, old)?;
+                        for &(example, count) in uses {
+                            let sample = &mut examples[example];
+                            sample.scores[edit.action] -= i16::from(edit.delta) * i16::from(count);
+                            let ranked = rank_scores(sample.scores, 0);
+                            sample.code = ranked.best;
+                            sample.runner_up = ranked.runner_up;
+                        }
+                    }
+                }
+            }
+            if accepted_edits == accepted_before_sweep {
+                break;
+            }
+            if sweep + 1 == config.max_sweeps {
+                stop = HardAddressStop::SweepLimit;
+            }
+        }
+        let changed_address_coefficients = initial_bank
+            .iter()
+            .zip(&self.model.address_coefficients)
+            .filter(|(before, after)| before != after)
+            .count();
+        let changed_observed_coarse_codes = initial_codes
+            .iter()
+            .zip(&examples)
+            .filter(|(before, after)| **before != after.code)
+            .count();
+        let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+        Ok(HardAddressReport {
+            before,
+            after: hard_snapshot(&groups),
+            pairs: pairs.len(),
+            entity_groups: groups.len(),
+            skipped_identical_negatives,
+            proposals_evaluated,
+            candidate_evaluations,
+            accepted_edits,
+            changed_address_coefficients,
+            changed_observed_coarse_codes,
+            elapsed_ms,
+            stop,
+        })
     }
 
     fn distribution(
@@ -1005,6 +1591,105 @@ mod tests {
         assert!(last < initial, "contrastive loss did not decrease");
         assert_eq!(trainer.model().encode(state_input).unwrap(), state_before);
         trainer.model().validate().unwrap();
+    }
+
+    fn hard_world(query_token: u16, positive_token: u16, negative_token: u16) -> HardAddressWorld {
+        let mut query = input(0, EncoderKind::Query);
+        query.context[0] = query_token;
+        query.context_len = 1;
+        let mut positive = input(0, EncoderKind::Key);
+        positive.context[0] = positive_token;
+        positive.context_len = 1;
+        let mut negative = input(0, EncoderKind::Key);
+        negative.context[0] = negative_token;
+        negative.context_len = 1;
+        HardAddressWorld {
+            query,
+            positive_index: 1,
+            negative_indices: vec![0],
+            committed_keys: vec![negative, positive],
+        }
+    }
+
+    #[test]
+    fn hard_address_search_edits_only_dedicated_integer_rows() {
+        let mut model = CodeEncoder::new(16, 2, 29).unwrap();
+        model.enable_context_addressing().unwrap();
+        // Deliberately collapsed address bank: the wrong entity fills the
+        // capacity-one page before the right source can be posted.
+        model.address_coefficients.fill(0);
+        let role_row = model
+            .layout
+            .row(model.layout.kind_base, EncoderKind::Key.index(), 0);
+        let role_base = role_row << 7;
+        model.coefficients[role_base..role_base + GROUP_ORDER].fill(0);
+        model.validate().unwrap();
+        let primary_before = model.coefficients.clone();
+        let state = input(4, EncoderKind::State);
+        let state_before = model.encode(state).unwrap();
+        let pair = HardAddressPair {
+            entity_group: 7,
+            worlds: [hard_world(2, 2, 3), hard_world(2, 2, 3)],
+        };
+        let mut trainer = EncoderTrainer::from_model(model).unwrap();
+        let config = HardAddressConfig {
+            page_capacity: 1,
+            max_pairs: 1,
+            max_proposals: 2_000,
+            max_candidate_evaluations: 250_000,
+            max_accepted_edits: 100,
+            max_duration_ms: 10_000,
+            ..HardAddressConfig::default()
+        };
+        let report = trainer.train_hard_address_batch(&[pair], config).unwrap();
+        assert!(report.before.objective > report.after.objective);
+        assert!(report.accepted_edits > 0);
+        assert!(report.changed_address_coefficients > 0);
+        assert!(report.after.admitted_worlds >= report.before.admitted_worlds);
+        assert!(report.candidate_evaluations <= config.max_candidate_evaluations);
+        assert_eq!(trainer.model().coefficients, primary_before);
+        assert_eq!(trainer.model().encode(state).unwrap(), state_before);
+        trainer.model().validate().unwrap();
+        // An accepted hard edit also resets its FP32 master to the exported
+        // integer, so subsequent offline updates cannot revert a hidden bin.
+        for (index, &coefficient) in trainer.model().address_coefficients.iter().enumerate() {
+            let global = primary_before.len() + index;
+            if coefficient != 0 {
+                assert_eq!(trainer.master[global], f32::from(coefficient));
+            }
+        }
+    }
+
+    #[test]
+    fn hard_address_skip_identical_negative_and_reject_invalid_batch() {
+        let mut model = CodeEncoder::new(16, 2, 31).unwrap();
+        model.enable_context_addressing().unwrap();
+        let mut trainer = EncoderTrainer::from_model(model).unwrap();
+        let pair = HardAddressPair {
+            entity_group: 0,
+            worlds: [hard_world(2, 2, 2), hard_world(2, 2, 2)],
+        };
+        let report = trainer
+            .train_hard_address_batch(
+                &[pair.clone()],
+                HardAddressConfig {
+                    max_pairs: 1,
+                    max_proposals: 12,
+                    max_candidate_evaluations: 10_000,
+                    max_accepted_edits: 12,
+                    max_duration_ms: 1_000,
+                    ..HardAddressConfig::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(report.skipped_identical_negatives, 2);
+        assert_eq!(report.before.wrong_entity_collisions, 0);
+        let mut bad = pair;
+        bad.worlds[0].positive_index = 2;
+        assert!(matches!(
+            trainer.train_hard_address_batch(&[bad], HardAddressConfig::default()),
+            Err(EncoderError::InvalidHardBatch)
+        ));
     }
 
     #[test]

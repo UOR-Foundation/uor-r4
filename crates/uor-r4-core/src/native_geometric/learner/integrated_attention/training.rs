@@ -280,6 +280,7 @@ pub struct JointTrainer {
     pub read_gate: SparseGateTrainer,
     pub write_gate: SparseGateTrainer,
     a2_head_exposures: u64,
+    coarse_address_frozen: bool,
 }
 impl JointTrainer {
     pub fn from_model(model: IntegratedModel) -> Result<Self, ModelError> {
@@ -294,7 +295,16 @@ impl JointTrainer {
             read_gate: SparseGateTrainer::from_model(model.read_gate)?,
             write_gate: SparseGateTrainer::from_model(model.write_gate)?,
             a2_head_exposures: 0,
+            coarse_address_frozen: false,
         })
+    }
+    /// Preserve an offline-fitted hard coarse router during subsequent joint
+    /// language/state/fine-energy learning. This disables only A2's lane-zero
+    /// contrastive update; fine contextual lanes and State remain trainable.
+    /// The choice is an offline training policy and must be bound in the
+    /// exported artifact's credit-assignment description.
+    pub fn freeze_context_address_learning(&mut self, frozen: bool) {
+        self.coarse_address_frozen = frozen;
     }
     pub fn runtime(&self) -> Runtime<'_> {
         Runtime {
@@ -490,7 +500,11 @@ impl JointTrainer {
                                 source_position,
                                 strong,
                             );
-                            if negatives.is_empty() {
+                            if self.coarse_address_frozen {
+                                // A3 learns integer admission before this
+                                // joint stage. Soft overlap must not silently
+                                // replace those exported coarse decisions.
+                            } else if negatives.is_empty() {
                                 metrics.contrastive_skipped_no_negative += 1;
                             } else {
                                 let contrastive_loss = self.encoder.train_contrastive(
@@ -855,6 +869,41 @@ pub fn evaluate_episode(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn frozen_coarse_router_survives_joint_language_learning() -> Result<(), ModelError> {
+        let mut model =
+            IntegratedModel::new(ModelConfig::pilot(64, 4)?, AlgebraKind::Cyclic120, 17)?;
+        model.enable_context_addressing()?;
+        let coarse = |encoder: &CodeEncoder| -> Vec<i8> {
+            encoder
+                .address_coefficients()
+                .chunks_exact(4 * encoder::ROW_STRIDE)
+                .flat_map(|rows| rows[..encoder::ROW_STRIDE].iter().copied())
+                .collect()
+        };
+        let before_coarse = coarse(&model.encoder);
+        let before_output = model.output.coefficients().to_vec();
+        let mut trainer = JointTrainer::from_model(model)?;
+        trainer.freeze_context_address_learning(true);
+        let tokens: Vec<u16> = (0..24).collect();
+        let mut source_targets = vec![None; tokens.len()];
+        source_targets[20] = Some(0);
+        let episode = TrainingEpisode {
+            name: "coarse-freeze-integration".into(),
+            source_id: 17,
+            token_bytes: vec![vec![b'x']; tokens.len()],
+            tokens,
+            source_targets,
+            prompt_len: Some(20),
+        };
+        let metrics = trainer.fit_episode(&episode, FitConfig::default())?;
+        assert_eq!(metrics.source_committed, 1);
+        assert_eq!(metrics.contrastive_updates, 0);
+        assert_eq!(coarse(trainer.encoder.model()), before_coarse);
+        assert_ne!(trainer.output.model().coefficients(), before_output);
+        Ok(())
+    }
+
     use super::*;
     #[test]
     fn one_token_copy_generate_marginalization_normalizes() {
