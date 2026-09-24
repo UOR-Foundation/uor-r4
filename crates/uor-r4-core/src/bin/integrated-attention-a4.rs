@@ -1,5 +1,7 @@
 //! Matched parent-continuation driver for candidate-or-NoRead and evidence language learning.
 //! Offline likelihood and fitting use floating point. Session decisions do not.
+#![recursion_limit = "256"]
+
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
