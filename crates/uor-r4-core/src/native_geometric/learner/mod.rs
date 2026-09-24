@@ -13,6 +13,7 @@ pub mod geometric_attention;
 pub mod grounded_session;
 pub mod group_table;
 pub mod head_projection;
+pub mod integrated_attention;
 pub mod jepa_trainer;
 pub mod lexical_realization;
 pub mod lowbit;
