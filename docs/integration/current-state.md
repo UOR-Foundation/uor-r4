@@ -18,7 +18,8 @@ supervision fixes 3-token rows (`add3` 34/54 vs the matched control 14/54; L3_ne
 0→5/6, trained positives 1→6/6) but does not transfer to 4-token rows, and 4-token supervision fixes 4-token rows
 without transferring back. Both treatments **regress `repository_bits` beyond the pre-declared `+0.05` tolerance**
 (`+0.2148` / `+0.2683`), so the extended curriculum is a scoped component with a measured prose cost, not a promoted
-successor. `integrate` moves 16/64 → 28/64 on `add3`; native/compiled parity holds (156 comparisons; 11.43×).
+successor. `integrate` moves 16/64 → 28/64 on `add3`; native/compiled parity holds (156 identical grounded rollouts
+in the `cost` check; 11.43×; the `integrate` runner additionally asserts equality on all 64 rollouts).
 Corrections recorded: the parent fails all eight evaluation values (the 2-token pass is a trained-arm result), and
 the requested "in-range 3-token numeric payload" cannot exist because this tokenizer splits digits individually.
 Ledger charged +2,000,000 ms. **No general language, copying, geometry, reasoning or energy claim follows.**

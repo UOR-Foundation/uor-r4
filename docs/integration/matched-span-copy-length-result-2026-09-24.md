@@ -9,7 +9,7 @@ and learned geometric operations replacing floating-point matrix multiplication 
 
 Base `48c2908f`. Worktree `…/uor-r4-worktrees/matched-span-curriculum-20260924`, branch
 `codex/matched-span-curriculum-20260924`. Evidence root
-`/Users/casey.allard/uor-r4-investigations/matched-span-20260924` (17 sealed attempts; ignored payloads, not in a Git
+`/Users/casey.allard/uor-r4-investigations/matched-span-20260924` (19 sealed attempts; ignored payloads, not in a Git
 clone). Parent artifact `causal-candidate.tlx` `1ac70065…955f`. All arms start from that parent, `ARM=moments`,
 seed `20260925`, `UOR_LANGUAGE_STEPS=512`, two threads, one cargo process at a time.
 
