@@ -1,6 +1,23 @@
 # Offline Rust training foundation
 
-This crate is the shared location for differentiable research references and future training bridges. No serving crate depends on it. Its first executable mode establishes numerical parity and a language-loss gradient through the retained #1017 ordinary transformer. It does not implement a native replacement or a hard-selection relaxation.
+This crate contains the offline recurrent-memory learner, its matched transport control, and differentiable research references. No serving crate depends on it. The recurrent learner trains state, causal memory reads/writes and token output jointly. The separate reference modes reproduce the retained #1017 ordinary transformer. Integer export remains a later integration step.
+
+## Joint recurrent-memory learning
+
+```text
+uor-r4-training joint-fit CAMPAIGN_JSON NEW_REPORT_ROOT {cpu|metal} [SEALED_RESUME_CHECKPOINT]
+uor-r4-training joint-evaluate CAMPAIGN_JSON SEALED_CHECKPOINT NEW_REPORT_ROOT {cpu|metal} {read|no-read} BATCH
+```
+
+The [prospective campaign](../../docs/integration/joint-recurrent-campaign-2026-09-24.md) specifies the graph, training exposure, resource ceilings, checkpoint selection and capability criteria. `JointModel` exposes the same causal core for differentiable unrolls and detached incremental sessions. It reads only earlier occurrences, updates recurrent state using the read, then writes the current contextual key/value. Exact observed token/occurrence identity is retained alongside learned vector compatibility. A normalized vocabulary/copy mixture supplies the language loss; targets enter only that loss.
+
+The quaternion and Householder-pair arms share dimensions, parameter initialization and data windows. Their local transport scales are matched; their global function families differ. These floating-point offline learners do not establish exact Hamiltonian dynamics or the final integer serving cost. Prime/zeta admission, hard discretization and typed native export remain subsequent integration work.
+
+Each checkpoint includes named model parameters, AdamW moments and per-variable clocks, model/optimizer configuration, exact source/data/tokenizer identities, and the next counter-seeded training window. Resume rejects changes to the model or sampler. The optional `stop_file` requests a checkpoint between updates. `max_process_seconds` stops new updates; the campaign separately reserves final evaluation, save/reload and sealing time.
+
+`joint-evaluate` loads the actual checkpoint, runs free continuations and all frozen source-edit pairs, and then scores every evaluator-v2 development position. NoRead applies from the start of every prompt/block. Per-target records use the explicit44-byte format in `evaluation-report.json`; probability flooring or answer repair is not added by evaluation. The current natural-story probes measure exploratory task transfer. Their failure alone does not diagnose the read mechanism.
+
+On Apple hosts, optional `cpu-accelerate` enables the pinned, corrected Candle BLAS adapter for offline training. Its four-line source difference and all upstream identities are retained in [the vendor note](../../third_party/candle-core-0.9.2/UOR-PATCH.md). CPU/Rust-gemm and Metal remain explicit alternatives. Backend-specific numerical behavior is reported; cross-backend bitwise training identity is not claimed.
 
 ## Integrity mode
 
@@ -40,4 +57,4 @@ The old safetensors/config/tokenizer and Rust reference loader are reused direct
 
 Primary implementation references: [Candle 0.9.2 API](https://docs.rs/candle-core/0.9.2/candle_core/), [Candle training example](https://github.com/huggingface/candle/blob/main/candle-examples/examples/mnist-training/main.rs), [tensor operations and inference-only softmax](https://github.com/huggingface/candle/blob/main/candle-nn/src/ops.rs). The actual retained architecture is implemented in `tools/r4-softmax-trainer/src/r4_softmax_trainer/model.py`; this crate reproduces it in Rust as an offline comparator.
 
-Executed September 24: the pinned 32-position check passed on CPU and Metal; see [the compact evidence](../../docs/evidence/reference-autodiff-integrity-2026-09-24.json) and [evaluator manifest](../../docs/integration/reference-evaluator-v1.json). That integrity mode enforces reference weights and architecture and emits full input identities; its complete manifest was verified independently. The new comparison modes enforce evaluator v2 directly. The native student remains future work; the [current state](../../docs/integration/current-state.md) owns the population comparison outcome and next execution.
+Executed September 24: the pinned 32-position reference check passed on CPU and Metal; see [the compact evidence](../../docs/evidence/reference-autodiff-integrity-2026-09-24.json) and [evaluator manifest](../../docs/integration/reference-evaluator-v1.json). That integrity mode enforces reference weights and architecture and emits full input identities; its complete manifest was verified independently. The comparison modes enforce evaluator v2 directly. The [current state](../../docs/integration/current-state.md) owns the reference results and the separate recurrent learner's outcome and next execution.

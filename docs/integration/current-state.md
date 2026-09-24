@@ -63,22 +63,39 @@ native model promotion occurs. The reference advantage does not isolate attentio
 or geometric causality. #1014 retains the historical attention-off evidence at
 its original scope.
 
-**Next: rung 1, one coherent recurrent-memory language learner** with continuous
-read/representation/state/output credit and a competitive ordinary recurrent
-control, as specified in the [canonical graph](project-track.md#rung-1-computation-graph-and-entry-gate).
-Freeze the full campaign from measured throughput, with the 30-million-token-per-arm
-planning anchor, natural-language loss, retained fit, optimizer/resume state,
-loaded free generation and complete changed-source/NoRead behavior. A one-seed
-initial campaign remains exploratory. The native student, soft-to-hard bridge
-and 600-cell diagnostic remain **NOT_RUN**; the diagnostic must not displace the
-joint learning milestone.
+## Active D8 rung 1 learning campaign
+
+**The continuous recurrent-memory learner is implemented and fitting.** Its full
+language-loss graph connects transport, state, causal Q/K/V memory and normalized
+vocabulary/copy output. A matched Householder-pair arm provides the ordinary
+control. Seven focused release checks passed, including all-write gradient
+preservation and optimizer continuation; actual profiles saved/reloaded their
+artifacts and generated continuations. These integrity results do not qualify
+language capability.
+
+The [frozen campaign](joint-recurrent-campaign-2026-09-24.md) and
+[resource projection](../evidence/joint-recurrent-budget-2026-09-24.json) specify
+29,999,104target visits per arm, one paired seed, independent64-token training
+windows and unchanged256-token development/generation. Longer read ages receive
+no data gradient under this initial fit. Both CPU jobs are running concurrently
+through RDC on the same M1 host, with two threads each, an8GiB aggregate RAM
+ceiling and checkpoint requests at resource limits. The compiled learning source
+is `9d8c1e39e2e3bbafaec63791b048b1b3b6161211`; the artifact container is
+`/Users/casey.allard/uor-r4-investigations/joint-recurrent-20260924`.
+
+After fitting, select midpoint/final checkpoints on the exposed64-block tune
+prefix, then execute the frozen complete population, whole-prefix NoRead,
+source edits and free generation comparisons. [Draft PR #1389](https://github.com/UOR-Foundation/uor-r4/pull/1389)
+preserves this continuation. Language/attention qualification is pending. Integer
+export and the600-cell diagnostic remain **NOT_RUN**; neither displaces learning.
 
 ## Delivery, resources and unresolved limits
 
 The preceding correction was protected [PR #1387](https://github.com/UOR-Foundation/uor-r4/pull/1387),
-merged as `942645b264f73ec49507cffd7c2f4cbd95de3aa2`. This continuation uses a
-separate protected [PR #1388](https://github.com/UOR-Foundation/uor-r4/pull/1388); live GitHub and owning issue receipts establish its
-actual merge and reviewed-tree equality. Queue compatibility acknowledgements
+merged as `942645b264f73ec49507cffd7c2f4cbd95de3aa2`. Rung0 was delivered through
+protected [PR #1388](https://github.com/UOR-Foundation/uor-r4/pull/1388), merged as
+`c84b198df3b47bc8326307dd9964dc9c87cb830c`. The active learner continuation is
+[draft PR #1389](https://github.com/UOR-Foundation/uor-r4/pull/1389). Queue compatibility acknowledgements
 execute no tests; local executed checks carry validation.
 
 The [baseline budget](../evidence/reference-baselines-budget-2026-09-24.json)
