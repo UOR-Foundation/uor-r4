@@ -7,11 +7,19 @@
 > Record: [direction-decision-2026-09-24.md](direction-decision-2026-09-24.md) · owner entries D4–D6 in
 > [DECISIONS.md](DECISIONS.md). The component results below retain their exact scope.
 
-## Active: explicit addressed-memory generation bridge, September 24 UTC
+## Active: real-text sparse-recall opportunity gate, September 24 UTC
+
+The [source-separated development diagnostic](realtext-sparse-recall-result-2026-09-24.md) asks whether a causal exact-pair episodic read helps the actual project-document token stream beyond a newly fitted unigram/order-1/order-2 count reference. On 87,564 scored positions, a Tune-fitted dyadic cache mixture scores **6.173020 versus C 6.410664 bits/target** (difference **−0.237644 [−0.292814, −0.190741]** by document bootstrap); the same-hit rotated-value null is **6.531288**. Distant (≥64-token) exact-pair hits cover **24.23%**, and **4.08% of all positions** have a correct distant cached successor when C's top-one is wrong. The pre-registered in-domain opportunity gate passes. All three age buckets select the same **1/4** cache weight, so there is no age-policy result. The 24 Dev documents are exposed project Markdown, 20 from `integration/`; the cache is an ordinary exact-token comparator, not learned semantic addressing. The loaded `TlModel`, general prose/code transfer, geometry, D0-b/D5 whole-path serving and energy were not tested here.
+
+**Next:** integrate a bounded addressable candidate with the **same loaded native language path** and learn source admission/read choice from observed tokens. Compare at matched access against this ordinary exact-pair cache and C on source-separated prose and Rust code, with actual generated continuations and the retained NoRead/source-change and lexical controls. Only then test Hamiltonian/H4 parameterisation against the ordinary candidate on an identifiable task. Avoid further fixture-only copy repair or post-exposure tuning of this diagnostic.
+
+---
+
+## Previous: explicit addressed-memory generation bridge, September 24 UTC
 
 The [pre-registered integration](addressed-lexical-bridge-result-2026-09-24.md) now passes an exact, typed scoped/versioned memory read into the **loaded** native `TlModel` Generate/Copy/Stop path. In the authoritative sealed `final4`/independent `replay4` panel, all **24 rows** agree across process and binary-memory reload; current/pinned/previous selection, read-disabled, unrelated edit, absent, evicted, no-history and wrong-scope controls pass. In two familiar single-token pairs, changing only the selected stored payload changes actual copied output (` green now` versus ` north now`; ` summer now` versus ` red now`). This witnesses explicit-address owned copying through the decoder. The uncopied `now` stays fixed; the unchanged ordinary-prose continuation remains degenerate. Writes, addresses and read permission are caller-supplied, KVAR's fitted gate is not transplanted, and the decoder still inspects **153,052** nonzero parameter slots per step. No learned natural-language request binding, semantic generalization, D5 sparse serving, geometric advantage, general prose, coding or energy result follows.
 
-**Next:** on this same native path, learn source admission and request-to-address/read/write decisions from observed text, with a fixed-flags same-structure intervention that changes an *uncopied* word after loaded generation. Keep the exact-memory, read-disabled, wrong-scope, absent/evicted and prior lexical/prose controls. A full ordinary `(f)` versus geometric `(h)` comparison remains `NOT_RUN` and needs its own prospective identifiable frame task.
+**Then next:** on this same native path, learn source admission and request-to-address/read/write decisions from observed text, with a fixed-flags same-structure intervention that changes an *uncopied* word after loaded generation. The real-text sparse-recall opportunity gate above now informs that work. Keep the exact-memory, read-disabled, wrong-scope, absent/evicted and prior lexical/prose controls. A full ordinary `(f)` versus geometric `(h)` comparison remains `NOT_RUN` and needs its own prospective identifiable frame task.
 
 ---
 
