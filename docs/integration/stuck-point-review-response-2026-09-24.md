@@ -64,7 +64,7 @@ source rather than accepted as live authority.
 |---|---|
 | Native addressing has no negatives and cannot learn | This describes A1. A2 introduced contextual negatives; A3 changes actual integer admission from 1/24 to 17/24; A4 learns candidate-or-NoRead. Their remaining local/truncated language credit is still inadequate. |
 | Admission forces all candidates to identical relative codes | Prefix admission forces equality only in the coarse lane. A1's all-lane code collapse was measured, not an unavoidable property of all later admission. |
-| Rust rules out a continuous autodiff bridge | False. Current policy permits Rust float/matmul training. New Python model code would require a policy change; the corrected path uses Rust. |
+| The policy rules out the continuous training route | The review's diagnosis passage overstates this, while its closing toolchain section correctly offers Candle/Burn. Current policy already permits Rust float/matmul training; we adopt that Rust autodiff option. |
 | D7 replaced D4–D6 | D7 explicitly preserves those constraints and changes implementation sequencing. D8 keeps their substantive goals too. |
 | #1017 was simply parked and never used | Later grounding fine-tunes, pointer/relation heads and attention-LoRA work exist. Their failures must inform the renewed reference/student path. The larger #1019 capacity attempt had the hardware stop; #1017 completed. |
 | A fixed minimum token count guarantees a meaningful test | Data, objective, task complexity, optimizer and learning curves matter. Tiny fixtures cannot establish language, but can reject an arithmetic bug. Token floors are planning targets, not universal laws. |
@@ -109,8 +109,9 @@ ordinary recurrent/Householder comparator belongs alongside geometric transport.
   on language activations. The attachment's sandbox distortion/word-problem runs
   were not reproduced here and remain unverified external observations.
   [Cohn–Kumar](https://arxiv.org/pdf/math/0607446).
-- **Nine scores:** a class function has nine values, but its 120-by-120 kernel can
-  have rank 120: `f(g)=1[g=e]` gives the identity matrix. Parameter count is not
+- **Nine scores:** the review is correct that class functions have nine degrees
+  of freedom. This does not imply rank nine or rule out useful inductive bias;
+  their 120-by-120 kernels can have rank 120: `f(g)=1[g=e]` gives the identity matrix. Parameter count is not
   kernel rank. A dot-product class score is a particular restricted operator.
 - **Complexity:** Barrington's nonsolvable-group result and TC0 limitations apply
   under specified depth, precision and architectural assumptions. They do not
@@ -146,6 +147,38 @@ It imports the actual checkpoint and checks differentiable next-token computatio
 against the existing Rust reference before larger training is projected. Its
 device, parity, gradients and execution outcome belong in the current-state
 entry; writing code or compiling it is not a training result.
+
+### Executed correction: reference and autodiff foundation
+
+The new crate was compiled from committed source `e4f7e9d9` with pinned Candle
+0.9.2, `metal` and `reference-accelerate`. Both actual device runs pass. The
+existing oracle reports Apple Accelerate CPU arithmetic. Independent review
+confirmed input hashes, token window, unchanged tolerances and architecture.
+
+| Integrity check | CPU | Metal |
+|---|---:|---:|
+| Compared logits | 131,072 | 131,072 |
+| Maximum absolute logit difference | 0.000015259 | 0.000016212 |
+| Matching top-one prediction positions | 32/32 | 32/32 |
+| Finite nonzero parameter-gradient tensors | 56/56 | 56/56 |
+| Finite nonzero Q/K/V-gradient tensors | 18/18 | 18/18 |
+| Selected finite-difference checks | 3/3 | 3/3 |
+| Optimizer steps | 0 | 0 |
+
+The [compact execution evidence](../evidence/reference-autodiff-integrity-2026-09-24.json)
+binds both full local reports, executable, source and
+[evaluator manifest](reference-evaluator-v1.json). The CLI enforces the weights
+and architecture; the full evaluator manifest was checked independently, not
+automatically enforced by the executable. Build wall time was 113.75 seconds;
+integrity process times were 1.39 seconds CPU and 12.88 seconds Metal. Those
+include loading, oracle comparison, backward work and finite differences, with
+cold Metal setup; they are not training-throughput or GPU-active measurements.
+
+This is an executed prerequisite for the new learning route. No new language
+quality, native student, hard-selection gradient, corpus fit or complete baseline
+table is claimed. The baseline table and real generation replay remain rung 0's
+next work; the canonical plan now specifies the subsequent recurrent computation
+graph so another local selector patch cannot substitute for it.
 
 The live state is shortened; its complete prior contents are preserved in a
 linked archive in the same directory. The existing canonical plan owns rung

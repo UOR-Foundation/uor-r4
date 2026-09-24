@@ -42,20 +42,33 @@ historical +2.677393-nat attention-off result; #1017 owns 1.572752 nats/token af
 149,995,520 cumulative tokens. These are bounded ordinary-transformer reference
 results on another tokenizer/corpus, not new executions or target serving.
 
-`crates/uor-r4-training` is being added as reusable offline Rust autodiff
-infrastructure. The immediate execution is actual #1017 import, reference-logit
-parity and next-token Q/K/V gradients on CPU/Metal before projecting a larger
-campaign. **Execution pending in this working change**; construction alone does
-not establish parity, learning or hardware throughput.
+The new offline `crates/uor-r4-training` loads the actual #1017 checkpoint and
+**passes the pinned numerical/gradient integrity check on CPU and Metal**.
+Each compares 131,072 logits over 32 input positions: maximum error is
+0.000015259 / 0.000016212, with 32/32 top-one matches. All 56 parameter tensors,
+including 18 Q/K/V tensors, have finite nonzero gradients; all three selected
+finite differences pass and restoration error is zero. No optimizer step occurs.
+[Source, hashes, device and results](../evidence/reference-autodiff-integrity-2026-09-24.json)
+match the [pinned evaluator input manifest](reference-evaluator-v1.json), checked
+independently. Optimized Rust compilation and independent source review passed.
+
+**Next within rung 0:** complete the same-token reference/n-gram/cache baseline
+table and generation replay, then implement the [specified recurrent learning
+graph](project-track.md#rung-1-computation-graph-and-entry-gate). The native student,
+soft-to-hard bridge and 600-cell diagnostic are not run. The 32-token training
+prefix loss and integrity timing are not population quality or training throughput.
 
 ## Delivery, resources and unresolved limits
 
 This work extends protected [PR #1387](https://github.com/UOR-Foundation/uor-r4/pull/1387).
-The owner explicitly requested its merge when complete. Delivery is pending
-until the reviewed source, checks, result and actual merge/tree are verified.
+The owner explicitly requested its merge when complete. Source, checks and
+results are recorded here; live GitHub and the owning issue receipts establish
+the actual protected merge and reviewed-tree equality.
 The [A4 budget](../evidence/integrated-attention-a4-budget-2026-09-24.json) and
 [review-correction supplement](../evidence/stuck-point-review-budget-2026-09-24.json)
-retain cumulative accounting, physical reserve and stop margin. No paid compute
+retain cumulative accounting, physical reserve and stop margin. The
+[cycle closeout](../evidence/stuck-point-review-closeout-2026-09-24.json) separates
+actual fit/integrity costs from the full engineering cycle. No paid compute
 or unique-artifact deletion is authorized or used.
 
 The old #1017 revealed test is a fixed regression set, not a fresh final holdout.

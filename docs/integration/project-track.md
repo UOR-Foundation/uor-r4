@@ -12,7 +12,7 @@ Rung status is maintained here and the active artifact/result pointer in [curren
 
 | Rung | Deliverable and decisive comparison | Status |
 |---|---|---|
-| 0 — reference and evaluator | Pin #1017 weights, tokenizer, train/dev and old revealed regression split; recover #1014 attention-ablation evidence. Reproduce real logits/generation in the reusable Rust autodiff tool and verify language gradients through Q/K/V. Pin one evaluator/manifest before candidate selection, including ordinary n-gram plus cache on the same tokens. | Active; historical identities verified; new autodiff execution recorded in current state |
+| 0 — reference and evaluator | Pin #1017 weights, tokenizer, train/dev and old revealed regression split; recover #1014 attention-ablation evidence. Reproduce real logits/generation in the reusable Rust autodiff tool and verify language gradients through Q/K/V. Pin one evaluator/manifest before candidate selection, including ordinary n-gram plus cache on the same tokens. | Active; identities and CPU/Metal gradient/parity checks passed; full baseline table and generation replay still open |
 | 0.5 — codebook diagnostic | On train-only calibration activations from the working reference, compare 600-cell, fitted k-means-120 and random-120 at equal stored bits, norms/gain and rotation budget. Measure attention/logit/NLL error separately. A transformer quantization diagnostic stays an offline reference, not target serving. | Not run; useful bounded codebook question, not a substitute language milestone |
 | 1 — native joint learning | Train one recurrent-memory student with continuous read/representation/state/output credit on the same natural data, plus a competitive ordinary recurrent control. An offline #1017 teacher is optional and declared. Use real autodiff and inspect nonzero gradients, retained fit, learning curves, natural likelihood and complete generation. | Next substantive model work after the reference/evaluator foundation |
 | 2 — discretize the working student | Add declared straight-through/annealed quantization, commitment/usage terms where needed, matched codebooks and explicit gains. Train and score both relaxed and exported hard paths throughout; preserve language behavior and measure the gap. | Not run |
@@ -31,6 +31,53 @@ Rung status is maintained here and the active artifact/result pointer in [curren
 - **Population balance.** Define loss components by declared population means and coefficients; count first-source, suffix, natural and Stop exposures. Inspect retained fit after the full update cycle. Shared parameters and causal trajectories can move a supposedly frozen representation.
 - **Geometry roles.** Separate identity/addressing, codebook metric, noncommutative composition/transport, and exact arithmetic. Preserve orientation and frames. Prime/zeta mechanisms keep their implemented roles; any claimed predictive contribution needs matched random/control refits. Codebook distortion and group-word tasks are scoped diagnostics, not language or energy qualification.
 - **Exactness.** Finite-group table products can be exact. Algebraic-valued recurrence requires a specified scaled `Z[phi]` representation with coefficient/denominator/overflow bounds; irrational factors are not exact finite binary shift-add constants on ordinary fixed point.
+
+### Rung 1 computation graph and entry gate
+
+The entry gate is the pinned reference/evaluator baseline table, with the [input
+manifest](reference-evaluator-v1.json) and actual device measurements. The
+integrity check is one prerequisite; it does not complete that table. Use the
+existing n-gram implementation only under its audited formula: its current class
+name alone does not establish full interpolated Kneser–Ney smoothing.
+
+The native student is a recurrent model with explicit contextual reads. Its
+proposed graph, before discretization, is:
+
+1. Encode the observed token and prior state into a provisional state
+   `s_pre = F(s_previous, embedding(token))`. A learned input-dependent unit
+   quaternion may transport each four-dimensional state lane; an ordinary
+   recurrent/Householder arm receives the same information and capacity budget.
+   Learn contraction/update gates separately from norm-preserving transport.
+2. Form continuous Query from `s_pre`, and Key/Value from each earlier observed
+   event when written. Keep exact occurrence, token/span and version identity in
+   the event tape. Identity addresses locate evidence; they are not a distance.
+   The memory rule and reset boundary must be identical across compared arms.
+3. Compute an explicit empirical read energy for each causally available event
+   and NoRead. Start with trainable vector compatibility plus declared age/role
+   terms, then `a = softmax(-energy / temperature)` and
+   `read = sum(a_i * value_i)`. Every term used for addressing/ranking must receive
+   a recorded gradient or an explicitly separate discrete objective. No answer
+   labels enter the forward pass. This energy is a learned score, not a physical
+   Hamiltonian or an exact record of the past.
+4. Update `s = U(s_pre, read)` and emit a normalized vocabulary/copy distribution
+   from that same state/read. Backpropagate language loss through emission,
+   update, read weights, values, queries, keys and recurrent transport over a
+   declared truncated sequence. Include source-edited and NoRead generation in
+   the fixed evaluator so lower likelihood loss alone cannot qualify memory use.
+5. After a retained continuous learner works, introduce the serving codebook,
+   gain quantization and hard read progressively. Forward hard choices use a
+   declared straight-through/annealed surrogate; record both relaxed and hard
+   results. Train with the exact bounded admission mask before deployment.
+   Closure of finite-group transport is tested separately from codebook distortion.
+
+Widths, unroll length, optimizer, loss weights and throughput projections are
+fixed in the campaign manifest before training, from measured local resources.
+Start the ordinary recurrent arm and geometric arm from matched information,
+exposure and tuning budgets. Do not add group-word, codebook and corpus losses in
+one uncontrolled change. If the ordinary learner cannot retain language fit,
+resolve the shared learning defect before attributing the failure to geometry.
+This continuous graph is offline training scaffolding; its served successor must
+still meet D0-b and the eventual D5 parameter-access requirement.
 
 ### Continuity, budgets and decision gates
 
