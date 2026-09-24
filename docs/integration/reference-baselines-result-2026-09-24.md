@@ -45,7 +45,7 @@ count calibration, **not a fresh final holdout**.
 
 All entries are mean negative log likelihood in **nats/token; lower is better**.
 The selected fixed discount is **0.9** and cache mixture is **0.05**, using a
-256-token cache reset per block. The cache adds **0.013841 nats/token** over the
+256-token cache reset per block. The cache reduces NLL by **0.013841 nats/token** relative to the
 pure 5-gram on the comparison tail. The reference is **0.817763 nats/token** better
 than that cache mixture. An independent row audit matches every input, target,
 block and offset to the retained token store and recomputes every reported mean.

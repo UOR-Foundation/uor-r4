@@ -77,7 +77,7 @@ joint learning milestone.
 
 The preceding correction was protected [PR #1387](https://github.com/UOR-Foundation/uor-r4/pull/1387),
 merged as `942645b264f73ec49507cffd7c2f4cbd95de3aa2`. This continuation uses a
-separate protected PR; live GitHub and owning issue receipts establish its
+separate protected [PR #1388](https://github.com/UOR-Foundation/uor-r4/pull/1388); live GitHub and owning issue receipts establish its
 actual merge and reviewed-tree equality. Queue compatibility acknowledgements
 execute no tests; local executed checks carry validation.
 
