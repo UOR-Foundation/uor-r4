@@ -32,6 +32,7 @@ pub mod relational_session;
 pub mod result_decoder;
 pub mod scoped_memory;
 pub mod shared_transition;
+pub mod sparse_native_read;
 pub mod state_lexical;
 pub mod transferable_lexical;
 pub mod transition_table;

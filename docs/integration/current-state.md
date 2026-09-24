@@ -7,11 +7,19 @@
 > Record: [direction-decision-2026-09-24.md](direction-decision-2026-09-24.md) · owner entries D4–D6 in
 > [DECISIONS.md](DECISIONS.md). The component results below retain their exact scope.
 
-## Active: real-text sparse-recall opportunity gate, September 24 UTC
+## Active: loaded native sparse-read gate fails admission, September 24 UTC
+
+The [frozen loaded integration](native-sparse-read-result-2026-09-24.md) joins a causal bounded exact-pair store and a fitted/reloaded four-bit source gate to the unchanged `TlModel` sequence path. On two new public-domain prose sources the teacher-forced top-one counts are **NoRead 84 / ordinary recent 323 / learned gate 319 / count 115** out of 2,032; on two separate Rust modules they are **193 / 675 / 674 / 409** out of 2,032. The gate reads on 1,498 of 1,504 recent hits, chooses an older different source six times and corrects one recent-source error. It **fails the predeclared gate** on both families and is not promoted. Four source-only edits change copied first-token output while NoRead stays fixed, but **0/8 actual eight-token generated continuations are fully correct**. The selected prose openings include contents and headings. A selected copy skips the dense vocabulary head for that step; the native transition remains dense and whole-path D5/energy are unqualified. Evidence: sealed `final1` under `/Users/casey.allard/uor-r4-investigations/native-sparse-read-20260924/`.
+
+**Next:** freeze a source-disjoint, at-chance-order-2 long-range text/code panel and train content/role-dependent query-to-address and write/read decisions in the same native path, with exact typed memory, unchanged-source/read-disabled controls and a matched ordinary router. Require changed-source effects on an *uncopied* generated token and count per-token learned-parameter access before testing an equal-cost Hamiltonian/H4 parameterisation. Do not tune this gate on its exposed Dev sources or return to authored copy fixtures.
+
+---
+
+## Previous: real-text sparse-recall opportunity gate, September 24 UTC
 
 The [source-separated development diagnostic](realtext-sparse-recall-result-2026-09-24.md) asks whether a causal exact-pair episodic read helps the actual project-document token stream beyond a newly fitted unigram/order-1/order-2 count reference. On 87,564 scored positions, a Tune-fitted dyadic cache mixture scores **6.173020 versus C 6.410664 bits/target** (difference **−0.237644 [−0.292814, −0.190741]** by document bootstrap); the same-hit rotated-value null is **6.531288**. Distant (≥64-token) exact-pair hits cover **24.23%**, and **4.08% of all positions** have a correct distant cached successor when C's top-one is wrong. The pre-registered in-domain opportunity gate passes. All three age buckets select the same **1/4** cache weight, so there is no age-policy result. The 24 Dev documents are exposed project Markdown, 20 from `integration/`; the cache is an ordinary exact-token comparator, not learned semantic addressing. The loaded `TlModel`, general prose/code transfer, geometry, D0-b/D5 whole-path serving and energy were not tested here.
 
-**Next:** integrate a bounded addressable candidate with the **same loaded native language path** and learn source admission/read choice from observed tokens. Compare at matched access against this ordinary exact-pair cache and C on source-separated prose and Rust code, with actual generated continuations and the retained NoRead/source-change and lexical controls. Only then test Hamiltonian/H4 parameterisation against the ordinary candidate on an identifiable task. Avoid further fixture-only copy repair or post-exposure tuning of this diagnostic.
+**Then next:** integrate a bounded addressable candidate with the loaded native language path and learn source admission/read choice from observed tokens. That experiment is reported above; the four-bit observed-feature gate failed its matched ordinary-cache comparison.
 
 ---
 

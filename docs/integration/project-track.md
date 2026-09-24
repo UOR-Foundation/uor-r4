@@ -41,10 +41,15 @@ serving invariant** (D5) and the current served path is recorded as dense/non-co
      [sparse-recall result](realtext-sparse-recall-result-2026-09-24.md) finds a causal ordinary exact-pair cache
      improves a newly fitted count reference by **0.237644 bits/target** on 87,564 source-separated project-document
      positions; 24.23% have ≥64-token hits. A candidate-rotation null is worse. This supports carrying a bounded
-     sparse read into the native sequence path, while the fitted three-bucket age weights collapse to one constant
-     and no learned source choice, prose/code transfer or geometric advantage is established. Next integrate and
-     train *read admission/choice* in the shared loaded model with a matched ordinary cache and real generated
-     prose/code controls before the full frame-identifiable `(f)/(h)` comparison.
+     sparse read into the native sequence path, while the fitted three-bucket age weights collapse to one constant.
+   - **M1 loaded sparse-read integration — done; gate rejected.** The
+     [loaded source-choice result](native-sparse-read-result-2026-09-24.md) fits and reloads a four-bit
+     NoRead/recent/previous source table beside the unchanged native model. It causally affects copied output, but
+     chooses recent almost always and loses slightly to the ordinary recent cache on separate prose and Rust code;
+     none of eight generated continuations is wholly correct. Do not tune it on exposed Dev. **Next** train a
+     content/role query-to-address and write/read policy on a source-disjoint long-range panel where exact pair and
+     order-2 controls are verified at chance, with a matched ordinary sparse router and actual uncopied-generation
+     intervention. H4/Hamiltonian competes only at equal information and access cost; full `(f)/(h)` remains unrun.
 3. **M2 — one-variable gate + capacity ablation, crossed with corpus**, endpointed on the M1 probe, `repository_bits`
    a `+0.05` guard only. (Only if M1 leaves the branch open.)
 4. **M3 — cross-window state + the long-range objective** — the first milestone that can claim a capability.
