@@ -343,13 +343,15 @@ impl JointTrainer {
                 &episode.token_bytes[position],
                 selected,
             )?;
-            // The write target is explicitly the episode's fit-only future source-use
-            // annotation. Raw event retention is unaffected by the learned write gate.
-            self.write_gate.train(
-                event.gate_features.as_slice(),
-                future_sources[position],
-                fit.gate_rate,
-            )?;
+            // Source annotations are incomplete: unmentioned events are unknown,
+            // not unwanted writes. During this positive-unlabeled warmup only
+            // witnessed useful sources receive credit. The initially enabled
+            // gate therefore retains all indexed occurrences at this stage.
+            // Selective writes need a later storage-pressure/utility objective.
+            if future_sources[position] {
+                self.write_gate
+                    .train(event.gate_features.as_slice(), true, fit.gate_rate)?;
+            }
             metrics.writes += u64::from(event.record_id.is_some());
             metrics.access.add(event.access);
             observed.push(ObservedTraining {

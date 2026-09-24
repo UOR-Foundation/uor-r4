@@ -298,7 +298,7 @@ fn execute(a: &Args) -> AnyResult<()> {
         let mut model = IntegratedModel::new(ModelConfig::pilot(4096, 4)?, kind, SEED)?;
         model.binding = ArtifactBinding {source_commit:source.to_owned(),tokenizer_sha256:TOKENIZER_SHA.into(),
             training_data_blake3:data_hash.clone(),training_seed:SEED,training_updates:0,
-            credit_assignment:format!("frozen hard forward model per episode; local marginal token CE; weak source-supervised query/key; future-use supervised write gate; local energy/gate CE; one-step truncated state surrogate; {:?}; epochs={}; max_updates={}",fit_config,a.epochs,a.max_updates)};
+            credit_assignment:format!("frozen hard forward model per episode; local marginal token CE; weak source-supervised query/key; positive-unlabeled all-write warmup; local energy/read-gate CE; one-step truncated state surrogate; {:?}; epochs={}; max_updates={}",fit_config,a.epochs,a.max_updates)};
         eprintln!(
             "parameters={} bytes; fit episodes={}, dev episodes={}",
             model.parameter_bytes(),
