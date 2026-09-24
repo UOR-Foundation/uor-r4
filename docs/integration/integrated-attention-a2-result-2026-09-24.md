@@ -1,6 +1,6 @@
 # Integrated attention A2: evidence learning improves; hard routing remains unresolved
 
-September 24, 2026. References #973 and #820. Open development within D7 Milestone A.
+September 24, 2026. References #973 and #820. Open development within D7 Milestone A. Protected delivery: [PR #1387](https://github.com/UOR-Foundation/uor-r4/pull/1387), open for review; A2 is not yet merged.
 
 ## Delivery and decision
 
