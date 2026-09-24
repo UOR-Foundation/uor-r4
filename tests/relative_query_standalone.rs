@@ -97,7 +97,10 @@ fn cancelled_signs_do_not_erase_intermediate_overflow() {
     let plan = CompiledRelativePath::compile(&m, &[1, 1]).unwrap();
     assert_eq!(plan.act([1, 2, 3, 4]).unwrap(), [1, 2, 3, 4]);
     assert_eq!(plan.act(minimum), Err("signed transport overflow".into()));
-    assert_eq!(plan.select(zero, &[zero, minimum]), m.select(&[1, 1], zero, &[zero, minimum]));
+    assert_eq!(
+        plan.select(zero, &[zero, minimum]),
+        m.select(&[1, 1], zero, &[zero, minimum])
+    );
     let identity = CompiledRelativePath::compile(&m, &[]).unwrap();
     assert_eq!(identity.act(minimum).unwrap(), minimum);
     assert_eq!(identity.select(minimum, &[minimum, zero]).unwrap(), 0);
@@ -119,7 +122,10 @@ fn ties_and_invalid_input_error_order_are_preserved() {
     let keys = [[i32::MIN, 0, 0, 0], [0; 4]];
     for path in [&[1, 999][..], &[999, 1][..], &[][..]] {
         for candidates in [&keys[..], &keys[1..], &[][..]] {
-            assert_eq!(m.select(path, [0; 4], candidates), sequential(&m, path, [0; 4], candidates));
+            assert_eq!(
+                m.select(path, [0; 4], candidates),
+                sequential(&m, path, [0; 4], candidates)
+            );
         }
     }
     assert!(CompiledRelativePath::compile(&m, &[999]).is_err());
@@ -138,6 +144,85 @@ fn compilation_is_constant_size_and_does_not_change_learned_artifact() {
     assert!(std::mem::size_of_val(&plan) <= 16);
     assert_eq!(plan.act([1, 2, 3, 4]), m.act(&path, [1, 2, 3, 4]));
     assert_eq!(m.to_bytes(), before);
+    println!("COMPILED_PATH_BYTES={}", std::mem::size_of_val(&plan));
+}
+
+#[test]
+fn relation_labels_are_resolved_through_the_learned_map() {
+    let m = RelativeActionModel::from_bytes(b"Q8L1\x06\x00\x07\x02\x02\x01\x06\x00").unwrap();
+    let keys = [[11, 23, -5, 7], [-8, 4, 9, -3], [2, 1, 0, -7]];
+    for path in [&[0, 2, 4][..], &[5, 3, 1, 2][..], &[1, 2][..]] {
+        let p = CompiledRelativePath::compile(&m, path).unwrap();
+        for &key in &keys {
+            assert_eq!(p.act(key), m.act(path, key));
+        }
+        assert_eq!(p.select([9, 2, -8, 1], &keys), sequential(&m, path, [9, 2, -8, 1], &keys));
+    }
+}
+
+// Unsafe allocator delegation exists only in this standalone test instrument.
+// Both production modules forbid or contain no unsafe code.
+mod allocation_census {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+
+    thread_local! {
+        static ENABLED: Cell<bool> = const { Cell::new(false) };
+        static CALLS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    struct Counter;
+
+    fn count() {
+        if ENABLED.try_with(Cell::get).unwrap_or(false) {
+            let _ = CALLS.try_with(|n| n.set(n.get() + 1));
+        }
+    }
+
+    // SAFETY: every allocation operation is delegated unchanged to System.
+    unsafe impl GlobalAlloc for Counter {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            count();
+            unsafe { System.alloc(layout) }
+        }
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            count();
+            unsafe { System.alloc_zeroed(layout) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            unsafe { System.dealloc(ptr, layout) }
+        }
+        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, size: usize) -> *mut u8 {
+            count();
+            unsafe { System.realloc(ptr, layout, size) }
+        }
+    }
+
+    #[global_allocator]
+    static ALLOCATOR: Counter = Counter;
+
+    pub fn measure<T>(f: impl FnOnce() -> T) -> (T, usize) {
+        CALLS.with(|n| n.set(0));
+        ENABLED.with(|on| on.set(true));
+        let value = f();
+        ENABLED.with(|on| on.set(false));
+        (value, CALLS.with(Cell::get))
+    }
+}
+
+#[test]
+fn valid_compilation_and_both_selection_interfaces_allocate_nothing() {
+    let m = model();
+    let path = [2, 4, 6, 1, 7, 3];
+    let keys = [[3, 7, -8, 11], [0; 4], [-9, 2, 5, 1]];
+    let (result, calls) = allocation_census::measure(|| {
+        let plan = CompiledRelativePath::compile(&m, &path)?;
+        Ok::<_, String>((plan.select([1, 2, 3, 4], &keys)?, m.select(&path, [1, 2, 3, 4], &keys)?))
+    });
+    let (a, b) = result.unwrap();
+    assert_eq!(a, b);
+    assert_eq!(calls, 0);
+    println!("SUCCESS_PATH_ALLOCATIONS={calls}");
 }
 
 #[test]
