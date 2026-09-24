@@ -12,7 +12,7 @@ pub mod output;
 pub mod training;
 pub mod training_support;
 
-use encoder::{CodeEncoder, EncoderInput, EncoderKind};
+use encoder::{CodeEncoder, EncoderInput, EncoderKind, CONTEXT_TOKENS};
 use geometry::{
     AlgebraKind, AlgebraReadCounts, EnergyReadCounts, EnergyTables, FiniteAlgebra, LanePair,
 };
@@ -24,6 +24,8 @@ use training_support::{GateReadCounts, SparseGate};
 const MAGIC: &[u8; 8] = b"UORIA01\0";
 pub const MAX_ARTIFACT_BYTES: usize = 256 << 20;
 pub const MAX_LANES: usize = 4;
+/// A2 indexes an exact occurrence only after this much right context arrives.
+pub const ADDRESS_COMMIT_DELAY: u64 = 16;
 
 #[derive(Debug)]
 pub enum ModelError {
@@ -219,6 +221,11 @@ impl IntegratedModel {
         self.config.validate()?;
         self.algebra.validate()?;
         self.encoder.validate()?;
+        if self.encoder.context_addressing && self.config.memory.event_capacity < CONTEXT_TOKENS {
+            return Err(ModelError::Artifact(
+                "context addressing needs a complete context window",
+            ));
+        }
         self.energy.validate()?;
         self.output.validate()?;
         self.read_gate.validate()?;
@@ -304,6 +311,8 @@ pub struct AccessCounts {
     pub group_table_reads: u64,
     pub pages_visited: u64,
     pub posting_entries_examined: u64,
+    #[serde(default)]
+    pub raw_context_events: u64,
 }
 impl AccessCounts {
     pub fn learned_coefficient_reads(&self) -> u64 {
@@ -321,6 +330,7 @@ impl AccessCounts {
         self.group_table_reads += other.group_table_reads;
         self.pages_visited += other.pages_visited;
         self.posting_entries_examined += other.posting_entries_examined;
+        self.raw_context_events += other.raw_context_events;
     }
 }
 
@@ -386,6 +396,8 @@ pub fn features(
 
 pub struct ObservationTrace {
     pub event_id: u64,
+    /// Exact earlier source indexed by this commit; absent during right-context warmup.
+    pub indexed_source_event_id: Option<u64>,
     pub record_id: Option<RecordId>,
     pub key_input: EncoderInput,
     pub key: [u8; 16],
@@ -442,9 +454,43 @@ impl Session {
         }
         Ok(())
     }
+    fn observed_context(
+        &self,
+        masked_event: Option<u64>,
+    ) -> Result<([u16; CONTEXT_TOKENS], u8), ModelError> {
+        let mut context = [0; CONTEXT_TOKENS];
+        let Some(latest) = self.memory.latest_event_id() else {
+            return Ok((context, 0));
+        };
+        let start = latest.saturating_sub(CONTEXT_TOKENS as u64 - 1).max(1);
+        let mut length = 0usize;
+        for id in start..=latest {
+            let event = self.memory.raw_event(id)?;
+            if event.source_id != self.source_id {
+                return Err(ModelError::Artifact(
+                    "context window crosses source ownership",
+                ));
+            }
+            context[length] = if masked_event == Some(id) {
+                u16::MAX
+            } else {
+                u16::try_from(event.token_id)
+                    .map_err(|_| ModelError::InvalidToken(event.token_id))?
+            };
+            length += 1;
+        }
+        Ok((context, length as u8))
+    }
     pub fn read(&self, runtime: Runtime<'_>, enabled: bool) -> Result<ReadTrace, ModelError> {
         self.check(runtime)?;
+        let (context, context_len) = if runtime.encoder.context_addressing {
+            self.observed_context(None)?
+        } else {
+            ([0; CONTEXT_TOKENS], 0)
+        };
         let input = EncoderInput {
+            context,
+            context_len,
             token: self.last_token,
             previous: self.state,
             evidence: None,
@@ -462,6 +508,7 @@ impl Session {
             search_incomplete: false,
             access: AccessCounts {
                 encoder_coefficients: encoded.coefficient_reads as u64,
+                raw_context_events: u64::from(context_len),
                 ..Default::default()
             },
         };
@@ -472,7 +519,14 @@ impl Session {
             return Ok(trace);
         }
         let result = self.memory.query(
-            ProductCode::new(&trace.query[..runtime.config.lanes])?,
+            // Coarse admission must not condition on value-bearing fine lanes.
+            ProductCode::new(
+                &trace.query[..if runtime.encoder.context_addressing {
+                    1
+                } else {
+                    runtime.config.lanes
+                }],
+            )?,
             None,
             Some(self.source_id),
             cutoff,
@@ -580,25 +634,13 @@ impl Session {
         if token as usize >= runtime.config.vocabulary {
             return Err(ModelError::InvalidToken(token));
         }
-        // This token has now been observed. Its value may inform the derived key
-        // and write decision, while the previous prefix retains its role context.
-        let key_input = EncoderInput {
-            token: self.last_token,
-            previous: self.state,
-            evidence: Some(token as u16),
-            kind: EncoderKind::Key,
-        };
-        let key = runtime.encoder.encode(key_input)?;
-        let gate_features = features(runtime.config, token as u16, &self.state, None);
-        let mut gate_reads = GateReadCounts::default();
-        let write = runtime
-            .write_gate
-            .enabled(gate_features.as_slice(), &mut gate_reads)?;
         let state_input = EncoderInput {
             token: token as u16,
             previous: self.state,
             evidence,
             kind: EncoderKind::State,
+            context: [0; CONTEXT_TOKENS],
+            context_len: 0,
         };
         let action = runtime.encoder.encode(state_input)?;
         let next_offset = self
@@ -614,23 +656,55 @@ impl Session {
                 &mut groups,
             )?;
         }
-        // Any exceptional partial commit makes this session unusable. The caller
-        // can restore its previous checkpoint; it must not continue stale state.
+        // A failed partial memory commit poisons the session, preserving the existing contract.
         self.poisoned = true;
         let event_id =
             self.memory
                 .observe(self.source_id, 0, token, self.byte_offset, raw_bytes)?;
         self.byte_offset = next_offset;
+        let indexed_source = if runtime.encoder.context_addressing {
+            event_id
+                .checked_sub(ADDRESS_COMMIT_DELAY)
+                .filter(|&id| id > 0)
+        } else {
+            Some(event_id)
+        };
+        let (context, context_len) = if runtime.encoder.context_addressing {
+            self.observed_context(indexed_source)?
+        } else {
+            ([0; CONTEXT_TOKENS], 0)
+        };
+        let source_token = match indexed_source {
+            Some(id) => self.memory.raw_event(id)?.token_id,
+            None => token,
+        };
+        let key_input = EncoderInput {
+            token: self.last_token,
+            previous: self.state,
+            evidence: Some(source_token as u16),
+            kind: EncoderKind::Key,
+            context,
+            context_len,
+        };
+        let key = runtime.encoder.encode(key_input)?;
+        let gate_features = features(runtime.config, source_token as u16, &self.state, None);
+        let mut gate_reads = GateReadCounts::default();
+        let write = indexed_source.is_some()
+            && runtime
+                .write_gate
+                .enabled(gate_features.as_slice(), &mut gate_reads)?;
         let record_id = if write {
-            let exact =
-                ExactKey::new(&event_id.to_le_bytes(), runtime.config.memory.max_key_bytes)?;
+            let source =
+                indexed_source.ok_or(ModelError::Artifact("missing indexed occurrence"))?;
+            let exact = ExactKey::new(&source.to_le_bytes(), runtime.config.memory.max_key_bytes)?;
+            let payload = self.memory.raw_event(source)?.bytes().to_vec();
             Some(
                 self.memory
                     .write(
-                        event_id,
+                        source,
                         &exact,
-                        raw_bytes,
-                        &[token],
+                        &payload,
+                        &[source_token],
                         ProductCode::new(&key.codes[..runtime.config.lanes])?,
                     )?
                     .record_id,
@@ -644,6 +718,7 @@ impl Session {
         self.poisoned = false;
         Ok(ObservationTrace {
             event_id,
+            indexed_source_event_id: record_id.and(indexed_source),
             record_id,
             key_input,
             key: key.codes,
@@ -652,6 +727,7 @@ impl Session {
             gate_features,
             access: AccessCounts {
                 encoder_coefficients: (key.coefficient_reads + action.coefficient_reads) as u64,
+                raw_context_events: u64::from(context_len),
                 gate_coefficients: gate_reads.coefficients,
                 group_table_reads: groups.product_reads + groups.inverse_reads,
                 ..Default::default()
@@ -708,5 +784,51 @@ impl Session {
             last_transition: None,
             poisoned: false,
         })
+    }
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+    #[test]
+    fn delayed_context_commit_preserves_occurrence_and_causal_cutoff() -> Result<(), ModelError> {
+        let mut model =
+            IntegratedModel::new(ModelConfig::pilot(64, 4)?, AlgebraKind::Cyclic120, 17)?;
+        model.encoder.enable_context_addressing()?;
+        let mut session = Session::new(model.runtime(), 91)?;
+        for token in 1..=16u32 {
+            let observed = session.observe(model.runtime(), token, b"x", None)?;
+            assert!(observed.record_id.is_none());
+            assert_eq!(session.memory.raw_event(observed.event_id)?.token_id, token);
+        }
+        let observed = session.observe(model.runtime(), 17, b"y", None)?;
+        assert_eq!(observed.indexed_source_event_id, Some(1));
+        assert_eq!(observed.key_input.context_len, 17);
+        assert_eq!(observed.key_input.context[0], u16::MAX);
+        assert_eq!(observed.key_input.context[16], 17);
+        let record = session.memory.record(
+            observed
+                .record_id
+                .ok_or(ModelError::Artifact("missing delayed record"))?,
+        )?;
+        assert_eq!(record.source_event_id, 1);
+        assert_eq!(record.commit_event_id, 17);
+        assert_eq!(record.token_ids(), &[1]);
+        assert_eq!(record.payload(), b"x");
+        let code = record.code();
+        assert!(session
+            .memory
+            .query(code, None, Some(91), 16)?
+            .candidates()
+            .is_empty());
+        assert_eq!(
+            session
+                .memory
+                .query(code, None, Some(91), 17)?
+                .candidates()
+                .len(),
+            1
+        );
+        Ok(())
     }
 }
