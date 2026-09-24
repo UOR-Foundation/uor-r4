@@ -99,11 +99,48 @@ fn cancelled_signs_do_not_erase_intermediate_overflow() {
     assert_eq!(plan.act(minimum), Err("signed transport overflow".into()));
     assert_eq!(
         plan.select(zero, &[zero, minimum]),
-        m.select(&[1, 1], zero, &[zero, minimum])
+        sequential(&m, &[1, 1], zero, &[zero, minimum])
     );
     let identity = CompiledRelativePath::compile(&m, &[]).unwrap();
     assert_eq!(identity.act(minimum).unwrap(), minimum);
     assert_eq!(identity.select(minimum, &[minimum, zero]).unwrap(), 0);
+}
+
+#[test]
+fn long_paths_match_sequential_where_a_coordinate_is_first_negated_after_step_four() {
+    let m = model();
+    let keys = [[1, 2, 3, 4], [-7, 11, 2, -3], [i32::MIN, 0, 0, 0], [0; 4]];
+    let queries = [[0; 4], [i32::MIN; 4], [9, -7, 4, 2]];
+    let check = |path: &[usize]| {
+        let plan = CompiledRelativePath::compile(&m, path).unwrap();
+        for &query in &queries {
+            assert_eq!(
+                plan.select(query, &keys),
+                sequential(&m, path, query, &keys),
+                "path={path:?}"
+            );
+        }
+    };
+    // The length-four test cannot reach a coordinate first negated after step four.
+    for len in 5..=6u32 {
+        for mut encoded in 0..8usize.pow(len) {
+            let mut path = Vec::new();
+            for _ in 0..len {
+                path.push(encoded % 8);
+                encoded /= 8;
+            }
+            check(&path);
+        }
+    }
+    for path in [
+        &[0usize, 0, 0, 0, 1][..],
+        &[0, 0, 0, 0, 2][..],
+        &[7, 7, 7, 7, 1][..],
+        &[0, 0, 0, 0, 4, 0, 1][..],
+        &[1, 2, 3, 4, 5, 6, 7, 1][..],
+    ] {
+        check(path);
+    }
 }
 
 #[test]

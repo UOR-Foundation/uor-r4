@@ -4,7 +4,7 @@ Base: `48106e7c0dd112c94f44bd535141002286ca92a1` (PR #1373). The five preceding 
 
 ## Objective
 
-Use the learned finite quaternion action as a computation, not a decorative feature: compile a relation path once, move the query into the inverse frame, and scan unmodified candidate keys. For signed permutation R, `||q - R k||_1 = ||R^-1 q - k||_1`. This replaces N repetitions of an L-step transport with O(L + N) work without changing selection, payload identities, tie-breaking, or existing Q8L1 model bytes.
+Use the learned finite quaternion action as a computation, not a decorative feature: reduce a relation path to a signed permutation, move the query into the inverse frame, and scan unmodified candidate keys. For signed permutation R, `||q - R k||_1 = ||R^-1 q - k||_1`. This replaces N repetitions of an L-step transport with O(L + N) work without changing selection, payload identities, tie-breaking, or existing Q8L1 model bytes. A caller may compile once and reuse `CompiledRelativePath`; the retained `RelativeActionModel::select` recompiles per call (still O(L+N)), so "compile once" describes the reusable plan, not the selector's internal path.
 
 ## Safety and numerical contract
 
