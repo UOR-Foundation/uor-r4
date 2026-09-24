@@ -2,9 +2,9 @@
 
 2026-09-24 · UOR-R4 Geometric Language Model · References #820
 
-**Outcome: a proposed integrated research and engineering plan, not a new trained model.** The recommendation is one learned, transformerless sequence model with **exact event memory, learned geometric candidate admission, a mutable discrete energy over selected records, shared finite geometric state operators, and a sparse normalized language head**. Develop the ordinary and geometric versions together under one end-to-end language/memory/code objective. The present RNN is a frozen control and an interim learning scaffold; the rejected exact-pair gate is not the next architecture.
+**Owner-adopted go-forward programme, September 24, 2026; implementation starts at Milestone A.** Ratification is recorded as [D7](DECISIONS.md#d7--adopt-the-integrated-attention-language-programme). Build one learned, transformerless sequence model with **exact event memory, learned geometric candidate admission, a mutable discrete energy over selected records, shared finite geometric state operators, and a sparse normalized language head**. Develop the ordinary and geometric versions together under one end-to-end language/memory/code objective. The present RNN is a frozen control and an interim learning scaffold; the rejected exact-pair gate is not the next architecture.
 
-This plan preserves D0-b and D4–D6. It changes the recommended unit of work from another isolated gate to a complete model. No new policy is ratified here, no earlier failure is relabeled, and no geometric, language, frontier or energy advantage is claimed. Proposed mechanisms and numerical design budgets below remain unimplemented until a later development milestone.
+This plan preserves D0-b and D4–D6. D7 adopts the unit of work as a complete model. No earlier failure is relabeled, and no geometric, language, frontier or energy advantage is claimed by adoption. The architecture and numerical design budgets below define the implementation programme; executed status belongs in [current state](current-state.md), rather than being inferred from this design document.
 
 ## 1. Investigation boundary and authority
 

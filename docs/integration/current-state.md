@@ -1,13 +1,19 @@
 # Current native geometric AI work
 
-> **Direction adopted 2026-09-24 (owner decision):** Goal S (multiplier-free serving) kept; Goal R (geometric
-> predictive advantage) re-scoped to a gated hypothesis and a candidate sparse-access structure; per-token parameter
-> sparsity recorded as the terminal serving invariant; the target objective moved to a long-range information probe.
-> The active milestone is the ["escape from bigram class" diagnostic gate](escape-bigram-class-plan-2026-09-24.md).
-> Record: [direction-decision-2026-09-24.md](direction-decision-2026-09-24.md) · owner entries D4–D6 in
-> [DECISIONS.md](DECISIONS.md). The component results below retain their exact scope.
+> **Latest owner direction, September 24:** [D7](DECISIONS.md#d7--adopt-the-integrated-attention-language-programme)
+> adopts the [integrated attention-language programme](principal-attention-plan-2026-09-24.md). Milestone A is active
+> under #973/#820. D0-b and D4–D6 retain their arithmetic, geometry-evidence, sparse-access and long-range-objective
+> constraints. Earlier isolated-gate sequencing is superseded; prior results retain their exact scope.
 
-## Latest: whole-project principal investigation and integrated model proposal, September 24 UTC
+## Active: integrated attention-language implementation and storage recovery
+
+The owner authorized cleanup, adopted the programme and directed implementation. Removing four verified Cargo incremental-cache directories recovered **4,839,772,160 physical bytes** (about 4.84 decimal GB), leaving **31,231,635,456 bytes** free at the paired closeout measurement. Models, research, source worktrees, binaries and warm dependency libraries were preserved. [Cleanup receipt](../evidence/storage-cleanup-2026-09-24.json).
+
+The [A1 implementation contract](integrated-attention-a1-plan-2026-09-24.md) starts one integrated Rust model/session/training path with artifact-bound finite geometry, contextual keys, bounded exact history and sparse output. Independent specialists own geometry, memory and output modules; the principal owns their shared model/trainer and serial Cargo execution. The [prospective resource receipt](../evidence/integrated-attention-a1-budget-2026-09-24.json) records the cumulative extension before use. **Implementation is in progress; no new model result is asserted by this entry.**
+
+---
+
+## Previous: whole-project principal investigation and integrated model proposal, September 24 UTC
 
 The [principal synthesis](principal-attention-plan-2026-09-24.md) reviews the history, current and dormant mechanisms, source paths and current primary literature with independent [mathematics](principal-attention-mathematics-2026-09-24.md), [computer-science](principal-attention-computer-science-2026-09-24.md) and [engineering](principal-attention-engineering-2026-09-24.md) reports plus cross-review. **No model was trained or replayed for this review.** The latest executed model result remains the failed loaded sparse-read gate below; source checkpoint `3101c060` and PRs #1380–#1384 were unmerged at review time, distinct from refreshed protected main `552d847d`.
 
