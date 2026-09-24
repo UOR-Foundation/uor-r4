@@ -5,7 +5,23 @@
 > under #973/#820. D0-b and D4–D6 retain their arithmetic, geometry-evidence, sparse-access and long-range-objective
 > constraints. Earlier isolated-gate sequencing is superseded; prior results retain their exact scope.
 
-## Active: integrated attention artifact executed; source-to-language learning remains unresolved
+## Active: A2 contextual attention fitted and replayed; hard admission is the next learning boundary
+
+Owner-requested PR [#1386](https://github.com/UOR-Foundation/uor-r4/pull/1386) is merged through the protected queue at main `b020f34a09816ba235984cedde1c50f4c8e9cae2`, with exact reviewed-tree equality. The incorporated #1380–#1385 PRs are closed with provenance. The complete programme is now on main; #973/#820 remain open.
+
+The [A2 continuation](integrated-attention-a2-result-2026-09-24.md) now joins delayed causal source indexing, a dedicated contextual address bank, contrastive query/key learning and source-conditioned marginal Generate/Copy language training in the integrated Rust model. Four matched fits completed, including one prospective correction that excludes future-target-derived natural recurrence hints from address supervision. All models were exported/reloaded; all 112 generated rows reproduce after tested short snapshots and separate-process replay. Complete evaluation and source-diagnosis files also reproduce byte for byte. [Evidence and identities](../evidence/integrated-attention-a2-result-2026-09-24.json).
+
+**Capability remains negative:** corrected C120/2I source admission is **1/24** new first-answer decisions, correct rank/selection **0/24**, and complete read-enabled correction answers **0/12** per arm. Read-enabled development likelihood is **6.854878 / 6.798124 bits/token**, versus NoRead **7.155441 / 7.101787**. These single-seed exposed results do not qualify general language or geometry. Actual generated answers remain punctuation/code-fragment loops; the candidate is not the default application model.
+
+The new decision-token head benefits from correct source evidence in offline one-step scoring, but that benefit does not reach hard retrieval. **Neither corrected artifact has a net change in any of the 2,097,152 dedicated context-token coefficients after export**; the shared role row and unretained master trajectory are outside this measurement. The head's true NoRead first-token MAP is colon on all 24 new prompts, so a larger decoder alone cannot cure this failure. Serving inspects roughly **35.9–36.0 thousand selected learned coefficients per generated step** against 42.1 million stored parameter bytes. This is logical access instrumentation, not full-path energy qualification.
+
+**Next in the same integrated model:** use a structured margin on the actual integer coarse scores, shared across value-edited source pairs and constrained by causal competing records plus real page capacity. Bounded signed-four-bit content-row edits must improve hard admission, then actual source ranking and complete uncopied generation against NoRead. This is one integrated learning continuation with diagnostic boundaries, not a new benchmark campaign. If operative hard learning still fails to generalize, reuse ordered span/role and exact byte/BPE identity contracts from the retained observed-text mechanisms. The [result's successor specification](integrated-attention-a2-result-2026-09-24.md#next-make-hard-admission-learn-in-the-integrated-model) records the decision and rejection conditions.
+
+Two qualification limits are explicit: only one BPE source anchor is masked, and the existing snapshot index rebuild can change posting membership after page saturation plus ring eviction. Current short replay does not establish that long-session case; preserve posting membership before persistent-session qualification. The [context projection correction](../evidence/integrated-attention-a2-context-projection-correction-2026-09-24.json) records the discovered 512 versus 1,024-token natural-loader discrepancy without retroactive prospective claims. No research/models/worktrees were deleted during A2, and no paid compute was used.
+
+---
+
+## Previous: A1 integrated attention artifact executed; source-to-language learning unresolved
 
 The owner authorized cleanup, adopted the programme and directed implementation. Removing four verified Cargo incremental-cache directories recovered **4,839,772,160 physical bytes** (about 4.84 decimal GB), leaving **31,231,635,456 bytes** free at the paired closeout measurement. Models, research, source worktrees, binaries and warm dependency libraries were preserved. [Cleanup receipt](../evidence/storage-cleanup-2026-09-24.json).
 
