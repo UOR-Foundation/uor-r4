@@ -149,8 +149,10 @@ pub struct MemoryEvent {
 
 struct RecurrentState {
     state: Tensor,
-    keys: Vec<Tensor>,
-    values: Vec<Tensor>,
+    // Contiguous [batch, previous events, width] histories. Each append keeps
+    // its graph edge during training, without restacking every earlier write.
+    keys: Option<Tensor>,
+    values: Option<Tensor>,
     events: Vec<MemoryEvent>,
 }
 
@@ -286,8 +288,8 @@ impl JointModel {
         }
         Ok(RecurrentState {
             state: Tensor::zeros((batch, self.config.width), DType::F32, &self.device)?,
-            keys: Vec::new(),
-            values: Vec::new(),
+            keys: None,
+            values: None,
             events: Vec::new(),
         })
     }
@@ -457,8 +459,14 @@ impl JointModel {
             )
         } else {
             let query = self.linear(&normalized, "read.query", training)?;
-            let keys = Tensor::stack(&memory.keys, 1)?;
-            let values = Tensor::stack(&memory.values, 1)?;
+            let keys = memory
+                .keys
+                .as_ref()
+                .ok_or_else(|| invalid("missing prior key history"))?;
+            let values = memory
+                .values
+                .as_ref()
+                .ok_or_else(|| invalid("missing prior value history"))?;
             let scores = query
                 .unsqueeze(1)?
                 .matmul(&keys.transpose(1, 2)?.contiguous()?)?
@@ -476,7 +484,7 @@ impl JointModel {
             let mass = candle_nn::ops::softmax(&Tensor::cat(&[&null, &scores], 1)?, 1)?;
             let no_read_mass = mass.narrow(1, 0, 1)?;
             let read_masses = mass.narrow(1, 1, previous)?.contiguous()?;
-            let read = read_masses.unsqueeze(1)?.matmul(&values)?.squeeze(1)?;
+            let read = read_masses.unsqueeze(1)?.matmul(values)?.squeeze(1)?;
             (no_read_mass, read_masses, read)
         };
         let update_input = Tensor::cat(&[&provisional, &read], 1)?;
@@ -495,15 +503,15 @@ impl JointModel {
         let value = self
             .linear(&normalized_write, "read.value", training)?
             .tanh()?;
+        let keys = append_history(memory.keys.as_ref(), &key, training)?;
+        let values = append_history(memory.values.as_ref(), &value, training)?;
         memory.state = if training {
             state.clone()
         } else {
             state.detach()
         };
-        memory.keys.push(if training { key } else { key.detach() });
-        memory
-            .values
-            .push(if training { value } else { value.detach() });
+        memory.keys = Some(keys);
+        memory.values = Some(values);
         memory.events.push(MemoryEvent {
             occurrence: previous,
             tokens: input.to_vec(),
@@ -701,6 +709,23 @@ pub fn numerical_contract() -> Value {
     })
 }
 
+/// Preserve all previous-write gradients with one two-input concatenation.
+/// Candle's stack/cat otherwise encodes one copy and one gradient edge per
+/// historical write on every step. Both layouts copy the same history bytes;
+/// this layout reduces encoder and graph-node counts without mutable writes.
+fn append_history(history: Option<&Tensor>, write: &Tensor, training: bool) -> Result<Tensor> {
+    let write = write.unsqueeze(1)?;
+    let appended = match history {
+        Some(previous) => Tensor::cat(&[previous, &write], 1)?,
+        None => write,
+    };
+    Ok(if training {
+        appended
+    } else {
+        appended.detach()
+    })
+}
+
 fn rms(input: &Tensor) -> Result<Tensor> {
     Ok(input.broadcast_div(
         &input
@@ -808,6 +833,48 @@ mod tests {
     }
     fn max_delta(a: &Tensor, b: &Tensor) -> Result<f32> {
         Ok(a.sub(b)?.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?)
+    }
+
+    #[test]
+    fn accumulated_history_matches_stack_values_and_all_write_gradients() -> Result<()> {
+        let device = Device::Cpu;
+        let writes = (0..5)
+            .map(|position| {
+                Var::from_vec(
+                    (0..6)
+                        .map(|coordinate| (position * 6 + coordinate + 1) as f32 / 32.0)
+                        .collect::<Vec<_>>(),
+                    (2, 3),
+                    &device,
+                )
+            })
+            .collect::<candle_core::Result<Vec<_>>>()?;
+        let mut history: Option<Tensor> = None;
+        let mut accumulated_loss = Tensor::zeros((), DType::F32, &device)?;
+        let mut stacked_loss = Tensor::zeros((), DType::F32, &device)?;
+        for (position, write) in writes.iter().enumerate() {
+            let appended = append_history(history.as_ref(), write.as_tensor(), true)?;
+            let originals: Vec<_> = writes[..=position].iter().map(Var::as_tensor).collect();
+            let stacked = Tensor::stack(&originals, 1)?;
+            assert_eq!(max_delta(&appended, &stacked)?, 0.0);
+            accumulated_loss = accumulated_loss.add(&appended.sqr()?.sum_all()?)?;
+            stacked_loss = stacked_loss.add(&stacked.sqr()?.sum_all()?)?;
+            history = Some(appended);
+        }
+        let accumulated_gradients = accumulated_loss.backward()?;
+        let stacked_gradients = stacked_loss.backward()?;
+        for write in &writes {
+            let actual = accumulated_gradients
+                .get(write.as_tensor())
+                .ok_or_else(|| invalid("missing accumulated-history write gradient"))?;
+            let expected = stacked_gradients
+                .get(write.as_tensor())
+                .ok_or_else(|| invalid("missing stacked-history write gradient"))?;
+            assert!(max_delta(actual, expected)? < 1e-6);
+        }
+        let detached = append_history(history.as_ref(), writes[0].as_tensor(), false)?;
+        assert!(!detached.track_op());
+        Ok(())
     }
 
     #[test]

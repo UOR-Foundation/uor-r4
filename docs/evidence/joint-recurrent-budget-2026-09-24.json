@@ -34,11 +34,11 @@
   "one_cargo_process": true,
   "one_metal_training_owner": true,
   "cpu_threads": 2,
-  "new_storage_limit_bytes": 419430400,
+  "new_storage_limit_bytes": 503316480,
   "storage_projection_bytes": {
-    "build_and_retained_binaries": 83886080,
-    "model_optimizer_checkpoints_both_arms": 251658240,
-    "reports_logs_temp": 83886080
+    "build_and_retained_binaries": 209715200,
+    "model_optimizer_checkpoints_both_arms": 188743680,
+    "reports_logs_temp": 104857600
   },
   "physical_free_before_bytes": 26525868032,
   "protected_physical_reserve_bytes": 25904021504,
@@ -51,5 +51,12 @@
     "reason": "Initial Metal B16 complete steps take about10s (~400targets/s), incompatible with paired30M planning anchor. Permit bounded CPU/backend/batch diagnosis before freezing full campaign; reuse unchanged graph. Existing cycle/time/storage limits unchanged.",
     "additional_profile_time_projection_seconds": 300,
     "additional_retained_checkpoint_bytes_max": 44000000
+  },
+  "storage_extension": {
+    "recorded_utc": "2026-09-24T23:28:27.458491+00:00",
+    "increment_bytes": 83886080,
+    "reason": "One optional backend build was canceled after a dependency safety issue was found; compiled cache is retained. Actual build allocation plus two profile artifacts consumed about235MB. Limit full-fit retained checkpoints to one midpoint and final per arm. Remaining projected writes fit above the unchanged physical reserve and128MiB stop margin.",
+    "physical_free_bytes_at_extension": 26317471744,
+    "physical_headroom_above_reserve_and_margin": 279232512
   }
 }
