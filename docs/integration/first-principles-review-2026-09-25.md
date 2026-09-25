@@ -44,6 +44,7 @@ The repository was read-only throughout the review. Appendix B lists the evidenc
    - The pace of decisions (11 in 7 days; 3 direction changes in 14 hours) outran the evidence.
 3. **The original idea was sound, and it has been published by others.**
    - TurboQuant, PolarQuant and QJL all *keep* the radius; none of them ablates it.
+   - The instinct that the radius matters is right for *ranking*, and retrieval work established it: NEQ (2019) and Google's ScaNN (2020). §6.1 reproduces it at zero bit cost.
    - The 4-D, radius-preserving quaternion quantizer was published by MIT/IBM in May 2026 (HQMQ). On Llama-3-8B KV caches at about 3 bits it beats a TurboQuant-style baseline.
    - 4-D is a weak block size for compression; 8-D, 24-D and trellis codes win.
    - The idea's best homes are:
@@ -107,6 +108,16 @@ The repository was read-only throughout the review. Appendix B lists the evidenc
 
 **Premise correction.** TurboQuant, PolarQuant and QJL do *not* discard the radius. Each stores the vector norm, either in floating point or recursively. What they eliminate is the per-block normalisation constants: scale and zero point (Literature 2504.19874, 2502.02617, 2406.03482).
 
+**The instinct has a correct, older form.** For inner-product *ranking* (retrieval and attention scores), an error in a vector's norm hurts more than an error in its direction.
+- NEQ (1911.04654, 2019) established this and quantizes the norm separately.
+- Google's own ScaNN (1908.10396, 2020) penalises the part of the error that lies along each vector more than the part across it.
+- The quantization agent reproduced the effect (§6.1): rescaling reconstructions to the stored norm, at no bit cost, raised TurboQuant's recall@10.
+
+**The project's own router paper misstates the record** (research/ai-research/ai-router/router-research/docs/research/ANGULAR_MANIFOLD_ROUTING_PAPER.md). Correct it before any external use:
+- It cites a title TurboQuant does not have, dated 2026 (:296). The paper is "TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate", arXiv 2504.19874, submitted 28 April 2025 (ICLR 2026).
+- It credits TurboQuant with showing that normalized embeddings are angularly non-uniform (:7, :22). TurboQuant is data-oblivious: it rotates inputs at random so that no such structure is needed.
+- It claims to predate TurboQuant's public release (:46), but the research chain it cites is from 2026.
+
 For a 4-block, PolarQuant's angles are exactly Hopf coordinates (math report §2.7). Two parts of the original idea remain distinct:
 - (a) *quantizing* the gain (radius) separately from the shape;
 - (b) using 4-D blocks.
@@ -119,7 +130,7 @@ For a 4-block, PolarQuant's angles are exactly Hopf coordinates (math report §2
 HQMQ's results:
 - About 5 bits: within 0.02–0.03 perplexity of fp16.
 - About 3 bits, on Llama-3-8B: it beats a TurboQuant-style spherical-plus-JL baseline (+0.745 vs +1.118 perplexity at 3.04 vs 3.15 bits).
-- Its E8 extension underperformed the 24-cell.
+- Its E8 extension underperformed the 24-cell. This review's lattice measurement found the opposite, E8 best at every rate (§6.1). The two E8 variants differ, and HQMQ's was not reproduced.
 
 IsoQuant (2603.28430) uses SO(4) quaternion-pair rotations as preconditioning. The owner's instinct was technically sound, but the priority is gone: **cite HQMQ and IsoQuant; do not claim the idea.**
 
@@ -466,22 +477,36 @@ Setup: i.i.d. Gaussian vectors, d=64, with an 8-bit norm counted for every metho
 | Bits/dim | 1.5 | 2 | 2.5 | 3 | 4 |
 |---|---:|---:|---:|---:|---:|
 | 4-D gain–shape with H4-derived codes vs TurboQuant-MSE | +0.19 dB | +0.30 | +0.24 | +0.64 | +0.93 |
-| D4 lattice (Voronoi cell = 24-cell) vs TurboQuant-MSE | ≈ +0.6–0.7 dB across rates | | | | |
+| D4 lattice (Voronoi cell = 24-cell) vs TurboQuant-MSE | ≈ +0.4–0.7 dB across rates | | | | |
 | E8 lattice vs TurboQuant-MSE | ≈ +0.85–1.22 dB across rates | | | | |
 
 - **The H4 structure itself does not help.** Spherical k-means codes of the same size match the 600-cell/2I codes (relative MSE 0.1288 vs 0.1274 at 2 bits). Random codes are 0.8–1.3 dB worse.
-- **Keeping the radius** is essential *inside* a 4-D block: dropping it costs 2–4 dB. But coding radius and direction as separate factors costs 0.3–0.5 dB against an unconstrained 4-D code. The literature agent's fixed 120-point code saturates at 3 bits/dim (§2.1).
+- **Keeping the radius.**
+  - *Inside a 4-D block* it is essential: dropping it costs 2.1–4.4 dB at equal or fewer bits. The MSE-optimal split gives the radius 1–3.3 bits per block.
+  - It is not "radius first". At about 2 bits/dim, a finer direction code with no radius beats a coarse one with 8 radius levels by 0.7–1.8 dB.
+  - Coding radius and direction as separate factors costs 0.3–0.5 dB against an unconstrained 4-D code, and up to 0.9 dB against E8. The literature agent's fixed 120-point code saturates at 3 bits/dim (§2.1).
+  - *For ranking* it helps beyond TurboQuant, at no bit cost. MSE-optimal codes shrink each vector by its own factor, which scrambles rankings. Rescaling every reconstruction to its stored norm raised TurboQuant's recall@10 by 0.017–0.031 on Gaussian data. On data sharing a large common component it gained 0.058–0.101 (3 seeds × 1,000 queries; paired SE ≈ 0.003).
+  - That reproduces known retrieval results (NEQ 1911.04654; ScaNN 1908.10396; §2.1).
+  - Per-block radii lowered recall on offset-dominated data (0.698 → 0.594) even as MSE improved. The ranking objective, not MSE, should choose the design.
 - **The data distribution matters more than the codebook.**
-  - Heavy-tailed coordinates need a random rotation; without it every method loses 1–4 dB.
-  - Heavy-tailed norms need a per-vector norm.
-  - Fixed outlier channels favour per-channel calibration.
+  - Heavy-tailed coordinates need a random rotation; without it every method loses 0.9–3.7 dB.
+  - Heavy-tailed norms need a per-vector norm; codes without one lose 1.9–3.8 dB.
+  - Fixed outlier channels or a common mean need centring. On the outlier set, centring cut TurboQuant's error from 0.127 to 0.059 and raised serving recall from 0.08–0.20 to 0.50–0.59.
+- **Free fixes for any stored code:**
+  - an 8-bit norm with reconstructions rescaled to it;
+  - global-mean centring;
+  - the add-only randomized Hadamard rotation;
+  - no QJL-style unbiasing for ranking. TurboQuant's unbiased variant had the worst recall of the rotated methods (0.389 at 2.84 bits/dim, against 0.676 for TurboQuant-MSE at 3), because top-k and softmax ignore a common scale.
 - **Serving.** Inner products between 2I codewords take exactly 9 values in ½ℤ[φ]. An integer ℤ[φ] lookup-table scorer matched the float path (recall@10 0.483 vs 0.482). Quantizing the *query* with the same ~2-bit code costs about 0.12 recall@10, and the same holds for scalar, k-means and E8 codes. So keep the query at full precision, with per-query tables built from shift-add constants.
 - **Best project use.**
-  - Keys and values of the attention and event-memory read, scored by table lookup. This replaces the 64 software multiplies per key in the current integer read (model.rs:322-329).
+  - Keys and values of the attention and event-memory read, scored by table lookup. This replaces the 64 software multiplies per key in the current integer read (model.rs:324-331).
   - For weights, E8 (icosian lattice) codewords up to about 2.2 bits/dim are exactly signed-4 integers, so the existing kernel is reusable.
+  - The project's signed-4 grid with power-of-two row scales is weak on synthetic Gaussian rows: relative MSE 0.0169 at 4.02 bits/dim, against 0.0101 with a free scale and 0.0087 for E8 at 4 bits/dim. E8 matches 0.0169 at about 3.5 bits/dim. Learned rounding may absorb part of this gap (untested).
   - Do not quantize the recurrent state at every step.
 
 **Verdict.** A sound engineering component with about 1 dB of headroom over scalar quantization. It is not, by itself, a breakthrough, and its novelty is low: HQMQ, PolarQuant, FibQuant and Block-Sphere Quantization precede it.
+
+All of this is synthetic data. The decisive test is still owed on the project's own vectors: "a matched H4/k-means/random vector-codebook comparison remains separately unrun" (quantized-recurrent-plan-2026-09-25.md:108-110). The optional 600-cell diagnostic is NOT_RUN (current-state.md:487). §10.1 item 14 prices it.
 
 ### 6.2 State tracking with geometric lanes (state-tracking report; math report E6)
 
@@ -883,6 +908,7 @@ The current "+30M tokens on the same model" card is superseded by Phase 0's cool
 | 11 | **Exact factored or class-based output softmax** | Cuts the 62.7% of per-token reads in the output head without a learned router | Days | NLL unchanged (exact) at lower bytes/token |
 | 12 | **uor-addr κ-labels** for event, record and artifact identity | UOR's own mature standard; retires prime-product identity | Hours | n/a |
 | 13 | **3 seeds by default, with bootstrap confidence intervals.** Gate on held-out BPB, a TinyStories-style coherence score and the D6 long-range probe, not on authored 32-prompt panels | Stops n = 1 and small-panel results from steering direction | Small | n/a |
+| 14 | **Run the owed codebook comparison on the retained checkpoint.** Compare signed-4, E8 at ≤2.2 bits/dim, D4, 2I gain–shape and 4-D k-means on the randomized-Hadamard-rotated weight matrices and on dumped Q/K/V | Decides whether sub-4-bit and lattice work is worth doing, using real vectors instead of §6.1's synthetic ones | Hours, offline | Stop sub-4-bit work if E8 at about 2.2 bits/dim costs more than 0.1 nats beyond today's learned-rounding loss (+0.024 / +0.046). Keep scalar if nothing beats it by at least 0.01 nats |
 
 **Quarter-square lookup multiply.** The quarter-square LUT, ab = ⌊(a+b)²/4⌋ − ⌊(a−b)²/4⌋, is a D0-b-legal *speed* fix: 30–45× faster than the current loop.
 
@@ -974,7 +1000,7 @@ Compiled from the literature report, which retrieved every source listed.
 
 | Project idea | Closest prior work | Novelty | Leverage for the project |
 |---|---|---|---|
-| Keep the radius and quantize the direction | TurboQuant 2504.19874, PolarQuant 2502.02617 and QJL 2406.03482 all store the norm | Already done | High |
+| Keep the radius and quantize the direction | TurboQuant 2504.19874, PolarQuant 2502.02617 and QJL 2406.03482 all store the norm. For ranking, NEQ 1911.04654 quantizes the norm explicitly and ScaNN 1908.10396 penalises error along each vector | Already done | High |
 | 4-D quaternion chunks with a polytope shape code | HQMQ 2605.27646 (2026), IsoQuant 2603.28430 (2026), HIGGS p=4 2411.17525, QuIP# D4 2402.04396 | Already done (concurrent) | High |
 | 600-cell or E8 = H4 ⊕ φH4 as a codebook | QuIP# E8P, LLVQ Leech lattice 2603.11021, 600-cell coding theory | Incremental | Medium |
 | Per-lane quaternion state rotation | QRNN 1806.04418, PaTH 2505.16381, DeltaProduct 2502.10297, Mamba-3 2603.15569 | Incremental | Medium |
@@ -1001,7 +1027,7 @@ The specialist reports and scripts lived in the review sandbox. Their load-beari
 | Literature | Seventy-plus retrieved papers; a 4-D gain–shape measurement |
 | Audit | GitHub API data for 974 PRs; per-PR file statistics for the 369 PRs merged in the last 30 days; compute-versus-orchestration accounting |
 | Verification | Builds and tests; x86 disassembly census; a random-weight timing harness comparing software and hardware multiply (bit-identical); a correctness review |
-| Quantization | Matched-bit rate-distortion comparisons, inner-product error and NN recall, and the codebook-serving variant |
+| Quantization | Matched-bit rate-distortion comparisons over five synthetic distributions; inner-product error and NN recall; a direct radius ablation and a norm-rescaling recall check (3 seeds × 1,000 queries); the codebook-serving variant |
 | State tracking | A5/Z60 word problems; quaternion, diagonal, complex and GRU models; exact 2I table serving |
 | Lead | 2I closure; golden-gate covering (level-1 3,600 rotations, exact ½ℤ[φ] coordinates, covering against random); a WikiText-2 byte-level time-mixing comparison (six variants) |
 
