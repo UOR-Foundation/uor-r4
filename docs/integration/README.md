@@ -23,6 +23,7 @@ index tooling is optional repository tooling, not the native model lifecycle.
 |---|---|
 | What are we building and why? | [Canonical project plan](project-track.md) |
 | What is implemented and next? | [Current state](current-state.md), [continuation prompt](CONTINUE.md) |
+| Is the programme on course, and what can geometry actually do? | [First-principles review, September 25](first-principles-review-2026-09-25.md): an evidence document, not a decision record |
 | What bounds execution? | [Policy](agent-execution-policy.md), [machine invariants](agent-execution-policy.json) |
 | What was discovered in the prior audit? | [Historical reconciliation](roadmap-reconciliation.md), [dated snapshot](roadmap-state.json), [source catalog](source-catalog.json) |
 | What components might be reused? | [UOR source audit](uor-source-audit.md), [external-source review](external-research-audit.md), [historical frontend port plan](frontend-port-plan.md) |
