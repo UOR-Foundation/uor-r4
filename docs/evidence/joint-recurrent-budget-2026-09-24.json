@@ -485,5 +485,27 @@
     "source_commit": "ad4e639fedecf9d490035f9986be736117bd3e29",
     "executable_sha256": "f68d654294607df7891e300d572d08bffa772606674c80cdaad2b95c7d122238",
     "same_model_horizon_batch_shards_optimizer_sampler_and_final_target": true
+  },
+  "final_evaluation_projection": {
+    "recorded_utc": "2026-09-25T05:54:34.126896+00:00",
+    "selected_steps": {
+      "quaternion": 7324,
+      "householder_pair": 7324
+    },
+    "evaluations": 4,
+    "concurrent_cpu_processes": 4,
+    "backend_threads_each": 1,
+    "batch": 16,
+    "context": 256,
+    "target_rows_per_evaluation": 249856,
+    "maximum_total_output_projection_bytes": 67108864,
+    "model_optimization_steps": 0,
+    "paired_evaluation_wall_projection_seconds": 600,
+    "supervisor_seconds": 720,
+    "aggregate_rss_stop_bytes": 8589934592,
+    "physical_free_stop_bytes": 21676163072,
+    "termination_grace_seconds": 15,
+    "remaining_comparison_review_docs_delivery_projection_seconds": 1800,
+    "within_existing_cycle_and_storage_limits": true
   }
 }
