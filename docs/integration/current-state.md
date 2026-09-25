@@ -187,7 +187,25 @@ and the [progress-control rules](agent-execution-policy.md#progress-control--own
 | Evaluator | Existing `reference-evaluator-v2.json`; no new panel or holdout during implementation |
 | Deferred branch | recent64 fitting and sign-index/width/hash sweeps |
 
-**Next capability work card (#973 under #820):**
+**Active capability work card (#973 under #820):**
+
+Owner resumed this milestone after storage consolidation. The
+[prospective continuation plan](language-continuation-plan-2026-09-25.md),
+[parent output judgments](../evidence/language-continuation-parent-quality-2026-09-25.json)
+and [resource projection](../evidence/language-continuation-budget-2026-09-25.json)
+freeze one further29,999,104-target dose per arm, steps8,348→15,672, with unchanged
+full256 conditions. Two configured DeepSeek reviews completed through RDC;
+[principal adjudication](../evidence/language-continuation-review-2026-09-25.json)
+retains actual prose criteria and declines additional heuristic panels.
+Preparation found a continuous-to-rounding interface prerequisite: explicit
+fresh-calibration shadow parents with truthful zero-update provenance.
+The adapter is implemented and [verified](../evidence/language-continuation-adapter-2026-09-25.json):
+2 focused release checks pass; both actual step8,348 parents complete calibration,
+packed export, integer bundle loading and an8-token interface exercise in about
+3 seconds each, with zero optimizer/data advances. This is interface evidence,
+not language retention. **Training is NOT_RUN at this record; launch follows
+final process/resource review.**
+
 
 - **Deliverable:** a retained full256 learner producing more coherent,
   source-consistent short language continuations through the standalone integer
