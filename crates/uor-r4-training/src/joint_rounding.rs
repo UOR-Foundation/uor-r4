@@ -906,7 +906,7 @@ mod tests {
         for (name, variable) in &parent {
             let original = values(&variable.as_detached_tensor())?;
             let relaxed = values(&soft[name])?;
-            let scale = scales[name];
+            let scale = scales[name.as_str()];
             for (index, (&before, &after)) in original.iter().zip(relaxed.iter()).enumerate() {
                 if before == 0.0 {
                     assert_eq!(after, before, "zero coordinate changed for {name}");
