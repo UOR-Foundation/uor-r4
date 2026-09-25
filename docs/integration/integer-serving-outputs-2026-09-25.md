@@ -23,7 +23,7 @@ Stop: `maximum_new_tokens`. Generated tokens: 128.
 Once upon a time, there was a mighty lion walking through the jungle. He was looking for his friends, and he
 
 ```text
-couldn't find it. He felt sad because he lost the lion's friend. He didn't want to make him sad, but he wanted to play hide of the lion. 
+couldn't find it. He felt sad because he lost the lion's friend. He didn't want to make him sad, but he wanted to play hide of the lion.
 He asked his mom if he could try to hide and finally said yes! He finally got looking for a big lion. There was a little mouse named Mimi. Mimi looked at the lion and said no, but He just wanted to help.
 After all the day she had finished, she was very happy. She thanked her and gave her a little kiss all day. Now, Mimi was not sad anymore again. The lion and Mimi became best friends forever
 ```
@@ -131,4 +131,3 @@ The train had shone so hard that it had brought a special spot.
 ```
 
 Stop: `maximum_new_tokens`. Generated tokens: 128.
-
