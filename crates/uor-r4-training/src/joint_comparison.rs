@@ -403,7 +403,7 @@ fn compare(
                 } else { "Selected target visits match. One seed and this artifact comparison do not establish a geometric advantage." }
             },
             "read_control":"Read and NoRead bind to the same checkpoint within each arm; NoRead rows have exact null mass1 and no selected prior occurrence. This reader does not replay the models or reconstruct full read/probability distributions.",
-            "checkpoint_selection":"Required caller-owned rule: select by the recorded F32 quick_loss tune score. This comparison consumes the supplied selected roots and never reselects using its later F64 row reductions. Selection-score receipts are not present in the evaluation-report schema and are not independently validated here.",
+            "checkpoint_selection":"Caller owns the prospectively frozen selection or final-step rule. This comparison consumes the supplied roots and never reselects using its later F64 row reductions; it does not independently validate a caller's selection receipt. Rung1 used F32 quick_loss tune selection; rung2 declares the final common step.",
             "loaded_generation_evidence":"Original sealed roots retain actual generations and story probes. Their file identities are recorded; correctness, collapse and task-transfer interpretation require inspecting those responses separately.",
             "geometry_promotion":false, "blocks_sha256":sha256_file(&out.join("comparison-blocks.jsonl"))?,
             "elapsed_seconds_before_sealing":started.elapsed().as_secs_f64()
