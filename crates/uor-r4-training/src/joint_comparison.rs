@@ -339,6 +339,15 @@ fn compare(
     }
     let exposure_differs = native[0]["checkpoint_binding"]["sampled_target_visits"]
         != native[2]["checkpoint_binding"]["sampled_target_visits"];
+    let phase_exposure = json!({
+        "quaternion":training_exposure(&native[0])?,
+        "ordinary":training_exposure(&native[2])?
+    });
+    let horizon_scope = if native[0]["campaign"]["context"] == CONTEXT {
+        "Prespecified descriptive slice of the same rows: positions0..63 versus64..255. Both slices lie within the current256-token training unroll; the boundary distinguishes early and later positions, not trained versus untrained positions. With a declared64-token warmup, phase exposure is reported separately. No primary gate is changed or decided on a slice."
+    } else {
+        "Prespecified descriptive slice of the same rows: positions0..63 versus64..255. For a64-window fit without256-token continuation, later positions extend beyond its independently reset training horizon. Consult the bound phase exposures; no primary gate is changed or decided on a slice."
+    };
     let position_horizons: serde_json::Map<String, Value> = ["tune", "comparison", "full"]
         .iter()
         .zip(&horizons)
@@ -383,10 +392,11 @@ fn compare(
             "position_horizon_means":position_horizons,
             "training_window":native[0]["campaign"]["context"],
             "position_split_matches_training_window":native[0]["campaign"]["context"] == 64,
-            "position_horizon_scope":"Prespecified descriptive slice of the same rows: positions0..63 versus64..255. For a 64-window fit, later positions extend beyond its independently reset training horizon. No primary gate is changed or decided on a slice.",
+            "position_horizon_scope":horizon_scope,
             "original_summary_agreement":agreement, "numerical_component_gates":numeric_gates,
             "selected_checkpoint_exposure":{
                 "quaternion":native[0]["checkpoint_binding"], "ordinary":native[2]["checkpoint_binding"],
+                "phase_exposure":phase_exposure,
                 "different_selected_optimization_exposure":exposure_differs,
                 "interpretation":if exposure_differs {
                     "Selected weights have different optimization exposure, additionally confounding geometry attribution. The declared planned dose and development/checkpoint settings match; this reader does not independently audit completion of both full fitting jobs or checkpoint selection."
@@ -551,7 +561,87 @@ fn validate_joint(report: &Value, transport: Transport, mode: ReadMode) -> Resul
     }
     digest_field(binding, "model_sha256", 64)?;
     digest_field(binding, "source_commit", 40)?;
+    training_exposure(report)?;
     Ok(())
+}
+
+/// Account for the declared single window transition without treating warmup
+/// visits as training at the final horizon. Parent hashes remain arm-specific;
+/// the training driver checked them against the actual sealed parent files.
+fn training_exposure(report: &Value) -> Result<Value> {
+    let campaign = &report["campaign"];
+    let binding = &report["checkpoint_binding"];
+    let transition = &campaign["training_window_transition"];
+    if binding["training_window_transition"] != *transition {
+        return Err(invalid("campaign/checkpoint training transition differs"));
+    }
+    let step = unsigned(binding, "optimizer_step")?;
+    let total = unsigned(binding, "sampled_target_visits")?;
+    let batch = unsigned(campaign, "batch")?;
+    let context = unsigned(campaign, "context")?;
+    let per_step = batch
+        .checked_mul(context)
+        .ok_or_else(|| invalid("phase visit overflow"))?;
+    let mut parent_step = 0;
+    let mut warmup_visits = 0;
+    let mut warmup_full_context_visits = 0;
+    let mut warmup = Value::Null;
+    if !transition.is_null() {
+        digest_field(transition, "parent_checkpoint_sha256", 64)?;
+        digest_field(transition, "parent_campaign_sha256", 64)?;
+        let old_batch = unsigned(transition, "old_batch")?;
+        let old_context = unsigned(transition, "old_context")?;
+        parent_step = unsigned(transition, "parent_optimizer_step")?;
+        warmup_visits = unsigned(transition, "parent_sampled_target_visits")?;
+        if !transition["reason"]
+            .as_str()
+            .is_some_and(|reason| !reason.trim().is_empty())
+            || !(1..=64).contains(&old_batch)
+            || !(8..=256).contains(&old_context)
+            || transition["new_batch"] != batch
+            || transition["new_context"] != context
+            || (old_batch == batch && old_context == context)
+            || old_batch.checked_mul(old_context) != Some(per_step)
+            || parent_step == 0
+            || parent_step > step
+            || parent_step.checked_mul(per_step) != Some(warmup_visits)
+            || warmup_visits > total
+            || binding["training_batch"] != batch
+            || binding["training_context"] != context
+            || binding["sampled_targets_per_step"] != per_step
+        {
+            return Err(invalid("invalid checkpoint training-phase accounting"));
+        }
+        if old_context == CONTEXT as u64 {
+            warmup_full_context_visits = warmup_visits;
+        }
+        warmup = json!({"batch":old_batch,"context":old_context,
+            "optimizer_steps":parent_step,"target_visits":warmup_visits});
+    }
+    let current_steps = step
+        .checked_sub(parent_step)
+        .ok_or_else(|| invalid("phase step underflow"))?;
+    let current_visits = total
+        .checked_sub(warmup_visits)
+        .ok_or_else(|| invalid("phase visit underflow"))?;
+    if current_steps.checked_mul(per_step) != Some(current_visits) {
+        return Err(invalid("current-phase visits differ from optimizer clock"));
+    }
+    let full_context_visits = warmup_full_context_visits
+        + if context == CONTEXT as u64 {
+            current_visits
+        } else {
+            0
+        };
+    Ok(json!({
+        "selected_global_optimizer_step":step,"selected_total_target_visits":total,
+        "warmup":warmup,
+        "current_phase":{"batch":batch,"context":context,"starting_global_step":parent_step,
+            "optimizer_steps":current_steps,"target_visits":current_visits},
+        "full256_context_target_visits":full_context_visits,
+        "training_window_transition":transition,
+        "interpretation":"Counts separate exposure by the declared training windows. A256-token unroll makes read ages1..255 eligible for language gradients; exposure alone does not establish effective long-range recall. Weights, optimizer state and global step continue through the declared transition. Parent file hashes are retained from sealed evaluation metadata, not revalidated by loading external checkpoints here."
+    }))
 }
 
 fn validate_pairs(reports: &[Value]) -> Result<()> {
@@ -571,6 +661,29 @@ fn validate_pairs(reports: &[Value]) -> Result<()> {
     }
     let q = &reports[0]["campaign"];
     let ordinary = &reports[2]["campaign"];
+    let q_transition = &q["training_window_transition"];
+    let ordinary_transition = &ordinary["training_window_transition"];
+    if q_transition.is_null() != ordinary_transition.is_null() {
+        return Err(invalid(
+            "transport arms differ in training transition presence",
+        ));
+    }
+    if !q_transition.is_null() {
+        for field in [
+            "old_batch",
+            "old_context",
+            "new_batch",
+            "new_context",
+            "parent_optimizer_step",
+            "parent_sampled_target_visits",
+        ] {
+            if q_transition[field] != ordinary_transition[field] {
+                return Err(invalid(format!(
+                    "transport arms differ in training transition {field}"
+                )));
+            }
+        }
+    }
     for field in [
         "optimizer",
         "data_seed",

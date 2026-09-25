@@ -65,7 +65,8 @@ its original scope.
 
 ## Active D8 rung 1 learning campaign
 
-**The continuous recurrent-memory learner is implemented and fitting.** Its full
+**The continuous recurrent-memory learner is implemented; its training horizon
+is being corrected before further full fitting.** Its full
 language-loss graph connects transport, state, causal Q/K/V memory and normalized
 vocabulary/copy output. A matched Householder-pair arm provides the ordinary
 control. Seven focused release checks passed, including all-write gradient
@@ -75,12 +76,16 @@ language capability.
 
 The [frozen campaign](joint-recurrent-campaign-2026-09-24.md) and
 [resource projection](../evidence/joint-recurrent-budget-2026-09-24.json) specify
-29,999,104target visits per arm, one paired seed, independent64-token training
-windows and unchanged256-token development/generation. Longer read ages receive
-no data gradient under this initial fit. Both CPU jobs are running concurrently
-through RDC on the same M1 host, with two threads each, an8GiB aggregate RAM
-ceiling and checkpoint requests at resource limits. The compiled learning source
-is `9d8c1e39e2e3bbafaec63791b048b1b3b6161211`; the artifact container is
+one paired seed and the unchanged256-token development/generation. The owner
+correctly challenged the64-token training mismatch before the full dose finished.
+Both RDC jobs checkpointed safely; quaternion's additional56original updates
+aligned both parents at2104steps /8,617,984visits. Their reload deltas are zero.
+Preserve this warmup and all AdamW state; the next explicit continuation uses
+batch16/context256 so longer histories receive language credit. Profile its
+complete updates before fixing the remaining time projection. Planned total
+exposure remains29,999,104visits per arm including warmup, with selection at
+global steps4714/7324. The warmup source is
+`9d8c1e39e2e3bbafaec63791b048b1b3b6161211`; the artifact container is
 `/Users/casey.allard/uor-r4-investigations/joint-recurrent-20260924`.
 
 After fitting, select midpoint/final checkpoints on the exposed64-block tune

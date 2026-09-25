@@ -15,6 +15,21 @@ use crate::joint_model::{JointConfig, JointModel, ReadMode};
 use crate::joint_optimizer::{AdamConfig, NamedAdamW};
 use crate::{invalid, sha256_file, Result};
 
+/// A new window schedule starting from one exact, sealed parent checkpoint.
+/// Hashes bind the parent's source, parameters, optimizer clock and data policy.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TrainingWindowTransition {
+    pub parent_checkpoint_sha256: String,
+    pub parent_campaign_sha256: String,
+    pub reason: String,
+    pub old_batch: usize,
+    pub old_context: usize,
+    pub new_batch: usize,
+    pub new_context: usize,
+    pub parent_optimizer_step: usize,
+    pub parent_sampled_target_visits: usize,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Campaign {
     pub schema: String,
@@ -34,6 +49,8 @@ pub struct Campaign {
     /// Optional local supervisor request: stop between updates and checkpoint.
     #[serde(default)]
     pub stop_file: Option<PathBuf>,
+    #[serde(default)]
+    pub training_window_transition: Option<TrainingWindowTransition>,
     pub trial_scope: String,
 }
 
@@ -61,8 +78,31 @@ impl Campaign {
         }
         cfg.model.validate()?;
         cfg.optimizer.validate()?;
+        if let Some(transition) = &cfg.training_window_transition {
+            if !is_hex_digest(&transition.parent_checkpoint_sha256, 64)
+                || !is_hex_digest(&transition.parent_campaign_sha256, 64)
+                || transition.reason.trim().is_empty()
+                || !(1..=64).contains(&transition.old_batch)
+                || !(8..=cfg.model.context).contains(&transition.old_context)
+                || transition.new_batch != cfg.batch
+                || transition.new_context != cfg.context
+                || transition.old_batch * transition.old_context != cfg.batch * cfg.context
+                || (transition.old_batch == cfg.batch && transition.old_context == cfg.context)
+                || transition.parent_optimizer_step == 0
+                || transition
+                    .parent_optimizer_step
+                    .checked_mul(cfg.batch * cfg.context)
+                    != Some(transition.parent_sampled_target_visits)
+            {
+                return Err(invalid("invalid declared training-window transition"));
+            }
+        }
         Ok(cfg)
     }
+}
+
+fn is_hex_digest(value: &str, length: usize) -> bool {
+    value.len() == length && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn metadata(cfg: &Campaign, mode: &str, device_name: &str) -> Result<Value> {
@@ -186,6 +226,9 @@ fn save_checkpoint(
             "optimizer_step":step,"sampled_target_visits":step*cfg.batch*cfg.context,
             "data_sampler":"splitmix64-counter-v1;valid-window-union;no-cross-store;step/lane-bound",
             "next_data_step":step,"data_seed":cfg.data_seed,
+            "training_batch":cfg.batch,"training_context":cfg.context,
+            "sampled_targets_per_step":cfg.batch*cfg.context,
+            "training_window_transition":cfg.training_window_transition,
             "evaluator_sha256":evaluator_sha,
             "model_sha256":sha256_file(&directory.join("model.safetensors"))?,
             "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNBOUND")
@@ -199,6 +242,13 @@ fn save_checkpoint(
 pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>) -> Result<()> {
     let started = Instant::now();
     let mut report = metadata(cfg, "joint-fit", device_name)?;
+    if cfg.training_window_transition.is_some() && resume.is_none() {
+        return Err(invalid(
+            "a training-window transition requires its sealed parent",
+        ));
+    }
+    report["training_window_transition"] = json!(cfg.training_window_transition);
+    report["training_window_transition_applied"] = json!(false);
     let evaluator = load_evaluator(&cfg.evaluator_path)?;
     // Reserve every checkpoint leaf before loading data or model. The final leaf
     // retains a clean resource-limited stop as well as a complete run.
@@ -225,18 +275,58 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
     let selected = device(device_name)?;
     let (model, mut optimizer, begin) = if let Some(path) = resume {
         report_output::verify(path)?;
-        let old: Campaign = serde_json::from_slice(&fs::read(path.join("campaign.json"))?)?;
+        let old = Campaign::load(&path.join("campaign.json"))?;
         let checkpoint: Value = serde_json::from_slice(&fs::read(path.join("checkpoint.json"))?)?;
-        // Only remaining time/target/checkpoint/report frequency may change.
+        let checkpoint_sha = sha256_file(&path.join("checkpoint.json"))?;
+        let campaign_sha = sha256_file(&path.join("campaign.json"))?;
+        let begin = usize::try_from(
+            checkpoint["next_data_step"]
+                .as_u64()
+                .ok_or_else(|| invalid("resume cursor"))?,
+        )
+        .map_err(|_| invalid("resume cursor exceeds platform usize"))?;
+        let parent_visits = begin
+            .checked_mul(old.batch * old.context)
+            .ok_or_else(|| invalid("resume target-visit count overflow"))?;
+        // Time/target/checkpoint/report frequency may change on ordinary resume.
+        // Window dimensions require a declaration bound to this exact parent.
         if serde_json::to_value(&old.model)? != serde_json::to_value(&cfg.model)?
-            || old.batch != cfg.batch
-            || old.context != cfg.context
+            || old.optimizer != cfg.optimizer
             || old.data_seed != cfg.data_seed
             || checkpoint["evaluator_sha256"] != evaluator.sha256
             || checkpoint["model_sha256"] != sha256_file(&path.join("model.safetensors"))?
+            || checkpoint["schema"] != "uor-r4.joint-recurrent-checkpoint/1"
+            || !checkpoint["source_commit"]
+                .as_str()
+                .is_some_and(|source| is_hex_digest(source, 40))
         {
             return Err(invalid(
-                "resume changes model, sampler, evaluator or weights",
+                "resume changes model, optimizer, data, evaluator or bound weights/source",
+            ));
+        }
+        let window_changed = old.batch != cfg.batch || old.context != cfg.context;
+        if window_changed {
+            let transition = cfg
+                .training_window_transition
+                .as_ref()
+                .ok_or_else(|| invalid("resume changes windows without a declared transition"))?;
+            if transition.parent_checkpoint_sha256 != checkpoint_sha
+                || transition.parent_campaign_sha256 != campaign_sha
+                || transition.old_batch != old.batch
+                || transition.old_context != old.context
+                || transition.new_batch != cfg.batch
+                || transition.new_context != cfg.context
+                || old.batch * old.context != cfg.batch * cfg.context
+                || transition.parent_optimizer_step != begin
+                || transition.parent_sampled_target_visits != parent_visits
+            {
+                return Err(invalid(
+                    "training-window transition does not match its actual parent",
+                ));
+            }
+        } else if cfg.training_window_transition != old.training_window_transition {
+            return Err(invalid(
+                "ordinary resume changes training-window transition lineage",
             ));
         }
         let model = JointModel::load(path, &selected)?;
@@ -244,14 +334,11 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
             return Err(invalid("loaded resume model differs from campaign"));
         }
         let optimizer = NamedAdamW::load(path, model.variables(), &cfg.optimizer)?;
-        let begin = checkpoint["next_data_step"]
-            .as_u64()
-            .ok_or_else(|| invalid("resume cursor"))? as usize;
         if optimizer.step_count() as usize != begin
             || begin >= cfg.total_steps
             || checkpoint["optimizer_step"] != json!(begin)
             || checkpoint["data_seed"] != json!(cfg.data_seed)
-            || checkpoint["sampled_target_visits"] != json!(begin * cfg.batch * cfg.context)
+            || checkpoint["sampled_target_visits"] != json!(parent_visits)
             || checkpoint["data_sampler"]
                 != "splitmix64-counter-v1;valid-window-union;no-cross-store;step/lane-bound"
         {
@@ -259,6 +346,15 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
                 "resume optimizer/cursor mismatch or completed target",
             ));
         }
+        report["resume_parent"] = json!({
+            "path":path,"checkpoint_sha256":checkpoint_sha,"campaign_sha256":campaign_sha,
+            "source_commit":checkpoint["source_commit"],"optimizer_step":begin,
+            "sampled_target_visits":parent_visits,
+        });
+        report["training_window_transition_applied"] = json!(window_changed);
+        report["window_sampler_continuation"] = json!(
+            "Same counter algorithm and global step; a declared batch/context transition changes sampled windows and lane count, with no data-cursor or optimizer reset."
+        );
         (model, optimizer, begin)
     } else {
         let model = JointModel::new(cfg.model.clone(), &selected)?;
@@ -274,6 +370,7 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         .map(|v| v.elem_count())
         .sum::<usize>());
     report["starting_step"] = json!(begin);
+    report["starting_sampled_target_visits"] = json!(begin * cfg.batch * cfg.context);
     let (retained_inputs, retained_targets) = training_batch(&stores, cfg, 0)?;
     let initial_fit = f64::from(
         model
@@ -415,6 +512,7 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
     report["completed_step"] = json!(complete);
     report["new_optimizer_steps"] = json!(complete - begin);
     report["new_sampled_target_visits"] = json!((complete - begin) * cfg.batch * cfg.context);
+    report["cumulative_sampled_target_visits"] = json!(complete * cfg.batch * cfg.context);
     report["final_retained_batch_nll"] = json!(final_fit);
     report["final_development_nll"] = json!(final_dev);
     report["reloaded_retained_batch_nll"] = json!(reloaded_fit);
@@ -619,6 +717,7 @@ mod tests {
             checkpoint_steps: vec![],
             max_process_seconds: 100,
             stop_file: None,
+            training_window_transition: None,
             trial_scope: "sampler".into(),
         };
         let stores = vec![

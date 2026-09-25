@@ -1,6 +1,8 @@
 # D8 rung 1: continuous recurrent memory learner
 
-Status: frozen protocol; paired full learning run active. References #973 and #820.
+Status: owner-directed horizon correction; the initial64-window full schedule
+is superseded. Preserve its warmup, then match training and evaluation at256.
+References #973 and #820.
 This follows the completed [rung 0 comparison](reference-evaluator-v2.json).
 The programme remains [project-track.md](project-track.md); changing outcomes
 belong in [current-state.md](current-state.md).
@@ -92,7 +94,7 @@ actual learning run. No expansion into unrelated test repairs is planned.
 Integer discretization, prime/zeta address admission and final serving costs
 remain subsequent rungs once joint language learning is demonstrated.
 
-## Full learning schedule frozen after measured profiling
+## Initial64-window full schedule: superseded after owner review
 
 The corrected pinned CPU backend completes the B64/T64 profile at approximately
 3,650target visits/second, with a3.00GB measured peak process footprint. The
@@ -136,3 +138,44 @@ Apple BLAS is explicitly enabled only in the offline tool. A pinned, licensed
 Candle0.9.2 source copy carries four corrected operand-slice lengths, verified
 against all103 upstream file hashes. See
 [the patch explanation](../../third_party/candle-core-0.9.2/UOR-PATCH.md).
+
+## Corrected continuation: full256-token language credit
+
+At00:39UTC September25, the owner correctly challenged spending the remaining
+campaign on64-token fits while evaluating256-token histories. That throughput
+choice leaves most read ages and longer state trajectories without language
+training. Disclosing the mismatch was insufficient reason to finish that dose.
+The lead requested safe checkpoints before further full fitting.
+
+The original quaternion run stopped at2048updates and the ordinary run at2104.
+Both checkpoints saved, sealed and reloaded with zero retained-loss difference.
+An executed56-update continuation of quaternion, using the original binary and
+64-window sampler, aligned both arms at **2104updates /8,617,984target visits**.
+This retained learning is warmup, not256-token evidence. All stopped attempts,
+models, optimizer moments and negative/unfinished claims remain preserved.
+
+Both arms now continue with **batch16, training context256, model/evaluation
+context256**. Targets per update remain4096. An explicit
+`training_window_transition` binds the actual parent checkpoint/campaign hashes,
+old/new dimensions, global optimizer/data step and prior exposure. Model weights,
+AdamW moments/configuration, tokenizer/data identities and global step survive.
+Changing the window dimensions changes sampled starts and lane count; this is a
+declared new sampler phase, not an ordinary identical-window resume. Undeclared
+dimension changes remain rejected. The new retained-batch loss is a different
+sample/horizon and must not be directly subtracted from the old retained loss.
+
+Profile12 complete256-token updates per arm before freezing the full resource
+projection. Retain those updates inside the planned total7324steps. The remaining
+phase comprises5220updates /21,381,120target visits at256, giving29,999,104total
+visits per arm including warmup. Planned selection candidates are global step
+4714 (midpoint of the256 phase) and7324. Warmup/profile checkpoints are not
+selection candidates. Use the same recorded F32-origin tune64 score and tie rule,
+then the unchanged full-population likelihood, combined NoRead, actual generation
+and exploratory source-edit checks. Both0–63 and64–255 slices are now inside the
+trained horizon; report them descriptively without changing the overall gate.
+
+The [budget](../evidence/joint-recurrent-budget-2026-09-24.json) records preparation
+and storage prospectively. Only two obsolete, reproducible Cargo library/metadata
+objects were additionally removed, reclaiming187,551,744physical bytes. No learned
+model, executed binary, report, research, source or worktree was removed. Full
+continuation launch still requires the measured256-step throughput/RAM projection.

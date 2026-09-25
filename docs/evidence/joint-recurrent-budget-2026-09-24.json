@@ -34,7 +34,7 @@
   "one_cargo_process": true,
   "one_metal_training_owner": true,
   "cpu_threads": 4,
-  "new_storage_limit_bytes": 671088640,
+  "new_storage_limit_bytes": 805306368,
   "storage_projection_bytes": {
     "build_and_retained_binaries": 377487360,
     "model_optimizer_checkpoints_both_arms": 188743680,
@@ -45,7 +45,7 @@
   "stop_margin_bytes": 134217728,
   "resource_limits_preserve_all_previous_charges": true,
   "paid_external_compute": false,
-  "deletions_authorized": "Only the seven named reproducible canceled-build objects in canceled-build-cleanup.json; no research/model/report/worktree deletion",
+  "deletions_authorized": "Seven canceled-build objects in canceled-build-cleanup.json, plus the two inspected obsolete Cargo core objects in horizon-correction-cache-cleanup.json. No research/model/report/worktree or executed binary deletion.",
   "profile_extension": {
     "recorded_utc": "2026-09-24T23:22:54.453091+00:00",
     "reason": "Initial Metal B16 complete steps take about10s (~400targets/s), incompatible with paired30M planning anchor. Permit bounded CPU/backend/batch diagnosis before freezing full campaign; reuse unchanged graph. Existing cycle/time/storage limits unchanged.",
@@ -158,5 +158,27 @@
       ]
     },
     "schedule": "Two concurrent CPU jobs; each30Mvisits approximately; same arrays, windows, exposure and optimizer. Monitor summed RSS and disk; request per-job checkpoint on ceiling. Thirty-percent overlap/thermal allowance; deadline11500s plus180s closeout. Both jobs checkpoint safely if throughput does not reach target."
+  },
+  "horizon_correction_preparation": {
+    "recorded_utc": "2026-09-25T00:41:23.876179+00:00",
+    "owner_direction": "Correct64-token fit versus256-token evaluation before spending the remaining full dose. Preserve learning and optimizer; originalfull64campaignsuperseded.",
+    "stopped_steps": {
+      "quaternion": 2048,
+      "householder_pair": 2104
+    },
+    "common_warmup_step": 2104,
+    "alignment_updates": 56,
+    "alignment_target_visits": 229376,
+    "alignment_seconds_limit": 240,
+    "corrected_profile_updates_max_per_arm": 12,
+    "corrected_profile_batch": 16,
+    "corrected_profile_context": 256,
+    "corrected_profile_time_limit_seconds_per_arm": 240,
+    "preparation_build_alignment_profile_projection_seconds": 900,
+    "new_storage_increment_bytes": 134217728,
+    "gross_new_storage_updated_limit_bytes": 805306368,
+    "reason": "Preserve stopped parents and add aligned parent, explicit256-window profiles and continuation checkpoints. Necessary local correction under standing authorization. Before new large writes reclaim only inspected reproducible obsolete compiler cache objects; unchanged physical reserve and128MiB margin.",
+    "full_continuation_launch_gate": "Record actual complete-step throughput and RAM for256-token fit, then freeze remaining dose and full time projection. No silent timer or criterion change.",
+    "shared_wall_ledger_unchanged_until_projected_full_continuation": true
   }
 }
