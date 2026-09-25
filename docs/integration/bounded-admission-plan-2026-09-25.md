@@ -106,6 +106,14 @@ RDC ran concurrent DeepSeek source/mathematics and Rust index implementation wor
 the principal implemented the shared graph, continuation and evaluation. Both
 received the live source, history, complete question, limits and artifact paths.
 Their raw handoffs remain in the local investigation root; no Kimi model was used.
+A third DeepSeek session reviewed the integrated frozen source while learning
+ran. It found no blocking defect in shared recurrence, causal selected reads,
+copy identity, packed policy or continuation clocks. It identified the projected
+physical-reserve shortfall and latent reporting/session-snapshot limitations.
+The current recipe has matching two-worker parent/new metadata, and generation
+does not mutate model variables inside a prepared session. Future worker changes
+must use the actual bounded recipe rather than inherited parent metadata; new
+optimizer/data clocks are read from `bounded_continuation`, not the legacy clock.
 
 Accepted objections: hard membership lacks direct credit; saturated postings can
 hide valuable old events; partial sign agreement is not maximum-inner-product
@@ -119,6 +127,13 @@ this joint learner. A-series local-chooser failures motivate care but do not
 determine this full recurrent graph's outcome. The reviewer's extra random-index,
 multi-seed and full-mask diagnostic list is not adopted as a gate for this narrow
 retention step; no geometry-superiority claim will be made.
+The integrated review's proposed omitted-mass calculation cannot be recovered
+from `targets.bin`, which stores only a top-read position, NoRead mass and copy
+gate. Its repeated permanent-unlearnability claim is unsupported. Zero weight
+decay does not establish that projection cannot affect future optimizer moments;
+projection leaves current moments intact and changes future parameter/gradient
+trajectories. Same-core source and the executed numerical comparisons together
+support the declared batch/session agreement; shared code alone is not its proof.
 
 [Reformer](https://arxiv.org/html/2001.04451v2) and its
 [primary implementation](https://github.com/google/trax/blob/master/trax/layers/research/efficient_attention.py)
@@ -147,3 +162,21 @@ checkpoint at guards, and charge unique chronological wall once. No external
 training hardware, destructive cleanup, or physical-energy claim. Deliver source,
 actual result and changed current-state/roadmap claims through a protected PR;
 verify its actual merge and tree. #973/#820 remain open until full acceptance.
+
+### Prospective storage amendment and exact resume
+
+At17:54:07UTC, measured free space was16,398,962,688bytes, while the remaining
+checkpoints, twelve target-record evaluations and delivery files were projected
+at240MiB. Before crossing the new allowance, the standing authorization recorded
+an additional512MiB of permitted physical use: reserve15→14.5GiB, retaining
+128MiB stop and64MiB closeout margins. The2.5GiB new-allocation cap and all time,
+RAM, recipe and quality limits stayed fixed. The
+[storage amendment](../evidence/bounded-admission-storage-extension-2026-09-25.json)
+preserves the original budget and exact reason.
+
+The already-running supervisor retained its original, stricter guard and
+checkpointed both arms at166 updates. Both actual processed-data hashes equal
+`67263574999ceec49711007e5d0221f04868147582099426bf03b4dec1e6dc50`.
+The new supervisor resumes the same model, optimizer, grids, source and recipe
+at sampler9026 for the remaining90 updates. Original roots and stop receipts
+remain preserved; the resource stop is not model-quality evidence.
