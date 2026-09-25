@@ -82,25 +82,39 @@ fn quantize(value: i128, input_bits: i32, output_bits: i32) -> Result<i32> {
     Ok(scaled(value, output_bits - input_bits)?.clamp(-32767, 32767) as i32)
 }
 
-/// Input codes are signed16 and coefficients signed4, validated at import.
-/// This hot path is separate from index/shape arithmetic in the model driver.
+/// Build each input coordinate's signed4 multiples once for reuse across rows.
+/// Slots use the coefficient's low nibble: 0..7 and -7..-1; reserved -8 is
+/// unreachable after import validation and its slot is zero. i64 intermediates
+/// keep these shifts/additions exact even for the full i32 input range.
 #[inline(never)]
-fn low_bit_dot(input: &[i32], weights: &[i16]) -> i64 {
+fn low_bit_products(input: &[i32]) -> Vec<[i64; 16]> {
+    input
+        .iter()
+        .map(|&x| {
+            let x = i64::from(x);
+            let twice = x << 1;
+            let four = x << 2;
+            let three = x + twice;
+            let five = x + four;
+            let six = twice + four;
+            let seven = (x << 3) - x;
+            [
+                0, x, twice, three, four, five, six, seven, 0, -seven, -six, -five, -four, -three,
+                -twice, -x,
+            ]
+        })
+        .collect()
+}
+
+/// Coefficients are signed4, validated at import. The retained shape bounds
+/// (at most512 input coordinates) keep even full-i32 products/sums inside i64.
+/// Coordinate order is unchanged; replacing recomputation with table reads adds
+/// no rounding. This hot path is separate from model-driver shape arithmetic.
+#[inline(never)]
+fn low_bit_dot(products: &[[i64; 16]], weights: &[i16]) -> i64 {
     let mut total = 0i64;
-    for (&x, &w) in input.iter().zip(weights) {
-        let x = i64::from(x);
-        let magnitude = match w.unsigned_abs() {
-            0 => 0,
-            1 => x,
-            2 => x << 1,
-            3 => x + (x << 1),
-            4 => x << 2,
-            5 => x + (x << 2),
-            6 => (x << 1) + (x << 2),
-            7 => (x << 3) - x,
-            _ => unreachable!("validated signed4 coefficient"),
-        };
-        total += if w < 0 { -magnitude } else { magnitude };
+    for (multiples, &weight) in products.iter().zip(weights) {
+        total += multiples[usize::from((weight as u16) & 15)];
     }
     total
 }
@@ -218,12 +232,13 @@ impl IntegerModel {
         if p.spec.bits != 4 || p.spec.shape.len() != 2 || p.spec.shape[1] != input.len() {
             return Err(invalid("integer affine input shape or bit width"));
         }
+        let products = low_bit_products(input);
         p.codes
             .chunks_exact(input.len())
             .zip(&p.spec.row_exponents)
             .map(|(row, &exponent)| {
                 scaled(
-                    i128::from(low_bit_dot(input, row)),
+                    i128::from(low_bit_dot(&products, row)),
                     WORK_BITS + input_exponent + i32::from(exponent),
                 )
             })
@@ -549,12 +564,39 @@ mod tests {
 
     #[test]
     fn signed4_affine_accumulation() {
-        let input = [-32767, -3, 0, 1, 16384, 32767];
+        let input = [i32::MIN, -32767, -3, 0, 1, 16384, 32767, i32::MAX];
+        let products = low_bit_products(&input);
         for code in -7i16..=7 {
+            for (&x, multiples) in input.iter().zip(&products) {
+                assert_eq!(
+                    multiples[usize::from((code as u16) & 15)],
+                    i64::from(x) * i64::from(code)
+                );
+            }
             let weights = vec![code; input.len()];
             let expected: i64 = input.iter().map(|&x| i64::from(x) * i64::from(code)).sum();
-            assert_eq!(low_bit_dot(&input, &weights), expected);
+            assert_eq!(low_bit_dot(&products, &weights), expected);
         }
+        for x in [i32::MIN, i32::MAX] {
+            let products = low_bit_products(&[x; 512]);
+            for code in [-7, 7] {
+                assert_eq!(
+                    low_bit_dot(&products, &[code; 512]),
+                    i64::from(x) * i64::from(code) * 512
+                );
+            }
+        }
+        let mixed_codes: Vec<i16> = (-7..=7).cycle().take(512).collect();
+        let mixed_input: Vec<i32> = input.into_iter().cycle().take(512).collect();
+        let expected: i64 = mixed_input
+            .iter()
+            .zip(&mixed_codes)
+            .map(|(&x, &code)| i64::from(x) * i64::from(code))
+            .sum();
+        assert_eq!(
+            low_bit_dot(&low_bit_products(&mixed_input), &mixed_codes),
+            expected
+        );
     }
 
     #[test]
