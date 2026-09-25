@@ -506,6 +506,16 @@ fn validate_baselines(reference: &Value, count: &Value, evaluator: &Value) -> Re
     digest_field(count, "model_sha256", 64)
 }
 
+fn gradient_shards(value: &Value) -> Result<u64> {
+    match value
+        .get("cpu_gradient_shards")
+        .map_or(Some(1), Value::as_u64)
+    {
+        Some(shards @ (1 | 2 | 4)) => Ok(shards),
+        _ => Err(invalid("invalid CPU gradient shard binding")),
+    }
+}
+
 fn validate_joint(report: &Value, transport: Transport, mode: ReadMode) -> Result<()> {
     let evaluation = &report["evaluation"];
     let config: JointConfig = serde_json::from_value(report["campaign"]["model"].clone())?;
@@ -521,6 +531,8 @@ fn validate_joint(report: &Value, transport: Transport, mode: ReadMode) -> Resul
         || campaign["schema"] != "uor-r4.joint-recurrent-campaign/1"
         || !(1..=64).contains(&batch)
         || !(8..=256).contains(&context)
+        || batch % gradient_shards(campaign)? != 0
+        || gradient_shards(campaign)? != gradient_shards(binding)?
         || config.context != CONTEXT
         || config.transport != transport
         || evaluation["schema"] != "uor-r4.joint-population-evaluation/1"
@@ -661,6 +673,9 @@ fn validate_pairs(reports: &[Value]) -> Result<()> {
     }
     let q = &reports[0]["campaign"];
     let ordinary = &reports[2]["campaign"];
+    if gradient_shards(q)? != gradient_shards(ordinary)? {
+        return Err(invalid("transport arms differ in CPU gradient shards"));
+    }
     let q_transition = &q["training_window_transition"];
     let ordinary_transition = &ordinary["training_window_transition"];
     if q_transition.is_null() != ordinary_transition.is_null() {
@@ -689,7 +704,6 @@ fn validate_pairs(reports: &[Value]) -> Result<()> {
         "data_seed",
         "batch",
         "context",
-        "cpu_gradient_shards",
         "total_steps",
         "development_every_steps",
         "development_blocks",

@@ -639,6 +639,10 @@ fn evaluate_checkpoint(
     let binding: Value = serde_json::from_slice(&fs::read(checkpoint.join("checkpoint.json"))?)?;
     if binding["evaluator_sha256"] != evaluator.sha256
         || binding["model_sha256"] != sha256_file(&checkpoint.join("model.safetensors"))?
+        || binding
+            .get("cpu_gradient_shards")
+            .map_or(Some(1), Value::as_u64)
+            != Some(cfg.cpu_gradient_shards as u64)
     {
         return Err(invalid("checkpoint/evaluator binding differs"));
     }
