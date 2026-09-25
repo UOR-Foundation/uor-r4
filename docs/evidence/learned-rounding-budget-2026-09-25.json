@@ -43,10 +43,10 @@
     "temporary_build_allowance": 268435456,
     "metadata": 16777216
   },
-  "physical_reserve_bytes": 19327352832,
+  "physical_reserve_bytes": 17179869184,
   "storage_stop_margin_bytes": 134217728,
   "checkpoint_closeout_headroom_bytes": 67108864,
-  "physical_free_stop_bytes": 19528679424,
+  "physical_free_stop_bytes": 17381195776,
   "physical_free_now_bytes": 22226501632,
   "physical_reserve_change_reason": "New isolated full worktree plus projected build and learned-code artifacts require about 2.3 GB from 22.2 GB free. Prospectively reserve 18 GiB plus 128 MiB stop and 64 MiB closeout, replacing prior campaign 20 GiB reserve without deleting artifacts.",
   "warm_build_cache": "/Users/casey.allard/uor-r4-worktrees/kvar-20260924/target",
@@ -168,5 +168,15 @@
     "rule": "lambda=L2(mean of 8 language alpha gradients)/L2(unit global-mean beta2 penalty alpha gradient), at initial soft values with all interface quantizers; ratio1; no search",
     "calibration_then_fit_max_target_visits_per_arm": 2129920,
     "prospectively_recorded_utc": "2026-09-25T15:39:02.596502+00:00"
-  }
+  },
+  "physical_reserve_extensions": [
+    {
+      "recorded_utc": "2026-09-25T15:57:48.935560+00:00",
+      "old_reserve_bytes": 19327352832,
+      "new_reserve_bytes": 17179869184,
+      "additional_local_physical_headroom_bytes": 2147483648,
+      "reason": "Original reserve stopped both exact continuations after one update with about 19.52 GB free. Current campaign retained files remain within 2.5 GiB allocation limit. Preserve all unique material and reserve 16 GiB plus original stop/checkpoint margins before resuming; no paid compute or deletion. No attribution of unrelated physical-space movement.",
+      "physical_free_now_bytes": 19453845504
+    }
+  ]
 }

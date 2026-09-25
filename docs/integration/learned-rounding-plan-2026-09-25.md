@@ -149,6 +149,19 @@ checkpoint stop. Compiler peaks and physical energy remain unmeasured unless
 explicitly observed. The standing authorization covers the recorded prospective
 cumulative extension, never a silent reset.
 
+**Execution resource adjustment, before resuming.** The original18GiB reserve
+stopped both fits after one completed update when physical free space sampled
+19,524,063,232bytes. Both exact alpha/Adam checkpoints are retained. Under the
+standing local-resource authorization, record2GiB additional physical headroom:
+reserve16GiB plus the unchanged128MiB stop and64MiB checkpoint margins. The
+2.5GiB new-allocation ceiling and two-hour cumulative cycle ceiling remain.
+The complete recipe resumes from update1, without recalibration or discarded
+learning. The two original stop receipts are preserved under attempt-specific
+names before clearing their operational stop paths. A configured2700second
+process boundary may likewise checkpoint and resume the remaining updates of
+the identical recipe within the complete-cycle limit; it never adds updates.
+Physical-space movement is observed without attributing it to another app.
+
 Compile the changed Rust path once with focused gradient/causality, legal-code,
 serialization and checkpoint checks; add checks only for a concrete unresolved
 risk. Record actual loaded outputs. Update the result/current state and owning
