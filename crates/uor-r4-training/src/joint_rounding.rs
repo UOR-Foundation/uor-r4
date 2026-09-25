@@ -1236,6 +1236,9 @@ mod tests {
     #[test]
     fn decision_inventory_matches_the_parent_and_round_trips_through_the_spec() -> Result<()> {
         let (spec, parent) = calibrated()?;
+        // Calibration chooses scales; the production parents additionally
+        // project their shadows into the fixed representable range.
+        spec.project_parameters(&parent)?;
         let rounding = LearnedRounding::new(&spec, &parent, fixture_config())?;
         // Exactly the integration check used by the model's rounding view.
         spec.validate(rounding.variables())?;

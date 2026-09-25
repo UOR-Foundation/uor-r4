@@ -656,15 +656,16 @@ mod tests {
             )?;
             parent.configure_quantization(0, 1)?;
             parent.set_completed_step(1)?;
+            let spec = &parent
+                .quantization()
+                .ok_or_else(|| invalid("test quantization"))?
+                .spec;
+            spec.project_parameters(parent.variables())?;
             let original = parent
                 .variables()
                 .iter()
                 .map(|(n, v)| Ok((n.clone(), v.flatten_all()?.to_vec1::<f32>()?)))
                 .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
-            let spec = &parent
-                .quantization()
-                .ok_or_else(|| invalid("test quantization"))?
-                .spec;
             let learner = LearnedRounding::new(spec, parent.variables(), config())?;
             let ids = [4, 8, 4, 9, 8, 7, 9, 4, 7, 4, 8, 4, 7, 9, 8, 4];
             let targets = [8, 4, 9, 8, 7, 9, 4, 7, 4, 8, 4, 7, 9, 8, 4, 9];
@@ -764,6 +765,7 @@ mod tests {
             .quantization()
             .ok_or_else(|| invalid("quantization"))?
             .spec;
+        spec.project_parameters(parent.variables())?;
         let learner = LearnedRounding::new(spec, parent.variables(), config())?;
         let mut optimizer = NamedAdamW::new(
             learner.variables(),
