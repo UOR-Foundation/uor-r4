@@ -86,8 +86,13 @@ the full remaining exposure. [CPU/GPU profiles](../evidence/joint-recurrent-hard
 selected two synchronous sequence workers per arm, both arms concurrent, at
 approximately1,419/1,575targets per second. Four workers per arm and Metal were
 slower. Both selected parents reach2128steps; remaining fitting is projected at
-about4–4.5hours. Both RDC jobs launched at01:17UTC September25 from their sealed
-step2128 parents; language results remain pending. Planned total
+about4–4.5hours. After the01:17UTC launch, the physical-space guard saved both
+jobs at2232/2230steps with zero reload loss difference. Inspected compiler
+intermediates reclaimed3,652,976,640measured physical bytes; all source, models,
+executables, reports and worktrees remain. Both jobs resumed at01:28UTC from
+those checkpoints with identical training/optimizer/sampler settings. See the
+[resource continuation](../evidence/joint-recurrent-resume-2026-09-25.json).
+Language results remain pending. Planned total
 exposure remains29,999,104visits per arm including warmup, with selection at
 global steps4714/7324. The warmup source is
 `9d8c1e39e2e3bbafaec63791b048b1b3b6161211`; the artifact container is
