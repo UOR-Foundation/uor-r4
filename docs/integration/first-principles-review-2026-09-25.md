@@ -541,31 +541,41 @@ All of this is synthetic data. The decisive test is still owed on the project's 
 
 **Setup.** A 3-layer byte-level language model:
 - d = 128, a GLU channel mixer and RMSNorm;
-- about 0.56M parameters (0.76M for the GRU);
-- 1,000 steps × 4,096 bytes = 4.1M training bytes;
+- 1,000 steps × 4,096 bytes = 4.1M training bytes, in windows of 128 bytes;
 - AdamW with warmup and cosine decay;
-- evaluated on the first 256 KiB of WikiText-2 validation in windows of 512 bytes.
+- evaluated on the first 256 KiB of WikiText-2 validation in windows of 512 bytes, four times the training length. The later runs were also scored at the 128-byte training length.
 
-The linear recurrences are trained with an associative scan. Every time-mixer uses four d×d maps; the GRU has six.
+The linear recurrences are trained with an associative scan. Each has 558,720 parameters: four d×d maps per layer (value, gate, transition, output). The attention reference uses five maps (607,488 parameters, +9%). The GRU uses eight, three of them on the recurrent state (755,328 parameters, +35%).
 
-| Time-mixer | Bits/byte, seed 0 | Notes |
-|---|---:|---|
-| Diagonal real decay (Mamba/minGRU-like, commutative) | **1.869** | Fastest to train |
-| Quaternion rotation + radial decay (continuous) | 1.881 | Snapped to 2I after training: **2.060** |
-| Quaternion, trained with straight-through snapping to 2I in every lane | 1.984 | All lanes forced onto the 120-element group |
-| Complex (2-D rotation + decay, commutative) | [pending] | |
-| Quaternion snapped to the integer small-rotation codebook | [pending] | |
-| Softmax attention + RoPE (transformer-style reference only) | [pending] | |
-| GRU (nonlinear, sequential; +35% parameters) | [pending] | |
-| Second seeds: quaternion, diagonal | [pending] | |
+**Determinism.** A rerun of quaternion seed 0 reproduced every number bit for bit. Timings were taken with one to four runs sharing the CPU, so they are not comparable and are omitted.
 
-Rows marked [pending] were still running when this document was first committed. They will be filled in by a follow-up commit on the same pull request.
+| Time-mixer | Bits/byte, 512-byte windows | At the 128-byte training length | Notes |
+|---|---:|---:|---|
+| Diagonal real decay (Mamba/minGRU-like, commutative) | 1.869, 1.873 (2 seeds) | **1.900** (seed 1) | Best linear recurrence |
+| Complex (2-D rotation + decay, commutative) | 1.878 | | One seed |
+| Quaternion rotation + radial decay (continuous) | 1.881, 1.879 (2 seeds) | 1.905 (seed 0) | |
+| … snapped to 2I after training | 2.060, 2.050 | | No retraining |
+| … snapped to the 157-element integer codebook after training | 2.043, 2.038 | | No retraining |
+| Quaternion, trained with straight-through snapping to 2I in every lane | 1.984 | | All lanes on the 120-element group |
+| Quaternion, trained with straight-through snapping to the integer codebook in every lane | 1.965 | | Finest step 7.15°, but only 13 rotation axes |
+| GRU (nonlinear, sequential) | **1.837** | | +35% parameters: *not* a matched comparison |
+| Softmax attention + RoPE, single head (transformer-style reference only) | 2.983 | 1.996 | RoPE fails beyond the training length |
 
-**Reading (preliminary; one seed).**
-- Non-commutative rotation gives **no** language-modelling advantage over diagonal decay at this scale, as the literature predicts.
-- Forcing *all* lanes onto the coarse 2I group costs about 0.10 bits/byte.
+**Reading.**
+- **Non-commutative rotation gives no language-modelling advantage.** Diagonal decay beat the quaternion arm on both seeds: means 1.871 against 1.880, with a seed spread of at most 0.005. Complex rotation lies between them on its one seed. This is what the literature predicts.
+- **Forcing every lane onto an exact rotation codebook is costly.**
+  - Snapping the trained quaternion model after training cost 0.16–0.18 bits/byte.
+  - Straight-through training recovered 40–50% of that: the loss fell to +0.10 for 2I and +0.08 for the integer codebook.
+  - The finer integer codebook barely beats 2I, because its fine steps lie on only 13 axes. It also needs a non-dyadic normaliser (§8.4).
+- **The nonlinear GRU was best (1.837),** but it had 35% more parameters. The D8 learner is GRU-like, so the incremental base in §9.3 starts from the stronger family per step.
+- **The single-head attention reference is weak at this scale.**
+  - At its own 128-byte training length it scored 1.996, worse than both linear recurrences there (diagonal 1.900, quaternion 1.905).
+  - Beyond the training length it failed (2.983 at 512 bytes), while the recurrences improved with the longer context (diagonal 1.900 → 1.873).
+  - This is a tiny, short-budget reference, not evidence about transformers in general. The repository's #1014 and #1017 are the relevant transformer comparators.
 
-Both support the lane-mixture design in §8.4: exact 2I only for tracking lanes, finer rounded lanes for content.
+**Design consequence**, consistent with the lane mixture in §8.4:
+- content lanes should be *diagonal decay* lanes, which were the best linear mixer here and need no rotation arithmetic;
+- exact 2I belongs only in separate tracking lanes, where §6.2 shows it earns its cost.
 
 ### 6.4 Golden-gate rotation codebooks (lead)
 
@@ -734,6 +744,7 @@ For cache-resident models (≲20M parameters at ternary), the levers are instruc
 - *Integer small rotations.* q ∝ p = (2^k, a, b, c) with a, b, c ∈ {−1, 0, 1}: 157 rotations, the finest at 7.15°.
   - Applying p is shifts and adds, but the normaliser 1/|p| is almost never dyadic. Only 15 of 157 codewords have rational |p|, and only the 24 Hurwitz units have dyadic unit coordinates (red-team, Derived).
   - Each fine lane therefore needs a constant multiply by r/|p|. That takes about 6 shift-adds per coordinate for ≤1% drift at 4k tokens, i.e. about 36 operations per lane-step versus 16 hardware multiplies (red-team, Measured). With 3 terms, an isometric lane's norm drifted 827× by T = 4,096.
+  - On text it buys little (§6.3). Forcing every lane onto this codebook cost 0.08 bits/byte even with straight-through training, barely better than 2I's 0.10, because its fine steps lie on only 13 rotation axes.
 - **The no-go result** (math report §2.4).
   - Any forgetting factor 0 < |λ| < 1 in ℤ[φ] is an expansion in the Galois-conjugate embedding. With λ = φ⁻¹, exact coefficients grow by log₂φ ≈ 0.694 bits per step.
   - A dyadic factor 2^−k fails in the same way, because denominators grow.
@@ -818,15 +829,18 @@ Precedent: learning continuously, snapping to 2I and serving as an integer autom
 
 **Step 1 (days): benchmark two candidate bases for throughput.**
 - *Incremental.* Keep the D8 learner. It already ties #1014 at equal tokens with 9.5× fewer non-embedding parameters. Raise its throughput with a larger batch, truncated or chunked BPTT, and no O(T²) history re-concatenation.
-- *Re-base.* A parallel-scan / chunked linear recurrence in the quaternion frame form, with RMS-normed ternary GLU channel mixing. L ≈ 12, d ≈ 384, about 23M parameters at the S scale.
+- *Re-base.* A parallel-scan / chunked linear recurrence with RMS-normed ternary GLU channel mixing. L ≈ 12, d ≈ 384, about 23M parameters at the S scale.
+  - Content lanes should use diagonal decay, the best linear mixer on text in §6.3.
+  - The quaternion frame form is needed only if rotating content lanes are kept. Pure-product tracking lanes are cumulative quaternion products, which scan in parallel directly.
 - Measure tokens/s and achieved FLOP/s for both in Rust/Candle-Metal at equal parameters. The re-base is justified only if it delivers at least 5–10× the tokens per M1-hour.
 
-**Evidence so far on quality** (§6.3, WikiText-2 bytes, matched 0.56M parameters, one seed):
-- diagonal-decay linear recurrence: 1.869 bits/byte;
-- quaternion linear recurrence: 1.881;
-- [GRU / complex / attention reference and second seeds: see §6.3].
+**Evidence so far on quality** (§6.3, WikiText-2 bytes, 0.56M parameters, bits/byte):
+- diagonal-decay linear recurrence: 1.869 and 1.873 (2 seeds);
+- complex: 1.878; quaternion: 1.881 and 1.879 (2 seeds);
+- GRU, with 35% more parameters: 1.837;
+- single-head softmax attention: 1.996 at its training length, against 1.900 for the diagonal recurrence there.
 
-The re-base's case rests on *throughput*, and on geometric lanes adding *capability* rather than perplexity. It does not rest on a language-modelling advantage.
+The re-base's case rests on *throughput*, and on geometric lanes adding *capability* rather than perplexity. It does not rest on a language-modelling advantage. The GRU family of the incremental base was the strongest per step, so the re-base must beat it at equal wall-clock and equal parameters, not merely at equal steps.
 
 **Step 2: add lane types to whichever base wins.**
 
@@ -834,7 +848,7 @@ The re-base's case rests on *throughput*, and on geometric lanes adding *capabil
 |---|---|---|---|---|
 | **Tracking** (separate from any matrix state) | Token-conditioned q_t = normalize(raw), not near-identity. Train continuously with a length curriculum, then snap to 2I | None. Input acts only through the choice of q_t; the readout is by group-index embedding | Exact index: 1 byte, table reads | A5-type tracking |
 | **Phase** | Cyclic C_N | None | Modular add | Counters |
-| **Memory and decay** | Fine or no rotation, rounded dyadic decay | Additive | Fixed-point with rounding (§8.4) | Content and memory |
+| **Memory and decay** | Diagonal decay without rotation (best on text, §6.3), rounded to dyadic | Additive | Fixed-point with rounding (§8.4) | Content and memory |
 | **Reflection** (optional) | Householder products | By design | Integer | S_n-type tracking |
 
 Contextual access, in order of preference under D0-b as written:
@@ -1029,7 +1043,7 @@ The specialist reports and scripts lived in the review sandbox. Their load-beari
 | Verification | Builds and tests; x86 disassembly census; a random-weight timing harness comparing software and hardware multiply (bit-identical); a correctness review |
 | Quantization | Matched-bit rate-distortion comparisons over five synthetic distributions; inner-product error and NN recall; a direct radius ablation and a norm-rescaling recall check (3 seeds × 1,000 queries); the codebook-serving variant |
 | State tracking | A5/Z60 word problems; quaternion, diagonal, complex and GRU models; exact 2I table serving |
-| Lead | 2I closure; golden-gate covering (level-1 3,600 rotations, exact ½ℤ[φ] coordinates, covering against random); a WikiText-2 byte-level time-mixing comparison (six variants) |
+| Lead | 2I closure; golden-gate covering (level-1 3,600 rotations, exact ½ℤ[φ] coordinates, covering against random); a WikiText-2 byte-level time-mixing comparison (seven time-mixers plus post-hoc snapping; two seeds for the diagonal and quaternion arms; one bit-identical rerun) |
 
 The Python scratch code used by the agents is **not** committed, in keeping with the project's no-Python-model policy. The figures quoted here come from those runs. Any mechanism adopted from this review should be re-implemented and re-measured in Rust inside the project's own harness.
 
