@@ -328,6 +328,19 @@ fn quick_loss(
     Ok(Some(weighted / blocks as f64))
 }
 
+fn shadow_loss(
+    model: &JointModel,
+    tokens: &[u16],
+    blocks: usize,
+    batch: usize,
+) -> Result<Option<f64>> {
+    if model.quantization().is_some() {
+        quick_loss(&model.without_quantization()?, tokens, blocks, batch)
+    } else {
+        Ok(None)
+    }
+}
+
 fn save_checkpoint(
     model: &JointModel,
     optimizer: &NamedAdamW,
@@ -562,6 +575,12 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
     let initial_dev = quick_loss(&model, &dev, cfg.development_blocks, cfg.batch)?;
     report["initial_retained_batch_nll"] = json!(initial_fit);
     report["initial_development_nll"] = json!(initial_dev);
+    report["initial_shadow_development_nll"] = json!(shadow_loss(
+        &model,
+        &dev,
+        cfg.development_blocks,
+        cfg.batch
+    )?);
     let mut curve = BufWriter::new(File::create_new(out.join("learning-curve.jsonl"))?);
     let mut step_times = Vec::new();
     let mut complete = begin;
@@ -597,6 +616,12 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         if cfg.development_every_steps > 0 && complete % cfg.development_every_steps == 0 {
             row["development_nll"] =
                 json!(quick_loss(&model, &dev, cfg.development_blocks, cfg.batch)?);
+            row["shadow_development_nll"] = json!(shadow_loss(
+                &model,
+                &dev,
+                cfg.development_blocks,
+                cfg.batch
+            )?);
         }
         serde_json::to_writer(&mut curve, &row)?;
         writeln!(curve)?;
@@ -643,6 +668,7 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         return Err(invalid("nonfinite final retained loss"));
     }
     let final_dev = quick_loss(&model, &dev, cfg.development_blocks, cfg.batch)?;
+    let final_shadow_dev = shadow_loss(&model, &dev, cfg.development_blocks, cfg.batch)?;
     save_checkpoint(
         &model,
         &optimizer,
@@ -701,6 +727,7 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
     report["cumulative_sampled_target_visits"] = json!(complete * cfg.batch * cfg.context);
     report["final_retained_batch_nll"] = json!(final_fit);
     report["final_development_nll"] = json!(final_dev);
+    report["final_shadow_development_nll"] = json!(final_shadow_dev);
     report["reloaded_retained_batch_nll"] = json!(reloaded_fit);
     report["reload_absolute_delta"] = json!(reload_delta);
     report["final_quantization"] = serde_json::to_value(model.quantization())?;
