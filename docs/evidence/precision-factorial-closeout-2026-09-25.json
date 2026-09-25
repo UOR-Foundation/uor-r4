@@ -321,5 +321,23 @@
   "all_unique_artifacts_preserved": true,
   "cleanup_performed_this_milestone": false,
   "paid_external_training_compute": false,
-  "limitations": "Model RSS is sampled; compiler RSS/temporary peaks and physical energy are unmeasured. Current allocated files do not measure historical gross allocation or APFS unique physical extents. Delivery tail is charged separately after verified protected merge."
+  "limitations": "Model RSS is sampled; compiler RSS/temporary peaks and physical energy are unmeasured. Current allocated files do not measure historical gross allocation or APFS unique physical extents. Delivery tail is charged separately after verified protected merge.",
+  "publication_validation": {
+    "status": "PASS_FOR_AUTHORED_FILES",
+    "argv": [
+      "git",
+      "diff",
+      "--check",
+      "ada3c77bbebcde37c36e3cd5a68b242857dc2be9",
+      "HEAD",
+      "--",
+      ".",
+      ":(exclude)docs/integration/precision-factorial-outputs-2026-09-25.md"
+    ],
+    "exit_code": 0,
+    "verbatim_output_exception": {
+      "path": "docs/integration/precision-factorial-outputs-2026-09-25.md",
+      "reason": "The full staged whitespace check reports 18 trailing-space lines inside literal generated text. Preserve those model bytes; exact equality to the retained output is separately verified. The earlier unstaged diff check did not include then-untracked files."
+    }
+  }
 }

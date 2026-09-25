@@ -197,7 +197,10 @@ sessions and codec/projection invariants. Actual model execution and complete
 endpoint matching supplement those tests. No broad test-fixing campaign was
 performed. The first formatting check found a line-wrap difference; it was
 corrected before the executed source commit. Existing dependency dead-code
-warnings were left at their original scope.
+warnings were left at their original scope. The full staged whitespace check flags
+18 trailing-space lines in literal generated text; those bytes are preserved.
+The full base-to-head check passes for authored files with that one verbatim
+output file excluded, and its complete contents match the retained output.
 
 RDC runs two model processes concurrently on the same M1, with nested backend
 threads set to one. The independent mathematics/systems reviews and the final
