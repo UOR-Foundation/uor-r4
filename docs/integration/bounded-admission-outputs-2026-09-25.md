@@ -1,6 +1,6 @@
 # Actual bounded-admission outputs and fixed access controls
 
-One paired seed; exposed development. Text is preserved without repair.
+One paired seed; exposed development. Wording and generated tokens are preserved without repair. This Markdown display trims trailing line spaces; exact response strings remain in the result JSON and sealed source reports.
 
 ## quaternion
 
@@ -203,7 +203,7 @@ The moral of the story is: always listen to your parents and care for your
 Prompt: Once upon a time, there was a mighty lion walking through the jungle. He was looking for his friends, and he
 
 ```text
-knew he could find a way to come back. He was very excited to explore and exploring the world with pride. 
+knew he could find a way to come back. He was very excited to explore and exploring the world with pride.
 One day, Joe was feeling very lonely because he wanted to play with him. He hid under a tree and his friend, Sam, to help him. Sam said, "I can help you find a game to get the game!"
 Sam and Sam worked together to help the mighty lion. They found some sticks and glue. They worked together to make the sticks. They used their colors and glue. They was so happy.
 But then, they heard a loud noise. They heard a noise coming from
@@ -729,10 +729,10 @@ At the end of the day, the kids came to the park. They were happy that the kids 
 Prompt: Once upon a time, there was a mommy and daddy playing with their 3-year-old son. Mommy
 
 ```text
-had a special surprise. She was a kind boy, so little one. 
-One day, Mommy said they needed to buy new presents for the birthday party. She had a surprise for 
-Inside the party party, everyone like everyone in town. The party had a fun time, and everyone loved their birthday. Everyone clapped and danced when they played with every day. 
-After a while, Mommy and Daddy went to an ancient room. There was a big, ugly bird. Mommy and their mommy were very happy. They had been very excited to play together. 
+had a special surprise. She was a kind boy, so little one.
+One day, Mommy said they needed to buy new presents for the birthday party. She had a surprise for
+Inside the party party, everyone like everyone in town. The party had a fun time, and everyone loved their birthday. Everyone clapped and danced when they played with every day.
+After a while, Mommy and Daddy went to an ancient room. There was a big, ugly bird. Mommy and their mommy were very happy. They had been very excited to play together.
 The birthday party was in the party all day,
 ```
 
@@ -742,7 +742,7 @@ Prompt: Once upon a time, there was a mighty lion walking through the jungle. He
 
 ```text
 spotted a rabbit. The rabbit said hello, and he was very excited.
-He grabbed his boat, Sam and the rabbit, and the rabbit went to the rabbit. 
+He grabbed his boat, Sam and the rabbit, and the rabbit went to the rabbit.
 Suddenly, the rabbit opened it and landed there. He was looking at them. He was amazed. He asked the rabbit, "What are you doing?" The rabbit smiled and said, "This is a rabbit. I have a big surprise for you!".
 The lion then looked at them. He was holding a big smile. "I have a surprise, rabbit! I can show you a rabbit." the lion said.
 The rabbit watched the rabbit
@@ -775,7 +775,7 @@ At the park, Tim saw a new toy. He felt happy. The next day
 Prompt: One day, there was a small and modest train. Inside the train were two friends - Lily and Dave. They
 
 ```text
-wanted to make a cake for their friend, Sam, and their home. 
+wanted to make a cake for their friend, Sam, and their home.
 When Sam got the new train, they found something shiny in the ground. It was a small, old cake. Sam said, "This is my cake! I want to keep it for the party, Sam."
 So, Sam and Dave got home and sat down in the ground. They made a delicious cake for Sam's birthday. Sam gave a big smile, and Sam was very happy. They both had a lot of fun and had lots of fun.
 ```
@@ -822,7 +822,7 @@ So, Sam and Dave got home and sat down in the ground. They made a delicious cake
 Prompt: Once upon a time, there was a mommy and daddy playing with their 3-year-old son. Mommy
 
 ```text
-had a special surprise. She was a kind boy, so little one. 
+had a special surprise. She was a kind boy, so little one.
 One day, Mommy said they needed to buy new presents for the birthday party. She had a surprise for �ilet, so she gave the present. Mom showed the ingred. Mommy and Daddy opened the door.
 Inside the party, Lily's mom bought Mommy to the party. Her mom said, "This party is a modern day, and this one can make you better. Do you like big one?"
 The icon shook his head, but the icon was still scared. They sat down on the ground
@@ -863,7 +863,7 @@ Tim rode the bike, and they played all day long. They were having so much fun th
 Prompt: One day, there was a small and modest train. Inside the train were two friends - Lily and Dave. They
 
 ```text
-wanted to make a cake for their friend, Sam, and their home. 
+wanted to make a cake for their friend, Sam, and their home.
 When Sam got the invitation, he had an idea. He wanted to make the cake a big cake. He was excited and said, "Let's go to the house and find some a piece of cake."
 Anna and Sam looked at each other. They saw a big box with a picture of a star. They were very excited. But one day, they got a surprise. There were a big, shiny orange cake.
 "Look, Sam, a cake!" Sam said. "I want to play with it."
@@ -925,7 +925,7 @@ Prompt: Once upon a time, there was a mighty lion walking through the jungle. He
 ```text
 soon found his friends.
 One sunny day, the lion was walking in the forest with his friends, in the grass, and he was having lots of fun.
-At the lion saw the lion and his friends got his friends to join him. Everyone was so excited to see the lion, so he said to his friends, "Do you like to play with me? I have a surprise for you!" 
+At the lion saw the lion and his friends got his friends to join him. Everyone was so excited to see the lion, so he said to his friends, "Do you like to play with me? I have a surprise for you!"
 The lion smiled at his friends, and they all gathered around the jungle! The lion was so glad he had a great plan and showed it to his friends. His friends liked it too, and they all started to play
 ```
 
@@ -1006,7 +1006,7 @@ Prompt: Once upon a time, there was a mommy and daddy playing with their 3-year-
 
 ```text
 smiled and said, "Yes, please." She took the ornament outside and gave it to him.
-Now, they both had so much fun playing with the ball. They decided to play with many toys for a while, and then at the box, in their mouths. 
+Now, they both had so much fun playing with the ball. They decided to play with many toys for a while, and then at the box, in their mouths.
 After they were done, they made a beautiful flower. Every day, the nightf would shine and sing with her friends.
 ```
 
@@ -1197,7 +1197,7 @@ Prompt: Once upon a time, there was a mighty lion walking through the jungle. He
 ```text
 soon found his friends.
 One sunny day, the lion was walking in the forest with his friends, watching all the fish. He was so amazed! He was amazed around his new way and he met a new bear to join him.
-"Follow me," he said, as he stepped closer and closer, but he kept running closer and closer. He noticed that the bear was running and jumped up into the water and stepped closer. 
+"Follow me," he said, as he stepped closer and closer, but he kept running closer and closer. He noticed that the bear was running and jumped up into the water and stepped closer.
 The bear's name was Tim with a smile. He told him that he was faster than to reach. He stepped closer to the shore and said, "Come back in the shore
 ```
 
@@ -1228,9 +1228,9 @@ Prompt: One day, there was a small and modest train. Inside the train were two f
 
 ```text
 all had a big, shiny box full of toys and books.
-One day, Lily was playing in Dave's home. She was having so much fun she wanted to be two friends. She wanted to try and try to do something that she had never to be friends. 
-Dave looked at the box and said, "No, you can't try it!" She grabbed the box and said, "Let's go in one!" 
-The box was so excited that she grabbed the box first. 
+One day, Lily was playing in Dave's home. She was having so much fun she wanted to be two friends. She wanted to try and try to do something that she had never to be friends.
+Dave looked at the box and said, "No, you can't try it!" She grabbed the box and said, "Let's go in one!"
+The box was so excited that she grabbed the box first.
 The box had a big smile and it was very strong. It was a big, bright box with lots of
 ```
 
@@ -1319,7 +1319,7 @@ Prompt: One day, there was a small and modest train. Inside the train were two f
 ```text
 all had a big, shiny box full of toys and books.
 One day, Lily was playing in Dave. "I found a big, shiny thing in the box!" she said. "It's so big, it's a secret!"
-Lily took a big, yellow piece and a small piece of thread. She was amazed! She said, "That was a secret! I know you must have a secret for you" with it!" 
+Lily took a big, yellow piece and a small piece of thread. She was amazed! She said, "That was a secret! I know you must have a secret for you" with it!"
 The little girl and her daughter hugged her mom smiled and said, "You are a good job, little girl. But you have to be patient and patient." The little girl
 ```
 

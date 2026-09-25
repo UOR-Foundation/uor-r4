@@ -30,5 +30,12 @@
     "scope": "Focused joint_ library filter; not a blanket workspace suite"
   },
   "model_result": "Both candidates rejected at the frozen source-retention gate; all prescribed evaluations and arithmetic complete",
-  "github_queue_statuses": "Compatibility acknowledgements execute no tests"
+  "github_queue_statuses": "Compatibility acknowledgements execute no tests",
+  "delivery_followup": {
+    "recorded_utc": "2026-09-25T18:24:02.774909+00:00",
+    "finding": "The first committed-range whitespace check included the previously untracked output display and found16 lines of model-generated trailing spaces. Earlier git diff --check covered tracked changes.",
+    "correction": "Trim trailing line spaces in the Markdown display only and label the presentation normalization. Exact JSON strings, sealed reports, operator source, parameters, targets and decisions are unchanged.",
+    "normalized_display_lines": 16,
+    "committed_range_check": "PASS: git diff --check origin/main..HEAD after display normalization"
+  }
 }
