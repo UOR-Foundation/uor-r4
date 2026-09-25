@@ -4,7 +4,7 @@ This crate contains the offline recurrent-memory learner, its matched transport 
 
 ## Joint recurrent-memory learning
 
-The [September 25 result](../../docs/integration/joint-recurrent-result-2026-09-25.md) completes the full paired campaign: 29,999,104 target visits per arm, including 21,381,120 at context 256. Both learners pass the frozen development likelihood/noncollapse/combined read-effect engineering gates. Ordinary has lower natural NLL; generated stories remain semantically unreliable. Integer export and geometric advantage remain unqualified. Quantization-aware continuation of these same checkpoints is the next dependency.
+The [September 25 result](../../docs/integration/joint-recurrent-result-2026-09-25.md) completes the full paired campaign: 29,999,104 target visits per arm, including 21,381,120 at context 256. Both learners pass the frozen development likelihood/noncollapse/combined read-effect engineering gates. Ordinary has lower natural NLL; generated stories remain semantically unreliable. Integer export and geometric advantage remain unqualified. The [subsequent quantized continuation](../../docs/integration/quantized-recurrent-result-2026-09-25.md) completed all four matched branches but failed both likelihood-retention gates; ordinary packed generation also short-cycles. The proposed projected-shadow midpoint continuation is NOT_RUN.
 
 ```text
 uor-r4-training joint-fit CAMPAIGN_JSON NEW_REPORT_ROOT {cpu|metal} [SEALED_RESUME_CHECKPOINT]
@@ -17,7 +17,7 @@ uor-r4-training joint-evaluate-shadow CAMPAIGN_JSON SEALED_CHECKPOINT NEW_REPORT
 
 The [frozen campaign](../../docs/integration/joint-recurrent-campaign-2026-09-24.md) specifies the graph, training exposure, resource ceilings, checkpoint selection and capability criteria. `JointModel` exposes the same causal core for differentiable unrolls and detached incremental sessions. It reads only earlier occurrences, updates recurrent state using the read, then writes the current contextual key/value. Exact observed token/occurrence identity is retained alongside learned vector compatibility. A normalized vocabulary/copy mixture supplies the language loss; targets enter only that loss.
 
-The quaternion and Householder-pair arms share dimensions, parameter initialization and data windows. Their local transport scales are matched; their global function families differ. These floating-point offline learners do not establish exact Hamiltonian dynamics or the final integer serving cost. Prime/zeta admission, hard discretization and typed native export remain subsequent integration work.
+The quaternion and Householder-pair arms share dimensions, parameter initialization and data windows. Their local transport scales are matched; their global function families differ. These floating-point offline learners do not establish exact Hamiltonian dynamics or the final integer serving cost. Prime/zeta admission and typed integer execution remain subsequent integration work. The first packed discretization recipe is implemented but fails its retention gates.
 
 Each checkpoint includes named model parameters, AdamW moments and per-variable clocks, model/optimizer configuration, exact source/data/tokenizer identities, and the next counter-seeded training window. Resume rejects changes to the model or sampler. The optional `stop_file` requests a checkpoint between updates. `max_process_seconds` stops new updates; the campaign separately reserves final evaluation, save/reload and sealing time.
 
@@ -53,6 +53,8 @@ Integer execution, bounded admission, sparse parameter access and energy are
 separate later work. The signed unit transport coordinates are rounded without
 off-grid renormalization; exact group closure is not asserted. Packed parameter
 size does not establish measured process RAM or serving speed.
+
+The descriptive `joint-state-drift` example accepts `QAT_CHECKPOINT PACKED_EXPORT EVALUATOR_JSON NEW_REPORT_ROOT`. It claims and seals an independent root, verifies bitwise packed-parameter agreement with the quantized selected shadows, and records finite coordinate/norm differences by all 256 positions on the original 64 tune windows. It uses the shared model implementation with quantizers enabled/disabled; it does not isolate transport error or add an acceptance threshold. The result receipt binds the executed source and binary.
 
 Evaluation accepts batches1–32. `joint-compare` joins all249,856 targets against the two sealed baseline evaluations and four learner/control evaluations. It verifies identities and original means, reports paired differences and horizon slices, and preserves the original generation/probe hashes. Rung1 selected by recorded F32 `quick_loss` tune scores; rung2 reports the frozen final common step. The comparison never reselects or decides generation quality. Hard and shadow modes are explicit, with matching Read/NoRead artifact/specification and cross-arm schedule/layout checks.
 
