@@ -1,7 +1,8 @@
 # D8 rung 1: continuous recurrent memory learner
 
-Status: corrected full256-token continuation running from01:17UTC September25;
-the initial64-window full schedule is superseded and its warmup is retained.
+Status: full planned exposure and comparison completed September 25. Both arms
+pass the frozen rung 1 engineering continuation gate at the [reported scope](joint-recurrent-result-2026-09-25.md).
+The initial 64-window schedule remains superseded; its matched warmup is retained.
 References #973 and #820.
 This follows the completed [rung 0 comparison](reference-evaluator-v2.json).
 The programme remains [project-track.md](project-track.md); changing outcomes

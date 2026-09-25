@@ -85,7 +85,7 @@
   "concurrent_cpu_training_processes": 2,
   "ram_expected_two_training_processes_bytes": 6010000000,
   "ram_supervisor_stop_bytes": 8589934592,
-  "physical_supervisor_stop_bytes": 26105348096,
+  "physical_supervisor_stop_bytes": 21676163072,
   "closeout_reserve_seconds_per_process": 180,
   "full_fit_launch_gate_satisfied": {
     "recorded_utc": "2026-09-24T23:45:50.163982+00:00",
@@ -507,5 +507,12 @@
     "termination_grace_seconds": 15,
     "remaining_comparison_review_docs_delivery_projection_seconds": 1800,
     "within_existing_cycle_and_storage_limits": true
-  }
+  },
+  "current_gradient_workers_per_process": 2,
+  "current_nested_backend_thread_limits": {
+    "RAYON_NUM_THREADS": 1,
+    "VECLIB_MAXIMUM_THREADS": 1
+  },
+  "cpu_threads_per_process_scope": "Original pre-sharding backend setting; current selection uses two explicit gradient workers and nested backend limits of one.",
+  "gross_new_storage_closeout_status": "UNRESOLVED: retained artifacts and cleanup receipts do not fully reconstruct overwritten/deleted and surviving compiler allocations; see closeout. No gross compliance claim."
 }

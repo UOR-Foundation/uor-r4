@@ -4,6 +4,8 @@ This crate contains the offline recurrent-memory learner, its matched transport 
 
 ## Joint recurrent-memory learning
 
+The [September 25 result](../../docs/integration/joint-recurrent-result-2026-09-25.md) completes the full paired campaign: 29,999,104 target visits per arm, including 21,381,120 at context 256. Both learners pass the frozen development likelihood/noncollapse/combined read-effect engineering gates. Ordinary has lower natural NLL; generated stories remain semantically unreliable. Integer export and geometric advantage remain unqualified. Quantization-aware continuation of these same checkpoints is the next dependency.
+
 ```text
 uor-r4-training joint-fit CAMPAIGN_JSON NEW_REPORT_ROOT {cpu|metal} [SEALED_RESUME_CHECKPOINT]
 uor-r4-training joint-evaluate CAMPAIGN_JSON SEALED_CHECKPOINT NEW_REPORT_ROOT {cpu|metal} {read|no-read} BATCH
@@ -17,6 +19,8 @@ The quaternion and Householder-pair arms share dimensions, parameter initializat
 Each checkpoint includes named model parameters, AdamW moments and per-variable clocks, model/optimizer configuration, exact source/data/tokenizer identities, and the next counter-seeded training window. Resume rejects changes to the model or sampler. The optional `stop_file` requests a checkpoint between updates. `max_process_seconds` stops new updates; the campaign separately reserves final evaluation, save/reload and sealing time.
 
 A separately declared `training_window_transition` can change batch/context while preserving their product, exact model and optimizer, and global step. It binds the actual parent checkpoint/campaign hashes and prior exposure; ordinary resume still rejects undeclared changes. The current correction retains a matched64-token warmup and continues with256-token training to match evaluation. Report both phase exposures. The changed dimensions define new sampled windows, and old/new retained-batch losses are different samples.
+
+`cpu_gradient_shards` defaults to one and accepts one, two or four; more than one is CPU-only and requires a divisible batch. Workers split complete sequences along the batch dimension, share immutable parameters, and return gradients in a fixed order. The caller forms the weighted mean before one global clip/AdamW update. Resume and evaluation bind the selected shard count; floating-point reduction order is not claimed bitwise equal to an unsplit batch. Measured M1 execution selected two workers per arm with both arms concurrent and nested backend thread limits of one. Four workers per arm and the tested Metal path were slower.
 
 `joint-evaluate` loads the actual checkpoint, runs free continuations and all frozen source-edit pairs, and then scores every evaluator-v2 development position. NoRead applies from the start of every prompt/block. Per-target records use the explicit44-byte format in `evaluation-report.json`; probability flooring or answer repair is not added by evaluation. The current natural-story probes measure exploratory task transfer. Their failure alone does not diagnose the read mechanism.
 
