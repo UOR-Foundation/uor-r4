@@ -1,6 +1,6 @@
 # D8 rung 1: continuous recurrent memory learner
 
-Status: corrected full256-token continuation selected and ready to launch;
+Status: corrected full256-token continuation running from01:17UTC September25;
 the initial64-window full schedule is superseded and its warmup is retained.
 References #973 and #820.
 This follows the completed [rung 0 comparison](reference-evaluator-v2.json).

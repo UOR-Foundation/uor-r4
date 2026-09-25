@@ -66,10 +66,10 @@ its original scope.
 ## Active D8 rung 1 learning campaign
 
 **The continuous recurrent-memory learner is implemented; its corrected full256
-continuation is ready with measured CPU parallelism.** Its full
+continuation is running with measured CPU parallelism.** Its full
 language-loss graph connects transport, state, causal Q/K/V memory and normalized
 vocabulary/copy output. A matched Householder-pair arm provides the ordinary
-control. Seven focused release checks passed, including all-write gradient
+control. Eight focused release checks passed, including all-write gradient
 preservation and optimizer continuation; actual profiles saved/reloaded their
 artifacts and generated continuations. These integrity results do not qualify
 language capability.
@@ -86,7 +86,8 @@ the full remaining exposure. [CPU/GPU profiles](../evidence/joint-recurrent-hard
 selected two synchronous sequence workers per arm, both arms concurrent, at
 approximately1,419/1,575targets per second. Four workers per arm and Metal were
 slower. Both selected parents reach2128steps; remaining fitting is projected at
-about4–4.5hours. Planned total
+about4–4.5hours. Both RDC jobs launched at01:17UTC September25 from their sealed
+step2128 parents; language results remain pending. Planned total
 exposure remains29,999,104visits per arm including warmup, with selection at
 global steps4714/7324. The warmup source is
 `9d8c1e39e2e3bbafaec63791b048b1b3b6161211`; the artifact container is
