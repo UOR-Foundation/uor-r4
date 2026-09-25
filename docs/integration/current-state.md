@@ -18,6 +18,26 @@ gate. Next continue these same learned checkpoints through the explicit
 soft-to-hard bridge, retaining the competitive ordinary control.
 The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged.
 
+## Active execution: D8 rung 2
+
+[Draft PR #1390](https://github.com/UOR-Foundation/uor-r4/pull/1390) implements the
+[frozen quantized-continuation plan](quantized-recurrent-plan-2026-09-25.md).
+Both selected parents have actual packed-code exports with zero full-context
+hard probability reload difference and identical fixed-seed generated IDs and
+distribution hashes. The short text remains semantically unreliable. Sixteen
+focused Rust checks passed. These are engineering observations, not completed
+language-retention acceptance.
+
+The [execution freeze](../evidence/quantized-recurrent-execution-freeze-2026-09-25.json)
+sets 1,024 additional updates per arm at B16/T256, including the eight retained
+profile updates in each QAT arm. Quantized training uses a 256-update ramp;
+evaluation is always fully quantized. Equally exposed continuous quaternion and
+ordinary continuations are required controls. Final common step 8,348 is fixed;
+the midpoint is retained without quality selection. The first QAT pair is
+running; final population, source-edit and generation retention are pending.
+Packed values are still executed by an F32 numerical emulator. Integer serving,
+bounded admission, sparse access and energy remain subsequent work.
+
 ## Retained integer-path result: A4
 
 Four matched eight-epoch continuations consume 4,499,104 new token updates and
