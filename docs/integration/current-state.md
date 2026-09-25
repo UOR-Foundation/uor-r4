@@ -203,8 +203,12 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **Training is NOT_RUN at this record; launch follows
-final process/resource review.**
+not language retention. **Paired training is RUNNING**, launched through RDC at
+21:06:32 UTC on September25; [launch receipt](../evidence/language-continuation-launch-2026-09-25.json)
+binds the exact commands, environment and early progress. Final evaluation,
+rounding and candidate quality remain NOT_RUN. Early updates are slower than
+the historical timing estimate; the existing process/cycle ceilings still apply,
+with checkpoints preserved for exact-state continuation if necessary.
 
 
 - **Deliverable:** a retained full256 learner producing more coherent,

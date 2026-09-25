@@ -58,3 +58,7 @@ Only the new adapter needs new focused code checks: truthful unchanged optimizer
 ## Executed prerequisite
 
 Source `209483169323563d541df781b8817a4bf6dc31e3` implements the explicit adapter. [Evidence](../evidence/language-continuation-adapter-2026-09-25.json): both focused checks passed on the first build; both actual retained continuous parents completed calibration, packed export, integer loading and8-token generation in approximately3seconds each. No model fitting occurred in this prerequisite. Clipping affected30,428/32,207 coordinates while preserving all nearest hard codes and1,648,037/1,646,255 fractional shadows respectively; original Adam fingerprints and step8,348 remain unchanged. These preflight packed bundles are unpromoted interface artifacts.
+
+## Execution status
+
+The [paired fit launched](../evidence/language-continuation-launch-2026-09-25.json) at21:06:32UTC on September25 through RDC. Both arms advance from step8,348 with full256 causal context; final candidate results are pending. Initial throughput is slower than the prior6.15h projection. The original7h per-fit and10h complete-cycle ceilings remain active; any necessary exact-state resume requires a prospectively recorded local extension. No new exposure tranche or change of learning conditions is implied.
