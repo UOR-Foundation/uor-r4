@@ -9,6 +9,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 use uor_r4_integer::bundle::Bundle;
+use uor_r4_integer::generation::Selection;
 use uor_r4_integer::{
     format, report_output, sha256_file, IntegerError, ReadMode, Result, SamplePolicy, Sampler,
     PROBABILITY_TOTAL,
@@ -150,6 +151,110 @@ fn replay_mode(bundle: &Bundle, prior: &Path, output: &Path, mode: ReadMode) -> 
     }))
 }
 
+// One loaded-artifact boundary check, independent of language-quality scoring.
+fn check_text_session(bundle: &Bundle, prior: &Path) -> Result<Value> {
+    let started = Instant::now();
+    let source = prior.join("story-probes-read-integer.jsonl");
+    let line = BufReader::new(File::open(&source)?)
+        .lines()
+        .next()
+        .ok_or_else(|| invalid("missing retained source prompt"))??;
+    let row: Value = serde_json::from_str(&line)?;
+    let prompt = row["original"]["generation"]["prompt"]
+        .as_str()
+        .ok_or_else(|| invalid("retained source row lacks natural prompt"))?;
+    let followup = " Then they went home.";
+    let first_ids = bundle.tokenizer().encode(prompt);
+    let followup_ids = bundle.tokenizer().encode(followup);
+    let mut session = bundle.text_session(ReadMode::Enabled)?;
+    let first_appended = session.append(prompt)?;
+    let before_first = session.len();
+    let first = session.generate(1, Selection::Greedy, false)?;
+    let first_token = *first
+        .generated_token_ids
+        .first()
+        .ok_or_else(|| invalid("first text call emitted no token"))?;
+    let after_first = session.len();
+    let second_appended = session.append(followup)?;
+    let after_append = session.len();
+    let second = session.generate(1, Selection::Greedy, false)?;
+    let second_decision = second
+        .decisions
+        .first()
+        .ok_or_else(|| invalid("second text call has no decision"))?;
+    let before_errors = session.len();
+
+    // Replay the complete occurrence tape directly, including the pending token
+    // exactly once between user appends; this does not use TextSession internals.
+    let mut raw_session = bundle.model().new_session();
+    let raw_tokens: Vec<u32> = std::iter::once(0)
+        .chain(first_ids.iter().copied())
+        .chain(std::iter::once(first_token))
+        .chain(followup_ids.iter().copied())
+        .collect();
+    let raw_clock = Instant::now();
+    let mut raw_last = None;
+    for &token in &raw_tokens {
+        raw_last = Some(
+            bundle
+                .model()
+                .step(&mut raw_session, token, ReadMode::Enabled)?,
+        );
+    }
+    let raw_model_ns = raw_clock.elapsed().as_nanos();
+    let raw_last = raw_last.ok_or_else(|| invalid("empty raw occurrence replay"))?;
+    let expected_hash = digest_u64(&raw_last.probabilities);
+    let expected_token = Sampler::new(0)
+        .select(&raw_last.probabilities, SamplePolicy::Greedy)
+        .map_err(|e| invalid(e.to_string()))?;
+    let append_error = session
+        .append(&" x".repeat(257))
+        .err()
+        .map(|e| e.to_string());
+    let after_append_error = session.len();
+    let generation_error = session
+        .generate(256, Selection::Greedy, false)
+        .err()
+        .map(|e| e.to_string());
+    let after_generation_error = session.len();
+    let pass = second_decision.probability_sha256_le_u64 == expected_hash
+        && second_decision.selected_token as usize == expected_token
+        && first.generated_token_ids.len() == 1
+        && second.generated_token_ids.len() == 1
+        && first.incremental_step_calls == 0
+        && second.incremental_step_calls == 0
+        && first_appended == first_ids.len()
+        && second_appended == followup_ids.len()
+        && before_first == 1 + first_ids.len()
+        && after_first == before_first + 1
+        && after_append == after_first + followup_ids.len()
+        && before_errors == after_append + 1
+        && raw_session.len() == after_append
+        && append_error.is_some()
+        && generation_error.is_some()
+        && after_append_error == before_errors
+        && after_generation_error == before_errors;
+    Ok(json!({
+        "schema":"uor-r4.loaded-text-session-boundary-check/1", "pass":pass,
+        "source_file_sha256":sha256_file(&source)?, "source_prompt":prompt,
+        "source_prompt_token_ids":first_ids, "followup_text":followup,
+        "followup_token_ids":followup_ids, "first_generated_token_ids":first.generated_token_ids,
+        "second_generated_token_ids":second.generated_token_ids,
+        "raw_occurrence_tape_token_ids":raw_tokens,
+        "raw_second_prediction":expected_token, "raw_second_probability_sha256_le_u64":expected_hash,
+        "text_second_probability_sha256_le_u64":second_decision.probability_sha256_le_u64,
+        "first_generate_model_calls":first.incremental_step_calls,
+        "second_generate_model_calls":second.incremental_step_calls,
+        "lengths":{"before_first":before_first,"after_first":after_first,"after_append":after_append,
+            "before_errors":before_errors,"after_append_error":after_append_error,
+            "after_generation_error":after_generation_error},
+        "oversized_append_error":append_error, "oversized_generate_error":generation_error,
+        "raw_replay_model_calls":raw_session.len(), "raw_replay_model_ns":raw_model_ns,
+        "complete_boundary_check_wall_ns":started.elapsed().as_nanos(),
+        "scope":"One actual artifact session continuation and capacity check; no language-quality claim"
+    }))
+}
+
 fn run(bundle_path: &Path, prior: &Path, output: &Path) -> Result<Value> {
     format::verify_sealed(prior)?;
     let load_clock = Instant::now();
@@ -160,12 +265,13 @@ fn run(bundle_path: &Path, prior: &Path, output: &Path) -> Result<Value> {
     }
     let read = replay_mode(&bundle, prior, output, ReadMode::Enabled)?;
     let no_read = replay_mode(&bundle, prior, output, ReadMode::NoRead)?;
-    let pass = read["pass"] == true && no_read["pass"] == true;
+    let text_session = check_text_session(&bundle, prior)?;
+    let pass = read["pass"] == true && no_read["pass"] == true && text_session["pass"] == true;
     Ok(json!({
         "schema":"uor-r4.standalone-integer-retained-replay/1", "pass":pass,
         "bundle_receipt_sha256":sha256_file(&bundle_path.join("bundle.json"))?,
         "prior_report_manifest_sha256":sha256_file(&prior.join("manifest.json"))?,
-        "bundle_load_ns":load_nanos, "read":read, "no_read":no_read,
+        "bundle_load_ns":load_nanos, "read":read, "no_read":no_read, "text_session":text_session,
         "scope":"Exact extraction replay of the existing four full256 windows per mode; no new population, floating model or tolerance",
         "acceptance":"Zero differences in every retained Q48 distribution SHA256 and greedy token; exact normalized probability/attention mass and all causal slots"
     }))
