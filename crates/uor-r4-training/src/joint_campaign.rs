@@ -432,6 +432,9 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
 }
 
 pub fn run_cli(args: &[String]) -> Result<()> {
+    if args.first().map(String::as_str) == Some("joint-compare") {
+        return crate::joint_comparison::run_cli(args);
+    }
     if args.first().map(String::as_str) == Some("joint-evaluate") {
         return evaluate_cli(args);
     }
@@ -488,8 +491,8 @@ fn evaluate_cli(args: &[String]) -> Result<()> {
         _ => return Err(invalid("evaluation read mode read|no-read")),
     };
     let batch: usize = args[6].parse().map_err(|_| invalid("evaluation batch"))?;
-    if !(1..=64).contains(&batch) {
-        return Err(invalid("evaluation batch1..64"));
+    if !(1..=joint_evaluation::MAX_EVALUATION_BATCH).contains(&batch) {
+        return Err(invalid("evaluation batch1..32"));
     }
     let checkpoint = Path::new(&args[2]);
     let out = Path::new(&args[3]);

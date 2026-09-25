@@ -7,15 +7,18 @@ This crate contains the offline recurrent-memory learner, its matched transport 
 ```text
 uor-r4-training joint-fit CAMPAIGN_JSON NEW_REPORT_ROOT {cpu|metal} [SEALED_RESUME_CHECKPOINT]
 uor-r4-training joint-evaluate CAMPAIGN_JSON SEALED_CHECKPOINT NEW_REPORT_ROOT {cpu|metal} {read|no-read} BATCH
+uor-r4-training joint-compare BASELINE_ROOT QUAT_READ QUAT_NOREAD ORD_READ ORD_NOREAD NEW_REPORT_ROOT
 ```
 
-The [prospective campaign](../../docs/integration/joint-recurrent-campaign-2026-09-24.md) specifies the graph, training exposure, resource ceilings, checkpoint selection and capability criteria. `JointModel` exposes the same causal core for differentiable unrolls and detached incremental sessions. It reads only earlier occurrences, updates recurrent state using the read, then writes the current contextual key/value. Exact observed token/occurrence identity is retained alongside learned vector compatibility. A normalized vocabulary/copy mixture supplies the language loss; targets enter only that loss.
+The [frozen campaign](../../docs/integration/joint-recurrent-campaign-2026-09-24.md) specifies the graph, training exposure, resource ceilings, checkpoint selection and capability criteria. `JointModel` exposes the same causal core for differentiable unrolls and detached incremental sessions. It reads only earlier occurrences, updates recurrent state using the read, then writes the current contextual key/value. Exact observed token/occurrence identity is retained alongside learned vector compatibility. A normalized vocabulary/copy mixture supplies the language loss; targets enter only that loss.
 
 The quaternion and Householder-pair arms share dimensions, parameter initialization and data windows. Their local transport scales are matched; their global function families differ. These floating-point offline learners do not establish exact Hamiltonian dynamics or the final integer serving cost. Prime/zeta admission, hard discretization and typed native export remain subsequent integration work.
 
 Each checkpoint includes named model parameters, AdamW moments and per-variable clocks, model/optimizer configuration, exact source/data/tokenizer identities, and the next counter-seeded training window. Resume rejects changes to the model or sampler. The optional `stop_file` requests a checkpoint between updates. `max_process_seconds` stops new updates; the campaign separately reserves final evaluation, save/reload and sealing time.
 
 `joint-evaluate` loads the actual checkpoint, runs free continuations and all frozen source-edit pairs, and then scores every evaluator-v2 development position. NoRead applies from the start of every prompt/block. Per-target records use the explicit44-byte format in `evaluation-report.json`; probability flooring or answer repair is not added by evaluation. The current natural-story probes measure exploratory task transfer. Their failure alone does not diagnose the read mechanism.
+
+Evaluation accepts batches1–32; the paired campaign uses16. `joint-compare` joins all249,856 targets against the two sealed baseline evaluations and four selected learner/control evaluations. It verifies identities and original means, reports paired differences and the prespecified horizon slices, and preserves the original generation/probe hashes. Select checkpoints from the recorded F32 `quick_loss` tune scores before running population evaluation. The comparison never reselects or decides generation quality; its numerical components alone do not complete rung1.
 
 On Apple hosts, optional `cpu-accelerate` enables the pinned, corrected Candle BLAS adapter for offline training. Its four-line source difference and all upstream identities are retained in [the vendor note](../../third_party/candle-core-0.9.2/UOR-PATCH.md). CPU/Rust-gemm and Metal remain explicit alternatives. Backend-specific numerical behavior is reported; cross-backend bitwise training identity is not claimed.
 

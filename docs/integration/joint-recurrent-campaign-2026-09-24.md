@@ -1,6 +1,6 @@
 # D8 rung 1: continuous recurrent memory learner
 
-Status: prospective implementation/profile protocol. References #973 and #820.
+Status: frozen protocol; paired full learning run active. References #973 and #820.
 This follows the completed [rung 0 comparison](reference-evaluator-v2.json).
 The programme remains [project-track.md](project-track.md); changing outcomes
 belong in [current-state.md](current-state.md).
@@ -55,6 +55,9 @@ point gives approximate norm preservation here, not exact runtime arithmetic.
 - Run Enabled and whole-prefix NoRead from fresh state. A comparison-tail loss
   increase of at least0.02nats when disabling reads is a prespecified indication
   of useful read-path contribution; output changes alone are insufficient.
+  NoRead removes both recurrent value feedback and pointer-copy probability, so
+  this intervention measures their combined contribution. It does not isolate
+  geometric addressing, value feedback, or distant retrieval individually.
 - Preserve five historical prompt continuations with seeds2014..2018 and the
   explicit probability-based Q32 sampler. Record all16 literal source-edit story
   pairs in each fit attempt before model loading. These are exploratory task
@@ -113,10 +116,18 @@ unchanged; later positions therefore measure extension beyond the training
 horizon. Passing the existing gates supports this artifact's observed behavior;
 failure does not isolate a geometric cause. A128/256-window continuation remains
 the next same-graph option before claiming learned256-step credit.
+Report descriptive likelihood slices for positions0–63 and64–255 from the same
+per-target records to distinguish the fitted horizon from its extension. These
+slices do not replace or weaken the full comparison-tail gates.
 
 Save the midpoint at3662updates and the final artifact. Select the checkpoint
 with the lower full64-block tune-prefix NLL, with an exact tie choosing the
-earlier step; do this separately but identically for each arm. Then evaluate
+earlier step; do this separately but identically for each arm. Selection uses
+the recorded `quick_loss` score (F32 batch reductions, aggregated as F64), before
+opening comparison-tail results. Preserve both scores and selected identities in
+the closeout receipt. Later per-token F64 scoring does not reselect a checkpoint.
+If the arms select different steps, report the exposure difference as a confound
+for their comparison. Then evaluate
 both selected checkpoints with reads enabled and whole-prefix NoRead on all976
 blocks and all frozen generation/source-edit probes. Preserve and report both
 candidate scores. No criterion or comparator is weakened for the shorter fit.

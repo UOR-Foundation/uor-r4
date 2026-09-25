@@ -10,6 +10,7 @@
 pub mod baseline_counts;
 pub mod baseline_protocol;
 pub mod joint_campaign;
+pub mod joint_comparison;
 pub mod joint_evaluation;
 pub mod joint_model;
 pub mod joint_optimizer;
