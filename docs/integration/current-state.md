@@ -203,12 +203,16 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **Paired training is RUNNING**, launched through RDC at
-21:06:32 UTC on September25; [launch receipt](../evidence/language-continuation-launch-2026-09-25.json)
-binds the exact commands, environment and early progress. Final evaluation,
-rounding and candidate quality remain NOT_RUN. Early updates are slower than
-the historical timing estimate; the existing process/cycle ceilings still apply,
-with checkpoints preserved for exact-state continuation if necessary.
+not language retention. **Paired training is RUNNING in a replacement attempt**.
+The first RDC-attached controller [failed](../evidence/language-continuation-interruption-2026-09-25.json)
+at 23:35 UTC with a broken output pipe; its workers exited on signal 2 before
+their first checkpoint. They logged 2,031/2,032 updates but saved no recoverable
+weights or optimizer state. That attempt is retained as an execution failure,
+not a model-quality result. A detached controller restarted the same full256
+step8,348→15,672 dose from the preserved parents at 23:46 UTC. Three intermediate
+checkpoints now reduce recovery loss; only the final step is eligible for
+evaluation. The necessary local time extension was recorded before restart.
+Final evaluation, rounding and candidate quality remain NOT_RUN.
 
 
 - **Deliverable:** a retained full256 learner producing more coherent,
