@@ -39,6 +39,9 @@ pub struct Campaign {
     pub data_seed: u64,
     pub batch: usize,
     pub context: usize,
+    /// Execution-only CPU partition; global batch, horizon and optimizer stay fixed.
+    #[serde(default = "default_cpu_gradient_shards")]
+    pub cpu_gradient_shards: usize,
     pub total_steps: usize,
     pub development_every_steps: usize,
     pub development_blocks: usize,
@@ -61,6 +64,8 @@ impl Campaign {
             || !(1..=64).contains(&cfg.batch)
             || !(8..=256).contains(&cfg.context)
             || cfg.context > cfg.model.context
+            || !matches!(cfg.cpu_gradient_shards, 1 | 2 | 4)
+            || cfg.batch % cfg.cpu_gradient_shards != 0
             || cfg.model.vocab_size != 4096
             || cfg.total_steps == 0
             || cfg.total_steps > 100_000
@@ -101,6 +106,10 @@ impl Campaign {
     }
 }
 
+fn default_cpu_gradient_shards() -> usize {
+    1
+}
+
 fn is_hex_digest(value: &str, length: usize) -> bool {
     value.len() == length && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
@@ -114,6 +123,8 @@ fn metadata(cfg: &Campaign, mode: &str, device_name: &str) -> Result<Value> {
         json!({"schema":"uor-r4.joint-recurrent-report/1", "mode":mode,
         "source_commit":source,"executable_sha256":sha256_file(&std::env::current_exe()?)?,
         "campaign":cfg,"requested_device":device_name,
+        "cpu_gradient_shards":cfg.cpu_gradient_shards,
+        "gradient_execution":"Independent full-window CPU shards share immutable Vars; ordered weighted mean F32 gradients; one global clip/AdamW update. Reduction order can differ from an unsplit batch.",
         "cpu_accelerate_compiled":cfg!(feature="cpu-accelerate"),
         "candle_source":"vendored0.9.2; four-line Accelerate operand slice correction; UPSTREAM.json",
         "deadline_scope":"max_process_seconds stops new updates; measured closeout allowance is budgeted separately",
@@ -227,6 +238,7 @@ fn save_checkpoint(
             "data_sampler":"splitmix64-counter-v1;valid-window-union;no-cross-store;step/lane-bound",
             "next_data_step":step,"data_seed":cfg.data_seed,
             "training_batch":cfg.batch,"training_context":cfg.context,
+            "cpu_gradient_shards":cfg.cpu_gradient_shards,
             "sampled_targets_per_step":cfg.batch*cfg.context,
             "training_window_transition":cfg.training_window_transition,
             "evaluator_sha256":evaluator_sha,
@@ -242,6 +254,9 @@ fn save_checkpoint(
 pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>) -> Result<()> {
     let started = Instant::now();
     let mut report = metadata(cfg, "joint-fit", device_name)?;
+    if cfg.cpu_gradient_shards > 1 && device_name != "cpu" {
+        return Err(invalid("multiple gradient shards require the CPU backend"));
+    }
     if cfg.training_window_transition.is_some() && resume.is_none() {
         return Err(invalid(
             "a training-window transition requires its sealed parent",
@@ -352,6 +367,8 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
             "sampled_target_visits":parent_visits,
         });
         report["training_window_transition_applied"] = json!(window_changed);
+        report["cpu_gradient_shards_changed_on_resume"] =
+            json!(old.cpu_gradient_shards != cfg.cpu_gradient_shards);
         report["window_sampler_continuation"] = json!(
             "Same counter algorithm and global step; a declared batch/context transition changes sampled windows and lane count, with no data-cursor or optimizer reset."
         );
@@ -401,22 +418,23 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         }
         let step_started = Instant::now();
         let (inputs, targets) = training_batch(&stores, cfg, step)?;
-        let output = model.forward(&inputs, cfg.batch, cfg.context, ReadMode::Enabled, true)?;
-        let loss = output.loss(&targets)?;
-        let value = loss.to_scalar::<f32>()?;
-        if !value.is_finite() {
-            return Err(invalid("nonfinite training loss"));
-        }
-        let grads = loss.backward()?;
-        let update = optimizer.step(model.variables(), &grads)?;
+        let gradients = crate::joint_parallel::batch_gradients(
+            &model,
+            &inputs,
+            &targets,
+            cfg.batch,
+            cfg.context,
+            cfg.cpu_gradient_shards,
+        )?;
+        let value = gradients.mean_nll;
+        let update = optimizer.step(model.variables(), &gradients.gradients)?;
         let elapsed = step_started.elapsed().as_secs_f64();
         step_times.push(elapsed);
         complete = step + 1;
         let mut row = json!({"step":complete,"sampled_target_visits":complete*cfg.batch*cfg.context,
-            "batch_mean_nll":value,"complete_step_seconds":elapsed,"optimizer":update});
-        drop(grads);
-        drop(loss);
-        drop(output);
+            "batch_mean_nll":value,"complete_step_seconds":elapsed,"optimizer":update,
+            "cpu_gradient_shards":cfg.cpu_gradient_shards});
+        drop(gradients);
         if cfg.development_every_steps > 0 && complete % cfg.development_every_steps == 0 {
             row["development_nll"] =
                 json!(quick_loss(&model, &dev, cfg.development_blocks, cfg.batch)?);
@@ -711,6 +729,7 @@ mod tests {
             data_seed: 42,
             batch: 4,
             context: 8,
+            cpu_gradient_shards: 1,
             total_steps: 10,
             development_every_steps: 0,
             development_blocks: 0,

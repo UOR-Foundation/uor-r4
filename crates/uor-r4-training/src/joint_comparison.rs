@@ -689,6 +689,7 @@ fn validate_pairs(reports: &[Value]) -> Result<()> {
         "data_seed",
         "batch",
         "context",
+        "cpu_gradient_shards",
         "total_steps",
         "development_every_steps",
         "development_blocks",

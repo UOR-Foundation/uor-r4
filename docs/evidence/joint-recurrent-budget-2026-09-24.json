@@ -14,14 +14,14 @@
     "limit_ms": 495000000
   },
   "reason": "Complete three-hour engineering/profile/paired-training/evaluation/delivery projection exceeds current96-minute balance. Standing local extensions apply; actual dose/device fixed after full-step throughput measurement before full training.",
-  "complete_cycle_limit_ms": 18000000,
+  "complete_cycle_limit_ms": 29700000,
   "phase_projection_seconds": {
     "engineering_and_review": 3600,
     "build_and_integrity_throughput": 1800,
     "paired_training_and_evaluation": 11500,
     "delivery": 600
   },
-  "profile_optimizer_steps_max_per_arm": 60,
+  "profile_optimizer_steps_max_per_arm": 120,
   "profile_tokens_max_per_arm": 400000,
   "intended_full_tokens_per_arm": 30000000,
   "full_fit_launch_gate": "Record measured full forward/backward/optimizer throughput, exact chosen graph/config/dose and projection before full fit; diagnose implementation failures within remaining budget.",
@@ -33,8 +33,8 @@
   "aggregate_ram_target_bytes": 8589934592,
   "one_cargo_process": true,
   "one_metal_training_owner": true,
-  "cpu_threads": 4,
-  "new_storage_limit_bytes": 805306368,
+  "cpu_threads": 8,
+  "new_storage_limit_bytes": 973078528,
   "storage_projection_bytes": {
     "build_and_retained_binaries": 377487360,
     "model_optimizer_checkpoints_both_arms": 188743680,
@@ -45,7 +45,7 @@
   "stop_margin_bytes": 134217728,
   "resource_limits_preserve_all_previous_charges": true,
   "paid_external_compute": false,
-  "deletions_authorized": "Seven canceled-build objects in canceled-build-cleanup.json, plus the two inspected obsolete Cargo core objects in horizon-correction-cache-cleanup.json. No research/model/report/worktree or executed binary deletion.",
+  "deletions_authorized": "Seven canceled-build objects in canceled-build-cleanup.json, plus the two inspected obsolete Cargo core objects in horizon-correction-cache-cleanup.json. No research/model/report/worktree or executed binary deletion. Four obsolete original-backend Candle objects enumerated in hardware-profile-cache-cleanup.json are also disposable after fingerprint/source preservation checks.",
   "profile_extension": {
     "recorded_utc": "2026-09-24T23:22:54.453091+00:00",
     "reason": "Initial Metal B16 complete steps take about10s (~400targets/s), incompatible with paired30M planning anchor. Permit bounded CPU/backend/batch diagnosis before freezing full campaign; reuse unchanged graph. Existing cycle/time/storage limits unchanged.",
@@ -81,7 +81,7 @@
     },
     "reason": "Measured corrected CPU backend supports the actual30M-visits paired learner but requires a longer campaign than the initial three-hour cycle. Run two CPU arms concurrently within measured RAM/thread limits; project up to3.2h per process plus completed preparation, evaluation and delivery. Standing local extensions apply; no external compute."
   },
-  "cpu_threads_per_process": 2,
+  "cpu_threads_per_process": 4,
   "concurrent_cpu_training_processes": 2,
   "ram_expected_two_training_processes_bytes": 6010000000,
   "ram_supervisor_stop_bytes": 8589934592,
@@ -180,5 +180,46 @@
     "reason": "Preserve stopped parents and add aligned parent, explicit256-window profiles and continuation checkpoints. Necessary local correction under standing authorization. Before new large writes reclaim only inspected reproducible obsolete compiler cache objects; unchanged physical reserve and128MiB margin.",
     "full_continuation_launch_gate": "Record actual complete-step throughput and RAM for256-token fit, then freeze remaining dose and full time projection. No silent timer or criterion change.",
     "shared_wall_ledger_unchanged_until_projected_full_continuation": true
+  },
+  "owner_full_horizon_hardware_extension": {
+    "recorded_utc": "2026-09-25T00:56:24.350757+00:00",
+    "owner_direction": "Finish the full planned exposure, about5morehours; investigate allCPUcores andAppleGPU acceleration.",
+    "ledger_before": {
+      "cumulative_ms": 482023963,
+      "limit_ms": 500400000
+    },
+    "ledger_after": {
+      "cumulative_ms": 482023963,
+      "limit_ms": 512400000
+    },
+    "increment_ms": 12000000,
+    "complete_cycle_limit_ms": 29700000,
+    "projection": "Already2happroximately including preparation and short-window warmup; <=15minutes boundedhardwareprofiling; correctedfullfitprojected4.75h plus15percentthermalallowance; <=30minutes evaluation andprotected delivery. Chargeactualcompletewalltime,notunusedallowance.",
+    "full_training_horizon": 256,
+    "hardware_profile_additional_updates_max_per_arm": 24,
+    "hardware_profile_max_seconds_per_attempt": 240,
+    "hardware_candidates": "TwoCPUarmswith4workerthreadsperprocess; oneMetalprofileofsameB16/T256graph andloadedparent. At most oneMetalowner; RAM/storage ceilings unchanged. Do notcomparegeometryacrossdifferenttrainingbackendswithoutmatching.",
+    "sampled_cpu2_profile_peak_combined_rss_bytes": 5833981952,
+    "cpu2_profile_targets_per_second": {
+      "quaternion": 1246.9765790186573,
+      "householder_pair": 1267.2356125905778
+    },
+    "new_storage_increment_bytes": 67108864,
+    "new_storage_limit_bytes": 872415232,
+    "paid_external_compute": false
+  },
+  "synchronous_cpu_profile": {
+    "recorded_utc": "2026-09-25T01:03:15.028859+00:00",
+    "reason": "Owner requests usefulall-coreparallelism. MeasuredCPU4settingsslightlyslower;3-secondstackshowsmostlyserialtensorcopy/elementwisework. Oneboundedbatch-data-parallelcandidate preservesB16/T256, languageobjectiveandoneAdamWupdate; profile2shardsand,onlyifuseful,4shardsperarm. No modelarchitectureorlearning-ratechange.",
+    "additional_updates_max_per_arm": 24,
+    "profile_seconds_limit_per_attempt": 240,
+    "worker_stacks_bytes_each": 67108864,
+    "max_gradient_workers_both_arms": 8,
+    "nested_blas_rayon_threads_per_process": 1,
+    "memory_stop_unchanged_bytes": 8589934592,
+    "full_horizon_and_planned_exposure_unchanged": true,
+    "gross_new_storage_increment_bytes": 100663296,
+    "gross_new_storage_updated_limit_bytes": 973078528,
+    "time_within_existing_full_horizon_extension": true
   }
 }
