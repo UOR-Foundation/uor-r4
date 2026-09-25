@@ -89,9 +89,13 @@ slower. Both selected parents reach2128steps; remaining fitting is projected at
 about4–4.5hours. After the01:17UTC launch, the physical-space guard saved both
 jobs at2232/2230steps with zero reload loss difference. Inspected compiler
 intermediates reclaimed3,652,976,640measured physical bytes; all source, models,
-executables, reports and worktrees remain. Both jobs resumed at01:28UTC from
-those checkpoints with identical training/optimizer/sampler settings. See the
-[resource continuation](../evidence/joint-recurrent-resume-2026-09-25.json).
+executables, reports and worktrees remain. A second physical-space stop preserved
+steps2241/2238. The owner correctly identified the excessive26.1GB operational
+guard while about25.2GB was still free. The [prospective correction](../evidence/joint-recurrent-reserve-correction-2026-09-25.json)
+keeps20GiB free plus128MiB stop margin and64MiB closeout headroom, against only
+200–250MB projected remaining output. Both jobs resumed at01:35UTC from the
+latest checkpoints with identical training/optimizer/sampler settings. Full
+resource history remains in the receipts; no completed learning is repeated.
 Language results remain pending. Planned total
 exposure remains29,999,104visits per arm including warmup, with selection at
 global steps4714/7324. The warmup source is
