@@ -1,7 +1,7 @@
 # D8 rung 1: continuous recurrent memory learner
 
-Status: owner-directed horizon correction; the initial64-window full schedule
-is superseded. Preserve its warmup, then match training and evaluation at256.
+Status: corrected full256-token continuation selected and ready to launch;
+the initial64-window full schedule is superseded and its warmup is retained.
 References #973 and #820.
 This follows the completed [rung 0 comparison](reference-evaluator-v2.json).
 The programme remains [project-track.md](project-track.md); changing outcomes
@@ -178,4 +178,34 @@ The [budget](../evidence/joint-recurrent-budget-2026-09-24.json) records prepara
 and storage prospectively. Only two obsolete, reproducible Cargo library/metadata
 objects were additionally removed, reclaiming187,551,744physical bytes. No learned
 model, executed binary, report, research, source or worktree was removed. Full
-continuation launch still requires the measured256-step throughput/RAM projection.
+continuation launch requires the measured256-step throughput/RAM projection.
+
+## Selected hardware and full256 continuation (September25UTC)
+
+The owner chose the full planned exposure after the corrected horizon profile,
+and asked for CPU/GPU parallelism. The [hardware receipt](../evidence/joint-recurrent-hardware-2026-09-25.json)
+retains every measured branch. Two synchronous CPU sequence workers per arm,
+with both arms running concurrently, were fastest: approximately1,419 and1,575
+targets/second. Four workers per arm were about6percent slower. The tested Metal
+quaternion arm achieved823targets/second. Increasing only backend thread settings
+did not help. Short profiles are a launch projection, not sustained performance
+or energy evidence; whole-attempt times also favored the selected configuration.
+
+Each worker receives complete256-token sequences. Fixed-order weighted mean
+gradients precede one global clip and AdamW update; batch16 and4096targets per
+update stay fixed. Both arms use two shards, nested backend threads1 and the same
+executable. F32 reduction order can change; bitwise trajectory equivalence is
+not claimed. The named-gradient/loss equivalence test and checkpoint shard
+bindings protect the intended objective and the matched comparison.
+
+Continue the selected profile checkpoints at global2128 to7324. Remaining work
+is5196updates /21,282,816target visits per arm. The final lineage contains
+8,617,984warmup visits at64 and21,381,120visits at256. Only4714/7324 are selection
+candidates, using their recorded tune64 scores before comparison-tail evaluation.
+The slowest selected profile projects15,000seconds of remaining training;
+17,400seconds permits measured variability, with180seconds closeout and30minutes
+evaluation/delivery reserved within the existing complete-cycle allowance.
+The observed combined RSS peak is6,180,077,568bytes against the8GiB stop.
+Source/executable/parent hashes, alternative attempts and storage stops remain
+bound in the receipt. No architecture, optimizer, data or evaluation gate changes
+accompany this execution choice.

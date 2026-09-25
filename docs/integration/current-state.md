@@ -65,8 +65,8 @@ its original scope.
 
 ## Active D8 rung 1 learning campaign
 
-**The continuous recurrent-memory learner is implemented; its training horizon
-is being corrected before further full fitting.** Its full
+**The continuous recurrent-memory learner is implemented; its corrected full256
+continuation is ready with measured CPU parallelism.** Its full
 language-loss graph connects transport, state, causal Q/K/V memory and normalized
 vocabulary/copy output. A matched Householder-pair arm provides the ordinary
 control. Seven focused release checks passed, including all-write gradient
@@ -80,9 +80,13 @@ one paired seed and the unchanged256-token development/generation. The owner
 correctly challenged the64-token training mismatch before the full dose finished.
 Both RDC jobs checkpointed safely; quaternion's additional56original updates
 aligned both parents at2104steps /8,617,984visits. Their reload deltas are zero.
-Preserve this warmup and all AdamW state; the next explicit continuation uses
-batch16/context256 so longer histories receive language credit. Profile its
-complete updates before fixing the remaining time projection. Planned total
+Preserve this warmup and all AdamW state; the explicit continuation uses
+batch16/context256 so longer histories receive language credit. The owner chose
+the full remaining exposure. [CPU/GPU profiles](../evidence/joint-recurrent-hardware-2026-09-25.json)
+selected two synchronous sequence workers per arm, both arms concurrent, at
+approximately1,419/1,575targets per second. Four workers per arm and Metal were
+slower. Both selected parents reach2128steps; remaining fitting is projected at
+about4–4.5hours. Planned total
 exposure remains29,999,104visits per arm including warmup, with selection at
 global steps4714/7324. The warmup source is
 `9d8c1e39e2e3bbafaec63791b048b1b3b6161211`; the artifact container is
