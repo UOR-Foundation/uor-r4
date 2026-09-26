@@ -39,8 +39,11 @@ is not proposed here as a substitute carrier for dense computation (see §2).
   escape that floor; group structure buys exact closure and zero rounding drift, not
   capacity. (Algebraic statements and their scope: the mathematics review of 2026-09-25.)
 - **The served path is dense and latency-bound.** Measured on the retained integer session:
-  1,672,960 four-bit code inspections per step (99.7% of the store streamed per token; 85.6%
-  of codes nonzero; 62.7% of the work in the dense 4096-row vocabulary projection); a
+  1,672,448 four-bit code entries inspected in the ten learned weight applications per
+  full-read step (exact integer counter; an earlier pre-instrument estimate of 1,672,960
+  included vector/bias work outside the counted routine), i.e. 99.6% of the store streamed
+  per token (85.6% of codes nonzero; 62.7% of the work in the dense 4096-row vocabulary
+  projection); a
   recorded full-window read step of 3.695 ms; about 6.5× slower than the matched F32 step;
   roughly 0.57 GB/s against M1 memory bandwidth roughly two orders of magnitude higher —
   i.e. ALU/latency-bound, not bandwidth-bound. D5 (per-token parameter sparsity) is unmet.
@@ -156,6 +159,15 @@ execution.
 4. **G2** — the previously unrun D5 contest (geometric router vs LSH / product-key) on the
    D6 long-range panel.
 5. **G3/G4** — measured energy, then scale.
+
+**Step 1 status (2026-09-25, this branch): implemented.** `crates/uor-r4-integer` now has exact
+integer counters and a default-off `--ops-report <path>` JSON (31 accumulator/report fields;
+30 crate tests pass; sampled outputs unchanged on the retained request set). Measured on the
+retained quaternion bundle, 64 source requests: 1,672,448 inspections at full read, 1,655,808
+at no read; code store 1,678,466 with 85.57% nonzero. Cache-hit, routing, operator-composition
+and candidate-read counters remain unmeasured by design (G0). A dependent-crate check
+(`cargo check -p uor-r4-core -p uor-r4-training`) and the `powermetrics` energy instrument are
+still to run before any PR.
 
 ## 10. Boundaries
 
