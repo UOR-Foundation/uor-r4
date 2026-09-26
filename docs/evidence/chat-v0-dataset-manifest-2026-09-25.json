@@ -1,0 +1,478 @@
+{
+  "acquisition_date_utc": "2026-09-26T03:19:56Z",
+  "base_commit": "b7162e607272af1b9c950eb531f77d26b2bf06b3",
+  "branch": "codex/canonical-address-routing-20260925",
+  "deterministic": true,
+  "generator": "fetch_chat_v0.py",
+  "generator_sha256": "3d8fd333dcaa4b63350f8970a7510793a6c4b8f174ab020ee6864a91afeba3ca",
+  "integrity": {
+    "all_lines_valid_json": true,
+    "all_output_sha256_recomputed_and_match": true,
+    "resume_equivalence": {
+      "byte_identical": true,
+      "method": "3-page pause then resume vs single-pass from offset 0",
+      "resumed_sha256": "42bf43c76eb28993db514544cbfe4054186cd69f9a3894373204da9733ce8d10",
+      "single_pass_sha256": "42bf43c76eb28993db514544cbfe4054186cd69f9a3894373204da9733ce8d10",
+      "source_tested": "smoltalk_smol-constraints.train"
+    },
+    "row_idx_contiguous_no_gaps_or_duplicates": true,
+    "truncated_cells_total_across_all_sources": 0
+  },
+  "line_schema": "{\"row_idx\": <int>, \"row\": <original dataset record>}",
+  "local_story_corpus_owner_checkout": [
+    {
+      "bytes": 2227753162,
+      "licence": "CDLA-Sharing-1.0 (roneneldan/TinyStories)",
+      "mtime": "2026-08-30T14:26:27",
+      "note": "Pre-existing local corpus. Not copied into this acquisition. Supplies the simple-story side; share-alike caveat applies.",
+      "path": "/Users/casey.allard/uor-r4/.uor-models/research/issue-1014/raw/TinyStoriesV2-GPT4-train.txt",
+      "sha256": "6418d412de72888f52b5142c761ac21a582f7d1166f0bfbdb5f03ccfdec90443"
+    },
+    {
+      "bytes": 1110771074,
+      "licence": "derived from CDLA-Sharing-1.0 source",
+      "mtime": "2026-09-17T23:10:38",
+      "note": "Pre-existing tokenized (u16) form; not touched by this task.",
+      "path": "/Users/casey.allard/uor-r4/tinystories_train.u16",
+      "sha256": "e930eaa224ba78d181871fcc08f9508bed371704ed86874af5447d505b395d7d"
+    }
+  ],
+  "page_size": 100,
+  "raw_data_committed": false,
+  "raw_data_root_ssd": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/raw",
+  "resumable": true,
+  "rows_api": "https://datasets-server.huggingface.co/rows",
+  "schema": "uor-r4-chat-v0-dataset-manifest/v1",
+  "sources": [
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-magpie-ultra&split=train&offset=<N>&length=100&truncate=0",
+      "byte_goal": 100000000,
+      "card_license_field": null,
+      "config": "smol-magpie-ultra",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages",
+        "category",
+        "difficulty",
+        "quality",
+        "reward_model_score",
+        "conversation_tokens"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-magpie-ultra.train",
+      "last_row_idx": 13899,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 409537,
+      "output_bytes": 100627145,
+      "output_file": "data/smoltalk_smol-magpie-ultra.train.jsonl",
+      "output_sha256": "61f64fae96470193d0d41cf693fd18523c2976d4c5116fe2f9b0f692e0df7d05",
+      "rows_fetched": 13900,
+      "split": "train",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-constraints&split=train&offset=<N>&length=100&truncate=0",
+      "byte_goal": 20000000,
+      "card_license_field": null,
+      "config": "smol-constraints",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-constraints.train",
+      "last_row_idx": 17899,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 34424,
+      "output_bytes": 20069314,
+      "output_file": "data/smoltalk_smol-constraints.train.jsonl",
+      "output_sha256": "42bf43c76eb28993db514544cbfe4054186cd69f9a3894373204da9733ce8d10",
+      "rows_fetched": 17900,
+      "split": "train",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-rewrite&split=train&offset=<N>&length=100&truncate=0",
+      "byte_goal": 30000000,
+      "card_license_field": null,
+      "config": "smol-rewrite",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-rewrite.train",
+      "last_row_idx": 17199,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 53342,
+      "output_bytes": 30055950,
+      "output_file": "data/smoltalk_smol-rewrite.train.jsonl",
+      "output_sha256": "f4c22e56a5db732f1e0b1084fbd62dbe752dd7e316f7baf70e6af9e275a4a62b",
+      "rows_fetched": 17200,
+      "split": "train",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-summarize&split=train&offset=<N>&length=100&truncate=0",
+      "byte_goal": 30000000,
+      "card_license_field": null,
+      "config": "smol-summarize",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-summarize.train",
+      "last_row_idx": 12299,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 96356,
+      "output_bytes": 30099230,
+      "output_file": "data/smoltalk_smol-summarize.train.jsonl",
+      "output_sha256": "a65a88621e34bf369b2d822e5d093caa96db51cd7069c5a568dd5e0e3be1ad4b",
+      "rows_fetched": 12300,
+      "split": "train",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceH4%2Fultrachat_200k&config=default&split=train_sft&offset=<N>&length=100&truncate=0",
+      "byte_goal": 70000000,
+      "card_license_field": "mit",
+      "config": "default",
+      "dataset": "HuggingFaceH4/ultrachat_200k",
+      "dataset_revision": "8049631c405ae6576f93f445c6b8166f76f5505a",
+      "features": [
+        "prompt",
+        "prompt_id",
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k",
+      "label": "ultrachat_200k.default.train_sft",
+      "last_row_idx": 10199,
+      "licence": "MIT",
+      "licence_evidence": {
+        "cardData_license_field": "mit",
+        "source": "HF API cardData.license + tag license:mit",
+        "statement": "cardData.license == 'mit'",
+        "url": "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k",
+      "num_rows_total_in_split": 207865,
+      "output_bytes": 70639403,
+      "output_file": "data/ultrachat_200k.default.train_sft.jsonl",
+      "output_sha256": "cbe48620627a740a97e04849b97d9c47ed387b92e3be059752f8fde48a5a61ce",
+      "rows_fetched": 10200,
+      "split": "train_sft",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Feveryday-conversations-llama3.1-2k&config=default&split=train_sft&offset=<N>&length=100&truncate=0",
+      "byte_goal": 10000000,
+      "card_license_field": "apache-2.0",
+      "config": "default",
+      "dataset": "HuggingFaceTB/everyday-conversations-llama3.1-2k",
+      "dataset_revision": "14f543216b9ba42b6b951dc5bd199460d193b162",
+      "features": [
+        "topic",
+        "subtopic",
+        "subsubtopic",
+        "full_topic",
+        "prompt",
+        "completion",
+        "token_length",
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/everyday-conversations-llama3.1-2k",
+      "label": "everyday-conversations-llama3.1-2k.default.train_sft",
+      "last_row_idx": 2259,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": "apache-2.0",
+        "source": "HF API cardData.license + tag license:apache-2.0",
+        "statement": "cardData.license == 'apache-2.0'",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/everyday-conversations-llama3.1-2k"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/everyday-conversations-llama3.1-2k",
+      "num_rows_total_in_split": 2260,
+      "output_bytes": 6034143,
+      "output_file": "data/everyday-conversations-llama3.1-2k.default.train_sft.jsonl",
+      "output_sha256": "ae41a99645f94471eb32b4a717ff984f808ddfb2e7624431d7797dc8413312ed",
+      "rows_fetched": 2260,
+      "split": "train_sft",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-magpie-ultra&split=test&offset=<N>&length=100&truncate=0",
+      "byte_goal": 5000000,
+      "card_license_field": null,
+      "config": "smol-magpie-ultra",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages",
+        "category",
+        "difficulty",
+        "quality",
+        "reward_model_score",
+        "conversation_tokens"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-magpie-ultra.test",
+      "last_row_idx": 699,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 21555,
+      "output_bytes": 5001797,
+      "output_file": "data/smoltalk_smol-magpie-ultra.test.jsonl",
+      "output_sha256": "69b37f3eddd1b2561e8638f0d52a0d1dbfda2d6584a17f7f17c78060b925458b",
+      "rows_fetched": 700,
+      "split": "test",
+      "split_role": "heldout",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-constraints&split=test&offset=<N>&length=100&truncate=0",
+      "byte_goal": 4000000,
+      "card_license_field": null,
+      "config": "smol-constraints",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-constraints.test",
+      "last_row_idx": 1811,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 1812,
+      "output_bytes": 2018618,
+      "output_file": "data/smoltalk_smol-constraints.test.jsonl",
+      "output_sha256": "825c78187a357642a3260e2027de6407d98c24e7616c85690b3cb89c92ce8463",
+      "rows_fetched": 1812,
+      "split": "test",
+      "split_role": "heldout",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-rewrite&split=test&offset=<N>&length=100&truncate=0",
+      "byte_goal": 3000000,
+      "card_license_field": null,
+      "config": "smol-rewrite",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-rewrite.test",
+      "last_row_idx": 1699,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 2808,
+      "output_bytes": 3027261,
+      "output_file": "data/smoltalk_smol-rewrite.test.jsonl",
+      "output_sha256": "a7e256d2bc7592fed5bacb15174f2ee4d381432a64abfb2d4449cf079e7da327",
+      "rows_fetched": 1700,
+      "split": "test",
+      "split_role": "heldout",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Fsmoltalk&config=smol-summarize&split=test&offset=<N>&length=100&truncate=0",
+      "byte_goal": 3000000,
+      "card_license_field": null,
+      "config": "smol-summarize",
+      "dataset": "HuggingFaceTB/smoltalk",
+      "dataset_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+      "features": [
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk",
+      "label": "smoltalk_smol-summarize.test",
+      "last_row_idx": 1299,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset card README.md \u00a7License (there is no cardData.license)",
+        "statement": "All the new datasets (Smol-Magpie-Ultra, Smol-contraints, Smol-rewrite, Smol-summarize) are licensed under Apache 2.0. For the existing public datasets, please refer to the original dataset for the license.",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk/blob/main/README.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk#license",
+      "num_rows_total_in_split": 5072,
+      "output_bytes": 3078157,
+      "output_file": "data/smoltalk_smol-summarize.test.jsonl",
+      "output_sha256": "501de16bdf70064ce1b87e4ac8def1598c9c7443e5a7f6f69bbe0adc416e647e",
+      "rows_fetched": 1300,
+      "split": "test",
+      "split_role": "heldout",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceH4%2Fultrachat_200k&config=default&split=test_sft&offset=<N>&length=100&truncate=0",
+      "byte_goal": 6000000,
+      "card_license_field": "mit",
+      "config": "default",
+      "dataset": "HuggingFaceH4/ultrachat_200k",
+      "dataset_revision": "8049631c405ae6576f93f445c6b8166f76f5505a",
+      "features": [
+        "prompt",
+        "prompt_id",
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k",
+      "label": "ultrachat_200k.default.test_sft",
+      "last_row_idx": 899,
+      "licence": "MIT",
+      "licence_evidence": {
+        "cardData_license_field": "mit",
+        "source": "HF API cardData.license + tag license:mit",
+        "statement": "cardData.license == 'mit'",
+        "url": "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k",
+      "num_rows_total_in_split": 23110,
+      "output_bytes": 6205514,
+      "output_file": "data/ultrachat_200k.default.test_sft.jsonl",
+      "output_sha256": "3f50cae6badb837a3a7d92f408e563fa29af9beff2607f7bb9ab2ea6596f2b41",
+      "rows_fetched": 900,
+      "split": "test_sft",
+      "split_role": "heldout",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=HuggingFaceTB%2Feveryday-conversations-llama3.1-2k&config=default&split=test_sft&offset=<N>&length=100&truncate=0",
+      "byte_goal": 2000000,
+      "card_license_field": "apache-2.0",
+      "config": "default",
+      "dataset": "HuggingFaceTB/everyday-conversations-llama3.1-2k",
+      "dataset_revision": "14f543216b9ba42b6b951dc5bd199460d193b162",
+      "features": [
+        "topic",
+        "subtopic",
+        "subsubtopic",
+        "full_topic",
+        "prompt",
+        "completion",
+        "token_length",
+        "messages"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/HuggingFaceTB/everyday-conversations-llama3.1-2k",
+      "label": "everyday-conversations-llama3.1-2k.default.test_sft",
+      "last_row_idx": 118,
+      "licence": "Apache-2.0",
+      "licence_evidence": {
+        "cardData_license_field": "apache-2.0",
+        "source": "HF API cardData.license + tag license:apache-2.0",
+        "statement": "cardData.license == 'apache-2.0'",
+        "url": "https://huggingface.co/datasets/HuggingFaceTB/everyday-conversations-llama3.1-2k"
+      },
+      "licence_url": "https://huggingface.co/datasets/HuggingFaceTB/everyday-conversations-llama3.1-2k",
+      "num_rows_total_in_split": 119,
+      "output_bytes": 316654,
+      "output_file": "data/everyday-conversations-llama3.1-2k.default.test_sft.jsonl",
+      "output_sha256": "5b263209232ed356e18670ba5b61c88fe23881fdf46f0492b225f297c8785e6c",
+      "rows_fetched": 119,
+      "split": "test_sft",
+      "split_role": "heldout",
+      "truncated_cells_total": 0
+    }
+  ],
+  "task": "chat-v0 R1 bounded dialogue/instruction data acquisition (DATA ONLY)",
+  "total_output_bytes": 277173186,
+  "truncate": 0,
+  "withheld": [
+    {
+      "dataset": "databricks/databricks-dolly-15k",
+      "license_field": "cc-by-sa-3.0",
+      "reason": "Share-alike (CC-BY-SA-3.0); not in the clearly-permissive allow-list. Value judgement: share-alike obligations on derived training data are ambiguous for a model artifact. Content not fetched. Awaiting owner decision.",
+      "url": "https://huggingface.co/datasets/databricks/databricks-dolly-15k"
+    },
+    {
+      "dataset": "roneneldan/TinyStoriesInstruct",
+      "license_field": "CDLA-Sharing-1.0 (readme.md; no cardData.license)",
+      "reason": "CDLA-Sharing-1.0 is a data share-alike agreement, not in the clearly-permissive allow-list. Content not fetched. The pre-existing local TinyStories corpus (owner checkout) already covers the simple-story side. Awaiting owner decision.",
+      "url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct"
+    },
+    {
+      "dataset": "HuggingFaceTB/smoltalk",
+      "license_field": "mixed (card \u00a7License: four new subsets Apache-2.0; aggregate 'all' includes public datasets under their own licences)",
+      "reason": "The aggregate 'all' config is not uniformly permissive. Only the four explicitly Apache-2.0 configs were fetched. 'all' content not fetched. Awaiting owner decision if the mixed aggregate is wanted.",
+      "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk"
+    },
+    {
+      "dataset": "HuggingFaceTB/smoltalk2",
+      "license_field": "mixed (card \u00a7License: named new splits Apache-2.0; existing public datasets under their own licences)",
+      "reason": "Verified for this task. No config/split was fetched because the bounded byte budget is already met by uniformly permissive sources. Named Apache-2.0 splits remain available if the owner wants a second instruction source.",
+      "url": "https://huggingface.co/datasets/HuggingFaceTB/smoltalk2"
+    }
+  ],
+  "worktree": "/Users/casey.allard/uor-r4/.worktrees/canonical-address-routing-20260925"
+}
