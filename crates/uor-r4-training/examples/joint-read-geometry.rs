@@ -8,13 +8,18 @@
 //! This is an exploratory comparison tool, not a frozen campaign: no evaluator
 //! manifest, source edits, generation panel, checkpoint selection or resume.
 //!
+//! `read_dropout=P` trains round(P*batch) windows of every batch with the read
+//! disabled from their first position, and the rest with it enabled, in one
+//! loss weighted by window count. It tests whether making the recurrent state
+//! predict without its read prevents read dependence. It requires one shard.
+//!
 //! ```text
 //! cargo run --release -p uor-r4-training --example joint-read-geometry -- \
 //!   train=TRAIN.u16 valid=VALID.u16 out=NEW_REPORT_ROOT geometry=dot|lorentz \
 //!   [lens=TOKEN_BYTES.u16] [seed=1] [width=256] [context=256] [batch=16] \
 //!   [steps=1000] [lr=0.001] [shards=1] [transport=quaternion] \
 //!   [eval_every=250] [eval_windows=64] [final_windows=256] [max_seconds=inf] \
-//!   [save_model=false]
+//!   [save_model=false] [read_dropout=0]
 //! ```
 //!
 //! `lens` holds the byte length of each token id (u16, vocabulary order); with
@@ -26,6 +31,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use candle_core::backprop::GradStore;
 use candle_core::{Device, Tensor};
 use serde_json::{json, Value};
 use uor_r4_core::report_output;
@@ -83,6 +89,8 @@ struct Settings {
     final_windows: usize,
     max_seconds: f64,
     save_model: bool,
+    read_dropout: f64,
+    dropped_windows: usize,
 }
 
 fn settings(args: &Args) -> Result<Settings> {
@@ -105,6 +113,7 @@ fn settings(args: &Args) -> Result<Settings> {
         "final_windows",
         "max_seconds",
         "save_model",
+        "read_dropout",
     ];
     if let Some(key) = args.0.keys().find(|key| !known.contains(&key.as_str())) {
         return Err(invalid(format!("unknown argument {key}=")));
@@ -132,19 +141,33 @@ fn settings(args: &Args) -> Result<Settings> {
         seed: args.number("seed", 1)?,
         read_geometry,
     };
+    let batch: usize = args.number("batch", 16)?;
+    let read_dropout: f64 = args.number("read_dropout", 0.0)?;
+    let dropped_windows = (read_dropout * batch as f64).round() as usize;
+    let shards: usize = args.number("shards", 1)?;
+    if !(0.0..1.0).contains(&read_dropout)
+        || dropped_windows >= batch.max(1)
+        || (dropped_windows > 0 && shards != 1)
+    {
+        return Err(invalid(
+            "read_dropout must lie in [0,1), leave a read-enabled window and use one shard",
+        ));
+    }
     let settings = Settings {
         train: PathBuf::from(args.required("train")?),
         valid: PathBuf::from(args.required("valid")?),
         lens: args.text("lens").map(PathBuf::from),
-        batch: args.number("batch", 16)?,
+        batch,
         steps: args.number("steps", 1000)?,
         learning_rate: args.number("lr", 1e-3)?,
-        shards: args.number("shards", 1)?,
+        shards,
         eval_every: args.number("eval_every", 250)?,
         eval_windows: args.number("eval_windows", 64)?,
         final_windows: args.number("final_windows", 256)?,
         max_seconds: args.number("max_seconds", f64::INFINITY)?,
         save_model: args.number("save_model", false)?,
+        read_dropout,
+        dropped_windows,
         config,
     };
     if settings.batch == 0
@@ -266,6 +289,34 @@ fn evaluate(
     Ok(result)
 }
 
+/// One combined loss: read-enabled windows first, then `dropped` NoRead
+/// windows, each part weighted by its share of the batch.
+fn read_dropout_gradients(
+    model: &JointModel,
+    inputs: &[u32],
+    targets: &[u32],
+    batch: usize,
+    dropped: usize,
+) -> Result<(f32, GradStore)> {
+    let time = model.config.context;
+    let enabled = batch - dropped;
+    let split = enabled * time;
+    let read = model
+        .forward(&inputs[..split], enabled, time, ReadMode::Enabled, true)?
+        .loss(&targets[..split])?;
+    let no_read = model
+        .forward(&inputs[split..], dropped, time, ReadMode::NoRead, true)?
+        .loss(&targets[split..])?;
+    let loss = read
+        .affine(enabled as f64 / batch as f64, 0.0)?
+        .add(&no_read.affine(dropped as f64 / batch as f64, 0.0)?)?;
+    let mean = loss.to_scalar::<f32>()?;
+    if !mean.is_finite() {
+        return Err(invalid("nonfinite read-dropout training loss"));
+    }
+    Ok((mean, loss.backward()?))
+}
+
 fn scalars(model: &JointModel) -> Result<Value> {
     let mut values = serde_json::Map::new();
     for (name, variable) in model.variables() {
@@ -326,17 +377,28 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
             inputs.extend_from_slice(&train[start..start + time]);
             targets.extend_from_slice(&train[start + 1..start + time + 1]);
         }
-        let gradients = batch_gradients(
-            &model,
-            &inputs,
-            &targets,
-            settings.batch,
-            time,
-            settings.shards,
-        )?;
-        let update = optimizer.step(model.variables(), &gradients.gradients)?;
+        let (mean_nll, gradients) = if settings.dropped_windows == 0 {
+            let gradients = batch_gradients(
+                &model,
+                &inputs,
+                &targets,
+                settings.batch,
+                time,
+                settings.shards,
+            )?;
+            (gradients.mean_nll, gradients.gradients)
+        } else {
+            read_dropout_gradients(
+                &model,
+                &inputs,
+                &targets,
+                settings.batch,
+                settings.dropped_windows,
+            )?
+        };
+        let update = optimizer.step(model.variables(), &gradients)?;
         train_seconds += step_started.elapsed().as_secs_f64();
-        losses.push(f64::from(gradients.mean_nll));
+        losses.push(f64::from(mean_nll));
         completed = step + 1;
         if completed % settings.eval_every == 0 && completed != settings.steps {
             let development = evaluate(&model, &valid, lens_slice, settings.eval_windows)?;
@@ -373,6 +435,13 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
         "optimizer": optimizer.config(),
         "batch": settings.batch,
         "shards": settings.shards,
+        "read_dropout": settings.read_dropout,
+        "read_dropout_windows_per_step": settings.dropped_windows,
+        "training_objective": if settings.dropped_windows == 0 {
+            "Population-mean next-token NLL with the read enabled"
+        } else {
+            "Window-count-weighted mean of read-enabled and NoRead next-token NLL"
+        },
         "steps_requested": settings.steps,
         "steps_completed": completed,
         "sampled_target_visits": completed * settings.batch * time,
