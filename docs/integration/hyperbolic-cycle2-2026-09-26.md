@@ -139,6 +139,7 @@ Commit `57a4c5e` on this branch (an agent in an isolated worktree wrote it; the 
 ## 7. What this changes
 
 1. **Hyperbolic heads become the default geometry of the read.** They are better on hierarchies and code and slightly better on prose, at the same cost: one Lorentzian inner product per candidate, with arcosh from a table.
+   **Update ([cycle 3](hyperbolic-cycle3-2026-09-26.md)).** Trained in the project's Rust learner, the Lorentz read was consistently but only slightly better than Dot: 3 of 4 code seeds, 0.018 nats per token on average, and 0.037 ahead on one WikiText seed. Item 1 is therefore a candidate default pending the owner's full-scale test, not an adopted one.
 2. **Keys are stored as a radius plus a direction code**, the owner's quantizer. About 36 bits per key at 8 dimensions kept most of the full-precision accuracy on both trees, against 128–256 bits for fp16 keys.
 3. **Next measurements**, each small:
    - a. **The first Rust training run with the Lorentz read** on the D8 learner.
