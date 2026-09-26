@@ -53,11 +53,11 @@ D5 sparsity, geometric advantage, Hamiltonian dynamics, useful general language
 or energy qualification is promoted. Actual prose still confuses entities and
 roles. Session capacity remains256, with independently tokenized text appends.
 
-**Next:** one integrated coherent-language continuation, through the same integer
-serving session. Existing continuous learning curves still improve; further
-selector or arithmetic sweeps are not the capability objective. Freeze meaningful
-learning exposure, output-quality criteria and complete costs before fitting.
-See the active work card below. No new multi-hour fit ran in this delivery.
+**Current continuation:** both arms have completed the fixed continuous target
+15,672. Apply the frozen evaluation, calibration, learned-code and integer-serving
+recipe to those actual finals; final quality decisions remain pending. See the
+[active recovery status](#latest-recovery6-status). The standalone-serving delivery
+above itself performed no new fit.
 
 [Bound result](../evidence/integer-serving-result-2026-09-25.json),
 [exact comparison](../evidence/integer-serving-comparison-2026-09-25.json),
@@ -203,8 +203,9 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **The quaternion arm completed its original target15,672 and saved its checkpoint;
-the ordinary control is now running from its preserved state.**
+not language retention. **Both arms have now completed the original continuous
+target15,672 with saved model, optimizer and sampler state; frozen downstream
+execution has launched and final quality decisions remain pending.**
 The first RDC-attached controller [failed](../evidence/language-continuation-interruption-2026-09-25.json)
 at 23:35 UTC with a broken output pipe; its workers exited on signal 2 before
 their first checkpoint. They logged 2,031/2,032 updates but saved no recoverable
@@ -248,16 +249,16 @@ integer conversion and prose adjudication remain NOT_RUN.
 
 The owner has authorized SSD cache offload and completion of the existing dose.
 The [recovery6 record](../evidence/language-continuation-recovery-6-2026-09-26.json)
-binds quaternion fit5 at **14,000**, with **1,672 updates / 6,848,512 targets
-remaining**, and Householder-pair fit4 at **13,949**, with **1,723 updates /
-7,057,408 targets remaining**. Householder never started fit5. Resume the saved
-parameters, Adam moments and sampler counters to the sole final **15,672**.
-On completion, the combined retained segments must total exactly **7,324 updates /
-29,999,104 target visits per arm from 8,348**. B16/T256, full causal access, two gradient shards,
-data, optimizer and every acceptance criterion remain fixed. One model process
-runs at a time throughout fitting and downstream work, with a 9,000-second
-per-arm fit cap. Attempt6 has no scheduled intermediate checkpoint; clean
-resource-stop checkpointing and the sole final remain.
+bound quaternion fit5 at **14,000** and Householder-pair fit4 at **13,949**;
+Householder never started fit5. Fit6 has now saved both **TARGET_COMPLETE** finals
+at **15,672**, retaining its **1,672 / 1,723** remaining updates respectively.
+The combined actual segments complete exactly **7,324 updates / 29,999,104 target
+visits per arm from 8,348**. Both optimizer and next-data clocks are15,672, with
+64,192,512 cumulative target visits. The unsaved fit1 updates remain a charged
+execution loss and are excluded from saved learning. B16/T256, full causal access,
+two gradient shards, data, optimizer and every acceptance criterion remain fixed.
+One model process runs at a time throughout downstream work; no extra continuous
+dose or checkpoint selection is introduced.
 
 The prospective complete-work projection is **33,300 seconds**, including
 cleanup/verification, sequential fit, conversion, evaluation/review/delivery and
@@ -271,8 +272,9 @@ remain separate. Physical reserve **24 GiB + 128 MiB stop margin + 64 MiB
 checkpoint headroom**, and existing RSS guards remain unchanged. Current model
 parents and frozen executables remain at their existing internal paths.
 
-**Cleanup/cutover: complete. Fit6: RUNNING. Final evaluation, learned-code
-conversion and served prose adjudication: NOT_RUN.** The migration verified
+**Cleanup/cutover: complete. Continuous fit6: COMPLETE in both arms.
+Postprocessing: RUNNING as of21:17UTC; final numerical, source and prose verdicts
+remain pending.** The migration verified
 45,329 files and their hardlink groups before removing the redundant internal
 Cargo cache. Its immediate free-space increase was 18,462,396,416 bytes; later
 host free-space changes are reported separately. The cache now resides on the
@@ -281,12 +283,10 @@ file was snapshotted separately because Cargo refreshes it outside build locks;
 source, models, original checkpoints and Docker data were preserved. Original
 Cargo lock inodes remain in a tiny internal directory referenced from the SSD.
 
-The detached controller launched at **17:11:38 UTC** and its first worker at
-17:11:46. The observed curve advances from 14,001 through 14,016 with two shards
-and no missing gradients. At that launch observation, Householder6 was unstarted until quaternion completed.
-This is live progress, not a new sealed checkpoint or model-quality result.
+The detached controller launched at **17:11:38 UTC** and ran the arms sequentially.
 Launch physical free space was 48,023,339,008 bytes and tracked allocation,
-including headroom, was 21,699,153,920 bytes. These readings remain guarded.
+including headroom, was 21,699,153,920 bytes. These are retained launch readings;
+physical/RSS/allocation guards remained active through both completed fits.
 The 29,700-second remaining launch projection includes fit, conversion,
 evaluation/review/delivery and stop margin; preparation is already charged.
 The existing 30-minute monitor is active for this single milestone. The
@@ -294,15 +294,20 @@ The existing 30-minute monitor is active for this single milestone. The
 guides interpretation after the unchanged frozen output packet returns; it
 introduces no new panel or automatic next fit.
 
-At **18:45 UTC**, [quaternion reached target15,672](../evidence/language-continuation-arm-progress-6-2026-09-26.json),
-saved its model/Adam/sampler state and exited0 after1,672 remaining updates
-(5,604.52s fit wall). Combined retained segments now complete the original
-7,324-update /29,999,104-target continuation for that arm. It will be preserved
-if the ordinary arm later stops. The same controller started Householder at
-18:45:17 from13,949; new updates beginning13,950 were observed. No additional
-dose or selection occurred. Paired complete Rust verification and all final
-Read/NoRead, conversion, source and prose evaluation remain pending; checkpoint
-completion alone does not establish language quality or geometric advantage.
+The [completed-fit and downstream record](../evidence/language-continuation-postprocess-6-2026-09-26.json)
+binds both actual finals: quaternion completed at **18:45 UTC**, and the
+Householder-pair control at **21:11 UTC**, each exiting0 without a resource stop.
+The sequential supervisor phases took **5,609.99s / 8,779.09s** respectively;
+these include child supervision and are separate from cumulative preparation,
+prior attempts and delivery charges. The controller wrote its complete-final
+index at21:11:37UTC and exited. Read-only downstream readiness accepted the
+actual asymmetric lineage and fixed exposure. Postprocessing launched at
+**21:16:54UTC**. Both full fit reports and both final checkpoint sets passed the
+existing Rust verifier by21:17:35UTC (four exit0 records); the quaternion continuous
+Read evaluation started at21:17:37UTC. The unchanged sequential Read/NoRead,
+calibration, alpha512, integer/source and prose packet is now executing. Its final
+results and principal adjudication are pending; training completion and seal
+verification do not establish language quality or geometric advantage.
 
 ### Active work-card decisions
 
@@ -324,13 +329,11 @@ completion alone does not establish language quality or geometric advantage.
   that dose. Preserve the frozen development output packet, parent judgments,
   entity/role consistency and completion criteria, and source/NoRead controls.
   No post-result panel expansion.
-- **One integrated execution:** complete the retained step 8,348→15,672 dose from
-  the latest actual saved checkpoints, preserving optimizer/sampler continuity.
-  Attempt6 resumes quaternion 14,000 and Householder-pair 13,949 sequentially,
-  with no scheduled intermediate checkpoint or candidate selection before 15,672.
-  Then apply the established calibration/learned-code/integer export once under
-  the declared retention recipe. New continuous weights require freshly bound
-  calibration/codes; old scales cannot be assumed valid.
+- **One integrated execution:** the retained step8,348→15,672 dose is complete
+  in both arms with optimizer/sampler continuity. Apply the established evaluation,
+  calibration/learned-code/integer export once under the declared retention recipe.
+  New continuous weights require freshly bound calibration/codes; old scales
+  cannot be assumed valid. No additional continuous dose is authorized here.
 - **Decision:** meaningful output improvement retained in integer serving advances
   conversation/coding work. Better NLL without useful output improvement requires
   one evidence-based interface/objective/data/capacity decision, not another

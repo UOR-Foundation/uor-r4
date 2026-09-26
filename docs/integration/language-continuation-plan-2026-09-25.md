@@ -2,6 +2,11 @@
 
 Prospective work card, September 25, 2026. References #973 under #820.
 
+**September26 execution status:** both actual continuous finals reached15,672.
+The fixed dose is complete; frozen downstream execution has launched and its
+final quality decisions remain pending. See the [latest state](current-state.md#latest-recovery6-status)
+and [completed-fit/downstream evidence](../evidence/language-continuation-postprocess-6-2026-09-26.json).
+
 ## Deliverable and causal change
 
 Advance coherent, source-consistent short language through the existing standalone integer session. PR #1397 established that this session preserves accepted numerical behavior; its actual stories still confuse entities, roles and events. The continuous step-8,348 parents still improved development likelihood in their last retained continuation. Change language-learning exposure once, with fixed architecture, next-token objective, tokenizer, optimizer, data population and context. This is not a diagnosis of saturation or proof that extra exposure suffices.
@@ -181,19 +186,25 @@ The verified cache cutover completed at 17:10 UTC. It preserved 45,329 build
 artifact files and removed their redundant internal copy; the recorded immediate
 free-space increase was 18,462,396,416 bytes. Regenerable compiler-probe metadata
 was snapshotted separately; source, models and checkpoints stayed internal.
-Detached sequential fit6 launched at 17:11:38 UTC. Actual quaternion steps
-14,001–14,016 were observed with Householder queued. Final downstream results
-remain **NOT_RUN**; running updates do not establish language improvement.
+Detached sequential fit6 launched at17:11:38UTC and has now completed both
+actual target15,672 finals. Final downstream results and quality decisions
+remain pending; completed training does not establish language improvement.
 The [conditional principal direction](language-continuation-direction-2026-09-26.md)
 explains how to interpret the frozen outputs; it does not authorize a new
 architecture, depth experiment, panel or exposure tranche. See
 [current state](current-state.md#latest-recovery6-status)
 for the latest witnessed recovery status.
 
-At18:45UTC the quaternion arm completed its sole target15,672 and saved the
-model/Adam/sampler state, with all1,672 remaining updates retained. The same
-controller began the ordinary arm at18:45:17 from13,949; actual new updates were
-observed. Preserve the completed quaternion if the second arm stops. This
-[arm transition](../evidence/language-continuation-arm-progress-6-2026-09-26.json)
-is execution evidence; paired full Rust verification and final quality decisions
-remain pending. No new experiment or exposure tranche is introduced.
+Quaternion completed at18:45UTC and Householder-pair at21:11UTC, each with
+`TARGET_COMPLETE`, exit0 and no resource stop. Fit6 retained the remaining
+1,672/1,723 updates; all saved segments together now complete the original
+7,324 updates /29,999,104 targets per arm from8,348. The earlier unsaved fit1
+2,031/2,032 updates remain an execution loss with their cost retained, not saved
+learning or a model-quality negative. The [final index and downstream record](../evidence/language-continuation-postprocess-6-2026-09-26.json)
+bind both actual checkpoints and the unchanged recipe. Postprocessing launched
+at21:16:54UTC; both full fit reports and both final checkpoint sets passed Rust
+verification by21:17:35UTC. The first continuous Read evaluation then started.
+The fixed sequential Read/NoRead, calibration, alpha512, integer/source and prose
+packet is executing; its final results and principal adjudication remain pending.
+No new experiment, extra continuous dose, criterion change or automatic promotion
+is introduced.
