@@ -203,7 +203,7 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **Paired training is RUNNING from verified saved-state checkpoints**.
+not language retention. **Training is STOPPED with verified saved checkpoints; owner resource action is required**.
 The first RDC-attached controller [failed](../evidence/language-continuation-interruption-2026-09-25.json)
 at 23:35 UTC with a broken output pipe; its workers exited on signal 2 before
 their first checkpoint. They logged 2,031/2,032 updates but saved no recoverable
@@ -227,6 +227,21 @@ started at06:01:36UTC from those saved states for only2,965/2,957 remaining
 updates. Internal allocation20GiB was recorded prospectively; the14:41UTC
 cycle deadline, cumulative time ceiling and physical/RSS guards remain fixed.
 Both remaining-fit processes now enforce the projected six-hour limit.
+At 07:22 UTC, fit4 hit the physical-space reserve and exited cleanly,
+saving 13,939 / 13,949. All four Rust report/checkpoint checks passed. The
+[sequential recovery](../evidence/language-continuation-recovery-5-2026-09-26.json)
+started at 07:31:51 UTC and also stopped at the physical reserve at 07:35:46.
+Quaternion saved all 61 new updates at step 14,000; both new Rust full-set
+checks passed. Householder did not start and remains at 13,949. Only
+**1,672 / 1,723 updates remain** to the original sole final 15,672.
+B16/T256, two gradient shards, full causal access, Adam and sampler continuity,
+and every acceptance criterion remain unchanged. Serial execution reduced
+campaign RSS but did not resolve host physical-space instability. Automatic
+retries are paused pending owner resolution of competing workloads or a new
+storage arrangement; no reserve reduction or deletion is authorized here.
+The prospectively recorded deadline 16:41 UTC and cumulative limit
+621,600,000 ms are budget caps, not a completion estimate. Final evaluation,
+integer conversion and prose adjudication remain NOT_RUN.
 
 
 - **Deliverable:** a retained full256 learner producing more coherent,

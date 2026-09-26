@@ -103,3 +103,57 @@ Detached fit4 started06:01:36UTC from the verified fit3 states, with only
 [recovery record](../evidence/language-continuation-recovery-4-2026-09-26.json)
 binds saved state, guards, launch and source; frozen downstream criteria remain
 unchanged and final quality is still NOT_RUN.
+
+## Sequential recovery after physical-space pressure
+
+Fit4 stopped for PHYSICAL_RESERVE at07:22UTC and saved13,939/13,949 with
+all1,232/1,234 fit4 updates. Four complete Rust report/checkpoint verifications
+passed. The16GiB machine showed8GiB allocated swap and another local Rust
+training process consuming roughly2–3GiB RSS. The stop followed a2GiB+12KiB
+free-space drop, consistent with swap-file growth; its exact cause is unproven.
+No owner process was signaled.
+
+The source-reviewed fit5 runs quaternion and then ordinary, one model at a
+time. Batch16, training/evaluation256, two full-sequence gradient shards, Adam
+moments, sampler and all acceptance criteria remain unchanged. Each needs only
+1,733/1,723 updates to the original15,672 target. Downstream commands are also
+serialized. Existing resource guards and original shared-cache accounting stay
+in force; no storage allowance increase or reserve reduction is adopted.
+
+A necessary two-hour local allowance extension was recorded before launch:
+complete-cycle deadline16:41UTC, cumulative621,600,000ms. Projection:18,000s
+sequential fitting (9,000s per arm),7,200s sequential calibration/rounding,3,600s
+evaluation/review/delivery,600s preparation and900s stop margin. Measured
+fit4 rates project3.70–3.88h for remaining serial updates without assuming a
+single-arm speedup. The actual finish time remains workload-dependent.
+
+Fit5 launched07:31:51UTC; actual quaternion updates were observed while the
+ordinary attempt was still unstarted. A completed arm will be preserved if
+the later arm stops. The [bound record](../evidence/language-continuation-recovery-5-2026-09-26.json)
+retains the resource evidence, checkpoints, launch and limits. Final model
+quality is still NOT_RUN.
+
+
+### Sequential attempt also stopped; preserve learning and resolve host pressure
+
+Fit5 stopped at 07:35:46 UTC with PHYSICAL_RESERVE. Quaternion saved all 61
+new updates at step 14,000, and both complete Rust report/checkpoint seal
+checks passed. Householder never started and remains at its verified fit4
+step 13,949. Remaining work is exactly 1,672 / 1,723 updates to 15,672.
+
+Peak sampled singleton RSS was 3,176,955,904 bytes, below its limit. Physical
+free space reached 25,356,619,776 bytes, below the unchanged 25,971,130,368-byte
+reserve. Tracked project allocation stayed below 20 GiB. Sequential execution
+reduced campaign memory demand but did not resolve physical-space instability;
+no precise attribution to another application is established.
+
+**Stop decision:** pause automatic retries and the heartbeat pending owner
+resolution of competing workloads or direction for a new storage arrangement.
+Do not treat a transient free-space rebound as sufficient evidence for another
+immediate attempt. Preserve both saved states, all failed logs and earlier
+parents. No extra exposure, deletion, reserve reduction or downstream launch.
+The existing source-reviewed downstream preparation is not executable against
+these incomplete finals; future continuation must bind the actual saved chain
+and reconcile its remaining resource/time allowance prospectively. The 16:41
+UTC deadline remains a recorded cap, not an ETA. This is incomplete execution,
+not a model-quality failure. Final evaluation and final SSD snapshot are pending.
