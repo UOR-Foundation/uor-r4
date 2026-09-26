@@ -309,6 +309,29 @@ calibration, alpha512, integer/source and prose packet is now executing. Its fin
 results and principal adjudication are pending; training completion and seal
 verification do not establish language quality or geometric advantage.
 
+### Continuous prose result; integer outcome pending
+
+The [actual continuous output review](../evidence/language-continuation-continuous-quality-2026-09-26.json)
+finds **0/5 fully acceptable stories in each arm**, compared with0/5 for each
+same-path parent. Principal and independent reviewers agree on the overall
+failure to meet the fixed3/5 and+2 criteria; dimension-level disagreements are
+retained. Some individual passages have understandable characters/events, but
+unresolved roles, disconnected events and incomplete endings still prevent the
+required conjunction. New characters and personification remain allowed; the
+128-token cap is not automatically a failure when a complete stable clause exists.
+
+Continuous comparison-tail Read NLL is **1.996490474 quaternion /
+1.974724189 ordinary**; NoRead is **2.492064889 /2.472758698**. The corresponding
+penalties,0.495574415 /0.498034509 nats on233,472 targets per arm, show context
+utility at this evaluator's scope. They do not qualify coherent prose or
+geometric advantage. This dose has not met its continuous prose objective.
+
+The declared downstream recipe continues: fresh calibration and normalization
+completed, and the fixed quaternion alpha512 phase began at21:23:43UTC. Hard and
+integer numerical/source retention, served prose and final external backup remain
+pending. Complete those existing commitments before the integrated interpretation;
+there is no additional exposure authorization or new mechanism decision here.
+
 ### Active work-card decisions
 
 - **Deliverable:** a retained full256 learner producing more coherent,

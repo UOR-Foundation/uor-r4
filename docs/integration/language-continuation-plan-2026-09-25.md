@@ -208,3 +208,16 @@ The fixed sequential Read/NoRead, calibration, alpha512, integer/source and pros
 packet is executing; its final results and principal adjudication remain pending.
 No new experiment, extra continuous dose, criterion change or automatic promotion
 is introduced.
+
+
+### Continuous quality observation, September26
+
+The actual five continuous stories per arm fail the frozen practical-improvement
+rule: principal and independent review each find0/5 acceptable, versus0/5 for the
+same-path parents. The [quoted review evidence](../evidence/language-continuation-continuous-quality-2026-09-26.json)
+retains all four criteria and reviewer disagreements. Continuous Read/NoRead
+likelihood demonstrates context utility within the fixed evaluator, which is a
+separate observation from coherent output. The unchanged integer-conversion,
+source-retention and served-prose packet is still running; its results and the
+integrated next-action interpretation remain pending. No new dose, acceptance
+change or failure-driven test programme is introduced.
