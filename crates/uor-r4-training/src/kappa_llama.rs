@@ -17,11 +17,20 @@
 //!
 //! Near the origin `d(a, b)^2 = |a - b|^2 + O(eps^4)`, and the polarization
 //! identity `2 <q, k> = |k|^2 + |q|^2 - |q - k|^2` makes both curved scores equal
-//! `<q, k> / sqrt(r)` minus a per-query constant, which softmax ignores. The
-//! conversion therefore starts at the checkpoint's own attention (to
-//! `O(kappa)`) and curvature grows only where training rewards it. RoPE
-//! rotates spatial coordinates only, which is an isometry of the hyperboloid,
-//! so both curved scores stay relative-position scores.
+//! `<q, k> / sqrt(r)` minus a per-query constant, which softmax ignores. These
+//! are flat-limit reparametrisations: they reproduce the checkpoint only as
+//! `kappa -> 0`, where to first order each adds `kappa F(q, k) / sqrt(r)` with
+//! the fixed quartic feature `F = (|q|^2 - |k|^2)^2 / 8 + |q - k|^4 / 24`
+//! (minus `|k|^4 / 6` for `Intrinsic`). The `*Linear` kinds are exactly that
+//! first-order model; they give the flat-limit curvature gradient in one
+//! backward pass and serve as the matched-capacity control for curved runs.
+//! The dimensionless curvature of a head is `t = kappa * mean |k|^2`; a head
+//! is genuinely hyperbolic only near `t ~ 1`. An exact start tends to stay in
+//! the flat basin, so curved runs can anneal curvature upward. RoPE rotates
+//! spatial coordinates only, which is an isometry of the hyperboloid, so the
+//! curved scores stay relative-position scores. Per-head learnable curvature
+//! with an exact Euclidean limit is known (FPS-T, arXiv 2309.04082; kappa-GCN,
+//! 1911.05076), as is RoPE as a spatial Lorentz rotation (HELM, 2505.24722).
 //!
 //! Every head also carries a learnable log inverse temperature (`log_beta`), in
 //! every score kind, so a `Dot` control has the same non-curvature freedom.
@@ -41,6 +50,11 @@ use crate::{invalid, Result};
 pub const LOG_EPS: &str = "curvature.log_eps";
 /// Name of the per-head log inverse temperature.
 pub const LOG_BETA: &str = "curvature.log_beta";
+/// Name of the per-head first-order curvature coefficient of the `*Linear`
+/// kinds, in units of the dimensionless curvature `t`.
+pub const LAMBDA: &str = "curvature.lambda";
+/// Frozen per-head `mean |k|^2` that converts `LAMBDA` (in `t`) to `kappa`.
+pub const NORM_SCALE: &str = "curvature.norm_scale";
 /// Below this argument the squared arcosh uses its four-term series (relative
 /// truncation error below 5e-8 here), which has finite gradients at zero; above
 /// it the closed form's f32 rounding error is below 1e-6 relative.
@@ -53,6 +67,10 @@ pub enum ScoreKind {
     Dot,
     KeyNorm,
     Intrinsic,
+    /// First-order (in `kappa`) expansion of `KeyNorm` around the flat limit.
+    KeyNormLinear,
+    /// First-order (in `kappa`) expansion of `Intrinsic` around the flat limit.
+    IntrinsicLinear,
 }
 
 impl ScoreKind {
@@ -61,15 +79,31 @@ impl ScoreKind {
             "dot" => Ok(Self::Dot),
             "key_norm" => Ok(Self::KeyNorm),
             "intrinsic" => Ok(Self::Intrinsic),
+            "key_norm_linear" => Ok(Self::KeyNormLinear),
+            "intrinsic_linear" => Ok(Self::IntrinsicLinear),
             _ => Err(invalid(format!(
-                "score must be dot, key_norm or intrinsic, not {text}"
+                "score must be dot, key_norm, intrinsic, key_norm_linear or intrinsic_linear, not {text}"
             ))),
         }
     }
 
+    /// Hyperbolic scores parametrized by `log_eps`.
     pub fn is_curved(self) -> bool {
-        self != Self::Dot
+        matches!(self, Self::KeyNorm | Self::Intrinsic)
     }
+
+    /// First-order scores parametrized by `LAMBDA`.
+    pub fn is_linear(self) -> bool {
+        matches!(self, Self::KeyNormLinear | Self::IntrinsicLinear)
+    }
+}
+
+/// Curvature parameters of one layer, each `(1, heads, 1, 1)`.
+pub enum LayerCurvature<'a> {
+    Flat,
+    LogEps(&'a Tensor),
+    /// First-order coefficient `kappa` per head.
+    Linear(&'a Tensor),
 }
 
 /// Architecture of a Hugging Face Llama checkpoint, as far as this tool uses it.
@@ -290,37 +324,66 @@ pub fn load_checkpoint(directory: &Path, device: &Device) -> Result<Checkpoint> 
 /// which only arise from rounding, are clamped). The series
 /// `2z - z^2/3 + 4z^3/45 - z^4/35` (from inverting `z = cosh(d) - 1`) is used
 /// below [`SERIES_LIMIT`]; the closed form's argument is clamped at the limit
-/// so its unused branch never produces a nonfinite gradient.
+/// from below and the series argument from above, so neither unused branch
+/// produces a nonfinite gradient.
 pub fn arcosh1p_squared(z: &Tensor) -> Result<Tensor> {
     let z = z.clamp(0f32, f32::MAX)?;
     let small = z.le(SERIES_LIMIT)?;
     let wide = z.clamp(SERIES_LIMIT, f32::MAX)?;
     let root = wide.mul(&wide.affine(1.0, 2.0)?)?.sqrt()?;
     let exact = wide.affine(1.0, 1.0)?.add(&root)?.log()?.sqr()?;
-    let cubic = z.affine(-1.0 / 35.0, 4.0 / 45.0)?;
-    let quadratic = z.mul(&cubic)?.affine(1.0, -1.0 / 3.0)?;
-    let series = z.mul(&z.mul(&quadratic)?.affine(1.0, 2.0)?)?;
+    let near = z.clamp(0f32, SERIES_LIMIT)?;
+    let cubic = near.affine(-1.0 / 35.0, 4.0 / 45.0)?;
+    let quadratic = near.mul(&cubic)?.affine(1.0, -1.0 / 3.0)?;
+    let series = near.mul(&near.mul(&quadratic)?.affine(1.0, 2.0)?)?;
     Ok(small.where_cond(&series, &exact)?)
 }
 
 /// Scores for one layer. `query` and `key` are post-RoPE `(batch, heads, time,
-/// head_dim)`; `log_eps` and `log_beta` are `(1, heads, 1, 1)`. Returns
-/// `(batch, heads, time, time)` before the causal mask.
+/// head_dim)`; the curvature parameters and `log_beta` are `(1, heads, 1, 1)`.
+/// Returns `(batch, heads, time, time)` before the causal mask.
 pub fn head_scores(
     kind: ScoreKind,
     query: &Tensor,
     key: &Tensor,
-    log_eps: Option<&Tensor>,
+    curvature: LayerCurvature<'_>,
     log_beta: &Tensor,
 ) -> Result<Tensor> {
     let head_dim = query.dim(D::Minus1)? as f64;
     let beta = log_beta.exp()?;
-    if kind == ScoreKind::Dot {
+    if kind == ScoreKind::Dot || kind.is_linear() {
         let key_t = key.transpose(2, 3)?.contiguous()?;
-        let scores = query.matmul(&key_t)?.affine(1.0 / head_dim.sqrt(), 0.0)?;
+        let dot = query.matmul(&key_t)?;
+        let mut scores = dot.affine(1.0 / head_dim.sqrt(), 0.0)?;
+        if kind.is_linear() {
+            let LayerCurvature::Linear(kappa) = curvature else {
+                return Err(invalid("a first-order score needs its coefficient"));
+            };
+            let q2 = query.sqr()?.sum_keepdim(3)?;
+            let k2 = key.sqr()?.sum_keepdim(3)?.transpose(2, 3)?.contiguous()?;
+            let distance_sq = dot
+                .affine(-2.0, 0.0)?
+                .broadcast_add(&q2)?
+                .broadcast_add(&k2)?;
+            let mut feature = q2
+                .broadcast_sub(&k2)?
+                .sqr()?
+                .affine(1.0 / 8.0, 0.0)?
+                .add(&distance_sq.sqr()?.affine(1.0 / 24.0, 0.0)?)?;
+            if kind == ScoreKind::IntrinsicLinear {
+                feature = feature.broadcast_sub(&k2.sqr()?.affine(1.0 / 6.0, 0.0)?)?;
+            }
+            scores = scores.add(
+                &feature
+                    .broadcast_mul(kappa)?
+                    .affine(1.0 / head_dim.sqrt(), 0.0)?,
+            )?;
+        }
         return Ok(scores.broadcast_mul(&beta)?);
     }
-    let log_eps = log_eps.ok_or_else(|| invalid("a curved score needs log_eps"))?;
+    let LayerCurvature::LogEps(log_eps) = curvature else {
+        return Err(invalid("a curved score needs log_eps"));
+    };
     let eps = log_eps.exp()?;
     let a = query.broadcast_mul(&eps)?;
     let b = key.broadcast_mul(&eps)?;
@@ -342,7 +405,7 @@ pub fn head_scores(
     let bias = match kind {
         ScoreKind::KeyNorm => b2,
         ScoreKind::Intrinsic => arcosh1p_squared(&ym)?,
-        ScoreKind::Dot => return Err(invalid("unreachable dot branch")),
+        _ => return Err(invalid("unreachable flat or first-order branch")),
     };
     let denominator = log_eps
         .affine(2.0, 0.0)?
@@ -474,6 +537,16 @@ impl KappaLlama {
                 Var::from_tensor(&Tensor::full(init_log_eps, grid, device)?)?,
             );
         }
+        if score.is_linear() {
+            variables.insert(
+                LAMBDA.to_owned(),
+                Var::from_tensor(&Tensor::zeros(grid, candle_core::DType::F32, device)?)?,
+            );
+            frozen.insert(
+                NORM_SCALE.to_owned(),
+                Tensor::ones(grid, candle_core::DType::F32, device)?,
+            );
+        }
         Ok(Self {
             shape,
             score,
@@ -550,6 +623,20 @@ impl KappaLlama {
         time: usize,
         detached: bool,
     ) -> Result<Tensor> {
+        self.forward_with_probe(ids, batch, time, detached, &mut |_, _, _, _| Ok(()))
+    }
+
+    /// [`forward`](Self::forward) that also presents every layer's post-RoPE
+    /// query and (grouped-query repeated) key `(batch, heads, time, head_dim)`
+    /// and attention probabilities `(batch, heads, time, time)` to `probe`.
+    pub fn forward_with_probe(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        detached: bool,
+        probe: &mut dyn FnMut(usize, &Tensor, &Tensor, &Tensor) -> Result<()>,
+    ) -> Result<Tensor> {
         let s = &self.shape;
         if batch == 0
             || time == 0
@@ -601,15 +688,24 @@ impl KappaLlama {
             let query = rope(&project("q_proj", s.heads)?, &cosine, &sine)?;
             let key = repeat(rope(&project("k_proj", s.kv_heads)?, &cosine, &sine)?)?;
             let value = repeat(project("v_proj", s.kv_heads)?)?;
-            let log_eps = if self.score.is_curved() {
-                Some(self.layer_scalars(LOG_EPS, layer, detached)?)
+            let log_eps: Tensor;
+            let kappa: Tensor;
+            let curvature = if self.score.is_curved() {
+                log_eps = self.layer_scalars(LOG_EPS, layer, detached)?;
+                LayerCurvature::LogEps(&log_eps)
+            } else if self.score.is_linear() {
+                kappa = self
+                    .layer_scalars(LAMBDA, layer, detached)?
+                    .div(&self.layer_scalars(NORM_SCALE, layer, true)?)?;
+                LayerCurvature::Linear(&kappa)
             } else {
-                None
+                LayerCurvature::Flat
             };
             let log_beta = self.layer_scalars(LOG_BETA, layer, detached)?;
-            let scores = head_scores(self.score, &query, &key, log_eps.as_ref(), &log_beta)?;
+            let scores = head_scores(self.score, &query, &key, curvature, &log_beta)?;
             let masked = mask.where_cond(&excluded, &scores)?;
             let probability = candle_nn::ops::softmax(&masked, 3)?;
+            probe(layer, &query, &key, &probability)?;
             let attended = probability
                 .matmul(&value)?
                 .transpose(1, 2)?
@@ -666,6 +762,62 @@ impl KappaLlama {
         Ok(())
     }
 
+    fn grid_tensor(&self, grid: &[Vec<f32>]) -> Result<Tensor> {
+        let (layers, heads) = (self.shape.layers, self.shape.heads);
+        if grid.len() != layers || grid.iter().any(|row| row.len() != heads) {
+            return Err(invalid(format!(
+                "a per-head grid must be {layers} x {heads}"
+            )));
+        }
+        let flat: Vec<f32> = grid.iter().flatten().copied().collect();
+        if flat.iter().any(|value| !value.is_finite()) {
+            return Err(invalid("per-head grid values must be finite"));
+        }
+        Ok(Tensor::from_vec(flat, (layers, heads), &self.device)?)
+    }
+
+    /// Overwrite `log_eps` head by head (`grid[layer][head]`).
+    pub fn set_log_eps_grid(&self, grid: &[Vec<f32>]) -> Result<()> {
+        let variable = self
+            .variables
+            .get(LOG_EPS)
+            .ok_or_else(|| invalid("this score kind has no log_eps"))?;
+        variable.set(&self.grid_tensor(grid)?)?;
+        Ok(())
+    }
+
+    /// Project `log_eps` onto a per-head floor (`floor[layer][head]`).
+    pub fn floor_log_eps_grid(&self, floor: &[Vec<f32>]) -> Result<()> {
+        let variable = self
+            .variables
+            .get(LOG_EPS)
+            .ok_or_else(|| invalid("this score kind has no log_eps"))?;
+        variable.set(&variable.as_tensor().maximum(&self.grid_tensor(floor)?)?)?;
+        Ok(())
+    }
+
+    /// Set the frozen per-head `mean |k|^2` of a first-order score, so that
+    /// `LAMBDA` is measured in the dimensionless curvature `t`.
+    pub fn set_norm_scale(&mut self, scale: &[Vec<f32>]) -> Result<()> {
+        if !self.score.is_linear() {
+            return Err(invalid("only first-order scores have a norm scale"));
+        }
+        if scale.iter().flatten().any(|value| *value <= 0.0) {
+            return Err(invalid("norm scales must be positive"));
+        }
+        let tensor = self.grid_tensor(scale)?;
+        self.frozen.insert(NORM_SCALE.to_owned(), tensor);
+        Ok(())
+    }
+
+    /// First-order coefficient per layer and head, in units of `t`.
+    pub fn first_order_coefficient(&self) -> Result<Vec<Vec<f32>>> {
+        match self.variables.get(LAMBDA) {
+            None => Ok(Vec::new()),
+            Some(lambda) => Ok(lambda.as_tensor().to_vec2()?),
+        }
+    }
+
     /// Project every head's `log_eps` onto `[floor, inf)`. An exact flat-limit
     /// start can sit in the flat basin, where learned curvature never grows; a
     /// rising floor anneals the heads into the curved regime while the rest of
@@ -680,6 +832,177 @@ impl KappaLlama {
             .ok_or_else(|| invalid("a dot model has no curvature"))?;
         variable.set(&variable.as_tensor().maximum(floor)?)?;
         Ok(())
+    }
+}
+
+/// Per-head mean of `|k|^2` over batch and time, for keys `(batch, heads, time,
+/// head_dim)`. Multiplying a head's curvature by it gives the dimensionless
+/// curvature `t`, which is invariant to rescaling that head's keys.
+pub fn mean_key_sq(key: &Tensor) -> Result<Vec<f32>> {
+    Ok(key.sqr()?.sum(3)?.mean((0, 2))?.to_vec1()?)
+}
+
+/// Attention statistics per layer and head (`[layer][head]`).
+#[derive(Clone, Debug, Serialize)]
+pub struct HeadStatistics {
+    /// Mean `|k|^2`: the unit of the dimensionless curvature `t = kappa * mean |k|^2`.
+    pub mean_key_sq: Vec<Vec<f32>>,
+    /// Median `|k|^2`.
+    pub median_key_sq: Vec<Vec<f32>>,
+    /// Mean cosine between a query and its highest-weight key.
+    pub top1_cosine: Vec<Vec<f32>>,
+    /// Mean attention mass held by the top `fractions[i]` of the causal keys,
+    /// the ceiling for any index that scores that fraction exactly.
+    pub top_mass: Vec<Vec<Vec<f32>>>,
+    pub fractions: Vec<f64>,
+    /// Queries with fewer causal keys than this are skipped for cosine and mass.
+    pub min_candidates: usize,
+    /// Query rows averaged per head.
+    pub rows: u64,
+}
+
+/// Accumulates [`HeadStatistics`] over batches of one model's attention.
+pub struct HeadStatisticsAccumulator {
+    fractions: Vec<f64>,
+    min_candidates: usize,
+    key_sq: Vec<Vec<Vec<f32>>>,
+    cosine: Vec<Vec<f64>>,
+    mass: Vec<Vec<Vec<f64>>>,
+    rows: Vec<Vec<u64>>,
+}
+
+fn dot64(a: &[f32], b: &[f32]) -> f64 {
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| f64::from(*x) * f64::from(*y))
+        .sum()
+}
+
+impl HeadStatisticsAccumulator {
+    pub fn new(shape: &LlamaShape, fractions: &[f64], min_candidates: usize) -> Result<Self> {
+        if fractions.is_empty()
+            || fractions.iter().any(|f| !(*f > 0.0 && *f <= 1.0))
+            || min_candidates == 0
+        {
+            return Err(invalid(
+                "fractions must lie in (0, 1] and min_candidates must be positive",
+            ));
+        }
+        Ok(Self {
+            fractions: fractions.to_vec(),
+            min_candidates,
+            key_sq: vec![vec![Vec::new(); shape.heads]; shape.layers],
+            cosine: vec![vec![0.0; shape.heads]; shape.layers],
+            mass: vec![vec![vec![0.0; fractions.len()]; shape.heads]; shape.layers],
+            rows: vec![vec![0; shape.heads]; shape.layers],
+        })
+    }
+
+    /// Run `model` on one batch without a backward graph, accumulate every
+    /// head, and return the batch's logits `(batch, time, vocab)`.
+    pub fn add(
+        &mut self,
+        model: &KappaLlama,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        let cpu = Device::Cpu;
+        let mut probe =
+            |layer: usize, query: &Tensor, key: &Tensor, probability: &Tensor| -> Result<()> {
+                let (b_len, h_len, t_len, width) = key.dims4()?;
+                let q: Vec<f32> = query.to_device(&cpu)?.flatten_all()?.to_vec1()?;
+                let k: Vec<f32> = key.to_device(&cpu)?.flatten_all()?.to_vec1()?;
+                let p: Vec<f32> = probability.to_device(&cpu)?.flatten_all()?.to_vec1()?;
+                let mut row = Vec::with_capacity(t_len);
+                for b in 0..b_len {
+                    for h in 0..h_len {
+                        let base = (b * h_len + h) * t_len;
+                        for t in 0..t_len {
+                            let kt = &k[(base + t) * width..(base + t + 1) * width];
+                            self.key_sq[layer][h].push(dot64(kt, kt) as f32);
+                        }
+                        for t in self.min_candidates.saturating_sub(1)..t_len {
+                            let start = (base + t) * t_len;
+                            let weights = &p[start..start + t + 1];
+                            let mut top = 0;
+                            for (i, w) in weights.iter().enumerate() {
+                                if *w > weights[top] {
+                                    top = i;
+                                }
+                            }
+                            let qt = &q[(base + t) * width..(base + t + 1) * width];
+                            let kt = &k[(base + top) * width..(base + top + 1) * width];
+                            let norms = (dot64(qt, qt) * dot64(kt, kt)).sqrt();
+                            if norms > 0.0 {
+                                self.cosine[layer][h] += dot64(qt, kt) / norms;
+                            }
+                            row.clear();
+                            row.extend_from_slice(weights);
+                            row.sort_by(|a, b| b.total_cmp(a));
+                            for (i, fraction) in self.fractions.iter().enumerate() {
+                                let keep =
+                                    ((fraction * (t + 1) as f64).ceil() as usize).clamp(1, t + 1);
+                                self.mass[layer][h][i] +=
+                                    row[..keep].iter().map(|w| f64::from(*w)).sum::<f64>();
+                            }
+                            self.rows[layer][h] += 1;
+                        }
+                    }
+                }
+                Ok(())
+            };
+        model.forward_with_probe(ids, batch, time, true, &mut probe)
+    }
+
+    pub fn finish(mut self) -> Result<HeadStatistics> {
+        let rows = self.rows.iter().flatten().copied().min().unwrap_or(0);
+        if rows == 0 || self.key_sq.iter().flatten().any(Vec::is_empty) {
+            return Err(invalid(
+                "no query had enough causal keys for head statistics",
+            ));
+        }
+        let mut mean_key_sq = Vec::with_capacity(self.key_sq.len());
+        let mut median_key_sq = Vec::with_capacity(self.key_sq.len());
+        for layer in &mut self.key_sq {
+            let mut means = Vec::with_capacity(layer.len());
+            let mut medians = Vec::with_capacity(layer.len());
+            for values in layer.iter_mut() {
+                let sum: f64 = values.iter().map(|v| f64::from(*v)).sum();
+                means.push((sum / values.len() as f64) as f32);
+                values.sort_by(f32::total_cmp);
+                medians.push(values[values.len() / 2]);
+            }
+            mean_key_sq.push(means);
+            median_key_sq.push(medians);
+        }
+        let mut top1_cosine = Vec::with_capacity(self.cosine.len());
+        let mut top_mass = Vec::with_capacity(self.mass.len());
+        for ((cosines, masses), counts) in self.cosine.iter().zip(&self.mass).zip(&self.rows) {
+            top1_cosine.push(
+                cosines
+                    .iter()
+                    .zip(counts)
+                    .map(|(sum, n)| (sum / *n as f64) as f32)
+                    .collect(),
+            );
+            top_mass.push(
+                masses
+                    .iter()
+                    .zip(counts)
+                    .map(|(sums, n)| sums.iter().map(|sum| (sum / *n as f64) as f32).collect())
+                    .collect(),
+            );
+        }
+        Ok(HeadStatistics {
+            mean_key_sq,
+            median_key_sq,
+            top1_cosine,
+            top_mass,
+            fractions: self.fractions,
+            min_candidates: self.min_candidates,
+            rows,
+        })
     }
 }
 
@@ -868,7 +1191,8 @@ mod tests {
                 let (cosine, sine) = rope_tables(1e4, 8, offset, 3, &device).expect("rope");
                 let q = rope(&base, &cosine, &sine).expect("q");
                 let k = rope(&base.affine(0.5, 0.25).expect("k"), &cosine, &sine).expect("k");
-                let scores = head_scores(kind, &q, &k, Some(&log_eps), &log_beta).expect("scores");
+                let scores = head_scores(kind, &q, &k, LayerCurvature::LogEps(&log_eps), &log_beta)
+                    .expect("scores");
                 rows.push(scores);
             }
             let shift = max_abs_difference(&rows[0], &rows[1]).expect("diff");
@@ -933,6 +1257,103 @@ mod tests {
         assert!(model(ScoreKind::Dot, 0.0, Trainable::Scalars)
             .floor_log_eps(0.0)
             .is_err());
+    }
+
+    #[test]
+    fn first_order_scores_match_curved_scores_to_first_order() {
+        let device = Device::Cpu;
+        let values: Vec<f32> = (0..2 * 3 * 8)
+            .map(|i| ((i * 29 % 31) as f32 - 15.0) / 5.0)
+            .collect();
+        let q = Tensor::from_vec(values.clone(), (1, 2, 3, 8), &device).expect("q");
+        let k = q.affine(-0.7, 0.3).expect("k");
+        let beta = Tensor::zeros((1, 2, 1, 1), candle_core::DType::F32, &device).expect("beta");
+        let dot = head_scores(ScoreKind::Dot, &q, &k, LayerCurvature::Flat, &beta).expect("dot");
+        let q2 = q.sqr().expect("sq").sum_keepdim(3).expect("sum");
+        for (curved, linear) in [
+            (ScoreKind::KeyNorm, ScoreKind::KeyNormLinear),
+            (ScoreKind::Intrinsic, ScoreKind::IntrinsicLinear),
+        ] {
+            let kappa = 1e-4f32;
+            let log_eps = Tensor::full(0.5 * kappa.ln(), (1, 2, 1, 1), &device).expect("eps");
+            let coefficient = Tensor::full(kappa, (1, 2, 1, 1), &device).expect("kappa");
+            // Curved scores carry the per-query constant -|q|^2 / (2 sqrt r); add it back.
+            let shift = q2.affine(0.5 / 8f64.sqrt(), 0.0).expect("shift");
+            let curved = head_scores(curved, &q, &k, LayerCurvature::LogEps(&log_eps), &beta)
+                .expect("curved")
+                .broadcast_add(&shift)
+                .expect("shifted");
+            let first = head_scores(linear, &q, &k, LayerCurvature::Linear(&coefficient), &beta)
+                .expect("first order");
+            let correction = max_abs_difference(&first, &dot).expect("correction");
+            let residual = max_abs_difference(&curved, &first).expect("residual");
+            assert!(
+                correction > 1e-3,
+                "{linear:?}: the first-order term must matter: {correction}"
+            );
+            assert!(
+                residual < 0.05 * correction,
+                "{linear:?}: residual {residual} vs {correction}"
+            );
+        }
+    }
+
+    #[test]
+    fn head_statistics_are_well_formed() {
+        let dot = model(ScoreKind::Dot, 0.0, Trainable::Scalars);
+        let mut stats =
+            HeadStatisticsAccumulator::new(dot.shape(), &[0.1, 0.5, 1.0], 4).expect("accumulator");
+        stats.add(&dot, &ids(2, 12), 2, 12).expect("batch");
+        let stats = stats.finish().expect("finish");
+        assert_eq!(stats.rows, 2 * 9);
+        for layer in 0..2 {
+            for head in 0..4 {
+                assert!(stats.median_key_sq[layer][head] > 0.0);
+                assert!(stats.top1_cosine[layer][head].abs() <= 1.0 + 1e-6);
+                let mass = &stats.top_mass[layer][head];
+                assert!(mass[0] <= mass[1] + 1e-6 && mass[1] <= mass[2] + 1e-6);
+                assert!(
+                    (mass[2] - 1.0).abs() < 1e-4,
+                    "all keys hold all mass: {mass:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn flat_limit_curvature_drive_is_one_backward_pass() {
+        let linear = model(ScoreKind::IntrinsicLinear, 0.0, Trainable::Scalars);
+        let dot = model(ScoreKind::Dot, 0.0, Trainable::Scalars);
+        let tokens = ids(2, 13);
+        let inputs: Vec<u32> = tokens
+            .chunks(13)
+            .flat_map(|row| row[..12].to_vec())
+            .collect();
+        let targets: Vec<u32> = tokens
+            .chunks(13)
+            .flat_map(|row| row[1..].to_vec())
+            .collect();
+        let reference = dot.forward(&inputs, 2, 12, true).expect("dot");
+        let logits = linear.forward(&inputs, 2, 12, false).expect("linear");
+        assert!(max_abs_difference(&logits, &reference).expect("diff") < 1e-4);
+        let lambda = linear.variables()[LAMBDA].as_tensor().clone();
+        let nll = next_token_nll(&logits, &targets).expect("nll");
+        let drive = nll.backward().expect("backward");
+        let g: Vec<Vec<f32>> = drive.get(&lambda).expect("drive").to_vec2().expect("grid");
+        assert!(g.iter().flatten().all(|v| v.is_finite()));
+        assert!(g.iter().flatten().any(|v| v.abs() > 1e-6), "{g:?}");
+        let logits = linear.forward(&inputs, 2, 12, false).expect("linear");
+        let self_kl = distillation_kl(&logits, &reference).expect("kl");
+        let sanity = self_kl.backward().expect("backward");
+        let s: Vec<Vec<f32>> = sanity
+            .get(&lambda)
+            .expect("sanity")
+            .to_vec2()
+            .expect("grid");
+        assert!(
+            s.iter().flatten().all(|v| v.abs() < 1e-6),
+            "self-distillation drive {s:?}"
+        );
     }
 
     #[test]
