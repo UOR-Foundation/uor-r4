@@ -3016,5 +3016,264 @@
    },
    "reading": "distance effect in both seeds; enclosing-scope effect at equal distance has opposite signs across seeds"
   }
+ },
+ "cycle_3b_integer_read": {
+  "label": "Measured (integer kernel, parity, timing, fine-tunes); code corpus development split; width 128, context 256",
+  "commits": [
+   "4183830",
+   "d0b417a",
+   "f92cf80"
+  ],
+  "tables": {
+   "root": "lab/exp/c3b/tables",
+   "tables_json_sha256": "2d16e17cd34c5a07681a7950a22c4b9a67df5208b28304ab8b7fbe94461c150d",
+   "arcosh_json_sha256": "eb4e49dc451341708d969028267a4b65132609f2dea65e6375804c882b34af9a"
+  },
+  "post_training_quantization": {
+   "dot_s1": {
+    "root": "lab/exp/c3b/run_dot_s1",
+    "manifest_sha256_packed": "2f1d9f079b1c91d1ab7bf3a3c9613ea64f395a754aa99d4bf4ce3bafe15b269b",
+    "checkpoint_weights_sha256": "7c07f6809a547a1b3aeef172b5470b68928dcabe44a03d71da121b76de5a6013",
+    "windows": 64,
+    "targets": 16384,
+    "stride": 3227,
+    "quantization": "Frozen dyadic scales calibrated once on the float checkpoint (configure_quantization(0, 1)); signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces; no quantization-aware training",
+    "read": {
+     "float_nll": 3.2675877594050395,
+     "emulator_nll": 3.35468705184652,
+     "integer_nll": 3.354624186291972,
+     "float_bits_per_byte": 1.342003882309814,
+     "emulator_bits_per_byte": 1.377775710707221,
+     "integer_bits_per_byte": 1.3777498917164304,
+     "emulator_minus_float_nll": 0.08709929244148062,
+     "integer_minus_emulator_nll": -6.28655545482637e-05,
+     "mean_total_variation_integer_emulator": 0.001741112533487495,
+     "maximum_probability_delta_integer_emulator": 0.01162908949447683,
+     "maximum_state_delta_integer_emulator": 0.0068359375,
+     "top1_agreement_integer_emulator": 0.996826171875,
+     "top1_agreement_integer_float": 0.79412841796875,
+     "mean_no_read_mass_integer": 0.4992925959217471,
+     "mean_no_read_mass_emulator": 0.4993086961259086,
+     "integer_seconds_per_step": 0.0042918848134155295
+    },
+    "no_read": {
+     "float_nll": 4.090175169758397,
+     "emulator_nll": 4.166888906036657,
+     "integer_nll": 4.166940994200945,
+     "float_bits_per_byte": 1.6798419388565742,
+     "emulator_bits_per_byte": 1.711348401572257,
+     "integer_bits_per_byte": 1.711369794270432,
+     "emulator_minus_float_nll": 0.07671373627826039,
+     "integer_minus_emulator_nll": 5.208816428758922e-05,
+     "mean_total_variation_integer_emulator": 0.0016849196338994022,
+     "maximum_probability_delta_integer_emulator": 0.008748433201528627,
+     "maximum_state_delta_integer_emulator": 0.0078125,
+     "top1_agreement_integer_emulator": 0.99658203125,
+     "top1_agreement_integer_float": 0.7392578125,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.002664183007995607
+    },
+    "read_effect_nats": {
+     "emulator": 0.8122018541901372,
+     "float": 0.8225874103533575,
+     "integer": 0.8123168079089731
+    },
+    "seconds": {
+     "preparation": 0.126562709,
+     "total": 139.684795872
+    }
+   },
+   "dot_s2": {
+    "root": "lab/exp/c3b/run_dot_s2",
+    "manifest_sha256_packed": "805b155b41834fa35ff628b0dad98b9e0fb5fc55c1a9f376434c38aed4a16765",
+    "checkpoint_weights_sha256": "378c24bc71202eb94ce60ed33c2d474dc2a6c8ee354af93f10837bcbaa2d7dbe",
+    "windows": 64,
+    "targets": 16384,
+    "stride": 3227,
+    "quantization": "Post-training: frozen dyadic scales calibrated once on the float checkpoint (configure_quantization(0, 1)); signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces; no quantization-aware training",
+    "read": {
+     "float_nll": 3.303681492611833,
+     "emulator_nll": 3.3703646931498135,
+     "integer_nll": 3.3703523028287266,
+     "float_bits_per_byte": 1.3568276402796353,
+     "emulator_bits_per_byte": 1.3842145448085923,
+     "integer_bits_per_byte": 1.384209456082527,
+     "emulator_minus_float_nll": 0.06668320053798027,
+     "integer_minus_emulator_nll": -1.2390321086908074e-05,
+     "mean_total_variation_integer_emulator": 0.0016518367156144842,
+     "maximum_probability_delta_integer_emulator": 0.007911358813927905,
+     "maximum_state_delta_integer_emulator": 0.00830078125,
+     "top1_agreement_integer_emulator": 0.99774169921875,
+     "top1_agreement_integer_float": 0.8026123046875,
+     "mean_no_read_mass_integer": 0.0039672549506307945,
+     "mean_no_read_mass_emulator": 0.003967236042386501,
+     "integer_seconds_per_step": 0.004344998710021978
+    },
+    "no_read": {
+     "float_nll": 5.884605779128229,
+     "emulator_nll": 5.858458882598959,
+     "integer_nll": 5.858418402901973,
+     "float_bits_per_byte": 2.4168176596703748,
+     "emulator_bits_per_byte": 2.4060790845390296,
+     "integer_bits_per_byte": 2.406062459458233,
+     "emulator_minus_float_nll": -0.02614689652927016,
+     "integer_minus_emulator_nll": -4.04796969863952e-05,
+     "mean_total_variation_integer_emulator": 0.0025601690244175003,
+     "maximum_probability_delta_integer_emulator": 0.012001518719678472,
+     "maximum_state_delta_integer_emulator": 0.0146484375,
+     "top1_agreement_integer_emulator": 0.995361328125,
+     "top1_agreement_integer_float": 0.65814208984375,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.002763083396850591
+    },
+    "read_effect_nats": {
+     "emulator": 2.4880941894491455,
+     "float": 2.580924286516396,
+     "integer": 2.488066100073246
+    },
+    "seconds": {
+     "preparation": 0.129760195,
+     "total": 142.94051892
+    }
+   },
+   "lorentzflat_s1": {
+    "root": "lab/exp/c3b/run_lorentzflat_s1",
+    "manifest_sha256_packed": "0a1e1962fc4afd65cdee0e7956102746db93feffca8442ca6a4af64b6eac1a51",
+    "checkpoint_weights_sha256": "4267dcb985ee5e6dd22d30ead5e844b614c305ee3eb93b0cd96ed65d609aa115",
+    "windows": 64,
+    "targets": 16384,
+    "stride": 3227,
+    "quantization": "Frozen dyadic scales calibrated once on the float checkpoint (configure_quantization(0, 1)); signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces; no quantization-aware training",
+    "read": {
+     "float_nll": 3.227564389478165,
+     "emulator_nll": 3.3037502965010397,
+     "integer_nll": 3.3037008904309833,
+     "float_bits_per_byte": 1.325566215817035,
+     "emulator_bits_per_byte": 1.3568558981546284,
+     "integer_bits_per_byte": 1.3568356069971421,
+     "emulator_minus_float_nll": 0.07618590702287475,
+     "integer_minus_emulator_nll": -4.9406070056434714e-05,
+     "mean_total_variation_integer_emulator": 0.0018583604039090573,
+     "maximum_probability_delta_integer_emulator": 0.009573919848360646,
+     "maximum_state_delta_integer_emulator": 0.0078125,
+     "top1_agreement_integer_emulator": 0.99749755859375,
+     "top1_agreement_integer_float": 0.8048095703125,
+     "mean_no_read_mass_integer": 0.5939436188404283,
+     "mean_no_read_mass_emulator": 0.5939357625316433,
+     "integer_seconds_per_step": 0.004472702394470203
+    },
+    "no_read": {
+     "float_nll": 4.0517537528854755,
+     "emulator_nll": 4.131877636465841,
+     "integer_nll": 4.131905780332053,
+     "float_bits_per_byte": 1.6640621972233478,
+     "emulator_bits_per_byte": 1.6969692132693894,
+     "integer_bits_per_byte": 1.6969807720033854,
+     "emulator_minus_float_nll": 0.0801238835803657,
+     "integer_minus_emulator_nll": 2.814386621174947e-05,
+     "mean_total_variation_integer_emulator": 0.0019103253407716232,
+     "maximum_probability_delta_integer_emulator": 0.011452348620721864,
+     "maximum_state_delta_integer_emulator": 0.00732421875,
+     "top1_agreement_integer_emulator": 0.99664306640625,
+     "top1_agreement_integer_float": 0.72821044921875,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.00267514799786376
+    },
+    "read_effect_nats": {
+     "emulator": 0.8281273399648015,
+     "float": 0.8241893634073105,
+     "integer": 0.8282048899010697
+    },
+    "seconds": {
+     "preparation": 0.12557452,
+     "total": 144.111552462
+    }
+   },
+   "lorentzflat_s2": {
+    "root": "lab/exp/c3b/run_lorentzflat_s2",
+    "manifest_sha256_packed": "ad91a95c894eab7ccbf32c1933cb062d1ea3da693c29a8f5593c21cfd2b4c2a1",
+    "checkpoint_weights_sha256": "d81adff1a9f45b5dedc4c0dedd5d57d0272e1a6a53aacbe864a96363f7f80acc",
+    "windows": 64,
+    "targets": 16384,
+    "stride": 3227,
+    "quantization": "Post-training: frozen dyadic scales calibrated once on the float checkpoint (configure_quantization(0, 1)); signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces; no quantization-aware training",
+    "read": {
+     "float_nll": 3.234188121953365,
+     "emulator_nll": 3.3167923628625036,
+     "integer_nll": 3.3167480618494127,
+     "float_bits_per_byte": 1.3282865940751287,
+     "emulator_bits_per_byte": 1.3622122971189865,
+     "integer_bits_per_byte": 1.362194102617129,
+     "emulator_minus_float_nll": 0.08260424090913876,
+     "integer_minus_emulator_nll": -4.4301013090830565e-05,
+     "mean_total_variation_integer_emulator": 0.002064972149752415,
+     "maximum_probability_delta_integer_emulator": 0.010901493298813847,
+     "maximum_state_delta_integer_emulator": 0.0087890625,
+     "top1_agreement_integer_emulator": 0.997314453125,
+     "top1_agreement_integer_float": 0.8040771484375,
+     "mean_no_read_mass_integer": 0.611100866428389,
+     "mean_no_read_mass_emulator": 0.6111007571966525,
+     "integer_seconds_per_step": 0.0045217729156494125
+    },
+    "no_read": {
+     "float_nll": 4.037962722979341,
+     "emulator_nll": 4.114618996724999,
+     "integer_nll": 4.114644741497507,
+     "float_bits_per_byte": 1.6583981976500193,
+     "emulator_bits_per_byte": 1.6898810604052672,
+     "integer_bits_per_byte": 1.6898916338273755,
+     "emulator_minus_float_nll": 0.07665627374565798,
+     "integer_minus_emulator_nll": 2.5744772508495828e-05,
+     "mean_total_variation_integer_emulator": 0.0020899466511531176,
+     "maximum_probability_delta_integer_emulator": 0.009842462663215201,
+     "maximum_state_delta_integer_emulator": 0.00634765625,
+     "top1_agreement_integer_emulator": 0.996337890625,
+     "top1_agreement_integer_float": 0.7415771484375,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.00271453294567871
+    },
+    "read_effect_nats": {
+     "emulator": 0.7978266338624951,
+     "float": 0.8037746010259759,
+     "integer": 0.7978966796480944
+    },
+    "seconds": {
+     "preparation": 0.099814753,
+     "total": 145.614207241
+    }
+   }
+  },
+  "timing_idle": [
+   {
+    "run": "timing_1_dot_s1",
+    "windows": 4,
+    "read_ms_per_step": 4.206322218750008,
+    "no_read_ms_per_step": 2.6806115751953095
+   },
+   {
+    "run": "timing_2_lorentzflat_s1",
+    "windows": 4,
+    "read_ms_per_step": 4.635827733398445,
+    "no_read_ms_per_step": 2.6150798164062525
+   },
+   {
+    "run": "timing_3_dot_s1",
+    "windows": 4,
+    "read_ms_per_step": 4.31758234570313,
+    "no_read_ms_per_step": 2.726067966796875
+   },
+   {
+    "run": "timing_4_lorentzflat_s1",
+    "windows": 4,
+    "read_ms_per_step": 4.316068624999999,
+    "no_read_ms_per_step": 2.9260920693359376
+   }
+  ],
+  "paths": "Relative to the session scratch directory; roots are claimed and sealed; models and tables are not committed",
+  "evaluation": "joint-integer-parity: evenly spaced windows of the code development split (valid.u16), fresh state per window; float and emulator by full-window forward, integer by incremental steps"
  }
 }

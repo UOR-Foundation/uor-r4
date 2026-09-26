@@ -16,6 +16,10 @@
 - The M4 hyperbolic cache memory (§8). The float experiment `cache_memory` and its example; the integer Lorentz cache in the engine (`453aa9d`); and the script's `CACHE=1` stage (`bdebc86`).
 - *Result.* A learned Lorentz cache beats the Euclidean and dot caches of equal size. Its integer form keeps 99.3% of the float gain.
 - The context-256 addendum to [cycle 3](hyperbolic-cycle3-2026-09-26.md#10-addendum-context-256): the Lorentz read's advantage grows with context.
+- Cycle 3b, the integer Lorentz read of the native model ([cycle 3 §11](hyperbolic-cycle3-2026-09-26.md#11-addendum-the-integer-lorentz-read)).
+  - The integer runtime serves quantized Lorentz models; the trained context-256 models run in it at parity with their F32 emulator.
+  - The Lorentz advantage over Dot survives 4-bit integer serving.
+  - `scripts/native-lorentz-m1.sh` runs the full-scale native comparison through to integer serving on an M1.
 
 ## 0. Findings
 
@@ -366,6 +370,7 @@ The chat engine now serves a learned Lorentz cache (commit `453aa9d`).
 - **Lead's runs.** The lead's single-threaded stand-in conversion and fine-tune runs recorded 2.9 wall-clock hours in total, under contention: 7,943 s and 2,580 s.
 - **Reviewers' runs.** Their costs are in their reports. The experiment reviewer used about 1.2 CPU-hours. The science reviewer's five checks each took under a minute.
 - **Context 256.** The four cycle-3 context-256 runs finished; their cost is in the cycle-3 addendum.
+- **Cycle 3b.** The integer Lorentz read's build, parity runs and fine-tunes; their cost is in [cycle 3 §11](hyperbolic-cycle3-2026-09-26.md#11-addendum-the-integer-lorentz-read).
 - **M4 (§8).**
   - The pilot took about 10 minutes, and the measured run 34 minutes.
   - Re-training and saving the seed-1 Lorentz cache took 20 minutes; the parity runs took 30 s and 134 s.

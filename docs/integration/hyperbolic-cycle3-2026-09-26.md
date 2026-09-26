@@ -270,7 +270,7 @@ Scores are quantised to Q8 steps of 0.0039, so 24 guard bits are enough.
 
 **Table.** arcosh(1 + u) is indexed by the leading-bit position of u plus 10 mantissa bits; u below 2⁻³⁰ maps to zero. That is about 52K entries, sealed like the existing exp, tanh and sigmoid tables.
 
-**Not implemented yet.** The quantisation-aware training path, packed export and runtime kernel for a Lorentz model. Today the integer runtime refuses Lorentz manifests with a typed error.
+**Not implemented yet.** The quantisation-aware training path, packed export and runtime kernel for a Lorentz model. Today the integer runtime refuses Lorentz manifests with a typed error. *(Implemented later the same day; see [§11](#11-addendum-the-integer-lorentz-read).)*
 
 ## 7. Changes in the repository
 
@@ -324,7 +324,7 @@ Training cost per update was the same for both geometries: about 3.0–3.3 s per
 
    `TRAIN.u16` is one retained training store, or both concatenated. A stopped run continues with `resume=OLD_ROOT/checkpoint`.
 3. **Watch the NoRead mass early in any run, whatever the geometry.** If it falls below 0.1 while the read-free likelihood gets worse, the run has become read-dependent. A flat start prevented this in every run here. `read_dropout` is available as a more direct remedy but has not been measured.
-4. **Next engineering, if the Lorentz read is adopted: the integer serving path** (§6). It needs quantisation-aware training for the two scalars, packed export, the sealed arcosh table, the runtime kernel and parity tests against the F32 path.
+4. **Next engineering, if the Lorentz read is adopted: the integer serving path** (§6). It needs quantisation-aware training for the two scalars, packed export, the sealed arcosh table, the runtime kernel and parity tests against the F32 path. *(Built later the same day; see [§11](#11-addendum-the-integer-lorentz-read).)*
 5. **Next research.**
    - A hyperbolic JEPA objective: predict a latent summary of the coming text from the recurrent state, and score the prediction with the Lorentz distance, to make the key radius carry structure (§5). The predictor exists only during training, so serving cost is unchanged.
    - Cycle 2's hyperbolic admission test at 4K–16K candidates, which this cycle did not reach.
@@ -385,3 +385,64 @@ Added later on 2026-09-26. **Measured**, reduced scale: code corpus, width 128, 
 - Four runs of about 11,000 s of training updates each (about 12.2 core-hours in total), with 4–8 processes sharing four cores.
 - The probe dumps and analyses took a few minutes.
 - The analyses are scratch scripts; the numbers are in the [evidence file](../evidence/hyperbolic-cycle3-runs-2026-09-26.json) under `context_256_addendum`.
+
+## 11. Addendum: the integer Lorentz read
+
+Added later on 2026-09-26 (cycle 3b). **Measured** unless labelled. The numbers are in the [evidence file](../evidence/hyperbolic-cycle3-runs-2026-09-26.json) under `cycle_3b_integer_read`.
+
+**What was built.** Commits `4183830`, `d0b417a` and `f92cf80`, and the commit adding this section.
+- **Kernel** ([`crates/uor-r4-integer/src/lorentz.rs`](../../crates/uor-r4-integer/src/lorentz.rs)).
+  - Queries and keys are Q8 codes. With Q = |q|², K = |k|² and D = ⟨q,k⟩ in code units, P = (2¹⁶+Q)(2¹⁶+K) and M = 2¹⁶+D, the argument is z − 1 = (√P − M)/2¹⁶.
+  - P − M² = 2¹⁶|q − k|² + (QK − D²) is an exact non-negative integer. So for M > 0 the kernel evaluates (P − M²)/(√P + M), with no cancellation: one floor square root with 24 guard bits and one rounded division give z − 1 at Q32.
+  - It applies the training clamp: z ≥ 1 + 2⁻²⁰, the F32 value of 1 + 10⁻⁶.
+  - arcosh(1 + u) comes from a sealed Q24 table. Argument codes below 2¹⁰ are read directly, then 1,024 linearly interpolated points per octave up to 2⁶⁴: 56,321 entries, 225 KB.
+  - The scale β = exp(log β) is computed once at load: ln 2 range reduction and a Taylor series at Q60, rounded to Q32.
+  - The score β(δ − d) is rounded to Q40. Age is added, then the sum is rounded and clipped to the Q8 score interface.
+  - Every product goes through the runtime's software shift-and-add arithmetic, like the rest of this prototype runtime.
+  - Unlike the §6 sketch, z − 1 comes from exact integers rather than from rounded q₀ and k₀.
+- **Contract.** A Lorentz model binds `packed_numerical_contract(Lorentz)`: the retained packed contract with a quantized Lorentz read declaration, one definition shared by training and the runtime. The Dot contract, the retained table files, Dot model identities and the Dot arithmetic are unchanged.
+- **Training side.**
+  - The two scalars quantize as signed 16-bit codes with one frozen scale each, like the other additive parameters.
+  - Quantization, packed export and `load_hard` accept Lorentz models.
+  - The table export adds `arcosh.json` and `arcosh.bin` next to the retained tables. A Lorentz model refuses a table root without them; older roots still serve Dot models.
+- **Shapes.** The runtime now also serves width-128 models: normalization divides by the state width. The width-256 arithmetic is unchanged; the parity test reproduces its earlier numbers exactly.
+- **Tools.**
+  - The `joint-integer-parity` example packs a checkpoint. A float checkpoint gets post-training scales; a quantization-aware one keeps its own. It then scores the same windows with the float weights, the packed F32 emulator and the integer runtime, read on and off.
+  - `joint-read-geometry` gains `init=MODEL_DIR` (fine-tune a saved float model) and `quantize_ramp=N` (quantization-aware training on the packed format's frozen scales).
+  - [`scripts/native-lorentz-m1.sh`](../../scripts/native-lorentz-m1.sh) runs §9.2's full-scale comparison through to integer serving on an Apple-silicon Mac.
+
+**Kernel accuracy** (focused tests in `uor-r4-integer` and `joint_integer_tables`).
+- The integer arcosh is within 2·10⁻⁷ of the function across every octave, including between grid points.
+- z − 1 is within 2⁻³¹ + 10⁻¹³(1 + |q|² + |k|²) of an F64 evaluation. The test covers 400 random, near-parallel and opposite vector pairs.
+- The load-time scale is within one Q32 unit of exp over the range the calibration can produce.
+- Untrained packed models at widths 256 and 128 run in the integer runtime within 0.01 of their F32 emulator on every probability and state coordinate. The cases are Dot, and Lorentz with the Dot-matched, flat and trained scalars.
+- At width 256 the Dot-matched initial Lorentz scale reads almost only the oldest key: read entropy 0.01 nats. So the flat and trained-scale cases, at 1.7–3.3 nats, are the ones that exercise spread reads.
+
+**Trained models, post-training quantization.**
+- *Models and quantization.* The four context-256 models of §10 (width 128). Each is packed with frozen dyadic scales calibrated once on its float weights, without fine-tuning.
+- *Evaluation.* 64 evenly spaced windows of 256 tokens (16,384 targets) of the development split that §4 and §10 also evaluated. This is a development measurement, not a final holdout.
+- *Table.* Read enabled; NLL in nats per token on the same windows.
+
+| Model | Float | Integer | Quantization cost | Integer − emulator | Mean TV | Top-1 agrees with emulator | Read effect, float / integer |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Dot s1 | 3.2676 | 3.3546 | +0.087 | −0.00006 | 0.0017 | 99.68% | 0.823 / 0.812 |
+| Dot s2 | 3.3037 | 3.3704 | +0.067 | −0.00001 | 0.0017 | 99.77% | 2.581 / 2.488 |
+| flat Lorentz s1 | 3.2276 | 3.3037 | +0.076 | −0.00005 | 0.0019 | 99.75% | 0.824 / 0.828 |
+| flat Lorentz s2 | 3.2342 | 3.3167 | +0.083 | −0.00004 | 0.0021 | 99.73% | 0.804 / 0.798 |
+
+Dot s2 is the read-dependent run of §10.
+
+- **The integer runtime matches the packed F32 emulator to 0.0001 nats per token for both geometries**, with the read on and off.
+- **The Lorentz advantage survives 4-bit integer serving.** Integer Lorentz − Dot is −0.051 (seed 1) and −0.054 (seed 2); in float on these windows it is −0.040 and −0.070.
+- Post-training 4-bit quantization costs 0.07–0.09 nats per token, 0.027–0.036 bits per byte.
+- **The largest single deviation slightly exceeds the retained 0.01 engineering limit in 4 of 8 model/mode cells.** The maximum is taken over 16,384 positions × 4,096 tokens and every state coordinate. It reaches 0.0120 on a probability and 0.0146 on a state coordinate.
+  - It occurs for Dot as well, and with the read disabled. So it comes from the shared recurrent and output path, not from the Lorentz kernel.
+  - The limit was set for the accepted width-256 model; these models are width 128.
+
+**Cost of the read.** Idle machine, one thread, 4 windows per run, two repetitions.
+- An integer step with the read over up to 255 keys takes 4.2–4.3 ms for Dot and 4.3–4.6 ms for Lorentz.
+- With the read disabled it takes 2.6–2.9 ms.
+- The difference between the geometries is within the run-to-run spread.
+- This measures the prototype runtime's software-multiply arithmetic, not an optimized serving speed.
+
+**Quantization-aware fine-tuning.** Running when this section was first committed: 300 updates from each §10 model with `quantize_ramp=100`, against float fine-tunes of the same length. Its results replace this paragraph.
