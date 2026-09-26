@@ -89,10 +89,12 @@ graph (~3–4k targets/s at 256 context): 60–120M tokens per epoch, 7–13 h/e
 wall boundary and checkpoint cadence fixed before launch, charged to the shared ledger. No
 external compute. Runs share the machine with the D8 cycle; one cargo process at a time.
 
-## 7. Open owner questions
+## 7. Owner decisions (2026-09-25)
 
-1. Target scope for chat-v0: single-turn + limited fact recall at 5–30M now (proven regime),
-   or commit to a ~100M multi-turn model (heavier, 20–100 h local training)?
-2. Data policy: may the lab fetch permissive datasets (TinyStories — already local; SmolTalk-2
-   Apache-2.0; TinyStoriesInstruct — license unverified), or should dialogue be constructed
-   locally from existing corpora and authored templates to avoid network and licensing risk?
+1. **Target chat-v0 small first, then scale.** Build a 5–30M parameter response-masked
+   dialogue model (the proven single-turn instruction regime, TinyStories-Instruct class) to a
+   passing chat-v0, then scale toward a larger multi-turn model (chat-v1) as a separate rung.
+2. **Permissive dataset fetching is allowed.** Dialogue data may be fetched from clearly
+   permissive public sources; any source with an unverified or non-permissive licence must not
+   have its content fetched — report it for an owner decision instead. Local construction from
+   the existing TinyStories corpus remains available and preferred where sufficient.
