@@ -203,8 +203,8 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **Verified SSD cache offload is complete; sequential fit6 is running from the saved
-checkpoints. Actual new quaternion updates have been observed.**
+not language retention. **The quaternion arm completed its original target15,672 and saved its checkpoint;
+the ordinary control is now running from its preserved state.**
 The first RDC-attached controller [failed](../evidence/language-continuation-interruption-2026-09-25.json)
 at 23:35 UTC with a broken output pipe; its workers exited on signal 2 before
 their first checkpoint. They logged 2,031/2,032 updates but saved no recoverable
@@ -283,7 +283,7 @@ Cargo lock inodes remain in a tiny internal directory referenced from the SSD.
 
 The detached controller launched at **17:11:38 UTC** and its first worker at
 17:11:46. The observed curve advances from 14,001 through 14,016 with two shards
-and no missing gradients. Householder6 is unstarted until quaternion completes.
+and no missing gradients. At that launch observation, Householder6 was unstarted until quaternion completed.
 This is live progress, not a new sealed checkpoint or model-quality result.
 Launch physical free space was 48,023,339,008 bytes and tracked allocation,
 including headroom, was 21,699,153,920 bytes. These readings remain guarded.
@@ -293,6 +293,16 @@ The existing 30-minute monitor is active for this single milestone. The
 [conditional principal direction](language-continuation-direction-2026-09-26.md)
 guides interpretation after the unchanged frozen output packet returns; it
 introduces no new panel or automatic next fit.
+
+At **18:45 UTC**, [quaternion reached target15,672](../evidence/language-continuation-arm-progress-6-2026-09-26.json),
+saved its model/Adam/sampler state and exited0 after1,672 remaining updates
+(5,604.52s fit wall). Combined retained segments now complete the original
+7,324-update /29,999,104-target continuation for that arm. It will be preserved
+if the ordinary arm later stops. The same controller started Householder at
+18:45:17 from13,949; new updates beginning13,950 were observed. No additional
+dose or selection occurred. Paired complete Rust verification and all final
+Read/NoRead, conversion, source and prose evaluation remain pending; checkpoint
+completion alone does not establish language quality or geometric advantage.
 
 ### Active work-card decisions
 

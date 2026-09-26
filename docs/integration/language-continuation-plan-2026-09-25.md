@@ -189,3 +189,11 @@ explains how to interpret the frozen outputs; it does not authorize a new
 architecture, depth experiment, panel or exposure tranche. See
 [current state](current-state.md#latest-recovery6-status)
 for the latest witnessed recovery status.
+
+At18:45UTC the quaternion arm completed its sole target15,672 and saved the
+model/Adam/sampler state, with all1,672 remaining updates retained. The same
+controller began the ordinary arm at18:45:17 from13,949; actual new updates were
+observed. Preserve the completed quaternion if the second arm stops. This
+[arm transition](../evidence/language-continuation-arm-progress-6-2026-09-26.json)
+is execution evidence; paired full Rust verification and final quality decisions
+remain pending. No new experiment or exposure tranche is introduced.
