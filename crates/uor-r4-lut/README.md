@@ -37,6 +37,7 @@ lut-tool mode=dequantize model=DIR lut=FILE.lut out=NEW_DIR
 lut-tool mode=fidelity model=DIR lut=FILE.lut tokens=X.u16 out=NEW_ROOT [windows=8] [time=128] [threads=N]
 lut-tool mode=bench lut=FILE.lut [tokens=64] [threads=N] [backend=portable|avx2|neon]
 lut-chat lut=FILE.lut tokenizer=DIR/tokenizer.json [prompt=TEXT] [system=TEXT] [tokens=256] [threads=N] [raw=true]
+    [temperature=0] [top_k=0] [top_p=1] [presence=0] [seed=1]
 ```
 
 `lut-tool` is an example of `uor-r4-training` (it needs the float checkpoint); `lut-chat` is this crate's binary.
@@ -44,7 +45,9 @@ lut-chat lut=FILE.lut tokenizer=DIR/tokenizer.json [prompt=TEXT] [system=TEXT] [
 columns are rounded in order and every rounding error is spread over the remaining columns through the inverse
 second moment of that matrix's inputs, measured on the calibration tokens by the float model. `dequantize` writes
 the float checkpoint the artifact represents, which isolates weight quantization from integer arithmetic.
-`fidelity` compares next-token distributions of the float checkpoint and the integer engine on a token file and
+`lut-chat` decodes greedily by default; a positive `temperature` samples with integer arithmetic only (the sealed
+exp table, a Q8 temperature, top-k, top-p, a presence penalty on recent tokens, and a seeded generator, so a seed
+reproduces a conversation). `fidelity` compares next-token distributions of the float checkpoint and the integer engine on a token file and
 seals a report root. [`scripts/lut-m1-chat.sh`](../../scripts/lut-m1-chat.sh) runs the whole path on an
 Apple-silicon Mac (export both ways, fidelity, throughput, a chat turn, and optional joules per token through
 [`scripts/energy_per_token.py`](../../scripts/energy_per_token.py) with an optional llama.cpp reference).

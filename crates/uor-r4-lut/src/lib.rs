@@ -24,6 +24,7 @@
 pub mod engine;
 pub mod format;
 pub mod kernels;
+pub mod sampling;
 
 pub use uor_r4_simd::Backend;
 

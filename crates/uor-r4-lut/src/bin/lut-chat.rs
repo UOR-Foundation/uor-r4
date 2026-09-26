@@ -3,11 +3,14 @@
 //! ```text
 //! lut-chat lut=MODEL.lut tokenizer=DIR/tokenizer.json [prompt=TEXT] [system=TEXT]
 //!     [tokens=256] [threads=N] [raw=true]
+//!     [temperature=0] [top_k=0] [top_p=1] [presence=0] [seed=1]
 //! ```
 //!
 //! With `prompt=` it answers one turn; otherwise it reads one user turn per line
 //! from standard input and keeps the conversation in the session's key/value
-//! cache. Decoding is greedy. The prompt uses SmolLM2's chat template, including
+//! cache. Decoding is greedy unless `temperature` is positive; sampling is
+//! integer-only and a seed reproduces it (SmolLM2's model card suggests
+//! temperature 0.2 and top_p 0.9). The prompt uses SmolLM2's chat template, including
 //! its default system turn; `raw=true` instead continues the given text as is
 //! (for base models), stopping only at the token limit.
 
@@ -17,25 +20,32 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use uor_r4_lut::engine::{Model, Session};
-use uor_r4_lut::kernels::argmax;
+use uor_r4_lut::sampling::{Sampler, SamplingSettings};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 const DEFAULT_SYSTEM: &str = "You are a helpful AI assistant named SmolLM, trained by Hugging Face";
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-/// Feed `ids`, then generate greedily until `stop` or `limit` new tokens,
-/// printing text as it becomes valid UTF-8. Returns the number of new tokens.
+/// Feed `ids`, then generate until `stop` or `limit` new tokens, printing
+/// text as it becomes valid UTF-8. `history` holds every token the session has
+/// read (for the presence penalty). Returns the number of new tokens.
 fn turn(
     session: &mut Session<'_>,
+    sampler: &mut Sampler,
+    history: &mut Vec<u32>,
     tokenizer: &ByteBpeTokenizer,
     ids: &[u32],
     stop: u32,
     limit: usize,
 ) -> Result<usize> {
+    let model = session.model();
+    let (table, step) = model.exp_table();
     let mut next = 0u32;
     for &id in ids {
-        next = argmax(session.step(id)?) as u32;
+        history.push(id);
+        let logits = session.step(id)?;
+        next = sampler.sample(logits, history, table, step)?;
     }
     let mut generated = Vec::new();
     let mut printed = 0usize;
@@ -48,10 +58,13 @@ fn turn(
             out.flush()?;
             printed = text.len();
         }
-        next = argmax(session.step(next)?) as u32;
+        history.push(next);
+        let logits = session.step(next)?;
+        next = sampler.sample(logits, history, table, step)?;
     }
     if next == stop {
         // Close the assistant turn in the cache.
+        history.push(stop);
         session.step(stop)?;
     }
     writeln!(out)?;
@@ -73,6 +86,18 @@ fn main() -> Result<()> {
         None => std::thread::available_parallelism().map_or(1, usize::from),
     };
     let raw = args.get("raw").is_some_and(|v| v == "true");
+    let number = |key: &str, default: f64| -> Result<f64> {
+        Ok(args.get(key).map_or(Ok(default), |v| v.parse::<f64>())?)
+    };
+    let settings = SamplingSettings::from_decimal(
+        number("temperature", 0.0)?,
+        args.get("top_k").map_or(Ok(0), |v| v.parse::<usize>())?,
+        number("top_p", 1.0)?,
+        number("presence", 0.0)?,
+    )?;
+    let seed: u64 = args.get("seed").map_or(Ok(1), |v| v.parse())?;
+    let mut sampler = Sampler::new(settings, seed);
+    let mut history = Vec::new();
     let mut model = Model::load(&lut)?;
     model.set_threads(threads)?;
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&std::fs::read(&tokenizer_path)?)
@@ -114,6 +139,7 @@ fn main() -> Result<()> {
         if session.position() + ids.len() + limit + 1 > model.shape().max_positions {
             eprintln!("(context full: starting a new conversation)");
             session.reset();
+            history.clear();
             ids = render(true);
             if ids.len() + limit + 1 > model.shape().max_positions {
                 return Err("the message does not fit the model's context".into());
@@ -121,7 +147,15 @@ fn main() -> Result<()> {
         }
         first = false;
         let started = Instant::now();
-        let produced = turn(session, &tokenizer, &ids, stop, limit)?;
+        let produced = turn(
+            session,
+            &mut sampler,
+            &mut history,
+            &tokenizer,
+            &ids,
+            stop,
+            limit,
+        )?;
         let seconds = started.elapsed().as_secs_f64();
         // Every prompt and generated token is one model step (the energy
         // script reads the `[N model tokens` prefix).

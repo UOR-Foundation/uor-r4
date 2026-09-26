@@ -19,13 +19,14 @@
 #   3. export twice: round-to-nearest, and GPTQ calibrated on CALIBRATION_TEXT
 #   4. fidelity of each artifact against the float checkpoint on EVAL_TEXT: next-token NLL change, KL, top-1
 #   5. decoding throughput at 1 thread and at every performance core
-#   6. one chat turn with the GPTQ artifact
+#   6. one chat turn with the GPTQ artifact, sampled with SmolLM2's suggested settings (CHAT_SAMPLING)
 #   7. only with ENERGY=1 (needs sudo for powermetrics): joules per token through scripts/energy_per_token.py,
 #      idle-subtracted, REPEATS times; with LLAMA_CLI and GGUF also set, the same for llama.cpp on that GGUF
 #      (for example SmolLM2-135M-Instruct Q4_0) as the reference point
 #
 # Knobs: MAX_POSITIONS (2048), WINDOWS (16), TIME (256), CAL_WINDOWS (64), DAMP (0.01), THREADS (performance
 # cores), DEVICE (cpu; metal runs the float side on the GPU and needs a --features metal build), CHAT_TOKENS (128),
+# CHAT_SAMPLING ("temperature=0.2 top_p=0.9 seed=1"; energy runs stay greedy, like llama.cpp at --temp 0),
 # ENERGY (0), REPEATS (3), ENERGY_TOKENS (256), LLAMA_CLI, GGUF.
 #
 # The serving path is integer-only with multiplier-free weight maps (NEON table reads, shifts and additions);
@@ -48,6 +49,7 @@ ENERGY=${ENERGY:-0}
 REPEATS=${REPEATS:-3}
 ENERGY_TOKENS=${ENERGY_TOKENS:-256}
 PROMPT=${PROMPT:-"Explain in two sentences why the sky is blue."}
+CHAT_SAMPLING=${CHAT_SAMPLING:-"temperature=0.2 top_p=0.9 seed=1"}
 TARGET=${CARGO_TARGET_DIR:-target}
 TOOL=$TARGET/release/examples/lut-tool
 TOKENIZE=$TARGET/release/examples/kappa-conversion
@@ -91,8 +93,9 @@ for threads in 1 "$THREADS"; do
   "$TOOL" mode=bench lut="$OUT/gptq.lut" tokens=256 threads="$threads" | tee "$OUT/bench-threads-$threads.json"
 done
 
+# shellcheck disable=SC2086 # CHAT_SAMPLING is a list of key=value arguments
 "$CHAT" lut="$OUT/gptq.lut" tokenizer="$MODEL/tokenizer.json" threads="$THREADS" tokens="$CHAT_TOKENS" \
-  prompt="$PROMPT" > "$OUT/chat-sample.txt" 2> "$OUT/chat-sample.log"
+  $CHAT_SAMPLING prompt="$PROMPT" > "$OUT/chat-sample.txt" 2> "$OUT/chat-sample.log"
 cat "$OUT/chat-sample.txt"
 
 if [ "$ENERGY" = 1 ]; then

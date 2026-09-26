@@ -186,6 +186,11 @@ impl Model {
         &self.header.source
     }
 
+    /// The sealed exp table (`round(2^31 exp(-i 2^exp_step_log2))`) and its step.
+    pub fn exp_table(&self) -> (&[u32], i32) {
+        (&self.exp_table, self.numerics.exp_step_log2)
+    }
+
     /// The vector backend of the weight kernels (detected at load).
     pub fn backend(&self) -> Backend {
         self.backend
@@ -348,6 +353,13 @@ pub struct Session<'m> {
     hidden: Act16,
     logits: Vec<i32>,
     cache8: Vec<i8>,
+}
+
+impl<'m> Session<'m> {
+    /// The model this session decodes with.
+    pub fn model(&self) -> &'m Model {
+        self.model
+    }
 }
 
 impl Session<'_> {
