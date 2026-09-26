@@ -328,3 +328,57 @@ Training cost per update was the same for both geometries: about 3.0–3.3 s per
 5. **Next research.**
    - A hyperbolic JEPA objective: predict a latent summary of the coming text from the recurrent state, and score the prediction with the Lorentz distance, to make the key radius carry structure (§5). The predictor exists only during training, so serving cost is unchanged.
    - Cycle 2's hyperbolic admission test at 4K–16K candidates, which this cycle did not reach.
+
+## 10. Addendum: context 256
+
+Added later on 2026-09-26. **Measured**, reduced scale: code corpus, width 128, two seeds.
+
+**Question.** Does the flat-start Lorentz read's advantage over the retained Dot read grow when the context doubles?
+
+**Design.** The same example and corpus as §4. The same 2,000 updates at the same tokens per update: batch 8 × context 256 here, against batch 16 × context 128 in §4. Arms: `geometry=dot` and `geometry=lorentz lorentz_start=flat`, seeds 1 and 2. The final evaluation is 512 windows (131,072 held-out targets).
+- A container restart stopped all four runs at step 750. They resumed exactly from their step-750 checkpoints; the interrupted roots are kept.
+- They were also paused for about 17 minutes in total for unrelated benchmarks.
+
+**Final NLL** (nats per token):
+
+| Seed | Dot | flat Lorentz | Lorentz − Dot | same seed at context 128 |
+|---|---:|---:|---:|---:|
+| 1 | 3.1694 | 3.1186 | −0.051 | −0.010 |
+| 2 | 3.1851 | 3.1238 | −0.061 | −0.015 |
+
+- The advantage is about four times the context-128 value for the same seeds; the four-seed mean at context 128 was −0.018.
+- Both seeds agree and the mean, 0.056, exceeds rule 1's 0.03-nat threshold. So under rule 1, flat Lorentz beats the *retained* Dot read at context 256.
+- The equal-start control of rule 2, flat Dot, was not run at this context.
+- Dot seed 2 became read-dependent: NoRead mass 0.004, read-free NLL 5.89. Dot seed 1 did not (NoRead mass 0.41). Neither Lorentz run did (0.58–0.59).
+
+**Where the gain is** (Lorentz − Dot NLL, 95% bootstrap intervals over 800 windows of the probe dump; negative favours Lorentz):
+
+| Tokens | Share | Seed 1 | Seed 2 |
+|---|---:|---:|---:|
+| not copyable | 48% | −0.021 [−0.028, −0.014] | −0.080 [−0.087, −0.073] |
+| copy, same scope | 36% | −0.064 [−0.072, −0.056] | −0.023 [−0.033, −0.014] |
+| copy, enclosing scope | 7% | −0.053 [−0.081, −0.028] | −0.056 [−0.085, −0.027] |
+| copy distance 1–4 | 6% | −0.055 [−0.073, −0.038] | +0.041 [+0.023, +0.060] |
+| copy distance 17–64 | 20% | −0.078 [−0.090, −0.068] | −0.053 [−0.064, −0.041] |
+| copy distance 65–255 | 9% | −0.086 [−0.105, −0.068] | −0.088 [−0.106, −0.069] |
+| slope per doubling of copy distance | | −0.012 [−0.015, −0.008] | −0.023 [−0.027, −0.020] |
+
+- **The largest and most consistent gain is on copies 65–255 tokens back**, mostly beyond the context-128 window.
+- The gain grows with copy distance in both seeds, as it did at context 128.
+- Unlike context 128, the enclosing-scope gain is resolved in both seeds. Its intervals do not control for copy distance.
+- The gain on non-copyable tokens differs fourfold between the seeds. Seed 2's is the larger, and its Dot run is the read-dependent one.
+
+**Read geometry of the trained Lorentz reads** (probe dump).
+- *Radius.* Keys sit at hyperbolic radius about 3.5 (queries 3.8), a strongly curved regime. Within a window the key radius varies little (std 0.23).
+- *Radius versus direction.* Replacing each key's radius by the window mean, keeping its direction, moves the read distribution by 0.09–0.10 total variation. Top-1 agreement is 76–77%.
+- *Scores and cosine.* The cosine to the query explains 79–81% of the Lorentz score variance, against 98–99% for Dot. At this radius the hyperbolic distance is not a function of the angle alone.
+
+**What changes.**
+- The Lorentz read becomes the stronger candidate for the native model's read at longer context.
+- Rule 4 (build the integer arcosh path) was already met in §4, by flat Lorentz against flat Dot at context 128. This addendum adds weight to that decision; it is not a new trigger.
+- The full-scale test of §9.2, on TinyStories at width and context 256, is still the decisive one.
+
+**Cost.**
+- Four runs of about 11,000 s of training updates each (about 12.2 core-hours in total), with 4–8 processes sharing four cores.
+- The probe dumps and analyses took a few minutes.
+- The analyses are scratch scripts; the numbers are in the [evidence file](../evidence/hyperbolic-cycle3-runs-2026-09-26.json) under `context_256_addendum`.

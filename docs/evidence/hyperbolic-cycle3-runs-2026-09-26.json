@@ -2634,5 +2634,327 @@
     "weight_decay": 0.01
    }
   }
- ]
+ ],
+ "context_256_addendum": {
+  "label": "Measured, reduced scale (code, width 128, 2 seeds)",
+  "settings": {
+   "context": 256,
+   "batch": 8,
+   "steps": 2000,
+   "width": 128,
+   "final_windows": 512,
+   "tokens_per_update": 2048,
+   "compare_context_128": "section 4 runs code_dot_s1/s2_r2 and code_lorentzflat_s1_r2/s2_r2 (batch 16, context 128)"
+  },
+  "runs": [
+   {
+    "run": "ctx256/dot_s1_r1",
+    "steps_completed": 2000,
+    "final_windows": 512,
+    "final": {
+     "bits_per_byte_no_read": 1.6273648212879244,
+     "bits_per_byte_read": 1.2743834025428735,
+     "nll_no_read": 4.047212841886387,
+     "nll_read": 3.169357481979053,
+     "no_read_mass": 0.4059268601837692,
+     "read_effect_nats": 0.8778553599073344,
+     "targets": 131072
+    },
+    "seconds": {
+     "final_evaluation": 87.184776453,
+     "training_updates": 10983.295772750018,
+     "wall": 5337.5898139
+    },
+    "resumed_from": "ctx256/dot_s1/checkpoint (step 750)"
+   },
+   {
+    "run": "ctx256/dot_s2_r1",
+    "steps_completed": 2000,
+    "final_windows": 512,
+    "final": {
+     "bits_per_byte_no_read": 2.3666531961768156,
+     "bits_per_byte_read": 1.2807324501600679,
+     "nll_no_read": 5.885803283051063,
+     "nll_read": 3.185147393813156,
+     "no_read_mass": 0.003947891773982219,
+     "read_effect_nats": 2.7006558892379067,
+     "targets": 131072
+    },
+    "seconds": {
+     "final_evaluation": 83.307204957,
+     "training_updates": 11058.10710701503,
+     "wall": 5347.500094958
+    },
+    "resumed_from": "ctx256/dot_s2/checkpoint (step 750)"
+   },
+   {
+    "run": "ctx256/lorentzflat_s1_r1",
+    "steps_completed": 2000,
+    "final_windows": 512,
+    "final": {
+     "bits_per_byte_no_read": 1.6084712202707074,
+     "bits_per_byte_read": 1.2539676503342445,
+     "nll_no_read": 4.00022496082488,
+     "nll_read": 3.1185840515627916,
+     "no_read_mass": 0.584263306348084,
+     "read_effect_nats": 0.8816409092620887,
+     "targets": 131072
+    },
+    "seconds": {
+     "final_evaluation": 84.983369973,
+     "training_updates": 11049.692448015,
+     "wall": 5306.56884056
+    },
+    "resumed_from": "ctx256/lorentzflat_s1/checkpoint (step 750)"
+   },
+   {
+    "run": "ctx256/lorentzflat_s2_r1",
+    "steps_completed": 2000,
+    "final_windows": 512,
+    "final": {
+     "bits_per_byte_no_read": 1.6046607669321793,
+     "bits_per_byte_read": 1.2560698941600619,
+     "nll_no_read": 3.990748465153249,
+     "nll_read": 3.123812275804416,
+     "no_read_mass": 0.5920177119950547,
+     "read_effect_nats": 0.8669361893488334,
+     "targets": 131072
+    },
+    "seconds": {
+     "final_evaluation": 81.835221489,
+     "training_updates": 11025.50810689299,
+     "wall": 5283.7395593
+    },
+    "resumed_from": "ctx256/lorentzflat_s2/checkpoint (step 750)"
+   }
+  ],
+  "lorentz_minus_dot_final_nll": {
+   "seed_1": -0.0508,
+   "seed_2": -0.0613,
+   "mean": -0.0561,
+   "same_seeds_context_128": {
+    "seed_1": -0.0098,
+    "seed_2": -0.0146
+   },
+   "four_seed_mean_context_128": -0.018
+  },
+  "probe_dump_windows": 800,
+  "per_category": {
+   "ctx256_s1": {
+    "all": {
+     "mean": -0.04755860017933578,
+     "lo": -0.0524536430333401,
+     "hi": -0.04305400992063134
+    },
+    "nll_dot": 3.1636607429274433,
+    "nll_lorentz": 3.1161021427481073,
+    "not_copyable": {
+     "frac": 0.4821225490196078,
+     "mean": -0.021167447203264658,
+     "lo": -0.02772407076417837,
+     "hi": -0.014307934759318913,
+     "contrib": -0.010304358775001281,
+     "nll_dot": 4.786911318240461
+    },
+    "copy_same_scope": {
+     "frac": 0.356328431372549,
+     "mean": -0.0642385908934526,
+     "lo": -0.07199586311861039,
+     "hi": -0.05640617102815833,
+     "contrib": -0.02435371286780423,
+     "nll_dot": 1.4812228213112375
+    },
+    "copy_enclosing_scope": {
+     "frac": 0.06969607843137254,
+     "mean": -0.053220766036003495,
+     "lo": -0.08048087849771182,
+     "hi": -0.027516617782695908,
+     "contrib": -0.0043937344694191666,
+     "nll_dot": 2.168864799534613
+    },
+    "copy_closed_child": {
+     "frac": 0.043397058823529414,
+     "mean": -0.04922304408620811,
+     "lo": -0.07474765909992256,
+     "hi": -0.0254351172278506,
+     "contrib": -0.002611637336683606,
+     "nll_dot": 1.93286801029399
+    },
+    "copy_other_scope": {
+     "frac": 0.048455882352941175,
+     "mean": -0.08537547417373113,
+     "lo": -0.1163965953242167,
+     "hi": -0.05332623321719527,
+     "contrib": -0.0058951567304274975,
+     "nll_dot": 1.9180105569492603
+    }
+   },
+   "ctx256_s2": {
+    "all": {
+     "mean": -0.06034796855389619,
+     "lo": -0.06586300896518013,
+     "hi": -0.054695394149775846
+    },
+    "nll_dot": 3.181276368256051,
+    "nll_lorentz": 3.1209283997021546,
+    "not_copyable": {
+     "frac": 0.4821225490196078,
+     "mean": -0.08011884662964673,
+     "lo": -0.08702879372951464,
+     "hi": -0.07331658214119222,
+     "contrib": -0.03781889041178339,
+     "nll_dot": 4.8353623157332875
+    },
+    "copy_same_scope": {
+     "frac": 0.356328431372549,
+     "mean": -0.02310626674687901,
+     "lo": -0.03248864125799789,
+     "hi": -0.013807653064819823,
+     "contrib": -0.010393009231799106,
+     "nll_dot": 1.4711481450063761
+    },
+    "copy_enclosing_scope": {
+     "frac": 0.06969607843137254,
+     "mean": -0.055938478337644724,
+     "lo": -0.08510885489618689,
+     "hi": -0.027195552727993583,
+     "contrib": -0.0055789342990371065,
+     "nll_dot": 2.1648925886573656
+    },
+    "copy_closed_child": {
+     "frac": 0.043397058823529414,
+     "mean": -0.04424716758195061,
+     "lo": -0.07196327813468173,
+     "hi": -0.01801234021518965,
+     "contrib": -0.0018906924793623415,
+     "nll_dot": 1.9005108482617308
+    },
+    "copy_other_scope": {
+     "frac": 0.048455882352941175,
+     "mean": -0.06572954742383687,
+     "lo": -0.09502725825117055,
+     "hi": -0.03644262082993296,
+     "contrib": -0.004666442131914235,
+     "nll_dot": 1.9082543359704927
+    }
+   },
+   "geometry": {}
+  },
+  "per_copy_distance_and_geometry": {
+   "s1": {
+    "1-4": {
+     "frac": 0.05835294117647059,
+     "mean": -0.0549,
+     "lo": -0.0732,
+     "hi": -0.0377
+    },
+    "5-16": {
+     "frac": 0.16255392156862744,
+     "mean": -0.0385,
+     "lo": -0.0496,
+     "hi": -0.0273
+    },
+    "17-64": {
+     "frac": 0.2046078431372549,
+     "mean": -0.0784,
+     "lo": -0.0896,
+     "hi": -0.0675
+    },
+    "65-255": {
+     "frac": 0.09236274509803921,
+     "mean": -0.0864,
+     "lo": -0.1048,
+     "hi": -0.0679
+    },
+    "slope_per_doubling": {
+     "mean": -0.0119,
+     "lo": -0.0151,
+     "hi": -0.0083
+    },
+    "geometry_lorentz": {
+     "key_norm_mean": 18.1802,
+     "query_norm_mean": 22.9956,
+     "key_radius_mean": 3.5668,
+     "key_radius_std": 0.243,
+     "query_radius_mean": 3.8142,
+     "query_radius_std": 0.1725,
+     "key_radius_within_window_std": 0.2347,
+     "KL_full_vs_spherical": 0.0719,
+     "TV_full_vs_spherical": 0.0972,
+     "top1_agree": 0.7557,
+     "R2_score_vs_cos": 0.7942
+    },
+    "geometry_dot": {
+     "key_norm_mean": 13.3135,
+     "query_norm_mean": 13.8982,
+     "key_norm_std": 1.8854,
+     "key_norm_within_window_cv": 0.1348,
+     "KL_full_vs_spherical": 0.1134,
+     "TV_full_vs_spherical": 0.1575,
+     "top1_agree": 0.7724,
+     "R2_score_vs_cos": 0.9774
+    }
+   },
+   "s2": {
+    "1-4": {
+     "frac": 0.05835294117647059,
+     "mean": 0.0413,
+     "lo": 0.0229,
+     "hi": 0.06
+    },
+    "5-16": {
+     "frac": 0.16255392156862744,
+     "mean": -0.0056,
+     "lo": -0.018,
+     "hi": 0.0068
+    },
+    "17-64": {
+     "frac": 0.2046078431372549,
+     "mean": -0.0525,
+     "lo": -0.0638,
+     "hi": -0.0413
+    },
+    "65-255": {
+     "frac": 0.09236274509803921,
+     "mean": -0.0877,
+     "lo": -0.1056,
+     "hi": -0.0693
+    },
+    "slope_per_doubling": {
+     "mean": -0.0231,
+     "lo": -0.0267,
+     "hi": -0.0196
+    },
+    "geometry_lorentz": {
+     "key_norm_mean": 17.7067,
+     "query_norm_mean": 22.3484,
+     "key_radius_mean": 3.5393,
+     "key_radius_std": 0.2443,
+     "query_radius_mean": 3.785,
+     "query_radius_std": 0.1763,
+     "key_radius_within_window_std": 0.2334,
+     "KL_full_vs_spherical": 0.0574,
+     "TV_full_vs_spherical": 0.0925,
+     "top1_agree": 0.769,
+     "R2_score_vs_cos": 0.806
+    },
+    "geometry_dot": {
+     "key_norm_mean": 12.6139,
+     "query_norm_mean": 14.1599,
+     "key_norm_std": 1.2734,
+     "key_norm_within_window_cv": 0.0953,
+     "KL_full_vs_spherical": 0.1818,
+     "TV_full_vs_spherical": 0.2144,
+     "top1_agree": 0.6876,
+     "R2_score_vs_cos": 0.9876
+    }
+   }
+  },
+  "caveats": [
+   "equal-start flat Dot control not run at context 256",
+   "Dot seed 2 read-dependent (NoRead mass 0.004)",
+   "category intervals do not control for copy distance",
+   "runs paused about 17 minutes in total for unrelated benchmarks; resumed exactly after a container restart at step 750"
+  ]
+ }
 }
