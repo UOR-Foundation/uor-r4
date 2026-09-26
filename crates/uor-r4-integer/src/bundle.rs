@@ -1,5 +1,5 @@
 //! Portable, sealed serving bundle binding exact model, tables and tokenizer.
-use crate::{format, invalid, report_output, sha256_file, IntegerModel, Result};
+use crate::{format, invalid, report_output, sha256_file, tables, IntegerModel, Result};
 use serde_json::{json, Value};
 use std::{fs, path::Path};
 use uor_r4_tokenizer::ByteBpeTokenizer;
@@ -97,7 +97,13 @@ pub fn pack(packed: &Path, tables: &Path, tokenizer: &Path, output: &Path) -> Re
     for name in MODEL_FILES {
         fs::copy(packed.join(name), output.join("model").join(name))?;
     }
-    for name in TABLE_FILES {
+    let arcosh = [tables::ARCOSH_METADATA, tables::ARCOSH_PAYLOAD];
+    let optional = if tables.join(tables::ARCOSH_METADATA).try_exists()? {
+        &arcosh[..]
+    } else {
+        &[]
+    };
+    for name in TABLE_FILES.iter().chain(optional) {
         fs::copy(tables.join(name), output.join("tables").join(name))?;
     }
     fs::write(output.join("tokenizer.json"), bytes)?;

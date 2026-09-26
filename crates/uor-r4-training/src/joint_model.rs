@@ -535,11 +535,6 @@ impl JointModel {
     }
 
     pub fn configure_quantization(&mut self, start_step: usize, ramp_steps: usize) -> Result<()> {
-        if !self.config.read_geometry.is_dot() {
-            return Err(invalid(
-                "quantization, packed export and integer serving are defined only for the dot read geometry; Lorentz has no integer arcosh contract yet",
-            ));
-        }
         if self.quantization.is_some()
             || self.hard_only
             || self.precision_mode.is_some()
@@ -1568,7 +1563,10 @@ impl JointModel {
             "schema":"uor-r4.joint-recurrent-packed-emulator/1",
             "model":self.config,
             "quantization":state,
-            "numerical_contract":admission_contract(quantized_numerical_contract(), self.admission),
+            "numerical_contract":admission_contract(
+                read_geometry_contract(quantized_numerical_contract(), self.config.read_geometry),
+                self.admission,
+            ),
             "parameter_manifest":parameters,
             "parameter_manifest_sha256":crate::sha256_file(&directory.join(joint_quantization::HARD_PARAMETERS_MANIFEST_FILE))?,
             "scope":"Packed signed 4-bit multiplicative weights and signed 16-bit additive offsets; dyadic scales; quantized recurrent interfaces; F32 emulation, not D0-b integer serving"
@@ -1591,9 +1589,13 @@ impl JointModel {
             .map(|v| serde_json::from_value(v.clone()))
             .transpose()?
             .unwrap_or_default();
+        let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
         if manifest["schema"] != "uor-r4.joint-recurrent-packed-emulator/1"
             || manifest["numerical_contract"]
-                != admission_contract(quantized_numerical_contract(), admission)
+                != admission_contract(
+                    read_geometry_contract(quantized_numerical_contract(), config.read_geometry),
+                    admission,
+                )
             || manifest["parameter_manifest_sha256"]
                 != crate::sha256_file(
                     &directory.join(joint_quantization::HARD_PARAMETERS_MANIFEST_FILE),
@@ -1609,7 +1611,6 @@ impl JointModel {
         if actual_manifest != manifest["parameter_manifest"] {
             return Err(invalid("packed model parameter manifest binding"));
         }
-        let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
         config.validate()?;
         let state: QuantizedTrainingState =
             serde_json::from_value(manifest["quantization"].clone())?;
@@ -1663,8 +1664,13 @@ fn admission_contract(mut contract: Value, policy: AdmissionPolicy) -> Value {
 }
 
 /// Declare a Lorentz read in the bound contract. `Dot` returns the retained
-/// contract unchanged, so existing checkpoints keep their exact identity.
+/// contract unchanged, so existing checkpoints keep their exact identity. A
+/// quantized contract takes the integer runtime's quantized Lorentz declaration,
+/// so quantized training, packed export and integer serving bind one contract.
 fn read_geometry_contract(mut contract: Value, geometry: ReadGeometry) -> Value {
+    if geometry == ReadGeometry::Lorentz && contract.get("quantization").is_some() {
+        return uor_r4_integer::config::with_lorentz_quantized_read(contract);
+    }
     if geometry == ReadGeometry::Lorentz {
         contract["read"] = json!("Query/Key from RMS-normalized provisional/written states, each lifted to the hyperboloid x0=sqrt(1+|x|^2); Value=tanh(affine(normalized written state)); score=exp(read.lorentz_log_beta)*(read.lorentz_offset-arcosh(max(q0*k0-<q,k>,1+1e-6)))+learned age, competing with learned NoRead");
         contract["read_geometry"] = json!({
@@ -2929,15 +2935,16 @@ mod tests {
 
     /// (d) Lorentz metadata round-trips; its checkpoint binds the geometry,
     /// contract and learned scale and reloads bit-identically. Relabeling it
-    /// as Dot fails the contract and then the parameter inventory, and the
-    /// arm cannot enter quantization or packed export.
+    /// as Dot fails the contract and then the parameter inventory. The float
+    /// model has no packed export; quantizing it binds the quantized Lorentz
+    /// contract shared with the integer runtime.
     #[test]
     fn lorentz_config_and_checkpoint_round_trip() -> Result<()> {
         let config = lorentz(Transport::HouseholderPair);
         let text = serde_json::to_string(&config)?;
         assert!(text.ends_with(r#","read_geometry":"lorentz"}"#), "{text}");
         assert_eq!(serde_json::from_str::<JointConfig>(&text)?, config);
-        let mut model = JointModel::new(config.clone(), &Device::Cpu)?;
+        let model = JointModel::new(config.clone(), &Device::Cpu)?;
         model.variables()[LORENTZ_LOG_BETA].set(&Tensor::from_vec(
             vec![0.375f32],
             (1,),
@@ -2948,8 +2955,6 @@ mod tests {
             (1,),
             &Device::Cpu,
         )?)?;
-        assert!(model.configure_quantization(0, 1).is_err());
-        assert!(model.quantization().is_none());
         let contract = model.numerical_contract();
         assert_eq!(contract["read_geometry"]["geometry"], "lorentz");
         assert_ne!(contract["read"], numerical_contract()["read"]);
@@ -2990,6 +2995,23 @@ mod tests {
         };
         assert!(error.to_string().contains("parameter names"), "{error}");
         fs::remove_dir_all(root)?;
+
+        let mut quantized = model.without_quantization()?;
+        quantized.configure_quantization(0, 1)?;
+        let spec = quantized.quantization().map(|state| &state.spec);
+        for name in [LORENTZ_LOG_BETA, LORENTZ_OFFSET] {
+            let parameter = spec
+                .and_then(|spec| spec.parameters.get(name))
+                .ok_or_else(|| invalid("quantized Lorentz scalar"))?;
+            assert_eq!((parameter.bits, parameter.shape.as_slice()), (16, &[1][..]));
+        }
+        let written: Value =
+            serde_json::from_str(&serde_json::to_string(&quantized.numerical_contract())?)?;
+        assert_eq!(
+            written,
+            uor_r4_integer::config::packed_numerical_contract(ReadGeometry::Lorentz)?
+        );
+        assert_ne!(written["read"], contract["read"]);
         Ok(())
     }
 

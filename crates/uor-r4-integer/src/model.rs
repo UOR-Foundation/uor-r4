@@ -4,6 +4,8 @@
 //! uses add/subtract, shifts, comparisons, integer table reads, binary products,
 //! division and square roots implemented in `crate::math`. No floating
 //! model operation or hardware product is requested by these numerical kernels.
+//! The read scores keys by the retained dot product or, for a Lorentz model, by
+//! the hyperbolic distance kernel in `crate::lorentz` with a sealed arcosh table.
 //! This remains a dense-parameter, allocating, finite-context prototype. Loading
 //! validates legacy metadata; offline table construction and host evaluation
 //! are separate from this numerical path. Approximate integer execution does
@@ -15,11 +17,15 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::config::{JointConfig, QuantizedTrainingState, ReadMode, Transport};
+use crate::config::{
+    JointConfig, QuantizedTrainingState, ReadGeometry, ReadMode, Transport, LORENTZ_LOG_BETA,
+    LORENTZ_OFFSET,
+};
 use crate::format::{self as joint_quantization, ParameterQuantization};
+use crate::lorentz::{self, LorentzRead};
 use crate::math::{self, MathResult};
 use crate::tables::{Tables, TOTAL};
-use crate::{invalid, IntegerError, Result};
+use crate::{invalid, Result};
 
 pub const PROBABILITY_TOTAL: u64 = TOTAL;
 const WORK_BITS: i32 = 40;
@@ -34,6 +40,8 @@ pub struct IntegerModel {
     config: JointConfig,
     parameters: BTreeMap<String, Parameter>,
     tables: Tables,
+    /// Load-time constants of a Lorentz read; `None` for the dot read.
+    lorentz: Option<LorentzRead>,
     identity: String,
 }
 
@@ -41,6 +49,8 @@ pub struct IntegerSession {
     identity: String,
     state: Vec<i32>,
     keys: Vec<Vec<i32>>,
+    /// Squared key norms in code units, kept for a Lorentz read only.
+    key_norms: Vec<i128>,
     values: Vec<Vec<i32>>,
     tokens: Vec<u32>,
 }
@@ -126,18 +136,15 @@ impl IntegerModel {
             return Err(invalid("integer model manifest too large"));
         }
         let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
-        // Only the retained dot-product read has an integer kernel. A Lorentz
-        // manifest also fails the contract comparison below; refuse it first
-        // so callers receive the typed reason (no integer arcosh path yet).
+        // The read geometry selects the contract: the retained legacy contract
+        // for the dot read, with the quantized Lorentz declaration otherwise.
         let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
-        if !config.read_geometry.is_dot() {
-            return Err(IntegerError::UnsupportedReadGeometry(config.read_geometry));
-        }
         if manifest["schema"] != "uor-r4.joint-recurrent-packed-emulator/1"
             || manifest
                 .get("admission")
                 .is_some_and(|value| value != "full")
-            || manifest["numerical_contract"] != crate::config::quantized_numerical_contract()?
+            || manifest["numerical_contract"]
+                != crate::config::packed_numerical_contract(config.read_geometry)?
             || manifest["parameter_manifest_sha256"]
                 != crate::sha256_file(
                     &directory.join(joint_quantization::HARD_PARAMETERS_MANIFEST_FILE),
@@ -177,7 +184,7 @@ impl IntegerModel {
         {
             return Err(invalid("integer model shapes/scales/clock differ"));
         }
-        let parameters = codes
+        let parameters: BTreeMap<String, Parameter> = codes
             .into_iter()
             .map(|(name, codes)| {
                 let parameter = Parameter {
@@ -188,11 +195,33 @@ impl IntegerModel {
             })
             .collect();
         let tables = Tables::load(tables)?;
-        let identity = format!("{}:{}", crate::sha256_file(&manifest_path)?, tables.sha256);
+        let mut identity = format!("{}:{}", crate::sha256_file(&manifest_path)?, tables.sha256);
+        let lorentz = match config.read_geometry {
+            ReadGeometry::Dot => None,
+            ReadGeometry::Lorentz => {
+                let Some(arcosh) = &tables.arcosh_sha256 else {
+                    return Err(invalid(
+                        "a Lorentz read requires a table root exported with the sealed arcosh table",
+                    ));
+                };
+                identity = format!("{identity}:{arcosh}");
+                let scalar = |name: &str| -> Result<(i16, i16)> {
+                    let p = parameters
+                        .get(name)
+                        .ok_or_else(|| invalid(format!("missing integer parameter {name}")))?;
+                    Ok((p.codes[0], p.spec.row_exponents[0]))
+                };
+                Some(LorentzRead::new(
+                    scalar(LORENTZ_LOG_BETA)?,
+                    scalar(LORENTZ_OFFSET)?,
+                )?)
+            }
+        };
         Ok(Self {
             config,
             parameters,
             tables,
+            lorentz,
             identity,
         })
     }
@@ -206,6 +235,7 @@ impl IntegerModel {
             identity: self.identity.clone(),
             state: vec![0; self.config.width],
             keys: Vec::with_capacity(self.config.context),
+            key_norms: Vec::with_capacity(self.config.context),
             values: Vec::with_capacity(self.config.context),
             tokens: Vec::with_capacity(self.config.context),
         }
@@ -259,6 +289,13 @@ impl IntegerModel {
             .zip(bias)
             .map(|(v, b)| quantize(v + b, WORK_BITS, 8))
             .collect()
+    }
+
+    fn arcosh(&self) -> Result<&[u32]> {
+        self.tables
+            .arcosh
+            .as_deref()
+            .ok_or_else(|| invalid("missing arcosh table"))
     }
 
     fn tanh(&self, input: &[i32]) -> Vec<i32> {
@@ -325,6 +362,10 @@ impl IntegerModel {
             let query = self.affine(&normalized, 10, "read.query")?;
             let null = self.affine(&normalized, 10, "read.no_read")?[0];
             let age = self.vector_work("read.age")?;
+            let hyperbolic = match &self.lorentz {
+                Some(read) => Some((read, lorentz::squared_norm(&query)?, self.arcosh()?)),
+                None => None,
+            };
             let mut scores = Vec::with_capacity(previous + 1);
             scores.push(null);
             for (index, key) in session.keys.iter().enumerate() {
@@ -332,8 +373,18 @@ impl IntegerModel {
                 for (&q, &k) in query.iter().zip(key) {
                     dot += product(i128::from(q), i128::from(k))?;
                 }
-                // Q8 dot Q8, divided by sqrt(read_width64)=8: exponent -19.
-                let score = scaled(dot, WORK_BITS - 19)? + age[previous - 1 - index];
+                let raw = match hyperbolic {
+                    // Q8 dot Q8, divided by sqrt(read_width64)=8: exponent -19.
+                    None => scaled(dot, WORK_BITS - 19)?,
+                    Some((read, query_norm, table)) => {
+                        let key_norm = *session
+                            .key_norms
+                            .get(index)
+                            .ok_or_else(|| invalid("missing Lorentz key norm"))?;
+                        read.score(query_norm, key_norm, dot, table, WORK_BITS)?
+                    }
+                };
+                let score = raw + age[previous - 1 - index];
                 scores.push(quantize(score, WORK_BITS, 8)?);
             }
             let masses = softmax(&scores, &self.tables)?;
@@ -357,6 +408,10 @@ impl IntegerModel {
         let gate = self.sigmoid(&self.affine(&copy_input, STATE_BITS, "copy.gate")?)[0];
         let write_normalized = normalize_state(&state)?;
         let key = self.affine(&write_normalized, 10, "read.key")?;
+        let key_norm = match self.lorentz {
+            Some(_) => Some(lorentz::squared_norm(&key)?),
+            None => None,
+        };
         let value = self.tanh(&self.affine(&write_normalized, 10, "read.value")?);
         let norm = self.parameter("output.norm.weight")?;
         let hidden = write_normalized
@@ -401,6 +456,7 @@ impl IntegerModel {
         // written here and cannot be a source for this step's contextual copy.
         session.state = state.clone();
         session.keys.push(key);
+        session.key_norms.extend(key_norm);
         session.values.push(value);
         session.tokens.push(token);
         Ok(IntegerStep {
@@ -625,12 +681,33 @@ mod tests {
         Ok(())
     }
 
-    /// No integer arcosh kernel exists: a Lorentz manifest is refused with the
-    /// typed error before any contract, parameter or table access, while
-    /// absent or explicit `dot` metadata passes this guard unchanged.
+    /// Each read geometry binds its own contract. The dot contract is the
+    /// retained legacy contract; the Lorentz contract changes only the read
+    /// declaration. A manifest pairing one geometry with the other's contract,
+    /// or with none, is refused before any parameter or table access, and a
+    /// matching Lorentz manifest passes on to the parameter binding.
     #[test]
-    fn loader_rejects_lorentz_read_geometry_with_typed_error() -> Result<()> {
-        use crate::config::ReadGeometry;
+    fn loader_binds_each_read_geometry_to_its_contract() -> Result<()> {
+        use crate::config::{packed_numerical_contract, quantized_numerical_contract};
+        use crate::IntegerError;
+        let dot_contract = packed_numerical_contract(ReadGeometry::Dot)?;
+        let lorentz_contract = packed_numerical_contract(ReadGeometry::Lorentz)?;
+        assert_eq!(dot_contract, quantized_numerical_contract()?);
+        let (Some(dot_fields), Some(lorentz_fields)) =
+            (dot_contract.as_object(), lorentz_contract.as_object())
+        else {
+            return Err(invalid("contracts are JSON objects"));
+        };
+        let changed: Vec<&str> = lorentz_fields
+            .iter()
+            .filter(|(key, value)| dot_fields.get(*key) != Some(*value))
+            .map(|(key, _)| key.as_str())
+            .collect();
+        assert_eq!(changed, ["read", "read_geometry"]);
+        assert!(dot_fields
+            .keys()
+            .all(|key| lorentz_fields.contains_key(key)));
+
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| invalid("test clock before epoch"))?
@@ -640,42 +717,50 @@ mod tests {
             std::process::id()
         ));
         fs::create_dir(&directory)?;
-        let write = |model: Value| -> Result<()> {
-            let manifest = serde_json::json!({
+        let write = |model: Value, contract: Option<&Value>| -> Result<()> {
+            let mut manifest = serde_json::json!({
                 "schema": "uor-r4.joint-recurrent-packed-emulator/1",
                 "model": model,
             });
+            if let Some(contract) = contract {
+                manifest["numerical_contract"] = contract.clone();
+            }
             fs::write(
                 directory.join("hard-model.json"),
                 serde_json::to_vec(&manifest)?,
             )?;
             Ok(())
         };
-        let lorentz = JointConfig {
+        let lorentz = serde_json::to_value(JointConfig {
             read_geometry: ReadGeometry::Lorentz,
             ..JointConfig::default()
-        };
-        write(serde_json::to_value(&lorentz)?)?;
-        let Err(error) = IntegerModel::load_with_tables(&directory, &directory) else {
-            return Err(invalid("Lorentz manifest was accepted"));
-        };
-        assert!(
-            matches!(
-                error,
-                IntegerError::UnsupportedReadGeometry(ReadGeometry::Lorentz)
-            ),
-            "{error}"
-        );
-        assert!(error.to_string().contains("lorentz"), "{error}");
-        let mut explicit_dot = serde_json::to_value(JointConfig::default())?;
+        })?;
+        let dot = serde_json::to_value(JointConfig::default())?;
+        let mut explicit_dot = dot.clone();
         explicit_dot["read_geometry"] = serde_json::json!("dot");
-        for model in [serde_json::to_value(JointConfig::default())?, explicit_dot] {
-            write(model)?;
+        for (model, contract) in [
+            (&lorentz, Some(&dot_contract)),
+            (&lorentz, None),
+            (&dot, Some(&lorentz_contract)),
+            (&dot, None),
+            (&explicit_dot, None),
+        ] {
+            write(model.clone(), contract)?;
             let Err(error) = IntegerModel::load_with_tables(&directory, &directory) else {
-                return Err(invalid("contract-free manifest was accepted"));
+                return Err(invalid("mismatched manifest was accepted"));
             };
-            assert!(matches!(error, IntegerError::Invalid(_)), "{error}");
+            assert!(
+                matches!(&error, IntegerError::Invalid(message) if message.contains("numerical contract")),
+                "{error}"
+            );
         }
+        // A matching Lorentz manifest passes the contract and then needs its
+        // parameter descriptor, which this directory lacks.
+        write(lorentz, Some(&lorentz_contract))?;
+        let Err(error) = IntegerModel::load_with_tables(&directory, &directory) else {
+            return Err(invalid("parameter-free manifest was accepted"));
+        };
+        assert!(matches!(error, IntegerError::Io(_)), "{error}");
         fs::remove_dir_all(&directory)?;
         Ok(())
     }

@@ -2,12 +2,21 @@
 
 This crate serves the retained learned recurrent model with full causal context,
 integer model arithmetic, and integer token selection. It supports the quaternion
-model and the matched Householder-pair control, both with the retained
-dot-product read. A model declaring the optional offline Lorentz read geometry
-is refused with `IntegerError::UnsupportedReadGeometry`; no integer arcosh path
-exists yet. The weights retain the model's existing limitations: general prose
-remains weak, and useful general reasoning and frontier capability are not
-established.
+model and the matched Householder-pair control, with the retained dot-product
+read or the hyperbolic (Lorentz) read. The weights retain the model's existing
+limitations: general prose remains weak, and useful general reasoning and
+frontier capability are not established.
+
+A Lorentz model is served under its own packed contract
+(`config::packed_numerical_contract`), which differs from the retained one only
+in its read declaration. Its two learned scalars are signed 16-bit codes. At load,
+`exp(read.lorentz_log_beta)` is computed once with integer arithmetic. For each
+key, `z - 1` of the lifted query and key comes from their Q8 codes as a
+difference of exact integers, with one square root and one rounded division
+(see [`src/lorentz.rs`](src/lorentz.rs)). The distance `arcosh(z)` is read from
+a sealed Q24 table (`arcosh.json`/`arcosh.bin`), which the training tool now
+exports next to the retained tables; the retained table files are unchanged.
+A Lorentz model refuses a table root without it.
 
 The crate depends on the shared byte-level tokenizer, Serde/JSON, and hashing
 libraries. It has no dependency on Candle, the training crate, the core crate,
