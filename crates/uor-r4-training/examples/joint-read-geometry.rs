@@ -13,13 +13,19 @@
 //! loss weighted by window count. It tests whether making the recurrent state
 //! predict without its read prevents read dependence. It requires one shard.
 //!
+//! `checkpoint_every=N` keeps `checkpoint/` (model, AdamW moments and progress)
+//! after every N updates, replaced atomically, and removes it on completion.
+//! `resume=OLD_ROOT/checkpoint` continues an interrupted attempt in a new report
+//! root with identical settings: the window sampler is advanced past the drawn
+//! windows, and the parent's hashes are recorded.
+//!
 //! ```text
 //! cargo run --release -p uor-r4-training --example joint-read-geometry -- \
 //!   train=TRAIN.u16 valid=VALID.u16 out=NEW_REPORT_ROOT geometry=dot|lorentz \
 //!   [lens=TOKEN_BYTES.u16] [seed=1] [width=256] [context=256] [batch=16] \
 //!   [steps=1000] [lr=0.001] [shards=1] [transport=quaternion] \
 //!   [eval_every=250] [eval_windows=64] [final_windows=256] [max_seconds=inf] \
-//!   [save_model=false] [read_dropout=0]
+//!   [save_model=false] [read_dropout=0] [checkpoint_every=0] [resume=CHECKPOINT]
 //! ```
 //!
 //! `lens` holds the byte length of each token id (u16, vocabulary order); with
@@ -91,6 +97,8 @@ struct Settings {
     save_model: bool,
     read_dropout: f64,
     dropped_windows: usize,
+    checkpoint_every: usize,
+    resume: Option<PathBuf>,
 }
 
 fn settings(args: &Args) -> Result<Settings> {
@@ -114,6 +122,8 @@ fn settings(args: &Args) -> Result<Settings> {
         "max_seconds",
         "save_model",
         "read_dropout",
+        "checkpoint_every",
+        "resume",
     ];
     if let Some(key) = args.0.keys().find(|key| !known.contains(&key.as_str())) {
         return Err(invalid(format!("unknown argument {key}=")));
@@ -168,6 +178,8 @@ fn settings(args: &Args) -> Result<Settings> {
         save_model: args.number("save_model", false)?,
         read_dropout,
         dropped_windows,
+        checkpoint_every: args.number("checkpoint_every", 0)?,
+        resume: args.text("resume").map(PathBuf::from),
         config,
     };
     if settings.batch == 0
@@ -175,9 +187,12 @@ fn settings(args: &Args) -> Result<Settings> {
         || settings.eval_every == 0
         || settings.eval_windows == 0
         || settings.final_windows == 0
+        || !settings
+            .checkpoint_every
+            .is_multiple_of(settings.eval_every)
     {
         return Err(invalid(
-            "batch must be 1..64; evaluation counts must be positive",
+            "batch must be 1..64; evaluation counts must be positive; checkpoints follow evaluations",
         ));
     }
     Ok(settings)
@@ -317,6 +332,52 @@ fn read_dropout_gradients(
     Ok((mean, loss.backward()?))
 }
 
+/// Settings a resumed attempt must repeat exactly.
+fn progress_settings(settings: &Settings) -> Value {
+    json!({
+        "config": settings.config,
+        "batch": settings.batch,
+        "learning_rate": settings.learning_rate,
+        "shards": settings.shards,
+        "read_dropout": settings.read_dropout,
+        "train": settings.train,
+        "valid": settings.valid,
+        "eval_every": settings.eval_every,
+        "eval_windows": settings.eval_windows,
+    })
+}
+
+/// Write `checkpoint.next/`, then swap it in for `checkpoint/`; an interrupted
+/// write leaves the previous checkpoint intact.
+fn write_checkpoint(
+    out: &Path,
+    model: &JointModel,
+    optimizer: &NamedAdamW,
+    progress: &Value,
+) -> Result<()> {
+    let next = out.join("checkpoint.next");
+    if next.exists() {
+        fs::remove_dir_all(&next)?;
+    }
+    fs::create_dir(&next)?;
+    model.save(&next)?;
+    optimizer.save(&next)?;
+    fs::write(
+        next.join("progress.json"),
+        serde_json::to_vec_pretty(progress)?,
+    )?;
+    let current = out.join("checkpoint");
+    let old = out.join("checkpoint.old");
+    if current.exists() {
+        fs::rename(&current, &old)?;
+    }
+    fs::rename(&next, &current)?;
+    if old.exists() {
+        fs::remove_dir_all(&old)?;
+    }
+    Ok(())
+}
+
 fn scalars(model: &JointModel) -> Result<Value> {
     let mut values = serde_json::Map::new();
     for (name, variable) in model.variables() {
@@ -349,23 +410,59 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
     if train.len() <= time + 1 || valid.len() <= time + settings.final_windows {
         return Err(invalid("token files are too short for the context/windows"));
     }
-    let model = JointModel::new(settings.config.clone(), &Device::Cpu)?;
-    let mut optimizer = NamedAdamW::new(
-        model.variables(),
-        AdamConfig {
-            learning_rate: settings.learning_rate,
-            ..AdamConfig::default()
-        },
-    )?;
+    let adam = AdamConfig {
+        learning_rate: settings.learning_rate,
+        ..AdamConfig::default()
+    };
     let lens_slice = lens.as_deref();
-    let initial = evaluate(&model, &valid, lens_slice, settings.eval_windows)?;
-    let mut curve =
-        vec![json!({"step":0,"development":initial.report(),"lorentz":scalars(&model)?})];
+    let (model, mut optimizer, begin, mut curve, mut train_seconds, parent) = match &settings.resume
+    {
+        Some(checkpoint) => {
+            let progress: Value =
+                serde_json::from_slice(&fs::read(checkpoint.join("progress.json"))?)?;
+            if progress["settings"] != progress_settings(settings) {
+                return Err(invalid("resume settings differ from the checkpoint"));
+            }
+            let model = JointModel::load(checkpoint, &Device::Cpu)?;
+            let optimizer = NamedAdamW::load(checkpoint, model.variables(), &adam)?;
+            let begin = progress["step"]
+                .as_u64()
+                .ok_or_else(|| invalid("checkpoint step"))? as usize;
+            if model.config != settings.config || begin > settings.steps {
+                return Err(invalid("checkpoint model or step differs"));
+            }
+            let curve = progress["curve"]
+                .as_array()
+                .cloned()
+                .ok_or_else(|| invalid("checkpoint curve"))?;
+            let seconds = progress["train_seconds"]
+                .as_f64()
+                .ok_or_else(|| invalid("checkpoint seconds"))?;
+            let parent = json!({
+                "checkpoint": checkpoint,
+                "step": begin,
+                "progress_sha256": sha256_file(&checkpoint.join("progress.json"))?,
+                "model_sha256": sha256_file(&checkpoint.join("model.safetensors"))?,
+                "optimizer_sha256": sha256_file(&checkpoint.join("optimizer.safetensors"))?,
+            });
+            (model, optimizer, begin, curve, seconds, parent)
+        }
+        None => {
+            let model = JointModel::new(settings.config.clone(), &Device::Cpu)?;
+            let optimizer = NamedAdamW::new(model.variables(), adam.clone())?;
+            let initial = evaluate(&model, &valid, lens_slice, settings.eval_windows)?;
+            let curve =
+                vec![json!({"step":0,"development":initial.report(),"lorentz":scalars(&model)?})];
+            (model, optimizer, 0, curve, 0.0, Value::Null)
+        }
+    };
     let mut windows = Windows(settings.config.seed ^ 0x5EED_0FD8);
-    let mut train_seconds = 0.0;
+    for _ in 0..begin * settings.batch {
+        windows.next();
+    }
     let mut losses = Vec::new();
-    let mut completed = 0;
-    for step in 0..settings.steps {
+    let mut completed = begin;
+    for step in begin..settings.steps {
         if started.elapsed().as_secs_f64() >= settings.max_seconds {
             break;
         }
@@ -416,6 +513,19 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
             }));
             losses.clear();
         }
+        if settings.checkpoint_every > 0
+            && completed % settings.checkpoint_every == 0
+            && completed != settings.steps
+            && losses.is_empty()
+        {
+            let progress = json!({
+                "settings": progress_settings(settings),
+                "step": completed,
+                "train_seconds": train_seconds,
+                "curve": curve,
+            });
+            write_checkpoint(out, &model, &optimizer, &progress)?;
+        }
     }
     let evaluation_started = Instant::now();
     let last = evaluate(&model, &valid, lens_slice, settings.final_windows)?;
@@ -444,6 +554,7 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
         },
         "steps_requested": settings.steps,
         "steps_completed": completed,
+        "resumed_from": parent,
         "sampled_target_visits": completed * settings.batch * time,
         "window_sampler": "SplitMix64 counter seeded with seed ^ 0x5EED0FD8; uniform window starts",
         "evaluation": "Fresh state per window; evenly spaced starts; Read and NoRead on the same targets",
@@ -458,6 +569,10 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
         },
     });
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
+    let checkpoint = out.join("checkpoint");
+    if checkpoint.exists() {
+        fs::remove_dir_all(&checkpoint)?;
+    }
     if settings.save_model {
         let directory = out.join("model");
         fs::create_dir(&directory)?;
