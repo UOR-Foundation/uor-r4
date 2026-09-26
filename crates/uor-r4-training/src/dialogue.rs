@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use candle_core::backprop::GradStore;
-use candle_core::{Device, Tensor};
+use candle_core::Tensor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -46,6 +46,12 @@ pub struct DialogueCampaign {
     pub eval_max_windows: usize,
     pub eval_batch: usize,
     pub tune_windows: usize,
+    /// Held-out evaluation period in optimizer steps. `0` evaluates only before
+    /// the first update and after the last one (historical behavior). A positive
+    /// value additionally scores the same held-out window population at those
+    /// steps and appends to `heldout-curve.jsonl`.
+    #[serde(default)]
+    pub eval_every: usize,
     #[serde(default)]
     pub checkpoint_steps: Vec<usize>,
     #[serde(default)]
@@ -80,7 +86,7 @@ impl DialogueCampaign {
             || self.context != 256
             || self.model.context != 256
             || !(DIALOGUE_MIN_PARAMETERS..=DIALOGUE_MAX_PARAMETERS).contains(&parameters)
-            || !(1..=16).contains(&self.batch)
+            || !(1..=64).contains(&self.batch)
             || self.total_steps == 0
             || self.total_steps > 100_000
             || self.max_process_seconds == 0
@@ -446,8 +452,12 @@ fn run_count_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
 pub fn run_fit(args: &[String]) -> Result<()> {
     let cfg = load_campaign(&args[1])?;
     let out = output_root(args)?;
+    let device_name = args.get(3).map(String::as_str).unwrap_or("cpu");
+    if !["cpu", "metal"].contains(&device_name) {
+        return Err(invalid("dialogue fit device must be cpu|metal"));
+    }
     report_output::claim(&out)?;
-    let result = run_fit_inner(&cfg, &out);
+    let result = run_fit_inner(&cfg, &out, device_name);
     if let Err(error) = &result {
         crate::baseline_protocol::save_json(
             &out.join("failed-attempt.json"),
@@ -459,7 +469,7 @@ pub fn run_fit(args: &[String]) -> Result<()> {
     result
 }
 
-fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
+fn run_fit_inner(cfg: &DialogueCampaign, out: &Path, device_name: &str) -> Result<()> {
     let started = Instant::now();
     let train = Split::open(&cfg.train_tokens, &cfg.train_mask)?;
     let heldout = Split::open(&cfg.heldout_tokens, &cfg.heldout_mask)?;
@@ -472,7 +482,7 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
         cfg.eval_stride,
         cfg.eval_max_windows,
     );
-    let device = Device::Cpu;
+    let device = crate::baseline_protocol::device(device_name)?;
     let model = JointModel::new_dialogue(cfg.model.clone(), &device)?;
     if model.parameter_count() != cfg.parameter_count() {
         return Err(invalid(
@@ -486,9 +496,18 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
     let initial_heldout = heldout_nats0 / heldout_count0 as f64;
 
     let mut curve = BufWriter::new(File::create(out.join("learning-curve.jsonl"))?);
+    let mut heldout_curve = BufWriter::new(File::create(out.join("heldout-curve.jsonl"))?);
+    writeln!(
+        heldout_curve,
+        "{}",
+        json!({"step":0,"wall_seconds":started.elapsed().as_secs_f64(),
+            "heldout_response_masked_nll_nats":initial_heldout,"supervised_targets":heldout_count0})
+    )?;
+    heldout_curve.flush()?;
     let mut gradient_audit = Value::Null;
     let mut step_times = Vec::new();
     let mut losses = Vec::new();
+    let mut phase_totals_seconds = [0.0f64; 5];
     let mut complete = 0usize;
     let mut checkpoint_manifest = Vec::new();
     for step in 0..cfg.total_steps {
@@ -498,18 +517,26 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
             break;
         }
         let step_started = Instant::now();
+        let data_started = Instant::now();
         let (inputs, targets, masks) = sample_batch(&train, cfg, step)?;
+        let data_seconds = data_started.elapsed().as_secs_f64();
+        let forward_started = Instant::now();
         let output = model.forward(&inputs, cfg.batch, cfg.context, ReadMode::Enabled, true)?;
+        let forward_seconds = forward_started.elapsed().as_secs_f64();
+        let loss_started = Instant::now();
         let (nats, supervised) = masked_nats(&output.probabilities, &targets, &masks)?;
         if supervised <= 0.0 {
             return Err(invalid("sampled batch has no supervised response targets"));
         }
         let loss = nats.affine(1.0 / supervised, 0.0)?;
         let value = loss.to_scalar::<f32>()?;
+        let loss_seconds = loss_started.elapsed().as_secs_f64();
         if !value.is_finite() {
             return Err(invalid("nonfinite response-masked loss"));
         }
+        let backward_started = Instant::now();
         let gradients = loss.backward()?;
+        let backward_seconds = backward_started.elapsed().as_secs_f64();
         if step == 0 {
             gradient_audit = audit_gradients(&model, &gradients)?;
             if !gradient_audit["all_paths_present_finite_nonzero"]
@@ -519,17 +546,31 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
                 return Err(invalid("a learned path has no finite nonzero gradient"));
             }
         }
+        let optimizer_started = Instant::now();
         let update: StepReport = optimizer
             .step(model.variables(), &gradients)
             .map_err(|error| invalid(error.to_string()))?;
+        let optimizer_seconds = optimizer_started.elapsed().as_secs_f64();
         drop(gradients);
         let elapsed = step_started.elapsed().as_secs_f64();
         step_times.push(elapsed);
         losses.push(value);
+        for (total, delta) in phase_totals_seconds.iter_mut().zip([
+            data_seconds,
+            forward_seconds,
+            loss_seconds,
+            backward_seconds,
+            optimizer_seconds,
+        ]) {
+            *total += delta;
+        }
         complete = step + 1;
         let row = json!({"step":complete,"supervised_targets":supervised as u64,
             "sampled_targets":(cfg.batch*cfg.context) as u64,"masked_batch_nll":value,
-            "step_seconds":elapsed,"optimizer":update});
+            "step_seconds":elapsed,
+            "phase_seconds":{"data":data_seconds,"forward":forward_seconds,"loss":loss_seconds,
+                "backward":backward_seconds,"optimizer":optimizer_seconds},
+            "optimizer":update});
         serde_json::to_writer(&mut curve, &row)?;
         writeln!(curve)?;
         if cfg.checkpoint_steps.contains(&complete) {
@@ -540,8 +581,21 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
         if complete % 50 == 0 {
             eprintln!("dialogue step {complete}: masked NLL {value:.6} ({elapsed:.2}s)");
         }
+        if cfg.eval_every > 0 && complete % cfg.eval_every == 0 {
+            let (nats, count) = response_nll(&model, &heldout, &starts, cfg)?;
+            let nll = nats / count as f64;
+            writeln!(
+                heldout_curve,
+                "{}",
+                json!({"step":complete,"wall_seconds":started.elapsed().as_secs_f64(),
+                    "heldout_response_masked_nll_nats":nll,"supervised_targets":count})
+            )?;
+            heldout_curve.flush()?;
+            eprintln!("dialogue heldout {complete}: {nll:.6} over {count} targets");
+        }
     }
     curve.flush()?;
+    heldout_curve.flush()?;
     let parameter_manifest = save_parameters(&model, &out.join("parameters.f32"))?;
     let (heldout_nats1, heldout_count1) = response_nll(&model, &heldout, &starts, cfg)?;
     let final_heldout = heldout_nats1 / heldout_count1 as f64;
@@ -583,6 +637,9 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
         "mode":"dialogue-fit",
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNBOUND"),
         "executable_sha256":sha256_file(&std::env::current_exe()?)?,
+        "requested_device":device_name,
+        "actual_device":format!("{:?}", device.location()),
+        "build_features":{"metal":cfg!(feature="metal"),"cpu_accelerate":cfg!(feature="cpu-accelerate")},
         "scope":cfg.trial_scope,
         "configuration":cfg,
         "parameter_count":model.parameter_count(),
@@ -596,10 +653,21 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path) -> Result<()> {
         "sampled_targets":(complete*cfg.batch*cfg.context) as u64,
         "supervised_targets":(complete*cfg.batch*cfg.context) as u64,
         "mean_step_seconds":step_seconds,
+        "phase_totals_seconds":{"data":phase_totals_seconds[0],"forward":phase_totals_seconds[1],
+            "loss":phase_totals_seconds[2],"backward":phase_totals_seconds[3],
+            "optimizer":phase_totals_seconds[4]},
+        "mean_phase_seconds":{"data":phase_totals_seconds[0]/complete.max(1) as f64,
+            "forward":phase_totals_seconds[1]/complete.max(1) as f64,
+            "loss":phase_totals_seconds[2]/complete.max(1) as f64,
+            "backward":phase_totals_seconds[3]/complete.max(1) as f64,
+            "optimizer":phase_totals_seconds[4]/complete.max(1) as f64},
+        "sampled_targets_per_second":if started.elapsed().as_secs_f64()>0.0{
+            (complete*cfg.batch*cfg.context) as f64/started.elapsed().as_secs_f64()}else{0.0},
         "loss_curve":{"first":losses.first().copied(),
             "last":losses.last().copied(),"count":losses.len(),
             "first_10":{"first":first10.map(|w|w.0),"mean":first10.map(|w|w.1),"last":first10.map(|w|w.2)},
             "mean":if losses.is_empty(){None}else{Some(losses.iter().map(|&v|f64::from(v)).sum::<f64>()/losses.len() as f64)}},
+        "heldout_curve":{"file":"heldout-curve.jsonl","eval_every":cfg.eval_every,"eval_windows":starts.len()},
         "gradient_audit":gradient_audit,
         "checkpoints":checkpoint_manifest,
         "final_parameter_artifact":{"file":"parameters.f32","sha256":sha256_file(&out.join("parameters.f32"))?,"manifest":parameter_manifest},
@@ -677,10 +745,10 @@ pub fn run_cli(args: &[String]) -> Result<()> {
     let mode = args.first().map(String::as_str);
     let result = match mode {
         Some("dialogue-count") if args.len() == 3 => run_count(args),
-        Some("dialogue-fit") if args.len() == 3 => run_fit(args),
+        Some("dialogue-fit") if (3..=4).contains(&args.len()) => run_fit(args),
         Some("dialogue-panel") if args.len() == 3 => run_panel(args),
         _ => Err(invalid(
-            "usage:\n  uor-r4-training dialogue-count CAMPAIGN_JSON NEW_REPORT_ROOT\n  uor-r4-training dialogue-fit CAMPAIGN_JSON NEW_REPORT_ROOT\n  uor-r4-training dialogue-panel PANEL_JSON OUT_JSON",
+            "usage:\n  uor-r4-training dialogue-count CAMPAIGN_JSON NEW_REPORT_ROOT\n  uor-r4-training dialogue-fit CAMPAIGN_JSON NEW_REPORT_ROOT [cpu|metal]\n  uor-r4-training dialogue-panel PANEL_JSON OUT_JSON",
         )),
     };
     result?;
@@ -691,6 +759,7 @@ pub fn run_cli(args: &[String]) -> Result<()> {
 mod tests {
     use super::*;
     use crate::joint_model::Transport;
+    use candle_core::Device;
 
     fn dialogue_config(width: usize, context: usize) -> JointConfig {
         JointConfig {
@@ -722,6 +791,7 @@ mod tests {
             eval_max_windows: 4,
             eval_batch: 8,
             tune_windows: 4,
+            eval_every: 0,
             checkpoint_steps: Vec::new(),
             count_report: None,
             stop_file: None,

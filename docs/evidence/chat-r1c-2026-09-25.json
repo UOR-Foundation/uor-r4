@@ -1,0 +1,837 @@
+{
+  "schema": "uor-r4.chat-r1c-evidence/1",
+  "generated_utc": "2026-09-26",
+  "scope": "R1c throughput diagnosis and one bounded <=3 h response-masked curve at width 576 (5,429,826 parameters) on the chat-v0 train split. Development curve only. No model promotion; no chat, capability, geometry, integer or energy claim.",
+  "branch": "codex/canonical-address-routing-20260925",
+  "task_packet_base_commit": "a212c45de43ca47de3aab5f24485f31cd697240a",
+  "delivery_state": "uncommitted on the worktree; the lead commits. Training crate changed (dialogue.rs); serving crate untouched.",
+  "source_changed": [
+    {
+      "path": "crates/uor-r4-training/src/dialogue.rs",
+      "sha256": "36de127a0eac20924891b34c3747597da1cb91397e493c3e9bc8191ef9f4faf0",
+      "change": "optional device argument (cpu|metal), optional eval_every campaign field with periodic held-out eval to heldout-curve.jsonl, per-step phase timing, batch validation widened 1..=16 to 1..=64, device/feature/phase/throughput provenance in the report"
+    }
+  ],
+  "binary_identities": {
+    "cpu_default_features": {
+      "sha256": "518d1a9cdba46193fca73189f845679cff69ffb58ca0bd3e86cc6dd42c18fd7c",
+      "features": {
+        "metal": false,
+        "cpu_accelerate": false
+      }
+    },
+    "metal_cpu_accelerate": {
+      "sha256": "8f2985aafdbf2a2187b6f38f49cf0b9beb0443de57e9f7c1884a197d243703b0",
+      "features": {
+        "metal": true,
+        "cpu_accelerate": true
+      }
+    },
+    "count_model_sha256": "90f0a6574b9d27a196af0040be96e8006923055b2cd68d4a499804aed01b6859"
+  },
+  "throughput_diagnosis": {
+    "clean_host": true,
+    "finding": "Step cost is op-count-bound across 256 sequential positions: backward is 80-86% of every configuration, forward 13-16%, optimizer 2-3%, data loader ~0. Per-step wall time is nearly flat from batch 8 to 24, so sampled targets/s scales with batch until compute/thermal pressure reverses it. CPU + Apple Accelerate at batch 24 is the fastest robust clean path; Metal peaks lower; the R1b 137-374 targets/s figures were batch-8 under the concurrent D8 cycle.",
+    "phase_fractions_bounded_run": {
+      "data": 0.0009669633406484724,
+      "forward": 0.13517495266937052,
+      "loss": 0.00018759351762000096,
+      "backward": 0.845829946377615,
+      "optimizer": 0.017840544094746096
+    },
+    "contention_note": "The host ran two concurrent joint-fit processes for the first probe series; those rows are retained as default-contended. All headline numbers were re-measured on the idle machine with explicit binary paths."
+  },
+  "throughput_table": [
+    {
+      "root": "idle-cpu-b8",
+      "build": "default",
+      "device": "cpu",
+      "batch": 8,
+      "step_seconds": 3.991,
+      "targets_per_second": 459.6,
+      "forward_seconds": 0.581,
+      "backward_seconds": 3.282,
+      "optimizer_seconds": 0.1241,
+      "backward_fraction": 0.8223,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "idle-cpu-b16",
+      "build": "default",
+      "device": "cpu",
+      "batch": 16,
+      "step_seconds": 5.801,
+      "targets_per_second": 655.6,
+      "forward_seconds": 0.964,
+      "backward_seconds": 4.704,
+      "optimizer_seconds": 0.115,
+      "backward_fraction": 0.811,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "idle-cpu-b32",
+      "build": "default",
+      "device": "cpu",
+      "batch": 32,
+      "step_seconds": 13.137,
+      "targets_per_second": 591.5,
+      "forward_seconds": 2.21,
+      "backward_seconds": 10.765,
+      "optimizer_seconds": 0.1437,
+      "backward_fraction": 0.8195,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "mx-def-cpu-b16",
+      "build": "default",
+      "device": "cpu",
+      "batch": 16,
+      "step_seconds": 5.914,
+      "targets_per_second": 644.1,
+      "forward_seconds": 0.988,
+      "backward_seconds": 4.796,
+      "optimizer_seconds": 0.1163,
+      "backward_fraction": 0.8109,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "mx-def-cpu-b24",
+      "build": "default",
+      "device": "cpu",
+      "batch": 24,
+      "step_seconds": 7.799,
+      "targets_per_second": 742.1,
+      "forward_seconds": 1.389,
+      "backward_seconds": 6.263,
+      "optimizer_seconds": 0.126,
+      "backward_fraction": 0.8031,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "mx-def-cpu-b24-rep2",
+      "build": "default",
+      "device": "cpu",
+      "batch": 24,
+      "step_seconds": 7.616,
+      "targets_per_second": 761.3,
+      "forward_seconds": 1.373,
+      "backward_seconds": 6.104,
+      "optimizer_seconds": 0.1211,
+      "backward_fraction": 0.8015,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "xcheck-metalacc-b8",
+      "build": "cpu-accelerate",
+      "device": "cpu",
+      "batch": 8,
+      "step_seconds": 3.576,
+      "targets_per_second": 522.1,
+      "forward_seconds": 0.403,
+      "backward_seconds": 3.036,
+      "optimizer_seconds": 0.1337,
+      "backward_fraction": 0.8488,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "mx-acc-cpu-b16",
+      "build": "cpu-accelerate",
+      "device": "cpu",
+      "batch": 16,
+      "step_seconds": 5.287,
+      "targets_per_second": 727.2,
+      "forward_seconds": 0.704,
+      "backward_seconds": 4.433,
+      "optimizer_seconds": 0.1384,
+      "backward_fraction": 0.8384,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "mx-acc-cpu-b24",
+      "build": "cpu-accelerate",
+      "device": "cpu",
+      "batch": 24,
+      "step_seconds": 7.251,
+      "targets_per_second": 804.2,
+      "forward_seconds": 0.973,
+      "backward_seconds": 6.113,
+      "optimizer_seconds": 0.1449,
+      "backward_fraction": 0.8431,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "mx-acc-cpu-b24-rep2",
+      "build": "cpu-accelerate",
+      "device": "cpu",
+      "batch": 24,
+      "step_seconds": 6.931,
+      "targets_per_second": 841.2,
+      "forward_seconds": 0.943,
+      "backward_seconds": 5.838,
+      "optimizer_seconds": 0.1326,
+      "backward_fraction": 0.8424,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "mx-acc-cpu-b32",
+      "build": "cpu-accelerate",
+      "device": "cpu",
+      "batch": 32,
+      "step_seconds": 9.393,
+      "targets_per_second": 835.3,
+      "forward_seconds": 1.271,
+      "backward_seconds": 7.968,
+      "optimizer_seconds": 0.137,
+      "backward_fraction": 0.8483,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "idle-metal-b8",
+      "build": "metal",
+      "device": "metal",
+      "batch": 8,
+      "step_seconds": 5.109,
+      "targets_per_second": 281.3,
+      "forward_seconds": 0.561,
+      "backward_seconds": 4.339,
+      "optimizer_seconds": 0.121,
+      "backward_fraction": 0.8494,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "idle-metal-b16",
+      "build": "metal",
+      "device": "metal",
+      "batch": 16,
+      "step_seconds": 6.636,
+      "targets_per_second": 581.0,
+      "forward_seconds": 0.775,
+      "backward_seconds": 5.553,
+      "optimizer_seconds": 0.1462,
+      "backward_fraction": 0.8367,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "idle-metal-b24",
+      "build": "metal",
+      "device": "metal",
+      "batch": 24,
+      "step_seconds": 8.728,
+      "targets_per_second": 671.1,
+      "forward_seconds": 0.796,
+      "backward_seconds": 7.465,
+      "optimizer_seconds": 0.1749,
+      "backward_fraction": 0.8553,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "idle-metal-b32",
+      "build": "metal",
+      "device": "metal",
+      "batch": 32,
+      "step_seconds": 10.793,
+      "targets_per_second": 727.8,
+      "forward_seconds": 1.007,
+      "backward_seconds": 9.152,
+      "optimizer_seconds": 0.2124,
+      "backward_fraction": 0.848,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "idle-metal-b48",
+      "build": "metal",
+      "device": "metal",
+      "batch": 48,
+      "step_seconds": 22.228,
+      "targets_per_second": 540.4,
+      "forward_seconds": 1.511,
+      "backward_seconds": 18.311,
+      "optimizer_seconds": 0.748,
+      "backward_fraction": 0.8238,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "idle-metal-b64",
+      "build": "metal",
+      "device": "metal",
+      "batch": 64,
+      "step_seconds": 37.884,
+      "targets_per_second": 426.4,
+      "forward_seconds": 2.076,
+      "backward_seconds": 32.418,
+      "optimizer_seconds": 1.3323,
+      "backward_fraction": 0.8557,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "mx-metal-b16",
+      "build": "metal",
+      "device": "metal",
+      "batch": 16,
+      "step_seconds": 6.346,
+      "targets_per_second": 509.3,
+      "forward_seconds": 0.635,
+      "backward_seconds": 5.375,
+      "optimizer_seconds": 0.1564,
+      "backward_fraction": 0.847,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "mx-metal-b24",
+      "build": "metal",
+      "device": "metal",
+      "batch": 24,
+      "step_seconds": 8.514,
+      "targets_per_second": 686.4,
+      "forward_seconds": 0.765,
+      "backward_seconds": 7.278,
+      "optimizer_seconds": 0.1732,
+      "backward_fraction": 0.8549,
+      "build_features": {
+        "cpu_accelerate": true,
+        "metal": true
+      }
+    },
+    {
+      "root": "probe-cpu-b8",
+      "build": "default-contended",
+      "device": "cpu",
+      "batch": 8,
+      "step_seconds": 13.78,
+      "targets_per_second": 136.0,
+      "forward_seconds": 2.26,
+      "backward_seconds": 11.07,
+      "optimizer_seconds": 0.4104,
+      "backward_fraction": 0.8034,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "probe-cpu-b16",
+      "build": "default-contended",
+      "device": "cpu",
+      "batch": 16,
+      "step_seconds": 21.876,
+      "targets_per_second": 176.1,
+      "forward_seconds": 3.965,
+      "backward_seconds": 17.514,
+      "optimizer_seconds": 0.3469,
+      "backward_fraction": 0.8006,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    },
+    {
+      "root": "probe-cpu-b32",
+      "build": "default-contended",
+      "device": "cpu",
+      "batch": 32,
+      "step_seconds": 14.284,
+      "targets_per_second": 537.4,
+      "forward_seconds": 2.814,
+      "backward_seconds": 11.303,
+      "optimizer_seconds": 0.1391,
+      "backward_fraction": 0.7913,
+      "build_features": {
+        "cpu_accelerate": false,
+        "metal": false
+      }
+    }
+  ],
+  "fastest_config": {
+    "device": "cpu on the metal,cpu-accelerate build (CpuDevice uses Apple Accelerate)",
+    "batch": 24,
+    "step_seconds_clean_range": [
+      6.93,
+      7.25
+    ],
+    "targets_per_second_clean_range": [
+      804.2,
+      841.2
+    ],
+    "one_epoch_steps_clean": 13433,
+    "one_epoch_hours_clean": 27.25,
+    "one_epoch_hours_bounded_sustained": 35.57
+  },
+  "bounded_campaign": {
+    "schema": "uor-r4.dialogue-campaign/1",
+    "train_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+    "train_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+    "heldout_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+    "heldout_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+    "model": {
+      "vocab_size": 4096,
+      "width": 576,
+      "read_width": 64,
+      "context": 256,
+      "transport": "quaternion",
+      "seed": 20260926
+    },
+    "optimizer": {
+      "learning_rate": 0.001,
+      "weight_decay": 0.01,
+      "parameter_abs_limit": 1000000.0,
+      "allowed_missing_gradients": []
+    },
+    "data_seed": 20260926,
+    "batch": 24,
+    "context": 256,
+    "total_steps": 100000,
+    "max_process_seconds": 10200,
+    "eval_stride": 4,
+    "eval_max_windows": 512,
+    "eval_batch": 8,
+    "tune_windows": 64,
+    "eval_every": 50,
+    "checkpoint_steps": [],
+    "count_report": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/count-3/dialogue-count.json",
+    "stop_file": null,
+    "trial_scope": "R1c bounded curve: <=3h (10200 s update deadline) response-masked fit at width 576 (5,429,826 params), batch 24 / context 256 = 6144 sampled targets/step, on the chat-v0 train split, with held-out evaluation on the matched 512-window population (stride 4) every 50 steps. Development curve only; not a passing R1 claim."
+  },
+  "bounded_report_summary": {
+    "status": "FIT_COMPLETE",
+    "steps_completed": 1073,
+    "sampled_targets": 6592512,
+    "mean_step_seconds": 8.880358460123956,
+    "phase_totals_seconds": {
+      "backward": 8047.072882912996,
+      "data": 9.19951405200001,
+      "forward": 1286.0300119820008,
+      "loss": 1.7847307430000001,
+      "optimizer": 169.73170460099985
+    },
+    "mean_phase_seconds": {
+      "backward": 7.499601941205029,
+      "data": 0.008573638445479972,
+      "forward": 1.1985368238415666,
+      "loss": 0.0016633091733457596,
+      "optimizer": 0.15818425405498587
+    },
+    "sampled_targets_per_second": 644.5380350119093,
+    "initial_heldout_response_masked_nll_nats": 7.3562929634577,
+    "final_heldout_response_masked_nll_nats": 3.2324347681049694,
+    "heldout_nll_change_nats": -4.123858195352731,
+    "elapsed_seconds": 10228.342338959,
+    "count_reference": {
+      "count_response_masked_nll_nats": 2.4656425541851505,
+      "margin_nats": -0.7667922139198189,
+      "neural_response_masked_nll_nats": 3.2324347681049694,
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/count-3/dialogue-count.json",
+      "population_matches": true,
+      "sha256": "a48e64e9a015aadcc16a27e8505b38511c6014678a1bea351d2802307bf70f09"
+    }
+  },
+  "bounded_curve_heldout": [
+    {
+      "heldout_response_masked_nll_nats": 7.3562929634577,
+      "step": 0,
+      "supervised_targets": 84328,
+      "wall_seconds": 20.110049
+    },
+    {
+      "heldout_response_masked_nll_nats": 6.168276844073514,
+      "step": 50,
+      "supervised_targets": 84328,
+      "wall_seconds": 405.659700542
+    },
+    {
+      "heldout_response_masked_nll_nats": 6.134488010867906,
+      "step": 100,
+      "supervised_targets": 84328,
+      "wall_seconds": 837.649716375
+    },
+    {
+      "heldout_response_masked_nll_nats": 5.978845732203698,
+      "step": 150,
+      "supervised_targets": 84328,
+      "wall_seconds": 1261.578330584
+    },
+    {
+      "heldout_response_masked_nll_nats": 5.677604142588826,
+      "step": 200,
+      "supervised_targets": 84328,
+      "wall_seconds": 1726.539702792
+    },
+    {
+      "heldout_response_masked_nll_nats": 5.14980226992068,
+      "step": 250,
+      "supervised_targets": 84328,
+      "wall_seconds": 2308.541474125
+    },
+    {
+      "heldout_response_masked_nll_nats": 4.767451674353974,
+      "step": 300,
+      "supervised_targets": 84328,
+      "wall_seconds": 2755.975216
+    },
+    {
+      "heldout_response_masked_nll_nats": 4.552959973757141,
+      "step": 350,
+      "supervised_targets": 84328,
+      "wall_seconds": 3202.139372292
+    },
+    {
+      "heldout_response_masked_nll_nats": 4.357580206830953,
+      "step": 400,
+      "supervised_targets": 84328,
+      "wall_seconds": 3606.051034334
+    },
+    {
+      "heldout_response_masked_nll_nats": 4.184162452204858,
+      "step": 450,
+      "supervised_targets": 84328,
+      "wall_seconds": 4039.878522959
+    },
+    {
+      "heldout_response_masked_nll_nats": 4.017774734084514,
+      "step": 500,
+      "supervised_targets": 84328,
+      "wall_seconds": 4469.871811084
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.870311964328347,
+      "step": 550,
+      "supervised_targets": 84328,
+      "wall_seconds": 4924.904323959
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.75361285993603,
+      "step": 600,
+      "supervised_targets": 84328,
+      "wall_seconds": 5383.787554
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.667726614615257,
+      "step": 650,
+      "supervised_targets": 84328,
+      "wall_seconds": 5806.646045584
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.5791508955358835,
+      "step": 700,
+      "supervised_targets": 84328,
+      "wall_seconds": 6350.114030875
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.5132116023350366,
+      "step": 750,
+      "supervised_targets": 84328,
+      "wall_seconds": 6995.666777042
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.4649437709931754,
+      "step": 800,
+      "supervised_targets": 84328,
+      "wall_seconds": 7632.857228959
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.3973781754696644,
+      "step": 850,
+      "supervised_targets": 84328,
+      "wall_seconds": 8111.636674167
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.3473452669474266,
+      "step": 900,
+      "supervised_targets": 84328,
+      "wall_seconds": 8567.794631125
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.3161806823655193,
+      "step": 950,
+      "supervised_targets": 84328,
+      "wall_seconds": 9025.356713584
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.2663918438994584,
+      "step": 1000,
+      "supervised_targets": 84328,
+      "wall_seconds": 9503.561681584
+    },
+    {
+      "heldout_response_masked_nll_nats": 3.2398858750277006,
+      "step": 1050,
+      "supervised_targets": 84328,
+      "wall_seconds": 9996.603659584
+    }
+  ],
+  "bounded_curve_train_blocks": [
+    {
+      "step_from": 1,
+      "step_to": 100,
+      "mean_masked_batch_nll": 6.27897698879242
+    },
+    {
+      "step_from": 101,
+      "step_to": 200,
+      "mean_masked_batch_nll": 5.904553265571594
+    },
+    {
+      "step_from": 201,
+      "step_to": 300,
+      "mean_masked_batch_nll": 5.1254295015335085
+    },
+    {
+      "step_from": 301,
+      "step_to": 400,
+      "mean_masked_batch_nll": 4.550121114253998
+    },
+    {
+      "step_from": 401,
+      "step_to": 500,
+      "mean_masked_batch_nll": 4.208128118515015
+    },
+    {
+      "step_from": 501,
+      "step_to": 600,
+      "mean_masked_batch_nll": 3.8449848771095274
+    },
+    {
+      "step_from": 601,
+      "step_to": 700,
+      "mean_masked_batch_nll": 3.660813376903534
+    },
+    {
+      "step_from": 701,
+      "step_to": 800,
+      "mean_masked_batch_nll": 3.4850473904609682
+    },
+    {
+      "step_from": 801,
+      "step_to": 900,
+      "mean_masked_batch_nll": 3.40059641122818
+    },
+    {
+      "step_from": 901,
+      "step_to": 1000,
+      "mean_masked_batch_nll": 3.307029731273651
+    },
+    {
+      "step_from": 1001,
+      "step_to": 1073,
+      "mean_masked_batch_nll": 3.2006783191471886
+    }
+  ],
+  "count_lines": {
+    "matched_512_window_nll": 2.4656425541851505,
+    "full_heldout_nll": 2.458182523807814,
+    "r1_margin_nats": 0.1,
+    "threshold_nll": 2.3656425541851505
+  },
+  "extrapolation": [
+    {
+      "tag": "all",
+      "n": 21,
+      "first_step": 50.0,
+      "last_step": 1050.0,
+      "last_nll": 3.2398858750277006,
+      "power_floor": {
+        "rss": 1.1000133184771679,
+        "a": 66.92724841223166,
+        "c": -55.02277258846248,
+        "b": 0.02,
+        "projected_steps": 2182.413019742585,
+        "projected_wall_hours": 5.3835027564877045
+      },
+      "log_linear": {
+        "rss": 1.0466462184278873,
+        "a": 11.533208019162693,
+        "b": -1.198064310127173,
+        "projected_steps": 2104.8113162076293,
+        "projected_wall_hours": 5.192077494124739
+      },
+      "exp_floor": {
+        "rss": 0.3113835623460271,
+        "a": 4.089060642687363,
+        "c": 2.9039687794250915,
+        "b": 0.0025065655115054063,
+        "projected_steps": null,
+        "projected_wall_hours": null
+      }
+    },
+    {
+      "tag": "second_half",
+      "n": 11,
+      "first_step": 550.0,
+      "last_step": 1050.0,
+      "last_nll": 3.2398858750277006,
+      "power_floor": {
+        "rss": 0.0002927718911757865,
+        "a": 812.8274031545488,
+        "c": 2.5618072175540365,
+        "b": 1.0194850967162852,
+        "projected_steps": null,
+        "projected_wall_hours": null
+      },
+      "log_linear": {
+        "rss": 0.0038375775038350557,
+        "a": 9.918294281322616,
+        "b": -0.9642210593714927,
+        "projected_steps": 2522.2452638777977,
+        "projected_wall_hours": 6.221789463217994
+      },
+      "exp_floor": {
+        "rss": 0.0004001821939631183,
+        "a": 3.4698301646566314,
+        "c": 2.9876951930140487,
+        "b": 0.0025065655115054063,
+        "projected_steps": null,
+        "projected_wall_hours": null
+      }
+    },
+    {
+      "tag": "last_8",
+      "n": 8,
+      "first_step": 700.0,
+      "last_step": 1050.0,
+      "last_nll": 3.2398858750277006,
+      "power_floor": {
+        "rss": 0.0002442064962747139,
+        "a": 241.5050790264322,
+        "c": 2.3416307606837403,
+        "b": 0.8047909495932714,
+        "projected_steps": 94046.64123558986,
+        "projected_wall_hours": 231.99107948408692
+      },
+      "log_linear": {
+        "rss": 0.0004778197293849233,
+        "a": 9.134383932840498,
+        "b": -0.8489847070839178,
+        "projected_steps": 2900.8187341905987,
+        "projected_wall_hours": 7.155641718737652
+      },
+      "exp_floor": {
+        "rss": 0.0002294832513833904,
+        "a": 2.964902898763196,
+        "c": 2.9364195325064233,
+        "b": 0.0021796221839177447,
+        "projected_steps": null,
+        "projected_wall_hours": null
+      }
+    }
+  ],
+  "extrapolation_note": "The early transient makes the all-point fit degenerate. On the bent second half the power-law floor is 2.562 (>= threshold, no crossing) and the exponential floor is 2.988; the last-8 power-law floor is 2.342 with a crossing at 94,047 steps (232 h). Only the floor-less log-linear form projects inside the budget (6.2-7.2 h), and it is the least physically appropriate model because it lets NLL fall without bound.",
+  "decision": {
+    "predeclared_rule": "Full R1 is justified only if the primary power-law-with-floor fit projects the threshold 2.3656425541851505 within <=12 h at the measured fastest clean rate; a floor at/above the threshold or a projection beyond the budget means a vehicle change.",
+    "in_run_result": "The bounded run did not reach the threshold: held-out response-masked NLL 3.232435 at 6,592,512 sampled targets (step 1073, 7.99% of one epoch), 0.7668 nats above count.",
+    "outcome": "NOT JUSTIFIED. Every identified floor model saturates at or above the threshold (2.34-3.0, bracketing the count itself); the optimistic crossing is 232 h and the realistic estimate is unreachable. The vehicle does not reach the R1 margin within a feasible budget.",
+    "recommendation": "Change the R1 vehicle. The floor clustering at ~2.4-3.0 shows the blocker is not only exposure: at width 576 the graph converges toward the count level, not 0.10 nats below it. Address both the sequential op-count bottleneck (84.6% of step time, one busy core) and capacity. Ranked options with projections in the result document."
+  },
+  "serving_width_gap": "The retained integer loader uor-r4-integer::JointConfig::validate accepts width 128 or 256 only. The trained width-576 artifact is a floating training checkpoint and is not loadable by the current serving loader; R3 needs a serving-side width extension before this candidate can be quantized. The serving crate was not modified.",
+  "artifact_hashes": {
+    "bounded-1/dialogue-fit.json": "5d5cdbb79005ca1db3d94d41809255b3af2607e5d1b3c32324c44e22a33fc7c7",
+    "bounded-1/heldout-curve.jsonl": "4695676bb6d0c9c3ce3e665ddf6e884febffe8d3bbc21e8bc3bb6a18341d4fb6",
+    "bounded-1/learning-curve.jsonl": "52aa8e55fa426cd827beb22727fa3f8715e8034633f177435bcbac5ca81fb96f",
+    "bounded-1/parameters.f32": "7f0938af379cd4a6037bd723b57ca5caeedde087cc0ad6799c087efc94dc02e2",
+    "bounded-1/manifest_blake3": [
+      {
+        "blake3": "8c07e21b79878e1713489a4e18e9fb58badb5ce12936f94609986a8c8f1c1937",
+        "bytes": 449,
+        "path": "attempt.json"
+      },
+      {
+        "blake3": "f3c5cee8a8e20ea60fc93ac20f3ee11e53c2c12a35783c2182aeb55021749056",
+        "bytes": 12689,
+        "path": "dialogue-fit.json"
+      },
+      {
+        "blake3": "1aa6be007b3c78a9ec05a4717691eea443a7084dde1809079194a95a14fa85c2",
+        "bytes": 2696,
+        "path": "heldout-curve.jsonl"
+      },
+      {
+        "blake3": "ba04c4f39734c3f6bc719379802cbdf325a576d2dd6a002d393e097737d5b074",
+        "bytes": 1460861,
+        "path": "learning-curve.jsonl"
+      },
+      {
+        "blake3": "f15906cfb0f4c6b8bcb3a9aff98fa6bc89927befe27e91795cc48f189394a774",
+        "bytes": 21719304,
+        "path": "parameters.f32"
+      }
+    ]
+  },
+  "exact_commands": [
+    "UOR_BUILD_SOURCE_COMMIT=a212c45de43ca47de3aab5f24485f31cd697240a cargo build --release -p uor-r4-training --offline   # default features",
+    "UOR_BUILD_SOURCE_COMMIT=a212c45de43ca47de3aab5f24485f31cd697240a cargo build --release -p uor-r4-training --offline --features metal,cpu-accelerate",
+    "cargo test --offline -p uor-r4-training --lib dialogue::   # 5/5 pass",
+    "uor-r4-training dialogue-fit <probe>.json <new-root> {cpu|metal}",
+    "uor-r4-training dialogue-fit bounded.json bounded-1 cpu   # <3 h bounded curve, metal,cpu-accelerate binary",
+    "uor-r4-training verify bounded-1"
+  ],
+  "cost": {
+    "release_build_default": "33 s incremental (shared target cache)",
+    "release_build_metal_accelerate": "3 m 13 s incremental",
+    "focused_tests": "~17 s executed (lib test binary warm)",
+    "throughput_probes": "~22 short probe fits, each 8 optimizer steps plus tiny 16-window eval; about 25 min total wall",
+    "bounded_curve": "10,228 s wall (10,200 s update deadline + final 512-window evaluation + parameter save + seal)",
+    "peak_rss_bounded_run": "~5.6 GiB host RSS (batch 24, width 576)",
+    "new_storage": "bounded parameters 21.7 MB + curve JSON ~1.5 MB + probes < 100 MB; count model 402 MB unchanged",
+    "external_paid_compute": "none; no CUDA; serving crate untouched"
+  },
+  "limitations": [
+    "Development curve only, 7.99% of one epoch; not an R1 pass and not a language, chat, geometry, integer or energy result.",
+    "Held-out population is the matched 512-window spread (84,328 supervised targets); the full-heldout count number is reported only for reference.",
+    "Every probe and the bounded run share the host with other lab jobs at times; headline throughput rows were re-measured idle, but sustained step time (8.88 s) is ~25% slower than the short-burst clean rate (6.93-7.25 s).",
+    "Extrapolation across power-law, log-linear and exponential families disagrees; the floor is identified only weakly. The decision relies on all identified floor models agreeing that the threshold is not cleared within budget.",
+    "The training crate change is uncommitted; the lead commits. Cross-backend bitwise training identity is not claimed (Accelerate BLAS changes float summation)."
+  ],
+  "next_decision": "Do not launch a full width-576 full-R1 fit. Recommend the vehicle change and its bounded first step in docs/integration/chat-r1c-result-2026-09-25.md."
+}

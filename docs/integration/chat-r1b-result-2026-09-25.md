@@ -140,6 +140,14 @@ the binding constraint at this scale.
 
 ## 7. Full R1 fit specification (for the lead to launch)
 
+> **Superseded throughput (2026-09-26).** The 61–166 h/epoch and 137–374 targets/s figures below were
+> batch-8 measurements taken while the concurrent D8 cycle loaded the host. The [R1c throughput
+> diagnosis](chat-r1c-result-2026-09-25.md#1-throughput-diagnosis) re-measured the same width 576 on an
+> idle host: the fastest clean configuration is CPU + Apple Accelerate at batch 24 → 804–841
+> targets/s (7.0 s/step), 27.3 h/epoch clean and 35.6 h/epoch sustained. R1c also shows the bounded
+> curve saturating around the count level and does not justify the full fit. The table below is kept
+> at its original artifact/budget scope.
+
 Predeclared from the measured throughput. `batch 8 × context 256 = 2048` sampled targets/step;
 one epoch over the 82,529,690-token train split is **40,298 steps**.
 
