@@ -2895,6 +2895,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "uor-r4-simd",
  "uor-r4-tokenizer",
 ]
 
@@ -2950,6 +2951,10 @@ dependencies = [
  "uor-r4-core",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "uor-r4-simd"
+version = "0.1.0"
 
 [[package]]
 name = "uor-r4-tokenizer"

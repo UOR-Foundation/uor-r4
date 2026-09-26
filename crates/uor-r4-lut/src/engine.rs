@@ -2,38 +2,61 @@
 
 use std::path::Path;
 
-use crate::format::{Artifact, MatrixSpec, Numerics, Shape};
+use uor_r4_simd::{Backend, Tables};
+
+use crate::format::{Artifact, Header, MatrixSpec, Numerics, Shape};
 use crate::kernels::{
-    build_multiples, dequant_row, exp_neg, gemv, quantize16, quantize8, rms_norm, rope, row_min_de,
-    shift, silu, to_exp_i32, Act16, MatrixView,
+    dequant_row, exp_neg, gemv, quantize16, quantize8, rms_norm, rope, shift, silu, to_exp_i32,
+    Act16, MatrixView, Packed,
 };
 use crate::{format_error, invalid, Result, RESIDUAL_EXP};
 
 /// Exponent of attention scores inside the softmax (`2^-12` nats).
 const SCORE_EXP: i32 = -12;
 
-struct Matrix {
+/// The row-major embedding, read one row per token.
+struct Embedding {
     spec: MatrixSpec,
-    row_min_de: Vec<u8>,
+    nibbles: Vec<u8>,
+    scales: Vec<u8>,
+}
+
+impl Embedding {
+    fn view(&self) -> MatrixView<'_> {
+        MatrixView {
+            rows: self.spec.rows,
+            cols: self.spec.cols,
+            exp_base: self.spec.exp_base,
+            nibbles: &self.nibbles,
+            scales: &self.scales,
+        }
+    }
 }
 
 struct Layer {
-    q: Matrix,
-    k: Matrix,
-    v: Matrix,
-    o: Matrix,
-    gate: Matrix,
-    up: Matrix,
-    down: Matrix,
+    q: Packed,
+    k: Packed,
+    v: Packed,
+    o: Packed,
+    gate: Packed,
+    up: Packed,
+    down: Packed,
 }
 
-/// A validated artifact ready for integer serving.
+/// A validated artifact repacked for integer serving. The artifact bytes are
+/// released after loading; the header and its SHA-256 are kept.
 pub struct Model {
-    artifact: Artifact,
+    header: Header,
+    sha256: String,
+    backend: Backend,
+    threads: usize,
+    /// Worker pool for more than one thread; a decoding step runs inside it,
+    /// so its parallel matrix products cost no cross-thread hand-off.
+    pool: Option<rayon::ThreadPool>,
     shape: Shape,
     numerics: Numerics,
-    embed: Matrix,
-    head: Matrix,
+    embed: Embedding,
+    head: Packed,
     layers: Vec<Layer>,
     exp_table: Vec<u32>,
     silu_table: Vec<i32>,
@@ -50,7 +73,7 @@ impl Model {
         let shape = artifact.header.shape.clone();
         let numerics = artifact.header.numerics.clone();
         let kv_rows = shape.kv_heads * shape.head_dim;
-        let matrix = |name: &str, rows: usize, cols: usize| -> Result<Matrix> {
+        let spec = |name: &str, rows: usize, cols: usize| -> Result<MatrixSpec> {
             let spec = artifact.matrix(name)?.clone();
             if spec.rows != rows || spec.cols != cols {
                 return Err(format_error(format!(
@@ -58,23 +81,37 @@ impl Model {
                     spec.rows, spec.cols
                 )));
             }
-            let row_min_de = row_min_de(rows, cols, artifact.section(spec.scales));
-            Ok(Matrix { spec, row_min_de })
+            Ok(spec)
+        };
+        let packed = |name: &str, rows: usize, cols: usize| -> Result<Packed> {
+            let spec = spec(name, rows, cols)?;
+            Packed::new(&MatrixView {
+                rows,
+                cols,
+                exp_base: spec.exp_base,
+                nibbles: artifact.section(spec.nibbles),
+                scales: artifact.section(spec.scales),
+            })
         };
         let mut layers = Vec::with_capacity(shape.layers);
         for l in 0..shape.layers {
             layers.push(Layer {
-                q: matrix(&format!("l{l}.q"), shape.width, shape.width)?,
-                k: matrix(&format!("l{l}.k"), kv_rows, shape.width)?,
-                v: matrix(&format!("l{l}.v"), kv_rows, shape.width)?,
-                o: matrix(&format!("l{l}.o"), shape.width, shape.width)?,
-                gate: matrix(&format!("l{l}.gate"), shape.ffn, shape.width)?,
-                up: matrix(&format!("l{l}.up"), shape.ffn, shape.width)?,
-                down: matrix(&format!("l{l}.down"), shape.width, shape.ffn)?,
+                q: packed(&format!("l{l}.q"), shape.width, shape.width)?,
+                k: packed(&format!("l{l}.k"), kv_rows, shape.width)?,
+                v: packed(&format!("l{l}.v"), kv_rows, shape.width)?,
+                o: packed(&format!("l{l}.o"), shape.width, shape.width)?,
+                gate: packed(&format!("l{l}.gate"), shape.ffn, shape.width)?,
+                up: packed(&format!("l{l}.up"), shape.ffn, shape.width)?,
+                down: packed(&format!("l{l}.down"), shape.width, shape.ffn)?,
             });
         }
-        let embed = matrix("embed", shape.vocab, shape.width)?;
-        let head = matrix("head", shape.vocab, shape.width)?;
+        let embed_spec = spec("embed", shape.vocab, shape.width)?;
+        let embed = Embedding {
+            nibbles: artifact.section(embed_spec.nibbles).to_vec(),
+            scales: artifact.section(embed_spec.scales).to_vec(),
+            spec: embed_spec,
+        };
+        let head = packed("head", shape.vocab, shape.width)?;
         let exp_table = artifact.table_u32("exp")?;
         let silu_table = artifact.table_i32("silu")?;
         let cos = artifact.table_i16("rope_cos")?;
@@ -94,7 +131,11 @@ impl Model {
             ));
         }
         Ok(Self {
-            artifact,
+            header: artifact.header.clone(),
+            sha256: artifact.sha256.clone(),
+            backend: Backend::detect(),
+            threads: 1,
+            pool: None,
             shape,
             numerics,
             embed,
@@ -113,22 +154,52 @@ impl Model {
 
     /// SHA-256 of the artifact bytes.
     pub fn artifact_sha256(&self) -> &str {
-        &self.artifact.sha256
+        &self.sha256
     }
 
     pub fn source(&self) -> &serde_json::Value {
-        &self.artifact.header.source
+        &self.header.source
     }
 
-    fn view<'a>(&'a self, m: &'a Matrix) -> MatrixView<'a> {
-        MatrixView {
-            rows: m.spec.rows,
-            cols: m.spec.cols,
-            exp_base: m.spec.exp_base,
-            nibbles: self.artifact.section(m.spec.nibbles),
-            scales: self.artifact.section(m.spec.scales),
-            row_min_de: &m.row_min_de,
+    /// The vector backend of the weight kernels (detected at load).
+    pub fn backend(&self) -> Backend {
+        self.backend
+    }
+
+    pub fn threads(&self) -> usize {
+        self.threads
+    }
+
+    /// Use `threads` worker threads (1: none) for large matrix products;
+    /// every thread count computes the same integers.
+    pub fn set_threads(&mut self, threads: usize) -> Result<()> {
+        if threads == 0 {
+            return Err(invalid("threads must be positive"));
         }
+        self.pool = if threads == 1 {
+            None
+        } else {
+            Some(
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .map_err(|e| invalid(format!("thread pool: {e}")))?,
+            )
+        };
+        self.threads = threads;
+        Ok(())
+    }
+
+    /// Select a backend; every backend computes the same integers.
+    pub fn set_backend(&mut self, backend: Backend) -> Result<()> {
+        if !backend.available() {
+            return Err(invalid(format!(
+                "the {} backend is not available on this CPU",
+                backend.name()
+            )));
+        }
+        self.backend = backend;
+        Ok(())
     }
 
     /// A fresh decoding session with an empty cache.
@@ -143,7 +214,7 @@ impl Model {
             value_exp: vec![Vec::new(); s.layers],
             x: vec![0; s.width],
             norm: Act16::default(),
-            table: Vec::new(),
+            tables: Tables::default(),
             scratch: Vec::new(),
             q: vec![0; s.width],
             k: vec![0; s.kv_heads * s.head_dim],
@@ -173,7 +244,7 @@ pub struct Session<'m> {
     value_exp: Vec<Vec<i32>>,
     x: Vec<i32>,
     norm: Act16,
-    table: Vec<i32>,
+    tables: Tables,
     scratch: Vec<i64>,
     q: Vec<i32>,
     k: Vec<i32>,
@@ -214,6 +285,16 @@ impl Session<'_> {
     /// (value `v` means `v * 2^-16`).
     pub fn step(&mut self, token: u32) -> Result<&[i32]> {
         let model = self.model;
+        match &model.pool {
+            Some(pool) => pool.install(|| self.advance(token))?,
+            None => self.advance(token)?,
+        }
+        Ok(&self.logits)
+    }
+
+    fn advance(&mut self, token: u32) -> Result<()> {
+        let model = self.model;
+        let parallel = model.pool.is_some();
         let s = &model.shape;
         let n = &model.numerics;
         if token as usize >= s.vocab {
@@ -225,7 +306,7 @@ impl Session<'_> {
         let (hd, group) = (s.head_dim, s.heads / s.kv_heads);
         let position = self.position;
         dequant_row(
-            &model.view(&model.embed),
+            &model.embed.view(),
             token as usize,
             &mut self.x,
             RESIDUAL_EXP,
@@ -239,28 +320,34 @@ impl Session<'_> {
                 &mut self.scratch,
                 &mut self.norm,
             );
-            build_multiples(&self.norm.values, &mut self.table);
+            self.tables.build(&self.norm.values)?;
             gemv(
-                &model.view(&layer.q),
-                &self.table,
+                &layer.q,
+                model.backend,
+                parallel,
+                &self.tables,
                 self.norm.exp,
                 &mut self.q,
                 RESIDUAL_EXP,
-            );
+            )?;
             gemv(
-                &model.view(&layer.k),
-                &self.table,
+                &layer.k,
+                model.backend,
+                parallel,
+                &self.tables,
                 self.norm.exp,
                 &mut self.k,
                 RESIDUAL_EXP,
-            );
+            )?;
             gemv(
-                &model.view(&layer.v),
-                &self.table,
+                &layer.v,
+                model.backend,
+                parallel,
+                &self.tables,
                 self.norm.exp,
                 &mut self.v,
                 RESIDUAL_EXP,
-            );
+            )?;
             for head in self.q.chunks_exact_mut(hd) {
                 rope(head, position, &model.cos, &model.sin, n.rope_q);
             }
@@ -338,14 +425,16 @@ impl Session<'_> {
             self.scratch
                 .extend(self.head_out.iter().map(|v| i64::from(*v)));
             quantize16(&self.scratch, RESIDUAL_EXP, &mut self.norm);
-            build_multiples(&self.norm.values, &mut self.table);
+            self.tables.build(&self.norm.values)?;
             gemv(
-                &model.view(&layer.o),
-                &self.table,
+                &layer.o,
+                model.backend,
+                parallel,
+                &self.tables,
                 self.norm.exp,
                 &mut self.proj,
                 RESIDUAL_EXP,
-            );
+            )?;
             for (x, p) in self.x.iter_mut().zip(&self.proj) {
                 *x = x.saturating_add(*p);
             }
@@ -357,35 +446,41 @@ impl Session<'_> {
                 &mut self.scratch,
                 &mut self.norm,
             );
-            build_multiples(&self.norm.values, &mut self.table);
+            self.tables.build(&self.norm.values)?;
             gemv(
-                &model.view(&layer.gate),
-                &self.table,
+                &layer.gate,
+                model.backend,
+                parallel,
+                &self.tables,
                 self.norm.exp,
                 &mut self.gate,
                 RESIDUAL_EXP,
-            );
+            )?;
             gemv(
-                &model.view(&layer.up),
-                &self.table,
+                &layer.up,
+                model.backend,
+                parallel,
+                &self.tables,
                 self.norm.exp,
                 &mut self.up,
                 RESIDUAL_EXP,
-            );
+            )?;
             self.scratch.clear();
             for (g, u) in self.gate.iter().zip(&self.up) {
                 let a = silu(*g, &model.silu_table, n.silu_step_log2, n.silu_range_log2);
                 self.scratch.push(i64::from(a) * i64::from(*u));
             }
             quantize16(&self.scratch, 2 * RESIDUAL_EXP, &mut self.hidden);
-            build_multiples(&self.hidden.values, &mut self.table);
+            self.tables.build(&self.hidden.values)?;
             gemv(
-                &model.view(&layer.down),
-                &self.table,
+                &layer.down,
+                model.backend,
+                parallel,
+                &self.tables,
                 self.hidden.exp,
                 &mut self.proj,
                 RESIDUAL_EXP,
-            );
+            )?;
             for (x, p) in self.x.iter_mut().zip(&self.proj) {
                 *x = x.saturating_add(*p);
             }
@@ -397,15 +492,17 @@ impl Session<'_> {
             &mut self.scratch,
             &mut self.norm,
         );
-        build_multiples(&self.norm.values, &mut self.table);
+        self.tables.build(&self.norm.values)?;
         gemv(
-            &model.view(&model.head),
-            &self.table,
+            &model.head,
+            model.backend,
+            parallel,
+            &self.tables,
             self.norm.exp,
             &mut self.logits,
             RESIDUAL_EXP,
-        );
+        )?;
         self.position += 1;
-        Ok(&self.logits)
+        Ok(())
     }
 }

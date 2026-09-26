@@ -10,7 +10,8 @@
 //! - learned weight maps (projections, MLP, embedding, output head) execute
 //!   without a multiplier: 4-bit weights in groups of [`GROUP`] with scales of
 //!   the form `(16 + m) 2^(e - 4)`, applied through per-activation tables of
-//!   multiples (one table read and one add per weight) and shift-add scales;
+//!   multiples read sixteen rows at a time by the audited vector kernels of
+//!   `uor-r4-simd` (table reads and additions per weight) and shift-add scales;
 //! - products of two runtime values or of a runtime value and a fixed
 //!   non-learned constant (attention scores, value mixing, gating,
 //!   normalization, RoPE) use the hardware integer multiplier.
@@ -23,6 +24,8 @@
 pub mod engine;
 pub mod format;
 pub mod kernels;
+
+pub use uor_r4_simd::Backend;
 
 use std::fmt;
 
@@ -38,6 +41,7 @@ pub enum LutError {
     Json(serde_json::Error),
     Format(String),
     Invalid(String),
+    Kernel(uor_r4_simd::SimdError),
 }
 
 impl fmt::Display for LutError {
@@ -47,6 +51,7 @@ impl fmt::Display for LutError {
             Self::Json(error) => write!(f, "artifact header: {error}"),
             Self::Format(message) => write!(f, "artifact format: {message}"),
             Self::Invalid(message) => write!(f, "invalid request: {message}"),
+            Self::Kernel(error) => write!(f, "kernel: {error}"),
         }
     }
 }
@@ -56,6 +61,12 @@ impl std::error::Error for LutError {}
 impl From<std::io::Error> for LutError {
     fn from(error: std::io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+impl From<uor_r4_simd::SimdError> for LutError {
+    fn from(error: uor_r4_simd::SimdError) -> Self {
+        Self::Kernel(error)
     }
 }
 

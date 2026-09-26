@@ -4,9 +4,9 @@
 //! ```text
 //! lut-tool mode=export model=DIR out=FILE.lut [max_positions=2048]
 //! lut-tool mode=dequantize model=DIR lut=FILE.lut out=NEW_DIR
-//! lut-tool mode=bench lut=FILE.lut [tokens=64]
+//! lut-tool mode=bench lut=FILE.lut [tokens=64] [threads=N] [backend=portable|avx2|neon]
 //! lut-tool mode=fidelity model=DIR lut=FILE.lut tokens=X.u16 out=NEW_ROOT
-//!     [windows=8] [time=128] [device=cpu|metal]
+//!     [windows=8] [time=128] [threads=N] [device=cpu|metal]
 //! ```
 //!
 //! `export` folds the RMSNorm gains into the following weights, quantizes every
@@ -29,6 +29,7 @@ use candle_core::Device;
 use serde_json::json;
 use uor_r4_core::report_output;
 use uor_r4_lut::engine::Model;
+use uor_r4_lut::Backend;
 use uor_r4_training::kappa_llama::{load_checkpoint, KappaLlama, ScoreKind, Trainable};
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::{Result, TrainingError};
@@ -169,7 +170,22 @@ fn dequantize(args: &Args) -> Result<()> {
 fn bench(args: &Args) -> Result<()> {
     let lut = PathBuf::from(args.required("lut")?);
     let tokens: usize = args.number("tokens", 64)?;
-    let model = Model::load(&lut).map_err(|e| invalid(e.to_string()))?;
+    let mut model = Model::load(&lut).map_err(|e| invalid(e.to_string()))?;
+    if let Some(name) = args.text("backend") {
+        let backend = match name {
+            "portable" => Backend::Portable,
+            "avx2" => Backend::Avx2,
+            "neon" => Backend::Neon,
+            other => return Err(invalid(format!("unknown backend {other}"))),
+        };
+        model
+            .set_backend(backend)
+            .map_err(|e| invalid(e.to_string()))?;
+    }
+    let threads: usize = args.number("threads", default_threads())?;
+    model
+        .set_threads(threads)
+        .map_err(|e| invalid(e.to_string()))?;
     let vocab = model.shape().vocab as u32;
     if tokens == 0 || tokens > model.shape().max_positions {
         return Err(invalid("tokens must be positive and fit max_positions"));
@@ -185,10 +201,15 @@ fn bench(args: &Args) -> Result<()> {
     let report = json!({
         "lut": lut, "lut_sha256": model.artifact_sha256(), "tokens": tokens,
         "seconds": seconds, "tokens_per_second": tokens as f64 / seconds,
-        "threads": std::env::var("RAYON_NUM_THREADS").unwrap_or_else(|_| "default".into()),
+        "threads": model.threads(),
+        "backend": model.backend().name(),
     });
     println!("{report}");
     Ok(())
+}
+
+fn default_threads() -> usize {
+    std::thread::available_parallelism().map_or(1, usize::from)
 }
 
 fn read_tokens(path: &Path, vocab: usize) -> Result<Vec<u32>> {
@@ -230,6 +251,7 @@ struct FidelitySettings {
     tokens: PathBuf,
     windows: usize,
     time: usize,
+    threads: usize,
     device: Device,
 }
 
@@ -240,14 +262,17 @@ fn fidelity_settings(args: &Args) -> Result<FidelitySettings> {
         tokens: PathBuf::from(args.required("tokens")?),
         windows: args.number("windows", 8)?,
         time: args.number("time", 128)?,
+        threads: args.number("threads", default_threads())?,
         device: match args.text("device").unwrap_or("cpu") {
             "cpu" => Device::Cpu,
             "metal" => Device::new_metal(0)?,
             other => return Err(invalid(format!("device must be cpu or metal, not {other}"))),
         },
     };
-    if settings.windows == 0 || settings.time < 2 {
-        return Err(invalid("windows must be positive and time >= 2"));
+    if settings.windows == 0 || settings.time < 2 || settings.threads == 0 {
+        return Err(invalid(
+            "windows and threads must be positive and time >= 2",
+        ));
     }
     Ok(settings)
 }
@@ -263,7 +288,10 @@ fn fidelity(settings: &FidelitySettings, out: &Path) -> Result<()> {
         Trainable::Scalars,
         &settings.device,
     )?;
-    let model = Model::load(&settings.lut).map_err(|e| invalid(e.to_string()))?;
+    let mut model = Model::load(&settings.lut).map_err(|e| invalid(e.to_string()))?;
+    model
+        .set_threads(settings.threads)
+        .map_err(|e| invalid(e.to_string()))?;
     if model.shape().vocab != vocab || model.shape().max_positions < settings.time {
         return Err(invalid(
             "artifact and checkpoint disagree, or the artifact is too short",
@@ -336,7 +364,9 @@ fn fidelity(settings: &FidelitySettings, out: &Path) -> Result<()> {
         "max_abs_log_probability_difference": max_diff,
         "integer_tokens_per_second": n / int_seconds.max(1e-9),
         "float_tokens_per_second": n / float_seconds.max(1e-9),
-        "units": "nats per token; integer engine single-threaded portable kernels",
+        "units": "nats per token",
+        "integer_backend": model.backend().name(),
+        "integer_threads": model.threads(),
     });
     eprintln!("{report}");
     fs::write(

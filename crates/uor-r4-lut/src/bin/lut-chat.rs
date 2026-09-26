@@ -1,13 +1,15 @@
 //! Chat with an integer-served model (no floating point, multiplier-free weight maps).
 //!
 //! ```text
-//! lut-chat lut=MODEL.lut tokenizer=DIR/tokenizer.json [prompt=TEXT] [system=TEXT] [tokens=256]
+//! lut-chat lut=MODEL.lut tokenizer=DIR/tokenizer.json [prompt=TEXT] [system=TEXT]
+//!     [tokens=256] [threads=N] [raw=true]
 //! ```
 //!
 //! With `prompt=` it answers one turn; otherwise it reads one user turn per line
 //! from standard input and keeps the conversation in the session's key/value
 //! cache. Decoding is greedy. The prompt uses SmolLM2's chat template, including
-//! its default system turn.
+//! its default system turn; `raw=true` instead continues the given text as is
+//! (for base models), stopping only at the token limit.
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, Write};
@@ -66,24 +68,37 @@ fn main() -> Result<()> {
     let tokenizer_path = PathBuf::from(args.get("tokenizer").ok_or("missing tokenizer=")?);
     let system = args.get("system").map_or(DEFAULT_SYSTEM, String::as_str);
     let limit: usize = args.get("tokens").map_or(Ok(256), |v| v.parse())?;
-    let model = Model::load(&lut)?;
+    let threads: usize = match args.get("threads") {
+        Some(v) => v.parse()?,
+        None => std::thread::available_parallelism().map_or(1, usize::from),
+    };
+    let raw = args.get("raw").is_some_and(|v| v == "true");
+    let mut model = Model::load(&lut)?;
+    model.set_threads(threads)?;
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&std::fs::read(&tokenizer_path)?)
         .ok_or("tokenizer.json is not a byte-level BPE tokenizer")?;
     let stop_ids = tokenizer.encode("<|im_end|>");
-    let [stop] = stop_ids[..] else {
-        return Err("<|im_end|> is not a single token".into());
+    let stop = match stop_ids[..] {
+        [stop] => stop,
+        _ if raw => u32::MAX,
+        _ => return Err("<|im_end|> is not a single token".into()),
     };
     eprintln!(
-        "model {} ({} layers, width {}), artifact sha256 {}",
+        "model {} ({} layers, width {}), artifact sha256 {}, {} kernels, {} threads",
         lut.display(),
         model.shape().layers,
         model.shape().width,
-        model.artifact_sha256()
+        model.artifact_sha256(),
+        model.backend().name(),
+        model.threads()
     );
     let mut session = model.session();
     let mut first = true;
     let mut ask = |session: &mut Session<'_>, message: &str| -> Result<()> {
         let render = |with_system: bool| {
+            if raw {
+                return tokenizer.encode(message);
+            }
             let mut text = String::new();
             if with_system {
                 text.push_str(&format!("<|im_start|>system\n{system}<|im_end|>\n"));
