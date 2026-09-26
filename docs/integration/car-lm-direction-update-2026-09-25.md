@@ -98,3 +98,8 @@ external compute. Runs share the machine with the D8 cycle; one cargo process at
    permissive public sources; any source with an unverified or non-permissive licence must not
    have its content fetched — report it for an owner decision instead. Local construction from
    the existing TinyStories corpus remains available and preferred where sufficient.
+3. **Share-alike data is permitted for this local research workstream.** The owner approved
+   fetching and using Dolly (CC-BY-SA-3.0), TinyStoriesInstruct (CDLA-Sharing-1.0) and the
+   existing local TinyStories corpus, provided licence obligations (attribution and share-alike
+   where applicable) are recorded in the dataset receipts for any downstream use. Strictly
+   permissive sources remain preferred where they suffice.
