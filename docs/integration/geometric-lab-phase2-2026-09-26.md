@@ -179,16 +179,32 @@ Stand-in, data objective, 600 steps. Validation bits per byte:
 
 ## 6. Owner decisions
 
-1. **Hugging Face access.** Allow Hugging Face (huggingface.co and its download hosts) in this environment, or keep real-checkpoint work on the M1.
-2. **"No transformer backbone at serving", before M2.** The likeliest near-term chat model is a 4-bit, integer-served SmolLM2 whose heads may stay dot. Options:
-   - (a) accept a converted backbone and restate the rule as "no dense float matmul and no multiplier at serving", with geometric memory and index layers added;
-   - (b) keep the rule and pursue a native model, which reaches narrow chat at M1 budgets;
-   - (c) take (a) now as the chat vehicle, while native geometric components replace parts of it as they prove themselves.
-3. **Paid compute.** Ternary quantization-aware training is about 1.3 H100-days per attempt; 4-bit is about one GPU-hour plus overhead.
-4. **SIMD.** One small audited SIMD crate with `unsafe` for the NEON table kernels, outside the frozen `forbid(unsafe_code)` crates? Without it the weight path stays 12–16× slower (*Measured*, x86 ratios).
-5. **Multipliers for activation products.** The systems reviewer found that tables cost about 1.8× a hardware multiply for element-wise products, and that the multiplier's energy share is negligible. D0-b covers weight maps; attention q·k, gating and value mixing are activation-by-activation products. Allow a hardware integer multiply there?
-6. **D5.** Are memory layers addressed by fixed geometric codes allowed? That is sparse parameter access without a learned gate.
-7. **Evaluation.** Judge geometry by event-level metrics (long-range copies, entity and scope resolution, long-memory recall) alongside mean NLL?
+Answered by the owner on 2026-09-26 and recorded as [D10](DECISIONS.md) on this branch:
+
+- **Backbone.** Option (a): the converted backbone is accepted, and the rule is restated as no floating point, no dense float matmul, and no multiplier in learned weight maps. D5 is unchanged, so the dense backbone is reported as the interim chat vehicle, not the terminal architecture.
+- **SIMD.** The faster option: one audited SIMD crate may use `unsafe` for NEON kernels.
+- **Multipliers.** Chosen for runtime speed: hardware integer multiplication is allowed for products of runtime values or fixed non-learned constants. Learned weight maps stay multiplier-free.
+
+Paid compute, which the owner asked to size (not authorized). The estimate is *Derived*:
+- **Workload.** Distilling SmolLM2-360M into a quantized 135M costs about 1.5 GFLOP per training token (6·135M for the student plus 2·362M for the teacher).
+- **Throughput.** An H100 at 20–40% of its 989 TFLOP/s bf16 peak, which is typical for small models.
+- **Prices.** *Literature*, public listings, August–September 2026: H100 80GB about $1.5–2.2 per hour on marketplaces (Vast.ai), $2.0–3.3 on RunPod, about $4 on Lambda, and $4–11 on the large clouds.
+
+| Run | Tokens | H100 hours | Cost at $1.5–4/h |
+|---|---:|---:|---:|
+| 4-bit QAT, first pass | 1B | 1–2 | $2–8 |
+| 4-bit QAT, near saturation (ParetoQ-scale) | 10B | 11–21 | $17–84 |
+| Ternary QAT, one attempt | 30B | 32–64 | $48–256 |
+
+- A 360M student costs about 2.7× these figures.
+- Setup, evaluation and failed attempts add perhaps 1.5–2×.
+- Post-training 4-bit quantization costs nothing and runs on the M1 in minutes. It comes first; QAT is needed only if its measured loss is too large.
+- Ternary is worth buying only after M1c shows its energy advantage on the real machine.
+
+Still open:
+1. Hugging Face access in this environment. The real checkpoints are on the M1 either way.
+2. D5: memory layers addressed by fixed geometric codes (sparse parameter access without a learned gate).
+3. Evaluation by event-level metrics alongside mean NLL.
 
 ## 7. Cost of this phase
 
