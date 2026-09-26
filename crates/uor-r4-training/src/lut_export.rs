@@ -653,6 +653,19 @@ pub fn export_llama(
     ))
 }
 
+/// The sealed table of [`uor_r4_lut::kernels::arcosh1p_q24`]:
+/// `round(2^24 arcosh(1 + g 2^-32))` at every grid point `g`, with
+/// `arcosh(1 + u) = log1p(u + sqrt(u (u + 2)))` for precision near 0.
+pub fn arcosh_table() -> Vec<u32> {
+    use uor_r4_lut::kernels::{arcosh_grid, ARCOSH_FRACTION_BITS, ARCOSH_TABLE_LEN};
+    (0..ARCOSH_TABLE_LEN)
+        .map(|i| {
+            let u = arcosh_grid(i) as f64 * 2f64.powi(-(ARCOSH_FRACTION_BITS as i32));
+            ((u + (u * (u + 2.0)).sqrt()).ln_1p() * 2f64.powi(24)).round() as u32
+        })
+        .collect()
+}
+
 /// Float values of a packed 4-bit matrix (diagnostics: isolates weight
 /// quantization from integer arithmetic).
 pub fn dequantize_matrix(
@@ -795,6 +808,34 @@ mod tests {
         assert!(
             gptq < 0.8 * nearest,
             "gptq {gptq} vs round-to-nearest {nearest}"
+        );
+    }
+
+    #[test]
+    fn integer_arcosh_matches_the_function_across_every_octave() {
+        use uor_r4_lut::kernels::{arcosh1p_q24, arcosh_grid, ARCOSH_TABLE_LEN};
+        let table = arcosh_table();
+        assert_eq!(table.len(), ARCOSH_TABLE_LEN);
+        assert!(table.windows(2).all(|w| w[0] <= w[1]) && table[0] == 0);
+        assert_eq!(arcosh_grid(ARCOSH_TABLE_LEN - 1), 1u128 << 96);
+        let mut rng = Rng(17);
+        let mut worst = 0f64;
+        for octave in 0..96u32 {
+            for _ in 0..40 {
+                let base = 1u128 << octave;
+                let code = base + ((rng.uniform() + 0.5) * base as f64) as u128;
+                let u = code as f64 * 2f64.powi(-32);
+                let want = (u + (u * (u + 2.0)).sqrt()).ln_1p();
+                let got = f64::from(arcosh1p_q24(code, &table)) * 2f64.powi(-24);
+                worst = worst.max((got - want).abs());
+            }
+        }
+        // Q24 resolution is 6e-8; interpolation adds at most about 1.2e-7.
+        assert!(worst < 3e-7, "worst error {worst}");
+        let top = f64::from(arcosh1p_q24(u128::MAX, &table)) * 2f64.powi(-24);
+        assert!(
+            (top - (2f64.powi(65)).ln()).abs() < 1e-6,
+            "saturation {top}"
         );
     }
 
