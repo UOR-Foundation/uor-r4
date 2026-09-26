@@ -1746,5 +1746,143 @@
   "c67e230",
   "50bee85",
   "f43aa4e"
- ]
+ ],
+ "m3_integer_engine": {
+  "label": "Measured on the 4-vCPU x86-64 review container unless stated",
+  "commits": [
+   "8931b27",
+   "d9fea81",
+   "4a01869",
+   "4fc1ea6",
+   "2995995",
+   "f5886cc"
+  ],
+  "exactness_chain": {
+   "vector_kernels_vs_portable": "bit-identical on random and extreme matrices; AVX2 native, NEON under qemu-aarch64 user-mode emulation; portable kernel equal to exact i128 products",
+   "tiny_model_integer_nll_nats": 19.174825423197102,
+   "tiny_model_integer_nll_unchanged_by": [
+    "simd gemv",
+    "in-pool stepping",
+    "vectorized attention",
+    "parallel heads"
+   ],
+   "small_llama_integer_nll_identical_at_threads": [
+    1,
+    4
+   ],
+   "greedy_110_tokens_integer_equals_dequantized_float": {
+    "round_to_nearest": true,
+    "gptq": true
+   }
+  },
+  "disassembly_audit": {
+   "avx2_weight_kernel": {
+    "instructions": 451,
+    "vpshufb": 32,
+    "vector_multiplies": 0,
+    "scalar_multiplies": 2,
+    "scalar_multiply_role": "block offsets in the prologue"
+   },
+   "neon_weight_kernel_inlined": {
+    "tbl": 128,
+    "vector_multiplies": 0,
+    "scalar_multiplies": 5,
+    "scalar_multiply_role": "block and address offsets"
+   }
+  },
+  "small_llama": {
+   "shape": {
+    "parameters": 4199680,
+    "layers": 6,
+    "width": 256,
+    "heads": 4,
+    "kv_heads": 2,
+    "head_dim": 64,
+    "ffn": 640,
+    "vocab": 264,
+    "context": 256
+   },
+   "training": "WikiText-2 bytes, 2300 steps x 16 x 256 tokens, AdamW, single core, 1920 s; throwaway JAX script in scratch (not in the repository)",
+   "loader_agreement_nats_per_token": 5e-07,
+   "evaluation": {
+    "positions": 4096,
+    "windows": 16,
+    "time": 256,
+    "split": "validation"
+   },
+   "calibration": {
+    "positions": 8192,
+    "windows": 32,
+    "time": 256,
+    "split": "train",
+    "damp": 0.01
+   },
+   "original_bf16_bits_per_byte": 1.6783,
+   "integer_vs_original": {
+    "round_to_nearest": {
+     "nll_change": 0.0067,
+     "kl": 0.00463,
+     "top1": 0.9595,
+     "integer_bits_per_byte": 1.6879
+    },
+    "gptq": {
+     "nll_change": 0.0034,
+     "kl": 0.00184,
+     "top1": 0.9795,
+     "integer_bits_per_byte": 1.6833
+    }
+   },
+   "integer_vs_own_dequantized_float": {
+    "round_to_nearest": {
+     "nll_change": 0.0007,
+     "kl": 0.000258,
+     "top1": 0.9932
+    },
+    "gptq": {
+     "nll_change": 0.0009,
+     "kl": 0.000271,
+     "top1": 0.9941
+    }
+   },
+   "mean_relative_output_error_on_calibration_inputs": {
+    "gptq": 0.0224,
+    "round_to_nearest": 0.0442
+   },
+   "reduced_run_note": "with 1024 calibration and 512 evaluation positions GPTQ lowered KL (2.2e-3 vs 5.4e-3) and raised top-1 (98.4% vs 96.5%) but its NLL change was larger (+0.0061 vs +0.0039); NLL change is too noisy at that size"
+  },
+  "throughput_random_135m_shape": {
+   "artifact_bytes": 86841984,
+   "backend": "avx2",
+   "tokens_per_second": {
+    "threads_1": {
+     "64": 36.5,
+     "1024": 30.4
+    },
+    "threads_2": {
+     "64": 47.4,
+     "1024": 39.7
+    },
+    "threads_4": {
+     "64": 54.8,
+     "1024": 42.0
+    }
+   },
+   "scalar_kernel_before_tokens_per_second": {
+    "threads_1": 5.9,
+    "threads_2": 9.8,
+    "threads_4": 14.2
+   },
+   "weight_kernel_ns_per_weight": {
+    "cache_resident": 0.1,
+    "streaming": 0.17
+   },
+   "note": "x86-64 VM, not an M1; the four context-256 runs were paused during each measurement"
+  },
+  "not_shown": [
+   "M1 speed or energy",
+   "135M/360M fidelity or chat quality",
+   "any advantage over llama.cpp",
+   "a geometric mechanism in the served model"
+  ]
+ }
 }

@@ -10,7 +10,9 @@
 
 **Labels.** **Measured** (run in the review sandbox), **Derived**, **Literature** (retrieved in this session; arXiv id given), **Hypothesis**. The lab had five specialist reviewers (mathematics, architecture, training and data, systems, experiment), two adversarial reviewers (feasibility/engineering and science/novelty) and the lead. Their reports and scratch experiments stay outside the repository. The numbers this note relies on are in [the evidence file](../evidence/lab-phase2-2026-09-26.json).
 
-**New in the repository.** A Rust conversion tool in the training crate: `kappa_llama`, example `kappa-conversion`, and `scripts/kappa-m1-pilot.sh`, in commits `c67e230`, `50bee85` and `f43aa4e`.
+**New in the repository.**
+- A Rust conversion tool in the training crate: `kappa_llama`, example `kappa-conversion`, and `scripts/kappa-m1-pilot.sh`, in commits `c67e230`, `50bee85` and `f43aa4e`.
+- The M3 integer serving path (§8): the engine crate `uor-r4-lut` with `lut-chat`, the audited SIMD crate `uor-r4-simd`, the exporter `lut_export` with GPTQ and the example `lut-tool`, and `scripts/lut-m1-chat.sh`, in commits `8931b27` to `f5886cc`.
 
 ## 0. Findings
 
@@ -158,7 +160,7 @@ Stand-in, data objective, 600 steps. Validation bits per byte:
 | M1c | owner's M1, about 1 h | llama.cpp SmolLM2-135M Q4_0 with a q8_0 cache at 2K and 8K tokens, on a performance core and under `taskpolicy -c background`, joules per token from two run lengths | If Q4_0 on efficiency cores is within 1.5× of the projected converted path at 2K, the energy case rests on M4 or ternary weights |
 | M1b | owner's M1, only if M1a passes | Distillation from 360M: dot, `intrinsic_linear`, intrinsic learnable, intrinsic and key-norm annealed to `t = 1`; 3 seeds, paired data | Do curved heads beat *both* controls on held-out KL/NLL beyond seed noise? |
 | M2 | M1 days, or GPU if approved | 4-bit QAT distillation including integer activations, table nonlinearities and a ≤4-bit output head | Chat quality at 4 bits. **Gated on owner decision 2** |
-| M3 | here and M1 | Integer serving; chat CLI; measured joules per token | Against the M1c baseline |
+| M3 | here and M1 | Integer serving; chat CLI; measured joules per token. **Built and measured here (§8); M1 speed and energy pending `scripts/lut-m1-chat.sh`, which also runs the M1c llama.cpp reference** | Against the M1c baseline |
 | M4 | here and M1 | Long context: dump real SmolLM2 queries and keys, test query-aware indexes, and train a native hyperbolic memory/retrieval layer over the converted backbone | The geometry's best-supported role (§0.4). ≥99% of attention mass at ≤5% scored on real heads? |
 | M5 | M1 | Parameter memory: none, learned product keys, E8 or sign sub-codebooks, n-gram addressed | ≥0.02 nats or factual-recall gain at equal active parameters |
 
@@ -206,10 +208,71 @@ Still open:
 2. D5: memory layers addressed by fixed geometric codes (sparse parameter access without a learned gate).
 3. Evaluation by event-level metrics alongside mean NLL.
 
+## 8. M3: the integer serving engine
+
+**What exists.** A converted Llama checkpoint is exported offline to a sealed 4-bit artifact and served with integers only ([crate README](../../crates/uor-r4-lut/README.md)).
+- Learned weight maps are served by vector table reads (`vpshufb` on AVX2, `tbl` on NEON: sixteen rows per instruction), shifts and additions.
+- Runtime products (attention, gating, RoPE, normalization) use the integer multiplier, as D10 allows.
+- Nonlinearities are sealed tables, and the key/value cache is 8-bit.
+- The exporter quantizes by round-to-nearest or by GPTQ (*Literature*: Frantar et al., arXiv 2210.17323) from input moments on calibration text, into the same artifact layout.
+- *Literature for context.* T-MAC (arXiv 2407.00088) serves low-bit weights from bit-plane tables; this engine instead builds per-activation tables of multiples, which suits 4-bit weights. The two have not been compared.
+
+**The exactness chain (Measured).**
+1. The AVX2 and NEON kernels reproduce the portable reference bit for bit on random and extreme matrices. AVX2 was run natively; NEON ran under `qemu-aarch64` emulation. The reference in turn matches exact `i128` products.
+2. No optimization changed an output. The tiny test model's integer NLL is identical before and after every kernel change. The small Llama below gives an identical NLL and an identical 110-token greedy continuation at 1 and 4 threads.
+3. The integer engine reproduces its own dequantized float model in greedy decoding, token for token, for both exports. On this model the remaining gap to the original is therefore the 4-bit weights.
+
+**Disassembly audit (Measured).** In the compiled weight kernels:
+- AVX2: 451 instructions, including 32 `vpshufb`, and no vector multiply;
+- NEON (inlined): 128 `tbl` and no vector multiply;
+- the only multiplies are scalar block-offset computations outside the per-weight loop.
+
+**Fidelity (Measured)** on a real trained model, since the SmolLM2 weights are not reachable here.
+- *The model.* A 4.2M-parameter byte-level Llama (6 layers, width 256) trained on WikiText-2 for these tests. A helper trained it with a throwaway JAX script in scratch space, which is not in the repository. The repository's loader agrees with that script's forward pass to 5e-7 nats per token.
+- *Protocol.* Evaluation on 4,096 held-out validation positions. GPTQ calibration on 8,192 training positions with damping 0.01, the literature default, not tuned here.
+
+| Integer engine versus | NLL change (nats/token) | KL | top-1 |
+|---|---:|---:|---:|
+| original bf16, round-to-nearest | +0.0067 | 4.6e-3 | 95.95% |
+| original bf16, GPTQ | +0.0034 | 1.8e-3 | 97.95% |
+| its dequantized float, round-to-nearest | +0.0007 | 2.6e-4 | 99.32% |
+| its dequantized float, GPTQ | +0.0009 | 2.7e-4 | 99.41% |
+
+GPTQ also halves the mean relative output error on the calibration inputs (0.022 against 0.044). In a reduced run (1,024 calibration and 512 evaluation positions), GPTQ still lowered KL and raised top-1, but its NLL change was larger. At that size NLL change is too noisy to rank exports; KL and top-1 are the fidelity measures.
+
+**Throughput (Measured, this 4-vCPU x86-64 container, not an M1).** Random artifact of SmolLM2-135M's shape (86.8 MB), AVX2, other work paused:
+
+| threads | 64 tokens | 1024 tokens |
+|---:|---:|---:|
+| 1 | 36.5 tok/s | 30.4 tok/s |
+| 2 | 47.4 tok/s | 39.7 tok/s |
+| 4 | 54.8 tok/s | 42.0 tok/s |
+
+- The scalar table kernel it replaced ran at 5.9 tokens/s on one thread.
+- The weight kernel alone takes about 0.10 ns per weight with matrices in cache, and about 0.17 ns when streaming the model.
+- At four threads the container's memory bandwidth limits throughput.
+
+**What this does not show.**
+- Speed or energy on an M1.
+- Fidelity or chat quality of the 135M/360M checkpoints.
+- Any advantage over llama.cpp.
+- A geometric mechanism: the served model is D10's dense interim vehicle.
+
+The next measurement is the owner's `scripts/lut-m1-chat.sh` run, with `ENERGY=1` and a llama.cpp GGUF for the M1c reference.
+
 ## 7. Cost of this phase
 
 - **Machine.** One shared review container: 4 cores, 15 GB, no GPU. It ran from about 16:20 to 18:15 UTC, at load 10–30. No paid or external compute.
 - **Lead's runs.** The lead's single-threaded stand-in conversion and fine-tune runs recorded 2.9 wall-clock hours in total, under contention: 7,943 s and 2,580 s.
 - **Reviewers' runs.** Their costs are in their reports. The experiment reviewer used about 1.2 CPU-hours. The science reviewer's five checks each took under a minute.
 - **Not included.** The four context-256 cycle-3 runs are still in progress and are not part of this note.
+- **M3 (§8).** Built and measured from about 18:50 to 21:00 UTC on the same container.
+  - The small Llama took 1,920 s of single-core training (34 min wall).
+  - GPTQ exports take 5–10 s at that size.
+  - Benchmarks paused the four context-256 runs for about 17 minutes in total. Eleven of those minutes were an accidental pause, when a process match stopped the benchmarking shell itself. Their wall-clock records include the pauses.
+  - Scratch storage:
+    - a 269 MB random 135M-shaped checkpoint, removed after benchmarking;
+    - 91 MB for its artifact and profiles;
+    - 28 MB for the small Llama;
+    - 67 MB of its artifacts, dequantized checkpoints and token files.
 - **Storage.** Phase-2 scratch outputs are 0.2 GB outside the repository, plus a shared 1.7 GB build cache. The repository gained two Rust source files, one script, this note and a 32 KB evidence file.
