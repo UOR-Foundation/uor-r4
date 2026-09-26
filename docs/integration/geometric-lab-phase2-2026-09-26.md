@@ -12,7 +12,7 @@
 
 **New in the repository.**
 - A Rust conversion tool in the training crate: `kappa_llama`, example `kappa-conversion`, and `scripts/kappa-m1-pilot.sh`, in commits `c67e230`, `50bee85` and `f43aa4e`.
-- The M3 integer serving path (§8): the engine crate `uor-r4-lut` with `lut-chat`, the audited SIMD crate `uor-r4-simd`, the exporter `lut_export` with GPTQ and the example `lut-tool`, and `scripts/lut-m1-chat.sh`, in commits `8931b27` to `f5886cc`.
+- The M3 integer serving path (§7): the engine crate `uor-r4-lut` with `lut-chat`, the audited SIMD crate `uor-r4-simd`, the exporter `lut_export` with GPTQ and the example `lut-tool`, and `scripts/lut-m1-chat.sh`, in commits `8931b27` to `f5886cc`.
 
 ## 0. Findings
 
@@ -160,7 +160,7 @@ Stand-in, data objective, 600 steps. Validation bits per byte:
 | M1c | owner's M1, about 1 h | llama.cpp SmolLM2-135M Q4_0 with a q8_0 cache at 2K and 8K tokens, on a performance core and under `taskpolicy -c background`, joules per token from two run lengths | If Q4_0 on efficiency cores is within 1.5× of the projected converted path at 2K, the energy case rests on M4 or ternary weights |
 | M1b | owner's M1, only if M1a passes | Distillation from 360M: dot, `intrinsic_linear`, intrinsic learnable, intrinsic and key-norm annealed to `t = 1`; 3 seeds, paired data | Do curved heads beat *both* controls on held-out KL/NLL beyond seed noise? |
 | M2 | M1 days, or GPU if approved | 4-bit QAT distillation including integer activations, table nonlinearities and a ≤4-bit output head | Chat quality at 4 bits. **Gated on owner decision 2** |
-| M3 | here and M1 | Integer serving; chat CLI; measured joules per token. **Built and measured here (§8); M1 speed and energy pending `scripts/lut-m1-chat.sh`, which also runs the M1c llama.cpp reference** | Against the M1c baseline |
+| M3 | here and M1 | Integer serving; chat CLI; measured joules per token. **Built and measured here (§7); M1 speed and energy pending `scripts/lut-m1-chat.sh`, which also runs the M1c llama.cpp reference** | Against the M1c baseline |
 | M4 | here and M1 | Long context: dump real SmolLM2 queries and keys, test query-aware indexes, and train a native hyperbolic memory/retrieval layer over the converted backbone | The geometry's best-supported role (§0.4). ≥99% of attention mass at ≤5% scored on real heads? |
 | M5 | M1 | Parameter memory: none, learned product keys, E8 or sign sub-codebooks, n-gram addressed | ≥0.02 nats or factual-recall gain at equal active parameters |
 
@@ -208,7 +208,7 @@ Still open:
 2. D5: memory layers addressed by fixed geometric codes (sparse parameter access without a learned gate).
 3. Evaluation by event-level metrics alongside mean NLL.
 
-## 8. M3: the integer serving engine
+## 7. M3: the integer serving engine
 
 **What exists.** A converted Llama checkpoint is exported offline to a sealed 4-bit artifact and served with integers only ([crate README](../../crates/uor-r4-lut/README.md)).
 - Learned weight maps are served by vector table reads (`vpshufb` on AVX2, `tbl` on NEON: sixteen rows per instruction), shifts and additions.
@@ -260,13 +260,47 @@ GPTQ also halves the mean relative output error on the calibration inputs (0.022
 
 The next measurement is the owner's `scripts/lut-m1-chat.sh` run, with `ENERGY=1` and a llama.cpp GGUF for the M1c reference.
 
-## 7. Cost of this phase
+## 8. M4a work card: a learned cache memory over a frozen backbone
+
+Written before the measured run; the rules below do not change after it.
+
+- **Deliverable.** A cache memory read over a frozen converted Llama, with measured held-out NLL gain and read concentration for three key geometries of identical parameters: `uor_r4_training::cache_memory` and the example `cache-memory`.
+- **Blocker it addresses.** The integer engine serves a dense backbone with a fixed window and no memory. In converted dot heads, curvature stays in the flat basin and the heads are not indexable (§0.3–0.4). Geometry has helped only where scores were *trained* with distances.
+- **Mechanism.** A learned continuous cache (*Literature*: Grave, Joulin and Usunier, arXiv 1612.04426).
+  - Queries and keys are learned maps (width 256 to 32) of the backbone's final normalized states.
+  - Entries point at the token that followed them.
+  - A query reads only entries at least 256 positions back, which is exactly what the backbone's window cannot see.
+  - A learned gate mixes the cache with the backbone's distribution.
+  - Scores: `dot` is `beta q.k`; `euclid` is `-beta |q-k|^2`; `lorentz` is `-beta d_H(q,k)^2` on the hyperboloid of curvature -1. Its maps' scale sets how hyperbolic it is, and it becomes `euclid` at small radius.
+- **Fixed conditions.**
+  - Backbone: the small Llama of §7 (weights `8c5edbd0…`).
+  - Segments of 1,024 tokens with 768 query positions each: 256 training segments (WikiText-2 train) and 64 validation segments (valid).
+  - 400 steps, batch 4, AdamW at lr 3e-3.
+  - Seeds 1 and 2, with the batch order paired across geometries.
+  - Initialization shared.
+- **Decisions, fixed in advance.** "Beats" means a lower mean held-out NLL over the two seeds, with both seeds agreeing in sign and the difference larger than the seed spread.
+  1. If no arm beats the backbone, the cache does not help this backbone. M4a stops here as a negative result.
+  2. If `lorentz` beats both `euclid` and `dot`, Lorentz keys go into M4b (integer serving of the cache read), which needs the integer arcosh table (task 3b).
+  3. If `lorentz` and `euclid` are within the spread and both beat `dot`, distance scoring matters but curvature does not. Adopt `euclid`; no arcosh table.
+  4. If `dot` is at least as good as both, geometry is not needed for this role. Adopt `dot`.
+  5. Secondary: if the adopted arm holds 99% of its read mass in at most 5% of the readable entries, a sparse index is viable for M4b.
+- **Checks.** Five unit tests:
+  - a closed gate reproduces the backbone;
+  - no entry inside the gap is read;
+  - the Lorentz score equals `acosh`, and is flat at small radius;
+  - gradients reach every variable;
+  - the concentration count.
+
+  Plus a smoke run and a one-seed pilot to confirm that the arms train at all.
+- **Cost.** About 1 h of implementation. About 40 minutes of CPU for the run: backbone features once, then six arms of 400 steps.
+
+## 9. Cost of this phase
 
 - **Machine.** One shared review container: 4 cores, 15 GB, no GPU. It ran from about 16:20 to 18:15 UTC, at load 10–30. No paid or external compute.
 - **Lead's runs.** The lead's single-threaded stand-in conversion and fine-tune runs recorded 2.9 wall-clock hours in total, under contention: 7,943 s and 2,580 s.
 - **Reviewers' runs.** Their costs are in their reports. The experiment reviewer used about 1.2 CPU-hours. The science reviewer's five checks each took under a minute.
 - **Not included.** The four context-256 cycle-3 runs are still in progress and are not part of this note.
-- **M3 (§8).** Built and measured from about 18:50 to 21:00 UTC on the same container.
+- **M3 (§7).** Built and measured from about 18:50 to 21:00 UTC on the same container.
   - The small Llama took 1,920 s of single-core training (34 min wall).
   - GPTQ exports take 5–10 s at that size.
   - Benchmarks paused the four context-256 runs for about 17 minutes in total. Eleven of those minutes were an accidental pause, when a process match stopped the benchmarking shell itself. Their wall-clock records include the pauses.
