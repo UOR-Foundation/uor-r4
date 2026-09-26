@@ -9,6 +9,7 @@
 
 pub mod baseline_counts;
 pub mod baseline_protocol;
+pub mod dialogue;
 pub mod joint_admission;
 pub mod joint_bounded_campaign;
 pub mod joint_cache_eval;

@@ -1,0 +1,1483 @@
+{
+  "schema": "uor-r4.chat-r1b-evidence/1",
+  "generated_utc": "2026-09-26",
+  "scope": "R1b development screen only. One 1800 s response-masked smoke fit at 5,429,826 parameters plus an order-5 Kneser-Ney count reference on the chat-v0 corpus. Not an R1 pass, not serving, integer, geometry or energy evidence.",
+  "branch": "codex/canonical-address-routing-20260925",
+  "task_packet_base_commit": "0b7b4c970e43176f909657247ebde5749a3558d0",
+  "worktree_head_at_handoff": "6cc050bc",
+  "delivery_state": "R1b changes are uncommitted on 6cc050bc; the lead commits. R1a pipeline commit 6cc050bc does not touch these files.",
+  "build_binding": "all runs built with UOR_BUILD_SOURCE_COMMIT=0b7b4c970e43176f909657247ebde5749a3558d0; executable_sha256 in each report binds the actual binary",
+  "worktree": "/Users/casey.allard/uor-r4/.worktrees/canonical-address-routing-20260925",
+  "source_changed": [
+    "crates/uor-r4-training/src/dialogue.rs (new)",
+    "crates/uor-r4-training/src/joint_model.rs (new_dialogue constructor; initialize split)",
+    "crates/uor-r4-training/src/lib.rs (module registration)",
+    "crates/uor-r4-training/src/main.rs (dialogue- dispatch)"
+  ],
+  "architecture_decision": {
+    "vehicle": "existing shared recurrent-memory JointModel graph, constructed at width 576",
+    "why_not_dense_transformer": "R1 keeps the read/copy path and R3 must quantize into the retained integer session, which executes the JointModel graph; a dense transformer cannot be quantized into it.",
+    "parameter_count": 5429826,
+    "parameter_formula": "9w^2 + 4235w + 4482 (vocab 4096, read_width 64, context 256)",
+    "serving_boundary": "uor-r4-integer::JointConfig::validate accepts only width 128 or 256 and was NOT modified. JointModel::new_dialogue is a training-only constructor; the artifact is a floating checkpoint not loadable by the current serving loader. R3 needs a serving-side width extension."
+  },
+  "objective": {
+    "supervision": "next-token CE on target positions whose response_mask==1 (assistant content and its terminating EOS)",
+    "mask_read_lockstep": true,
+    "read_mode": "enabled",
+    "gradient_audit_all_paths_present_finite_nonzero": true,
+    "gradient_paths": [
+      {
+        "elements": 1,
+        "finite": true,
+        "l2": 0.15653535723686218,
+        "max_abs": 0.15653535723686218,
+        "name": "copy.gate.bias",
+        "nonzero": 1
+      },
+      {
+        "elements": 1152,
+        "finite": true,
+        "l2": 0.7188116530731383,
+        "max_abs": 0.0789823979139328,
+        "name": "copy.gate.weight",
+        "nonzero": 1152
+      },
+      {
+        "elements": 2359296,
+        "finite": true,
+        "l2": 17.77305442615089,
+        "max_abs": 1.5600359439849854,
+        "name": "embedding.weight",
+        "nonzero": 2359296
+      },
+      {
+        "elements": 4096,
+        "finite": true,
+        "l2": 0.030982103241388934,
+        "max_abs": 0.007131866179406643,
+        "name": "output.bias",
+        "nonzero": 4096
+      },
+      {
+        "elements": 576,
+        "finite": true,
+        "l2": 0.010073174708866452,
+        "max_abs": 0.0014166987966746092,
+        "name": "output.norm.weight",
+        "nonzero": 576
+      },
+      {
+        "elements": 255,
+        "finite": true,
+        "l2": 0.04226849808413504,
+        "max_abs": 0.020325805991888046,
+        "name": "read.age",
+        "nonzero": 255
+      },
+      {
+        "elements": 64,
+        "finite": true,
+        "l2": 0.14693320071063512,
+        "max_abs": 0.04253102466464043,
+        "name": "read.key.bias",
+        "nonzero": 64
+      },
+      {
+        "elements": 36864,
+        "finite": true,
+        "l2": 3.24457362784787,
+        "max_abs": 0.11571839451789856,
+        "name": "read.key.weight",
+        "nonzero": 36864
+      },
+      {
+        "elements": 1,
+        "finite": true,
+        "l2": 0.0008732881397008896,
+        "max_abs": 0.0008732881397008896,
+        "name": "read.no_read.bias",
+        "nonzero": 1
+      },
+      {
+        "elements": 576,
+        "finite": true,
+        "l2": 2.4681420732402075,
+        "max_abs": 0.5377193689346313,
+        "name": "read.no_read.weight",
+        "nonzero": 576
+      },
+      {
+        "elements": 64,
+        "finite": true,
+        "l2": 0.18136272703628264,
+        "max_abs": 0.05931129679083824,
+        "name": "read.query.bias",
+        "nonzero": 64
+      },
+      {
+        "elements": 36864,
+        "finite": true,
+        "l2": 3.7542736665364655,
+        "max_abs": 0.1767745018005371,
+        "name": "read.query.weight",
+        "nonzero": 36864
+      },
+      {
+        "elements": 576,
+        "finite": true,
+        "l2": 1.3516400532058452,
+        "max_abs": 0.16001459956169128,
+        "name": "read.value.bias",
+        "nonzero": 576
+      },
+      {
+        "elements": 331776,
+        "finite": true,
+        "l2": 12.020323484384214,
+        "max_abs": 0.20899474620819092,
+        "name": "read.value.weight",
+        "nonzero": 331776
+      },
+      {
+        "elements": 1728,
+        "finite": true,
+        "l2": 25.35202899943594,
+        "max_abs": 5.667001724243164,
+        "name": "recurrent.bias",
+        "nonzero": 1728
+      },
+      {
+        "elements": 995328,
+        "finite": true,
+        "l2": 11.868856479999895,
+        "max_abs": 0.2112680971622467,
+        "name": "recurrent.input.weight",
+        "nonzero": 995328
+      },
+      {
+        "elements": 995328,
+        "finite": true,
+        "l2": 17.11421504563975,
+        "max_abs": 0.6708666086196899,
+        "name": "recurrent.state.weight",
+        "nonzero": 995328
+      },
+      {
+        "elements": 576,
+        "finite": true,
+        "l2": 135.98085222634674,
+        "max_abs": 16.384937286376953,
+        "name": "update.bias",
+        "nonzero": 576
+      },
+      {
+        "elements": 1,
+        "finite": true,
+        "l2": 0.1172613650560379,
+        "max_abs": 0.1172613650560379,
+        "name": "update.gate.bias",
+        "nonzero": 1
+      },
+      {
+        "elements": 1152,
+        "finite": true,
+        "l2": 1.4638738754979768,
+        "max_abs": 0.13423581421375275,
+        "name": "update.gate.weight",
+        "nonzero": 1152
+      },
+      {
+        "elements": 663552,
+        "finite": true,
+        "l2": 18.478831754576692,
+        "max_abs": 0.19049395620822906,
+        "name": "update.weight",
+        "nonzero": 663552
+      }
+    ],
+    "leakage": "train and held-out stores are distinct files (asserted in code); fit samples only train; held-out pass never backprops"
+  },
+  "focused_tests": {
+    "command": "UOR_BUILD_SOURCE_COMMIT=0b7b4c970e43176f909657247ebde5749a3558d0 cargo test -p uor-r4-training --offline --lib dialogue::",
+    "result": "5 passed; 0 failed",
+    "names": [
+      "scaled_dialogue_width_is_in_the_declared_parameter_band",
+      "new_dialogue_constructs_above_the_serving_width_contract",
+      "window_starts_respect_the_target_boundary_and_cap",
+      "masked_objective_supervises_only_masked_targets",
+      "masked_loss_reaches_every_learned_path"
+    ]
+  },
+  "fit_campaign": {
+    "schema": "uor-r4.dialogue-campaign/1",
+    "train_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+    "train_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+    "heldout_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+    "heldout_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+    "model": {
+      "vocab_size": 4096,
+      "width": 576,
+      "read_width": 64,
+      "context": 256,
+      "transport": "quaternion",
+      "seed": 20260926
+    },
+    "optimizer": {
+      "learning_rate": 0.001,
+      "weight_decay": 0.01,
+      "parameter_abs_limit": 1000000.0,
+      "allowed_missing_gradients": []
+    },
+    "data_seed": 20260926,
+    "batch": 8,
+    "context": 256,
+    "total_steps": 100000,
+    "max_process_seconds": 1800,
+    "eval_stride": 4,
+    "eval_max_windows": 512,
+    "eval_batch": 8,
+    "tune_windows": 64,
+    "checkpoint_steps": [],
+    "count_report": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/count-2/dialogue-count.json",
+    "stop_file": null,
+    "trial_scope": "R1b smoke fit: one short response-masked run at width 576 (5,429,826 parameters) with a 1800 s update deadline on the chat-v0 train split, batch 8 / context 256. Held-out response-masked NLL on the same 512-window population as the count reference. Development screen only; not a passing R1 claim and not a full-exposure fit."
+  },
+  "count_campaign": {
+    "schema": "uor-r4.dialogue-campaign/1",
+    "train_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+    "train_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+    "heldout_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+    "heldout_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+    "model": {
+      "vocab_size": 4096,
+      "width": 576,
+      "read_width": 64,
+      "context": 256,
+      "transport": "quaternion",
+      "seed": 20260926
+    },
+    "optimizer": {
+      "learning_rate": 0.001,
+      "weight_decay": 0.01,
+      "parameter_abs_limit": 1000000.0,
+      "allowed_missing_gradients": []
+    },
+    "data_seed": 20260926,
+    "batch": 8,
+    "context": 256,
+    "total_steps": 100000,
+    "max_process_seconds": 1800,
+    "eval_stride": 4,
+    "eval_max_windows": 512,
+    "eval_batch": 8,
+    "tune_windows": 64,
+    "checkpoint_steps": [],
+    "count_report": null,
+    "stop_file": null,
+    "trial_scope": "R1b count reference: order-5 interpolated Kneser-Ney fitted on the chat-v0 train tokens, response-masked NLL on a fixed held-out window population (stride 4, max 512) that the dialogue learner also scores. NLL only; no decoder. Discount selected on train-split windows only."
+  },
+  "smoke_fit_report": {
+    "checkpoints": [],
+    "configuration": {
+      "batch": 8,
+      "checkpoint_steps": [],
+      "context": 256,
+      "count_report": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/count-2/dialogue-count.json",
+      "data_seed": 20260926,
+      "eval_batch": 8,
+      "eval_max_windows": 512,
+      "eval_stride": 4,
+      "heldout_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+      "heldout_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+      "max_process_seconds": 1800,
+      "model": {
+        "context": 256,
+        "read_width": 64,
+        "seed": 20260926,
+        "transport": "quaternion",
+        "vocab_size": 4096,
+        "width": 576
+      },
+      "optimizer": {
+        "allowed_missing_gradients": [],
+        "learning_rate": 0.001,
+        "parameter_abs_limit": 1000000.0,
+        "weight_decay": 0.01
+      },
+      "schema": "uor-r4.dialogue-campaign/1",
+      "stop_file": null,
+      "total_steps": 100000,
+      "train_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+      "train_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+      "trial_scope": "R1b smoke fit: one short response-masked run at width 576 (5,429,826 parameters) with a 1800 s update deadline on the chat-v0 train split, batch 8 / context 256. Held-out response-masked NLL on the same 512-window population as the count reference. Development screen only; not a passing R1 claim and not a full-exposure fit.",
+      "tune_windows": 64
+    },
+    "count_reference": {
+      "count_response_masked_nll_nats": 2.4656425541851505,
+      "margin_nats": -3.7533384056312156,
+      "neural_response_masked_nll_nats": 6.218980959816366,
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/count-2/dialogue-count.json",
+      "population_matches": true,
+      "sha256": "87caea9a87308e52b60dd64a98f83ccb59c31db208a23b6211348ee2a11cd594"
+    },
+    "elapsed_seconds": 2008.212229875,
+    "evaluation_population": {
+      "context": 256,
+      "max_windows": 512,
+      "stride": 4,
+      "windows": 512
+    },
+    "executable_sha256": "2627080bcf28be5f6a9269f086f34b76f29ad96cdb43f91e0f3aec98bf892cb2",
+    "final_heldout_response_masked_nll_nats": 6.218980959816366,
+    "final_parameter_artifact": {
+      "file": "parameters.f32",
+      "manifest": {
+        "coordinate_bytes": 21719304,
+        "file": "parameters.f32",
+        "index": [
+          {
+            "elements": 1,
+            "name": "copy.gate.bias",
+            "offset": 0,
+            "shape": [
+              1
+            ]
+          },
+          {
+            "elements": 1152,
+            "name": "copy.gate.weight",
+            "offset": 1,
+            "shape": [
+              1,
+              1152
+            ]
+          },
+          {
+            "elements": 2359296,
+            "name": "embedding.weight",
+            "offset": 1153,
+            "shape": [
+              4096,
+              576
+            ]
+          },
+          {
+            "elements": 4096,
+            "name": "output.bias",
+            "offset": 2360449,
+            "shape": [
+              4096
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "output.norm.weight",
+            "offset": 2364545,
+            "shape": [
+              576
+            ]
+          },
+          {
+            "elements": 255,
+            "name": "read.age",
+            "offset": 2365121,
+            "shape": [
+              255
+            ]
+          },
+          {
+            "elements": 64,
+            "name": "read.key.bias",
+            "offset": 2365376,
+            "shape": [
+              64
+            ]
+          },
+          {
+            "elements": 36864,
+            "name": "read.key.weight",
+            "offset": 2365440,
+            "shape": [
+              64,
+              576
+            ]
+          },
+          {
+            "elements": 1,
+            "name": "read.no_read.bias",
+            "offset": 2402304,
+            "shape": [
+              1
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "read.no_read.weight",
+            "offset": 2402305,
+            "shape": [
+              1,
+              576
+            ]
+          },
+          {
+            "elements": 64,
+            "name": "read.query.bias",
+            "offset": 2402881,
+            "shape": [
+              64
+            ]
+          },
+          {
+            "elements": 36864,
+            "name": "read.query.weight",
+            "offset": 2402945,
+            "shape": [
+              64,
+              576
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "read.value.bias",
+            "offset": 2439809,
+            "shape": [
+              576
+            ]
+          },
+          {
+            "elements": 331776,
+            "name": "read.value.weight",
+            "offset": 2440385,
+            "shape": [
+              576,
+              576
+            ]
+          },
+          {
+            "elements": 1728,
+            "name": "recurrent.bias",
+            "offset": 2772161,
+            "shape": [
+              1728
+            ]
+          },
+          {
+            "elements": 995328,
+            "name": "recurrent.input.weight",
+            "offset": 2773889,
+            "shape": [
+              1728,
+              576
+            ]
+          },
+          {
+            "elements": 995328,
+            "name": "recurrent.state.weight",
+            "offset": 3769217,
+            "shape": [
+              1728,
+              576
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "update.bias",
+            "offset": 4764545,
+            "shape": [
+              576
+            ]
+          },
+          {
+            "elements": 1,
+            "name": "update.gate.bias",
+            "offset": 4765121,
+            "shape": [
+              1
+            ]
+          },
+          {
+            "elements": 1152,
+            "name": "update.gate.weight",
+            "offset": 4765122,
+            "shape": [
+              1,
+              1152
+            ]
+          },
+          {
+            "elements": 663552,
+            "name": "update.weight",
+            "offset": 4766274,
+            "shape": [
+              576,
+              1152
+            ]
+          }
+        ]
+      },
+      "sha256": "fcb5aa806ec2c1133d7c75658fb84ef718d6a2490e25cfdc872d2cab548a9b0e"
+    },
+    "gradient_audit": {
+      "all_paths_present_finite_nonzero": true,
+      "paths": [
+        {
+          "elements": 1,
+          "finite": true,
+          "l2": 0.15653535723686218,
+          "max_abs": 0.15653535723686218,
+          "name": "copy.gate.bias",
+          "nonzero": 1
+        },
+        {
+          "elements": 1152,
+          "finite": true,
+          "l2": 0.7188116530731383,
+          "max_abs": 0.0789823979139328,
+          "name": "copy.gate.weight",
+          "nonzero": 1152
+        },
+        {
+          "elements": 2359296,
+          "finite": true,
+          "l2": 17.77305442615089,
+          "max_abs": 1.5600359439849854,
+          "name": "embedding.weight",
+          "nonzero": 2359296
+        },
+        {
+          "elements": 4096,
+          "finite": true,
+          "l2": 0.030982103241388934,
+          "max_abs": 0.007131866179406643,
+          "name": "output.bias",
+          "nonzero": 4096
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 0.010073174708866452,
+          "max_abs": 0.0014166987966746092,
+          "name": "output.norm.weight",
+          "nonzero": 576
+        },
+        {
+          "elements": 255,
+          "finite": true,
+          "l2": 0.04226849808413504,
+          "max_abs": 0.020325805991888046,
+          "name": "read.age",
+          "nonzero": 255
+        },
+        {
+          "elements": 64,
+          "finite": true,
+          "l2": 0.14693320071063512,
+          "max_abs": 0.04253102466464043,
+          "name": "read.key.bias",
+          "nonzero": 64
+        },
+        {
+          "elements": 36864,
+          "finite": true,
+          "l2": 3.24457362784787,
+          "max_abs": 0.11571839451789856,
+          "name": "read.key.weight",
+          "nonzero": 36864
+        },
+        {
+          "elements": 1,
+          "finite": true,
+          "l2": 0.0008732881397008896,
+          "max_abs": 0.0008732881397008896,
+          "name": "read.no_read.bias",
+          "nonzero": 1
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 2.4681420732402075,
+          "max_abs": 0.5377193689346313,
+          "name": "read.no_read.weight",
+          "nonzero": 576
+        },
+        {
+          "elements": 64,
+          "finite": true,
+          "l2": 0.18136272703628264,
+          "max_abs": 0.05931129679083824,
+          "name": "read.query.bias",
+          "nonzero": 64
+        },
+        {
+          "elements": 36864,
+          "finite": true,
+          "l2": 3.7542736665364655,
+          "max_abs": 0.1767745018005371,
+          "name": "read.query.weight",
+          "nonzero": 36864
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 1.3516400532058452,
+          "max_abs": 0.16001459956169128,
+          "name": "read.value.bias",
+          "nonzero": 576
+        },
+        {
+          "elements": 331776,
+          "finite": true,
+          "l2": 12.020323484384214,
+          "max_abs": 0.20899474620819092,
+          "name": "read.value.weight",
+          "nonzero": 331776
+        },
+        {
+          "elements": 1728,
+          "finite": true,
+          "l2": 25.35202899943594,
+          "max_abs": 5.667001724243164,
+          "name": "recurrent.bias",
+          "nonzero": 1728
+        },
+        {
+          "elements": 995328,
+          "finite": true,
+          "l2": 11.868856479999895,
+          "max_abs": 0.2112680971622467,
+          "name": "recurrent.input.weight",
+          "nonzero": 995328
+        },
+        {
+          "elements": 995328,
+          "finite": true,
+          "l2": 17.11421504563975,
+          "max_abs": 0.6708666086196899,
+          "name": "recurrent.state.weight",
+          "nonzero": 995328
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 135.98085222634674,
+          "max_abs": 16.384937286376953,
+          "name": "update.bias",
+          "nonzero": 576
+        },
+        {
+          "elements": 1,
+          "finite": true,
+          "l2": 0.1172613650560379,
+          "max_abs": 0.1172613650560379,
+          "name": "update.gate.bias",
+          "nonzero": 1
+        },
+        {
+          "elements": 1152,
+          "finite": true,
+          "l2": 1.4638738754979768,
+          "max_abs": 0.13423581421375275,
+          "name": "update.gate.weight",
+          "nonzero": 1152
+        },
+        {
+          "elements": 663552,
+          "finite": true,
+          "l2": 18.478831754576692,
+          "max_abs": 0.19049395620822906,
+          "name": "update.weight",
+          "nonzero": 663552
+        }
+      ]
+    },
+    "heldout_nll_change_nats": -1.1373119949559403,
+    "heldout_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+      "response_tokens": 3942347,
+      "sha256": "ca5ccf0722d9dcdc5294b612f2c25536fe49192be7bedbc3007a1fcfc0940225",
+      "tokens": 6215400
+    },
+    "initial_heldout_response_masked_nll_nats": 7.356292954772306,
+    "loss_curve": {
+      "count": 113,
+      "first": 7.39530611038208,
+      "first_10": {
+        "first": 7.39530611038208,
+        "last": 6.555708408355713,
+        "mean": 6.988784551620483
+      },
+      "last": 6.243645668029785,
+      "mean": 6.291135897678611
+    },
+    "mean_step_seconds": 14.830638680991157,
+    "mode": "dialogue-fit",
+    "parameter_count": 5429826,
+    "sampled_targets": 231424,
+    "schema": "uor-r4.dialogue-fit-report/1",
+    "scope": "R1b smoke fit: one short response-masked run at width 576 (5,429,826 parameters) with a 1800 s update deadline on the chat-v0 train split, batch 8 / context 256. Held-out response-masked NLL on the same 512-window population as the count reference. Development screen only; not a passing R1 claim and not a full-exposure fit.",
+    "source_commit": "6cc050bccc299494738e014e2c2741a19a99b879",
+    "status": "FIT_COMPLETE",
+    "steps_completed": 113,
+    "supervised_targets": 231424,
+    "train_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+      "response_tokens": 56650286,
+      "sha256": "4a554b0ef8be12344f21f1bd6bdc9faeeeddcef212a138a8772a8bf42604c4fa",
+      "tokens": 82529690
+    }
+  },
+  "timing_probe_report": {
+    "checkpoints": [],
+    "configuration": {
+      "batch": 8,
+      "checkpoint_steps": [],
+      "context": 256,
+      "count_report": null,
+      "data_seed": 20260926,
+      "eval_batch": 8,
+      "eval_max_windows": 16,
+      "eval_stride": 4,
+      "heldout_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+      "heldout_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+      "max_process_seconds": 900,
+      "model": {
+        "context": 256,
+        "read_width": 64,
+        "seed": 20260926,
+        "transport": "quaternion",
+        "vocab_size": 4096,
+        "width": 576
+      },
+      "optimizer": {
+        "allowed_missing_gradients": [],
+        "learning_rate": 0.001,
+        "parameter_abs_limit": 1000000.0,
+        "weight_decay": 0.01
+      },
+      "schema": "uor-r4.dialogue-campaign/1",
+      "stop_file": null,
+      "total_steps": 5,
+      "train_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+      "train_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+      "trial_scope": "R1b timing probe only: 5 optimize steps at width 576, 16-window evaluation, to measure step and evaluation throughput before the declared smoke run. Not a model result.",
+      "tune_windows": 16
+    },
+    "count_reference": null,
+    "elapsed_seconds": 31.74570875,
+    "evaluation_population": {
+      "context": 256,
+      "max_windows": 16,
+      "stride": 4,
+      "windows": 16
+    },
+    "executable_sha256": "0a838cfe6045d8b41e284a145b21652175f4c21d1792f33080f99ac8534118dc",
+    "final_heldout_response_masked_nll_nats": 6.567718236867359,
+    "final_parameter_artifact": {
+      "file": "parameters.f32",
+      "manifest": {
+        "coordinate_bytes": 21719304,
+        "file": "parameters.f32",
+        "index": [
+          {
+            "elements": 1,
+            "name": "copy.gate.bias",
+            "offset": 0,
+            "shape": [
+              1
+            ]
+          },
+          {
+            "elements": 1152,
+            "name": "copy.gate.weight",
+            "offset": 1,
+            "shape": [
+              1,
+              1152
+            ]
+          },
+          {
+            "elements": 2359296,
+            "name": "embedding.weight",
+            "offset": 1153,
+            "shape": [
+              4096,
+              576
+            ]
+          },
+          {
+            "elements": 4096,
+            "name": "output.bias",
+            "offset": 2360449,
+            "shape": [
+              4096
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "output.norm.weight",
+            "offset": 2364545,
+            "shape": [
+              576
+            ]
+          },
+          {
+            "elements": 255,
+            "name": "read.age",
+            "offset": 2365121,
+            "shape": [
+              255
+            ]
+          },
+          {
+            "elements": 64,
+            "name": "read.key.bias",
+            "offset": 2365376,
+            "shape": [
+              64
+            ]
+          },
+          {
+            "elements": 36864,
+            "name": "read.key.weight",
+            "offset": 2365440,
+            "shape": [
+              64,
+              576
+            ]
+          },
+          {
+            "elements": 1,
+            "name": "read.no_read.bias",
+            "offset": 2402304,
+            "shape": [
+              1
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "read.no_read.weight",
+            "offset": 2402305,
+            "shape": [
+              1,
+              576
+            ]
+          },
+          {
+            "elements": 64,
+            "name": "read.query.bias",
+            "offset": 2402881,
+            "shape": [
+              64
+            ]
+          },
+          {
+            "elements": 36864,
+            "name": "read.query.weight",
+            "offset": 2402945,
+            "shape": [
+              64,
+              576
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "read.value.bias",
+            "offset": 2439809,
+            "shape": [
+              576
+            ]
+          },
+          {
+            "elements": 331776,
+            "name": "read.value.weight",
+            "offset": 2440385,
+            "shape": [
+              576,
+              576
+            ]
+          },
+          {
+            "elements": 1728,
+            "name": "recurrent.bias",
+            "offset": 2772161,
+            "shape": [
+              1728
+            ]
+          },
+          {
+            "elements": 995328,
+            "name": "recurrent.input.weight",
+            "offset": 2773889,
+            "shape": [
+              1728,
+              576
+            ]
+          },
+          {
+            "elements": 995328,
+            "name": "recurrent.state.weight",
+            "offset": 3769217,
+            "shape": [
+              1728,
+              576
+            ]
+          },
+          {
+            "elements": 576,
+            "name": "update.bias",
+            "offset": 4764545,
+            "shape": [
+              576
+            ]
+          },
+          {
+            "elements": 1,
+            "name": "update.gate.bias",
+            "offset": 4765121,
+            "shape": [
+              1
+            ]
+          },
+          {
+            "elements": 1152,
+            "name": "update.gate.weight",
+            "offset": 4765122,
+            "shape": [
+              1,
+              1152
+            ]
+          },
+          {
+            "elements": 663552,
+            "name": "update.weight",
+            "offset": 4766274,
+            "shape": [
+              576,
+              1152
+            ]
+          }
+        ]
+      },
+      "sha256": "2e6f0fede4b381e0e4a9f431241fb088e927f296c78dfef7c4fe2026493658f3"
+    },
+    "gradient_audit": {
+      "all_paths_present_finite_nonzero": true,
+      "paths": [
+        {
+          "elements": 1,
+          "finite": true,
+          "l2": 0.15653535723686218,
+          "max_abs": 0.15653535723686218,
+          "name": "copy.gate.bias",
+          "nonzero": 1
+        },
+        {
+          "elements": 1152,
+          "finite": true,
+          "l2": 0.7188116530731383,
+          "max_abs": 0.0789823979139328,
+          "name": "copy.gate.weight",
+          "nonzero": 1152
+        },
+        {
+          "elements": 2359296,
+          "finite": true,
+          "l2": 17.77305442615089,
+          "max_abs": 1.5600359439849854,
+          "name": "embedding.weight",
+          "nonzero": 2359296
+        },
+        {
+          "elements": 4096,
+          "finite": true,
+          "l2": 0.030982103241388934,
+          "max_abs": 0.007131866179406643,
+          "name": "output.bias",
+          "nonzero": 4096
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 0.010073174708866452,
+          "max_abs": 0.0014166987966746092,
+          "name": "output.norm.weight",
+          "nonzero": 576
+        },
+        {
+          "elements": 255,
+          "finite": true,
+          "l2": 0.04226849808413504,
+          "max_abs": 0.020325805991888046,
+          "name": "read.age",
+          "nonzero": 255
+        },
+        {
+          "elements": 64,
+          "finite": true,
+          "l2": 0.14693320071063512,
+          "max_abs": 0.04253102466464043,
+          "name": "read.key.bias",
+          "nonzero": 64
+        },
+        {
+          "elements": 36864,
+          "finite": true,
+          "l2": 3.24457362784787,
+          "max_abs": 0.11571839451789856,
+          "name": "read.key.weight",
+          "nonzero": 36864
+        },
+        {
+          "elements": 1,
+          "finite": true,
+          "l2": 0.0008732881397008896,
+          "max_abs": 0.0008732881397008896,
+          "name": "read.no_read.bias",
+          "nonzero": 1
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 2.4681420732402075,
+          "max_abs": 0.5377193689346313,
+          "name": "read.no_read.weight",
+          "nonzero": 576
+        },
+        {
+          "elements": 64,
+          "finite": true,
+          "l2": 0.18136272703628264,
+          "max_abs": 0.05931129679083824,
+          "name": "read.query.bias",
+          "nonzero": 64
+        },
+        {
+          "elements": 36864,
+          "finite": true,
+          "l2": 3.7542736665364655,
+          "max_abs": 0.1767745018005371,
+          "name": "read.query.weight",
+          "nonzero": 36864
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 1.3516400532058452,
+          "max_abs": 0.16001459956169128,
+          "name": "read.value.bias",
+          "nonzero": 576
+        },
+        {
+          "elements": 331776,
+          "finite": true,
+          "l2": 12.020323484384214,
+          "max_abs": 0.20899474620819092,
+          "name": "read.value.weight",
+          "nonzero": 331776
+        },
+        {
+          "elements": 1728,
+          "finite": true,
+          "l2": 25.35202899943594,
+          "max_abs": 5.667001724243164,
+          "name": "recurrent.bias",
+          "nonzero": 1728
+        },
+        {
+          "elements": 995328,
+          "finite": true,
+          "l2": 11.868856479999895,
+          "max_abs": 0.2112680971622467,
+          "name": "recurrent.input.weight",
+          "nonzero": 995328
+        },
+        {
+          "elements": 995328,
+          "finite": true,
+          "l2": 17.11421504563975,
+          "max_abs": 0.6708666086196899,
+          "name": "recurrent.state.weight",
+          "nonzero": 995328
+        },
+        {
+          "elements": 576,
+          "finite": true,
+          "l2": 135.98085222634674,
+          "max_abs": 16.384937286376953,
+          "name": "update.bias",
+          "nonzero": 576
+        },
+        {
+          "elements": 1,
+          "finite": true,
+          "l2": 0.1172613650560379,
+          "max_abs": 0.1172613650560379,
+          "name": "update.gate.bias",
+          "nonzero": 1
+        },
+        {
+          "elements": 1152,
+          "finite": true,
+          "l2": 1.4638738754979768,
+          "max_abs": 0.13423581421375275,
+          "name": "update.gate.weight",
+          "nonzero": 1152
+        },
+        {
+          "elements": 663552,
+          "finite": true,
+          "l2": 18.478831754576692,
+          "max_abs": 0.19049395620822906,
+          "name": "update.weight",
+          "nonzero": 663552
+        }
+      ]
+    },
+    "heldout_nll_change_nats": -0.5236032684994312,
+    "heldout_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+      "response_tokens": 3942347,
+      "sha256": "ca5ccf0722d9dcdc5294b612f2c25536fe49192be7bedbc3007a1fcfc0940225",
+      "tokens": 6215400
+    },
+    "initial_heldout_response_masked_nll_nats": 7.09132150536679,
+    "loss_curve": {
+      "count": 5,
+      "first": 7.39530611038208,
+      "first_10": {
+        "first": null,
+        "last": null,
+        "mean": null
+      },
+      "last": 6.868966579437256,
+      "mean": 7.18161678314209
+    },
+    "mean_step_seconds": 5.478971475,
+    "mode": "dialogue-fit",
+    "parameter_count": 5429826,
+    "sampled_targets": 10240,
+    "schema": "uor-r4.dialogue-fit-report/1",
+    "scope": "R1b timing probe only: 5 optimize steps at width 576, 16-window evaluation, to measure step and evaluation throughput before the declared smoke run. Not a model result.",
+    "source_commit": "6cc050bccc299494738e014e2c2741a19a99b879",
+    "status": "FIT_COMPLETE",
+    "steps_completed": 5,
+    "supervised_targets": 10240,
+    "train_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+      "response_tokens": 56650286,
+      "sha256": "4a554b0ef8be12344f21f1bd6bdc9faeeeddcef212a138a8772a8bf42604c4fa",
+      "tokens": 82529690
+    }
+  },
+  "count_reference_report": {
+    "configuration": {
+      "batch": 8,
+      "checkpoint_steps": [],
+      "context": 256,
+      "count_report": null,
+      "data_seed": 20260926,
+      "eval_batch": 8,
+      "eval_max_windows": 512,
+      "eval_stride": 4,
+      "heldout_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+      "heldout_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+      "max_process_seconds": 1800,
+      "model": {
+        "context": 256,
+        "read_width": 64,
+        "seed": 20260926,
+        "transport": "quaternion",
+        "vocab_size": 4096,
+        "width": 576
+      },
+      "optimizer": {
+        "allowed_missing_gradients": [],
+        "learning_rate": 0.001,
+        "parameter_abs_limit": 1000000.0,
+        "weight_decay": 0.01
+      },
+      "schema": "uor-r4.dialogue-campaign/1",
+      "stop_file": null,
+      "total_steps": 100000,
+      "train_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+      "train_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+      "trial_scope": "R1b count reference: order-5 interpolated Kneser-Ney fitted on the chat-v0 train tokens, response-masked NLL on a fixed held-out window population (stride 4, max 512) that the dialogue learner also scores. NLL only; no decoder. Discount selected on train-split windows only.",
+      "tune_windows": 64
+    },
+    "discount_tune": {
+      "grid": [
+        0.5,
+        0.75,
+        0.9
+      ],
+      "selected_discount": 0.5,
+      "selected_train_nll": 1.8696114527884597,
+      "train_window_nll": [
+        {
+          "discount": 0.5,
+          "nll": 1.8696114527884597
+        },
+        {
+          "discount": 0.75,
+          "nll": 1.910823037878304
+        },
+        {
+          "discount": 0.9,
+          "nll": 1.9530368715514959
+        }
+      ],
+      "tune_scope": "count selection uses train-split windows only; no held-out selection",
+      "tune_windows": 64
+    },
+    "elapsed_seconds": 43.1455985,
+    "executable_sha256": "cc1d255880cd36cc0e7ab1dc38f7d46b001090e897faf89b7ed53b11d46d1295",
+    "fit": {
+      "algorithm": "count-pruned fixed-discount interpolated Kneser-Ney with additive unigram floor",
+      "model_bytes": 402186967,
+      "orders": [
+        {
+          "counted_windows": 82529689,
+          "order": 1,
+          "pruning_threshold": 0,
+          "raw_types": 4024,
+          "retained_count": 989022,
+          "retained_types": 4024,
+          "threshold_types_kept": 0,
+          "total_count": 989022
+        },
+        {
+          "counted_windows": 82529688,
+          "order": 2,
+          "pruning_threshold": 0,
+          "raw_types": 989022,
+          "retained_count": 7289718,
+          "retained_types": 989022,
+          "threshold_types_kept": 0,
+          "total_count": 7289718
+        },
+        {
+          "counted_windows": 82529687,
+          "order": 3,
+          "pruning_threshold": 1,
+          "raw_types": 7289718,
+          "retained_count": 15041415,
+          "retained_types": 4000000,
+          "threshold_types_kept": 1809608,
+          "total_count": 18331133
+        },
+        {
+          "counted_windows": 82529686,
+          "order": 4,
+          "pruning_threshold": 1,
+          "raw_types": 18331133,
+          "retained_count": 19046498,
+          "retained_types": 8000000,
+          "threshold_types_kept": 4732339,
+          "total_count": 29377631
+        },
+        {
+          "counted_windows": 82529686,
+          "order": 5,
+          "pruning_threshold": 1,
+          "raw_types": 29377631,
+          "retained_count": 61152055,
+          "retained_types": 8000000,
+          "threshold_types_kept": 302927,
+          "total_count": 82529686
+        }
+      ],
+      "projected_fit_peak_bytes": 1943065617,
+      "sequence_lengths": [
+        82529690
+      ],
+      "train_tokens": 82529690
+    },
+    "fit_seconds": 16.956177625,
+    "full_heldout": {
+      "population": "all 256-token windows, stride 1",
+      "response_masked_nll_nats": 2.458182523807814,
+      "supervised_targets": 3942189,
+      "windows": 24278
+    },
+    "heldout_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+      "response_tokens": 3942347,
+      "sha256": "ca5ccf0722d9dcdc5294b612f2c25536fe49192be7bedbc3007a1fcfc0940225",
+      "tokens": 6215400
+    },
+    "matched_evaluation": {
+      "population": "heldout windows at eval_stride with eval_max_windows",
+      "response_masked_nll_nats": 2.4656425541851505,
+      "supervised_targets": 84328,
+      "windows": 512
+    },
+    "mode": "dialogue-count",
+    "model_bytes": 402186967,
+    "model_sha256": "90f0a6574b9d27a196af0040be96e8006923055b2cd68d4a499804aed01b6859",
+    "ngram_config": {
+      "discount": 0.75,
+      "max_train_tokens": 82529690,
+      "row_caps": [
+        4000000,
+        4000000,
+        8000000,
+        8000000
+      ],
+      "unigram_alpha": 0.0001,
+      "vocab_size": 4096
+    },
+    "schema": "uor-r4.dialogue-count-report/1",
+    "scope": "R1b count reference: order-5 interpolated Kneser-Ney fitted on the chat-v0 train tokens, response-masked NLL on a fixed held-out window population (stride 4, max 512) that the dialogue learner also scores. NLL only; no decoder. Discount selected on train-split windows only.",
+    "source_commit": "6cc050bccc299494738e014e2c2741a19a99b879",
+    "status": "COUNT_COMPLETE",
+    "train_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+      "response_tokens": 56650286,
+      "sha256": "4a554b0ef8be12344f21f1bd6bdc9faeeeddcef212a138a8772a8bf42604c4fa",
+      "tokens": 82529690
+    }
+  },
+  "screen": {
+    "count_matched_nll": 2.4656425541851505,
+    "learner_heldout_nll": 6.218980959816366,
+    "margin_count_minus_learner": -3.7533384056312156,
+    "population_matches": true,
+    "acceptance_met": false
+  },
+  "full_r1_projection": {
+    "sampled_targets_per_step": 2048,
+    "steps_per_epoch": 40298,
+    "measured_step_seconds": {
+      "probe_light_load": 5.478971475,
+      "smoke_loaded": 14.830638680991157,
+      "smoke_median_loaded": 14.935586292,
+      "smoke_min_loaded": 10.85479575
+    },
+    "measured_targets_per_second": {
+      "light_load": 373.7927837998098,
+      "loaded": 138.0925018842903
+    },
+    "one_epoch_wall_hours": {
+      "light_load": 61.33099791654166,
+      "loaded": 166.0125215462727
+    },
+    "bounded_6h_steps": {
+      "light_load": 3942,
+      "loaded": 1456
+    },
+    "bounded_13h_steps_light_load": 8541,
+    "peak_rss_gib_smoke": 2.30132,
+    "checkpoint_bytes_each": 21719304,
+    "declared_decision": "Direction-update 7-13 h/epoch projection invalidated at width 576; extending this run cannot close the 3.753-nat screen margin. Lead chooses bounded exposure, a dense R1 vehicle, or rescale."
+  },
+  "panel_reconciliation": {
+    "file": "docs/integration/chat-r1b-panel-requests-dev-2026-09-25.json",
+    "rows": 38,
+    "groups": {
+      "core": 20,
+      "memory": 10,
+      "refusal": 8
+    },
+    "fresh_rows_opened": false,
+    "memory_rows_note": "panel stores no intermediate assistant replies; consecutive User: blocks emitted"
+  },
+  "artifact_hashes": {
+    "fit_report": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/fit-1/dialogue-fit.json",
+      "bytes": 11969,
+      "sha256": "ba227de08cb9dc65681a91b03c1802210db91c17b56fb684ac7ed0a663530c9d"
+    },
+    "fit_parameters": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/fit-1/parameters.f32",
+      "bytes": 21719304,
+      "sha256": "fcb5aa806ec2c1133d7c75658fb84ef718d6a2490e25cfdc872d2cab548a9b0e"
+    },
+    "fit_curve": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/fit-1/learning-curve.jsonl",
+      "bytes": 140242,
+      "sha256": "b0b5c23074b82ee6e1adcea7aec84fd0f1fff2c52e672223455fabdbcac981eb"
+    },
+    "probe_report": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/probe-fit-1/dialogue-fit.json",
+      "bytes": 11142,
+      "sha256": "7c583f81cd4d9a1cf3d3799051fde87f9bad3ed15d32ae200da573bc980fe849"
+    },
+    "count_report": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/count-3/dialogue-count.json",
+      "bytes": 5454,
+      "sha256": "a48e64e9a015aadcc16a27e8505b38511c6014678a1bea351d2802307bf70f09"
+    },
+    "count_model": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/r1b/count-3/model.ng5",
+      "bytes": 402186967,
+      "sha256": "90f0a6574b9d27a196af0040be96e8006923055b2cd68d4a499804aed01b6859"
+    },
+    "panel_requests": {
+      "path": "/Users/casey.allard/uor-r4/.worktrees/canonical-address-routing-20260925/docs/integration/chat-r1b-panel-requests-dev-2026-09-25.json",
+      "bytes": 10539,
+      "sha256": "28c5ce327387b4eff90b7b36dd585fddb89c12bbb7ce7bfa5eff3b0e63e122c3"
+    },
+    "fit_campaign": {
+      "path": "/Users/casey.allard/uor-r4/.worktrees/canonical-address-routing-20260925/docs/integration/chat-r1b-fit-campaign-2026-09-25.json",
+      "bytes": 1455,
+      "sha256": "6969ffbfaf71971d855c31f4b3048c0c97794390223e93910d6d4758df743398"
+    },
+    "count_campaign": {
+      "path": "/Users/casey.allard/uor-r4/.worktrees/canonical-address-routing-20260925/docs/integration/chat-r1b-count-campaign-2026-09-25.json",
+      "bytes": 1324,
+      "sha256": "1d20faa9a9340664e2d1e78a73a3fa93e6269a7bb7f81f79c64ed2ee900fee6f"
+    },
+    "train_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+      "bytes": 165059444,
+      "sha256": "4a554b0ef8be12344f21f1bd6bdc9faeeeddcef212a138a8772a8bf42604c4fa"
+    },
+    "train_mask": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+      "bytes": 82529690,
+      "sha256": "09dc0fe5d0e2de7b5072e4586b5cb9ef3379856600ff90061c561a48826e75e7"
+    },
+    "heldout_tokens": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+      "bytes": 12430864,
+      "sha256": "ca5ccf0722d9dcdc5294b612f2c25536fe49192be7bedbc3007a1fcfc0940225"
+    },
+    "heldout_mask": {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+      "bytes": 6215400,
+      "sha256": "ed43a9eade79d84dc73be608fb788f1e7566021fbdbba35ce3e5eddbc4fce8b4"
+    },
+    "panel": {
+      "path": "/Users/casey.allard/uor-r4/.worktrees/canonical-address-routing-20260925/docs/integration/chat-panel-v0-2026-09-25.json",
+      "bytes": 33248,
+      "sha256": "10dfc0e7c529feecfa61e393b22a404ffee561339281abf5ea03f53964c6cfd2"
+    }
+  },
+  "exact_commands": [
+    "UOR_BUILD_SOURCE_COMMIT=0b7b4c970e43176f909657247ebde5749a3558d0 cargo build --release -p uor-r4-training --offline",
+    "UOR_BUILD_SOURCE_COMMIT=0b7b4c970e43176f909657247ebde5749a3558d0 cargo test -p uor-r4-training --offline --lib dialogue::",
+    "BIN dialogue-count $LAB/r1b-count-campaign.json $LAB/count-3",
+    "/usr/bin/time -l BIN dialogue-fit $LAB/r1b-fit-campaign.json $LAB/fit-1",
+    "BIN dialogue-panel <worktree>/docs/integration/chat-panel-v0-2026-09-25.json $LAB/panel-requests-dev.json",
+    "BIN verify $LAB/count-3; BIN verify $LAB/fit-1; BIN verify $LAB/probe-fit-1"
+  ],
+  "cost": {
+    "build_first_seconds": 147,
+    "focused_tests_seconds": 85,
+    "count_run_seconds": 14.7,
+    "smoke_fit_seconds": 2008.212229875,
+    "timing_probe_seconds": 32,
+    "peak_rss_gib": 2.30132,
+    "external_or_paid_compute": "none"
+  },
+  "limitations": [
+    "113 steps = 0.28% of an epoch; development screen only.",
+    "Width 576 artifact is not loadable by the retained serving loader; R3 needs a serving-side width extension.",
+    "Step times measured under a concurrent D8 cycle (5.48 s/step light load to 19.30 s/step loaded).",
+    "Matched held-out population is 512 spread 256-token windows; full-heldout count NLL reported for reference.",
+    "Interpolated single-discount Kneser-Ney with count pruning, discount selected on train windows only.",
+    "No greedy generation; the non-degenerate-output limb is NOT_RUN because the likelihood criterion was not met."
+  ],
+  "next_decision": "Read the bounded-full-R1 curve, switch the R1 vehicle to a configurable dense learner with a documented path into the integer session, or rescale. The sealed panel fresh array stays closed until design selection."
+}

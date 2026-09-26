@@ -1,0 +1,34 @@
+{
+  "schema": "uor-r4.dialogue-campaign/1",
+  "train_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/tokens.u16",
+  "train_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/train/response_mask.u8",
+  "heldout_tokens": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16",
+  "heldout_mask": "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/response_mask.u8",
+  "model": {
+    "vocab_size": 4096,
+    "width": 576,
+    "read_width": 64,
+    "context": 256,
+    "transport": "quaternion",
+    "seed": 20260926
+  },
+  "optimizer": {
+    "learning_rate": 0.001,
+    "weight_decay": 0.01,
+    "parameter_abs_limit": 1000000.0,
+    "allowed_missing_gradients": []
+  },
+  "data_seed": 20260926,
+  "batch": 8,
+  "context": 256,
+  "total_steps": 100000,
+  "max_process_seconds": 1800,
+  "eval_stride": 4,
+  "eval_max_windows": 512,
+  "eval_batch": 8,
+  "tune_windows": 64,
+  "checkpoint_steps": [],
+  "count_report": null,
+  "stop_file": null,
+  "trial_scope": "R1b count reference: order-5 interpolated Kneser-Ney fitted on the chat-v0 train tokens, response-masked NLL on a fixed held-out window population (stride 4, max 512) that the dialogue learner also scores. NLL only; no decoder. Discount selected on train-split windows only."
+}

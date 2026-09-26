@@ -231,6 +231,16 @@ struct CoreStep {
 impl JointModel {
     pub fn new(config: JointConfig, device: &Device) -> Result<Self> {
         config.validate()?;
+        Self::initialize(config, device)
+    }
+
+    /// Offline constructor for declared dialogue configurations whose width
+    /// exceeds the retained serving loader's 128/256 contract. Not a serving path.
+    pub fn new_dialogue(config: JointConfig, device: &Device) -> Result<Self> {
+        Self::initialize(config, device)
+    }
+
+    fn initialize(config: JointConfig, device: &Device) -> Result<Self> {
         let mut rng = Initializer(config.seed);
         let mut variables = BTreeMap::new();
         // Stable lexical parameter order and one seed give identical initial

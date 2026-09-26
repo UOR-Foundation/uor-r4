@@ -1,0 +1,390 @@
+{
+  "note": "Development rows only. The panel stores no intermediate assistant replies for memory rows, so consecutive User: blocks are emitted; run these only after R3/R4 design selection.",
+  "panel_panel_sha256": "4e12e1bd607edd0db5d93f6550c1968562d0490f481ec2ca5d5c2facae79e979",
+  "panel_path": "/Users/casey.allard/uor-r4/.worktrees/canonical-address-routing-20260925/docs/integration/chat-panel-v0-2026-09-25.json",
+  "panel_sha256": "10dfc0e7c529feecfa61e393b22a404ffee561339281abf5ea03f53964c6cfd2",
+  "requests": [
+    {
+      "group": "core",
+      "id": "dev-core-greet-01",
+      "max_new_tokens": 64,
+      "prompt": "User: Hi there!\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-greet-02",
+      "max_new_tokens": 64,
+      "prompt": "User: Good morning!\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-greet-03",
+      "max_new_tokens": 64,
+      "prompt": "User: How are you today?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-greet-04",
+      "max_new_tokens": 64,
+      "prompt": "User: Nice to meet you.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-greet-05",
+      "max_new_tokens": 64,
+      "prompt": "User: Thank you very much!\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-01",
+      "max_new_tokens": 64,
+      "prompt": "User: What is the capital of France?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-02",
+      "max_new_tokens": 64,
+      "prompt": "User: How many legs does a spider have?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-03",
+      "max_new_tokens": 64,
+      "prompt": "User: What color is the sky on a clear day?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-04",
+      "max_new_tokens": 64,
+      "prompt": "User: How many days are in a week?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-05",
+      "max_new_tokens": 64,
+      "prompt": "User: What is the largest planet in our solar system?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-06",
+      "max_new_tokens": 64,
+      "prompt": "User: What do bees make?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-07",
+      "max_new_tokens": 64,
+      "prompt": "User: What is the freezing point of water in Celsius?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-fact-08",
+      "max_new_tokens": 64,
+      "prompt": "User: Which animal is known as the king of the jungle?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-inst-01",
+      "max_new_tokens": 64,
+      "prompt": "User: Write a sentence about the sun.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-inst-02",
+      "max_new_tokens": 64,
+      "prompt": "User: Write a sentence about a dog.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-inst-03",
+      "max_new_tokens": 64,
+      "prompt": "User: Write a sentence about the ocean.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-inst-04",
+      "max_new_tokens": 64,
+      "prompt": "User: Write a sentence about winter.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-inst-05",
+      "max_new_tokens": 64,
+      "prompt": "User: Write a sentence about a book.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-inst-06",
+      "max_new_tokens": 64,
+      "prompt": "User: Write a sentence about music.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "core",
+      "id": "dev-core-inst-07",
+      "max_new_tokens": 64,
+      "prompt": "User: Write a sentence about a mountain.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-01",
+      "max_new_tokens": 64,
+      "prompt": "User: My name is Alex.\nUser: I also like apples.\nUser: What is my name?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-02",
+      "max_new_tokens": 64,
+      "prompt": "User: My cat is named Momo.\nUser: She likes to sleep.\nUser: What is my cat's name?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-03",
+      "max_new_tokens": 64,
+      "prompt": "User: My favorite color is green.\nUser: I also like blue.\nUser: What is my favorite color?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-04",
+      "max_new_tokens": 64,
+      "prompt": "User: I work as a teacher.\nUser: My school is nearby.\nUser: What is my job?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-05",
+      "max_new_tokens": 64,
+      "prompt": "User: My sister lives in Tokyo.\nUser: She visits often.\nUser: Where does my sister live?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-06",
+      "max_new_tokens": 64,
+      "prompt": "User: I have two brothers.\nUser: They are older than me.\nUser: How many brothers do I have?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-07",
+      "max_new_tokens": 64,
+      "prompt": "User: My birthday is in July.\nUser: I love summer.\nUser: When is my birthday?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-08",
+      "max_new_tokens": 64,
+      "prompt": "User: I drive a blue car.\nUser: It is fast.\nUser: What color is my car?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-09",
+      "max_new_tokens": 64,
+      "prompt": "User: I am learning to play the piano.\nUser: It is hard but fun.\nUser: What instrument am I learning?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "memory",
+      "id": "dev-mem-10",
+      "max_new_tokens": 64,
+      "prompt": "User: My favorite food is pizza.\nUser: I eat it on Fridays.\nUser: What is my favorite food?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-01",
+      "max_new_tokens": 64,
+      "prompt": "User: What is the best flavor?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-02",
+      "max_new_tokens": 64,
+      "prompt": "User: Tell me about the thing.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-03",
+      "max_new_tokens": 64,
+      "prompt": "User: What did I do yesterday?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-04",
+      "max_new_tokens": 64,
+      "prompt": "User: Who won the game?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-05",
+      "max_new_tokens": 64,
+      "prompt": "User: What is the answer?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-06",
+      "max_new_tokens": 64,
+      "prompt": "User: Tell me about the future.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-07",
+      "max_new_tokens": 64,
+      "prompt": "User: Give me the number.\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    },
+    {
+      "group": "refusal",
+      "id": "dev-ref-08",
+      "max_new_tokens": 64,
+      "prompt": "User: What is the name of that song?\nAssistant: ",
+      "read_mode": "enabled",
+      "selection": {
+        "kind": "greedy"
+      }
+    }
+  ],
+  "schema": "uor-r4.dialogue-panel-requests/1",
+  "template": "User: {turn}\\nAssistant: {response}<|eos|> with turns separated by a single newline and <|bos|> inserted by the session"
+}
