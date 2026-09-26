@@ -12,6 +12,7 @@
 //!     [teacher=DIR] [score=intrinsic|key_norm|dot] [init_log_eps=-4.6] [trainable=scalars|query_key]
 //!     [steps=500] [batch=4] [time=256] [lr=1e-5] [curv_lr=1e-2] [eval_every=100]
 //!     [eval_windows=16] [seed=1] [max_seconds=0] [save_model=true]
+//!     [anneal_to=LOG_EPS] [anneal_steps=steps/2] [anneal_hold=true]
 //! kappa-conversion mode=sample model=DIR prompt=TEXT [variables=ROOT/model/variables.safetensors]
 //!     [score=dot] [trainable=scalars|query_key] [tokens=64]
 //! ```
@@ -20,7 +21,10 @@
 //! `train` minimizes KL(teacher || student) when `teacher=` is given (the
 //! teacher runs the Dot score) and next-token loss on `train=` otherwise. A
 //! `score=dot` run is the matched control: same data order, same per-head
-//! temperatures and trainable weights, no curvature.
+//! temperatures and trainable weights, no curvature. An exact flat-limit start
+//! can stay in the flat basin, so `anneal_to=` raises a floor on every head's
+//! `log_eps` linearly from `init_log_eps` to `anneal_to` over `anneal_steps`,
+//! then holds it (or releases it with `anneal_hold=false`).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -343,6 +347,26 @@ struct TrainSettings {
     seed: u64,
     max_seconds: f64,
     save_model: bool,
+    anneal: Option<Anneal>,
+}
+
+/// Rising lower bound on every head's `log_eps` (curvature annealing).
+#[derive(Clone, Copy, Debug)]
+struct Anneal {
+    to: f32,
+    steps: usize,
+    hold: bool,
+}
+
+impl Anneal {
+    /// The floor after `step` optimizer steps, if one applies.
+    fn floor(&self, init: f32, step: usize) -> Option<f32> {
+        if step > self.steps && !self.hold {
+            return None;
+        }
+        let fraction = (step as f32 / self.steps as f32).min(1.0);
+        Some(init + (self.to - init) * fraction)
+    }
 }
 
 fn train_settings(args: &Args) -> Result<TrainSettings> {
@@ -373,7 +397,35 @@ fn train_settings(args: &Args) -> Result<TrainSettings> {
                 )))
             }
         },
+        anneal: None,
     };
+    let mut settings = settings;
+    if let Some(text) = args.text("anneal_to") {
+        let to: f32 = text
+            .parse()
+            .map_err(|_| invalid(format!("invalid anneal_to={text}")))?;
+        let hold = match args.text("anneal_hold").unwrap_or("true") {
+            "true" => true,
+            "false" => false,
+            other => {
+                return Err(invalid(format!(
+                    "anneal_hold must be true or false, not {other}"
+                )))
+            }
+        };
+        let steps = args.number("anneal_steps", settings.steps.div_ceil(2))?;
+        if !settings.score.is_curved()
+            || !to.is_finite()
+            || !(-20.0..=5.0).contains(&to)
+            || to < settings.init_log_eps
+            || steps == 0
+        {
+            return Err(invalid(
+                "anneal needs a curved score, anneal_to in [init_log_eps, 5] and anneal_steps > 0",
+            ));
+        }
+        settings.anneal = Some(Anneal { to, steps, hold });
+    }
     if settings.steps == 0
         || settings.batch == 0
         || settings.time < 2
@@ -408,8 +460,10 @@ fn train(settings: &TrainSettings, out: &Path) -> Result<()> {
         seed,
         max_seconds,
         save_model,
+        anneal,
         ..
     } = settings;
+    let anneal = *anneal;
     let (score, trainable, init_log_eps, steps, batch, time) =
         (*score, *trainable, *init_log_eps, *steps, *batch, *time);
     let (lr, curv_lr, eval_every, eval_windows, seed, max_seconds, save_model) = (
@@ -495,6 +549,7 @@ fn train(settings: &TrainSettings, out: &Path) -> Result<()> {
             "valid_nll": eval.nll,
             "valid_kl_to_teacher": eval.kl,
             "curvature": summary(&model.curvature()?),
+            "curvature_floor_log_eps": anneal.and_then(|a| a.floor(init_log_eps, step)),
             "temperature": summary(&model.temperature()?),
             "wall": started.elapsed().as_secs_f64(),
         });
@@ -525,6 +580,9 @@ fn train(settings: &TrainSettings, out: &Path) -> Result<()> {
         scalar_opt.step(&scalar_vars, &gradients)?;
         if let Some(optimizer) = weight_opt.as_mut() {
             optimizer.step(&weight_vars, &gradients)?;
+        }
+        if let Some(floor) = anneal.and_then(|a| a.floor(init_log_eps, step)) {
+            student.floor_log_eps(floor)?;
         }
         completed = step;
         if step % eval_every == 0 || step == steps {
@@ -559,6 +617,7 @@ fn train(settings: &TrainSettings, out: &Path) -> Result<()> {
             "score": score, "trainable": trainable, "init_log_eps": init_log_eps, "steps": steps,
             "completed_steps": completed, "batch": batch, "time": time, "lr": lr, "curv_lr": curv_lr,
             "eval_every": eval_every, "eval_windows": eval_windows, "seed": seed,
+            "anneal": anneal.map(|a| json!({"to": a.to, "steps": a.steps, "hold": a.hold})),
             "objective": if teacher.is_some() { "kl_to_dot_teacher" } else { "next_token_nll" },
         },
         "curvature_final": student.curvature()?,

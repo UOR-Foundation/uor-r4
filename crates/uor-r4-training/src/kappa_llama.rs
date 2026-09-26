@@ -665,6 +665,22 @@ impl KappaLlama {
         variable.set(&Tensor::full(value, variable.shape(), &self.device)?)?;
         Ok(())
     }
+
+    /// Project every head's `log_eps` onto `[floor, inf)`. An exact flat-limit
+    /// start can sit in the flat basin, where learned curvature never grows; a
+    /// rising floor anneals the heads into the curved regime while the rest of
+    /// the model adapts.
+    pub fn floor_log_eps(&self, floor: f32) -> Result<()> {
+        if !floor.is_finite() {
+            return Err(invalid("curvature floor must be finite"));
+        }
+        let variable = self
+            .variables
+            .get(LOG_EPS)
+            .ok_or_else(|| invalid("a dot model has no curvature"))?;
+        variable.set(&variable.as_tensor().maximum(floor)?)?;
+        Ok(())
+    }
 }
 
 /// Mean next-token negative log-likelihood (nats) of `(batch, time, vocab)`
@@ -893,6 +909,30 @@ mod tests {
                 "{name}: gradient norm {norm}"
             );
         }
+    }
+
+    #[test]
+    fn curvature_floor_projects_every_head() {
+        let curved = model(ScoreKind::KeyNorm, -6.0, Trainable::Scalars);
+        curved.floor_log_eps(-2.0).expect("floor");
+        let kappa = curved.curvature().expect("kappa");
+        let want = (-4.0f32).exp();
+        assert!(kappa
+            .iter()
+            .flatten()
+            .all(|k| (k - want).abs() <= 1e-6 * want));
+        curved
+            .floor_log_eps(-3.0)
+            .expect("lower floor keeps higher values");
+        assert!(curved
+            .curvature()
+            .expect("kappa")
+            .iter()
+            .flatten()
+            .all(|k| (k - want).abs() <= 1e-6 * want));
+        assert!(model(ScoreKind::Dot, 0.0, Trainable::Scalars)
+            .floor_log_eps(0.0)
+            .is_err());
     }
 
     #[test]
