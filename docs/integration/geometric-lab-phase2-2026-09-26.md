@@ -297,6 +297,34 @@ Written before the measured run; the rules below do not change after it.
   - *Change.* 1,600 training segments instead of 256, read in shuffled passes, so the 400 steps of 4 read each segment once. The decisions and every other condition are unchanged.
   - *Why.* The one-seed pilot trained on 64 segments, about 19 passes, and overfit. Validation NLL change was best mid-training (Lorentz −0.009 at step 100, Euclid −0.008 at step 200). By step 300 it was positive for every arm (+0.0085, +0.0015, dot +0.0037), while training loss kept falling.
 
+### 8.1 M4a result (Measured)
+
+64 held-out validation segments; 768 query positions each, 49,152 in all. The backbone NLL at those positions is 1.1613 nats per token. Change from the backbone:
+
+| Keys | Seed 1 | Seed 2 | Mean | 99% of the read in | Top-8 mass | Gate | Mean `\|k\|^2` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| dot | −0.0101 | −0.0092 | −0.0097 | 3.2–3.4% of entries | 0.97 | 0.02–0.04 | 135–141 |
+| euclid | −0.0138 | −0.0143 | −0.0141 | 2.2–2.4% | 0.98–0.99 | 0.05 | 111–119 |
+| lorentz | −0.0184 | −0.0188 | **−0.0186** | 13.1–13.5% | 0.86–0.87 | 0.07–0.09 | 178–186 |
+
+- **Every arm beats the backbone.** Both seeds agree, and every mean exceeds its seed spread (0.0004–0.0008).
+- **Paired, Lorentz beats both other arms.**
+  - Against Euclid: −0.0046 and −0.0045.
+  - Against dot: −0.0083 and −0.0096.
+  - Euclid against dot: −0.0038 and −0.0051.
+- **Decision 2 applies.** Lorentz keys go into M4b, the integer serving of the cache read. The integer arcosh kernel it needs now exists (`uor_r4_lut::kernels::arcosh1p_q24`, worst error below 3·10⁻⁷ nats).
+- **Decision 5 does not hold for the adopted arm.**
+  - The Lorentz read spreads its mass: 99% needs about 13% of the readable entries.
+  - The flat arms concentrate theirs (2–3%).
+  - So a sparse index is not shown to be viable for the Lorentz cache; M4b reads it densely. At 32 dimensions and a few thousand entries, that is well under 1% of the backbone's per-token work (*Derived*).
+- **The learned Lorentz keys are strongly curved.** Mean `|u|^2` is about 180, a hyperbolic radius of about 3.3, close to the cycle-3 read's 3.5.
+- **The flat maps grow almost as large** (`|u|^2` 110–140), so scale alone does not separate the arms.
+- *Scope.*
+  - A 4.2M-parameter byte-level backbone, whose cache holds only what lies beyond its 256-token window. For scale, 0.0186 nats is 0.027 bits per byte (1.6%).
+  - Training ran 400 steps. Dot was still improving at step 400 (−0.0052 to −0.0101 over the last 100 steps), while Euclid and Lorentz had levelled off. The ranking is at the fixed budget.
+  - The effect on SmolLM2, with BPE tokens, a far stronger backbone and a 2K window, is unmeasured.
+- *Cost.* 34 minutes on the container: 815 s of backbone features, then 105–341 s per arm.
+
 ## 9. Cost of this phase
 
 - **Machine.** One shared review container: 4 cores, 15 GB, no GPU. It ran from about 16:20 to 18:15 UTC, at load 10–30. No paid or external compute.
