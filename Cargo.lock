@@ -2891,6 +2891,7 @@ name = "uor-r4-lut"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "rayon",
  "serde",
  "serde_json",
  "sha2",

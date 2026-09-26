@@ -126,32 +126,60 @@ pub fn row_min_de(rows: usize, cols: usize, scales: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-/// `out[r] = sum_c W[r][c] x[c]`, with `x` given by its multiples table and
-/// exponent, written at exponent `out_exp`. Additions, shifts and table reads
-/// only: no multiplier touches a weight.
-pub fn gemv(m: &MatrixView<'_>, table: &[i32], x_exp: i32, out: &mut [i32], out_exp: i32) {
+/// Matrices with at least this many weights split their rows across threads.
+pub const PARALLEL_WEIGHTS: usize = 1 << 18;
+
+/// One output row of [`gemv`]: the accumulated value and its exponent offset
+/// `de_min`. Additions, shifts and table reads only.
+#[inline]
+fn gemv_row(m: &MatrixView<'_>, table: &[i32], r: usize) -> i64 {
     let groups = m.cols / crate::GROUP;
     let half_group = crate::GROUP / 2;
-    for (r, slot) in out.iter_mut().enumerate().take(m.rows) {
-        let nibbles = &m.nibbles[r * m.cols / 2..(r + 1) * m.cols / 2];
-        let scales = &m.scales[r * groups..(r + 1) * groups];
-        let de_min = m.row_min_de[r];
-        let mut acc = 0i64;
-        for (g, &scale) in scales.iter().enumerate() {
-            let mut a = 0i32;
-            let base = g * crate::GROUP;
-            for (b, &byte) in nibbles[g * half_group..(g + 1) * half_group]
-                .iter()
-                .enumerate()
-            {
-                let i = base + 2 * b;
-                a += table[i * 16 + usize::from(byte & 15)];
-                a += table[(i + 1) * 16 + usize::from(byte >> 4)];
-            }
-            acc += scale_16_plus(i64::from(a), scale & 15) << ((scale >> 4) - de_min);
+    let nibbles = &m.nibbles[r * m.cols / 2..(r + 1) * m.cols / 2];
+    let scales = &m.scales[r * groups..(r + 1) * groups];
+    let de_min = m.row_min_de[r];
+    let mut acc = 0i64;
+    for (g, &scale) in scales.iter().enumerate() {
+        let mut a = 0i32;
+        let base = g * crate::GROUP;
+        for (b, &byte) in nibbles[g * half_group..(g + 1) * half_group]
+            .iter()
+            .enumerate()
+        {
+            let i = base + 2 * b;
+            a += table[i * 16 + usize::from(byte & 15)];
+            a += table[(i + 1) * 16 + usize::from(byte >> 4)];
         }
-        let from = m.exp_base + i32::from(de_min) - 4 + x_exp;
+        acc += scale_16_plus(i64::from(a), scale & 15) << ((scale >> 4) - de_min);
+    }
+    acc
+}
+
+/// `out[r] = sum_c W[r][c] x[c]`, with `x` given by its multiples table and
+/// exponent, written at exponent `out_exp`. Additions, shifts and table reads
+/// only: no multiplier touches a weight. Large matrices split their rows
+/// across threads; the arithmetic, and so the result, is the same.
+pub fn gemv(m: &MatrixView<'_>, table: &[i32], x_exp: i32, out: &mut [i32], out_exp: i32) {
+    use rayon::prelude::*;
+    let finish = |r: usize, slot: &mut i32| {
+        let acc = gemv_row(m, table, r);
+        let from = m.exp_base + i32::from(m.row_min_de[r]) - 4 + x_exp;
         *slot = to_exp_i32(acc, from, out_exp);
+    };
+    let out = &mut out[..m.rows];
+    if m.rows * m.cols >= PARALLEL_WEIGHTS {
+        const CHUNK: usize = 32;
+        out.par_chunks_mut(CHUNK)
+            .enumerate()
+            .for_each(|(c, chunk)| {
+                for (i, slot) in chunk.iter_mut().enumerate() {
+                    finish(c * CHUNK + i, slot);
+                }
+            });
+    } else {
+        for (r, slot) in out.iter_mut().enumerate() {
+            finish(r, slot);
+        }
     }
 }
 
@@ -425,6 +453,48 @@ mod tests {
             // compare at the kernel's input resolution (2^-12 nats)
             let want = (-(fixed as f64) / 4096.0).exp();
             assert!((got - want).abs() < 2e-6, "exp(-{d}) = {got}, want {want}");
+        }
+    }
+
+    #[test]
+    fn parallel_gemv_matches_the_exact_product() {
+        let (rows, cols) = (1024, 256);
+        assert!(rows * cols >= PARALLEL_WEIGHTS);
+        let mut seed = 99u32;
+        let mut next = || {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            (seed >> 16) as u8
+        };
+        let nibbles: Vec<u8> = (0..rows * cols / 2).map(|_| next()).collect();
+        let scales: Vec<u8> = (0..rows * cols / crate::GROUP)
+            .map(|_| next() & 0x3F)
+            .collect();
+        let x: Vec<i16> = (0..cols)
+            .map(|i| ((i * 131) % 4001) as i16 - 2000)
+            .collect();
+        let min_de = row_min_de(rows, cols, &scales);
+        let m = MatrixView {
+            rows,
+            cols,
+            exp_base: -2,
+            nibbles: &nibbles,
+            scales: &scales,
+            row_min_de: &min_de,
+        };
+        let mut table = Vec::new();
+        build_multiples(&x, &mut table);
+        let mut out = vec![0i32; rows];
+        gemv(&m, &table, -8, &mut out, -14);
+        for (r, got) in out.iter().enumerate() {
+            let mut exact = 0i128;
+            for c in 0..cols {
+                let byte = nibbles[(r * cols + c) / 2];
+                let q = i128::from(if c % 2 == 0 { byte & 15 } else { byte >> 4 }) - 8;
+                let s = scales[(r * cols + c) / crate::GROUP];
+                exact += (q * (16 + i128::from(s & 15)) * i128::from(x[c])) << (s >> 4);
+            }
+            // exact is at exponent -2 - 4 - 8 = -14, the output exponent
+            assert_eq!(i128::from(*got), exact, "row {r}");
         }
     }
 }

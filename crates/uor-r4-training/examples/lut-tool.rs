@@ -4,6 +4,7 @@
 //! ```text
 //! lut-tool mode=export model=DIR out=FILE.lut [max_positions=2048]
 //! lut-tool mode=dequantize model=DIR lut=FILE.lut out=NEW_DIR
+//! lut-tool mode=bench lut=FILE.lut [tokens=64]
 //! lut-tool mode=fidelity model=DIR lut=FILE.lut tokens=X.u16 out=NEW_ROOT
 //!     [windows=8] [time=128] [device=cpu|metal]
 //! ```
@@ -162,6 +163,31 @@ fn dequantize(args: &Args) -> Result<()> {
         fs::copy(model.join("tokenizer.json"), out.join("tokenizer.json"))?;
     }
     eprintln!("wrote dequantized float checkpoint {}", out.display());
+    Ok(())
+}
+
+fn bench(args: &Args) -> Result<()> {
+    let lut = PathBuf::from(args.required("lut")?);
+    let tokens: usize = args.number("tokens", 64)?;
+    let model = Model::load(&lut).map_err(|e| invalid(e.to_string()))?;
+    let vocab = model.shape().vocab as u32;
+    if tokens == 0 || tokens > model.shape().max_positions {
+        return Err(invalid("tokens must be positive and fit max_positions"));
+    }
+    let mut session = model.session();
+    let started = Instant::now();
+    let mut next = 1u32;
+    for i in 0..tokens {
+        let logits = session.step(next).map_err(|e| invalid(e.to_string()))?;
+        next = (uor_r4_lut::kernels::argmax(logits) as u32 + i as u32) % vocab;
+    }
+    let seconds = started.elapsed().as_secs_f64();
+    let report = json!({
+        "lut": lut, "lut_sha256": model.artifact_sha256(), "tokens": tokens,
+        "seconds": seconds, "tokens_per_second": tokens as f64 / seconds,
+        "threads": std::env::var("RAYON_NUM_THREADS").unwrap_or_else(|_| "default".into()),
+    });
+    println!("{report}");
     Ok(())
 }
 
@@ -332,6 +358,7 @@ fn main() -> Result<()> {
     match args.required("mode")? {
         "export" => export(&args),
         "dequantize" => dequantize(&args),
+        "bench" => bench(&args),
         "fidelity" => {
             let settings = fidelity_settings(&args)?;
             let out = PathBuf::from(args.required("out")?);
