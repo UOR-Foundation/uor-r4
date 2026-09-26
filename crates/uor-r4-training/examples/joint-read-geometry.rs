@@ -13,6 +13,13 @@
 //! loss weighted by window count. It tests whether making the recurrent state
 //! predict without its read prevents read dependence. It requires one shard.
 //!
+//! `lorentz_start=flat` starts the Lorentz read scale at beta 1 instead of the
+//! Dot-matched default (it sets `read.lorentz_log_beta` to 0 after
+//! construction; that scalar draws nothing from the initializer). Its initial
+//! scores are about ten times flatter; it trained more reliably in the
+//! reduced-scale code comparison, where the default was slightly better when
+//! it did not become read-dependent.
+//!
 //! `checkpoint_every=N` keeps `checkpoint/` (model, AdamW moments and progress)
 //! after every N updates, replaced atomically, and removes it on completion.
 //! `resume=OLD_ROOT/checkpoint` continues an interrupted attempt in a new report
@@ -25,7 +32,8 @@
 //!   [lens=TOKEN_BYTES.u16] [seed=1] [width=256] [context=256] [batch=16] \
 //!   [steps=1000] [lr=0.001] [shards=1] [transport=quaternion] \
 //!   [eval_every=250] [eval_windows=64] [final_windows=256] [max_seconds=inf] \
-//!   [save_model=false] [read_dropout=0] [checkpoint_every=0] [resume=CHECKPOINT]
+//!   [save_model=false] [read_dropout=0] [checkpoint_every=0] [resume=CHECKPOINT] \
+//!   [lorentz_start=matched|flat]
 //! ```
 //!
 //! `lens` holds the byte length of each token id (u16, vocabulary order); with
@@ -41,7 +49,9 @@ use candle_core::backprop::GradStore;
 use candle_core::{Device, Tensor};
 use serde_json::{json, Value};
 use uor_r4_core::report_output;
-use uor_r4_training::joint_model::{JointConfig, JointModel, ReadGeometry, ReadMode, Transport};
+use uor_r4_training::joint_model::{
+    JointConfig, JointModel, ReadGeometry, ReadMode, Transport, LORENTZ_LOG_BETA,
+};
 use uor_r4_training::joint_optimizer::{AdamConfig, NamedAdamW};
 use uor_r4_training::joint_parallel::batch_gradients;
 use uor_r4_training::{sha256_file, Result, TrainingError};
@@ -99,6 +109,7 @@ struct Settings {
     dropped_windows: usize,
     checkpoint_every: usize,
     resume: Option<PathBuf>,
+    flat_lorentz_start: bool,
 }
 
 fn settings(args: &Args) -> Result<Settings> {
@@ -124,6 +135,7 @@ fn settings(args: &Args) -> Result<Settings> {
         "read_dropout",
         "checkpoint_every",
         "resume",
+        "lorentz_start",
     ];
     if let Some(key) = args.0.keys().find(|key| !known.contains(&key.as_str())) {
         return Err(invalid(format!("unknown argument {key}=")));
@@ -163,6 +175,15 @@ fn settings(args: &Args) -> Result<Settings> {
             "read_dropout must lie in [0,1), leave a read-enabled window and use one shard",
         ));
     }
+    let flat_lorentz_start = match args.text("lorentz_start") {
+        None | Some("matched") => false,
+        Some("flat") if read_geometry == ReadGeometry::Lorentz => true,
+        Some(other) => {
+            return Err(invalid(format!(
+                "lorentz_start={other} needs geometry=lorentz and matched or flat"
+            )))
+        }
+    };
     let settings = Settings {
         train: PathBuf::from(args.required("train")?),
         valid: PathBuf::from(args.required("valid")?),
@@ -180,6 +201,7 @@ fn settings(args: &Args) -> Result<Settings> {
         dropped_windows,
         checkpoint_every: args.number("checkpoint_every", 0)?,
         resume: args.text("resume").map(PathBuf::from),
+        flat_lorentz_start,
         config,
     };
     if settings.batch == 0
@@ -344,6 +366,7 @@ fn progress_settings(settings: &Settings) -> Value {
         "valid": settings.valid,
         "eval_every": settings.eval_every,
         "eval_windows": settings.eval_windows,
+        "flat_lorentz_start": settings.flat_lorentz_start,
     })
 }
 
@@ -449,6 +472,13 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
         }
         None => {
             let model = JointModel::new(settings.config.clone(), &Device::Cpu)?;
+            if settings.flat_lorentz_start {
+                model
+                    .variables()
+                    .get(LORENTZ_LOG_BETA)
+                    .ok_or_else(|| invalid("missing Lorentz scale"))?
+                    .set(&Tensor::from_vec(vec![0f32], (1,), model.device())?)?;
+            }
             let optimizer = NamedAdamW::new(model.variables(), adam.clone())?;
             let initial = evaluate(&model, &valid, lens_slice, settings.eval_windows)?;
             let curve =
@@ -547,6 +577,8 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
         "shards": settings.shards,
         "read_dropout": settings.read_dropout,
         "read_dropout_windows_per_step": settings.dropped_windows,
+        "lorentz_start": (settings.config.read_geometry == ReadGeometry::Lorentz)
+            .then_some(if settings.flat_lorentz_start { "flat (beta 1)" } else { "Dot-matched" }),
         "training_objective": if settings.dropped_windows == 0 {
             "Population-mean next-token NLL with the read enabled"
         } else {
