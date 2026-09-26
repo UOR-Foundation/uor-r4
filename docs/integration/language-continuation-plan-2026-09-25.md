@@ -40,7 +40,7 @@ Retain the original five numerical/export gates: packed comparison-tail NLL with
 - Continuous and integer output-quality improvement with retained numerical/source controls: advance integrated conversation/memory and coding consumption of the same path; general capability remains open.
 - Better likelihood without the declared useful-output improvement: preserve the learning and explicitly choose among objective/data coverage and capacity using the returned evidence. Do not automatically add another exposure tranche or selector sweep.
 - No development improvement: park exposure-only continuation at this scope.
-- Continuous improvement lost only through rounding/integer conversion: preserve continuous and integer candidates and treat this as numerical retention, without weakening thresholds or blaming attention.
+- Continuous improvement accompanied by a measured numerical/source-retention failure after conversion: preserve both candidates and localize numerical retention without weakening thresholds. If numerical retention passes but served prose differs across the frozen sampling policies, report served quality unmet and attribution unresolved; sample divergence alone does not establish a conversion defect.
 - Execution interrupted or provenance invalid: mark incomplete/UNAVAILABLE and repair only that execution boundary; do not interpret it as model quality.
 
 Each arm is judged separately. Success of only the ordinary control cannot promote quaternion quality or geometric advantage. One paired seed cannot establish comparative superiority.
@@ -157,3 +157,35 @@ these incomplete finals; future continuation must bind the actual saved chain
 and reconcile its remaining resource/time allowance prospectively. The 16:41
 UTC deadline remains a recorded cap, not an ETA. This is incomplete execution,
 not a model-quality failure. Final evaluation and final SSD snapshot are pending.
+
+### September 26: owner-authorized SSD offload and exact saved-state completion
+
+The owner has now authorized the storage arrangement and remaining continuation.
+The [attempt6 evidence](../evidence/language-continuation-recovery-6-2026-09-26.json)
+binds quaternion fit5 step 14,000 and Householder-pair fit4 step 13,949, with only
+1,672 / 1,723 updates remaining to 15,672. Householder did not execute fit5.
+Saved model parameters, optimizer moments and data position are retained; the
+original 7,324-update / 29,999,104-target dose per arm from 8,348 and every full256
+and quality criterion remain fixed.
+
+All model work is sequential; each remaining fit has a 9,000-second cap. Attempt6
+sets `checkpoint_steps=[]`; its final and clean resource-stop checkpoints remain.
+Prospective local resources are recorded before launch: 33,300 seconds for the
+complete remaining work, deadline September 27 02:41 UTC, cumulative 657,600,000 ms,
+tracked 32 GiB with the original baseline retained and changed SSD-cache allocation
+counted. The separate 32 GiB offload and original 4 GiB snapshot allowances do not
+reset that baseline. Physical/RSS guards remain unchanged. Original plans and
+budgets stay preserved as dated receipts.
+
+The verified cache cutover completed at 17:10 UTC. It preserved 45,329 build
+artifact files and removed their redundant internal copy; the recorded immediate
+free-space increase was 18,462,396,416 bytes. Regenerable compiler-probe metadata
+was snapshotted separately; source, models and checkpoints stayed internal.
+Detached sequential fit6 launched at 17:11:38 UTC. Actual quaternion steps
+14,001–14,016 were observed with Householder queued. Final downstream results
+remain **NOT_RUN**; running updates do not establish language improvement.
+The [conditional principal direction](language-continuation-direction-2026-09-26.md)
+explains how to interpret the frozen outputs; it does not authorize a new
+architecture, depth experiment, panel or exposure tranche. See
+[current state](current-state.md#latest-recovery6-status)
+for the latest witnessed recovery status.

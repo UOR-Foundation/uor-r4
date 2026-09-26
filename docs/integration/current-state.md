@@ -203,14 +203,15 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **Training is STOPPED with verified saved checkpoints; owner resource action is required**.
+not language retention. **Verified SSD cache offload is complete; sequential fit6 is running from the saved
+checkpoints. Actual new quaternion updates have been observed.**
 The first RDC-attached controller [failed](../evidence/language-continuation-interruption-2026-09-25.json)
 at 23:35 UTC with a broken output pipe; its workers exited on signal 2 before
 their first checkpoint. They logged 2,031/2,032 updates but saved no recoverable
 weights or optimizer state. That attempt is retained as an execution failure,
 not a model-quality result. A detached controller restarted the same full256
 step8,348→15,672 dose from the preserved parents at 23:46 UTC. Three intermediate
-checkpoints now reduce recovery loss; only the final step is eligible for
+checkpoints were scheduled to reduce recovery loss; only the final step is eligible for
 evaluation. The necessary local time extension was recorded before restart.
 At02:08UTC on September26, that pair then stopped cleanly at its shared-storage
 allocation guard, saving verified checkpoints at10,480/10,488. The
@@ -225,8 +226,8 @@ fit3 updates at12,707/12,715. Four complete Rust seal checks passed.
 [Fit4 recovery](../evidence/language-continuation-recovery-4-2026-09-26.json)
 started at06:01:36UTC from those saved states for only2,965/2,957 remaining
 updates. Internal allocation20GiB was recorded prospectively; the14:41UTC
-cycle deadline, cumulative time ceiling and physical/RSS guards remain fixed.
-Both remaining-fit processes now enforce the projected six-hour limit.
+cycle deadline, cumulative time ceiling and physical/RSS guards were retained
+for fit4. Both remaining-fit processes enforced the projected six-hour limit.
 At 07:22 UTC, fit4 hit the physical-space reserve and exited cleanly,
 saving 13,939 / 13,949. All four Rust report/checkpoint checks passed. The
 [sequential recovery](../evidence/language-continuation-recovery-5-2026-09-26.json)
@@ -236,13 +237,64 @@ checks passed. Householder did not start and remains at 13,949. Only
 **1,672 / 1,723 updates remain** to the original sole final 15,672.
 B16/T256, two gradient shards, full causal access, Adam and sampler continuity,
 and every acceptance criterion remain unchanged. Serial execution reduced
-campaign RSS but did not resolve host physical-space instability. Automatic
-retries are paused pending owner resolution of competing workloads or a new
-storage arrangement; no reserve reduction or deletion is authorized here.
-The prospectively recorded deadline 16:41 UTC and cumulative limit
-621,600,000 ms are budget caps, not a completion estimate. Final evaluation,
+campaign RSS but did not resolve host physical-space instability. At the fit5
+stop, automatic retries were paused pending owner resolution of competing
+workloads or a new storage arrangement, without authorizing reserve reduction
+or deletion. The prospectively recorded fit5 deadline 16:41 UTC and cumulative
+limit 621,600,000 ms were budget caps, not a completion estimate. Final evaluation,
 integer conversion and prose adjudication remain NOT_RUN.
 
+### Latest recovery6 status
+
+The owner has authorized SSD cache offload and completion of the existing dose.
+The [recovery6 record](../evidence/language-continuation-recovery-6-2026-09-26.json)
+binds quaternion fit5 at **14,000**, with **1,672 updates / 6,848,512 targets
+remaining**, and Householder-pair fit4 at **13,949**, with **1,723 updates /
+7,057,408 targets remaining**. Householder never started fit5. Resume the saved
+parameters, Adam moments and sampler counters to the sole final **15,672**.
+On completion, the combined retained segments must total exactly **7,324 updates /
+29,999,104 target visits per arm from 8,348**. B16/T256, full causal access, two gradient shards,
+data, optimizer and every acceptance criterion remain fixed. One model process
+runs at a time throughout fitting and downstream work, with a 9,000-second
+per-arm fit cap. Attempt6 has no scheduled intermediate checkpoint; clean
+resource-stop checkpointing and the sole final remain.
+
+The prospective complete-work projection is **33,300 seconds**, including
+cleanup/verification, sequential fit, conversion, evaluation/review/delivery and
+stop margin. The new whole-cycle deadline is **September 27 at 02:41 UTC**, with
+cumulative time limit **657,600,000 ms**. These are caps, not an ETA. The tracked
+allocation ceiling is **32 GiB**, retaining the original whole-cycle baseline
+and conservatively charging the relocated shared cache after its device/inode
+change; this is not a measurement of internal-drive consumption. The separate
+**32 GiB cache-offload allowance** and original **4 GiB snapshot allowance**
+remain separate. Physical reserve **24 GiB + 128 MiB stop margin + 64 MiB
+checkpoint headroom**, and existing RSS guards remain unchanged. Current model
+parents and frozen executables remain at their existing internal paths.
+
+**Cleanup/cutover: complete. Fit6: RUNNING. Final evaluation, learned-code
+conversion and served prose adjudication: NOT_RUN.** The migration verified
+45,329 files and their hardlink groups before removing the redundant internal
+Cargo cache. Its immediate free-space increase was 18,462,396,416 bytes; later
+host free-space changes are reported separately. The cache now resides on the
+approved SSD behind the original paths. One regenerable compiler-probe metadata
+file was snapshotted separately because Cargo refreshes it outside build locks;
+source, models, original checkpoints and Docker data were preserved. Original
+Cargo lock inodes remain in a tiny internal directory referenced from the SSD.
+
+The detached controller launched at **17:11:38 UTC** and its first worker at
+17:11:46. The observed curve advances from 14,001 through 14,016 with two shards
+and no missing gradients. Householder6 is unstarted until quaternion completes.
+This is live progress, not a new sealed checkpoint or model-quality result.
+Launch physical free space was 48,023,339,008 bytes and tracked allocation,
+including headroom, was 21,699,153,920 bytes. These readings remain guarded.
+The 29,700-second remaining launch projection includes fit, conversion,
+evaluation/review/delivery and stop margin; preparation is already charged.
+The existing 30-minute monitor is active for this single milestone. The
+[conditional principal direction](language-continuation-direction-2026-09-26.md)
+guides interpretation after the unchanged frozen output packet returns; it
+introduces no new panel or automatic next fit.
+
+### Active work-card decisions
 
 - **Deliverable:** a retained full256 learner producing more coherent,
   source-consistent short language continuations through the standalone integer
@@ -256,22 +308,29 @@ integer conversion and prose adjudication remain NOT_RUN.
   training/evaluation/session256, full admission and ordinary arm. Preserve
   accepted integer bundles. Alpha-only code rounding is not a replacement for
   learning the language parameters.
-- **Before fitting:** project the complete paired training/export/actual-serving
-  cycle with measured throughput and physical reserve. Approximately30M more
-  targets per arm is a planning anchor, not an automatic launch or promise.
-  Freeze one compact development output packet and explicit entity/role
-  consistency and completion criteria; record the parent outputs first. Existing
-  source/NoRead controls remain. No post-result panel expansion.
-- **One integrated execution:** resume the retained continuous step8348 parents,
-  preserve optimizer/sampler continuity, keep a midpoint and final checkpoint,
-  then apply the established learned-code/integer export once under a declared
-  retention recipe. New continuous weights require prospectively bound new
-  calibration/codes; old scales cannot simply be assumed valid.
+- **Before fitting or recovery:** project the complete remaining training/export/
+  actual-serving cycle with measured throughput and physical reserve. The
+  29,999,104-target dose per arm is already fixed; a recovery does not restart
+  that dose. Preserve the frozen development output packet, parent judgments,
+  entity/role consistency and completion criteria, and source/NoRead controls.
+  No post-result panel expansion.
+- **One integrated execution:** complete the retained step 8,348→15,672 dose from
+  the latest actual saved checkpoints, preserving optimizer/sampler continuity.
+  Attempt6 resumes quaternion 14,000 and Householder-pair 13,949 sequentially,
+  with no scheduled intermediate checkpoint or candidate selection before 15,672.
+  Then apply the established calibration/learned-code/integer export once under
+  the declared retention recipe. New continuous weights require freshly bound
+  calibration/codes; old scales cannot be assumed valid.
 - **Decision:** meaningful output improvement retained in integer serving advances
-  conversation/coding work. Better NLL without useful output improvement triggers
-  an explicit objective/data/capacity decision, not an automatic next exposure
-  tranche. No development improvement parks exposure-only continuation. A loss
-  only at export is numerical retention; preserve both artifacts and the gate.
+  conversation/coding work. Better NLL without useful output improvement requires
+  one evidence-based interface/objective/data/capacity decision, not another
+  automatic exposure tranche. No development improvement under healthy completed
+  execution parks exposure-only continuation. Measured numerical or source-retention
+  failure supports targeted conversion repair while preserving both artifacts
+  and every gate. If numerical gates pass but continuous prose passes and integer
+  prose fails, served quality remains unmet and attribution unresolved: their
+  frozen sampling policies differ. Apply the [conditional principal memo](language-continuation-direction-2026-09-26.md)
+  without changing the fixed rubric.
 - **Stop:** at the configured complete-cycle limits and the declared decision.
   Keep learned checkpoints and negatives. No admission, scale or scalar-feature
   search is justified merely by remaining machine time.
