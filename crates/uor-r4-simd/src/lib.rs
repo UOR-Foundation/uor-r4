@@ -354,6 +354,151 @@ fn portable_block(m: &Interleaved, tables: &[u8], b: usize, out: &mut [i64; ROWS
     *out = acc;
 }
 
+/// Attention scores of one head: `out[u] = q . keys[u * stride + offset..][..q.len()]`
+/// for `u < out.len()`, exactly (`|q| <= 2^15`, `|key| <= 2^7`, so the sum fits
+/// `i32` for `q.len() <= 256`).
+pub fn dot_rows_i16_i8(
+    q: &[i16],
+    keys: &[i8],
+    stride: usize,
+    offset: usize,
+    out: &mut [i32],
+) -> Result<(), SimdError> {
+    check_rows(q.len(), keys.len(), stride, offset, out.len())?;
+    #[cfg(target_arch = "x86_64")]
+    if Backend::Avx2.available() {
+        // SAFETY: `available()` confirmed AVX2 on this CPU.
+        unsafe { auto_avx2::dot_rows(q, keys, stride, offset, out) };
+        return Ok(());
+    }
+    dot_rows(q, keys, stride, offset, out);
+    Ok(())
+}
+
+/// Value mixing of one head: `mix[i] += sum_u shift(w[u] values[u * stride +
+/// offset + i], down[u])`, where `shift` rounds half up (`(p + 2^(d - 1)) >> d`)
+/// exactly as `uor-r4-lut`'s `i64` shift. Requires `0 <= w <= 2^24`,
+/// `|value| <= 127` (so `|w value| < 2^31`) and `down >= 0`.
+pub fn mix_rows(
+    weights: &[i32],
+    downs: &[i32],
+    values: &[i8],
+    stride: usize,
+    offset: usize,
+    mix: &mut [i64],
+) -> Result<(), SimdError> {
+    check_rows(mix.len(), values.len(), stride, offset, weights.len())?;
+    if downs.len() != weights.len()
+        || weights.iter().any(|w| !(0..=1 << 24).contains(w))
+        || downs.iter().any(|d| *d < 0)
+    {
+        return Err(shape("mixing weights or shifts out of range"));
+    }
+    #[cfg(target_arch = "x86_64")]
+    if Backend::Avx2.available() {
+        // SAFETY: `available()` confirmed AVX2 on this CPU.
+        unsafe { auto_avx2::mix_rows(weights, downs, values, stride, offset, mix) };
+        return Ok(());
+    }
+    mix_rows_body(weights, downs, values, stride, offset, mix);
+    Ok(())
+}
+
+fn check_rows(
+    width: usize,
+    len: usize,
+    stride: usize,
+    offset: usize,
+    rows: usize,
+) -> Result<(), SimdError> {
+    let Some(last) = rows.checked_sub(1) else {
+        return Ok(());
+    };
+    let end = last
+        .checked_mul(stride)
+        .and_then(|start| start.checked_add(offset))
+        .and_then(|start| start.checked_add(width));
+    match end {
+        Some(end) if end <= len => Ok(()),
+        _ => Err(shape("rows reach past the end of the cache")),
+    }
+}
+
+#[inline(always)]
+fn dot_rows(q: &[i16], keys: &[i8], stride: usize, offset: usize, out: &mut [i32]) {
+    for (u, slot) in out.iter_mut().enumerate() {
+        let key = &keys[u * stride + offset..u * stride + offset + q.len()];
+        *slot = q
+            .iter()
+            .zip(key)
+            .map(|(x, y)| i32::from(*x) * i32::from(*y))
+            .sum();
+    }
+}
+
+#[inline(always)]
+fn mix_rows_body(
+    weights: &[i32],
+    downs: &[i32],
+    values: &[i8],
+    stride: usize,
+    offset: usize,
+    mix: &mut [i64],
+) {
+    let width = mix.len();
+    for (u, (&w, &down)) in weights.iter().zip(downs).enumerate() {
+        if w == 0 {
+            continue;
+        }
+        let v = &values[u * stride + offset..u * stride + offset + width];
+        match down {
+            0 => {
+                for (m, x) in mix.iter_mut().zip(v) {
+                    *m += i64::from(w * i32::from(*x));
+                }
+            }
+            // For 1 <= d <= 31, (p + 2^(d - 1)) >> d == ((p >> (d - 1)) + 1) >> 1.
+            1..=31 => {
+                let s = (down - 1) as u32;
+                for (m, x) in mix.iter_mut().zip(v) {
+                    *m += i64::from(((w * i32::from(*x)) >> s).wrapping_add(1) >> 1);
+                }
+            }
+            // (p + 2^(d - 1)) >> d is zero for |p| < 2^31.
+            32..=62 => {}
+            _ => {
+                for (m, x) in mix.iter_mut().zip(v) {
+                    if w * i32::from(*x) < 0 {
+                        *m -= 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The attention loops compiled a second time with AVX2 enabled (the same safe
+/// code; the compiler vectorizes it with 256-bit instructions).
+#[cfg(target_arch = "x86_64")]
+mod auto_avx2 {
+    #[target_feature(enable = "avx2")]
+    pub(super) fn dot_rows(q: &[i16], keys: &[i8], stride: usize, offset: usize, out: &mut [i32]) {
+        super::dot_rows(q, keys, stride, offset, out);
+    }
+
+    #[target_feature(enable = "avx2")]
+    pub(super) fn mix_rows(
+        weights: &[i32],
+        downs: &[i32],
+        values: &[i8],
+        stride: usize,
+        offset: usize,
+        mix: &mut [i64],
+    ) {
+        super::mix_rows_body(weights, downs, values, stride, offset, mix);
+    }
+}
+
 #[cfg(target_arch = "x86_64")]
 mod avx2 {
     use super::{Interleaved, GROUP, GROUP_PAIRS, PAIR_TABLE, ROWS};
@@ -767,6 +912,88 @@ mod tests {
         let mut second = vec![0i64; ROWS];
         m.gemv_blocks(&tables, 1, &mut second).unwrap();
         assert_eq!(second, whole[ROWS..2 * ROWS]);
+    }
+
+    /// `uor-r4-lut`'s rounding shift (round half up; saturating left).
+    fn reference_shift(value: i64, shift: i32) -> i64 {
+        if shift >= 63 {
+            if value < 0 {
+                -1
+            } else {
+                0
+            }
+        } else if shift > 0 {
+            (value + (1i64 << (shift - 1))) >> shift
+        } else {
+            value
+        }
+    }
+
+    #[test]
+    fn attention_rows_match_the_i64_reference() {
+        let (width, stride, offset, rows) = (64, 192, 64, 37);
+        let mut rng = Lcg(77);
+        let q: Vec<i16> = (0..width)
+            .map(|i| {
+                if i % 9 == 0 {
+                    -32767
+                } else {
+                    rng.next() as i16
+                }
+            })
+            .collect();
+        let cache: Vec<i8> = (0..rows * stride)
+            .map(|i| {
+                if i % 11 == 0 {
+                    -127
+                } else {
+                    (rng.next() as i8).max(-127)
+                }
+            })
+            .collect();
+        let mut dots = vec![0i32; rows];
+        dot_rows_i16_i8(&q, &cache, stride, offset, &mut dots).unwrap();
+        for (u, got) in dots.iter().enumerate() {
+            let key = &cache[u * stride + offset..u * stride + offset + width];
+            let want: i64 = q
+                .iter()
+                .zip(key)
+                .map(|(a, b)| i64::from(*a) * i64::from(*b))
+                .sum();
+            assert_eq!(i64::from(*got), want, "row {u}");
+        }
+        let weights: Vec<i32> = (0..rows)
+            .map(|u| match u % 5 {
+                0 => 1 << 24,
+                1 => 0,
+                2 => (1 << 24) - 1,
+                _ => (rng.next() >> 8) as i32,
+            })
+            .collect();
+        let downs: Vec<i32> = (0..rows as i32)
+            .map(|u| [0, 1, 2, 7, 30, 31, 32, 40, 63, 70][u as usize % 10])
+            .collect();
+        let mut mix = vec![3i64; width];
+        mix_rows(&weights, &downs, &cache, stride, offset, &mut mix).unwrap();
+        for (i, got) in mix.iter().enumerate() {
+            let mut want = 3i64;
+            for u in 0..rows {
+                if weights[u] != 0 {
+                    let v = i64::from(cache[u * stride + offset + i]);
+                    want += reference_shift(i64::from(weights[u]) * v, downs[u]);
+                }
+            }
+            assert_eq!(*got, want, "lane {i}");
+        }
+        assert!(dot_rows_i16_i8(
+            &q,
+            &cache[..cache.len() - 1],
+            stride,
+            offset + 64,
+            &mut dots
+        )
+        .is_err());
+        assert!(mix_rows(&[1 << 25], &[0], &cache, stride, offset, &mut mix).is_err());
     }
 
     #[test]

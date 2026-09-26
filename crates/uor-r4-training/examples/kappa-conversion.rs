@@ -18,7 +18,7 @@
 //!     [time=256] [lr=1e-5] [curv_lr=1e-2] [eval_every=100] [eval_windows=16] [seed=1]
 //!     [max_seconds=0] [save_model=true] [anneal_t=T] [anneal_steps=steps/2] [anneal_hold=true]
 //! kappa-conversion mode=sample model=DIR prompt=TEXT [variables=ROOT/model/variables.safetensors]
-//!     [score=dot] [trainable=scalars] [system=TEXT] [tokens=64]
+//!     [score=dot] [trainable=scalars] [system=TEXT] [tokens=64] [raw=true]
 //! ```
 //!
 //! Every mode also accepts `device=cpu|metal` (metal needs `--features metal`).
@@ -1091,9 +1091,14 @@ fn sample(args: &Args) -> Result<()> {
         }
         None => {}
     }
-    let chat = format!(
-        "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
-    );
+    let raw = args.text("raw") == Some("true");
+    let chat = if raw {
+        prompt.to_owned()
+    } else {
+        format!(
+            "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
+        )
+    };
     let mut ids = tokenizer.encode(&chat);
     let stop = tokenizer.encode("<|im_end|>");
     let prompt_len = ids.len();

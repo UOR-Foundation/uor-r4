@@ -373,6 +373,34 @@ mod tests {
     }
 
     #[test]
+    fn simd_value_mixing_matches_this_crate_s_shift() {
+        let mut rng = Lcg(4242);
+        let values: Vec<i8> = (0..64)
+            .map(|i| {
+                if i % 13 == 0 {
+                    -127
+                } else {
+                    (rng.byte() as i8).max(-127)
+                }
+            })
+            .collect();
+        for w in [0i32, 1, 7, 1 << 12, (1 << 24) - 1, 1 << 24] {
+            for down in 0..70 {
+                let mut got = vec![5i64; values.len()];
+                uor_r4_simd::mix_rows(&[w], &[down], &values, 64, 0, &mut got).unwrap();
+                for (g, v) in got.iter().zip(&values) {
+                    let want = if w == 0 {
+                        5
+                    } else {
+                        5 + shift(i64::from(w) * i64::from(*v), down)
+                    };
+                    assert_eq!(*g, want, "w {w} down {down} v {v}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn integer_square_root_is_exact() {
         for v in [
             0u128,

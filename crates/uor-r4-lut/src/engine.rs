@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use uor_r4_simd::{Backend, Tables};
+use uor_r4_simd::{dot_rows_i16_i8, mix_rows, Backend, Tables};
 
 use crate::format::{Artifact, Header, MatrixSpec, Numerics, Shape};
 use crate::kernels::{
@@ -13,6 +13,10 @@ use crate::{format_error, invalid, Result, RESIDUAL_EXP};
 
 /// Exponent of attention scores inside the softmax (`2^-12` nats).
 const SCORE_EXP: i32 = -12;
+/// Largest head dimension whose 16-by-8-bit dot products fit `i32`.
+const MAX_HEAD_DIM: usize = 256;
+/// Heads run on separate threads once `(position + 1) * head_dim` reaches this.
+const PARALLEL_ATTENTION: usize = 1 << 14;
 
 /// The row-major embedding, read one row per token.
 struct Embedding {
@@ -41,6 +45,26 @@ struct Layer {
     gate: Packed,
     up: Packed,
     down: Packed,
+}
+
+/// One layer's key/value cache, read by attention.
+struct LayerCache<'a> {
+    keys: &'a [i8],
+    values: &'a [i8],
+    key_exp: &'a [i32],
+    value_exp: &'a [i32],
+}
+
+/// Buffers of one attention head (one set per worker thread).
+#[derive(Default)]
+struct HeadScratch {
+    wide: Vec<i64>,
+    q16: Act16,
+    dots: Vec<i32>,
+    scores: Vec<i64>,
+    weights: Vec<i32>,
+    downs: Vec<i32>,
+    mix: Vec<i64>,
 }
 
 /// A validated artifact repacked for integer serving. The artifact bytes are
@@ -125,6 +149,7 @@ impl Model {
             || !(-16..0).contains(&numerics.silu_step_log2)
             || !(SCORE_EXP..0).contains(&numerics.exp_step_log2)
             || !(1..=15).contains(&numerics.rope_q)
+            || shape.head_dim > MAX_HEAD_DIM
         {
             return Err(format_error(
                 "sealed tables do not match the declared numerics",
@@ -202,6 +227,75 @@ impl Model {
         Ok(())
     }
 
+    /// One attention head (key/value head `g`) over positions `0..=position`,
+    /// written into `out` at the residual exponent.
+    fn attend(
+        &self,
+        g: usize,
+        query: &[i32],
+        cache: &LayerCache<'_>,
+        position: usize,
+        scratch: &mut HeadScratch,
+        out: &mut [i32],
+    ) -> Result<()> {
+        let (s, n) = (&self.shape, &self.numerics);
+        let (hd, kv) = (s.head_dim, s.kv_heads);
+        let stride = kv * hd;
+        scratch.wide.clear();
+        scratch.wide.extend(query.iter().map(|v| i64::from(*v)));
+        quantize16(&scratch.wide, RESIDUAL_EXP, &mut scratch.q16);
+        scratch.dots.clear();
+        scratch.dots.resize(position + 1, 0);
+        dot_rows_i16_i8(
+            &scratch.q16.values,
+            cache.keys,
+            stride,
+            g * hd,
+            &mut scratch.dots,
+        )?;
+        scratch.scores.clear();
+        for (u, dot) in scratch.dots.iter().enumerate() {
+            let exp = scratch.q16.exp + cache.key_exp[u * kv + g] - 30;
+            scratch
+                .scores
+                .push(shift(i64::from(*dot) * n.score_scale_q30, SCORE_EXP - exp));
+        }
+        let max = scratch.scores.iter().copied().max().unwrap_or(0);
+        scratch.weights.clear();
+        let mut total = 0u64;
+        for score in &scratch.scores {
+            // At most 2^31 >> 7 = 2^24.
+            let w = exp_neg(max - score, SCORE_EXP, &self.exp_table, n.exp_step_log2) >> 7;
+            total += w;
+            scratch.weights.push(w as i32);
+        }
+        let total = total.max(1);
+        let e_max = (0..=position)
+            .map(|u| cache.value_exp[u * kv + g])
+            .max()
+            .unwrap_or(RESIDUAL_EXP);
+        scratch.downs.clear();
+        scratch
+            .downs
+            .extend((0..=position).map(|u| e_max - cache.value_exp[u * kv + g]));
+        scratch.mix.clear();
+        scratch.mix.resize(hd, 0);
+        mix_rows(
+            &scratch.weights,
+            &scratch.downs,
+            cache.values,
+            stride,
+            g * hd,
+            &mut scratch.mix,
+        )?;
+        let reciprocal = (1u128 << 62) / u128::from(total);
+        for (slot, m) in out.iter_mut().zip(&scratch.mix) {
+            let normalized = (i128::from(*m) * reciprocal as i128) >> 62;
+            *slot = to_exp_i32(normalized as i64, e_max, RESIDUAL_EXP);
+        }
+        Ok(())
+    }
+
     /// A fresh decoding session with an empty cache.
     pub fn session(&self) -> Session<'_> {
         let s = &self.shape;
@@ -219,16 +313,13 @@ impl Model {
             q: vec![0; s.width],
             k: vec![0; s.kv_heads * s.head_dim],
             v: vec![0; s.kv_heads * s.head_dim],
-            q16: Act16::default(),
             head_out: vec![0; s.width],
+            head: HeadScratch::default(),
             proj: vec![0; s.width],
             gate: vec![0; s.ffn],
             up: vec![0; s.ffn],
             hidden: Act16::default(),
             logits: vec![0; s.vocab],
-            scores: Vec::new(),
-            weights: Vec::new(),
-            mix: vec![0; s.head_dim],
             cache8: vec![0; s.head_dim],
         }
     }
@@ -249,16 +340,13 @@ pub struct Session<'m> {
     q: Vec<i32>,
     k: Vec<i32>,
     v: Vec<i32>,
-    q16: Act16,
     head_out: Vec<i32>,
+    head: HeadScratch,
     proj: Vec<i32>,
     gate: Vec<i32>,
     up: Vec<i32>,
     hidden: Act16,
     logits: Vec<i32>,
-    scores: Vec<i64>,
-    weights: Vec<u64>,
-    mix: Vec<i64>,
     cache8: Vec<i8>,
 }
 
@@ -367,58 +455,26 @@ impl Session<'_> {
                     exps.push(exp);
                 }
             }
-            let keys = &self.keys[l];
-            let values = &self.values[l];
-            let (key_exp, value_exp) = (&self.key_exp[l], &self.value_exp[l]);
-            let stride = s.kv_heads * hd;
-            for h in 0..s.heads {
-                let g = h / group;
-                self.scratch.clear();
-                self.scratch
-                    .extend(self.q[h * hd..(h + 1) * hd].iter().map(|v| i64::from(*v)));
-                quantize16(&self.scratch, RESIDUAL_EXP, &mut self.q16);
-                self.scores.clear();
-                for u in 0..=position {
-                    let key = &keys[u * stride + g * hd..u * stride + (g + 1) * hd];
-                    let dot: i64 = self
-                        .q16
-                        .values
-                        .iter()
-                        .zip(key)
-                        .map(|(a, b)| i64::from(*a) * i64::from(*b))
-                        .sum();
-                    let exp = self.q16.exp + key_exp[u * s.kv_heads + g] - 30;
-                    self.scores
-                        .push(shift(dot * n.score_scale_q30, SCORE_EXP - exp));
-                }
-                let max = self.scores.iter().copied().max().unwrap_or(0);
-                self.weights.clear();
-                let mut total = 0u64;
-                for score in &self.scores {
-                    let w = exp_neg(max - score, SCORE_EXP, &model.exp_table, n.exp_step_log2) >> 7;
-                    total += w;
-                    self.weights.push(w);
-                }
-                let total = total.max(1);
-                let e_max = (0..=position)
-                    .map(|u| value_exp[u * s.kv_heads + g])
-                    .max()
-                    .unwrap_or(RESIDUAL_EXP);
-                self.mix.iter_mut().for_each(|m| *m = 0);
-                for (u, w) in self.weights.iter().enumerate() {
-                    if *w == 0 {
-                        continue;
-                    }
-                    let value = &values[u * stride + g * hd..u * stride + (g + 1) * hd];
-                    let down = e_max - value_exp[u * s.kv_heads + g];
-                    for (m, v) in self.mix.iter_mut().zip(value) {
-                        *m += shift(*w as i64 * i64::from(*v), down);
-                    }
-                }
-                let reciprocal = (1u128 << 62) / u128::from(total);
-                for (i, m) in self.mix.iter().enumerate() {
-                    let normalized = (i128::from(*m) * reciprocal as i128) >> 62;
-                    self.head_out[h * hd + i] = to_exp_i32(normalized as i64, e_max, RESIDUAL_EXP);
+            let cache = LayerCache {
+                keys: &self.keys[l],
+                values: &self.values[l],
+                key_exp: &self.key_exp[l],
+                value_exp: &self.value_exp[l],
+            };
+            let q = &self.q;
+            if parallel && (position + 1) * hd >= PARALLEL_ATTENTION {
+                use rayon::prelude::*;
+                self.head_out
+                    .par_chunks_mut(hd)
+                    .enumerate()
+                    .try_for_each_init(HeadScratch::default, |scratch, (h, out)| {
+                        let query = &q[h * hd..(h + 1) * hd];
+                        model.attend(h / group, query, &cache, position, scratch, out)
+                    })?;
+            } else {
+                for (h, out) in self.head_out.chunks_mut(hd).enumerate() {
+                    let query = &q[h * hd..(h + 1) * hd];
+                    model.attend(h / group, query, &cache, position, &mut self.head, out)?;
                 }
             }
             self.scratch.clear();
