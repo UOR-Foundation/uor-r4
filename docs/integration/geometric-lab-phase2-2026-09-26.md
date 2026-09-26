@@ -12,7 +12,10 @@
 
 **New in the repository.**
 - A Rust conversion tool in the training crate: `kappa_llama`, example `kappa-conversion`, and `scripts/kappa-m1-pilot.sh`, in commits `c67e230`, `50bee85` and `f43aa4e`.
-- The M3 integer serving path (§7): the engine crate `uor-r4-lut` with `lut-chat`, the audited SIMD crate `uor-r4-simd`, the exporter `lut_export` with GPTQ and the example `lut-tool`, and `scripts/lut-m1-chat.sh`, in commits `8931b27` to `f5886cc`.
+- The M3 integer serving path (§7): the engine crate `uor-r4-lut` with `lut-chat`, the audited SIMD crate `uor-r4-simd`, the exporter `lut_export` with GPTQ and the example `lut-tool`, and `scripts/lut-m1-chat.sh`, in commits `8931b27` to `f5886cc`, with integer sampling in `90e39ce`.
+- The M4 hyperbolic cache memory (§8). The float experiment `cache_memory` and its example; the integer Lorentz cache in the engine (`453aa9d`); and the script's `CACHE=1` stage (`bdebc86`).
+- *Result.* A learned Lorentz cache beats the Euclidean and dot caches of equal size. Its integer form keeps 99.3% of the float gain.
+- The context-256 addendum to [cycle 3](hyperbolic-cycle3-2026-09-26.md#10-addendum-context-256): the Lorentz read's advantage grows with context.
 
 ## 0. Findings
 
@@ -362,7 +365,12 @@ The chat engine now serves a learned Lorentz cache (commit `453aa9d`).
 - **Machine.** One shared review container: 4 cores, 15 GB, no GPU. It ran from about 16:20 to 18:15 UTC, at load 10–30. No paid or external compute.
 - **Lead's runs.** The lead's single-threaded stand-in conversion and fine-tune runs recorded 2.9 wall-clock hours in total, under contention: 7,943 s and 2,580 s.
 - **Reviewers' runs.** Their costs are in their reports. The experiment reviewer used about 1.2 CPU-hours. The science reviewer's five checks each took under a minute.
-- **Not included.** The four context-256 cycle-3 runs are still in progress and are not part of this note.
+- **Context 256.** The four cycle-3 context-256 runs finished; their cost is in the cycle-3 addendum.
+- **M4 (§8).**
+  - The pilot took about 10 minutes, and the measured run 34 minutes.
+  - Re-training and saving the seed-1 Lorentz cache took 20 minutes; the parity runs took 30 s and 134 s.
+  - Local end-to-end runs of the M1 script took a few minutes each.
+  - Scratch storage grew by under 20 MB.
 - **M3 (§7).** Built and measured from about 18:50 to 21:00 UTC on the same container.
   - The small Llama took 1,920 s of single-core training (34 min wall).
   - GPTQ exports take 5–10 s at that size.
