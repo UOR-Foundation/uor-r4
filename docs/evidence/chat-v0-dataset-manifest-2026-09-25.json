@@ -1,10 +1,24 @@
 {
   "acquisition_date_utc": "2026-09-26T03:19:56Z",
+  "extension_sharealike_2026_09_25": {
+    "updated_utc": "2026-09-26T04:45:26Z",
+    "updated_at_head": "0b7b4c970e43176f909657247ebde5749a3558d0",
+    "owner_direction": "2026-09-25 owner approval of share-alike dialogue/story sources for this local research workstream (DATA ONLY).",
+    "generator_sha256_at_extension_fetch": "6643d223ad20932c32581f05e009b13dd9db8c6d164bf0588f5978dae769a140",
+    "generator_sha256_final": "497cf1a19a4ec0854ffecd6f891151e27e083c69b1ca12cf6e88c212da5575f7",
+    "generator_predecessor_sha256": "3d8fd333dcaa4b63350f8970a7510793a6c4b8f174ab020ee6864a91afeba3ca",
+    "generator_predecessor_file": "fetch_chat_v0_v1_2026-09-25.py",
+    "sources_added": 3,
+    "rows_added": 75111,
+    "bytes_added": 22774075,
+    "total_output_bytes_after": 299947261,
+    "note": "The 12 prior permissive sources were skipped via their recorded state and are byte-identical with unchanged sha256. TinyStoriesInstruct rows are ~150-190 B, so the requested 100-200 MB band was reconciled to the explicit ~40-50k row bound; see the companion receipts, Limitations. The extension fetch ran the byte-goal variant 6643d223; the final generator 497cf1a1 differs only by a generated-README heading text correction, with identical fetch logic and identical data sha256."
+  },
   "base_commit": "b7162e607272af1b9c950eb531f77d26b2bf06b3",
   "branch": "codex/canonical-address-routing-20260925",
   "deterministic": true,
   "generator": "fetch_chat_v0.py",
-  "generator_sha256": "3d8fd333dcaa4b63350f8970a7510793a6c4b8f174ab020ee6864a91afeba3ca",
+  "generator_sha256": "497cf1a19a4ec0854ffecd6f891151e27e083c69b1ca12cf6e88c212da5575f7",
   "integrity": {
     "all_lines_valid_json": true,
     "all_output_sha256_recomputed_and_match": true,
@@ -15,8 +29,57 @@
       "single_pass_sha256": "42bf43c76eb28993db514544cbfe4054186cd69f9a3894373204da9733ce8d10",
       "source_tested": "smoltalk_smol-constraints.train"
     },
+    "resume_equivalence_sharealike_extension": {
+      "byte_identical": true,
+      "method": "3-page pause then resume vs single-pass from offset 0 (cmp byte-identical)",
+      "resumed_sha256": "b667c7b804002b3debccb685e89a49c1b655ca3007ddb776ad0fa158695c8954",
+      "single_pass_sha256": "b667c7b804002b3debccb685e89a49c1b655ca3007ddb776ad0fa158695c8954",
+      "source_tested": "tinystoriesinstruct.default.validation"
+    },
     "row_idx_contiguous_no_gaps_or_duplicates": true,
-    "truncated_cells_total_across_all_sources": 0
+    "truncated_cells_total_across_all_sources": 0,
+    "files_reverified_sha256_from_disk": 15,
+    "rows_total_reverified": 155402,
+    "bytes_total_reverified": 299947261,
+    "http_backoff_sharealike_extension": {
+      "http_429_total": 67,
+      "http_5xx_total": 0,
+      "exhausted_retries": 0,
+      "tracebacks": 0,
+      "by_dataset": {
+        "databricks/databricks-dolly-15k": 12,
+        "roneneldan/TinyStoriesInstruct": 55
+      },
+      "note": "All 429s recovered by exponential backoff. The original run recorded 89x 429 + 2x 502; cumulative fetch-log HTTP 429 count is 156."
+    }
+  },
+  "licence_obligations": {
+    "CC-BY-SA-3.0": {
+      "spdx": "CC-BY-SA-3.0",
+      "name": "Creative Commons Attribution-ShareAlike 3.0 Unported",
+      "url": "https://creativecommons.org/licenses/by-sa/3.0/legalcode",
+      "attribution_required": true,
+      "share_alike": true,
+      "obligations": [
+        "Attribution (BY): credit the source `databricks/databricks-dolly-15k` and its authors, link the licence, and indicate if changes were made.",
+        "ShareAlike (SA): if the data or adapted/derived material is distributed, it must be under CC-BY-SA-3.0 or a licence compatible with it.",
+        "No additional restrictions: do not apply legal terms or technological measures that restrict others from exercising the licensed rights.",
+        "Scope: covers the raw data and adapted/derived data. Whether trained model weights are a 'derivative work' is legally unsettled; downstream publication of a model trained on this data should be treated as share-alike-encumbered unless separately cleared."
+      ]
+    },
+    "CDLA-Sharing-1.0": {
+      "spdx": "CDLA-Sharing-1.0",
+      "name": "Community Data License Agreement - Sharing, Version 1.0",
+      "url": "https://cdla.dev/sharing-1-0/",
+      "attribution_required": true,
+      "share_alike": true,
+      "obligations": [
+        "Notices: retain copyright, licence and attribution notices and provide recipients a copy of the agreement.",
+        "ShareAlike: distribution of the Data, or of 'Enhanced Data' derived from it, must be made under CDLA-Sharing-1.0.",
+        "No additional restrictions on a recipient's exercise of the granted rights.",
+        "Scope: 'Enhanced Data' means data resulting from modifying or augmenting the Data (for example combining it with other data). Whether trained model weights are 'Enhanced Data' is legally unsettled; downstream publication of a model trained on this data should be treated as share-alike-encumbered unless separately cleared."
+      ]
+    }
   },
   "line_schema": "{\"row_idx\": <int>, \"row\": <original dataset record>}",
   "local_story_corpus_owner_checkout": [
@@ -443,24 +506,108 @@
       "split": "test_sft",
       "split_role": "heldout",
       "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=databricks%2Fdatabricks-dolly-15k&config=default&split=train&offset=<N>&length=100&truncate=0",
+      "byte_goal": 100000000,
+      "card_license_field": "cc-by-sa-3.0",
+      "config": "default",
+      "dataset": "databricks/databricks-dolly-15k",
+      "dataset_revision": "bdd27f4d94b9c1f951818a7da7fd7aeea5dbff1a",
+      "features": [
+        "instruction",
+        "context",
+        "response",
+        "category"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/databricks/databricks-dolly-15k",
+      "label": "dolly_15k.default.train",
+      "last_row_idx": 15010,
+      "licence": "CC-BY-SA-3.0",
+      "licence_evidence": {
+        "cardData_license_field": "cc-by-sa-3.0",
+        "source": "HF API cardData.license + tag license:cc-by-sa-3.0",
+        "statement": "cardData.license == 'cc-by-sa-3.0'",
+        "url": "https://huggingface.co/datasets/databricks/databricks-dolly-15k"
+      },
+      "licence_url": "https://huggingface.co/datasets/databricks/databricks-dolly-15k",
+      "num_rows_total_in_split": 15011,
+      "output_bytes": 13261723,
+      "output_file": "data/dolly_15k.default.train.jsonl",
+      "output_sha256": "96fe2257ef4202020e4f4e64e0853a4cd256f26553039db22d1bafe6e22353eb",
+      "rows_fetched": 15011,
+      "split": "train",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=roneneldan%2FTinyStoriesInstruct&config=default&split=train&offset=<N>&length=100&truncate=0",
+      "byte_goal": 8000000,
+      "card_license_field": null,
+      "config": "default",
+      "dataset": "roneneldan/TinyStoriesInstruct",
+      "dataset_revision": "ee050ed1f8720795be342921335e821856a2b42e",
+      "features": [
+        "text"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct",
+      "label": "tinystoriesinstruct.default.train",
+      "last_row_idx": 50499,
+      "licence": "CDLA-Sharing-1.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset repo readme.md body (file is lowercase `readme.md`; no cardData.license)",
+        "statement": "License: CDLA-Sharing-1.0",
+        "url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct/blob/main/readme.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct/blob/main/readme.md",
+      "num_rows_total_in_split": 21755681,
+      "output_bytes": 8005244,
+      "output_file": "data/tinystoriesinstruct.default.train.jsonl",
+      "output_sha256": "5fdc6ac0cb4b4af0349be4691b53a31f73c7d978a34064d17a8457c41c78b825",
+      "rows_fetched": 50500,
+      "split": "train",
+      "split_role": "train",
+      "truncated_cells_total": 0
+    },
+    {
+      "api_rows_url_template": "https://datasets-server.huggingface.co/rows?dataset=roneneldan%2FTinyStoriesInstruct&config=default&split=validation&offset=<N>&length=100&truncate=0",
+      "byte_goal": 1500000,
+      "card_license_field": null,
+      "config": "default",
+      "dataset": "roneneldan/TinyStoriesInstruct",
+      "dataset_revision": "ee050ed1f8720795be342921335e821856a2b42e",
+      "features": [
+        "text"
+      ],
+      "first_row_idx": 0,
+      "hf_url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct",
+      "label": "tinystoriesinstruct.default.validation",
+      "last_row_idx": 9599,
+      "licence": "CDLA-Sharing-1.0",
+      "licence_evidence": {
+        "cardData_license_field": null,
+        "source": "dataset repo readme.md body (file is lowercase `readme.md`; no cardData.license)",
+        "statement": "License: CDLA-Sharing-1.0",
+        "url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct/blob/main/readme.md"
+      },
+      "licence_url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct/blob/main/readme.md",
+      "num_rows_total_in_split": 218380,
+      "output_bytes": 1507108,
+      "output_file": "data/tinystoriesinstruct.default.validation.jsonl",
+      "output_sha256": "b667c7b804002b3debccb685e89a49c1b655ca3007ddb776ad0fa158695c8954",
+      "rows_fetched": 9600,
+      "split": "validation",
+      "split_role": "heldout",
+      "truncated_cells_total": 0
     }
   ],
-  "task": "chat-v0 R1 bounded dialogue/instruction data acquisition (DATA ONLY)",
-  "total_output_bytes": 277173186,
+  "task": "chat-v0 R1 bounded dialogue/instruction data acquisition (DATA ONLY); extended 2026-09-25 with owner-approved share-alike sources",
+  "total_output_bytes": 299947261,
   "truncate": 0,
   "withheld": [
-    {
-      "dataset": "databricks/databricks-dolly-15k",
-      "license_field": "cc-by-sa-3.0",
-      "reason": "Share-alike (CC-BY-SA-3.0); not in the clearly-permissive allow-list. Value judgement: share-alike obligations on derived training data are ambiguous for a model artifact. Content not fetched. Awaiting owner decision.",
-      "url": "https://huggingface.co/datasets/databricks/databricks-dolly-15k"
-    },
-    {
-      "dataset": "roneneldan/TinyStoriesInstruct",
-      "license_field": "CDLA-Sharing-1.0 (readme.md; no cardData.license)",
-      "reason": "CDLA-Sharing-1.0 is a data share-alike agreement, not in the clearly-permissive allow-list. Content not fetched. The pre-existing local TinyStories corpus (owner checkout) already covers the simple-story side. Awaiting owner decision.",
-      "url": "https://huggingface.co/datasets/roneneldan/TinyStoriesInstruct"
-    },
     {
       "dataset": "HuggingFaceTB/smoltalk",
       "license_field": "mixed (card \u00a7License: four new subsets Apache-2.0; aggregate 'all' includes public datasets under their own licences)",
