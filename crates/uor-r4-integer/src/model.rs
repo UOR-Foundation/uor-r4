@@ -166,8 +166,9 @@ impl IntegerModel {
             return Err(invalid("integer parameter manifest binding differs"));
         }
         config.validate()?;
-        if config.context != 256 || config.width != 256 || config.read_width != 64 {
-            return Err(invalid("integer bridge fixes context256/state256/read64"));
+        // `validate` bounds width to 128 or 256 and context to 2..256.
+        if config.read_width != 64 {
+            return Err(invalid("integer bridge fixes read64"));
         }
         let state: QuantizedTrainingState =
             serde_json::from_value(manifest["quantization"].clone())?;
@@ -470,18 +471,22 @@ impl IntegerModel {
 }
 
 /// State Q11 -> RMS-normalized Q10. Variance uses Q64 guard precision in code
-/// units: sum(x_code^2)/256 + 2^22/100000. The square root has 32 guard bits.
+/// units: sum(x_code^2)/width + 2^22/100000, width 128 or 256. The square root
+/// has 32 guard bits.
 #[inline(never)]
 fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
-    if input.len() != 256 {
-        return Err(invalid("integer normalization width must be256"));
-    }
+    // 2^64/width as a shift.
+    let shift = match input.len() {
+        128 => 57,
+        256 => 56,
+        _ => return Err(invalid("integer normalization width must be 128 or 256")),
+    };
     let mut sum = 0u128;
     for &x in input {
         sum += product(i128::from(x), i128::from(x))? as u128;
     }
     let epsilon = divide(1i128 << 86, 100_000)? as u128;
-    let variance = (sum << 56) + epsilon;
+    let variance = (sum << shift) + epsilon;
     let denominator = math::isqrt(variance) as i128;
     input
         .iter()
@@ -666,6 +671,18 @@ mod tests {
         assert_eq!(normalize_state(&vec![0; 256])?, vec![0; 256]);
         let normalized = normalize_state(&vec![2048; 256])?;
         assert!(normalized.iter().all(|&x| x == 1024));
+        // Width 128 divides by its own count: the same unit-RMS result.
+        assert!(normalize_state(&vec![2048; 128])?
+            .iter()
+            .all(|&x| x == 1024));
+        let alternating: Vec<i32> = (0..256)
+            .map(|i| if i % 2 == 0 { 2048 } else { -2048 })
+            .collect();
+        assert_eq!(
+            normalize_state(&alternating[..128])?,
+            normalize_state(&alternating)?[..128]
+        );
+        assert!(normalize_state(&vec![1; 64]).is_err());
         let state = [100, -400, 800, -1200];
         for kind in [Transport::Quaternion, Transport::HouseholderPair] {
             assert_eq!(transport(&state, &[0; 4], kind)?, state);

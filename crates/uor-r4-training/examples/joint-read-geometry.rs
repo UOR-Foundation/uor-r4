@@ -26,6 +26,14 @@
 //! root with identical settings: the window sampler is advanced past the drawn
 //! windows, and the parent's hashes are recorded.
 //!
+//! `init=MODEL_DIR` fine-tunes a saved float model (its configuration must match
+//! the arguments) with a fresh optimizer and a separate window stream.
+//! `quantize_ramp=N` trains with the packed format's frozen dyadic scales,
+//! calibrated once on the starting weights: straight-through fake quantization
+//! whose strength ramps to full over N updates, the hard path in every
+//! evaluation. The saved model then exports with `JointModel::save_hard` and
+//! runs in the integer runtime (see the `joint-integer-parity` example).
+//!
 //! ```text
 //! cargo run --release -p uor-r4-training --example joint-read-geometry -- \
 //!   train=TRAIN.u16 valid=VALID.u16 out=NEW_REPORT_ROOT geometry=dot|lorentz \
@@ -33,7 +41,7 @@
 //!   [steps=1000] [lr=0.001] [shards=1] [transport=quaternion] \
 //!   [eval_every=250] [eval_windows=64] [final_windows=256] [max_seconds=inf] \
 //!   [save_model=false] [read_dropout=0] [checkpoint_every=0] [resume=CHECKPOINT] \
-//!   [lorentz_start=matched|flat]
+//!   [lorentz_start=matched|flat] [init=MODEL_DIR] [quantize_ramp=0]
 //! ```
 //!
 //! `lens` holds the byte length of each token id (u16, vocabulary order); with
@@ -110,6 +118,8 @@ struct Settings {
     checkpoint_every: usize,
     resume: Option<PathBuf>,
     flat_lorentz_start: bool,
+    init: Option<PathBuf>,
+    quantize_ramp: usize,
 }
 
 fn settings(args: &Args) -> Result<Settings> {
@@ -136,6 +146,8 @@ fn settings(args: &Args) -> Result<Settings> {
         "checkpoint_every",
         "resume",
         "lorentz_start",
+        "init",
+        "quantize_ramp",
     ];
     if let Some(key) = args.0.keys().find(|key| !known.contains(&key.as_str())) {
         return Err(invalid(format!("unknown argument {key}=")));
@@ -202,8 +214,15 @@ fn settings(args: &Args) -> Result<Settings> {
         checkpoint_every: args.number("checkpoint_every", 0)?,
         resume: args.text("resume").map(PathBuf::from),
         flat_lorentz_start,
+        init: args.text("init").map(PathBuf::from),
+        quantize_ramp: args.number("quantize_ramp", 0)?,
         config,
     };
+    if settings.init.is_some() && (settings.flat_lorentz_start || settings.resume.is_some()) {
+        return Err(invalid(
+            "init starts from saved weights: lorentz_start and resume do not apply",
+        ));
+    }
     if settings.batch == 0
         || settings.batch > 64
         || settings.eval_every == 0
@@ -367,6 +386,8 @@ fn progress_settings(settings: &Settings) -> Value {
         "eval_every": settings.eval_every,
         "eval_windows": settings.eval_windows,
         "flat_lorentz_start": settings.flat_lorentz_start,
+        "init": settings.init,
+        "quantize_ramp": settings.quantize_ramp,
     })
 }
 
@@ -438,7 +459,8 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
         ..AdamConfig::default()
     };
     let lens_slice = lens.as_deref();
-    let (model, mut optimizer, begin, mut curve, mut train_seconds, parent) = match &settings.resume
+    let (mut model, mut optimizer, begin, mut curve, mut train_seconds, parent) = match &settings
+        .resume
     {
         Some(checkpoint) => {
             let progress: Value =
@@ -471,7 +493,21 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
             (model, optimizer, begin, curve, seconds, parent)
         }
         None => {
-            let model = JointModel::new(settings.config.clone(), &Device::Cpu)?;
+            let mut model = match &settings.init {
+                Some(directory) => {
+                    let model = JointModel::load(directory, &Device::Cpu)?;
+                    if model.config != settings.config || model.quantization().is_some() {
+                        return Err(invalid(
+                            "init needs a float model whose configuration matches the arguments",
+                        ));
+                    }
+                    model
+                }
+                None => JointModel::new(settings.config.clone(), &Device::Cpu)?,
+            };
+            if settings.quantize_ramp > 0 {
+                model.configure_quantization(0, settings.quantize_ramp)?;
+            }
             if settings.flat_lorentz_start {
                 model
                     .variables()
@@ -486,7 +522,13 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
             (model, optimizer, 0, curve, 0.0, Value::Null)
         }
     };
-    let mut windows = Windows(settings.config.seed ^ 0x5EED_0FD8);
+    // A fine-tune draws from its own stream, not the parent run's windows.
+    let stream = if settings.init.is_some() {
+        0x5EED_0FD8 ^ 0xF1AE_7C0E
+    } else {
+        0x5EED_0FD8
+    };
+    let mut windows = Windows(settings.config.seed ^ stream);
     for _ in 0..begin * settings.batch {
         windows.next();
     }
@@ -524,6 +566,7 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
             )?
         };
         let update = optimizer.step(model.variables(), &gradients)?;
+        model.set_completed_step(step + 1)?;
         train_seconds += step_started.elapsed().as_secs_f64();
         losses.push(f64::from(mean_nll));
         completed = step + 1;
@@ -587,8 +630,24 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
         "steps_requested": settings.steps,
         "steps_completed": completed,
         "resumed_from": parent,
+        "init": settings.init.as_deref().map(|directory| -> Result<Value> {
+            Ok(json!({
+                "model": directory,
+                "config_sha256": sha256_file(&directory.join("config.json"))?,
+                "weights_sha256": sha256_file(&directory.join("model.safetensors"))?,
+            }))
+        }).transpose()?,
+        "quantization": model.quantization().map(|state| json!({
+            "ramp_steps": state.ramp_steps,
+            "final_strength": model.training_strength(),
+            "scope": "Frozen dyadic scales calibrated once on the starting weights; straight-through fake quantization; evaluations use the hard path",
+        })),
         "sampled_target_visits": completed * settings.batch * time,
-        "window_sampler": "SplitMix64 counter seeded with seed ^ 0x5EED0FD8; uniform window starts",
+        "window_sampler": if settings.init.is_some() {
+            "SplitMix64 counter seeded with seed ^ 0x5EED0FD8 ^ 0xF1AE7C0E (fine-tune stream); uniform window starts"
+        } else {
+            "SplitMix64 counter seeded with seed ^ 0x5EED0FD8; uniform window starts"
+        },
         "evaluation": "Fresh state per window; evenly spaced starts; Read and NoRead on the same targets",
         "final_windows": settings.final_windows,
         "final": last.report(),

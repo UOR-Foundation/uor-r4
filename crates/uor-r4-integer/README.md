@@ -3,7 +3,9 @@
 This crate serves the retained learned recurrent model with full causal context,
 integer model arithmetic, and integer token selection. It supports the quaternion
 model and the matched Householder-pair control, with the retained dot-product
-read or the hyperbolic (Lorentz) read. The weights retain the model's existing
+read or the hyperbolic (Lorentz) read, at state width 128 or 256 (read width 64,
+context up to 256). Serving bundles keep the retained width-256, context-256
+shape. The weights retain the model's existing
 limitations: general prose remains weak, and useful general reasoning and
 frontier capability are not established.
 

@@ -293,7 +293,7 @@ mod tests {
         Ok(result)
     }
 
-    /// Untrained width-256 Lorentz models, quantized and packed, run in the
+    /// Untrained width-256 and width-128 Lorentz models, quantized and packed, run in the
     /// integer runtime within the retained engineering drift limits (0.01 on
     /// probabilities and state) of their F32 emulator, as the dot read does.
     /// The Dot-matched initial scale reads almost only the oldest key at this
@@ -337,6 +337,15 @@ mod tests {
                 householder,
                 Some((1.32, 4.94)),
                 false,
+            ),
+            (
+                "lorentz-flat-width128",
+                JointConfig {
+                    width: 128,
+                    ..lorentz.clone()
+                },
+                Some((0.0, 5.0)),
+                true,
             ),
         ] {
             let model = JointModel::new(config, &Device::Cpu)?;
