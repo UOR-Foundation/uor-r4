@@ -365,7 +365,10 @@ Added later on 2026-09-26. **Measured**, reduced scale: code corpus, width 128, 
 
 - **The largest and most consistent gain is on copies 65–255 tokens back**, mostly beyond the context-128 window.
 - The gain grows with copy distance in both seeds, as it did at context 128.
-- Unlike context 128, the enclosing-scope gain is resolved in both seeds. Its intervals do not control for copy distance.
+- The enclosing-scope gain in the table does not control for copy distance.
+- *Controlled.* Regressing the per-token difference on log copy distance plus scope category (same scope as the baseline; bootstrap over windows) keeps the distance effect: −0.012 [−0.016, −0.008] and −0.022 [−0.026, −0.018] per doubling.
+- At equal distance, the enclosing-scope effect points in opposite directions in the two seeds: +0.023 [+0.003, +0.043] (less Lorentz advantage than same-scope copies) and −0.018 [−0.047, +0.010].
+- So, as at context 128, the gain is a copy-distance effect, not a scope-structure effect.
 - The gain on non-copyable tokens differs fourfold between the seeds. Seed 2's is the larger, and its Dot run is the read-dependent one.
 
 **Read geometry of the trained Lorentz reads** (probe dump).

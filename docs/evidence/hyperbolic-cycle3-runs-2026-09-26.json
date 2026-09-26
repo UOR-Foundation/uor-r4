@@ -2955,6 +2955,66 @@
    "Dot seed 2 read-dependent (NoRead mass 0.004)",
    "category intervals do not control for copy distance",
    "runs paused about 17 minutes in total for unrelated benchmarks; resumed exactly after a container restart at step 750"
-  ]
+  ],
+  "distance_controlled_regression": {
+   "model": "per-token Lorentz - Dot NLL on copyable tokens = a + b log2(copy distance) + scope-category indicators (same scope baseline); 95% bootstrap over windows (400)",
+   "results": {
+    "s1": {
+     "intercept_same_scope": {
+      "mean": -0.0232,
+      "lo": -0.0366,
+      "hi": -0.0104
+     },
+     "per_doubling": {
+      "mean": -0.012,
+      "lo": -0.0156,
+      "hi": -0.0083
+     },
+     "enclosing_minus_same": {
+      "mean": 0.0233,
+      "lo": 0.0025,
+      "hi": 0.0425
+     },
+     "closed_child_minus_same": {
+      "mean": 0.0244,
+      "lo": 0.0027,
+      "hi": 0.0435
+     },
+     "other_minus_same": {
+      "mean": -0.0252,
+      "lo": -0.0514,
+      "hi": -0.0019
+     }
+    },
+    "s2": {
+     "intercept_same_scope": {
+      "mean": 0.0526,
+      "lo": 0.0378,
+      "hi": 0.067
+     },
+     "per_doubling": {
+      "mean": -0.0218,
+      "lo": -0.0256,
+      "hi": -0.0181
+     },
+     "enclosing_minus_same": {
+      "mean": -0.0183,
+      "lo": -0.0468,
+      "hi": 0.0099
+     },
+     "closed_child_minus_same": {
+      "mean": 0.0151,
+      "lo": -0.0082,
+      "hi": 0.0396
+     },
+     "other_minus_same": {
+      "mean": -0.0161,
+      "lo": -0.0401,
+      "hi": 0.0089
+     }
+    }
+   },
+   "reading": "distance effect in both seeds; enclosing-scope effect at equal distance has opposite signs across seeds"
+  }
  }
 }
