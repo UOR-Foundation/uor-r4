@@ -1186,6 +1186,9 @@ pub fn run_cli(args: &[String]) -> Result<()> {
     if args.first().map(String::as_str) == Some("joint-compare") {
         return crate::joint_comparison::run_cli(args);
     }
+    if args.first().map(String::as_str) == Some("joint-cache-eval") {
+        return crate::joint_cache_eval::run_cli(args);
+    }
     if args.first().map(String::as_str) == Some("joint-evaluate-precision") {
         return evaluate_precision_cli(args);
     }
