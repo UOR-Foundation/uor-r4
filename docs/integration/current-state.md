@@ -1,6 +1,6 @@
 # Current UOR-R4 research state
 
-Updated September 25, 2026. **Pre-alpha; no useful general-language, coding,
+Updated September 26, 2026. **Pre-alpha; no useful general-language, coding,
 frontier, geometric-advantage or full-path energy qualification.**
 
 ## Decision and active work
@@ -203,7 +203,7 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **Paired training is RUNNING in a replacement attempt**.
+not language retention. **Paired training is RUNNING from verified saved-state checkpoints**.
 The first RDC-attached controller [failed](../evidence/language-continuation-interruption-2026-09-25.json)
 at 23:35 UTC with a broken output pipe; its workers exited on signal 2 before
 their first checkpoint. They logged 2,031/2,032 updates but saved no recoverable
@@ -212,7 +212,14 @@ not a model-quality result. A detached controller restarted the same full256
 step8,348→15,672 dose from the preserved parents at 23:46 UTC. Three intermediate
 checkpoints now reduce recovery loss; only the final step is eligible for
 evaluation. The necessary local time extension was recorded before restart.
-Final evaluation, rounding and candidate quality remain NOT_RUN.
+At02:08UTC on September26, that pair then stopped cleanly at its shared-storage
+allocation guard, saving verified checkpoints at10,480/10,488. The
+[exact-state recovery](../evidence/language-continuation-recovery-2026-09-26.json)
+retains both saved states. A detached resume started at02:37:55UTC; new updates
+were observed in both arms. Only5,192/5,184 remaining updates lead to15,672.
+A prospectively recorded local storage/time extension preserves the original
+allocation baseline and machine reserves. Final evaluation, rounding and
+candidate quality remain NOT_RUN.
 
 
 - **Deliverable:** a retained full256 learner producing more coherent,

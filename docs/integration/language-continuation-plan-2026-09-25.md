@@ -68,3 +68,17 @@ The [paired fit launched](../evidence/language-continuation-launch-2026-09-25.js
 The first [paired attempt](../evidence/language-continuation-interruption-2026-09-25.json) ended at 23:35 UTC on September25 when its controller output pipe broke. Both workers exited on signal2 before the planned step12,010 checkpoint. Their curves record 2,031/2,032 completed updates, but no sealed model or optimizer checkpoint exists for either arm. Those updates and their time remain in the resource ledger and execution record; they are not counted as saved learning or a model negative. The trigger that closed the output pipe remains unresolved.
 
 At 23:46 UTC, a controller with a detached process session and local output file started a replacement fit from the two original sealed step8,348 parents. The original Rust trainer, architecture, tokenizer, data seed/population, B16/T256, full causal access, optimizer, and final step15,672 are unchanged. Intermediate checkpoints at steps10,000, 12,010 and14,000 improve recovery after another controller or machine interruption; only15,672 is a quality candidate. The original ten-hour budget remains a frozen prelaunch receipt. A necessary standing-authorized **six-hour extension** was recorded prospectively before this replacement: whole-cycle deadline 12:41 UTC September26, cumulative ledger limit607,200,000ms, and unchanged 4GiB new-storage/machine reserves. This extends time for the same exposure and downstream decisions; it does not authorize an additional tranche. Actual final model and output results are pending.
+
+## Exact-state recovery after shared storage growth
+
+At02:08UTC on September26, the replacement pair reached its configured4GiB new-allocation ceiling as the shared Cargo target grew. Both workers exited normally and sealed resource-stop checkpoints at steps10,480 and10,488. Full Rust verification of both report roots and both checkpoints passed. Their model parameters, Adam moments and sampler clocks are retained; this interruption did not discard checkpointed learning. A separate Antigravity-owned Cargo job was observed using the shared build cache. The conservative original allocation baseline continues to count that growth.
+
+The [recovery record](../evidence/language-continuation-recovery-2026-09-26.json) binds the saved states and prospective necessary allowance: internal new-storage ceiling16GiB, a12GiB increment; whole-cycle deadline14:41UTC, a2h increment; cumulative ledger ceiling614,400,000ms. Physical reserve24GiB plus128MiB stop and64MiB checkpoint margins, and4.5GiB per-worker/8GiB pair RSS remain unchanged. The separate owner-approved SSD backup allowance remains4GiB.
+
+Resume only5,192 quaternion updates and5,184 ordinary updates from the respective saved states, to the same sole final15,672. Combined retained fit2 and resumed fit3 records must total exactly7,324updates and29,999,104targets per arm from8,348. Keep recovery checkpoints12,010/14,000 and use new exclusive attempts. No model, data, context, optimizer, selection or quality criterion changes. Final evaluation and served-language decisions remain pending.
+
+The exact-state resume launched at02:37:55UTC: detached controller25480,
+workers25485/25486, caffeinate25481. Both logs show new updates beginning
+10,481/10,489. Live process commands, events and guards were checked; no
+concurrent duplicate fit was started. The downstream preparation has independent
+and principal source review, but no evaluation launch or quality result yet.
