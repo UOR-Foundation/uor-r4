@@ -459,7 +459,9 @@ fn run(settings: &Settings, out: &Path) -> Result<()> {
     });
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
     if settings.save_model {
-        model.save(&out.join("model"))?;
+        let directory = out.join("model");
+        fs::create_dir(&directory)?;
+        model.save(&directory)?;
     }
     eprintln!("final: {}", last.report());
     Ok(())
