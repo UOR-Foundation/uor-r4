@@ -13,6 +13,7 @@ pub mod format;
 pub mod generation;
 pub mod math;
 pub mod model;
+pub mod ops;
 pub mod report_output;
 pub mod sampling;
 pub mod tables;

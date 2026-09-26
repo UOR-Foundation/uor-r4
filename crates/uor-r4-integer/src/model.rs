@@ -18,6 +18,7 @@ use serde_json::Value;
 use crate::config::{JointConfig, QuantizedTrainingState, ReadMode, Transport};
 use crate::format::{self as joint_quantization, ParameterQuantization};
 use crate::math::{self, MathResult};
+use crate::ops::{accumulate_store, CodeStoreStats, StepOps};
 use crate::tables::{Tables, TOTAL};
 use crate::{invalid, Result};
 
@@ -35,6 +36,7 @@ pub struct IntegerModel {
     parameters: BTreeMap<String, Parameter>,
     tables: Tables,
     identity: String,
+    code_store: CodeStoreStats,
 }
 
 pub struct IntegerSession {
@@ -119,6 +121,35 @@ fn low_bit_dot(products: &[[i64; 16]], weights: &[i16]) -> i64 {
     total
 }
 
+#[inline]
+fn matrix_work_parameter(
+    parameter: &Parameter,
+    input: &[i32],
+    input_exponent: i32,
+    ops: &mut StepOps,
+) -> Result<Vec<i128>> {
+    ops.matrix_work_calls += 1;
+    if parameter.spec.bits != 4
+        || parameter.spec.shape.len() != 2
+        || parameter.spec.shape[1] != input.len()
+    {
+        return Err(invalid("integer affine input shape or bit width"));
+    }
+    let products = low_bit_products(input);
+    parameter
+        .codes
+        .chunks_exact(input.len())
+        .zip(&parameter.spec.row_exponents)
+        .map(|(row, &exponent)| {
+            ops.matrix_work_inspections += row.len() as u64;
+            scaled(
+                i128::from(low_bit_dot(&products, row)),
+                WORK_BITS + input_exponent + i32::from(exponent),
+            )
+        })
+        .collect()
+}
+
 impl IntegerModel {
     pub fn load_with_tables(directory: &Path, tables: &Path) -> Result<Self> {
         let manifest_path = directory.join("hard-model.json");
@@ -171,7 +202,7 @@ impl IntegerModel {
         {
             return Err(invalid("integer model shapes/scales/clock differ"));
         }
-        let parameters = codes
+        let parameters: BTreeMap<String, Parameter> = codes
             .into_iter()
             .map(|(name, codes)| {
                 let parameter = Parameter {
@@ -183,16 +214,25 @@ impl IntegerModel {
             .collect();
         let tables = Tables::load(tables)?;
         let identity = format!("{}:{}", crate::sha256_file(&manifest_path)?, tables.sha256);
+        let mut code_store = CodeStoreStats::default();
+        for parameter in parameters.values() {
+            accumulate_store(&parameter.codes, &mut code_store);
+        }
         Ok(Self {
             config,
             parameters,
             tables,
             identity,
+            code_store,
         })
     }
 
     pub fn config(&self) -> &JointConfig {
         &self.config
+    }
+
+    pub fn code_store_stats(&self) -> CodeStoreStats {
+        self.code_store
     }
 
     pub fn new_session(&self) -> IntegerSession {
@@ -227,26 +267,25 @@ impl IntegerModel {
     /// Return Q40 affine sums. The highest permitted exponent and shape fit
     /// i128. Scales finer than Q40 round once here (at most2^-41 absolute);
     /// the original Q8 output interface subsequently rounds and saturates.
-    fn matrix_work(&self, input: &[i32], input_exponent: i32, name: &str) -> Result<Vec<i128>> {
+    fn matrix_work(
+        &self,
+        input: &[i32],
+        input_exponent: i32,
+        name: &str,
+        ops: &mut StepOps,
+    ) -> Result<Vec<i128>> {
         let p = self.parameter(name)?;
-        if p.spec.bits != 4 || p.spec.shape.len() != 2 || p.spec.shape[1] != input.len() {
-            return Err(invalid("integer affine input shape or bit width"));
-        }
-        let products = low_bit_products(input);
-        p.codes
-            .chunks_exact(input.len())
-            .zip(&p.spec.row_exponents)
-            .map(|(row, &exponent)| {
-                scaled(
-                    i128::from(low_bit_dot(&products, row)),
-                    WORK_BITS + input_exponent + i32::from(exponent),
-                )
-            })
-            .collect()
+        matrix_work_parameter(p, input, input_exponent, ops)
     }
 
-    fn affine(&self, input: &[i32], input_bits: i32, prefix: &str) -> Result<Vec<i32>> {
-        let values = self.matrix_work(input, -input_bits, &format!("{prefix}.weight"))?;
+    fn affine(
+        &self,
+        input: &[i32],
+        input_bits: i32,
+        prefix: &str,
+        ops: &mut StepOps,
+    ) -> Result<Vec<i32>> {
+        let values = self.matrix_work(input, -input_bits, &format!("{prefix}.weight"), ops)?;
         let bias = self.vector_work(&format!("{prefix}.bias"))?;
         values
             .into_iter()
@@ -275,6 +314,16 @@ impl IntegerModel {
         token: u32,
         mode: ReadMode,
     ) -> Result<IntegerStep> {
+        self.step_counted(session, token, mode, &mut StepOps::default())
+    }
+
+    pub fn step_counted(
+        &self,
+        session: &mut IntegerSession,
+        token: u32,
+        mode: ReadMode,
+        ops: &mut StepOps,
+    ) -> Result<IntegerStep> {
         if session.identity != self.identity
             || token as usize >= self.config.vocab_size
             || session.len() >= self.config.context
@@ -293,9 +342,11 @@ impl IntegerModel {
             &embedding_codes,
             i32::from(embedding.spec.row_exponents[token_index]),
             "recurrent.input.weight",
+            ops,
         )?;
         let previous_normalized = normalize_state(&session.state)?;
-        let recurrent = self.matrix_work(&previous_normalized, -10, "recurrent.state.weight")?;
+        let recurrent =
+            self.matrix_work(&previous_normalized, -10, "recurrent.state.weight", ops)?;
         let bias = self.vector_work("recurrent.bias")?;
         let fused = token_affine
             .into_iter()
@@ -316,8 +367,8 @@ impl IntegerModel {
         let (no_read, read_masses, read) = if previous == 0 || mode == ReadMode::NoRead {
             (TOTAL, vec![0; previous], vec![0; width])
         } else {
-            let query = self.affine(&normalized, 10, "read.query")?;
-            let null = self.affine(&normalized, 10, "read.no_read")?[0];
+            let query = self.affine(&normalized, 10, "read.query", ops)?;
+            let null = self.affine(&normalized, 10, "read.no_read", ops)?[0];
             let age = self.vector_work("read.age")?;
             let mut scores = Vec::with_capacity(previous + 1);
             scores.push(null);
@@ -343,15 +394,15 @@ impl IntegerModel {
         };
         let mut update_input = provisional.clone();
         update_input.extend_from_slice(&read);
-        let update = self.tanh(&self.affine(&update_input, STATE_BITS, "update")?);
-        let rho = self.sigmoid(&self.affine(&update_input, STATE_BITS, "update.gate")?)[0];
+        let update = self.tanh(&self.affine(&update_input, STATE_BITS, "update", ops)?);
+        let rho = self.sigmoid(&self.affine(&update_input, STATE_BITS, "update.gate", ops)?)[0];
         let state = blend(&provisional, &update, &vec![rho; width])?;
         let mut copy_input = state.clone();
         copy_input.extend_from_slice(&read);
-        let gate = self.sigmoid(&self.affine(&copy_input, STATE_BITS, "copy.gate")?)[0];
+        let gate = self.sigmoid(&self.affine(&copy_input, STATE_BITS, "copy.gate", ops)?)[0];
         let write_normalized = normalize_state(&state)?;
-        let key = self.affine(&write_normalized, 10, "read.key")?;
-        let value = self.tanh(&self.affine(&write_normalized, 10, "read.value")?);
+        let key = self.affine(&write_normalized, 10, "read.key", ops)?;
+        let value = self.tanh(&self.affine(&write_normalized, 10, "read.value", ops)?);
         let norm = self.parameter("output.norm.weight")?;
         let hidden = write_normalized
             .iter()
@@ -364,7 +415,7 @@ impl IntegerModel {
                 )
             })
             .collect::<Result<Vec<_>>>()?;
-        let logits = self.matrix_work(&hidden, -10, "embedding.weight")?;
+        let logits = self.matrix_work(&hidden, -10, "embedding.weight", ops)?;
         let output_bias = self.vector_work("output.bias")?;
         let logits = logits
             .into_iter()
@@ -616,6 +667,30 @@ mod tests {
         );
         assert_eq!(blend(&state, &[0; 4], &[0; 4])?, state);
         assert_eq!(blend(&state, &[16384; 4], &[32768; 4])?, vec![2048; 4]);
+        Ok(())
+    }
+
+    #[test]
+    fn matrix_work_counter_is_exact_and_shape_checked() -> Result<()> {
+        let parameter = Parameter {
+            codes: vec![0, 1, -1, 2, 0, -3],
+            spec: ParameterQuantization {
+                shape: vec![2, 3],
+                bits: 4,
+                row_exponents: vec![0, 0],
+            },
+        };
+        let mut ops = StepOps::default();
+        let output = matrix_work_parameter(&parameter, &[1, 2, 3], 0, &mut ops)?;
+        assert_eq!(output.len(), 2);
+        assert_eq!(ops.matrix_work_calls, 1);
+        assert_eq!(ops.matrix_work_inspections, 6);
+        matrix_work_parameter(&parameter, &[0, 0, 0], 0, &mut ops)?;
+        assert_eq!(ops.matrix_work_calls, 2);
+        assert_eq!(ops.matrix_work_inspections, 12);
+        assert!(matrix_work_parameter(&parameter, &[1, 2], 0, &mut ops).is_err());
+        assert_eq!(ops.matrix_work_calls, 3);
+        assert_eq!(ops.matrix_work_inspections, 12);
         Ok(())
     }
 }

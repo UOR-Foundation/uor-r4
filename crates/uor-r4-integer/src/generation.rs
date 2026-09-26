@@ -1,4 +1,5 @@
 //! Stateful text sessions using integer predictions and integer token selection.
+use crate::ops::{GenerationOps, StepOps};
 use crate::{
     bundle::Bundle, invalid, IntegerSession, IntegerStep, ReadMode, Result, SamplePolicy, Sampler,
     PROBABILITY_TOTAL,
@@ -84,9 +85,21 @@ pub struct TextSession<'a> {
     observed: Vec<u32>,
     calls: usize,
     model_ns: u128,
+    ops: StepOps,
+    ops_steps: u64,
+    recording: bool,
+    per_step_inspections: Vec<u64>,
 }
 impl Bundle {
     pub fn text_session(&self, mode: ReadMode) -> Result<TextSession<'_>> {
+        self.text_session_with(mode, false)
+    }
+    fn text_session_with(&self, mode: ReadMode, recording: bool) -> Result<TextSession<'_>> {
+        let per_step_inspections = if recording {
+            Vec::with_capacity(self.model().config().context)
+        } else {
+            Vec::new()
+        };
         let mut session = TextSession {
             bundle: self,
             state: self.model().new_session(),
@@ -96,11 +109,26 @@ impl Bundle {
             observed: Vec::new(),
             calls: 0,
             model_ns: 0,
+            ops: StepOps::default(),
+            ops_steps: 0,
+            recording,
+            per_step_inspections,
         };
         session.observe(0)?;
         Ok(session)
     }
     pub fn generate(&self, request: &Request) -> Result<Generation> {
+        self.generate_impl(request, false).map(|(result, _)| result)
+    }
+    /// Generate and return the exact counter totals for this request.
+    pub fn generate_counted(&self, request: &Request) -> Result<(Generation, GenerationOps)> {
+        self.generate_impl(request, true)
+    }
+    fn generate_impl(
+        &self,
+        request: &Request,
+        recording: bool,
+    ) -> Result<(Generation, GenerationOps)> {
         let clock = Instant::now();
         validate_budget(
             1,
@@ -108,7 +136,7 @@ impl Bundle {
             request.max_new_tokens,
             self.model().config().context,
         )?;
-        let mut session = self.text_session(request.read_mode)?;
+        let mut session = self.text_session_with(request.read_mode, recording)?;
         session.append(&request.prompt)?;
         let mut result = session.generate(
             request.max_new_tokens,
@@ -119,17 +147,25 @@ impl Bundle {
         result.incremental_step_calls = session.calls;
         result.model_step_nanoseconds = session.model_ns;
         result.whole_generation_nanoseconds = clock.elapsed().as_nanos();
-        Ok(result)
+        let ops = GenerationOps {
+            steps: session.ops_steps,
+            tokens_generated: result.generated_token_ids.len() as u64,
+            matrix_work_calls: session.ops.matrix_work_calls,
+            matrix_work_inspections: session.ops.matrix_work_inspections,
+            per_step_inspections: std::mem::take(&mut session.per_step_inspections),
+        };
+        Ok((result, ops))
     }
 }
 impl<'a> TextSession<'a> {
     fn observe(&mut self, token: u32) -> Result<()> {
         let position = self.state.len();
         let clock = Instant::now();
-        let step = self
-            .bundle
-            .model()
-            .step(&mut self.state, token, self.mode)?;
+        let mut step_ops = StepOps::default();
+        let step =
+            self.bundle
+                .model()
+                .step_counted(&mut self.state, token, self.mode, &mut step_ops)?;
         self.model_ns += clock.elapsed().as_nanos();
         let total = step
             .probabilities
@@ -155,6 +191,13 @@ impl<'a> TextSession<'a> {
         self.current = Some(step);
         self.observed.push(token);
         self.calls += 1;
+        self.ops.matrix_work_calls += step_ops.matrix_work_calls;
+        self.ops.matrix_work_inspections += step_ops.matrix_work_inspections;
+        self.ops_steps += 1;
+        if self.recording {
+            self.per_step_inspections
+                .push(step_ops.matrix_work_inspections);
+        }
         Ok(())
     }
     fn consume_pending(&mut self) -> Result<()> {
@@ -169,6 +212,15 @@ impl<'a> TextSession<'a> {
     }
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+    pub fn ops(&self) -> StepOps {
+        self.ops
+    }
+    pub fn ops_steps(&self) -> u64 {
+        self.ops_steps
+    }
+    pub fn per_step_inspections(&self) -> &[u64] {
+        &self.per_step_inspections
     }
     pub fn append(&mut self, text: &str) -> Result<usize> {
         let tokens = self.bundle.tokenizer().encode(text);
