@@ -15,7 +15,8 @@
 //! half a window of context (the first half window excepted). Its states at
 //! `site` and its log-probability of every next token are kept in memory.
 //! Every arm then trains on the same training segments in the same order (per
-//! seed) and is evaluated on every validation segment:
+//! seed; each pass over the segments in a fresh random order) and is evaluated
+//! on every validation segment:
 //! - mixture and backbone NLL at the query positions `t >= gap`;
 //! - the share of query positions whose next token is in the cache at all;
 //! - read concentration, on every `eval_rows`-th query row: the share of
@@ -264,17 +265,30 @@ fn features(model: &KappaLlama, tokens: &[u32], count: usize, s: &Settings) -> R
     })
 }
 
-/// Deterministic batch order for one seed (shared by every geometry).
+/// Deterministic batch order for one seed (shared by every geometry): passes
+/// over the training segments in a fresh random order each pass, so no
+/// segment repeats before every segment has been read.
 fn batch_order(seed: u64, steps: usize, batch: usize, segments: usize) -> Vec<Vec<usize>> {
     let mut state = seed.wrapping_mul(0xD1B5_4A32_D192_ED03) | 1;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let mut pass: Vec<usize> = Vec::new();
     (0..steps)
         .map(|_| {
             (0..batch)
                 .map(|_| {
-                    state ^= state << 13;
-                    state ^= state >> 7;
-                    state ^= state << 17;
-                    (state % segments as u64) as usize
+                    if pass.is_empty() {
+                        pass = (0..segments).collect();
+                        for i in (1..segments).rev() {
+                            let j = (next() % (i as u64 + 1)) as usize;
+                            pass.swap(i, j);
+                        }
+                    }
+                    pass.pop().unwrap_or(0)
                 })
                 .collect()
         })

@@ -293,6 +293,9 @@ Written before the measured run; the rules below do not change after it.
 
   Plus a smoke run and a one-seed pilot to confirm that the arms train at all.
 - **Cost.** About 1 h of implementation. About 40 minutes of CPU for the run: backbone features once, then six arms of 400 steps.
+- **Deviation after the pilot, before the measured run.**
+  - *Change.* 1,600 training segments instead of 256, read in shuffled passes, so the 400 steps of 4 read each segment once. The decisions and every other condition are unchanged.
+  - *Why.* The one-seed pilot trained on 64 segments, about 19 passes, and overfit. Validation NLL change was best mid-training (Lorentz −0.009 at step 100, Euclid −0.008 at step 200). By step 300 it was positive for every arm (+0.0085, +0.0015, dot +0.0037), while training loss kept falling.
 
 ## 9. Cost of this phase
 
