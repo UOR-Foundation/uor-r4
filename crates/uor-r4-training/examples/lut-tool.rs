@@ -3,6 +3,7 @@
 //!
 //! ```text
 //! lut-tool mode=export model=DIR out=FILE.lut [max_positions=2048]
+//!     [calibration=X.u16 [calibration_windows=16] [calibration_time=256] [damp=0.01]]
 //! lut-tool mode=dequantize model=DIR lut=FILE.lut out=NEW_DIR
 //! lut-tool mode=bench lut=FILE.lut [tokens=64] [threads=N] [backend=portable|avx2|neon]
 //! lut-tool mode=fidelity model=DIR lut=FILE.lut tokens=X.u16 out=NEW_ROOT
@@ -31,7 +32,7 @@ use uor_r4_core::report_output;
 use uor_r4_lut::engine::Model;
 use uor_r4_lut::Backend;
 use uor_r4_training::kappa_llama::{load_checkpoint, KappaLlama, ScoreKind, Trainable};
-use uor_r4_training::lut_export::export_llama;
+use uor_r4_training::lut_export::{export_llama, Calibration};
 use uor_r4_training::{Result, TrainingError};
 
 fn invalid(message: impl Into<String>) -> TrainingError {
@@ -67,15 +68,61 @@ fn export(args: &Args) -> Result<()> {
             out.display()
         )));
     }
+    let calibration_tokens = args.text("calibration").map(PathBuf::from);
+    let windows: usize = args.number("calibration_windows", 16)?;
+    let time: usize = args.number("calibration_time", 256)?;
+    let damp: f64 = args.number("damp", 0.01)?;
+    if windows == 0 || time == 0 || !damp.is_finite() || damp < 0.0 {
+        return Err(invalid(
+            "calibration_windows and calibration_time must be positive, damp >= 0",
+        ));
+    }
     let started = Instant::now();
     let checkpoint = load_checkpoint(&model, &Device::Cpu)?;
+    let calibration = match &calibration_tokens {
+        Some(path) => {
+            let tokens = read_tokens(path, checkpoint.shape.vocab)?;
+            let float = KappaLlama::new(
+                checkpoint.clone(),
+                ScoreKind::Dot,
+                0.0,
+                Trainable::Scalars,
+                &Device::Cpu,
+            )?;
+            let calibration = Calibration::collect(&float, &tokens, windows, time)?;
+            eprintln!(
+                "collected input moments over {} calibration positions in {:.1}s",
+                calibration.positions,
+                started.elapsed().as_secs_f64()
+            );
+            Some(calibration)
+        }
+        None => None,
+    };
+    let quantizer = match &calibration_tokens {
+        Some(path) => json!({
+            "method": "gptq",
+            "calibration": path,
+            "calibration_sha256": uor_r4_training::sha256_file(path)?,
+            "calibration_windows": windows,
+            "calibration_time": time,
+            "damp": damp,
+        }),
+        None => json!({"method": "round_to_nearest"}),
+    };
     let source = json!({
-        "exporter": "uor-r4-training lut_export 1",
+        "exporter": "uor-r4-training lut_export 2",
         "checkpoint": model,
         "weights_sha256": checkpoint.weights_sha256,
-        "quantizer": "4-bit groups of 32, per-group least-squares scale over (16 + m) 2^(e - 4), RMSNorm gains folded",
+        "format": "4-bit groups of 32, per-group least-squares scale over (16 + m) 2^(e - 4), RMSNorm gains folded",
+        "quantizer": quantizer,
     });
-    let (bytes, report) = export_llama(&checkpoint, max_positions, source)?;
+    let (bytes, report) = export_llama(
+        &checkpoint,
+        max_positions,
+        source,
+        calibration.as_ref().map(|c| (c, damp)),
+    )?;
     fs::write(&out, &bytes)?;
     let mut report_path = out.clone().into_os_string();
     report_path.push(".report.json");
@@ -91,6 +138,17 @@ fn export(args: &Args) -> Result<()> {
         started.elapsed().as_secs_f64(),
         worst
     );
+    if let Some(outputs) = report["relative_output_error"].as_object() {
+        let mean = |key: &str| {
+            let values: Vec<f64> = outputs.values().filter_map(|v| v[key].as_f64()).collect();
+            values.iter().sum::<f64>() / values.len().max(1) as f64
+        };
+        eprintln!(
+            "mean relative output error on the calibration inputs: gptq {:.4}, round-to-nearest {:.4}",
+            mean("gptq"),
+            mean("round_to_nearest")
+        );
+    }
     Ok(())
 }
 

@@ -98,6 +98,21 @@ impl ScoreKind {
     }
 }
 
+/// Where a weight map reads its input (see [`KappaLlama::forward_with_capture`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Site {
+    /// Input of `q_proj`, `k_proj` and `v_proj` in a layer.
+    Attention(usize),
+    /// Input of `o_proj`.
+    Output(usize),
+    /// Input of `gate_proj` and `up_proj`.
+    Mlp(usize),
+    /// Input of `down_proj`.
+    Down(usize),
+    /// Input of the output head.
+    Head,
+}
+
 /// Curvature parameters of one layer, each `(1, heads, 1, 1)`.
 pub enum LayerCurvature<'a> {
     Flat,
@@ -275,6 +290,8 @@ fn decode_values(name: &str, dtype: SafeDtype, bytes: &[u8]) -> Result<Vec<f32>>
 }
 
 /// A checkpoint read into f32 tensors, with its shape and weights-file digest.
+/// Cloning shares the tensor storage.
+#[derive(Clone)]
 pub struct Checkpoint {
     pub shape: LlamaShape,
     pub tensors: BTreeMap<String, Tensor>,
@@ -592,16 +609,19 @@ impl KappaLlama {
         Ok(input.matmul(&self.tensor(name, detached)?.t()?)?)
     }
 
-    fn rms_norm(&self, input: &Tensor, name: &str) -> Result<Tensor> {
+    /// RMSNorm before its gain: `x / sqrt(mean(x^2) + eps)`.
+    fn rms_unit(&self, input: &Tensor) -> Result<Tensor> {
         // Primitive composition: Candle's fused RMSNorm is inference-only.
         let denominator = input
             .sqr()?
             .mean_keepdim(D::Minus1)?
             .affine(1.0, self.shape.rms_eps)?
             .sqrt()?;
-        Ok(input
-            .broadcast_div(&denominator)?
-            .broadcast_mul(&self.tensor(name, true)?)?)
+        Ok(input.broadcast_div(&denominator)?)
+    }
+
+    fn apply_gain(&self, unit: &Tensor, name: &str) -> Result<Tensor> {
+        Ok(unit.broadcast_mul(&self.tensor(name, true)?)?)
     }
 
     /// Per-head scalars of one layer as `(1, heads, 1, 1)`.
@@ -637,6 +657,33 @@ impl KappaLlama {
         detached: bool,
         probe: &mut dyn FnMut(usize, &Tensor, &Tensor, &Tensor) -> Result<()>,
     ) -> Result<Tensor> {
+        self.forward_hooked(ids, batch, time, detached, probe, &mut |_, _| Ok(()))
+    }
+
+    /// Detached [`forward`](Self::forward) that presents the input of every
+    /// weight map to `capture` as `(batch * time, columns)`: the RMSNorm output
+    /// before its gain for the attention, MLP and head sites (the exporter folds
+    /// the gains into those weights), the attention output for `o_proj` and the
+    /// gated MLP activation for `down_proj`.
+    pub fn forward_with_capture(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        capture: &mut dyn FnMut(Site, &Tensor) -> Result<()>,
+    ) -> Result<Tensor> {
+        self.forward_hooked(ids, batch, time, true, &mut |_, _, _, _| Ok(()), capture)
+    }
+
+    fn forward_hooked(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        detached: bool,
+        probe: &mut dyn FnMut(usize, &Tensor, &Tensor, &Tensor) -> Result<()>,
+        capture: &mut dyn FnMut(Site, &Tensor) -> Result<()>,
+    ) -> Result<Tensor> {
         let s = &self.shape;
         if batch == 0
             || time == 0
@@ -663,7 +710,9 @@ impl KappaLlama {
         let group = s.heads / s.kv_heads;
         for layer in 0..s.layers {
             let prefix = format!("model.layers.{layer}");
-            let normalized = self.rms_norm(&state, &format!("{prefix}.input_layernorm.weight"))?;
+            let unit = self.rms_unit(&state)?;
+            capture(Site::Attention(layer), &unit)?;
+            let normalized = self.apply_gain(&unit, &format!("{prefix}.input_layernorm.weight"))?;
             let project = |name: &str, heads: usize| -> Result<Tensor> {
                 Ok(self
                     .linear(
@@ -711,24 +760,31 @@ impl KappaLlama {
                 .transpose(1, 2)?
                 .contiguous()?
                 .reshape((batch * time, s.width))?;
+            capture(Site::Output(layer), &attended)?;
             state = state.add(&self.linear(
                 &attended,
                 &format!("{prefix}.self_attn.o_proj.weight"),
                 true,
             )?)?;
+            let unit = self.rms_unit(&state)?;
+            capture(Site::Mlp(layer), &unit)?;
             let normalized =
-                self.rms_norm(&state, &format!("{prefix}.post_attention_layernorm.weight"))?;
+                self.apply_gain(&unit, &format!("{prefix}.post_attention_layernorm.weight"))?;
             let gate = self
                 .linear(&normalized, &format!("{prefix}.mlp.gate_proj.weight"), true)?
                 .silu()?;
             let up = self.linear(&normalized, &format!("{prefix}.mlp.up_proj.weight"), true)?;
+            let gated = gate.mul(&up)?;
+            capture(Site::Down(layer), &gated)?;
             state = state.add(&self.linear(
-                &gate.mul(&up)?,
+                &gated,
                 &format!("{prefix}.mlp.down_proj.weight"),
                 true,
             )?)?;
         }
-        let hidden = self.rms_norm(&state, "model.norm.weight")?;
+        let unit = self.rms_unit(&state)?;
+        capture(Site::Head, &unit)?;
+        let hidden = self.apply_gain(&unit, "model.norm.weight")?;
         let head = if s.tied_embeddings {
             "model.embed_tokens.weight"
         } else {
