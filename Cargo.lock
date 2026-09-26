@@ -2887,6 +2887,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "uor-r4-lut"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uor-r4-tokenizer",
+]
+
+[[package]]
 name = "uor-r4-model-source"
 version = "0.1.0"
 dependencies = [
@@ -2961,6 +2972,7 @@ dependencies = [
  "sha2",
  "uor-r4-core",
  "uor-r4-integer",
+ "uor-r4-lut",
  "uor-r4-model-source",
 ]
 
