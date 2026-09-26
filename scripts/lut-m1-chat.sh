@@ -20,14 +20,22 @@
 #   4. fidelity of each artifact against the float checkpoint on EVAL_TEXT: next-token NLL change, KL, top-1
 #   5. decoding throughput at 1 thread and at every performance core
 #   6. one chat turn with the GPTQ artifact, sampled with SmolLM2's suggested settings (CHAT_SAMPLING)
-#   7. only with ENERGY=1 (needs sudo for powermetrics): joules per token through scripts/energy_per_token.py,
+#   7. only with CACHE=1: train a learned Lorentz cache memory (lab M4) on CACHE_TEXT over the checkpoint's final
+#      states, with a CACHE_WINDOW-token attention window (the cache reads only what the window cannot see),
+#      export gptq-cache.lut with that window and the cache, and check that the integer cache keeps the float
+#      cache's gain on EVAL_TEXT (cache-fidelity). Chat with it through lut-chat as usual; long chats then slide
+#      the window and keep older text in the cache.
+#   8. only with ENERGY=1 (needs sudo for powermetrics): joules per token through scripts/energy_per_token.py,
 #      idle-subtracted, REPEATS times; with LLAMA_CLI and GGUF also set, the same for llama.cpp on that GGUF
 #      (for example SmolLM2-135M-Instruct Q4_0) as the reference point
 #
 # Knobs: MAX_POSITIONS (2048), WINDOWS (16), TIME (256), CAL_WINDOWS (64), DAMP (0.01), THREADS (performance
 # cores), DEVICE (cpu; metal runs the float side on the GPU and needs a --features metal build), CHAT_TOKENS (128),
 # CHAT_SAMPLING ("temperature=0.2 top_p=0.9 seed=1"; energy runs stay greedy, like llama.cpp at --temp 0),
-# ENERGY (0), REPEATS (3), ENERGY_TOKENS (256), LLAMA_CLI, GGUF.
+# ENERGY (0), REPEATS (3), ENERGY_TOKENS (256), LLAMA_CLI, GGUF, CACHE (0), CACHE_TEXT (a few MB of text, disjoint
+# from EVAL_TEXT), CACHE_WINDOW (512), CACHE_SEGMENTS (800), CACHE_STEPS (200; steps x 4 <= segments reads each
+# segment once), CACHE_DIM (32). The cache stage keeps about CACHE_SEGMENTS x 2 x CACHE_WINDOW x width x 4 bytes of
+# backbone states in memory (1.9 GB for SmolLM2-135M at the defaults).
 #
 # The serving path is integer-only with multiplier-free weight maps (NEON table reads, shifts and additions);
 # the dense backbone is D10's interim chat vehicle and is not D5-sparse. Send OUT_PARENT back for the record.
@@ -49,11 +57,17 @@ ENERGY=${ENERGY:-0}
 REPEATS=${REPEATS:-3}
 ENERGY_TOKENS=${ENERGY_TOKENS:-256}
 PROMPT=${PROMPT:-"Explain in two sentences why the sky is blue."}
+CACHE=${CACHE:-0}
+CACHE_WINDOW=${CACHE_WINDOW:-512}
+CACHE_SEGMENTS=${CACHE_SEGMENTS:-800}
+CACHE_STEPS=${CACHE_STEPS:-200}
+CACHE_DIM=${CACHE_DIM:-32}
 CHAT_SAMPLING=${CHAT_SAMPLING:-"temperature=0.2 top_p=0.9 seed=1"}
 TARGET=${CARGO_TARGET_DIR:-target}
 TOOL=$TARGET/release/examples/lut-tool
 TOKENIZE=$TARGET/release/examples/kappa-conversion
 CHAT=$TARGET/release/lut-chat
+CACHE_TOOL=$TARGET/release/examples/cache-memory
 
 for file in config.json model.safetensors tokenizer.json; do
   [ -f "$MODEL/$file" ] || { echo "missing $MODEL/$file (download the checkpoint first)" >&2; exit 1; }
@@ -72,7 +86,8 @@ sysctl -n machdep.cpu.brand_string >> "$OUT/machine.txt" 2>/dev/null || true
 
 features=()
 [ "$DEVICE" = metal ] && features=(--features metal)
-cargo build --release "${features[@]}" -p uor-r4-training --example lut-tool --example kappa-conversion
+cargo build --release "${features[@]}" -p uor-r4-training --example lut-tool --example kappa-conversion \
+  --example cache-memory
 cargo build --release -p uor-r4-lut --bin lut-chat
 
 "$TOKENIZE" mode=tokenize model="$MODEL" text="$CAL_TEXT" out="$OUT/calibration.u16"
@@ -98,6 +113,21 @@ done
   $CHAT_SAMPLING prompt="$PROMPT" > "$OUT/chat-sample.txt" 2> "$OUT/chat-sample.log"
 cat "$OUT/chat-sample.txt"
 
+if [ "$CACHE" = 1 ]; then
+  [ -f "${CACHE_TEXT:-}" ] || { echo "CACHE=1 needs CACHE_TEXT, a text file disjoint from EVAL_TEXT" >&2; exit 1; }
+  "$TOKENIZE" mode=tokenize model="$MODEL" text="$CACHE_TEXT" out="$OUT/cache-train.u16"
+  "$CACHE_TOOL" model="$MODEL" train="$OUT/cache-train.u16" valid="$OUT/eval.u16" out="$OUT/cache" \
+    geometries=lorentz seeds=1 dim="$CACHE_DIM" gap="$CACHE_WINDOW" window="$CACHE_WINDOW" \
+    segment=$((2 * CACHE_WINDOW)) train_segments="$CACHE_SEGMENTS" valid_segments=16 steps="$CACHE_STEPS" \
+    batch=4 save=true device="$DEVICE"
+  "$TOOL" mode=export model="$MODEL" out="$OUT/gptq-cache.lut" max_positions="$CACHE_WINDOW" \
+    calibration="$OUT/calibration.u16" calibration_windows="$CAL_WINDOWS" calibration_time="$TIME" damp="$DAMP" \
+    cache="$OUT/cache/models/lorentz-seed1.safetensors" 2>&1 | tee "$OUT/export-gptq-cache.log"
+  "$TOOL" mode=cache-fidelity model="$MODEL" lut="$OUT/gptq-cache.lut" \
+    cache="$OUT/cache/models/lorentz-seed1.safetensors" tokens="$OUT/eval.u16" out="$OUT/cache-fidelity" \
+    segments=16 segment=$((2 * CACHE_WINDOW)) window="$CACHE_WINDOW" threads="$THREADS"
+fi
+
 if [ "$ENERGY" = 1 ]; then
   for repeat in $(seq 1 "$REPEATS"); do
     sudo python3 scripts/energy_per_token.py --label "lut-gptq-$repeat" --idle-seconds 8 -- \
@@ -114,4 +144,4 @@ if [ "$ENERGY" = 1 ]; then
   done
 fi
 
-echo "done: fidelity-*/fidelity.json, bench-threads-*.json, chat-sample.txt and energy-*.txt are in $OUT"
+echo "done: fidelity-*/fidelity.json, bench-threads-*.json, chat-sample.txt, cache-fidelity/ and energy-*.txt are in $OUT"

@@ -7,6 +7,7 @@
 //!     [geometries=dot,euclid,lorentz] [seeds=1,2] [dim=32] [gap=256] [window=256] [segment=1024]
 //!     [train_segments=256] [valid_segments=64] [site=head|attention:L|mlp:L]
 //!     [steps=400] [batch=4] [lr=0.003] [eval_every=100] [eval_rows=4] [save=false]
+//!     [device=cpu|metal]
 //! ```
 //!
 //! With `save=true` every trained arm is written to
@@ -14,7 +15,8 @@
 //! (geometry, dimensions, gap and site), the input of `lut-tool mode=export`'s
 //! `cache=` option.
 //!
-//! The frozen backbone runs once over evenly spaced segments of `segment + 1`
+//! `device=metal` (with `--features metal`) runs the backbone on the GPU; the
+//! cache always trains on the CPU. The frozen backbone runs once over evenly spaced segments of `segment + 1`
 //! tokens, in windows of its trained context `window` with stride
 //! `window / 2`; every position is read from a window in which it has at least
 //! half a window of context (the first half window excepted). Its states at
@@ -98,6 +100,7 @@ struct Settings {
     eval_every: usize,
     eval_rows: usize,
     save: bool,
+    device: String,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -164,6 +167,7 @@ fn settings(args: &Args) -> Result<Settings> {
         eval_every: args.number("eval_every", 100)?,
         eval_rows: args.number("eval_rows", 4)?,
         save: args.text("save") == Some("true"),
+        device: args.text("device").unwrap_or("cpu").to_owned(),
     };
     if s.dim == 0
         || s.window < 2
@@ -233,8 +237,9 @@ fn features(model: &KappaLlama, tokens: &[u32], count: usize, s: &Settings) -> R
             s.window,
             s.site.site(),
         )?;
-        states.push(state);
-        logps.push(logp);
+        // The cache trains on the CPU whatever device ran the backbone.
+        states.push(state.to_device(&Device::Cpu)?);
+        logps.push(logp.to_device(&Device::Cpu)?);
         nexts.push(next);
     }
     Ok(Features {
@@ -350,12 +355,23 @@ fn evaluate(memory: &CacheMemory, valid: &Features, s: &Settings, full: bool) ->
 
 fn run(s: &Settings, out: &Path) -> Result<()> {
     let started = Instant::now();
+    let backbone_device = match s.device.as_str() {
+        "cpu" => Device::Cpu,
+        "metal" => Device::new_metal(0)?,
+        other => return Err(invalid(format!("device must be cpu or metal, not {other}"))),
+    };
     let device = Device::Cpu;
-    let checkpoint = load_checkpoint(&s.model, &device)?;
+    let checkpoint = load_checkpoint(&s.model, &backbone_device)?;
     let weights_sha256 = checkpoint.weights_sha256.clone();
     let vocab = checkpoint.shape.vocab;
     let width = checkpoint.shape.width;
-    let model = KappaLlama::new(checkpoint, ScoreKind::Dot, 0.0, Trainable::Scalars, &device)?;
+    let model = KappaLlama::new(
+        checkpoint,
+        ScoreKind::Dot,
+        0.0,
+        Trainable::Scalars,
+        &backbone_device,
+    )?;
     let train_tokens = read_tokens(&s.train, vocab)?;
     let valid_tokens = read_tokens(&s.valid, vocab)?;
     let train = features(&model, &train_tokens, s.train_segments, s)?;
