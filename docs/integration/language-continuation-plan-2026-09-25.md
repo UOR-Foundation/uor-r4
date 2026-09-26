@@ -82,3 +82,24 @@ workers25485/25486, caffeinate25481. Both logs show new updates beginning
 10,481/10,489. Live process commands, events and guards were checked; no
 concurrent duplicate fit was started. The downstream preparation has independent
 and principal source review, but no evaluation launch or quality result yet.
+
+## Second saved-state recovery, September26
+
+Shared build-cache allocation again reached its ceiling at05:36UTC. Both fit3
+workers exited0 and saved RESOURCE_CHECKPOINT finals at12,707/12,715. Each
+retained2,227 additional updates; complete Rust verification of both report roots
+and both final checkpoints passed. No saved fit2/fit3 learning is repeated.
+
+The necessary internal allocation increase16→20GiB was recorded before fit4,
+retaining the original cache-accounting baseline and physical/RSS reserves.
+The remaining allocation fits the observed physical headroom. The complete-cycle
+deadline14:41UTC and cumulative614,400,000ms ceiling are unchanged. Independent
+review caught a32400-second process clock against a21600-second remaining-fit
+projection; both campaigns and launcher were aligned to21600 before launch.
+
+Detached fit4 started06:01:36UTC from the verified fit3 states, with only
+2,965/2,957 updates remaining to the same sole candidate15,672. Intermediate
+14,000 is recovery only. Actual new updates in both arms were observed. The
+[recovery record](../evidence/language-continuation-recovery-4-2026-09-26.json)
+binds saved state, guards, launch and source; frozen downstream criteria remain
+unchanged and final quality is still NOT_RUN.

@@ -220,6 +220,13 @@ were observed in both arms. Only5,192/5,184 remaining updates lead to15,672.
 A prospectively recorded local storage/time extension preserves the original
 allocation baseline and machine reserves. Final evaluation, rounding and
 candidate quality remain NOT_RUN.
+The next shared-cache stop at05:36UTC also exited cleanly and preserved all
+fit3 updates at12,707/12,715. Four complete Rust seal checks passed.
+[Fit4 recovery](../evidence/language-continuation-recovery-4-2026-09-26.json)
+started at06:01:36UTC from those saved states for only2,965/2,957 remaining
+updates. Internal allocation20GiB was recorded prospectively; the14:41UTC
+cycle deadline, cumulative time ceiling and physical/RSS guards remain fixed.
+Both remaining-fit processes now enforce the projected six-hour limit.
 
 
 - **Deliverable:** a retained full256 learner producing more coherent,
