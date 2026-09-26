@@ -86,7 +86,7 @@ sysctl -n machdep.cpu.brand_string >> "$OUT/machine.txt" 2>/dev/null || true
 
 features=()
 [ "$DEVICE" = metal ] && features=(--features metal)
-cargo build --release "${features[@]}" -p uor-r4-training --example lut-tool --example kappa-conversion \
+cargo build --release ${features[@]+"${features[@]}"} -p uor-r4-training --example lut-tool --example kappa-conversion \
   --example cache-memory
 cargo build --release -p uor-r4-lut --bin lut-chat
 

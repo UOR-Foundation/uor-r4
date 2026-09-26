@@ -44,7 +44,7 @@ mkdir -p "$OUT"
 
 features=()
 [ "$DEVICE" = metal ] && features=(--features metal)
-cargo build --release "${features[@]}" -p uor-r4-training --example kappa-conversion
+cargo build --release ${features[@]+"${features[@]}"} -p uor-r4-training --example kappa-conversion
 
 lines=$(wc -l < "$TEXT")
 cut_at=$(( lines * 95 / 100 ))
