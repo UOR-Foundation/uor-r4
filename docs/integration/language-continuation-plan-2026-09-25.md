@@ -2,10 +2,18 @@
 
 Prospective work card, September 25, 2026. References #973 under #820.
 
-**September26 execution status:** both actual continuous finals reached15,672.
-The fixed dose is complete; frozen downstream execution has launched and its
-final quality decisions remain pending. See the [latest state](current-state.md#latest-recovery6-status)
-and [completed-fit/downstream evidence](../evidence/language-continuation-postprocess-6-2026-09-26.json).
+**Closed September26 at this exposure scope.** Both continuous finals and the
+frozen downstream packet completed; none of the four arm/path groups meets the
+prose improvement rule. The [completed result](language-continuation-result-2026-09-26.md)
+owns the outcome and the [current work card](current-state.md#next-single-work-card--failure-localization)
+owns the recommended later causal diagnostic. Earlier launch/recovery instructions below
+are historical; they do not authorize another dose or repeat campaign.
+
+**Historical September26 execution update:** when both continuous finals first
+reached15,672, the frozen downstream packet had launched and quality decisions
+were pending. That packet is now complete and adjudicated in the result above.
+The [completed-fit/downstream evidence](../evidence/language-continuation-postprocess-6-2026-09-26.json)
+retains the execution chronology.
 
 ## Deliverable and causal change
 
@@ -64,9 +72,9 @@ Only the new adapter needs new focused code checks: truthful unchanged optimizer
 
 Source `209483169323563d541df781b8817a4bf6dc31e3` implements the explicit adapter. [Evidence](../evidence/language-continuation-adapter-2026-09-25.json): both focused checks passed on the first build; both actual retained continuous parents completed calibration, packed export, integer loading and8-token generation in approximately3seconds each. No model fitting occurred in this prerequisite. Clipping affected30,428/32,207 coordinates while preserving all nearest hard codes and1,648,037/1,646,255 fractional shadows respectively; original Adam fingerprints and step8,348 remain unchanged. These preflight packed bundles are unpromoted interface artifacts.
 
-## Execution status
+## Historical execution status at the first launch
 
-The [paired fit launched](../evidence/language-continuation-launch-2026-09-25.json) at21:06:32UTC on September25 through RDC. Both arms advance from step8,348 with full256 causal context; final candidate results are pending. Initial throughput is slower than the prior6.15h projection. The original7h per-fit and10h complete-cycle ceilings remain active; any necessary exact-state resume requires a prospectively recorded local extension. No new exposure tranche or change of learning conditions is implied.
+The [paired fit launched](../evidence/language-continuation-launch-2026-09-25.json) at21:06:32UTC on September25 through RDC. Both arms began advancing from step8,348 with full256 causal context; final candidate results were pending at that update. Initial throughput is slower than the prior6.15h projection. At that launch the original7h per-fit and10h complete-cycle ceilings were active; any necessary exact-state resume requires a prospectively recorded local extension. No new exposure tranche or change of learning conditions is implied.
 
 ## Execution correction after the controller interruption
 
@@ -187,8 +195,8 @@ artifact files and removed their redundant internal copy; the recorded immediate
 free-space increase was 18,462,396,416 bytes. Regenerable compiler-probe metadata
 was snapshotted separately; source, models and checkpoints stayed internal.
 Detached sequential fit6 launched at17:11:38UTC and has now completed both
-actual target15,672 finals. Final downstream results and quality decisions
-remain pending; completed training does not establish language improvement.
+actual target15,672 finals. At that update, final downstream results and quality
+decisions were pending; completed training did not establish language improvement.
 The [conditional principal direction](language-continuation-direction-2026-09-26.md)
 explains how to interpret the frozen outputs; it does not authorize a new
 architecture, depth experiment, panel or exposure tranche. See
@@ -205,7 +213,7 @@ bind both actual checkpoints and the unchanged recipe. Postprocessing launched
 at21:16:54UTC; both full fit reports and both final checkpoint sets passed Rust
 verification by21:17:35UTC. The first continuous Read evaluation then started.
 The fixed sequential Read/NoRead, calibration, alpha512, integer/source and prose
-packet is executing; its final results and principal adjudication remain pending.
+packet was then executing; its final results and principal adjudication were pending.
 No new experiment, extra continuous dose, criterion change or automatic promotion
 is introduced.
 
@@ -218,6 +226,35 @@ same-path parents. The [quoted review evidence](../evidence/language-continuatio
 retains all four criteria and reviewer disagreements. Continuous Read/NoRead
 likelihood demonstrates context utility within the fixed evaluator, which is a
 separate observation from coherent output. The unchanged integer-conversion,
-source-retention and served-prose packet is still running; its results and the
-integrated next-action interpretation remain pending. No new dose, acceptance
+source-retention and served-prose packet was still running at that observation;
+its results and the integrated next-action interpretation were then pending. No new dose, acceptance
 change or failure-driven test programme is introduced.
+
+
+### Completed frozen packet and closeout, September26
+
+All frozen outputs completed at23:04:43UTC. The [integrated result](language-continuation-result-2026-09-26.md)
+and [bound evidence](../evidence/language-continuation-result-2026-09-26.json) retain
+both full step15,672 continuous finals, fresh calibration, the declared512-update
+rounding recipe and actual loaded integer/source/prose outputs. The original
+7,324 additional updates /29,999,104 targets per arm were completed once across
+retained segments; interruptions did not enlarge the saved dose.
+
+Principal and independent reviews agree on continuous0/5 in each arm and integer
+0/5 quaternion,1/5 ordinary, versus0/5 same-path parents. All four groups miss the
+unchanged3/5 and+2 rule. Positive dimensions and reviewer disagreements remain
+in the [continuous](../evidence/language-continuation-continuous-quality-2026-09-26.json)
+and [integer](../evidence/language-continuation-integer-quality-2026-09-26.json)
+records. Ordinary numerical/source-retention failures and the quaternion served
+short-cycle are separately adjudicated in the result; likelihood or a limited
+engineering pass does not substitute for prose acceptance.
+
+Close exposure-only fitting without promotion. Completed existing-record analysis
+prioritizes the emission/selection interface but leaves the root cause UNRESOLVED.
+The [single recommended later work card](current-state.md#next-single-work-card--failure-localization)
+is a same-checkpoint causal diagnostic of poorly ranked predictions versus
+stochastic deviations, with missing component probabilities collected only where
+necessary. This closeout changes no criterion and authorizes no replay, extra
+fit, new acceptance panel, decoding-policy change, depth change or scale search.
+Final artifact preservation, cumulative costs and protected delivery are recorded
+in the result's [delivery section](language-continuation-result-2026-09-26.md#delivery-and-cost-closeout).

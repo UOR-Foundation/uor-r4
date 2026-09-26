@@ -13,20 +13,35 @@ The [canonical plan](project-track.md) owns the persistent training/reference
 ladder. #973 remains active under programme #820; their full acceptance is open.
 
 **Park further A1–A4 local selector tuning.** Preserve its native serving and
-exact-memory scaffolds. The joint recurrent-memory learner passes its frozen
-continuation gate. The learned neighboring-code successor now passes all five
-original hard-artifact retention gates in both arms; the two older quantized
-negatives remain preserved. The shared bounded-admission successor now completes
+exact-memory scaffolds. The September25 joint recurrent-memory learner and its
+learned neighboring-code successor retain their original scoped engineering
+acceptance; the two older quantized negatives remain preserved. The completed
+September26 language continuation is a distinct candidate with failed prose
+and retention criteria, as reported below. The shared bounded-admission successor now completes
 its paired comparison but fails source retention in both arms. Keep the accepted
 learned-code parents and full 256-token access. The recent64 training follow-up
 is withdrawn under the owner-directed [D9 correction](DECISIONS.md#d9--prevent-experiment-loops-and-preserve-the-context-contract).
 The full-context standalone integer serving session is now implemented and retained
 at the scope below. An exact arithmetic optimization makes actual generation
-4.5–6.6 times faster on the measured workloads. Advance coherent language learning
-through this same session; admission pruning remains deferred.
+4.5–6.6 times faster on the measured workloads. The subsequent fixed exposure
+completed without meeting coherent-language criteria. Preserve the accepted
+parents and close exposure-only fitting; one later localization from existing
+evidence is the recommended next work card. Admission pruning remains deferred.
 The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged.
 
-## Latest result: standalone integer serving and exact speedup
+## Latest result: completed continuation, useful-language target unmet
+
+The [completed result](language-continuation-result-2026-09-26.md) records both
+continuous finals at step15,672 and all frozen downstream outputs completed at
+23:04:43UTC. Continuous prose is **0/5 quaternion and0/5 ordinary**; integer prose
+is **0/5 and1/5**, against0/5 same-path parents. All four groups miss the fixed
+3/5 and+2 improvement rule. Natural likelihood and Read/NoRead utility improve
+without qualifying coherent language. Ordinary numerical/source-retention gates
+also fail; quaternion has source regressions against the accepted parent and an
+actual integer short-cycle. No candidate is promoted. The [next single work card](#next-single-work-card--failure-localization)
+localizes these failures from existing records; it authorizes no fit or sweep.
+
+## Retained result: standalone integer serving and exact speedup, September25
 
 The [standalone result](integer-serving-result-2026-09-25.md) delivers a Rust
 CLI and stateful library session with bound tokenizer/model/tables, integer
@@ -53,11 +68,12 @@ D5 sparsity, geometric advantage, Hamiltonian dynamics, useful general language
 or energy qualification is promoted. Actual prose still confuses entities and
 roles. Session capacity remains256, with independently tokenized text appends.
 
-**Current continuation:** both arms have completed the fixed continuous target
-15,672. Apply the frozen evaluation, calibration, learned-code and integer-serving
-recipe to those actual finals; final quality decisions remain pending. See the
-[active recovery status](#latest-recovery6-status). The standalone-serving delivery
-above itself performed no new fit.
+**Completed continuation:** both arms reached the fixed continuous target
+15,672 and completed the frozen evaluation, calibration, learned-code and integer
+packet. The [final result](language-continuation-result-2026-09-26.md) misses all
+four prose improvement targets and retains specific numerical/source failures;
+neither candidate is promoted. The standalone-serving delivery above itself
+performed no new fit.
 
 [Bound result](../evidence/integer-serving-result-2026-09-25.json),
 [exact comparison](../evidence/integer-serving-comparison-2026-09-25.json),
@@ -187,7 +203,7 @@ and the [progress-control rules](agent-execution-policy.md#progress-control--own
 | Evaluator | Existing `reference-evaluator-v2.json`; no new panel or holdout during implementation |
 | Deferred branch | recent64 fitting and sign-index/width/hash sweeps |
 
-**Active capability work card (#973 under #820):**
+**Completed exposure work card (#973 under #820):**
 
 Owner resumed this milestone after storage consolidation. The
 [prospective continuation plan](language-continuation-plan-2026-09-25.md),
@@ -203,9 +219,9 @@ The adapter is implemented and [verified](../evidence/language-continuation-adap
 2 focused release checks pass; both actual step8,348 parents complete calibration,
 packed export, integer bundle loading and an8-token interface exercise in about
 3 seconds each, with zero optimizer/data advances. This is interface evidence,
-not language retention. **Both arms have now completed the original continuous
-target15,672 with saved model, optimizer and sampler state; frozen downstream
-execution has launched and final quality decisions remain pending.**
+not language retention. **Both arms completed the original continuous target
+15,672 and the frozen downstream packet. The fixed prose targets remain unmet;
+no candidate replaces the accepted parents.**
 The first RDC-attached controller [failed](../evidence/language-continuation-interruption-2026-09-25.json)
 at 23:35 UTC with a broken output pipe; its workers exited on signal 2 before
 their first checkpoint. They logged 2,031/2,032 updates but saved no recoverable
@@ -220,8 +236,8 @@ allocation guard, saving verified checkpoints at10,480/10,488. The
 retains both saved states. A detached resume started at02:37:55UTC; new updates
 were observed in both arms. Only5,192/5,184 remaining updates lead to15,672.
 A prospectively recorded local storage/time extension preserves the original
-allocation baseline and machine reserves. Final evaluation, rounding and
-candidate quality remain NOT_RUN.
+allocation baseline and machine reserves. At that recovery point, final
+evaluation, rounding and candidate quality were NOT_RUN.
 The next shared-cache stop at05:36UTC also exited cleanly and preserved all
 fit3 updates at12,707/12,715. Four complete Rust seal checks passed.
 [Fit4 recovery](../evidence/language-continuation-recovery-4-2026-09-26.json)
@@ -234,8 +250,8 @@ saving 13,939 / 13,949. All four Rust report/checkpoint checks passed. The
 [sequential recovery](../evidence/language-continuation-recovery-5-2026-09-26.json)
 started at 07:31:51 UTC and also stopped at the physical reserve at 07:35:46.
 Quaternion saved all 61 new updates at step 14,000; both new Rust full-set
-checks passed. Householder did not start and remains at 13,949. Only
-**1,672 / 1,723 updates remain** to the original sole final 15,672.
+checks passed. Householder did not start and remained at 13,949. At the fit5
+stop, **1,672 / 1,723 updates remained** to the original sole final 15,672.
 B16/T256, two gradient shards, full causal access, Adam and sampler continuity,
 and every acceptance criterion remain unchanged. Serial execution reduced
 campaign RSS but did not resolve host physical-space instability. At the fit5
@@ -243,7 +259,7 @@ stop, automatic retries were paused pending owner resolution of competing
 workloads or a new storage arrangement, without authorizing reserve reduction
 or deletion. The prospectively recorded fit5 deadline 16:41 UTC and cumulative
 limit 621,600,000 ms were budget caps, not a completion estimate. Final evaluation,
-integer conversion and prose adjudication remain NOT_RUN.
+integer conversion and prose adjudication were NOT_RUN at that stop.
 
 ### Latest recovery6 status
 
@@ -257,12 +273,12 @@ visits per arm from 8,348**. Both optimizer and next-data clocks are15,672, with
 64,192,512 cumulative target visits. The unsaved fit1 updates remain a charged
 execution loss and are excluded from saved learning. B16/T256, full causal access,
 two gradient shards, data, optimizer and every acceptance criterion remain fixed.
-One model process runs at a time throughout downstream work; no extra continuous
-dose or checkpoint selection is introduced.
+One model process ran at a time throughout downstream work; no extra continuous
+dose or checkpoint selection was introduced.
 
-The prospective complete-work projection is **33,300 seconds**, including
+The recorded prospective complete-work projection was **33,300 seconds**, including
 cleanup/verification, sequential fit, conversion, evaluation/review/delivery and
-stop margin. The new whole-cycle deadline is **September 27 at 02:41 UTC**, with
+stop margin. The recorded whole-cycle deadline is **September 27 at 02:41 UTC**, with
 cumulative time limit **657,600,000 ms**. These are caps, not an ETA. The tracked
 allocation ceiling is **32 GiB**, retaining the original whole-cycle baseline
 and conservatively charging the relocated shared cache after its device/inode
@@ -272,9 +288,8 @@ remain separate. Physical reserve **24 GiB + 128 MiB stop margin + 64 MiB
 checkpoint headroom**, and existing RSS guards remain unchanged. Current model
 parents and frozen executables remain at their existing internal paths.
 
-**Cleanup/cutover: complete. Continuous fit6: COMPLETE in both arms.
-Postprocessing: RUNNING as of21:17UTC; final numerical, source and prose verdicts
-remain pending.** The migration verified
+**Cleanup/cutover: complete. Continuous fit6 and frozen postprocessing: COMPLETE.
+Prose targets: UNMET in both arms; neither candidate is promoted.** The migration verified
 45,329 files and their hardlink groups before removing the redundant internal
 Cargo cache. Its immediate free-space increase was 18,462,396,416 bytes; later
 host free-space changes are reported separately. The cache now resides on the
@@ -289,10 +304,10 @@ including headroom, was 21,699,153,920 bytes. These are retained launch readings
 physical/RSS/allocation guards remained active through both completed fits.
 The 29,700-second remaining launch projection includes fit, conversion,
 evaluation/review/delivery and stop margin; preparation is already charged.
-The existing 30-minute monitor is active for this single milestone. The
-[conditional principal direction](language-continuation-direction-2026-09-26.md)
-guides interpretation after the unchanged frozen output packet returns; it
-introduces no new panel or automatic next fit.
+The [conditional principal direction](language-continuation-direction-2026-09-26.md)
+and [completed result](language-continuation-result-2026-09-26.md) guide the
+existing-evidence localization decision. No new panel or automatic fit follows
+from a monitor or the completed packet.
 
 The [completed-fit and downstream record](../evidence/language-continuation-postprocess-6-2026-09-26.json)
 binds both actual finals: quaternion completed at **18:45 UTC**, and the
@@ -305,11 +320,12 @@ actual asymmetric lineage and fixed exposure. Postprocessing launched at
 **21:16:54UTC**. Both full fit reports and both final checkpoint sets passed the
 existing Rust verifier by21:17:35UTC (four exit0 records); the quaternion continuous
 Read evaluation started at21:17:37UTC. The unchanged sequential Read/NoRead,
-calibration, alpha512, integer/source and prose packet is now executing. Its final
-results and principal adjudication are pending; training completion and seal
-verification do not establish language quality or geometric advantage.
+calibration, alpha512, integer/source and prose packet completed at23:04:43UTC.
+Its [final adjudication](../evidence/language-continuation-result-2026-09-26.json)
+retains the negative quality and numerical/source findings. Training completion
+and seal verification do not establish language quality or geometric advantage.
 
-### Continuous prose result; integer outcome pending
+### Completed continuous and integer prose result
 
 The [actual continuous output review](../evidence/language-continuation-continuous-quality-2026-09-26.json)
 finds **0/5 fully acceptable stories in each arm**, compared with0/5 for each
@@ -326,50 +342,53 @@ penalties,0.495574415 /0.498034509 nats on233,472 targets per arm, show context
 utility at this evaluator's scope. They do not qualify coherent prose or
 geometric advantage. This dose has not met its continuous prose objective.
 
-The declared downstream recipe continues: fresh calibration and normalization
-completed, and the fixed quaternion alpha512 phase began at21:23:43UTC. Hard and
-integer numerical/source retention, served prose and final external backup remain
-pending. Complete those existing commitments before the integrated interpretation;
-there is no additional exposure authorization or new mechanism decision here.
+The [integer output review](../evidence/language-continuation-integer-quality-2026-09-26.json)
+finds **0/5 quaternion and1/5 ordinary**, again below the frozen threshold. Both
+reviewers accept the ordinary lion story; disagreements over quaternion seed2017
+progression and ordinary seed2014 completion are preserved and change neither
+row acceptance nor the outcome. The [integrated result](language-continuation-result-2026-09-26.md)
+separates prose failure from measured conversion/source failures and the quaternion
+integer goose short-cycle. Different continuous/integer sampling policies prevent
+attributing sample differences alone to conversion. Final delivery items are
+listed only in the result's [delivery section](language-continuation-result-2026-09-26.md#delivery-and-cost-closeout).
 
-### Active work-card decisions
+### Next single work card — failure localization
 
-- **Deliverable:** a retained full256 learner producing more coherent,
-  source-consistent short language continuations through the standalone integer
-  session. Conversation and coding remain downstream consumers of this path.
-- **Observed blocker / change:** both arms have weak language, while their
-  continuous development NLL was still improving at the latest retained
-  continuation. Resume that continuous language learning with optimizer/data
-  state. Change exposure first; capacity saturation, missing attention or a
-  necessary new Hamiltonian are unproven diagnoses.
-- **Fixed conditions:** architecture, next-token objective, tokenizer,
-  training/evaluation/session256, full admission and ordinary arm. Preserve
-  accepted integer bundles. Alpha-only code rounding is not a replacement for
-  learning the language parameters.
-- **Before fitting or recovery:** project the complete remaining training/export/
-  actual-serving cycle with measured throughput and physical reserve. The
-  29,999,104-target dose per arm is already fixed; a recovery does not restart
-  that dose. Preserve the frozen development output packet, parent judgments,
-  entity/role consistency and completion criteria, and source/NoRead controls.
-  No post-result panel expansion.
-- **One integrated execution:** the retained step8,348→15,672 dose is complete
-  in both arms with optimizer/sampler continuity. Apply the established evaluation,
-  calibration/learned-code/integer export once under the declared retention recipe.
-  New continuous weights require freshly bound calibration/codes; old scales
-  cannot be assumed valid. No additional continuous dose is authorized here.
-- **Decision:** meaningful output improvement retained in integer serving advances
-  conversation/coding work. Better NLL without useful output improvement requires
-  one evidence-based interface/objective/data/capacity decision, not another
-  automatic exposure tranche. No development improvement under healthy completed
-  execution parks exposure-only continuation. Measured numerical or source-retention
-  failure supports targeted conversion repair while preserving both artifacts
-  and every gate. If numerical gates pass but continuous prose passes and integer
-  prose fails, served quality remains unmet and attribution unresolved: their
-  frozen sampling policies differ. Apply the [conditional principal memo](language-continuation-direction-2026-09-26.md)
-  without changing the fixed rubric.
-- **Stop:** at the configured complete-cycle limits and the declared decision.
-  Keep learned checkpoints and negatives. No admission, scale or scalar-feature
-  search is justified merely by remaining machine time.
+- **Completed evidence review:** the fixed dose and output packet are closed.
+  The [existing trace analysis](../evidence/language-continuation-trace-coverage-2026-09-26.json)
+  and [independent direction review](../evidence/language-continuation-direction-review-2026-09-26.json)
+  justify prioritizing the emission/selection interface. They do not establish a
+  sole cause or a successful decoder repair. #973 and #820 remain open at their
+  wider acceptance scope.
+- **Observed blocker:** continuous prose misses the frozen criterion despite
+  improved natural likelihood. Ordinary numerical/source retention fails;
+  quaternion source regressions and an integer short-cycle also remain. Existing
+  greedy source-panel regressions prevent a sampling-only explanation of all
+  failures. Neither absent attention, capacity saturation nor a necessary new
+  Hamiltonian follows from this result.
+- **One recommended later causal diagnostic:** use the same checkpoints and
+  witnessed failing prefixes in both arms to distinguish a poorly ranked
+  semantic token from a stochastic choice that departs from a better-ranked
+  alternative. Define the decision this observation can change and its complete
+  prospective cost before execution. Capture missing per-token vocabulary/copy
+  components only where necessary. This work card is a recommendation, not an
+  executed replay or authorization to change decoding or model weights.
+- **Existing evidence and limits:** continuous generations already retain top-read
+  occurrence/token/mass, copy gate/effective copy mass, selected raw model
+  probability and greedy token; integer records retain selected probability,
+  NoRead mass and hashes. Selected model probability is not the post-temperature,
+  top-k sampling probability. Low total copy mass cannot exclude copying of a
+  particular low-probability token. Full source-weight distributions, separate
+  vocabulary/copy components and alternate state trajectories are absent; claims
+  needing those records remain UNRESOLVED. A greedy alternative at a sampled
+  prefix does not establish coherent greedy generation.
+- **Decision and stop:** finish with one supported implementation decision or an
+  explicit UNRESOLVED finding. Keep accepted parents, both new final paths,
+  negative history, full256 access, ordinary controls and the original output
+  criteria. No new fit, exposure tranche, prompt acceptance panel, coefficient/
+  scale/admission sweep or expanded test programme follows from this closeout.
+  Numerical repair alone cannot qualify the continuous-language result that
+  already failed. Remaining machine allowance is not a reason to repeat a run.
 
 The full256 baseline is finite; terminal D5 parameter sparsity remains open.
 Standalone integer generation is **executed at the scoped numerical boundary**.
