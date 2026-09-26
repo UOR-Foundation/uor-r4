@@ -2,9 +2,12 @@
 
 This crate serves the retained learned recurrent model with full causal context,
 integer model arithmetic, and integer token selection. It supports the quaternion
-model and the matched Householder-pair control. The weights retain the model's
-existing limitations: general prose remains weak, and useful general reasoning
-and frontier capability are not established.
+model and the matched Householder-pair control, both with the retained
+dot-product read. A model declaring the optional offline Lorentz read geometry
+is refused with `IntegerError::UnsupportedReadGeometry`; no integer arcosh path
+exists yet. The weights retain the model's existing limitations: general prose
+remains weak, and useful general reasoning and frontier capability are not
+established.
 
 The crate depends on the shared byte-level tokenizer, Serde/JSON, and hashing
 libraries. It has no dependency on Candle, the training crate, the core crate,

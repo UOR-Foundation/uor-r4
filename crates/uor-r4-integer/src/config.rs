@@ -21,6 +21,34 @@ pub enum ReadMode {
     NoRead,
 }
 
+/// Read-score geometry. `Dot` is the retained scaled dot product. `Lorentz`
+/// lifts query and key to the hyperboloid x -> (sqrt(1+|x|^2), x) and scores
+/// the negative scaled geodesic distance; only offline F32 training implements
+/// it, and this integer runtime refuses it (no integer arcosh path yet).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadGeometry {
+    #[default]
+    Dot,
+    Lorentz,
+}
+
+impl ReadGeometry {
+    pub const fn is_dot(&self) -> bool {
+        matches!(self, Self::Dot)
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Dot => "dot",
+            Self::Lorentz => "lorentz",
+        }
+    }
+}
+
+/// Learned scalar log scale of the Lorentz read; absent from `Dot` models.
+pub const LORENTZ_LOG_BETA: &str = "read.lorentz_log_beta";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct JointConfig {
     pub vocab_size: usize,
@@ -29,6 +57,10 @@ pub struct JointConfig {
     pub context: usize,
     pub transport: Transport,
     pub seed: u64,
+    /// Absent in retained metadata, which therefore reads as `Dot`. `Dot` is
+    /// never serialized, so existing configs, manifests and hashes are unchanged.
+    #[serde(default, skip_serializing_if = "ReadGeometry::is_dot")]
+    pub read_geometry: ReadGeometry,
 }
 impl Default for JointConfig {
     fn default() -> Self {
@@ -39,6 +71,7 @@ impl Default for JointConfig {
             context: 256,
             transport: Transport::Quaternion,
             seed: 0,
+            read_geometry: ReadGeometry::Dot,
         }
     }
 }
@@ -59,7 +92,7 @@ impl JointConfig {
     pub fn shapes(&self) -> BTreeMap<String, Vec<usize>> {
         let d = self.width;
         let r = self.read_width;
-        BTreeMap::from([
+        let mut shapes = BTreeMap::from([
             ("embedding.weight".into(), vec![self.vocab_size, d]),
             ("recurrent.input.weight".into(), vec![3 * d, d]),
             ("recurrent.state.weight".into(), vec![3 * d, d]),
@@ -81,7 +114,12 @@ impl JointConfig {
             ("copy.gate.bias".into(), vec![1]),
             ("output.norm.weight".into(), vec![d]),
             ("output.bias".into(), vec![self.vocab_size]),
-        ])
+        ]);
+        if self.read_geometry == ReadGeometry::Lorentz {
+            // One learned scalar; `Dot` keeps its exact retained inventory.
+            shapes.insert(LORENTZ_LOG_BETA.into(), vec![1]);
+        }
+        shapes
     }
 }
 

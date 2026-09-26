@@ -19,7 +19,7 @@ use crate::config::{JointConfig, QuantizedTrainingState, ReadMode, Transport};
 use crate::format::{self as joint_quantization, ParameterQuantization};
 use crate::math::{self, MathResult};
 use crate::tables::{Tables, TOTAL};
-use crate::{invalid, Result};
+use crate::{invalid, IntegerError, Result};
 
 pub const PROBABILITY_TOTAL: u64 = TOTAL;
 const WORK_BITS: i32 = 40;
@@ -126,6 +126,13 @@ impl IntegerModel {
             return Err(invalid("integer model manifest too large"));
         }
         let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+        // Only the retained dot-product read has an integer kernel. A Lorentz
+        // manifest also fails the contract comparison below; refuse it first
+        // so callers receive the typed reason (no integer arcosh path yet).
+        let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
+        if !config.read_geometry.is_dot() {
+            return Err(IntegerError::UnsupportedReadGeometry(config.read_geometry));
+        }
         if manifest["schema"] != "uor-r4.joint-recurrent-packed-emulator/1"
             || manifest
                 .get("admission")
@@ -151,7 +158,6 @@ impl IntegerModel {
         if descriptor != manifest["parameter_manifest"] {
             return Err(invalid("integer parameter manifest binding differs"));
         }
-        let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
         config.validate()?;
         if config.context != 256 || config.width != 256 || config.read_width != 64 {
             return Err(invalid("integer bridge fixes context256/state256/read64"));
@@ -616,6 +622,61 @@ mod tests {
         );
         assert_eq!(blend(&state, &[0; 4], &[0; 4])?, state);
         assert_eq!(blend(&state, &[16384; 4], &[32768; 4])?, vec![2048; 4]);
+        Ok(())
+    }
+
+    /// No integer arcosh kernel exists: a Lorentz manifest is refused with the
+    /// typed error before any contract, parameter or table access, while
+    /// absent or explicit `dot` metadata passes this guard unchanged.
+    #[test]
+    fn loader_rejects_lorentz_read_geometry_with_typed_error() -> Result<()> {
+        use crate::config::ReadGeometry;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| invalid("test clock before epoch"))?
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "uor-integer-read-geometry-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory)?;
+        let write = |model: Value| -> Result<()> {
+            let manifest = serde_json::json!({
+                "schema": "uor-r4.joint-recurrent-packed-emulator/1",
+                "model": model,
+            });
+            fs::write(
+                directory.join("hard-model.json"),
+                serde_json::to_vec(&manifest)?,
+            )?;
+            Ok(())
+        };
+        let lorentz = JointConfig {
+            read_geometry: ReadGeometry::Lorentz,
+            ..JointConfig::default()
+        };
+        write(serde_json::to_value(&lorentz)?)?;
+        let Err(error) = IntegerModel::load_with_tables(&directory, &directory) else {
+            return Err(invalid("Lorentz manifest was accepted"));
+        };
+        assert!(
+            matches!(
+                error,
+                IntegerError::UnsupportedReadGeometry(ReadGeometry::Lorentz)
+            ),
+            "{error}"
+        );
+        assert!(error.to_string().contains("lorentz"), "{error}");
+        let mut explicit_dot = serde_json::to_value(JointConfig::default())?;
+        explicit_dot["read_geometry"] = serde_json::json!("dot");
+        for model in [serde_json::to_value(JointConfig::default())?, explicit_dot] {
+            write(model)?;
+            let Err(error) = IntegerModel::load_with_tables(&directory, &directory) else {
+                return Err(invalid("contract-free manifest was accepted"));
+            };
+            assert!(matches!(error, IntegerError::Invalid(_)), "{error}");
+        }
+        fs::remove_dir_all(&directory)?;
         Ok(())
     }
 }

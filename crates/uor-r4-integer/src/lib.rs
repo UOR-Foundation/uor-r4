@@ -17,7 +17,7 @@ pub mod report_output;
 pub mod sampling;
 pub mod tables;
 
-pub use config::{JointConfig, ReadMode, Transport};
+pub use config::{JointConfig, ReadGeometry, ReadMode, Transport};
 pub use model::{IntegerModel, IntegerSession, IntegerStep, PROBABILITY_TOTAL};
 pub use sampling::{SamplePolicy, Sampler, SamplingError};
 
@@ -32,6 +32,8 @@ pub enum IntegerError {
     Io(std::io::Error),
     Json(serde_json::Error),
     Invalid(String),
+    /// The model declares a read geometry without an integer serving kernel.
+    UnsupportedReadGeometry(ReadGeometry),
 }
 impl fmt::Display for IntegerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -39,6 +41,11 @@ impl fmt::Display for IntegerError {
             Self::Io(error) => write!(f, "integer runtime I/O: {error}"),
             Self::Json(error) => write!(f, "integer runtime JSON: {error}"),
             Self::Invalid(error) => write!(f, "invalid integer runtime input: {error}"),
+            Self::UnsupportedReadGeometry(geometry) => write!(
+                f,
+                "integer runtime has no {} read kernel; it serves only the retained dot-product read",
+                geometry.name()
+            ),
         }
     }
 }
