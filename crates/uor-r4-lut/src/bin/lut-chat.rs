@@ -122,11 +122,14 @@ fn main() -> Result<()> {
         first = false;
         let started = Instant::now();
         let produced = turn(session, &tokenizer, &ids, stop, limit)?;
+        let seconds = started.elapsed().as_secs_f64();
+        // Every prompt and generated token is one model step (the energy
+        // script reads the `[N model tokens` prefix).
+        let steps = ids.len() + produced;
         eprintln!(
-            "[{} prompt + {} generated tokens in {:.2}s]",
+            "[{steps} model tokens; {} prompt + {produced} generated in {seconds:.2}s; {:.1} tok/s]",
             ids.len(),
-            produced,
-            started.elapsed().as_secs_f64()
+            steps as f64 / seconds.max(1e-9)
         );
         Ok(())
     };

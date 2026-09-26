@@ -138,7 +138,10 @@ fn export(args: &Args) -> Result<()> {
         started.elapsed().as_secs_f64(),
         worst
     );
-    if let Some(outputs) = report["relative_output_error"].as_object() {
+    if let Some(outputs) = report["relative_output_error"]
+        .as_object()
+        .filter(|outputs| !outputs.is_empty())
+    {
         let mean = |key: &str| {
             let values: Vec<f64> = outputs.values().filter_map(|v| v[key].as_f64()).collect();
             values.iter().sum::<f64>() / values.len().max(1) as f64
