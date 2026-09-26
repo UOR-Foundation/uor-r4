@@ -23,8 +23,9 @@ pub enum ReadMode {
 
 /// Read-score geometry. `Dot` is the retained scaled dot product. `Lorentz`
 /// lifts query and key to the hyperboloid x -> (sqrt(1+|x|^2), x) and scores
-/// the negative scaled geodesic distance; only offline F32 training implements
-/// it, and this integer runtime refuses it (no integer arcosh path yet).
+/// the scaled geodesic distance below a learned radius; only offline F32
+/// training implements it, and this integer runtime refuses it (no integer
+/// arcosh path yet).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadGeometry {
@@ -48,6 +49,9 @@ impl ReadGeometry {
 
 /// Learned scalar log scale of the Lorentz read; absent from `Dot` models.
 pub const LORENTZ_LOG_BETA: &str = "read.lorentz_log_beta";
+/// Learned scalar radius of the Lorentz read: keys closer than this geodesic
+/// distance score above zero against NoRead. Absent from `Dot` models.
+pub const LORENTZ_OFFSET: &str = "read.lorentz_offset";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct JointConfig {
@@ -116,8 +120,9 @@ impl JointConfig {
             ("output.bias".into(), vec![self.vocab_size]),
         ]);
         if self.read_geometry == ReadGeometry::Lorentz {
-            // One learned scalar; `Dot` keeps its exact retained inventory.
+            // Two learned scalars; `Dot` keeps its exact retained inventory.
             shapes.insert(LORENTZ_LOG_BETA.into(), vec![1]);
+            shapes.insert(LORENTZ_OFFSET.into(), vec![1]);
         }
         shapes
     }
