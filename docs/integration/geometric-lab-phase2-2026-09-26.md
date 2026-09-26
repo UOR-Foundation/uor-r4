@@ -325,6 +325,38 @@ Written before the measured run; the rules below do not change after it.
   - The effect on SmolLM2, with BPE tokens, a far stronger backbone and a 2K window, is unmeasured.
 - *Cost.* 34 minutes on the container: 815 s of backbone features, then 105–341 s per arm.
 
+### 8.2 M4b: the integer Lorentz cache (Measured)
+
+The chat engine now serves a learned Lorentz cache (commit `453aa9d`).
+
+**How it is served** ([crate README](../../crates/uor-r4-lut/README.md)).
+- An artifact may carry the cache: its 4-bit query, key and gate maps, the score scale on the `(16 + m) 2^(e - 4)` grid, and the sealed arcosh table.
+- Each decoding step:
+  - finalizes the previous position's entry with the token that followed it;
+  - keeps this position's key;
+  - reads the entries at least `gap` positions back.
+- `z - 1 = q0 k0 - <q, k> - 1` is formed exactly at `2^-64` from Q32 time coordinates. The distance comes from the arcosh table, the weights from the exp table, and the gate from a sigmoid built on the exp table.
+- The next token comes from `(1 - g) p_model + g p_cache`.
+- A full attention window slides: the recent half is re-encoded, and the cache keeps everything older.
+
+**Parity** on the small Llama: all 64 held-out segments of §8.1 (49,152 positions beyond the 256-token window), the saved seed-1 Lorentz cache, and the GPTQ backbone export.
+
+| | Backbone NLL | Gain from the cache | Mean gate |
+|---|---:|---:|---:|
+| float backbone, float cache | 1.1613 | −0.01840 | 0.0875 |
+| integer backbone (GPTQ 4-bit), integer cache | 1.1636 | −0.01828 | 0.0883 |
+
+- The integer cache keeps 99.3% of the float cache's gain.
+- Per segment, the two gains differ by 0.0001 on average (standard deviation 0.0009).
+- The integer hyperbolic distance matches `acosh` in f64 to 10⁻⁴ relative, for coordinates from 0.01 to 6.
+- The exp-table sigmoid matches to 2·10⁻⁶.
+- A 900-step `lut-chat` run through the sliding window, with sampling and the cache, completed without error.
+
+**What remains.** Training a cache for SmolLM2 needs the checkpoint, so it runs on the owner's machine.
+- The window to pair with the cache is a design choice. The full 2,048-token window gives memory beyond two thousand tokens.
+- A shorter attention window, such as 512, would cut attention work at long context. The cache would then cover the rest.
+- Which works better for chat is unmeasured.
+
 ## 9. Cost of this phase
 
 - **Machine.** One shared review container: 4 cores, 15 GB, no GPU. It ran from about 16:20 to 18:15 UTC, at load 10–30. No paid or external compute.

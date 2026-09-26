@@ -19,6 +19,11 @@ weight on every token, so it is not the sparse end state of D5, and it adds no g
   integer multiplier, which D10 allows. The key/value cache is 8-bit with one exponent per vector.
 - Decoding is one token per step (no batched prompt prefill); a step runs inside a private worker pool, and heads
   are split across threads at long contexts. Every backend and thread count computes the same integers.
+- Optionally, a learned Lorentz cache memory (lab M4): the artifact carries 4-bit query, key and gate maps of the
+  final normalized state and a sealed arcosh table. Each step stores its key, and reads the entries at least `gap`
+  positions back by hyperbolic distance. The integer distance is exact up to the arcosh table, and the weights
+  come from the exp table. The next token comes from `(1 - g) p_model + g p_cache`. `lut-chat` then slides a full
+  attention window (re-encoding its recent half), and the cache keeps everything older.
 
 ## Artifact
 
@@ -33,9 +38,12 @@ buffer. See [`src/format.rs`](src/format.rs).
 ```text
 lut-tool mode=export model=DIR out=FILE.lut [max_positions=2048]
     [calibration=X.u16 [calibration_windows=16] [calibration_time=256] [damp=0.01]]
+    [cache=ROOT/models/lorentz-seedS.safetensors]
 lut-tool mode=dequantize model=DIR lut=FILE.lut out=NEW_DIR
 lut-tool mode=fidelity model=DIR lut=FILE.lut tokens=X.u16 out=NEW_ROOT [windows=8] [time=128] [threads=N]
 lut-tool mode=bench lut=FILE.lut [tokens=64] [threads=N] [backend=portable|avx2|neon]
+lut-tool mode=cache-fidelity model=DIR lut=FILE.lut cache=MODEL.safetensors tokens=X.u16 out=NEW_ROOT
+    [segments=16] [segment=1024] [window=256] [threads=N]
 lut-chat lut=FILE.lut tokenizer=DIR/tokenizer.json [prompt=TEXT] [system=TEXT] [tokens=256] [threads=N] [raw=true]
     [temperature=0] [top_k=0] [top_p=1] [presence=0] [seed=1]
 ```
@@ -81,6 +89,11 @@ Decoding throughput on a random artifact with SmolLM2-135M's shape (86.8 MB; AVX
 The scalar table kernel it replaced ran at 5.9 tokens/s on one thread. The weight kernel alone takes about 0.10 ns
 per weight with matrices in cache and about 0.17 ns streaming the model; at four threads the container's memory
 bandwidth limits throughput.
+
+The cache is trained offline by the `cache-memory` example of `uor-r4-training` (`save=true`), exported with
+`cache=`, and checked by `cache-fidelity`. That mode runs the float cache over the float backbone and the integer
+engine with its cache on the same held-out positions. On the small Llama the integer cache kept 99.3% of the float
+cache's gain: −0.01828 against −0.01840 nats per token on 49,152 positions beyond the 256-token window.
 
 ## Limitations
 

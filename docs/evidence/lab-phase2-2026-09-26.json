@@ -2527,5 +2527,56 @@
    "features": 815.104947483,
    "total": 2059.218392635
   }
+ },
+ "m4b_integer_cache": {
+  "label": "Measured on the container",
+  "commit": "453aa9d",
+  "report": {
+   "settings": {
+    "cache_dim": 32,
+    "cache_geometry": "lorentz",
+    "gap": 256,
+    "segment": 1024,
+    "segments": 64,
+    "threads": 2,
+    "window": 256
+   },
+   "positions": 49152,
+   "float": {
+    "backbone_nll": 1.1613253786641733,
+    "delta_nats": -0.018398323733981464,
+    "mean_gate": 0.08751265239153601,
+    "mixture_nll": 1.142927054930192
+   },
+   "integer": {
+    "backbone_nll": 1.1636001320958818,
+    "delta_nats": -0.018276584573284477,
+    "mean_gate": 0.08833357698941313,
+    "mixture_nll": 1.1453235475225971
+   },
+   "mean_abs_mixture_nll_difference": 0.029264543699925222,
+   "seconds": 134.141847224,
+   "units": "nats per token at positions t >= gap"
+  },
+  "identity": {
+   "cache": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/lab/exp/m4a/saved1/models/lorentz-seed1.safetensors",
+   "lut": "small_gptq_cache.lut",
+   "lut_sha256": "0e6317270d1dda66d1adfc851c06eb11ce122946f27b609b690ac60f2af3fe1d",
+   "model": "ckpt",
+   "tokens": "valid.u16",
+   "tokens_sha256": "da0e5825b68805f4866f526afb6886a1bf2b8fa55085647b6cc5cc190d365f45",
+   "weights_sha256": "8c5edbd0673e47cbe4954958ae773a299dcce26c177be3d10594b02a4a7b6f66"
+  },
+  "gain_retained": 0.9933831384610253,
+  "per_segment_delta_difference": {
+   "mean": 0.00012,
+   "sd": 0.00093,
+   "max_abs": 0.00504
+  },
+  "unit_checks": {
+   "hyperbolic_distance_relative_error": "< 1e-4 for coordinate scales 0.01..6",
+   "sigmoid_abs_error": "< 2e-6",
+   "arcosh_abs_error": "< 3e-7"
+  }
  }
 }
