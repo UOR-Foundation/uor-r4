@@ -33,7 +33,9 @@ The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged
 
 The [completed result](language-continuation-result-2026-09-26.md) records both
 continuous finals at step15,672 and all frozen downstream outputs completed at
-23:04:43UTC. Continuous prose is **0/5 quaternion and0/5 ordinary**; integer prose
+23:04:43UTC. The final SSD snapshot is verified, including67 copied report/checkpoint
+roots; the [closeout](language-continuation-result-2026-09-26.md#delivery-and-cost-closeout)
+records storage, cost and protected delivery. Continuous prose is **0/5 quaternion and0/5 ordinary**; integer prose
 is **0/5 and1/5**, against0/5 same-path parents. All four groups miss the fixed
 3/5 and+2 improvement rule. Natural likelihood and Read/NoRead utility improve
 without qualifying coherent language. Ordinary numerical/source-retention gates

@@ -231,27 +231,53 @@ language behavior that also failed.
 
 ## Delivery and cost closeout
 
-The model result is final. Protected delivery, final preserved-artifact backup
-and end-of-delivery resource reconciliation have their own completion receipts.
+The [closeout receipt](../evidence/language-continuation-closeout-2026-09-26.json)
+records the completed model result, verified backup and cost through
+**September26 23:43:06 UTC**. The subsequent protected delivery is owned by
+[live PR#1398](https://github.com/UOR-Foundation/uor-r4/pull/1398) and its linked
+#973/#820 updates; a queued PR or compatibility acknowledgment is not a merge
+or test result. Both wider issues remain open and neither candidate is promoted.
 
-- **Final SSD model/artifact snapshot:** PENDING principal closeout receipt and
-  verified destination/manifest binding. The earlier verified Cargo-cache
-  offload is a separate completed operation; it reclaimed18,462,396,416 internal
-  bytes at cutover and preserved source, models and checkpoints.
-- **Complete cost:** PENDING final cumulative ledger cursor through delivery.
-  The [cost-detail snapshot](../evidence/language-continuation-cost-detail-2026-09-26.json)
-  records258.758s adapter build and47,677.005s continuous supervised phase wall
-  time (13.244h), including the lost fit1 phase8,949.286s exactly once. Paired
-  workers count once per phase. Alpha fitting took5,521.657s within the
-  6,464.883s downstream controller envelope; do not add it again to that envelope.
-  The62,799.308s summed saved continuous process times overlap and are not elapsed
-  wall charges. Preparation, interruptions, storage work, evaluation, review and
-  delivery remain charged
-  once through the cumulative cursor. The task's effective cumulative allowance
-  is657,600,000ms; a separately observed higher ledger limit is not extra task
-  authority. The prospectively recorded tracked32GiB allocation retains the
-  original baseline, including the relocated shared cache; separate32GiB offload
-  and original4GiB model-snapshot allowances are not internal free-space claims.
-- **Protected delivery:** PR#1398; actual merge/source equality PENDING. Keep
-  #973 and #820 open because their complete acceptance is not met. No direct
-  main push, completion claim or candidate promotion follows from this document.
+- **Final SSD snapshot: verified.**
+  `/Volumes/UOR-Workspace/Backups/language-continuation-final-20260926-6`
+  contains the completed milestone, source bundle at
+  `ddc751e7d8b5dcc659b08a0dd13c78b5df1c5d89` and a timestamped ledger copy.
+  All **67 copied Rust report/checkpoint roots passed** complete-set verification;
+  SHA256, modes, types and membership also matched. Its **1,082,432,690 bytes**
+  plus the first snapshot's885,274,668 bytes total **1,967,707,358 bytes**, within
+  the original4GiB allowance including the metadata reserve. Manifest SHA256:
+  `53881742c4ad8375d472c462483ea50d07e4199106676534e5b0b182158a2ede`.
+  The two snapshots form the recovery set:240 immutable dependency files in the
+  first snapshot were reverified. The new snapshot alone is not self-contained;
+  later delivery receipts are not claimed to be in that earlier frozen copy.
+  [Backup evidence](../evidence/language-continuation-final-backup-2026-09-26.json).
+- **Internal storage:** the earlier verified Cargo-cache offload reclaimed
+  18,462,396,416 internal bytes at cutover. Models, source, checkpoints and
+  Docker.raw stayed internal. At final backup completion, physical internal free
+  space was **51,746,230,272 bytes**. Preserve `cache-locks-6` and the SSD
+  compatibility links; future builds require the mounted workspace.
+- **Complete elapsed accounting:**97,326.083 seconds (**27.04 hours**) from
+  cycle start through the timestamp above. This includes preparation, all
+  failed/recovered work, paused intervals, storage work, evaluation and review;
+  the remaining GitHub delivery tail is charged once through the final local
+  cursor and reported in the owning issue. Historical cumulative charge at this
+  receipt is **643,296,442ms**, below the milestone's effective657,600,000ms
+  ceiling. The externally changed shared limit744,000,000ms remains preserved
+  with attribution UNRESOLVED and is not adopted as extra authority.
+- **Model and build time, separate from full wall:** all continuous supervised
+  phases total **47,677.005s (13.24h)**, with paired workers counted once and
+  lost fit1's8,949.286s included once. The downstream controller used6,464.883s
+  (107.75min), including5,521.657s of alpha fitting; do not add those nested
+  quantities together. Adapter build used258.758s. Summed saved continuous
+  process time62,799.308s overlaps early paired work and is not elapsed wall.
+  [Detailed scope and per-phase records](../evidence/language-continuation-cost-detail-2026-09-26.json).
+- **Validation:** the adapter's2 focused release checks and both actual parent
+  interface exercises were already executed. Final JSON parsing, changed local
+  link targets, `git diff --check` and claim-wording checks pass. No blanket
+  suite or repeat model run was added. GitHub's five historical status names
+  are explicit queue compatibility acknowledgments; local receipts carry tests.
+
+The tracked32GiB allocation retains the original baseline including the relocated
+shared cache. The separate32GiB cache-offload and original4GiB model-backup
+allowances are not internal free-space claims. No paid training, active model
+relocation, further deletion, threshold change or automatic next dose occurred.
