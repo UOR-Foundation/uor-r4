@@ -6,6 +6,9 @@
 //! numbers come from a seeded xorshift generator, so a seed reproduces a
 //! conversation exactly. Temperature 0 is greedy decoding.
 
+use std::collections::BTreeMap;
+
+use crate::engine::CacheRead;
 use crate::kernels::{argmax, exp_neg};
 use crate::{invalid, Result, RESIDUAL_EXP};
 
@@ -102,6 +105,43 @@ impl Sampler {
         if logits.is_empty() {
             return Err(invalid("no logits to sample from"));
         }
+        self.adjust(logits, recent)?;
+        if self.settings.temperature_q8 == 0 {
+            return Ok(argmax(&self.adjusted) as u32);
+        }
+        self.build_candidates(exp_table, exp_step_log2);
+        let total: u64 = self.candidates.iter().map(|c| c.1).sum();
+        if total == 0 {
+            return Ok(self.candidates[0].0);
+        }
+        let mut draw = self.next_u64() % total.max(1);
+        for c in &self.candidates {
+            if draw < c.1 {
+                return Ok(c.0);
+            }
+            draw -= c.1;
+        }
+        Ok(self.candidates[self.candidates.len() - 1].0)
+    }
+
+    /// The presence-adjusted, tempered and truncated candidates of `logits`
+    /// in `self.candidates` (sampling with a positive temperature).
+    fn sample_candidates(
+        &mut self,
+        logits: &[i32],
+        recent: &[u32],
+        exp_table: &[u32],
+        exp_step_log2: i32,
+    ) -> Result<()> {
+        if logits.is_empty() {
+            return Err(invalid("no logits to sample from"));
+        }
+        self.adjust(logits, recent)?;
+        self.build_candidates(exp_table, exp_step_log2);
+        Ok(())
+    }
+
+    fn adjust(&mut self, logits: &[i32], recent: &[u32]) -> Result<()> {
         let s = self.settings;
         self.adjusted.clear();
         self.adjusted.extend_from_slice(logits);
@@ -119,9 +159,11 @@ impl Sampler {
                 }
             }
         }
-        if s.temperature_q8 == 0 {
-            return Ok(argmax(&self.adjusted) as u32);
-        }
+        Ok(())
+    }
+
+    fn build_candidates(&mut self, exp_table: &[u32], exp_step_log2: i32) {
+        let s = self.settings;
         let max = self.adjusted.iter().copied().max().unwrap_or(0);
         self.candidates.clear();
         self.candidates.extend(
@@ -145,10 +187,7 @@ impl Sampler {
         self.candidates
             .sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let total: u64 = self.candidates.iter().map(|c| c.1).sum();
-        if total == 0 {
-            return Ok(self.candidates[0].0);
-        }
-        if s.top_p_q16 < 1 << 16 {
+        if total > 0 && s.top_p_q16 < 1 << 16 {
             let target = (u128::from(total) * u128::from(s.top_p_q16)) >> 16;
             let mut running = 0u128;
             let mut keep = self.candidates.len();
@@ -161,15 +200,87 @@ impl Sampler {
             }
             self.candidates.truncate(keep.max(1));
         }
-        let total: u64 = self.candidates.iter().map(|c| c.1).sum();
-        let mut draw = self.next_u64() % total.max(1);
-        for c in &self.candidates {
-            if draw < c.1 {
-                return Ok(c.0);
-            }
-            draw -= c.1;
+    }
+}
+
+impl Sampler {
+    /// [`Self::sample`] from the mixture `(1 - g) p_model + g p_cache` when a
+    /// cache read is given. Greedy decoding takes the most probable token of
+    /// the mixture (cross-multiplied, so no division); sampling mixes the
+    /// tempered and truncated model candidates with the cache distribution.
+    pub fn sample_with_cache(
+        &mut self,
+        logits: &[i32],
+        recent: &[u32],
+        exp_table: &[u32],
+        exp_step_log2: i32,
+        cache: Option<&CacheRead<'_>>,
+    ) -> Result<u32> {
+        let Some(cache) = cache.filter(|c| c.gate_q31 > 0 && c.total > 0) else {
+            return self.sample(logits, recent, exp_table, exp_step_log2);
+        };
+        let gate = u128::from(cache.gate_q31.min(1 << 31));
+        let keep = (1u128 << 31) - gate;
+        let mut cached: BTreeMap<u32, u128> = BTreeMap::new();
+        for (token, weight) in cache.tokens.iter().zip(cache.weights) {
+            *cached.entry(*token).or_default() += u128::from(*weight);
         }
-        Ok(self.candidates[self.candidates.len() - 1].0)
+        let cache_total = u128::from(cache.total);
+        if self.settings.temperature_q8 == 0 {
+            // p_model(w) = e_w / z with e_w = exp(l_w - max) in Q31, from the
+            // presence-adjusted logits.
+            self.adjust(logits, recent)?;
+            let adjusted = &self.adjusted;
+            let max = adjusted.iter().copied().max().unwrap_or(0);
+            let weight = |v: i32| {
+                u128::from(exp_neg(
+                    i64::from(max) - i64::from(v),
+                    RESIDUAL_EXP,
+                    exp_table,
+                    exp_step_log2,
+                ))
+            };
+            let z: u128 = adjusted.iter().map(|&v| weight(v)).sum::<u128>().max(1);
+            // Compare (1 - g) e_w C + g c_w z (the mixture times 2^31 z C).
+            let best_model = argmax(adjusted) as u32;
+            let score = |token: u32| -> u128 {
+                let e = adjusted.get(token as usize).map_or(0, |&v| weight(v));
+                keep * e * cache_total + gate * cached.get(&token).copied().unwrap_or(0) * z
+            };
+            let mut best = (score(best_model), best_model);
+            for &token in cached.keys() {
+                let s = score(token);
+                if s > best.0 || (s == best.0 && token < best.1) {
+                    best = (s, token);
+                }
+            }
+            return Ok(best.1);
+        }
+        // Tempered, truncated model candidates, then the mixture.
+        self.sample_candidates(logits, recent, exp_table, exp_step_log2)?;
+        let model_total: u128 = self
+            .candidates
+            .iter()
+            .map(|c| u128::from(c.1))
+            .sum::<u128>()
+            .max(1);
+        let mut mixture: BTreeMap<u32, u128> = BTreeMap::new();
+        for &(token, w) in &self.candidates {
+            *mixture.entry(token).or_default() += keep * u128::from(w) * cache_total;
+        }
+        for (token, c) in &cached {
+            *mixture.entry(*token).or_default() += gate * c * model_total;
+        }
+        let total: u128 = mixture.values().sum();
+        let mut draw =
+            (u128::from(self.next_u64()) << 64 | u128::from(self.next_u64())) % total.max(1);
+        for (token, w) in &mixture {
+            if draw < *w {
+                return Ok(*token);
+            }
+            draw -= w;
+        }
+        Ok(*mixture.keys().next_back().unwrap_or(&0))
     }
 }
 
@@ -236,6 +347,44 @@ mod tests {
         let mut greedy = Sampler::new(settings, 1);
         // Token 0 was seen recently: a 1-nat penalty makes 4 the greedy choice.
         assert_eq!(greedy.sample(&l, &[0, 0, 3], &table, -8)?, 4);
+        Ok(())
+    }
+
+    #[test]
+    fn the_cache_mixture_moves_greedy_and_sampled_choices() -> Result<()> {
+        let table = exp_table();
+        // The model prefers token 0 (p about 0.66); the cache points at token 2.
+        let l = logits(&[1.0, 0.0, -1.0]);
+        let tokens = [2u32, 2, 1];
+        let weights = [1u64 << 20, 1 << 20, 1 << 10];
+        let read = |gate: f64| CacheRead {
+            gate_q31: (gate * 2f64.powi(31)) as u64,
+            tokens: &tokens,
+            weights: &weights,
+            total: weights.iter().sum(),
+        };
+        let mut greedy = Sampler::new(SamplingSettings::default(), 1);
+        assert_eq!(
+            greedy.sample_with_cache(&l, &[], &table, -8, Some(&read(0.1)))?,
+            0
+        );
+        // At gate 0.8: 0.2 * 0.66 < 0.8 * 0.9995 for token 2.
+        assert_eq!(
+            greedy.sample_with_cache(&l, &[], &table, -8, Some(&read(0.8)))?,
+            2
+        );
+        assert_eq!(greedy.sample_with_cache(&l, &[], &table, -8, None)?, 0);
+        let mut sampler = Sampler::new(SamplingSettings::from_decimal(1.0, 0, 1.0, 0.0)?, 4);
+        let draws = 20_000;
+        let mut count = 0usize;
+        for _ in 0..draws {
+            if sampler.sample_with_cache(&l, &[], &table, -8, Some(&read(0.5)))? == 2 {
+                count += 1;
+            }
+        }
+        // p(2) = 0.5 * 0.0900 + 0.5 * 0.9995 = 0.545.
+        let f = count as f64 / draws as f64;
+        assert!((f - 0.545).abs() < 0.015, "token 2 drawn {f}");
         Ok(())
     }
 

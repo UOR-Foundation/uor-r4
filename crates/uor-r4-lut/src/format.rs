@@ -85,6 +85,24 @@ pub struct Numerics {
     pub rope_q: u32,
 }
 
+/// A learned Lorentz cache memory over the final normalized state (lab M4;
+/// trained by `uor-r4-training`'s `cache_memory`). Its maps are the matrices
+/// `cache.query` and `cache.key` (`dim x width`) and `cache.gate`
+/// (`1 x width`); the table `arcosh` holds `arcosh(1 + u)`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CacheSpec {
+    /// Only `lorentz` is served.
+    pub geometry: String,
+    pub dim: usize,
+    /// A query at position `t` reads entries at positions `<= t - gap`.
+    pub gap: usize,
+    /// Score scale `beta = (16 + beta_m) 2^(beta_e - 4)`; the score is `-beta d^2`.
+    pub beta_m: u8,
+    pub beta_e: i32,
+    /// Gate bias at exponent -16.
+    pub gate_bias: i64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Span {
     pub offset: u64,
@@ -136,6 +154,9 @@ pub struct Header {
     pub tables: Vec<TableSpec>,
     /// Provenance recorded by the exporter; never read by serving arithmetic.
     pub source: serde_json::Value,
+    /// Optional learned cache memory; absent from plain exports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<CacheSpec>,
 }
 
 /// Values of one sealed table.
@@ -163,6 +184,7 @@ impl ArtifactBuilder {
                 matrices: Vec::new(),
                 tables: Vec::new(),
                 source,
+                cache: None,
             },
             blob: Vec::new(),
         })
@@ -239,6 +261,11 @@ impl ArtifactBuilder {
             span,
         });
         Ok(())
+    }
+
+    /// Declare the learned cache (its matrices and table are added separately).
+    pub fn set_cache(&mut self, cache: CacheSpec) {
+        self.header.cache = Some(cache);
     }
 
     /// The complete artifact bytes.

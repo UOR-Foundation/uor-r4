@@ -6,8 +6,13 @@
 //! cache-memory model=DIR train=X.u16 valid=Y.u16 out=NEW_ROOT
 //!     [geometries=dot,euclid,lorentz] [seeds=1,2] [dim=32] [gap=256] [window=256] [segment=1024]
 //!     [train_segments=256] [valid_segments=64] [site=head|attention:L|mlp:L]
-//!     [steps=400] [batch=4] [lr=0.003] [eval_every=100] [eval_rows=4]
+//!     [steps=400] [batch=4] [lr=0.003] [eval_every=100] [eval_rows=4] [save=false]
 //! ```
+//!
+//! With `save=true` every trained arm is written to
+//! `NEW_ROOT/models/GEOMETRY-seedS.safetensors` with a `.json` beside it
+//! (geometry, dimensions, gap and site), the input of `lut-tool mode=export`'s
+//! `cache=` option.
 //!
 //! The frozen backbone runs once over evenly spaced segments of `segment + 1`
 //! tokens, in windows of its trained context `window` with stride
@@ -29,10 +34,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use candle_core::{Device, Tensor, D};
+use candle_core::{Device, Tensor};
 use serde_json::{json, Value};
 use uor_r4_core::report_output;
-use uor_r4_training::cache_memory::{concentration, mean, CacheBatch, CacheGeometry, CacheMemory};
+use uor_r4_training::cache_memory::{
+    concentration, mean, segment_features, CacheBatch, CacheGeometry, CacheMemory,
+};
 use uor_r4_training::joint_optimizer::{AdamConfig, NamedAdamW};
 use uor_r4_training::kappa_llama::{load_checkpoint, KappaLlama, ScoreKind, Site, Trainable};
 use uor_r4_training::{Result, TrainingError};
@@ -90,6 +97,7 @@ struct Settings {
     lr: f64,
     eval_every: usize,
     eval_rows: usize,
+    save: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -113,11 +121,11 @@ impl SiteChoice {
         }
     }
 
-    fn matches(self, site: Site) -> bool {
-        match (self, site) {
-            (Self::Head, Site::Head) => true,
-            (Self::Attention(a), Site::Attention(b)) | (Self::Mlp(a), Site::Mlp(b)) => a == b,
-            _ => false,
+    fn site(self) -> Site {
+        match self {
+            Self::Head => Site::Head,
+            Self::Attention(layer) => Site::Attention(layer),
+            Self::Mlp(layer) => Site::Mlp(layer),
         }
     }
 
@@ -155,6 +163,7 @@ fn settings(args: &Args) -> Result<Settings> {
         lr: args.number("lr", 0.003)?,
         eval_every: args.number("eval_every", 100)?,
         eval_rows: args.number("eval_rows", 4)?,
+        save: args.text("save") == Some("true"),
     };
     if s.dim == 0
         || s.window < 2
@@ -209,10 +218,6 @@ fn features(model: &KappaLlama, tokens: &[u32], count: usize, s: &Settings) -> R
         return Err(invalid("token file shorter than one segment"));
     }
     let room = tokens.len() - span;
-    let half = s.window / 2;
-    let starts: Vec<usize> = (0..=(s.segment - s.window) / half)
-        .map(|w| w * half)
-        .collect();
     let mut states = Vec::with_capacity(count);
     let mut logps = Vec::with_capacity(count);
     let mut nexts = Vec::with_capacity(count);
@@ -222,41 +227,15 @@ fn features(model: &KappaLlama, tokens: &[u32], count: usize, s: &Settings) -> R
         } else {
             c * room / (count - 1)
         };
-        let segment = &tokens[offset..offset + span];
-        let ids: Vec<u32> = starts
-            .iter()
-            .flat_map(|&start| segment[start..start + s.window].iter().copied())
-            .collect();
-        let targets: Vec<u32> = starts
-            .iter()
-            .flat_map(|&start| segment[start + 1..start + s.window + 1].iter().copied())
-            .collect();
-        let mut captured = None;
-        let logits = model.forward_with_capture(&ids, starts.len(), s.window, &mut |site, x| {
-            if s.site.matches(site) {
-                captured = Some(x.clone());
-            }
-            Ok(())
-        })?;
-        let captured = captured.ok_or_else(|| invalid("the chosen site was never captured"))?;
-        let width = captured.dim(1)?;
-        let captured = captured.reshape((starts.len(), s.window, width))?;
-        let device = logits.device();
-        let target = Tensor::from_vec(targets, (starts.len(), s.window, 1), device)?;
-        let logp = candle_nn::ops::log_softmax(&logits, D::Minus1)?
-            .gather(&target, 2)?
-            .squeeze(2)?;
-        // Keep the first window whole and the second half of every later one.
-        let mut state_parts = Vec::with_capacity(starts.len());
-        let mut logp_parts = Vec::with_capacity(starts.len());
-        for (w, _) in starts.iter().enumerate() {
-            let (from, len) = if w == 0 { (0, s.window) } else { (half, half) };
-            state_parts.push(captured.get(w)?.narrow(0, from, len)?);
-            logp_parts.push(logp.get(w)?.narrow(0, from, len)?);
-        }
-        states.push(Tensor::cat(&state_parts, 0)?);
-        logps.push(Tensor::cat(&logp_parts, 0)?);
-        nexts.push(segment[1..].to_vec());
+        let (state, logp, next) = segment_features(
+            model,
+            &tokens[offset..offset + span],
+            s.window,
+            s.site.site(),
+        )?;
+        states.push(state);
+        logps.push(logp);
+        nexts.push(next);
     }
     Ok(Features {
         states: Tensor::stack(&states, 0)?,
@@ -432,6 +411,31 @@ fn run(s: &Settings, out: &Path) -> Result<()> {
                     .unwrap_or(f64::NAN),
                 arm_started.elapsed().as_secs_f64()
             );
+            if s.save {
+                let directory = out.join("models");
+                fs::create_dir_all(&directory)?;
+                let stem = format!("{}-seed{seed}", geometry.name());
+                let tensors: std::collections::HashMap<String, Tensor> = memory
+                    .variables()
+                    .iter()
+                    .map(|(name, var)| (name.clone(), var.as_tensor().clone()))
+                    .collect();
+                candle_core::safetensors::save(
+                    &tensors,
+                    directory.join(format!("{stem}.safetensors")),
+                )?;
+                fs::write(
+                    directory.join(format!("{stem}.json")),
+                    serde_json::to_vec_pretty(&json!({
+                        "schema": "uor-r4.cache-memory-model/1",
+                        "geometry": geometry.name(), "width": width, "dim": s.dim,
+                        "gap": s.gap, "window": s.window, "site": s.site.name(), "seed": seed,
+                        "backbone_weights_sha256": weights_sha256,
+                        "variables": ["query (width x dim)", "key (width x dim)", "log_beta (1)", "gate_weight (width x 1)", "gate_bias (1)"],
+                        "held_out": final_report,
+                    }))?,
+                )?;
+            }
             arms.push(json!({
                 "geometry": geometry.name(),
                 "seed": seed,
@@ -452,7 +456,7 @@ fn run(s: &Settings, out: &Path) -> Result<()> {
             "dim": s.dim, "gap": s.gap, "window": s.window, "segment": s.segment,
             "train_segments": s.train_segments, "valid_segments": s.valid_segments,
             "site": s.site.name(), "steps": s.steps, "batch": s.batch, "lr": s.lr,
-            "eval_every": s.eval_every, "eval_rows": s.eval_rows,
+            "eval_every": s.eval_every, "eval_rows": s.eval_rows, "save": s.save,
         },
         "units": "nats per token at query positions t >= gap",
         "feature_seconds": feature_seconds,

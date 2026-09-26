@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use candle_core::DType;
 use rayon::prelude::*;
 use serde_json::{json, Value};
-use uor_r4_lut::format::{ArtifactBuilder, Fixed, Numerics, Shape, TableValues};
+use uor_r4_lut::format::{ArtifactBuilder, CacheSpec, Fixed, Numerics, Shape, TableValues};
 use uor_r4_lut::GROUP;
 
 use crate::kappa_llama::{Checkpoint, KappaLlama, Site};
@@ -441,14 +441,84 @@ fn fold_columns(values: &mut [f32], cols: usize, gain: &[f32]) {
     }
 }
 
+/// A trained cache memory (the `save=true` output of the `cache-memory`
+/// example) to export beside the backbone (lab M4b).
+pub struct CacheWeights {
+    pub geometry: String,
+    pub gap: usize,
+    pub dim: usize,
+    /// `width x dim` maps, row-major.
+    pub query: Vec<f32>,
+    pub key: Vec<f32>,
+    pub log_beta: f32,
+    pub gate_weight: Vec<f32>,
+    pub gate_bias: f32,
+}
+
+impl CacheWeights {
+    /// Read `PATH.safetensors` and the `PATH.json` written beside it.
+    pub fn load(path: &std::path::Path) -> Result<Self> {
+        let meta: Value = serde_json::from_slice(&std::fs::read(path.with_extension("json"))?)?;
+        if meta["schema"] != "uor-r4.cache-memory-model/1" {
+            return Err(invalid("not a cache-memory model"));
+        }
+        let geometry = meta["geometry"]
+            .as_str()
+            .ok_or_else(|| invalid("cache geometry missing"))?
+            .to_owned();
+        let number = |key: &str| -> Result<usize> {
+            meta[key]
+                .as_u64()
+                .map(|v| v as usize)
+                .ok_or_else(|| invalid(format!("cache {key} missing")))
+        };
+        let (gap, dim, width) = (number("gap")?, number("dim")?, number("width")?);
+        let tensors = candle_core::safetensors::load(path, &candle_core::Device::Cpu)?;
+        let get = |name: &str, len: usize| -> Result<Vec<f32>> {
+            let values = tensors
+                .get(name)
+                .ok_or_else(|| invalid(format!("cache tensor {name} missing")))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            if values.len() != len || values.iter().any(|v| !v.is_finite()) {
+                return Err(invalid(format!("cache tensor {name} has the wrong size")));
+            }
+            Ok(values)
+        };
+        Ok(Self {
+            query: get("query", width * dim)?,
+            key: get("key", width * dim)?,
+            log_beta: get("log_beta", 1)?[0],
+            gate_weight: get("gate_weight", width)?,
+            gate_bias: get("gate_bias", 1)?[0],
+            geometry,
+            gap,
+            dim,
+        })
+    }
+}
+
+/// `(m, e)` with `(16 + m) 2^(e - 4)` nearest to `value > 0`.
+fn grid_nearest(value: f64) -> (u8, i32) {
+    let e = value.log2().floor() as i32;
+    let m = (value / 2f64.powi(e - 4)).round() as i32 - 16;
+    if m >= 16 {
+        (0, e + 1)
+    } else {
+        (m.clamp(0, 15) as u8, e)
+    }
+}
+
 /// Export `checkpoint` for integer serving with sessions of up to
 /// `max_positions` tokens, with GPTQ when `calibration` gives input moments
-/// (and its damping). Returns the artifact bytes and a quantization report.
+/// (and its damping), and a trained Lorentz cache when `cache` is given.
+/// Returns the artifact bytes and a quantization report.
 pub fn export_llama(
     checkpoint: &Checkpoint,
     max_positions: usize,
     source: Value,
     calibration: Option<(&Calibration, f64)>,
+    cache: Option<&CacheWeights>,
 ) -> Result<(Vec<u8>, Value)> {
     let s = &checkpoint.shape;
     let shape = Shape {
@@ -605,6 +675,50 @@ pub fn export_llama(
         s.width,
         Some(Site::Head),
     )?;
+    if let Some(cache) = cache {
+        if cache.geometry != "lorentz" || cache.dim == 0 || cache.gap == 0 {
+            return Err(invalid("only a Lorentz cache is served"));
+        }
+        if cache.query.len() != s.width * cache.dim || cache.gate_weight.len() != s.width {
+            return Err(invalid("cache maps do not match the backbone width"));
+        }
+        // The maps act on the final normalized state: rows are the dim outputs.
+        let transpose = |map: &[f32]| -> Vec<f32> {
+            (0..cache.dim)
+                .flat_map(|d| (0..s.width).map(move |w| map[w * cache.dim + d]))
+                .collect()
+        };
+        for (name, map) in [("cache.query", &cache.query), ("cache.key", &cache.key)] {
+            add(
+                &mut builder,
+                name,
+                &transpose(map),
+                cache.dim,
+                s.width,
+                Some(Site::Head),
+            )?;
+        }
+        add(
+            &mut builder,
+            "cache.gate",
+            &cache.gate_weight,
+            1,
+            s.width,
+            Some(Site::Head),
+        )?;
+        let (beta_m, beta_e) = grid_nearest(f64::from(cache.log_beta).exp());
+        builder.set_cache(CacheSpec {
+            geometry: "lorentz".to_owned(),
+            dim: cache.dim,
+            gap: cache.gap,
+            beta_m,
+            beta_e,
+            gate_bias: (f64::from(cache.gate_bias) * 65536.0).round() as i64,
+        });
+        builder
+            .add_table("arcosh", TableValues::U32(&arcosh_table()))
+            .map_err(|e| invalid(e.to_string()))?;
+    }
 
     let exp: Vec<u32> = (0..EXP_RANGE * (1 << -EXP_STEP_LOG2) + 2)
         .map(|i| (2f64.powi(31) * (-(i as f64) * 2f64.powi(EXP_STEP_LOG2)).exp()).round() as u32)

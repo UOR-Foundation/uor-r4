@@ -4,10 +4,10 @@ use std::path::Path;
 
 use uor_r4_simd::{dot_rows_i16_i8, mix_rows, Backend, Tables};
 
-use crate::format::{Artifact, Header, MatrixSpec, Numerics, Shape};
+use crate::format::{Artifact, CacheSpec, Header, MatrixSpec, Numerics, Shape};
 use crate::kernels::{
-    dequant_row, exp_neg, gemv, quantize16, quantize8, rms_norm, rope, shift, silu, to_exp_i32,
-    Act16, MatrixView, Packed,
+    arcosh1p_q24, dequant_row, exp_neg, gemv, isqrt, quantize16, quantize8, rms_norm, rope,
+    scale_16_plus, shift, silu, to_exp_i32, Act16, MatrixView, Packed, ARCOSH_TABLE_LEN,
 };
 use crate::{format_error, invalid, Result, RESIDUAL_EXP};
 
@@ -47,6 +47,96 @@ struct Layer {
     down: Packed,
 }
 
+/// Exponent of the cache's query and key coordinates.
+const CACHE_EXP: i32 = -12;
+
+/// The learned Lorentz cache of an artifact.
+struct CacheModel {
+    spec: CacheSpec,
+    query: Packed,
+    key: Packed,
+    gate: Packed,
+    arcosh: Vec<u32>,
+}
+
+/// One read of the cache: the mixture weight and the weights of the readable
+/// entries (entry `i` points at `tokens[i]`), summing to `total`.
+pub struct CacheRead<'a> {
+    /// Cache share of the next-token distribution, times `2^31`.
+    pub gate_q31: u64,
+    pub tokens: &'a [u32],
+    pub weights: &'a [u64],
+    pub total: u64,
+}
+
+/// Session state of the cache: finalized entries in stream order, the latest
+/// key (waiting for the token that follows it) and the current read.
+#[derive(Default)]
+struct CacheState {
+    stream: usize,
+    keys: Vec<i32>,
+    times: Vec<u64>,
+    next: Vec<u32>,
+    pending: Vec<i32>,
+    pending_time: Option<u64>,
+    query: Vec<i32>,
+    gate_out: Vec<i32>,
+    distances: Vec<u64>,
+    weights: Vec<u64>,
+    readable: usize,
+    gate_q31: u64,
+    total: u64,
+}
+
+impl CacheState {
+    fn clear(&mut self) {
+        *self = Self::default();
+    }
+}
+
+/// `x0 = sqrt(1 + |v|^2)` at exponent -32, for `v` at exponent -12.
+fn lorentz_time(v: &[i32]) -> u64 {
+    let square: u128 = v
+        .iter()
+        .map(|x| (i64::from(*x) * i64::from(*x)) as u128)
+        .sum();
+    isqrt((1u128 << 64) + (square << 40)) as u64
+}
+
+/// Squared hyperbolic distance at exponent -48 between a query and a key at
+/// exponent -12, given their time coordinates ([`lorentz_time`]): `z - 1 =
+/// q0 k0 - <q, k> - 1` exactly at exponent -64, then the arcosh table.
+fn lorentz_distance_sq(
+    query: &[i32],
+    query_time: u64,
+    key: &[i32],
+    key_time: u64,
+    arcosh: &[u32],
+) -> u64 {
+    let dot: i64 = query
+        .iter()
+        .zip(key)
+        .map(|(a, b)| i64::from(*a) * i64::from(*b))
+        .sum();
+    let z_minus_one = (u128::from(query_time) * u128::from(key_time)) as i128
+        - (i128::from(dot) << 40)
+        - (1i128 << 64);
+    let code = (z_minus_one.max(0) >> 32) as u128;
+    let d = u64::from(arcosh1p_q24(code, arcosh));
+    d * d
+}
+
+/// `sigmoid(x)` for `x` at exponent -16, times `2^31`, from the exp table.
+fn sigmoid_q31(x: i64, table: &[u32], step_log2: i32) -> u64 {
+    let e = exp_neg(x.abs(), RESIDUAL_EXP, table, step_log2);
+    let one = 1u64 << 31;
+    if x >= 0 {
+        (one << 31) / (one + e)
+    } else {
+        (e << 31) / (one + e)
+    }
+}
+
 /// One layer's key/value cache, read by attention.
 struct LayerCache<'a> {
     keys: &'a [i8],
@@ -82,6 +172,7 @@ pub struct Model {
     embed: Embedding,
     head: Packed,
     layers: Vec<Layer>,
+    cache: Option<CacheModel>,
     exp_table: Vec<u32>,
     silu_table: Vec<i32>,
     cos: Vec<i16>,
@@ -136,6 +227,31 @@ impl Model {
             spec: embed_spec,
         };
         let head = packed("head", shape.vocab, shape.width)?;
+        let cache = match &artifact.header.cache {
+            None => None,
+            Some(spec) => {
+                if spec.geometry != "lorentz"
+                    || spec.dim == 0
+                    || spec.dim > 1024
+                    || spec.gap == 0
+                    || spec.beta_m > 15
+                    || !(-64..=64).contains(&spec.beta_e)
+                {
+                    return Err(format_error("unsupported cache declaration"));
+                }
+                let arcosh = artifact.table_u32("arcosh")?;
+                if arcosh.len() != ARCOSH_TABLE_LEN || arcosh.windows(2).any(|w| w[0] > w[1]) {
+                    return Err(format_error("the arcosh table has the wrong size or order"));
+                }
+                Some(CacheModel {
+                    spec: spec.clone(),
+                    query: packed("cache.query", spec.dim, shape.width)?,
+                    key: packed("cache.key", spec.dim, shape.width)?,
+                    gate: packed("cache.gate", 1, shape.width)?,
+                    arcosh,
+                })
+            }
+        };
         let exp_table = artifact.table_u32("exp")?;
         let silu_table = artifact.table_i32("silu")?;
         let cos = artifact.table_i16("rope_cos")?;
@@ -161,6 +277,7 @@ impl Model {
             backend: Backend::detect(),
             threads: 1,
             pool: None,
+            cache,
             shape,
             numerics,
             embed,
@@ -189,6 +306,11 @@ impl Model {
     /// The sealed exp table (`round(2^31 exp(-i 2^exp_step_log2))`) and its step.
     pub fn exp_table(&self) -> (&[u32], i32) {
         (&self.exp_table, self.numerics.exp_step_log2)
+    }
+
+    /// The declared cache, if the artifact has one.
+    pub fn cache_spec(&self) -> Option<&CacheSpec> {
+        self.cache.as_ref().map(|c| &c.spec)
     }
 
     /// The vector backend of the weight kernels (detected at load).
@@ -320,6 +442,7 @@ impl Model {
             v: vec![0; s.kv_heads * s.head_dim],
             head_out: vec![0; s.width],
             head: HeadScratch::default(),
+            cache: CacheState::default(),
             proj: vec![0; s.width],
             gate: vec![0; s.ffn],
             up: vec![0; s.ffn],
@@ -347,6 +470,7 @@ pub struct Session<'m> {
     v: Vec<i32>,
     head_out: Vec<i32>,
     head: HeadScratch,
+    cache: CacheState,
     proj: Vec<i32>,
     gate: Vec<i32>,
     up: Vec<i32>,
@@ -367,7 +491,13 @@ impl Session<'_> {
         self.position
     }
 
+    /// Start a new conversation: empty attention and cache memory.
     pub fn reset(&mut self) {
+        self.reset_attention();
+        self.cache.clear();
+    }
+
+    fn reset_attention(&mut self) {
         self.position = 0;
         for cache in [&mut self.keys, &mut self.values] {
             for layer in cache.iter_mut() {
@@ -382,17 +512,59 @@ impl Session<'_> {
     }
 
     /// Feed one token at the next position; returns the next-token logits
-    /// (value `v` means `v * 2^-16`).
+    /// (value `v` means `v * 2^-16`). With a cache, the token also finalizes
+    /// the previous entry and the cache is read for the next token.
     pub fn step(&mut self, token: u32) -> Result<&[i32]> {
         let model = self.model;
         match &model.pool {
-            Some(pool) => pool.install(|| self.advance(token))?,
-            None => self.advance(token)?,
+            Some(pool) => pool.install(|| self.advance(token, true))?,
+            None => self.advance(token, true)?,
         }
         Ok(&self.logits)
     }
 
-    fn advance(&mut self, token: u32) -> Result<()> {
+    /// Refill the attention window with `tokens` (already read once) from
+    /// position 0, leaving the cache memory as it is: a long stream keeps its
+    /// older positions in the cache while attention sees the recent window.
+    /// Returns the logits after the last token.
+    pub fn reencode(&mut self, tokens: &[u32]) -> Result<&[i32]> {
+        if tokens.is_empty() || tokens.len() > self.model.shape.max_positions {
+            return Err(invalid("re-encoding needs 1..=max_positions tokens"));
+        }
+        self.reset_attention();
+        let model = self.model;
+        for &token in tokens {
+            match &model.pool {
+                Some(pool) => pool.install(|| self.advance(token, false))?,
+                None => self.advance(token, false)?,
+            }
+        }
+        Ok(&self.logits)
+    }
+
+    /// The cache read for the next token after the last `step`, if the
+    /// artifact has a cache and any entry is readable.
+    pub fn cache_read(&self) -> Option<CacheRead<'_>> {
+        let c = &self.cache;
+        (c.readable > 0 && c.total > 0).then(|| CacheRead {
+            gate_q31: c.gate_q31,
+            tokens: &c.next[..c.readable],
+            weights: &c.weights[..c.readable],
+            total: c.total,
+        })
+    }
+
+    /// The logits of the last step or re-encoding.
+    pub fn logits(&self) -> &[i32] {
+        &self.logits
+    }
+
+    /// Positions the cache has read so far (its stream length).
+    pub fn cache_stream(&self) -> usize {
+        self.cache.stream
+    }
+
+    fn advance(&mut self, token: u32, update_cache: bool) -> Result<()> {
         let model = self.model;
         let parallel = model.pool.is_some();
         let s = &model.shape;
@@ -571,6 +743,163 @@ impl Session<'_> {
             RESIDUAL_EXP,
         )?;
         self.position += 1;
+        if let (Some(cache), true) = (&model.cache, update_cache) {
+            self.cache_step(cache, token)?;
+        }
         Ok(())
+    }
+
+    /// Update and read the cache from the final normalized state, whose tables
+    /// are built: finalize the previous entry with `token`, hold this
+    /// position's key, and read entries at positions `<= t - gap`.
+    fn cache_step(&mut self, cache: &CacheModel, token: u32) -> Result<()> {
+        let model = self.model;
+        let n = &model.numerics;
+        let dim = cache.spec.dim;
+        let c = &mut self.cache;
+        if let Some(time) = c.pending_time.take() {
+            c.keys.extend_from_slice(&c.pending);
+            c.times.push(time);
+            c.next.push(token);
+        }
+        c.pending.resize(dim, 0);
+        gemv(
+            &cache.key,
+            model.backend,
+            false,
+            &self.tables,
+            self.norm.exp,
+            &mut c.pending,
+            CACHE_EXP,
+        )?;
+        c.pending_time = Some(lorentz_time(&c.pending));
+        let t = c.stream;
+        c.stream += 1;
+        c.readable = (t + 1).saturating_sub(cache.spec.gap).min(c.times.len());
+        c.total = 0;
+        if c.readable == 0 {
+            return Ok(());
+        }
+        c.query.resize(dim, 0);
+        gemv(
+            &cache.query,
+            model.backend,
+            false,
+            &self.tables,
+            self.norm.exp,
+            &mut c.query,
+            CACHE_EXP,
+        )?;
+        let query_time = lorentz_time(&c.query);
+        c.distances.clear();
+        for (key, time) in c.keys.chunks_exact(dim).zip(&c.times).take(c.readable) {
+            c.distances.push(lorentz_distance_sq(
+                &c.query,
+                query_time,
+                key,
+                *time,
+                &cache.arcosh,
+            ));
+        }
+        let nearest = c.distances.iter().copied().min().unwrap_or(0);
+        c.weights.clear();
+        for &d2 in &c.distances {
+            // beta (d^2 - min d^2), from exponent -48 to -16.
+            let gap = (d2 - nearest).min(1 << 56) as i64;
+            let scaled = shift(
+                scale_16_plus(gap, cache.spec.beta_m),
+                4 - cache.spec.beta_e + 32,
+            );
+            let w = exp_neg(scaled, RESIDUAL_EXP, &model.exp_table, n.exp_step_log2) >> 7;
+            c.total += w;
+            c.weights.push(w);
+        }
+        c.gate_out.resize(1, 0);
+        gemv(
+            &cache.gate,
+            model.backend,
+            false,
+            &self.tables,
+            self.norm.exp,
+            &mut c.gate_out,
+            RESIDUAL_EXP,
+        )?;
+        let logit = i64::from(c.gate_out[0]) + cache.spec.gate_bias;
+        c.gate_q31 = sigmoid_q31(logit, &model.exp_table, n.exp_step_log2);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kernels::arcosh_grid;
+
+    fn arcosh_table() -> Vec<u32> {
+        (0..ARCOSH_TABLE_LEN)
+            .map(|i| {
+                let u = arcosh_grid(i) as f64 * 2f64.powi(-32);
+                ((u + (u * (u + 2.0)).sqrt()).ln_1p() * 2f64.powi(24)).round() as u32
+            })
+            .collect()
+    }
+
+    fn exp_table() -> Vec<u32> {
+        (0..32 * 256 + 2)
+            .map(|i| (2f64.powi(31) * (-(i as f64) / 256.0).exp()).round() as u32)
+            .collect()
+    }
+
+    #[test]
+    fn integer_hyperbolic_distances_match_f64() {
+        let table = arcosh_table();
+        let mut seed = 5u64;
+        let mut uniform = || {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            ((seed >> 11) as f64) / ((1u64 << 53) as f64) - 0.5
+        };
+        let code =
+            |v: &[f64]| -> Vec<i32> { v.iter().map(|x| (x * 4096.0).round() as i32).collect() };
+        let value = |c: &[i32]| -> Vec<f64> { c.iter().map(|x| f64::from(*x) / 4096.0).collect() };
+        let norm = |v: &[f64]| v.iter().map(|x| x * x).sum::<f64>();
+        let mut worst = 0f64;
+        for scale in [0.01, 0.3, 2.0, 6.0] {
+            for _ in 0..200 {
+                let q: Vec<f64> = (0..32).map(|_| uniform() * scale).collect();
+                // Keys near the query and farther away.
+                let k: Vec<f64> = q.iter().map(|v| v + uniform() * scale * 0.2).collect();
+                let (qc, kc) = (code(&q), code(&k));
+                let (qd, kd) = (value(&qc), value(&kc));
+                let z = (1.0 + norm(&qd)).sqrt() * (1.0 + norm(&kd)).sqrt()
+                    - qd.iter().zip(&kd).map(|(a, b)| a * b).sum::<f64>();
+                let want = z.max(1.0).acosh().powi(2);
+                let qt = lorentz_time(&qc);
+                assert!((qt as f64 * 2f64.powi(-32) - (1.0 + norm(&qd)).sqrt()).abs() < 1e-9);
+                let got = lorentz_distance_sq(&qc, qt, &kc, lorentz_time(&kc), &table) as f64
+                    * 2f64.powi(-48);
+                worst = worst.max((got - want).abs() / want.max(1e-3));
+            }
+        }
+        assert!(worst < 1e-4, "worst relative error {worst}");
+        let p = vec![1234i32; 32];
+        let t = lorentz_time(&p);
+        assert!(
+            lorentz_distance_sq(&p, t, &p, t, &table) < 1 << 20,
+            "a point is near itself"
+        );
+    }
+
+    #[test]
+    fn sigmoid_from_the_exp_table() {
+        let table = exp_table();
+        for x in [-8.0f64, -1.5, -0.1, 0.0, 0.2, 2.0, 7.9] {
+            let code = (x * 65536.0).round() as i64;
+            let got = sigmoid_q31(code, &table, -8) as f64 * 2f64.powi(-31);
+            let want = 1.0 / (1.0 + (-(code as f64) / 65536.0).exp());
+            assert!(
+                (got - want).abs() < 2e-6,
+                "sigmoid({x}) = {got}, want {want}"
+            );
+        }
     }
 }

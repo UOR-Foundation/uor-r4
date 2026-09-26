@@ -12,7 +12,10 @@
 //! integer-only and a seed reproduces it (SmolLM2's model card suggests
 //! temperature 0.2 and top_p 0.9). The prompt uses SmolLM2's chat template, including
 //! its default system turn; `raw=true` instead continues the given text as is
-//! (for base models), stopping only at the token limit.
+//! (for base models), stopping only at the token limit. With an artifact that
+//! carries a learned cache (lab M4), the next token comes from the mixture of
+//! the model and the cache, and a full attention window slides (the recent
+//! half is re-encoded) while the cache keeps everything older.
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, Write};
@@ -27,9 +30,23 @@ const DEFAULT_SYSTEM: &str = "You are a helpful AI assistant named SmolLM, train
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+/// Feed one token. With a cache, a full attention window slides first: the
+/// most recent half of `history` is re-encoded and the cache keeps the rest.
+fn feed(session: &mut Session<'_>, history: &[u32], token: u32, slide: bool) -> Result<()> {
+    let max = session.model().shape().max_positions;
+    if slide && session.position() + 1 > max {
+        let start = history.len().saturating_sub(max / 2);
+        session.reencode(&history[start..])?;
+    }
+    session.step(token)?;
+    Ok(())
+}
+
 /// Feed `ids`, then generate until `stop` or `limit` new tokens, printing
 /// text as it becomes valid UTF-8. `history` holds every token the session has
-/// read (for the presence penalty). Returns the number of new tokens.
+/// read. With a cache, the next token comes from the mixture of the model and
+/// the cache, and the attention window slides instead of filling. Returns the
+/// number of new tokens.
 fn turn(
     session: &mut Session<'_>,
     sampler: &mut Sampler,
@@ -40,12 +57,22 @@ fn turn(
     limit: usize,
 ) -> Result<usize> {
     let model = session.model();
+    let slide = model.cache_spec().is_some();
     let (table, step) = model.exp_table();
+    let mut choose = |session: &Session<'_>, history: &[u32]| -> Result<u32> {
+        Ok(sampler.sample_with_cache(
+            session.logits(),
+            history,
+            table,
+            step,
+            session.cache_read().as_ref(),
+        )?)
+    };
     let mut next = 0u32;
     for &id in ids {
+        feed(session, history, id, slide)?;
         history.push(id);
-        let logits = session.step(id)?;
-        next = sampler.sample(logits, history, table, step)?;
+        next = choose(session, history)?;
     }
     let mut generated = Vec::new();
     let mut printed = 0usize;
@@ -58,14 +85,14 @@ fn turn(
             out.flush()?;
             printed = text.len();
         }
+        feed(session, history, next, slide)?;
         history.push(next);
-        let logits = session.step(next)?;
-        next = sampler.sample(logits, history, table, step)?;
+        next = choose(session, history)?;
     }
     if next == stop {
         // Close the assistant turn in the cache.
+        feed(session, history, stop, slide)?;
         history.push(stop);
-        session.step(stop)?;
     }
     writeln!(out)?;
     Ok(generated.len())
@@ -136,7 +163,8 @@ fn main() -> Result<()> {
             tokenizer.encode(&text)
         };
         let mut ids = render(first);
-        if session.position() + ids.len() + limit + 1 > model.shape().max_positions {
+        let slides = model.cache_spec().is_some();
+        if !slides && session.position() + ids.len() + limit + 1 > model.shape().max_positions {
             eprintln!("(context full: starting a new conversation)");
             session.reset();
             history.clear();

@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 
 use candle_core::{DType, Device, Tensor, Var};
 
-use crate::kappa_llama::arcosh1p_squared;
+use crate::kappa_llama::{arcosh1p_squared, KappaLlama, Site};
 use crate::{invalid, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -156,6 +156,39 @@ impl CacheMemory {
         &self.variables
     }
 
+    /// A trained cache saved by the `cache-memory` example (`PATH.safetensors`
+    /// with its `PATH.json`).
+    pub fn load(path: &std::path::Path, device: &Device) -> Result<Self> {
+        let meta: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path.with_extension("json"))?)?;
+        let number = |key: &str| -> Result<usize> {
+            meta[key]
+                .as_u64()
+                .map(|v| v as usize)
+                .ok_or_else(|| invalid(format!("cache {key} missing")))
+        };
+        let geometry = CacheGeometry::parse(meta["geometry"].as_str().unwrap_or(""))?;
+        let memory = Self::new(
+            geometry,
+            number("width")?,
+            number("dim")?,
+            number("gap")?,
+            0,
+            device,
+        )?;
+        let saved = candle_core::safetensors::load(path, device)?;
+        for (name, var) in memory.variables() {
+            let tensor = saved
+                .get(name)
+                .ok_or_else(|| invalid(format!("saved cache lacks {name}")))?;
+            if tensor.dims() != var.dims() {
+                return Err(invalid(format!("saved cache {name} has the wrong shape")));
+            }
+            var.set(tensor)?;
+        }
+        Ok(memory)
+    }
+
     fn var(&self, name: &str) -> Result<&Tensor> {
         self.variables
             .get(name)
@@ -257,6 +290,65 @@ impl CacheMemory {
             key_norm_sq,
         })
     }
+}
+
+/// Backbone output over one segment of `len + 1` tokens: the states at `site`
+/// `(len, width)`, the log-probability of every next token `(len)` and the
+/// next tokens. Windows of `window` tokens run with stride `window / 2`
+/// (`len` a multiple of it); the first window is kept whole and every later
+/// one contributes its second half, so each position after the first window
+/// is read with at least `window / 2` tokens of context.
+pub fn segment_features(
+    model: &KappaLlama,
+    segment: &[u32],
+    window: usize,
+    site: Site,
+) -> Result<(Tensor, Tensor, Vec<u32>)> {
+    let len = segment
+        .len()
+        .checked_sub(1)
+        .ok_or_else(|| invalid("empty segment"))?;
+    let half = window / 2;
+    if window < 2 || !window.is_multiple_of(2) || len < window || !len.is_multiple_of(half) {
+        return Err(invalid(
+            "segment length must be a multiple of window / 2 and at least window",
+        ));
+    }
+    let starts: Vec<usize> = (0..=(len - window) / half).map(|w| w * half).collect();
+    let ids: Vec<u32> = starts
+        .iter()
+        .flat_map(|&start| segment[start..start + window].iter().copied())
+        .collect();
+    let targets: Vec<u32> = starts
+        .iter()
+        .flat_map(|&start| segment[start + 1..start + window + 1].iter().copied())
+        .collect();
+    let mut captured = None;
+    let logits = model.forward_with_capture(&ids, starts.len(), window, &mut |at, x| {
+        if at == site {
+            captured = Some(x.clone());
+        }
+        Ok(())
+    })?;
+    let captured = captured.ok_or_else(|| invalid("the chosen site was never captured"))?;
+    let width = captured.dim(1)?;
+    let captured = captured.reshape((starts.len(), window, width))?;
+    let target = Tensor::from_vec(targets, (starts.len(), window, 1), logits.device())?;
+    let logp = candle_nn::ops::log_softmax(&logits, candle_core::D::Minus1)?
+        .gather(&target, 2)?
+        .squeeze(2)?;
+    let mut state_parts = Vec::with_capacity(starts.len());
+    let mut logp_parts = Vec::with_capacity(starts.len());
+    for w in 0..starts.len() {
+        let (from, count) = if w == 0 { (0, window) } else { (half, half) };
+        state_parts.push(captured.get(w)?.narrow(0, from, count)?);
+        logp_parts.push(logp.get(w)?.narrow(0, from, count)?);
+    }
+    Ok((
+        Tensor::cat(&state_parts, 0)?,
+        Tensor::cat(&logp_parts, 0)?,
+        segment[1..].to_vec(),
+    ))
 }
 
 /// Read concentration of one attention row over its `valid` readable entries:
