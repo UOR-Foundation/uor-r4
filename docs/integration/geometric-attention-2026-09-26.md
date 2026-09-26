@@ -116,6 +116,12 @@ All five scoring geometries recalled every query at 1,024 candidates. The Hammin
 | 8 | 92.7% · 80.3% · 54.1% | 63.1% · 59.3% · 54.6% | 99.6% · 99.4% · 98.5% | 52.7% · 26.5% · 3.8% | 32.0% · 15.9% · 2.4% |
 | 16 | 96.4% · 87.8% · 68.2% | 74.5% · 70.8% · 67.5% | 100.0% · 100.0% · 100.0% | 43.0% · 22.7% · 3.5% | 44.0% · 24.2% · 5.3% |
 
+**Correction ([cycle 2](hyperbolic-cycle2-2026-09-26.md)).** The root is always stored, so always answering with the root's value is right 52.7%, 26.3% and 3.6% of the time at 48, 96 and 192 stored nodes. Rows at or near those numbers learned only that rule: 8- and 16-bit Hamming, E8, and dot product or cosine at 2 dimensions. Measured on the non-root queries at 8 dimensions:
+- hyperbolic: 99.2%, 99.2% and 98.5%;
+- dot product: 87.7%, 77.1% and 53.5%.
+
+The headline below holds.
+
 **Reading.**
 - **Hyperbolic scoring wins decisively at low width.**
   - With 8 dimensions it recalled 98.5% at 192 stored nodes, where dot product had 54.1%.
