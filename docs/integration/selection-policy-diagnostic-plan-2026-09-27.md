@@ -79,3 +79,15 @@ No fit, no external compute, no deletion; the 128 MiB stop margin is untouched.
 Finish with one supported implementation decision or an explicit `UNRESOLVED`
 finding, delivered through a protected PR referencing #973/#820, with the run
 handoff updated.
+
+## Corrigendum (2026-09-27, after execution; predeclared rule unchanged)
+
+The Question section cites `5/2` and `7/4` as the continuous source panel's
+lost/gained versus the accepted parent. That attribution is wrong: those are the
+new F32-hard artifact's complete-row figures. The step-15,672 continuous greedy
+panel is 21/32 (quaternion) and 23/32 (householder pair) complete, with
+lost/gained **9/2** and **6/5** versus the accepted September25 parent
+(first-noun `5/2` and `1/2`), as verified independently in the
+[result](selection-policy-diagnostic-result-2026-09-27.md) and the retained
+[row adjudication](../evidence/language-continuation-source-comparisons-2026-09-26.json).
+The predeclared question, classification rule and cost are unchanged.
