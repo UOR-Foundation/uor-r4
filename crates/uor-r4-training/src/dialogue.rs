@@ -54,11 +54,22 @@ pub struct DialogueCampaign {
     pub eval_every: usize,
     #[serde(default)]
     pub checkpoint_steps: Vec<usize>,
+    /// CPU gradient shards for the response-masked objective. `1` is the
+    /// historical single-worker path; `2` or `4` split independent batch rows
+    /// across scoped workers and combine by supervised target count before one
+    /// AdamW update. More than one shard requires the CPU device and a batch
+    /// divisible by the shard count.
+    #[serde(default = "default_dialogue_shards")]
+    pub cpu_gradient_shards: usize,
     #[serde(default)]
     pub count_report: Option<PathBuf>,
     #[serde(default)]
     pub stop_file: Option<PathBuf>,
     pub trial_scope: String,
+}
+
+fn default_dialogue_shards() -> usize {
+    1
 }
 
 impl DialogueCampaign {
@@ -95,6 +106,8 @@ impl DialogueCampaign {
             || self.eval_max_windows == 0
             || !(1..=16).contains(&self.eval_batch)
             || self.tune_windows == 0
+            || !matches!(self.cpu_gradient_shards, 1 | 2 | 4)
+            || self.batch % self.cpu_gradient_shards != 0
             || self.checkpoint_steps.len() > 8
             || self
                 .checkpoint_steps
@@ -199,7 +212,11 @@ fn window_starts(total: usize, context: usize, stride: usize, max_windows: usize
     starts
 }
 
-fn masked_nats(probabilities: &Tensor, targets: &[u32], masks: &[u8]) -> Result<(Tensor, f64)> {
+pub(crate) fn masked_nats(
+    probabilities: &Tensor,
+    targets: &[u32],
+    masks: &[u8],
+) -> Result<(Tensor, f64)> {
     let (batch, time, vocab) = probabilities.dims3()?;
     let count = batch * time;
     if targets.len() != count || masks.len() != count {
@@ -520,23 +537,45 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path, device_name: &str) -> Resul
         let data_started = Instant::now();
         let (inputs, targets, masks) = sample_batch(&train, cfg, step)?;
         let data_seconds = data_started.elapsed().as_secs_f64();
-        let forward_started = Instant::now();
-        let output = model.forward(&inputs, cfg.batch, cfg.context, ReadMode::Enabled, true)?;
-        let forward_seconds = forward_started.elapsed().as_secs_f64();
-        let loss_started = Instant::now();
-        let (nats, supervised) = masked_nats(&output.probabilities, &targets, &masks)?;
-        if supervised <= 0.0 {
-            return Err(invalid("sampled batch has no supervised response targets"));
+        let mut forward_seconds = 0.0f64;
+        let mut loss_seconds = 0.0f64;
+        let backward_seconds;
+        let (value, supervised, gradients);
+        if cfg.cpu_gradient_shards > 1 {
+            let gradient_started = Instant::now();
+            let masked = crate::joint_parallel::masked_batch_gradients(
+                &model,
+                &inputs,
+                &targets,
+                &masks,
+                cfg.batch,
+                cfg.context,
+                cfg.cpu_gradient_shards,
+            )?;
+            backward_seconds = gradient_started.elapsed().as_secs_f64();
+            value = masked.mean_nll;
+            supervised = masked.supervised;
+            gradients = masked.gradients;
+        } else {
+            let forward_started = Instant::now();
+            let output = model.forward(&inputs, cfg.batch, cfg.context, ReadMode::Enabled, true)?;
+            forward_seconds = forward_started.elapsed().as_secs_f64();
+            let loss_started = Instant::now();
+            let (nats, response_targets) = masked_nats(&output.probabilities, &targets, &masks)?;
+            supervised = response_targets;
+            if supervised <= 0.0 {
+                return Err(invalid("sampled batch has no supervised response targets"));
+            }
+            let loss = nats.affine(1.0 / supervised, 0.0)?;
+            value = loss.to_scalar::<f32>()?;
+            loss_seconds = loss_started.elapsed().as_secs_f64();
+            if !value.is_finite() {
+                return Err(invalid("nonfinite response-masked loss"));
+            }
+            let backward_started = Instant::now();
+            gradients = loss.backward()?;
+            backward_seconds = backward_started.elapsed().as_secs_f64();
         }
-        let loss = nats.affine(1.0 / supervised, 0.0)?;
-        let value = loss.to_scalar::<f32>()?;
-        let loss_seconds = loss_started.elapsed().as_secs_f64();
-        if !value.is_finite() {
-            return Err(invalid("nonfinite response-masked loss"));
-        }
-        let backward_started = Instant::now();
-        let gradients = loss.backward()?;
-        let backward_seconds = backward_started.elapsed().as_secs_f64();
         if step == 0 {
             gradient_audit = audit_gradients(&model, &gradients)?;
             if !gradient_audit["all_paths_present_finite_nonzero"]
@@ -567,7 +606,7 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path, device_name: &str) -> Resul
         complete = step + 1;
         let row = json!({"step":complete,"supervised_targets":supervised as u64,
             "sampled_targets":(cfg.batch*cfg.context) as u64,"masked_batch_nll":value,
-            "step_seconds":elapsed,
+            "step_seconds":elapsed,"cpu_gradient_shards":cfg.cpu_gradient_shards,
             "phase_seconds":{"data":data_seconds,"forward":forward_seconds,"loss":loss_seconds,
                 "backward":backward_seconds,"optimizer":optimizer_seconds},
             "optimizer":update});
@@ -643,6 +682,12 @@ fn run_fit_inner(cfg: &DialogueCampaign, out: &Path, device_name: &str) -> Resul
         "scope":cfg.trial_scope,
         "configuration":cfg,
         "parameter_count":model.parameter_count(),
+        "cpu_gradient_shards":cfg.cpu_gradient_shards,
+        "phase_semantics":if cfg.cpu_gradient_shards>1{
+            "backward is the parallel sharded forward+masked-loss+backward gradient call aggregated over all workers; forward and loss are 0"
+        }else{
+            "forward, loss and backward are measured separately on the single full-batch worker"
+        },
         "train_tokens":{"path":cfg.train_tokens,"sha256":sha256_file(&cfg.train_tokens)?,"tokens":train.slice().len(),"response_tokens":train.mask.iter().filter(|&&m| m==1).count()},
         "heldout_tokens":{"path":cfg.heldout_tokens,"sha256":sha256_file(&cfg.heldout_tokens)?,"tokens":heldout.slice().len(),"response_tokens":heldout.mask.iter().filter(|&&m| m==1).count()},
         "evaluation_population":{"windows":starts.len(),"context":cfg.context,"stride":cfg.eval_stride,"max_windows":cfg.eval_max_windows},
@@ -793,6 +838,7 @@ mod tests {
             tune_windows: 4,
             eval_every: 0,
             checkpoint_steps: Vec::new(),
+            cpu_gradient_shards: 1,
             count_report: None,
             stop_file: None,
             trial_scope: "test".into(),

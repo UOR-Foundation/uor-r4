@@ -88,6 +88,10 @@ pub struct JointModel {
     interface_audit: Option<Arc<Mutex<BTreeMap<String, InterfaceAudit>>>>,
     admission: AdmissionPolicy,
     admission_audit: Option<Arc<Mutex<Value>>>,
+    /// R2 scan-native vehicle configuration. `None` retains the historical
+    /// R1c cell; `Some` is set only by `JointModel::new_dialogue_scan`. The
+    /// scan path is continuous F32 and does not use QAT quantizers.
+    pub(crate) scan: Option<crate::joint_scan::ScanConfig>,
 }
 
 /// Scales are calibrated once from the sealed parent and retained on resume.
@@ -304,6 +308,7 @@ impl JointModel {
             interface_audit: None,
             admission: AdmissionPolicy::Full,
             admission_audit: None,
+            scan: None,
         })
     }
 
@@ -588,6 +593,7 @@ impl JointModel {
         model.interface_audit = self.interface_audit.clone();
         model.admission = self.admission;
         model.admission_audit = self.admission_audit.clone();
+        model.scan = self.scan.clone();
         Ok(model)
     }
 
@@ -728,7 +734,19 @@ impl JointModel {
             .sum()
     }
 
-    fn weight(&self, name: &str, training: bool) -> Result<Tensor> {
+    /// Remove one named parameter from this model. Used only by the R2 scan
+    /// constructor to drop `recurrent.state.weight`, whose transition the
+    /// input-only scan cell replaces. Fails if the parameter is absent.
+    pub(crate) fn drop_parameter(&mut self, name: &str) -> Result<()> {
+        if self.variables.remove(name).is_none() {
+            return Err(invalid(format!(
+                "cannot drop absent joint parameter {name}"
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn weight(&self, name: &str, training: bool) -> Result<Tensor> {
         if let Some(parameters) = &self.prepared_parameters {
             return parameters
                 .get(name)
@@ -1321,7 +1339,7 @@ impl JointModel {
             .reshape((batch, self.config.vocab_size))?)
     }
 
-    fn output_distribution(
+    pub(crate) fn output_distribution(
         &self,
         states: &Tensor,
         no_read: &Tensor,
