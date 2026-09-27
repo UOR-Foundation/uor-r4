@@ -2450,6 +2450,7 @@ impl IntegerModel {
         Ok(results)
     }
 
+    #[inline(never)]
     fn affine_direct_into(
         &self,
         products: &[[i64; 16]],
@@ -2575,6 +2576,7 @@ impl IntegerModel {
     /// Dedicated zero-allocation affine projection for wide matrix rows (576, 1152).
     /// Uses 4-row blocked product table reuse with register-resident accumulators,
     /// followed by scalar tail processing and scale_and_quantize_logit.
+    #[inline(never)]
     fn affine_wide_into<const WIDTH: usize>(
         &self,
         products: &[[i64; 16]],
