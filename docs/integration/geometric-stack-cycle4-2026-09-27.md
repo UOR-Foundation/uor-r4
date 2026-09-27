@@ -56,7 +56,11 @@ The layer outputs `W_out (h_t ⊙ gelu(g_t))`, where `g_t` is a second input bra
   - The transition acts on `h` by left multiplication, a linear map, so the recurrence is an affine scan. Its composition law `(q2, b2) ∘ (q1, b1) = (q2 * q1, q2 * b1 + b2)` is associative. A parallel prefix scan over time is therefore possible, but this implementation does not use one.
 - **Non-expanding transitions, not a bound on the states.** *Derived.*
   - A unit quaternion preserves the norm and `lambda_t < 1`. Every product of transitions is therefore non-expanding: `|q_t * ... * q_s| <= 1`.
-  - This does not bound the driven state uniformly. With a constant `lambda`, the worst-case steady state is `sqrt((1 + lambda) / (1 - lambda))` times the largest drive, which grows as `lambda` approaches 1. It says nothing about the residual stream across layers either.
+  - This does not bound the driven state uniformly.
+    - As implemented, `|u_t| = |raw_t| / sqrt(|raw_t|^2 + 1e-6)`, slightly below 1, and the drive multiplier is `kappa = sqrt(max(1 - lambda^2, 1e-6))`.
+    - For constant coefficients and drives of norm at most `B`, `|h_t| <= rho |h_{t-1}| + kappa B` with `rho = lambda |u| < 1`. The asymptotic bound is therefore `kappa B / (1 - rho)`.
+    - With a unit rotation and an unclamped drive this becomes `sqrt((1 + lambda) / (1 - lambda)) B`, which grows as `lambda` approaches 1.
+    - It says nothing about the residual stream across layers.
   - Setting `u_t` to the identity (`rotation=false`) leaves a real gated linear recurrence with one decay per lane. That is the ablation of the transport.
 - **Exact backward.** *Derived.* It is the reverse scan:
   - the total gradient of `h_t` is `G_t = dh_t + conj(q_{t+1}) * G_{t+1}`;
