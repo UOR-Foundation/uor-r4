@@ -399,12 +399,12 @@ impl<'s, 'a> DialogueConversationStream<'s, 'a> {
     }
 
     pub fn into_turn(mut self) -> Result<ConversationTurn> {
-        if let Some(err) = self.error {
+        if let Some(err) = self.error.take() {
             return Err(err);
         }
         if !self.stopped {
             while self.next().is_some() {}
-            if let Some(err) = self.error {
+            if let Some(err) = self.error.take() {
                 return Err(err);
             }
         }
@@ -450,13 +450,13 @@ impl<'s, 'a> DialogueConversationStream<'s, 'a> {
 
         let generation = Generation {
             prompt: String::new(),
-            prompt_token_ids: self.prompt_token_ids,
-            generated_token_ids: self.generated_tokens,
+            prompt_token_ids: std::mem::take(&mut self.prompt_token_ids),
+            generated_token_ids: std::mem::take(&mut self.generated_tokens),
             response_text: String::from_utf8_lossy(&bytes).trim().to_owned(),
             raw_decoded: String::from_utf8_lossy(&raw).into_owned(),
             utf8_decodable: std::str::from_utf8(&bytes).is_ok(),
             stop,
-            decisions: self.decisions,
+            decisions: std::mem::take(&mut self.decisions),
             selection,
             read_mode: self.conversation.mode,
             context_capacity: self.conversation.bundle.model().config().context,
@@ -471,7 +471,7 @@ impl<'s, 'a> DialogueConversationStream<'s, 'a> {
 
         Ok(ConversationTurn {
             boundary: self.boundary,
-            appended_token_ids: self.appended,
+            appended_token_ids: std::mem::take(&mut self.appended),
             raw_generated_bytes: raw,
             dialogue: DialogueGeneration {
                 protocol: self.conversation.protocol.clone(),
@@ -569,6 +569,16 @@ impl<'s, 'a> Iterator for DialogueConversationStream<'s, 'a> {
 
         self.finish_turn(Stop::MaximumNewTokens);
         self.decoder.flush()
+    }
+}
+
+impl<'s, 'a> Drop for DialogueConversationStream<'s, 'a> {
+    fn drop(&mut self) {
+        if !self.stopped {
+            self.finish_with_error(ConversationError::Execution(invalid(
+                "dialogue conversation stream dropped before terminal stop token",
+            )));
+        }
     }
 }
 
@@ -921,6 +931,41 @@ mod tests {
         ));
         assert!(matches!(
             conversation.sampler_state(),
+            Err(ConversationError::Poisoned)
+        ));
+    }
+
+    #[test]
+    fn conversation_stream_early_drop_poisons_session() {
+        let bundle = Bundle::create_test_bundle_with_byte_vocab();
+        let protocol = DialogueProtocol::literal_roles_v1(bundle.tokenizer()).unwrap();
+        let mut conversation = bundle
+            .dialogue_conversation(&protocol, &[], 42, ReadMode::Enabled)
+            .unwrap();
+        {
+            let req = ConversationRequest {
+                user: "Hello",
+                max_new_tokens: 16,
+                policy: SamplePolicy::Greedy,
+                first_sentence: false,
+                closure: TurnClosure::InterruptAssistant,
+            };
+            let mut stream = conversation.respond_stream(req).unwrap();
+            let chunk = stream.next();
+            assert!(chunk.is_some());
+            assert!(!stream.is_stopped());
+            // stream is dropped here before terminal stop token
+        }
+        assert!(conversation.is_poisoned());
+        let next_req = ConversationRequest {
+            user: "Second message",
+            max_new_tokens: 4,
+            policy: SamplePolicy::Greedy,
+            first_sentence: false,
+            closure: TurnClosure::InterruptAssistant,
+        };
+        assert!(matches!(
+            conversation.respond(next_req),
             Err(ConversationError::Poisoned)
         ));
     }

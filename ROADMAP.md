@@ -25,33 +25,39 @@ Research is conducted across three parallel, coordinated labs:
 
 ## 2. Active Research Tracks
 
-### Track 1: Sparse Geometric Memory Addressing (2D Galois Lattice / Product-Key Memory)
-- **Goal**: Replace dense MLPs with sparse geometric memory addressing using $H_4$ and $E_8$ fixed codebooks to achieve per-token parameter sparsity under the D5 serving contract.
-- **Current Hypothesis**: Moving geometry from dense read scores to sparse memory indexes with fixed $H_4$ (600-cell, 120 icosians) and $E_8$ (240 roots) codebooks reduces parameter reads per token while matching or improving loss over dense Dot/Lorentz baselines.
+### Track 1: Sparse Geometric Memory Addressing & Hyperbolic Cache Comparison
+- **Goal**: (1) Replace dense MLPs with sparse geometric memory addressing using $H_4$ and $E_8$ fixed codebooks under the D5 contract; (2) Compare curved spacetime (Lorentz / hyperbolic) vs Euclidean / Dot read geometry for long-horizon context memory and capacity-matched conversational serving cache.
+- **Current Hypothesis**: 
+  - *Memory Addressing*: Moving geometry from dense read scores to sparse memory indexes with fixed $H_4$ (600-cell, 120 icosians) and $E_8$ (240 roots) codebooks reduces parameter reads per token while matching or improving loss over dense Dot/Lorentz baselines.
+  - *Hyperbolic Cache*: Hyperbolic negative curvature ($\mathbb{H}^d$ in the Lorentz model) provides tree-like capacity with lower distortion for nested token contexts, achieving lower NLL at matched compute budgets without violating D10 integer serving invariants.
 - **Owning Lab**: Lab 1 (Claude / Director)
-- **Status**: Active. PR [#1437](https://github.com/UOR-Foundation/uor-r4/pull/1437) open with `StackConfig.memory`, fused top-$k$ selection, and pre-registered 5-arm comparison plan. Cycle-4 main baseline comparison running.
-- **Next Decision Point**: Score Cycle-4 comparison and evaluate Cycle-5 memory arms against pre-registered threshold ($\ge 0.02$ nats improvement).
+- **Status**: Active.
+  - PR [#1437](https://github.com/UOR-Foundation/uor-r4/pull/1437) open with `StackConfig.memory`, fused top-$k$ selection, and pre-registered 5-arm comparison plan. Cycle-4 main baseline comparison running.
+  - Cycle 3 hyperbolic comparison completed (`docs/integration/hyperbolic-cycle3-2026-09-26.md`, PR [#1419](https://github.com/UOR-Foundation/uor-r4/pull/1419)): Lorentz read beat Dot in 3 of 4 seeds (0.018 nats/token on codebase, 0.037 nats on WikiText-2). Capacity-matched hyperbolic cache geometry integrated in `uor-r4-integer` (`test_hyperbolic_conversational_cache.rs`).
+- **Next Decision Point**: Score Cycle-4 comparison, evaluate Cycle-5 memory arms against pre-registered threshold ($\ge 0.02$ nats improvement), and benchmark long-horizon conversational cache scaling ($K=512 \to 1024$) vs flat Euclidean L2 paging.
 
 ### Track 2: Exact Signed $H_4$ Integer Classification & Discrete Read Groups
-- **Goal**: Provide an exact common-scale i32 classifier over all 120 signed $H_4$ roots without normalized floating-point arithmetic or hardware multiplier instructions.
+- **Goal**: Provide an exact common-scale i32 classifier over all 120 signed $H_4$ roots without normalized floating-point arithmetic or hardware multiplier instructions, and resolve discrete geometric read routing.
 - **Current Hypothesis**: Scoring 14 fundamental root families under exact integer arithmetic enables canonical directional classification across the full i32 domain, eliminating floating-point dependencies from discrete geometric routing.
 - **Owning Lab**: Lab 2 (OpenCode)
-- **Status**: Active. PR [#1435](https://github.com/UOR-Foundation/uor-r4/pull/1435) open with exact signed $H_4$ integer classifier in `crates/uor-r4-integer/src/h4.rs`. 3 focused checks pass; strict ARM64 opcode audit passes (0 Class I multipliers, 0 Class II dividers, 0 Class III floats).
-- **Next Decision Point**: Verify training donor-order check and decide on integrating exact $H_4$ relation lookup table (`inverse(q) * k`) with learned reader scoring.
+- **Status**: Active.
+  - PR [#1435](https://github.com/UOR-Foundation/uor-r4/pull/1435) open with exact signed $H_4$ integer classifier in `crates/uor-r4-integer/src/h4.rs`. 3 focused checks pass; strict ARM64 opcode audit passes (0 Class I multipliers, 0 Class II dividers, 0 Class III floats).
+  - PR [#1438](https://github.com/UOR-Foundation/uor-r4/pull/1438) ("Implement and screen the finite geometric read kernel") screened and merged into `origin/main` at `dccef74b`. Result: HARM at predeclared scope (Read NLL $+0.0197$ nats, 10 unique answer losses on 32-row panel, 1.84× cost vs 1.5× gate). Unit-coded 16-lane finite relation score (784 params) parked at this scope.
+- **Next Decision Point**: Evaluate Lab 2's integer $H_4$ discrete root lookup table (`inverse(q) * k`) as an unparameterized geometric relation alternative to learned continuous relation scoring, avoiding the capacity overhead that triggered HARM in PR #1438.
 
 ### Track 3: Zero-MatMul Wide Integer Serving & Streaming Chat Continuity
 - **Goal**: Serve learned geometric dialogue models on Apple Silicon with strictly zero multipliers, zero dividers, zero floats in runtime symbols, latency $\le 4.0$ ms/tok, and peak RSS $< 35$ MB.
-- **Current Hypothesis**: Four-row blocked product table reuse with register-resident accumulators and zero-allocation wide affine projections accelerate width 576/1152 evaluation on ARM64 while preserving strict D0-b hardware invariants and exact streaming dialogue history across turns.
+- **Current Hypothesis**: Four-row blocked product table reuse with register-resident accumulators and zero-allocation wide affine projections accelerate width 576/1152 evaluation on ARM64 while preserving strict D0-b hardware invariants, exact streaming dialogue history across turns, and fail-closed session drop safety.
 - **Owning Lab**: Lab 3 (Anti-Gravity)
-- **Status**: Active. PR [#1434](https://github.com/UOR-Foundation/uor-r4/pull/1434) (dialogue continuity and streaming generation in `uor-chat`) and PR [#1436](https://github.com/UOR-Foundation/uor-r4/pull/1436) (four-row blocked product table reuse and zero-allocation wide affine) delivered and synthesized in `lab/anti-gravity/geometric-intelligence-synthesis`. Benchmarks: 0.349 ms `project_vocab`, 1.0008 ms/tok streaming latency, peak RSS 7.06–8.27 MB, 0 multipliers/dividers/floats.
-- **Next Decision Point**: Evaluate recovered continuous relations vs quantized representations on the dialogue evaluator, and integrate exact $H_4$ discrete lookups into wide serving.
+- **Status**: Active. PR [#1434](https://github.com/UOR-Foundation/uor-r4/pull/1434) (dialogue continuity and streaming generation in `uor-chat`) and PR [#1436](https://github.com/UOR-Foundation/uor-r4/pull/1436) (four-row blocked product table reuse and zero-allocation wide affine) synthesized in `lab/anti-gravity/geometric-intelligence-synthesis`. Benchmarks: 0.349 ms `project_vocab`, 1.0008 ms/tok streaming latency, peak RSS 7.06–8.27 MB, 0 multipliers/dividers/floats across 31 matched serving symbols, and fail-closed drop semantics implemented via `Drop for DialogueConversationStream`.
+- **Next Decision Point**: Complete dialogue relation recovery observation on learned legal integer codes and integrate exact $H_4$ discrete lookups into wide serving.
 
 ### Track 4: Response-Aware Dialogue Code-Choice Fitting (Precision Recovery)
 - **Goal**: Recover semantic relations lost during nearest-neighbor integer quantization of continuous dialogue children via response-aware legal integer neighbor code learning.
 - **Current Hypothesis**: Response/EOS-weighted objective over full-sequence shards with one global rounding penalty and clipped Adam updates over 5.34M choosable coordinates preserves continuous child semantic relations (entity recall, color, role relations) that independent rounding erases.
 - **Owning Lab**: Cross-Lab / Fourth Lab Scaffolding (coordinated by Lab 3)
-- **Status**: Checkpointed at 231/512 updates (260,430 targets) on `/Volumes/UOR-Workspace/uor-r4-lab/fourth-lab-sequential-code-choice-fit-1`. Continuation runner and spec prepared; integer conversion bridge validated.
-- **Next Decision Point**: Complete 58-turn dialogue observation on the 231-step checkpointed codes to verify whether entity recall (Momo, green) recovers before scheduling the remaining 281 continuation updates.
+- **Status**: Checkpointed at 231/512 updates (260,430 targets, 5,210.05s) on `/Volumes/UOR-Workspace/uor-r4-lab/fourth-lab-sequential-code-choice-fit-1/checkpoint-final` after hitting the host storage soft-stop. Full Adam state (21 parameter groups) and alpha choice variables sealed on SSD; integer conversion bridge validated.
+- **Next Decision Point**: Complete 58-turn dialogue observation on the 231-step checkpointed codes to verify whether entity recall (Momo cat-name, green favorite-color) recovers before scheduling the remaining 281 continuation updates.
 
 ---
 

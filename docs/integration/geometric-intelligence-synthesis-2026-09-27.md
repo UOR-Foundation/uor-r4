@@ -8,8 +8,8 @@
 ## 1. Executive Summary
 
 This report documents the synthesis of Lab 3's core deliverables for the native geometric language model:
-1. **Dialogue Streaming Continuity**: Real-time token streaming with incremental UTF-8 boundary decoding and exact-token history retention across multi-turn sessions in `uor-chat` (PR #1434).
-2. **Four-Row Blocked Product Table Reuse**: Dedicated zero-allocation wide affine projections and register-resident accumulator blocked kernels for widths 576 and 1152 in `uor-r4-integer` (PR #1436).
+1. **Dialogue Streaming Continuity**: Real-time token streaming with incremental UTF-8 boundary decoding, exact-token history retention, and fail-closed session drop semantics (`Drop for DialogueConversationStream`) across multi-turn sessions in `uor-chat` (PR #1434).
+2. **Four-Row Blocked Product Table Reuse**: Dedicated zero-allocation wide affine projections (`affine_wide_into`, `affine_direct_into`) and register-resident accumulator blocked kernels for widths 576 and 1152 in `uor-r4-integer` (PR #1436).
 3. **Rigorous Hardware Invariant Verification**: AArch64 disassembly auditing certifying strictly 0 Class I (multipliers), 0 Class II (dividers), and 0 Class III (floating-point) instructions in compiled numerical serving symbols.
 4. **Dialogue Retention Analysis**: Comprehensive evaluation of continuous dialogue relations against quantized integer representations, connecting the findings to the learned response-aware code fitting from `fourth-lab-sequential-code-choice-fit-1`.
 
@@ -26,7 +26,7 @@ Audited via `scripts/audit_zero_matmul_serving.py --tap`:
 | Target Artifact | Matched Symbols | Class I (Multipliers) | Class II (Dividers) | Class III (Floats) | Verdict |
 |---|---:|---:|---:|---:|:---:|
 | `target/release/uor-chat` | 30 | 0 | 0 | 0 | **PASS (5/5)** |
-| `target/release/libuor_r4_integer.rlib` | 30 | 0 | 0 | 0 | **PASS (5/5)** |
+| `target/release/libuor_r4_integer.rlib` | 31 | 0 | 0 | 0 | **PASS (5/5)** |
 
 Emitted instruction inspection verifies zero instances of `mul`, `smull`, `umull`, `madd`, `sdiv`, `udiv`, `fmul`, `fadd`, `fmov`, or vector FP operations across all numerical kernel symbols.
 
@@ -93,5 +93,5 @@ To bridge the precision gap without violating D0-b (strictly zero floating point
 ## 5. Architectural Alignment & Next Steps
 
 - **Lab 1 Alignment**: Sparse geometric memory addressing (PR #1437) can replace wide dense affine projections with discrete $H_4 \times H_4$ Galois lattice lookups, further reducing per-token parameter bandwidth.
-- **Lab 2 Alignment**: The exact signed $H_4$ classifier (PR #1435) provides common-scale integer root identification over all 120 roots, enabling discrete geometric read routing in `uor-chat`.
+- **Lab 2 Alignment**: The exact signed $H_4$ classifier (PR #1435) provides common-scale integer root identification over all 120 roots. Following the screening and parking of the parameterized finite geometric read kernel in PR #1438 (which incurred HARM due to 784 added parameters and 1.84× cost overhead), Lab 2's unparameterized integer $H_4$ discrete root lookup table (`inverse(q) * k`) becomes the primary geometric relation route.
 - **Next Decision Point**: Complete the 58-turn dialogue observation on the 231-step checkpointed codes to verify whether entity recall (Momo, green) recovers before scheduling the remaining 281 continuation updates.
