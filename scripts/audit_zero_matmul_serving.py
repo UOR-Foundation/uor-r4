@@ -284,6 +284,25 @@ PACKED_KERNEL_CALLERS = [
     )
 ]
 
+# Exact H4 classification is a standalone numerical component. Inspect every
+# emitted classifier/helper range that is present without making historical
+# artifacts require a component they did not contain. Absent inline helpers
+# still require checking the actual containing function before claiming coverage.
+EXACT_GEOMETRY_SYMBOLS = [
+    {
+        "name": f"h4_classifier::{name}",
+        "pattern": re.compile(r"h4_classifier.*" + re.escape(name) + r"\b"),
+        "mangled": re.compile(r"__RNv.*h4_classifier.*" + str(len(name)) + re.escape(name) + r"\b"),
+        "description": "Exact signed H4 classification and integer score comparison",
+    }
+    for name in (
+        "signed_h4_code_i32",
+        "coefficient_term",
+        "score",
+        "score_difference_order",
+    )
+]
+
 
 def find_target_artifact(user_arg=None):
     if user_arg:
@@ -472,7 +491,11 @@ def run_audit(per_symbol, is_demangled, target_path, strict_arm64=True):
             results["missing_mandatory"].append((disp_name, disp_desc))
 
     # Also audit optional/additional serving symbols if present
-    other_list = (RLIB_MANDATORY_SYMBOLS if not is_rlib else []) + PACKED_KERNEL_CALLERS
+    other_list = (
+        (RLIB_MANDATORY_SYMBOLS if not is_rlib else [])
+        + PACKED_KERNEL_CALLERS
+        + EXACT_GEOMETRY_SYMBOLS
+    )
     for entry in other_list:
         name = entry["name"]
         pat = entry["pattern"] if is_demangled else entry["mangled"]
