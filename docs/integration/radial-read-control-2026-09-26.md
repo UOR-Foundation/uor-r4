@@ -95,10 +95,26 @@ prepared or executed for this implementation increment.
 
 ## Validation and next decision
 
-Executed validation is recorded at delivery. Necessary implementation checks
-cover forward/backward credit to query/key/scalars, checkpoint identity,
-shared-reader dispatch, retained Dot behavior and unsupported-serving rejection.
-They are functional checks, not fitted-model or language evidence.
+The final source `48fd43c16cf2596e6379a5869500b19d43571731`, including main
+`ab90b9e5`, was compiled with its actual `UOR_BUILD_SOURCE_COMMIT`. All four
+`radial_read_` checks and both retained `calibrated_shadow_` checks pass on the
+same CPU test executable. They cover forward/backward credit to query/key/value,
+NoRead and scalar parameters; both reader paths and causality; checkpoint
+identity; retained Dot/Lorentz behavior; and unsupported affine serving.
+The [execution receipt](../evidence/offline-radial-read-validation-2026-09-27.json)
+binds the five source files, executable, prior attempts and cost. An earlier
+retained check failed because the executable had an unbound source identity;
+the source-bound build resolves it without changing the model or the check.
+These are functional checks, not fitted-model or language evidence.
+
+The final build/check commands took 79.98 and 11.10 seconds; the tests themselves
+took 3.32 and 11.07 seconds. Peak command RSS was 2,237,857,792 bytes. Including
+the superseded builds and failed provenance attempt, this increment used
+462.02 seconds of compile/check command time. The cumulative elapsed receipt
+also charges preparation, review and shared build-slot waiting; no paired
+training study, capability evaluation, accelerator work or paid compute ran.
+All six declared implementation risks are resolved; further broad testing is
+not a prerequisite to selecting the next research comparison.
 
 Before any new fit, select one paired development comparison with fixed data,
 draws, shared initial matrices, optimizer, full 256-token access and complete

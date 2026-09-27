@@ -32,6 +32,10 @@ whose 104 listed file identities were verified by the fourth lab. Continuous
 checkpoints and several replay inputs remain external. The
 [radial read comparison](radial-read-control-2026-09-26.md) extends the merged
 reader with an offline affine control while preserving existing upstream paths.
+All six focused checks pass on source `48fd43c1`, covering the affine control
+and retained Dot/Lorentz and checkpoint paths; the
+[source-bound receipt](../evidence/offline-radial-read-validation-2026-09-27.json)
+records executed checks, prior attempts and complete elapsed accounting.
 Its implementation and a future language comparison have distinct scope.
 General language/M1 qualification remains unmeasured here. D10's policy
 clarification remains pending in this lab; the new control introduces no
