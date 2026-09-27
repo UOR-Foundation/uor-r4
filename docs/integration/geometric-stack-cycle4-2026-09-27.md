@@ -174,7 +174,7 @@ Final NLL in nats per token, with bits per byte in parentheses:
 
 - **Selection.** The rule was fixed before any pilot run finished: each arm's rate is the one with the lowest final NLL. That gives 2e-3 for the control and 4e-3 for the stack. At the selected rates the stack leads by **0.158 nats** (0.064 bits per byte).
 - **Fairness.** The control's best rate lies inside the grid. The stack's best rate is the grid's largest, so its optimum may be higher. The tuning therefore does not disadvantage the control.
-- **At every rate the stack leads.** At 4e-3 the control degrades (2.834) while the stack keeps improving. The stack also trains stably at a rate that is too high for the control.
+- **At every rate the stack leads.** At 4e-3 the control scores worse than at 2e-3 (2.834 against 2.768), while the stack improves further. That is underperformance of the control at that rate, not a measured numerical instability.
 - **Context, not a matched comparison.** The retained native learner of cycle 3 scored 3.119–3.124 with the flat Lorentz read and 3.169–3.185 with the Dot read, on the same windows and data after the same 4.1M target visits. It had width 128 and about 0.69M parameters. Both 7.2M-parameter arms here are 0.35–0.58 nats better. Size, depth, layer structure and training configuration all differ between the two, so this cycle does not attribute the gap to any one of them.
 - **Samples.** Greedy continuations of three development prompts fall into repetition loops in both arms at this budget, for example a repeated `use std::path::PathBuf;` line. The report roots keep all six arms' greedy and sampled continuations.
 - **Cost.** Two runs shared the 4-core sandbox, with two threads each.
