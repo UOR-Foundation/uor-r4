@@ -1,12 +1,15 @@
-//! A parallel-trainable, multi-layer native geometric language model (the
-//! geometric stack), and an ordinary transformer control with the retained
-//! #1017 reference's shape. Both are trained from scratch on the same data.
-//! Offline training only; nothing here is a serving path.
+//! A multi-layer native geometric language model trained a whole window at a
+//! time (the geometric stack), and an ordinary transformer control with the
+//! retained #1017 reference's shape. Both are trained from scratch on the same
+//! data. Offline training only; nothing here is a serving path.
 //!
 //! The retained native model (`joint_model`) is one gated recurrent layer with
 //! one read, trained position by position. This module tests whether a stack of
-//! the same kinds of operators, laid out so a whole window trains at once, closes
-//! the gap to an ordinary transformer of equal size.
+//! the same kinds of operators closes the gap to an ordinary transformer of
+//! equal size. Its layers take their gates and projections from the layer input
+//! alone, so each projection is one matrix product per window; only the cheap
+//! recurrence scan runs position by position, batched and parallel over
+//! windows.
 //!
 //! Geometric layers are pre-norm and residual, and each ends with a SwiGLU MLP.
 //! The temporal mixer is one of two kinds, chosen per layer by `pattern`:

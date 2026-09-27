@@ -23,9 +23,13 @@
 #   3. evaluate each trained model on DEV with the block protocol (tune, comparison and full means)
 #   4. write summary.txt: comparison-tail NLL per arm next to #1017's 1.574024, and greedy/sampled continuations
 #
-# Knobs: SEEDS ("1"), STEPS (7324), BATCH (16), THREADS (4), LR_TRANSFORMER and LR_GEOMETRIC (the lab pilot's
-# choices), WARMUP (200), PATTERN (rrarra), READ (lorentz), ROTATION (true), TRAIN_WEIGHTS (unset: proportional),
-# EVAL_EVERY (250), FEATURES (cpu-accelerate on macOS, none elsewhere).
+# Knobs: SEEDS ("1"), STEPS (7324), BATCH (16), THREADS (4), SEQUENTIAL (0), LR_TRANSFORMER and LR_GEOMETRIC (the
+# lab pilot's choices), WARMUP (200), PATTERN (rrarra), READ (lorentz), ROTATION (true), TRAIN_WEIGHTS (unset:
+# proportional), EVAL_EVERY (250), FEATURES (cpu-accelerate on macOS, none elsewhere).
+#
+# Shared machine: by default both arms run at once with THREADS threads each (8 threads). Before launching, check
+# #973 for other labs' active fits and do not start beside one; SEQUENTIAL=1 runs the arms one after the other,
+# and THREADS lowers each arm's share.
 #
 # Cost: unmeasured on the M1. The lab sandbox (4 x86 cores, two arms at once, two threads each) trained about
 # 1,100 tokens per second per arm, so STEPS=7324 is about 7.6 hours there. Try STEPS=250 first to time an update.
@@ -37,6 +41,7 @@ DEV=${2:?development token file required}
 TOKENIZER=${3:?tokenizer.json required (for decoding samples)}
 OUT=${4:-reports/geometric-stack-$(date +%Y%m%d-%H%M%S)}
 SEEDS=${SEEDS:-"1"}
+SEQUENTIAL=${SEQUENTIAL:-0}
 STEPS=${STEPS:-7324}
 BATCH=${BATCH:-16}
 THREADS=${THREADS:-4}
@@ -76,6 +81,7 @@ common=(train="$TRAIN" valid="$DEV" tokenizer="$TOKENIZER" steps="$STEPS" batch=
 for seed in $SEEDS; do
   RAYON_NUM_THREADS=$THREADS "$STACK" train "${common[@]}" out="$OUT/transformer-s$seed" arch=transformer \
     seed="$seed" lr="$LR_TRANSFORMER" > "$OUT/transformer-s$seed.log" 2>&1 &
+  [ "$SEQUENTIAL" = 1 ] && wait
   RAYON_NUM_THREADS=$THREADS "$STACK" train "${common[@]}" out="$OUT/geometric-s$seed" arch=geometric \
     pattern="$PATTERN" read="$READ" rotation="$ROTATION" seed="$seed" lr="$LR_GEOMETRIC" \
     > "$OUT/geometric-s$seed.log" 2>&1 &

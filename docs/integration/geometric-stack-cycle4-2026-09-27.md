@@ -40,19 +40,23 @@ h_t = lambda_t (u_t * h_{t-1}) + sqrt(1 - lambda_t^2) c_t
 ```
 
 - `*` is the Hamilton product.
-- `u_t` is a unit quaternion computed from the input: `raw_t / |raw_t|`, where `raw_t` is a learned linear map of the normalized input plus a bias that starts at the identity quaternion `(1, 0, 0, 0)`.
+- `u_t` is a unit quaternion computed from the input. The implementation normalizes `raw_t / sqrt(|raw_t|^2 + 1e-6)`, so `u_t` is unit up to that epsilon. `raw_t` is a learned linear map of the normalized input plus a bias that starts at the identity quaternion `(1, 0, 0, 0)`.
 - `lambda_t = a^(8 r_t)` is a gated decay:
   - `r_t` is a sigmoid gate of the input;
   - `log a = -softplus(-decay)` is learned per lane;
   - at a fully open gate, the lanes start with timescales spread geometrically from 2 to 1,000 tokens.
 - `c_t` is the input branch after a width-4 causal depthwise convolution, whose taps start at the identity.
-- `sqrt(1 - lambda^2)` keeps the state's scale bounded (Griffin's normalization).
+- The drive factor is implemented as `sqrt(max(1 - lambda^2, 1e-6))`. It is Griffin's normalization: for uncorrelated drives of equal variance it keeps the state's variance at the drive's.
 
 The layer outputs `W_out (h_t ⊙ gelu(g_t))`, where `g_t` is a second input branch.
 
-- **Parallel over time.** *Derived.* The transition is a scaled unit quaternion acting by left multiplication, a linear map of `h`. The recurrence is therefore an affine scan whose composition law `(q2, b2) ∘ (q1, b1) = (q2 * q1, q2 * b1 + b2)` is associative. So it can be evaluated for a whole window without the per-position dependence of the retained learner.
-- **Stable by construction.** *Derived.*
-  - A unit quaternion preserves the norm, and the decay is below 1, so no product of transitions can grow.
+- **Whole-window training, not a parallel scan over time.** *Derived for the first part, as implemented for the second.*
+  - The gates, rotation and drive depend only on the layer's input, not on the recurrent state. So every projection of a layer runs once per window as one matrix product. In the retained learner, each position's read and update depend on the state the previous position produced.
+  - Only the scan itself runs position by position: a few multiply-adds per lane and step, batched over windows and parallel across them.
+  - The transition acts on `h` by left multiplication, a linear map, so the recurrence is an affine scan. Its composition law `(q2, b2) ∘ (q1, b1) = (q2 * q1, q2 * b1 + b2)` is associative. A parallel prefix scan over time is therefore possible, but this implementation does not use one.
+- **Non-expanding transitions, not a bound on the states.** *Derived.*
+  - A unit quaternion preserves the norm and `lambda_t < 1`. Every product of transitions is therefore non-expanding: `|q_t * ... * q_s| <= 1`.
+  - This does not bound the driven state uniformly. With a constant `lambda`, the worst-case steady state is `sqrt((1 + lambda) / (1 - lambda))` times the largest drive, which grows as `lambda` approaches 1. It says nothing about the residual stream across layers either.
   - Setting `u_t` to the identity (`rotation=false`) leaves a real gated linear recurrence with one decay per lane. That is the ablation of the transport.
 - **Exact backward.** *Derived.* It is the reverse scan:
   - the total gradient of `h_t` is `G_t = dh_t + conj(q_{t+1}) * G_{t+1}`;
@@ -110,7 +114,7 @@ Everything is Rust on Candle 0.9.2, with the crate's `forbid(unsafe_code)` kept.
 | SwiGLU | `silu(gate) * up` |
 | Cross-entropy | Mean next-token loss |
 
-- **Why fuse.** Candle's CPU elementwise ops are single-threaded, and its batched matrix product runs one small matrix at a time. Fusing took single-arm throughput on 4 threads as follows.
+- **Why fuse.** The recurrence core scans time sequentially inside each window and runs windows in parallel (§2.1). Candle's CPU elementwise ops are single-threaded, and its batched matrix product runs one small matrix at a time. Fusing took single-arm throughput on 4 threads as follows.
 
   | Arm | Before (tokens/s) | After (tokens/s) |
   |---|---:|---:|

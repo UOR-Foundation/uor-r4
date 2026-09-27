@@ -31,8 +31,9 @@
 //! spaced over VALID, the rule of `joint-read-geometry`, so `final_windows=512`
 //! at context 256 scores the same 131,072 targets as that example. A stopped run
 //! continues with `resume=OLD_ROOT/checkpoint` in a new root, with identical
-//! settings. Every report root is claimed before loading and sealed at the end.
-//! Set RAYON_NUM_THREADS to bound the threads.
+//! settings and input contents (sizes and SHA-256 of every input file). Every
+//! report root is claimed before loading and sealed at the end. Set
+//! RAYON_NUM_THREADS to bound the threads.
 //!
 //! `evaluate` scores consecutive 256-input blocks with a fresh state per
 //! block (257 stored ids, 256 targets), the retained evaluator's protocol
@@ -446,14 +447,29 @@ impl Settings {
         })
     }
 
-    /// Settings a resumed run must share with its parent.
-    fn lineage(&self) -> Value {
+    /// Settings and input contents a resumed run must share with its parent.
+    fn lineage(&self, inputs: &Value) -> Value {
         json!({
             "config": self.config, "steps": self.steps, "batch": self.batch, "lr": self.lr,
             "warmup": self.warmup, "min_lr": self.min_lr, "weight_decay": self.weight_decay,
             "clip": self.clip, "eval_every": self.eval_every, "eval_windows": self.eval_windows,
-            "train_weights": self.train_weights,
+            "train_weights": self.train_weights, "inputs": inputs,
         })
+    }
+
+    /// Content identities (size and SHA-256, not paths) of every file the run
+    /// reads, so a resume must present the same bytes in the same order.
+    fn input_contents(&self) -> Result<Value> {
+        let content = |path: &Path| -> Result<Value> {
+            Ok(json!({"bytes": fs::metadata(path)?.len(), "sha256": sha256_file(path)?}))
+        };
+        Ok(json!({
+            "train": self.train.iter().map(|p| content(p)).collect::<Result<Vec<_>>>()?,
+            "valid": content(&self.valid)?,
+            "lens": self.lens.as_deref().map(content).transpose()?,
+            "merges": self.merges.as_deref().map(content).transpose()?,
+            "tokenizer": self.tokenizer.as_deref().map(content).transpose()?,
+        }))
     }
 }
 
@@ -700,7 +716,7 @@ fn save_checkpoint(
     model: &StackModel,
     optimizer: &StackAdamW,
     progress: &Progress,
-    settings: &Settings,
+    lineage: &Value,
 ) -> Result<()> {
     let staging = out.join("checkpoint.partial");
     let _ = fs::remove_dir_all(&staging);
@@ -710,7 +726,7 @@ fn save_checkpoint(
         staging.join("state.json"),
         serde_json::to_vec_pretty(&json!({
             "step": progress.step, "rng": progress.rng.0.to_string(), "curve": progress.curve,
-            "train_seconds": progress.train_seconds, "lineage": settings.lineage(),
+            "train_seconds": progress.train_seconds, "lineage": lineage,
         }))?,
     )?;
     let final_path = out.join("checkpoint");
@@ -721,6 +737,7 @@ fn save_checkpoint(
 
 fn train(settings: &Settings, out: &Path) -> Result<()> {
     let device = Device::Cpu;
+    let lineage = settings.lineage(&settings.input_contents()?);
     let vocabulary = settings.config.vocab_size;
     let train: Vec<Vec<u32>> = settings
         .train
@@ -760,8 +777,10 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
         }
         Some(checkpoint) => {
             let state: Value = serde_json::from_slice(&fs::read(checkpoint.join("state.json"))?)?;
-            if state["lineage"] != settings.lineage() {
-                return Err(invalid("resume settings differ from the checkpoint"));
+            if state["lineage"] != lineage {
+                return Err(invalid(
+                    "resume settings or input contents differ from the checkpoint",
+                ));
             }
             let model = StackModel::load(&checkpoint.join("model"), &device)?;
             let optimizer = StackAdamW::load(&checkpoint.join("optimizer"), &model)?;
@@ -850,11 +869,11 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
             && progress.step % settings.checkpoint_every == 0
             && progress.step < settings.steps
         {
-            save_checkpoint(out, &model, &optimizer, &progress, settings)?;
+            save_checkpoint(out, &model, &optimizer, &progress, &lineage)?;
         }
         if started.elapsed().as_secs_f64() > settings.max_seconds {
             stopped_early = true;
-            save_checkpoint(out, &model, &optimizer, &progress, settings)?;
+            save_checkpoint(out, &model, &optimizer, &progress, &lineage)?;
             break;
         }
     }
