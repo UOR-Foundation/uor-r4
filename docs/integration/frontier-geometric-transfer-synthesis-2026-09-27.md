@@ -52,7 +52,7 @@ Serving execution adheres strictly to owner-adopted D0-b and Milestone M1–M5 c
    - Average single-token latency across 128–520 tokens on M1 CPU: **2.33 ms – 3.12 ms/token**, meeting the $\le 4.0\text{ ms/tok}$ target.
    - Pure CPU execution: **0 GPU / Metal / CUDA linkages** (`test_m5_apple_silicon_zero_gpu_cpu_only_invariants`).
 4. **Causal Memory Necessity**:
-   - Long-horizon recall benchmarks (20 turns, $K = 2500+$ tokens) achieve **10/10 (100.0%) recall** with up to **508.3x perplexity inflation** and **6.231 nats delta NLL** under NoRead ablation (`conversational_benchmarks.rs`).
+   - Long-horizon recall benchmarks (20 turns, $K = 2500+$ tokens) achieve **10/10 (100.0%) recall** with up to **508.3x perplexity inflation** and **6.231 nats delta NLL** under NoRead ablation (`conversational_benchmarks.rs`). This measures exact key-value needle retrieval and slot preservation under synthetic multi-turn scenarios; per fourth-lab integration findings, it does not establish open conversational fluency or broad language capability.
    - Cross-lab Lorentz model evaluation achieves **5.8450 nats delta NLL** advantage on repeated sequence recall (`cross_lab_lorentz_frontier.rs`).
 
 ## 4. Lineage and Artifact Provenance
