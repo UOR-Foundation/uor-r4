@@ -255,7 +255,7 @@ Development NLL on 64 windows at 250, 500, 750 and 1,000 updates, seed 2: Lorent
 | Seed | Lorentz | Dot | Lorentz − Dot |
 |---|---:|---:|---:|
 | 1 | 2.5531 | 2.6291 | −0.0760 |
-| 2 | 2.5382 | not run | — |
+| 2 | 2.5382 | queued | — |
 
 Development NLL on 64 windows at 250, 500, 750 and 1,000 updates:
 
@@ -269,6 +269,11 @@ Development NLL on 64 windows at 250, 500, 750 and 1,000 updates:
   - The lead holds at every evaluation: 0.12, 0.09, 0.09 and 0.07 nats.
   - Lorentz's second seed lands 0.015 from its first.
   - There is one Dot seed, so the Dot arm's own seed spread is not measured here. In the full stack it was 0.002.
+  - **Queued: Dot, seed 2.** It runs after the cycle-5 arms (`c5/pipeline3.sh` in the lab sandbox), with the same executable, data and settings, alone with four threads. Its reading, fixed before it runs:
+    - if the Lorentz mean over two seeds is at least 0.03 nats below the Dot mean, the Lorentz score is recorded as better in the reads-only stack over two seeds at this dose;
+    - if the two means are within 0.03 nats of each other, no advantage is recorded;
+    - if Dot is at least 0.03 nats better, that is recorded;
+    - the Dot seed spread is reported beside the result either way.
 - **The score's effect depends on the configuration.** It is not measurable in `rrarra` (±0.021 over two seeds) and is 0.076 when all six mixers are reads. A *Hypothesis*, not tested: the recurrence supplies ordering or recency structure that the Lorentz geometry otherwise gives the reads.
 - **The reads-only lead depended on the score.** With Dot reads, reads-only (2.6291) scores worse than the `rrarra` Dot stack (2.5889, seed 1).
 - **Against the control (2.7680), each arm at its pilot-selected learning rate:**
