@@ -157,7 +157,32 @@ Everything is Rust on Candle 0.9.2, with the crate's `forbid(unsafe_code)` kept.
 
 ## 5. Learning-rate pilot
 
-*(Filled in when the runs finish.)*
+*Measured.* Settings:
+- 1,000 updates of 16 × 256 tokens (4,096,000 target visits per run), seed 1, on the repository code split only;
+- warmup 100, then cosine decay to 10% of the peak rate;
+- AdamW with beta2 0.95, weight decay 0.1 on matrices, clipping at 1.0.
+
+Both arms drew identical windows. The final evaluation covers the 512 evenly spaced development windows of `joint-read-geometry`: 131,072 targets, the same windows as cycle 3's context-256 finals.
+
+Final NLL in nats per token, with bits per byte in parentheses:
+
+| Learning rate | Transformer control | Geometric stack | Stack − control |
+|---|---:|---:|---:|
+| 1e-3 | 2.8608 (1.1503) | 2.7851 (1.1199) | −0.076 |
+| 2e-3 | **2.7680** (1.1130) | 2.6790 (1.0772) | −0.089 |
+| 4e-3 | 2.8339 (1.1395) | **2.6097** (1.0494) | −0.224 |
+
+- **Selection.** The rule was fixed before any pilot run finished: each arm's rate is the one with the lowest final NLL. That gives 2e-3 for the control and 4e-3 for the stack. At the selected rates the stack leads by **0.158 nats** (0.064 bits per byte).
+- **Fairness.** The control's best rate lies inside the grid. The stack's best rate is the grid's largest, so its optimum may be higher. The tuning therefore does not disadvantage the control.
+- **At every rate the stack leads.** At 4e-3 the control degrades (2.834) while the stack keeps improving. The stack also trains stably at a rate that is too high for the control.
+- **Context, not a matched comparison.** The retained native learner of cycle 3 scored 3.119–3.124 with the flat Lorentz read and 3.169–3.185 with the Dot read, on the same windows and data after the same 4.1M target visits. It had width 128 and about 0.69M parameters. Both 7.2M-parameter arms here are 0.35–0.58 nats better. That gap is mostly capacity, which is the premise of this cycle, not a mechanism comparison.
+- **Samples.** Greedy continuations of three development prompts fall into repetition loops in both arms at this budget, for example a repeated `use std::path::PathBuf;` line. The report roots keep all six arms' greedy and sampled continuations.
+- **Throughput.** Two runs shared the 4-core sandbox, with two threads each, at 942–1,222 tokens/s per run, or 3,353–4,350 s of training per run. Rounds 1 and 2 overlapped builds and tests of this branch and of #1410, so their rates are lower bounds.
+- **Identities.**
+  - Executable `fcf710ad…` (commit `dca1b790`, host-tuned release build).
+  - Training split `b12707b0…`, development split `3f7c50ef…`.
+  - Each report root binds its model SHA-256, settings, curve and samples.
+- **Scope.** One seed and a short budget. The 0.089–0.224 nat differences are several times the seed spread seen in cycle 3 (about 0.01–0.04), but they measure early training. The main comparison (§6) measures the endpoint.
 
 ## 6. Main comparison
 
