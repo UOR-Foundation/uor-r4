@@ -85,6 +85,37 @@ impl Tables {
             arcosh_sha256,
         })
     }
+
+    pub fn synthetic_for_test() -> Self {
+        let mut sigmoid = Vec::with_capacity(ENTRIES);
+        let mut tanh = Vec::with_capacity(ENTRIES);
+        let mut exp = Vec::with_capacity(ENTRIES);
+        for i in 0..ENTRIES {
+            let s = ((i as i64 * 32768) / (ENTRIES as i64 - 1)) as i32;
+            let t = (((i as i64 - 32767) * 16384) / 32767) as i32;
+            let shift = (i / 1024).min(48) as u32;
+            let e = TOTAL >> shift;
+            sigmoid.push(s);
+            tanh.push(t);
+            exp.push(e);
+        }
+        sigmoid[32767] = 16384;
+        tanh[32767] = 0;
+        exp[0] = TOTAL;
+        for i in 1..ENTRIES {
+            if exp[i] > exp[i - 1] {
+                exp[i] = exp[i - 1];
+            }
+        }
+        Self {
+            sigmoid,
+            tanh,
+            exp,
+            arcosh: None,
+            sha256: "synthetic_tables_hash".to_owned(),
+            arcosh_sha256: None,
+        }
+    }
 }
 
 /// The Lorentz read's arcosh table: bound metadata, monotone Q24 values, and

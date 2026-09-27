@@ -495,6 +495,19 @@ mod tests {
         assert!(metadata["numerical_contract"]
             .as_str()
             .is_some_and(|text| text.contains("lorentz read")));
+        // Partitioned conversational memory scores by the dot read only, so it
+        // refuses a Lorentz model instead of computing the wrong scores.
+        let model = served.model();
+        let mut conversation = model.new_conversational_session();
+        let Err(error) = model.step_conversational(
+            &mut conversation,
+            5,
+            uor_r4_integer::SlotTarget::Dialogue,
+            ReadMode::Enabled,
+        ) else {
+            return Err(invalid("conversational step accepted a Lorentz model"));
+        };
+        assert!(error.to_string().contains("dot-read"), "{error}");
         let accepted = test_root("bundle-accepted")?;
         assert!(bundle::pack(&packed, &tables, &tokenizer_file, &accepted).is_err());
         for directory in [tables, packed, tokenizer, root, accepted] {
