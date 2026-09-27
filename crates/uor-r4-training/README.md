@@ -9,6 +9,32 @@ the process supervisor monitors RSS, storage and elapsed time. This crate makes
 no heapless or allocation-free steady-state guarantee. Portable serving crates
 retain their separate stricter contracts.
 
+## Complete-prefix native dialogue learning
+
+`dialogue-prefix-fit` connects the strict retained R1d parameter import to exact
+complete-response episodes, token-counted gradient shards, fresh Adam learning,
+sealed offline checkpoint reload and actual exact-token replies. The
+[executed integration](../../docs/integration/dialogue-prefix-implementation-2026-09-27.md)
+contains the two-update campaigns and complete evidence; useful chat and the
+substantive paired study remain open.
+
+```sh
+UOR_BUILD_SOURCE_COMMIT="$(git rev-parse HEAD)" cargo build --release --offline \
+  -p uor-r4-training --features cpu-accelerate --example dialogue-prefix-fit
+target/release/examples/dialogue-prefix-fit CAMPAIGN_JSON NEW_REPORT_ROOT
+```
+
+The campaign binds the retained parameters, prepared manifest, tokenizer, open
+request file, expected response population, prefix policy, counter seeds,
+optimizer, update endpoint, development and resource limits. `full_prefix` and
+`role_only` receive identical selected response/EOS targets. Both evaluate true
+full prefixes. A resume must match the source and learning contract, keeps the
+data/optimizer clock, and extends the same update-wise schedule hash chain.
+The witnessed fresh save/reload does not establish next-update resume equivalence.
+Use the prospective whole-process supervisor/resource projection as well as the
+driver's soft update deadline. This is the offline F32 width-576 path, without
+widening canonical or integer loaders.
+
 ## Integer numerical execution bridge
 
 `joint_integer.rs` re-exports the shared standalone implementation that loads validated signed codes and runs learned full-context
@@ -58,6 +84,7 @@ uor-r4-training joint-round-fit RESOLVED_ROUNDING_RECIPE_JSON NEW_REPORT_ROOT [S
 uor-r4-training joint-bound-fit BOUNDED_CAMPAIGN_JSON NEW_REPORT_ROOT [SEALED_BOUNDED_CHECKPOINT]
 uor-r4-training joint-evaluate-admission PACKED_EXPORT EVALUATOR_JSON NEW_REPORT_ROOT cpu {read|no-read} BATCH {full|recent64|recent32|orthant64|exact_cache64}
 uor-r4-training joint-emission-trace CAMPAIGN_JSON SEALED_CHECKPOINT RETAINED_GENERATIONS_JSON NEW_REPORT_ROOT cpu {read|no-read}
+uor-r4-training joint-selection-replay CAMPAIGN_JSON SEALED_CHECKPOINT RETAINED_EVALUATE_ROOT NEW_REPORT_ROOT cpu
 ```
 
 The [frozen campaign](../../docs/integration/joint-recurrent-campaign-2026-09-24.md) specifies the graph, training exposure, resource ceilings, checkpoint selection and capability criteria. `JointModel` exposes the same causal core for differentiable unrolls and detached incremental sessions. It reads only earlier occurrences, updates recurrent state using the read, then writes the current contextual key/value. Exact observed token/occurrence identity is retained alongside learned vector compatibility. A normalized vocabulary/copy mixture supplies the language loss; targets enter only that loss.

@@ -151,7 +151,7 @@ pub fn run_cli(args: &[String]) -> Result<()> {
     result
 }
 
-fn new_output_path(path: &Path) -> Result<PathBuf> {
+pub(crate) fn new_output_path(path: &Path) -> Result<PathBuf> {
     if path
         .components()
         .any(|part| matches!(part, Component::ParentDir))
@@ -412,7 +412,7 @@ fn compare(
     Ok(())
 }
 
-fn read_json(path: &Path) -> Result<Value> {
+pub(crate) fn read_json(path: &Path) -> Result<Value> {
     if fs::metadata(path)?.len() > 2 * 1024 * 1024 {
         return Err(invalid(format!(
             "comparison metadata exceeds 2MiB: {}",
@@ -432,7 +432,7 @@ fn digest_field(value: &Value, field: &str, length: usize) -> Result<()> {
     Ok(())
 }
 
-fn read_input(
+pub(crate) fn read_input(
     root: &Path,
     name: &str,
     report_file: &str,
@@ -518,7 +518,7 @@ fn gradient_shards(value: &Value) -> Result<u64> {
     }
 }
 
-fn validate_joint(report: &Value, transport: Transport, mode: ReadMode) -> Result<()> {
+pub(crate) fn validate_joint(report: &Value, transport: Transport, mode: ReadMode) -> Result<()> {
     let evaluation = &report["evaluation"];
     let config: JointConfig = serde_json::from_value(report["campaign"]["model"].clone())?;
     config.validate()?;
@@ -579,6 +579,16 @@ fn validate_joint(report: &Value, transport: Transport, mode: ReadMode) -> Resul
     digest_field(binding, "model_sha256", 64)?;
     digest_field(binding, "source_commit", 40)?;
     let declared: crate::joint_campaign::Campaign = serde_json::from_value(campaign.clone())?;
+    crate::joint_campaign::validate_read_initialization_binding(&declared, binding)?;
+    crate::joint_transfer::validate_binding(&declared, binding)?;
+    if report["shared_parameter_transfer"] != campaign["shared_parameter_transfer"]
+        || report["transfer_receipt"] != binding["transfer_receipt"]
+    {
+        return Err(invalid("evaluation/campaign transfer provenance differs"));
+    }
+    if report["read_initialization"] != campaign["read_initialization"] {
+        return Err(invalid("evaluation/campaign read initialization differs"));
+    }
     crate::joint_campaign::validate_projection_binding(
         &declared,
         binding,
@@ -776,6 +786,15 @@ fn validate_pairs(reports: &[Value]) -> Result<()> {
     }
     let q = &reports[0]["campaign"];
     let ordinary = &reports[2]["campaign"];
+    if !q["shared_parameter_transfer"].is_null() || !ordinary["shared_parameter_transfer"].is_null()
+    {
+        return Err(invalid(
+            "joint-compare does not define transferred-parent matching; radial score-law studies require their declared comparison",
+        ));
+    }
+    if q["read_initialization"] != ordinary["read_initialization"] {
+        return Err(invalid("transport arms differ in read initialization"));
+    }
     let q_quantization = &q["quantization_transition"];
     let ordinary_quantization = &ordinary["quantization_transition"];
     if q_quantization.is_null() != ordinary_quantization.is_null() {
@@ -872,20 +891,26 @@ fn validate_pairs(reports: &[Value]) -> Result<()> {
             )));
         }
     }
-    // Absent read_geometry is JSON null for retained dot-read arms.
-    for field in [
-        "vocab_size",
-        "width",
-        "read_width",
-        "context",
-        "seed",
-        "read_geometry",
-    ] {
+    for field in ["vocab_size", "width", "read_width", "context", "seed"] {
         if q["model"][field] != ordinary["model"][field] {
             return Err(invalid(format!(
                 "transport arms differ in shared model {field}"
             )));
         }
+    }
+    // Missing metadata means the retained Dot operator. Transport comparisons
+    // must not silently compare different read operators.
+    let read_geometry = |model: &Value| -> Result<crate::joint_model::ReadGeometry> {
+        Ok(model
+            .get("read_geometry")
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose()?
+            .unwrap_or_default())
+    };
+    if read_geometry(&q["model"])? != read_geometry(&ordinary["model"])? {
+        return Err(invalid(
+            "transport arms differ in shared model read_geometry",
+        ));
     }
     for field in [
         "source_commit",
@@ -1065,7 +1090,7 @@ fn bytes<const N: usize>(reader: &mut impl Read) -> Result<[u8; N]> {
     reader.read_exact(&mut value)?;
     Ok(value)
 }
-fn joint_row(
+pub(crate) fn joint_row(
     reader: &mut BufReader<File>,
     offset: usize,
     target: u32,

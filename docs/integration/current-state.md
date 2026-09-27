@@ -7,7 +7,13 @@ frontier, geometric-advantage or full-path energy qualification.**
 
 The owner has authorized the [fourth Codex research lab](../../.codex-lab/README.md)
 and shared GitHub/worktree coordination with Google, OpenCode/DeepSeek/Kimi and
-Claude. The [canonical roadmap](project-track.md#four-lab-research-programme--owner-direction-september-26)
+Claude. **Owner clarification, September 27:** “Keep the native,
+multiplier-free serving target.” This lab does not adopt D10's converted
+transformer backbone or hardware serving-multiplier exceptions. Offline Rust
+learning remains permitted under D0-b. Preserve the other session's historical
+record and source as research/comparators.
+[Shared clarification](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5852795279).
+The [canonical roadmap](project-track.md#four-lab-research-programme--owner-direction-september-26)
 orders geometric attention, inference, prose, chat and reasoning, with discovery
 branches allowed to revise the mechanism from evidence. The initial independent
 source review identifies a concrete training/chat role-token mismatch and
@@ -23,14 +29,221 @@ record the executed scope. No model fit or capability promotion
 follows from the lab setup. Accepted models and the continuation negative below
 remain unchanged. Other labs' active source and model jobs are preserved.
 
+The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
+and consistent optional stop-token handling. Six focused checks pass. A loaded
+accepted-bundle witness matches exact prefix IDs and all 16 prediction records
+across two selection policies against direct integer stepping; both short outputs
+remain incoherent for chat. The
+[adapter receipt](../evidence/dialogue-token-session-validation-2026-09-27.json)
+records actual text, source/artifact identity and cost. This is verified input
+and prediction transport, not trained chat. Existing chatbot CLI, corpus builder
+and panel adoption remain open. The separate width-576 dialogue artifact recovery
+is recorded below. No accepted bundle was changed.
+
+The [persistent conversation adapter](dialogue-continuity-2026-09-27.md) now
+retains generated IDs, pending tokens and categorical state across turns. It
+preflights each complete request and records model EOS separately from explicit
+caller closure; execution failure poisons the session. Five tokenizer and ten
+integer-generation checks pass. On the unchanged accepted bundle, a two-turn
+witness matches all eight prediction records and exact input history against
+direct integer stepping, with 36 total conversation steps and no prefix replay.
+The actual capped outputs are `“Is there the` and `1 asked the people`; this is
+verified token/state transport, not useful chat. The
+[source-bound result and complete cost](../evidence/dialogue-continuity-validation-2026-09-27.json)
+record 112.04 seconds of build/check work and 2.576 seconds of actual inference.
+Google retains CLI wiring ownership; this resolves its follow-up's
+[display-history reconstruction seam](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852795123)
+at the reusable library boundary, with adoption still pending.
+
+The [retained R1d dialogue artifact](dialogue-artifact-replay-2026-09-27.md) now
+reloads through a strict offline continuous Full/Dot/Quaternion importer. All
+four focused checks pass; an initial malformed tokenizer fixture and its repair
+remain in the cost record. A loaded 15-position full/incremental comparison has
+maximum probability delta 9.69e-7 and zero argmax disagreements. The fixed 38
+open development requests produced 58 actual responses with exact generated
+multi-turn history: 11 model EOS, 4 cycle and 43 token-cap stops. They contain
+conversational phrasing and some topic/fact reuse, but are repetitive, often
+irrelevant, and none of the eight factual replies supplies the requested fact.
+This is a preserved weak-output baseline, not useful chat. The
+[complete outputs and source/artifact/resource bindings](../evidence/dialogue-r1d-replay-2026-09-27.json)
+record 18.132 seconds of actual inference and 58,572,800 bytes peak child RSS.
+The historical fit remains 9,162,752 sampled positions; summing its per-update
+records gives 6,280,627 response-supervised positions, correcting a duplicated
+report field. Its bounded no-longer-fit decision remains; unstable extrapolated
+floors do not establish capacity as the cause. No training extension or integer
+loader widening follows. The frozen reader study and other labs' mechanisms
+remain independent.
+
+The [R1d training-context audit](dialogue-context-audit-2026-09-27.md) now
+reconstructs all 2,237 update denominators exactly. Of 6,280,627 response-target
+visits, 74.6033% start their input window inside the same response, with all
+pre-response context outside the window. This does not establish the cause of
+weak generated replies. Only 14,826/129,486 complete response prefixes fit
+within 256 total IDs; 89.4847% of that eligible response-run population comes
+from Everyday Conversations and Smol Constraints. A prefix-preserving option
+therefore requires explicit population/weighting choices and a matched control.
+The complete-prefix implementation below supplies that design while preserving
+the separate dialogue trainer owner's files. The audit itself performs no fit
+or filtering of retained artifacts. Three focused Rust checks pass; the data-only pass
+took 3.210 seconds with no model execution. The
+[receipt](../evidence/dialogue-context-audit-2026-09-27.json) binds source,
+inputs, rowwise reconstruction, result and cost.
+
 **Concurrent discovery:** the [fourth-lab native-read review](fourth-lab-native-read-review-2026-09-26.md)
 inspects Claude PR#1401's full-context Lorentz implementation and reported
-development results. Reuse its reader interface before a competing 2I
-integration; obtain its retained source/artifact packet and resolve the two
-reported bounded implementation defects. Independent replay and general
-language/M1 qualification remain unavailable or unmeasured at this review.
-That branch's D10 converted-backbone/arithmetic policy awaits owner
-clarification in this lab; native review does not adopt it implicitly.
+development results. Claude fixed the two reported implementation defects and
+guarded the conversational integration risks; PR #1401 is now merged. PR #1406
+supplies its [native packet](../evidence/native-lorentz-packet-2026-09-26/README.md),
+whose 104 listed file identities were verified by the fourth lab. Continuous
+checkpoints and several replay inputs remain external. The
+[radial read comparison](radial-read-control-2026-09-26.md) extends the merged
+reader with an offline affine control while preserving existing upstream paths.
+All six focused checks pass on source `48fd43c1`, covering the affine control
+and retained Dot/Lorentz and checkpoint paths; the
+[source-bound receipt](../evidence/offline-radial-read-validation-2026-09-27.json)
+records executed checks, prior attempts and complete elapsed accounting.
+Its implementation and a future language comparison have distinct scope.
+The optional unit-scale campaign initializer is now implemented and all four
+initializer plus two retained checkpoint checks pass. A source-bound startup
+observation executed by Antigravity was independently verified and preserved by
+the fourth lab, avoiding a duplicate run. Both readers have six finite nonzero
+language-gradient families and nonzero causal read mass on all four fixed
+full256 windows; no calibration correction is indicated. Supplementary
+untrained continuations remain incoherent and include a disclosed duplicate-BOS
+prompt condition. [Startup evidence and exact scope](../evidence/radial-unit-start-validation-2026-09-27.json).
+The [explicit shared-parameter transfer](radial-parameter-transfer-2026-09-27.md)
+is now implemented for both radial arms. It copies the retained negative
+step15,672 Dot candidate's21 shared arrays, records its64,192,512 historical
+target visits, and starts a new lineage with identical Adam resets and sampling
+seed240927. Saved children retain their own evolved weights, optimizer and
+historical transfer receipt. Ten source-bound focused checks pass. A single
+183.70-second zero-update observation at the learned query/key scale completed:
+both readers have finite nonzero measured gradient arrays and no zero causal
+read positions across four fixed full256 windows. Initial NLL is2.389537 versus
+2.400457; both eight-token outputs are `toys. One day, he found a`. These are
+startup observations, not fitted advantage or prose qualification. The
+[source, output and resource receipt](../evidence/radial-parameter-transfer-validation-2026-09-27.json)
+binds the actual copied arrays and sealed report. No calibration sweep is
+indicated. The same-geometry Dot parameter-only reset is now implemented, with
+four focused checks passing for transfer, receipt compatibility and persisted
+resume across all three geometries. One actual zero-update witness preserves
+all 21 arrays, complete predictions on the same four full256 windows, and eight
+generation decisions exactly against the independently loaded parent. Its fresh
+Adam and per-parameter clocks start at zero. Initial Dot NLL is 1.996717, so the
+radial startup losses above show an initial disturbance rather than a fitted
+advantage. The Dot continuation is `toys and read them all day.` at the eight-token
+cap; this remains a tiny observation, not prose qualification.
+[Source, actual output and cost](../evidence/dot-reset-validation-2026-09-27.json)
+are retained. The [matched adaptation plan](radial-adaptation-study-2026-09-27.md)
+selects one 1,024-update screen per arm, with a descriptive checkpoint at 512 and
+the final endpoint as the sole comparison. The complete twelve-hour local
+process/evaluation projection is recorded. Source `488e3976` supplies the scoped
+seven-root comparison and opt-in greedy prose supplement; three focused release
+checks and three CLI rejection cases pass. The existing `joint-compare` contract
+is unchanged. The fixed comparison is now complete: all three fits reached
+1,024 updates /
+4,194,304 new visits, followed by six full evaluations and successful greedy
+supplementation. Full development NLL is 1.999366810 Dot, 2.045765725 Lorentz and
+2.012669715 Affine. Both radial arms are worse than Dot on all three partitions.
+Complete source answers are 21/32, 14/32 and 19/32 respectively. Principal and
+independent review agree on sampled 0/5 each and greedy 1/5, 2/5, 1/5, preserving
+individual borderline readings. Lorentz's isolated greedy gain does not offset
+its likelihood/source regressions. Dot itself retains source turnover and weak
+prose; no new model is promoted.
+
+The [completed result](radial-adaptation-result-2026-09-27.md) parks these radial
+transfer configurations at the fixed dose, preserving all artifacts and useful
+partial findings. Its [source-bound packet](../evidence/radial-adaptation-result-2026-09-27.json)
+records actual outputs, paired population/source differences, independent review,
+source/binary/weight identities and complete cost components. No extra fit,
+initializer, seed or decoder sweep follows. This does not reject geometric
+readers or establish integer/energy advantage. The [complete-prefix dialogue learner](dialogue-prefix-implementation-2026-09-27.md)
+now executes that independent intervention: two fresh two-update witnesses use
+identical 32 response visits / 1,991 response-EOS targets, global token-mean
+gradients, exact parameter/Adam checkpoint reload and actual replies. Eight
+focused Rust checks pass. Both saved models reproduce last-batch loss exactly;
+neither answers Paris or recalls Alex in the final memory turn. All ten replies,
+source identities and the 40.528-second combined process wall cost are retained
+in its [packet](../evidence/dialogue-prefix-implementation-2026-09-27.json).
+This is integrated execution, not useful chat or conditioning advantage. The
+substantive 1,024-update pair remains NOT_RUN. Next freeze source-stratified open
+development IDs/reporting, the existing open request panel and a complete
+prospective cost before that one paired study; restart from the retained parent,
+not the two-update descendants. Other labs retain their CLI, trainer and deeper
+stack ownership. Native, multiplier-free serving remains the target.
+
+The fourth lab's [source review of Google PR #1410 at `9722200c`](https://github.com/UOR-Foundation/uor-r4/pull/1410#issuecomment-5851958824)
+identifies useful serving optimization alongside unresolved integration and
+evidence issues: conversational Lorentz remains guarded, the CLI retains role
+fallbacks, BPE salience interprets token IDs as characters, and synthetic phase
+and selected-byte checks do not qualify generated reasoning/recall. Its claimed
+MinP prose repair and complete-path memory measurements are not established by
+the cited source. Those findings do not change accepted artifacts or the native model's current
+capability status. PR #1410 subsequently merged as `5d3a9932`; a merge and its
+compatibility acknowledgements alone do not resolve the evidence boundaries.
+Its merged files match the reviewed `9722200c` files, so the recorded findings
+remain. The merge changes integer execution, not the continuous transfer/model
+path measured in the Dot witness. Future integer measurements must bind this
+changed source separately.
+
+
+Claude's [draft stack experiment, PR #1414](https://github.com/UOR-Foundation/uor-r4/pull/1414)
+now has a reviewed six-pilot packet at `dc721f0a`: all 31 listed file identities
+match. Each pilot used 1,000 updates / 4,096,000 visits at one seed, with final
+evaluation on 131,072 exposed development targets. The selected geometric
+lr0.004 NLL is 2.609729 versus the selected transformer lr0.002 control's 2.768041.
+This compares tuned architecture packages at similar parameter counts, not
+curvature alone. Independent review of all 36 sampled/greedy continuations finds
+repetition, malformed code and no useful coding/prose result. The packet records
+12,066 seconds elapsed over three pilot rounds; the sum of process durations is
+22,989 seconds and is not CPU time or complete preparation/build cost.
+[Packet review and limitations](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5853505407).
+Current head `35d8da2f` corrects the high-rate control wording to underperformance.
+Source fixes for resume and scan/drive-bound claims remain separate from older
+executed binaries. Six raw model weights and two executables are still external;
+the fourth lab has designated an owner-SSD intake and requested an immutable
+transfer, with payload verification pending.
+[Preservation coordination](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5853595061).
+This complementary Claude-owned track has no integrated integer/session path
+and neither supplies the matched Dot control nor changes its dose or serving
+policy. Its package-level likelihood result keeps deeper architecture as a
+candidate; useful generated behavior remains required.
+
+The separately owned termination-objective study has a
+[source-verified weighted-shard normalization/reporting defect](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852801075)
+at `c54d7801`: shard-normalized weighted losses are combined by equal batch mass,
+so unequal boundary counts differ from a global weighted mean; its training
+curve also records weighted loss as `batch_mean_nll`. Standard development
+metrics remain unweighted. The four fits and eight full evaluations are now
+complete. The [fourth-lab result review](termination-objective-review-2026-09-27.md)
+classifies this implemented dose as **INERT: no automatic extension**. Weighted
+full Read NLL is worse than plain by 0.009439 and 0.012453. All 20 sampled Read
+stories fail complete prose criteria; both plain and weighted groups select
+EOS in 2/10 outputs. The original 20 source failures yield only three weighted
+resolutions beyond plain, below the declared four; only two are closure fixes.
+All 128 new source outputs use the caller's first-period stop, not model EOS.
+The declared numerical, source-retention and terminal-cycle guardrails hold at
+this saved-packet scope. Preserve the modest source gains and remaining errors,
+without attributing this result to the known objective defect. Future adoption
+needs the correction, but no repair-fit follows automatically. The
+[derived output/identity packet](../evidence/termination-objective-review-2026-09-27.json)
+keeps the parent/control row join and recorded cost components. Owning-lab full
+resource reconciliation remains open; overlapping shared elapsed must not be
+charged again. The frozen unweighted reader study is unaffected.
+
+After the optional weighted objective entered mainline, the current-source
+fixed reader comparator now explicitly rejects any `end_weight` override.
+Three focused optimized Rust checks pass, including actual campaign
+deserialization for Dot, Lorentz and Affine: historical omission and null stay
+accepted, while explicit weights are rejected. The
+[source-bound guard receipt](../evidence/reader-objective-guard-2026-09-27.json)
+records 46.57 seconds of build/check work and the scope. Training arithmetic and
+the frozen running study are unchanged. Source/result descriptions now distinguish
+weighted training loss from ordinary evaluation and non-timing witness agreement
+from identical files. An
+[overlapping termination delivery charge was reconciled](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5853741962)
+against 18 linked receipts, removing 17,348,658 ms of duplicate shared wall time
+while preserving original records and unchanged resource limits.
 
 ## Decision and active work
 
@@ -57,9 +270,18 @@ completed without meeting coherent-language criteria. Preserve the accepted
 parents and close exposure-only fitting. The recommended same-checkpoint
 emission/selection diagnostic is now executed read-only at the same step-15,672
 artifacts; its witnessed malformed decisions are predominantly low-probability
-draws from the model's own ranking, so the selection interface is supported for
-a later bounded experiment, while the retained greedy source-panel regressions
-remain a separate ranking-side obligation. Admission pruning remains deferred.
+draws from the model's own ranking. The follow-on selection-policy diagnostic is
+now executed too: with the draw removed the sampled malformed clauses do not
+recur, but greedy prose still misses the frozen acceptability bar (quaternion
+2/5, ordinary pair 0/5) and the greedy source panel still fails 11/32 and 9/32
+rows, so ranking/emission was the supported next target. The bounded
+termination-weighted objective experiment is now executed and returns INERT: at
+2.5× on sentence-final targets over 1,024 updates (4.19M targets per arm) it adds
+only 3 unique source rows beyond a dose-matched plain continuation (0 unique
+losses) and leaves sampled prose at0/5, while the plain dose already recovers12
+of20 failing rows; guardrails hold and standard development NLL is slightly
+worse for the treatment. Termination weighting is a weak lever at this dose; the
+next rung is the state/read path. Admission pruning remains deferred.
 The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged.
 
 ## Latest result: completed continuation, useful-language target unmet
@@ -106,7 +328,9 @@ track does not change the work card below.
     arithmetic are unchanged.
   - The Lorentz read adds two learned signed 16-bit scalars (log β and δ) beside
     the ≤4-bit weight maps, plus a Q32 scale derived at load. They are not 4-bit
-    parameters; whether D10 admits them awaits the owner's clarification.
+    parameters. This lab's native/multiplier-free clarification does not silently
+    qualify their precision under D0-b; any serving adoption must state the
+    exact parameter and arithmetic contract.
   - After 300 quantization-aware updates, 4-bit integer serving is within 0.035
     nats of equal float fine-tunes and keeps the Lorentz advantage (−0.062 and
     −0.059 nats)
@@ -450,6 +674,46 @@ listed only in the result's [delivery section](language-continuation-result-2026
   better-ranked token is not a coherent alternate trajectory.
 - **Stop:** this packet is closed. #973 and #820 remain open at their wider
   acceptance scope.
+
+### Executed: same-checkpoint selection-policy diagnostic (September 27)
+
+- **Executed read-only** from the [predeclared plan](selection-policy-diagnostic-plan-2026-09-27.md)
+  and [result](selection-policy-diagnostic-result-2026-09-27.md): deterministic
+  greedy replay at the same step-15,672 checkpoints. The greedy source panel
+  reproduced the retained `story-probes.json` exactly (`PARITY_EXACT`, 0
+  mismatches; complete answers21/32 quaternion,23/32 ordinary pair), and the five
+  frozen prompts were replayed with the draw removed.
+- **Witnessed result:** all five greedy trajectories diverge within the first
+  three tokens, so the sampled malformed clauses do not recur; nevertheless
+  greedy prose stays below the frozen acceptability bar in both arms (quaternion
+  2/5, ordinary pair0/5) and the greedy source panel keeps failing11/32 and9/32
+  rows. The independent evidence auditor returned identical verdicts.
+- **Supported next target:** ranking/emission, on the concrete greedy regression
+  rows (lost versus the accepted parent:9 and6 complete answers) and the two
+  dominant modes (correct-noun-then-extra phrase13/20; wrong first noun7/20). No
+  promotion and no weight/serving-decoding change; selection policy did not reach
+  the positive branch.
+- **Correction:** the plan's `5/2`/`7/4` citation is the new hard artifact's row,
+  not this continuous panel's (`9/2` and `6/5`); the plan carries a corrigendum.
+- **Stop:** this packet is closed. #973 and #820 remain open at their wider scope.
+
+### Executed: termination-weighted objective experiment (September 27)
+
+- **Executed** from the [predeclared plan](termination-objective-plan-2026-09-27.md)
+  and [result](termination-objective-result-2026-09-27.md): four sequential fits from the
+  step-15,672 parents (1,024 updates /4,194,304 targets each) comparing an additive
+  `end_weight=2.5` on sentence-final targets against a dose-matched plain continuation.
+- **Witnessed result:** `INERT`. The treatment uniquely resolves3 source rows (2
+  non-termination +1 wrong-noun) with zero unique losses, but the plain dose alone
+  recovers12 of20 failing rows, sampled five-prompt prose stays0/5 in all four finals
+  (principal and independent audit agree), and the standard development NLL is slightly
+  worse for the treatment. Guardrails hold.
+- **Decision:** stop the termination-weighting branch; the residual entity/role collapse
+  and cap-truncation failures place the next rung in the state/read path (cross-lab
+  native radial reader comparison, or a conditional depth hypothesis). No promotion; the
+  plan's INERT band is recorded as treatment-minus-control and the judgment sensitivity
+  is disclosed.
+- **Stop:** this packet is closed. #973 and #820 remain open at their wider scope.
 
 The full256 baseline is finite; terminal D5 parameter sparsity remains open.
 Standalone integer generation is **executed at the scoped numerical boundary**.

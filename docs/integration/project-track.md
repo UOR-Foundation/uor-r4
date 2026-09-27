@@ -9,6 +9,12 @@ defines specialist coverage, recursive source review and cross-lab ownership.
 This section extends the programme; the retained artifacts, historical results
 and D8 learning ladder below keep their exact scope.
 
+The owner's September 27 answer for this lab is **native, multiplier-free
+serving**. This fourth lab does not adopt D10's converted-backbone or hardware
+serving-multiplier exceptions. Offline Rust learning remains permitted under
+D0-b; other labs' historical records and comparator implementations are retained.
+[Owner clarification](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5852795279).
+
 The working order is **geometric attention → efficient inference → general
 prose → chat → reasoning/coding**. Research may proceed in parallel when
 dependencies and file/resource ownership permit. Useful generated behavior and
@@ -43,7 +49,102 @@ their programme/model responsibilities.
 identified an existing native Lorentz read/configuration/export interface.
 Review and reuse that seam before adding a competing finite-group reader;
 retain radius/initialization controls and the reported numerical limitations.
-Its separate proposed D10 backbone/arithmetic policy is not implicitly adopted.
+Its separate D10 backbone/arithmetic exceptions are not adopted by this lab under
+the owner clarification above.
+The [offline radial comparison](radial-read-control-2026-09-26.md) is implemented:
+it adds an affine tangent score to the continuous Lorentz reader with the same
+lifted radial information and learned scalar count. This distinguishes nonlinear
+distance weighting from the lift itself. Its explicit shared unit-scale
+initializer and fixed-prefix startup observation now establish active language
+credit in both untrained readers at that scope. The old default is preserved and
+new campaign/checkpoint provenance binds the override. The
+[shared-parameter transfer](radial-parameter-transfer-2026-09-27.md) now preserves
+all shared learned Dot arrays in a new adaptation lineage with identical Adam
+resets and a new common sampling stream. The single learned-parent startup
+observation completed with connected finite gradients and unchanged parameters;
+no calibration correction is indicated. The explicit same-geometry Dot reset
+control now preserves the actual parent's arrays, predictions and generated
+decisions while beginning a fresh optimizer lineage. The
+[fixed adaptation screen](radial-adaptation-study-2026-09-27.md) selects 1,024
+updates per arm with one descriptive midpoint. Its complete local resource
+projection is recorded and its Rust analysis preserves matched transfer,
+execution, data and output identities. Lorentz versus affine
+isolates the nonlinear score within this representation;
+a fitted practical improvement claim also needs that Dot control with the same
+reset, objective, stream and exposure.
+The future language comparison must report calibration differences and useful generated behavior;
+implementation checks do not trigger a training sweep or serving promotion.
+Keep the independently owned termination objective separate. Exact-token
+dialogue adoption can advance through the retained integer session while these
+learning conditions are resolved. The [persistent conversation adapter](dialogue-continuity-2026-09-27.md)
+now preserves exact generated history, explicit turn closure and continued
+sampler state; focused checks and a short actual two-turn transport witness pass.
+Google retains CLI adoption. This is an integration result, not learned-chat
+qualification or a reason to change the frozen reader study.
+
+The separate [R1d artifact replay](dialogue-artifact-replay-2026-09-27.md) now
+closes its retained response learner's fit→reload→output gap. Actual replies
+remain weak and repetitive, with some topic/fact reuse; practical chat remains
+open. Preserve it as a diagnostic baseline and retain the bounded decision
+against another automatic fit. Its curve extrapolation does not identify a
+capacity floor or eliminate data/objective explanations. Select the next native
+learning change from this output evidence together with the completed matched
+reader and termination results and the separately scoped stack evidence.
+Integer width adoption remains separate.
+
+The [training-context diagnostic](dialogue-context-audit-2026-09-27.md) makes
+request-preserving sampling a concrete candidate: most actual response-target
+exposure lacked its original pre-response prefix. A full-prefix length filter
+also excludes most responses and changes source composition sharply. Choose
+and report that data population explicitly with the dialogue branch owner.
+The [selected complete-prefix plan](dialogue-prefix-learning-plan-2026-09-27.md)
+uses the same complete responses and genuine EOS in both arms, with original
+versus role-only prefixes and a shared global response-token objective. This
+refines the earlier historical-suffix-control proposal: removing arbitrary answer
+prefixes would also change which early reply tokens receive training. The new
+control directly compares conditional with role-only response learning; it does
+not reconstruct the historical sampler or identify that sampler as the cause of
+failure. The [integrated parameter-start → learning → save/reload → actual
+reply path](dialogue-prefix-implementation-2026-09-27.md) is now executed in two
+matched two-update witnesses. Eight focused checks pass, but actual replies
+remain weak. Freeze source-stratified open-development IDs/reporting and complete
+resources before one substantive 1,024-update pair from the retained parent.
+This study is NOT_RUN; foreign trainer and CLI ownership remain preserved.
+
+The [completed termination-objective review](termination-objective-review-2026-09-27.md)
+parks the implemented weighting condition as INERT. Its three improvements on
+the original 20 failed source rows fall below the declared four, and actual
+sampled prose supplies no additional acceptable story. Preserve the modest
+source-completion gains, controls and remaining source errors; do not extend the
+dose automatically or rerun merely because a known normalization defect exists.
+The [completed fixed reader comparison](radial-adaptation-result-2026-09-27.md)
+now parks the transferred radial configurations: both lose to matched Dot on
+likelihood and complete source responses. Lorentz's isolated greedy story gain
+is preserved alongside concrete source regressions. Keep the native Dot path;
+no new serving operator, extra dose or seed sweep is selected. Advance the
+fixed complete-prefix dialogue study after its implemented integration
+witness and prospective work card. Deeper geometric state/read
+structure remains a complementary Claude-owned candidate; its distinct
+population and serving contracts remain explicit.
+
+
+**Parallel architecture exploration:** Claude's [Cycle 4 stack experiment](https://github.com/UOR-Foundation/uor-r4/pull/1414)
+investigates deeper quaternion recurrence and multi-head Lorentz reads against
+its own transformer control at similar parameter counts. The reviewed
+[six-pilot packet](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5853505407)
+supplies a development likelihood gain for the separately selected geometric
+package, with no useful generated coding/prose result. All 31 listed file
+identities were verified; raw model preservation is being coordinated on the
+owner SSD, with transfer/verification still pending. The input-content resume
+and scan/stability source corrections do not retroactively change older runs.
+Its implementation batches windows while scanning recurrence time sequentially;
+it has no integrated integer/session path. The [source review](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5852370380)
+records the concrete lineage and claim corrections, with the
+[delta review](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5852801270)
+confirming their resolution in new source. Keep this Claude-owned
+experiment complementary to the retained-reader comparison. Completed results
+may change the next architecture investment; an offline package comparison
+does not by itself isolate curvature, qualify efficient serving, or adopt D10.
 
 ## Active programme — learn the model, then harden its execution
 

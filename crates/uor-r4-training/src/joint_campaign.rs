@@ -1,5 +1,5 @@
 //! One persistent offline recurrent-memory learning campaign.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -15,9 +15,13 @@ use crate::baseline_protocol::{
     device, load_evaluator, read_tokens, save_json, verify_identity, Evaluator,
 };
 use crate::joint_evaluation::{self, STORY_PROBE_SCOPE, STORY_STOP_POLICY};
-use crate::joint_model::{JointConfig, JointModel, PrecisionMode, ReadMode};
+use crate::joint_model::{
+    JointConfig, JointModel, PrecisionMode, ReadGeometry, ReadMode, LORENTZ_LOG_BETA,
+    LORENTZ_OFFSET,
+};
 use crate::joint_optimizer::{AdamConfig, NamedAdamW};
 use crate::joint_quantization::QuantizationSpec;
+use crate::joint_transfer::{SharedParameterTransfer, TransferReceipt};
 use crate::{invalid, sha256_file, Result};
 
 /// A new window schedule starting from one exact, sealed parent checkpoint.
@@ -65,12 +69,24 @@ pub struct ProjectionTransition {
     pub reason: String,
 }
 
+/// Explicit fresh-start override shared by the two radial read operators.
+/// Absence retains the model constructor's historical initialization.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadInitialization {
+    UnitScale,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Campaign {
     pub schema: String,
     pub evaluator_path: PathBuf,
     pub model: JointConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_initialization: Option<ReadInitialization>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_parameter_transfer: Option<SharedParameterTransfer>,
     pub optimizer: AdamConfig,
     pub data_seed: u64,
     pub batch: usize,
@@ -94,6 +110,13 @@ pub struct Campaign {
     pub quantization_transition: Option<QuantizationTransition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub projection_transition: Option<ProjectionTransition>,
+    /// Loss multiplier for sentence-final/EOS targets in the training
+    /// objective; absent = 1.0 for every target (historical behavior). The
+    /// training `batch_mean_nll` is also weighted; development evaluation is not.
+    /// Multiple shards normalize locally, then combine by batch fraction, so
+    /// unequal shard weight totals do not implement a global weighted mean.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_weight: Option<f32>,
     pub trial_scope: String,
 }
 
@@ -122,7 +145,16 @@ impl Campaign {
             return Err(invalid("unsupported joint campaign configuration"));
         }
         cfg.model.validate()?;
+        cfg.validate_read_initialization()?;
+        if let Some(transfer) = &cfg.shared_parameter_transfer {
+            transfer.validate_declaration(&cfg)?;
+        }
         cfg.optimizer.validate()?;
+        if let Some(weight) = cfg.end_weight {
+            if !valid_end_weight(weight) {
+                return Err(invalid("end_weight must be finite and in (0, 16]"));
+            }
+        }
         if let Some(transition) = &cfg.training_window_transition {
             if !is_hex_digest(&transition.parent_checkpoint_sha256, 64)
                 || !is_hex_digest(&transition.parent_campaign_sha256, 64)
@@ -160,6 +192,78 @@ impl Campaign {
         validate_projection_declaration(&cfg)?;
         Ok(cfg)
     }
+
+    fn validate_read_initialization(&self) -> Result<()> {
+        if self.read_initialization.is_some()
+            && !matches!(
+                self.model.read_geometry,
+                ReadGeometry::Lorentz | ReadGeometry::LorentzAffine
+            )
+        {
+            return Err(invalid(
+                "unit_scale initialization requires a radial read operator",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Construct a fresh campaign model before optimizer creation or evaluation.
+    /// The optional unit-scale override changes only log(beta); a declared
+    /// parameter transfer then replaces the shared arrays. Resume must load its
+    /// evolved checkpoint instead of repeating either initialization step.
+    pub fn fresh_model(&self, device: &candle_core::Device) -> Result<JointModel> {
+        self.fresh_model_with_provenance(device)
+            .map(|(model, _)| model)
+    }
+
+    /// Initialize shared parameters once and retain the resulting immutable
+    /// lineage. Resume loads its own checkpoint and never calls this method.
+    pub fn fresh_model_with_provenance(
+        &self,
+        device: &candle_core::Device,
+    ) -> Result<(JointModel, Option<TransferReceipt>)> {
+        self.validate_read_initialization()?;
+        let mut model = JointModel::new(self.model.clone(), device)?;
+        if self.read_initialization == Some(ReadInitialization::UnitScale) {
+            model
+                .variables()
+                .get(LORENTZ_LOG_BETA)
+                .ok_or_else(|| invalid("radial model has no learned log(beta)"))?
+                .set(&candle_core::Tensor::new(&[0.0f32], device)?)?;
+        }
+        let receipt = if let Some(transfer) = &self.shared_parameter_transfer {
+            let evaluator = load_evaluator(&self.evaluator_path)?;
+            Some(transfer.apply(self, &evaluator.sha256, &mut model)?)
+        } else {
+            None
+        };
+        Ok((model, receipt))
+    }
+}
+
+pub(crate) fn validate_read_initialization_binding(cfg: &Campaign, binding: &Value) -> Result<()> {
+    cfg.validate_read_initialization()?;
+    // Missing legacy metadata and the omitted default both denote no override.
+    if binding["read_initialization"] != json!(cfg.read_initialization) {
+        return Err(invalid("checkpoint/campaign read initialization differs"));
+    }
+    Ok(())
+}
+
+fn same_read_initialization(a: &Campaign, b: &Campaign) -> Result<()> {
+    a.validate_read_initialization()?;
+    b.validate_read_initialization()?;
+    if a.read_initialization != b.read_initialization {
+        return Err(invalid(
+            "learning configuration changes read initialization",
+        ));
+    }
+    if a.shared_parameter_transfer != b.shared_parameter_transfer {
+        return Err(invalid(
+            "learning configuration changes shared-parameter transfer",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_projection_declaration(cfg: &Campaign) -> Result<()> {
@@ -232,6 +336,7 @@ fn projection_resume_transition(
     state: &Value,
     step: usize,
 ) -> Result<bool> {
+    same_read_initialization(cfg, old)?;
     projection_state_matches(cfg, state, step)?;
     match (&old.projection_transition, &cfg.projection_transition) {
         (None, None) => Ok(false),
@@ -288,6 +393,8 @@ fn validate_quantization_binding(
     state: &Value,
     step: usize,
 ) -> Result<()> {
+    validate_read_initialization_binding(cfg, checkpoint)?;
+    crate::joint_transfer::validate_binding(cfg, checkpoint)?;
     if checkpoint["quantization_transition"] != json!(cfg.quantization_transition)
         || checkpoint["quantization"] != *state
     {
@@ -320,6 +427,7 @@ fn quantization_resume_transition(
     campaign_sha: &str,
     step: usize,
 ) -> Result<bool> {
+    same_read_initialization(cfg, old)?;
     match (&old.quantization_transition, &cfg.quantization_transition) {
         (None, None) => Ok(false),
         (Some(previous), Some(current)) if previous == current => {
@@ -367,13 +475,32 @@ fn is_hex_digest(value: &str, length: usize) -> bool {
     value.len() == length && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+fn valid_end_weight(weight: f32) -> bool {
+    weight.is_finite() && weight > 0.0 && weight <= 16.0
+}
+
+/// Sentence-final boundary ids for the optional `end_weight` objective. Rows
+/// are `(id, lossy single-token decode)`; an id is a boundary target when its
+/// trimmed decode is `.`, `!` or `?`. The shared EOS id `1` is always included.
+/// The result is unique and sorted so it can be recorded verbatim.
+pub(crate) fn boundary_token_ids(decoded: &[(u32, String)]) -> Vec<u32> {
+    let mut ids = BTreeSet::new();
+    ids.insert(1u32);
+    for (id, text) in decoded {
+        if matches!(text.trim(), "." | "!" | "?") {
+            ids.insert(*id);
+        }
+    }
+    ids.into_iter().collect()
+}
+
 pub(crate) fn metadata(cfg: &Campaign, mode: &str, device_name: &str) -> Result<Value> {
+    cfg.validate_read_initialization()?;
     let source = option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNBOUND");
     if source == "UNBOUND" {
         return Err(invalid("joint campaign requires source-bound build"));
     }
-    Ok(
-        json!({"schema":"uor-r4.joint-recurrent-report/1", "mode":mode,
+    let mut report = json!({"schema":"uor-r4.joint-recurrent-report/1", "mode":mode,
         "source_commit":source,"executable_sha256":sha256_file(&std::env::current_exe()?)?,
         "campaign":cfg,"requested_device":device_name,
         "cpu_gradient_shards":cfg.cpu_gradient_shards,
@@ -381,8 +508,16 @@ pub(crate) fn metadata(cfg: &Campaign, mode: &str, device_name: &str) -> Result<
         "cpu_accelerate_compiled":cfg!(feature="cpu-accelerate"),
         "candle_source":"vendored0.9.2; four-line Accelerate operand slice correction; UPSTREAM.json",
         "deadline_scope":"max_process_seconds stops new updates; measured closeout allowance is budgeted separately",
-        "scope":"Offline recurrent-memory learner or quantized numerical emulator; no transformer backbone, compliant integer serving kernel, geometry promotion or energy claim"}),
-    )
+        "scope":"Offline recurrent-memory learner or quantized numerical emulator; no transformer backbone, compliant integer serving kernel, geometry promotion or energy claim"});
+    if let Some(initialization) = cfg.read_initialization {
+        report["read_initialization"] = json!(initialization);
+        report["read_initialization_scope"] = json!("Fresh construction sets read.lorentz_log_beta=0 (beta=1) and retains the constructor offset. Other variables retain constructor values unless the separately declared shared-parameter transfer replaces them with the bound parent arrays. Resume/evaluation retain loaded learned scalars. Model numerical-contract initialization text describes the constructor default before this campaign override.");
+    }
+    if let Some(transfer) = &cfg.shared_parameter_transfer {
+        report["shared_parameter_transfer"] = json!(transfer);
+        report["transfer_scope"] = json!("Explicit shared-parameter adaptation from the bound Dot parent; fresh optimizer and counter-sampler clocks. Parent exposure remains historical and is not included in local adaptation step counts. Resume retains the saved transfer receipt and evolved parameters without reopening the original parent.");
+    }
+    Ok(report)
 }
 
 fn splitmix(mut state: u64) -> u64 {
@@ -701,6 +836,7 @@ fn witness_entry_projection(
     Ok(report)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn save_checkpoint(
     model: &JointModel,
     optimizer: &NamedAdamW,
@@ -709,6 +845,7 @@ fn save_checkpoint(
     step: usize,
     status: &str,
     evaluator_sha: &str,
+    transfer_receipt: Option<&TransferReceipt>,
 ) -> Result<()> {
     save_checkpoint_with_calibration(
         model,
@@ -719,6 +856,7 @@ fn save_checkpoint(
         status,
         evaluator_sha,
         None,
+        transfer_receipt,
     )
 }
 
@@ -732,7 +870,17 @@ fn save_checkpoint_with_calibration(
     status: &str,
     evaluator_sha: &str,
     calibration: Option<&Value>,
+    transfer_receipt: Option<&TransferReceipt>,
 ) -> Result<()> {
+    cfg.validate_read_initialization()?;
+    crate::joint_transfer::validate_binding(
+        cfg,
+        &json!({
+            "shared_parameter_transfer": cfg.shared_parameter_transfer,
+            "transfer_receipt": transfer_receipt,
+            "evaluator_sha256": evaluator_sha,
+        }),
+    )?;
     let quantization = serde_json::to_value(model.quantization())?;
     quantization_state_matches(cfg, &quantization, step)?;
     projection_state_matches(cfg, &quantization, step)?;
@@ -760,6 +908,13 @@ fn save_checkpoint_with_calibration(
     });
     if let Some(transition) = &cfg.projection_transition {
         binding["projection_transition"] = json!(transition);
+    }
+    if let Some(initialization) = cfg.read_initialization {
+        binding["read_initialization"] = json!(initialization);
+    }
+    if let Some(transfer) = &cfg.shared_parameter_transfer {
+        binding["shared_parameter_transfer"] = json!(transfer);
+        binding["transfer_receipt"] = json!(transfer_receipt);
     }
     if let Some(calibration) = calibration {
         binding["shadow_calibration"] = calibration.clone();
@@ -797,6 +952,25 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         "Continuous F32 model; F32-origin quick_loss reductions."
     });
     let evaluator = load_evaluator(&cfg.evaluator_path)?;
+    // One identity-checked tokenizer load serves both the optional termination
+    // boundary set before training and the reload smoke generation afterward.
+    let tokenizer = load_tokenizer(&evaluator.document)?;
+    let decoded_ids = (0..tokenizer.vocab_size() as u32)
+        .map(|id| (id, tokenizer.decode(&[id])))
+        .collect::<Vec<_>>();
+    let boundary_ids = boundary_token_ids(&decoded_ids);
+    if cfg.end_weight.is_some() && boundary_ids.len() < 2 {
+        return Err(invalid(
+            "end_weight requires at least two termination boundary token ids",
+        ));
+    }
+    let boundary_set: BTreeSet<u32> = boundary_ids.iter().copied().collect();
+    report["end_weight"] = json!(cfg.end_weight);
+    report["boundary_token_ids"] = json!(boundary_ids);
+    report["boundary_tokens"] = json!(boundary_ids
+        .iter()
+        .map(|id| tokenizer.decode(&[*id]))
+        .collect::<Vec<_>>());
     // Reserve every checkpoint leaf before loading data or model. The final leaf
     // retains a clean resource-limited stop as well as a complete run.
     let final_path = out.join("checkpoint-final");
@@ -820,10 +994,12 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         .collect::<Result<Vec<_>>>()?;
     let dev = read_tokens(&evaluator.document["dev_source"])?;
     let selected = device(device_name)?;
-    let (mut model, mut optimizer, begin) = if let Some(path) = resume {
+    let (mut model, mut optimizer, begin, transfer_receipt) = if let Some(path) = resume {
         report_output::verify(path)?;
         let old = Campaign::load(&path.join("campaign.json"))?;
+        same_read_initialization(cfg, &old)?;
         let checkpoint: Value = serde_json::from_slice(&fs::read(path.join("checkpoint.json"))?)?;
+        let transfer_receipt = crate::joint_transfer::validate_binding(cfg, &checkpoint)?;
         let checkpoint_sha = sha256_file(&path.join("checkpoint.json"))?;
         let campaign_sha = sha256_file(&path.join("campaign.json"))?;
         let begin = usize::try_from(
@@ -953,11 +1129,11 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         report["window_sampler_continuation"] = json!(
             "Same counter algorithm and global step; a declared batch/context transition changes sampled windows and lane count, with no data-cursor or optimizer reset."
         );
-        (model, optimizer, begin)
+        (model, optimizer, begin, transfer_receipt)
     } else {
-        let model = JointModel::new(cfg.model.clone(), &selected)?;
+        let (model, transfer_receipt) = cfg.fresh_model_with_provenance(&selected)?;
         let optimizer = NamedAdamW::new(model.variables(), cfg.optimizer.clone())?;
-        (model, optimizer, 0)
+        (model, optimizer, 0, transfer_receipt)
     };
     report["evaluator_sha256"] = json!(evaluator.sha256);
     report["training_sources"] = evaluator.document["train_sources"].clone();
@@ -968,6 +1144,19 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         .map(|v| v.elem_count())
         .sum::<usize>());
     report["starting_step"] = json!(begin);
+    if let Some(receipt) = &transfer_receipt {
+        report["transfer_receipt"] = json!(receipt);
+        report["shared_parameter_transfer_applied_this_process"] = json!(resume.is_none());
+    }
+    if cfg.read_initialization.is_some() {
+        report["read_initialization_applied_this_process"] = json!(resume.is_none());
+        report["starting_radial_scalars"] = json!({
+            "read.lorentz_log_beta": model.variables().get(LORENTZ_LOG_BETA)
+                .ok_or_else(|| invalid("radial model has no learned log(beta)"))?.to_vec1::<f32>()?,
+            "read.lorentz_offset": model.variables().get(LORENTZ_OFFSET)
+                .ok_or_else(|| invalid("radial model has no learned offset"))?.to_vec1::<f32>()?
+        });
+    }
     report["starting_sampled_target_visits"] = json!(begin * cfg.batch * cfg.context);
     report["initial_quantization"] = serde_json::to_value(model.quantization())?;
     report["initial_training_quantization_strength"] = json!(model.training_strength());
@@ -1024,10 +1213,23 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         let step_started = Instant::now();
         let quantization_strength = model.training_strength();
         let (inputs, targets) = training_batch(&stores, cfg, step)?;
+        let target_weights = cfg.end_weight.map(|weight| {
+            targets
+                .iter()
+                .map(|target| {
+                    if boundary_set.contains(target) {
+                        weight
+                    } else {
+                        1.0
+                    }
+                })
+                .collect::<Vec<f32>>()
+        });
         let gradients = crate::joint_parallel::batch_gradients(
             &model,
             &inputs,
             &targets,
+            target_weights.as_deref(),
             cfg.batch,
             cfg.context,
             cfg.cpu_gradient_shards,
@@ -1092,6 +1294,7 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
                 complete,
                 "INTERMEDIATE",
                 &evaluator.sha256,
+                transfer_receipt.as_ref(),
             )?;
         }
     }
@@ -1127,6 +1330,7 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
         complete,
         status,
         &evaluator.sha256,
+        transfer_receipt.as_ref(),
     )?;
     // Actual artifact reload; generation/evaluation consume this same checkpoint.
     let restored = JointModel::load(&final_path, &selected)?;
@@ -1155,7 +1359,6 @@ pub fn fit(cfg: &Campaign, out: &Path, device_name: &str, resume: Option<&Path>)
     {
         return Err(invalid("loaded recurrent checkpoint changed retained loss"));
     }
-    let tokenizer = load_tokenizer(&evaluator.document)?;
     let smoke = joint_evaluation::generate(
         &restored,
         &tokenizer,
@@ -1209,6 +1412,9 @@ pub fn run_cli(args: &[String]) -> Result<()> {
     if args.first().map(String::as_str) == Some("joint-emission-trace") {
         return emission_trace_cli(args);
     }
+    if args.first().map(String::as_str) == Some("joint-selection-replay") {
+        return selection_replay_cli(args);
+    }
     if args.first().map(String::as_str) == Some("joint-integer-tables") {
         if args.len() != 2 {
             return Err(invalid("joint-integer-tables NEW_REPORT_ROOT"));
@@ -1233,6 +1439,9 @@ pub fn run_cli(args: &[String]) -> Result<()> {
     }
     if args.first().map(String::as_str) == Some("joint-compare") {
         return crate::joint_comparison::run_cli(args);
+    }
+    if args.first().map(String::as_str) == Some("joint-reader-compare") {
+        return crate::joint_reader_comparison::run_cli(args);
     }
     if args.first().map(String::as_str) == Some("joint-evaluate-precision") {
         return evaluate_precision_cli(args);
@@ -1291,9 +1500,14 @@ fn load_tokenizer(evaluator: &Value) -> Result<HfBpeTokenizer> {
 }
 
 fn evaluate_cli(args: &[String]) -> Result<()> {
-    if args.len() != 7 || !["cpu", "metal"].contains(&args[4].as_str()) {
-        return Err(invalid("usage: joint-evaluate[-shadow] CAMPAIGN_JSON SEALED_CHECKPOINT NEW_REPORT_ROOT {cpu|metal} {read|no-read} BATCH; joint-evaluate-hard SEALED_CHECKPOINT_OR_EXPORT EVALUATOR_JSON NEW_REPORT_ROOT cpu {read|no-read} BATCH"));
+    if !matches!(args.len(), 7 | 8)
+        || !["cpu", "metal"].contains(&args[4].as_str())
+        || (args.len() == 8
+            && (args[7] != "--greedy-prose" || args[0] != "joint-evaluate" || args[5] != "read"))
+    {
+        return Err(invalid("usage: joint-evaluate[-shadow] CAMPAIGN_JSON SEALED_CHECKPOINT NEW_REPORT_ROOT {cpu|metal} {read|no-read} BATCH; joint-evaluate-hard SEALED_CHECKPOINT_OR_EXPORT EVALUATOR_JSON NEW_REPORT_ROOT cpu {read|no-read} BATCH; optional --greedy-prose only for continuous joint-evaluate Read"));
     }
+    let greedy_prose = args.len() == 8;
     let hard = args[0] == "joint-evaluate-hard";
     let shadow = args[0] == "joint-evaluate-shadow";
     if hard && args[4] != "cpu" {
@@ -1339,6 +1553,11 @@ fn evaluate_cli(args: &[String]) -> Result<()> {
             let mut input = load_bound_checkpoint(source, &selected, &evaluator.sha256)?;
             same_learning_configuration(&cfg, &input.campaign)?;
             input.campaign = cfg;
+            if greedy_prose && input.model.quantization().is_some() {
+                return Err(invalid(
+                    "greedy prose supplement requires a continuous checkpoint",
+                ));
+            }
             if shadow {
                 if input.model.quantization().is_none() {
                     return Err(invalid(
@@ -1352,10 +1571,59 @@ fn evaluate_cli(args: &[String]) -> Result<()> {
             }
             evaluate_loaded(
                 &input, &evaluator, source, out, &args[0], &args[4], mode, batch,
-            )
+            )?;
+            if greedy_prose {
+                evaluate_greedy_prose(&input, &evaluator, source, out, &args[4])?;
+            }
+            Ok(())
         }
     })();
     finish_attempt(out, result)
+}
+
+/// Supplement the already completed Read evaluation while its exact model is
+/// still loaded. No source-panel or sampled-generation work is repeated.
+fn evaluate_greedy_prose(
+    input: &BoundModel,
+    evaluator: &Evaluator,
+    checkpoint: &Path,
+    out: &Path,
+    device_name: &str,
+) -> Result<()> {
+    let mut packet = metadata(&input.campaign, "joint-greedy-prose", device_name)?;
+    let tokenizer = load_tokenizer(&evaluator.document)?;
+    let prompts_path = verify_identity(&evaluator.document["prompt_source"])?;
+    let prompts: Value = serde_json::from_slice(&fs::read(prompts_path)?)?;
+    let prompts = prompts["prompts"]
+        .as_array()
+        .filter(|prompts| prompts.len() == 5)
+        .ok_or_else(|| invalid("greedy supplement requires the five canonical prompts"))?;
+    let mut generations = Vec::with_capacity(prompts.len());
+    for prompt in prompts {
+        generations.push(joint_evaluation::generate(
+            &input.model,
+            &tokenizer,
+            prompt["text"]
+                .as_str()
+                .ok_or_else(|| invalid("prompt text"))?,
+            ReadMode::Enabled,
+            None,
+            128,
+        )?);
+    }
+    packet["schema"] = json!("uor-r4.joint-greedy-prose/1");
+    packet["operation"] = json!("joint-greedy-prose");
+    packet["mode"] = json!(ReadMode::Enabled);
+    packet["status"] = json!("COMPLETE");
+    packet["policy"] = json!("greedy");
+    packet["checkpoint"] = json!(checkpoint);
+    packet["checkpoint_binding"] = input.binding.clone();
+    packet["evaluator_sha256"] = json!(evaluator.sha256);
+    packet["prompt_source"] = evaluator.document["prompt_source"].clone();
+    packet["generations"] = json!(generations);
+    // The attempt manifest binds this additional file. Preserve the existing
+    // population report and save_json's exclusive-creation semantics.
+    save_json(&out.join("greedy-generations.json"), &packet)
 }
 
 /// Read-only same-checkpoint emission/selection localization. Replays the five
@@ -1446,6 +1714,398 @@ fn emission_trace_cli(args: &[String]) -> Result<()> {
         Ok(())
     })();
     finish_attempt(out, result)
+}
+
+/// Read-only same-checkpoint selection-policy replay. The greedy story-probe
+/// pass must reproduce the retained `story-probes.json` exactly; only then are
+/// the greedy free continuations of the five frozen prompts reported beside the
+/// retained sampled trajectories. No weights, decoding or panels change.
+fn selection_replay_cli(args: &[String]) -> Result<()> {
+    if args.len() != 6 || args[5] != "cpu" {
+        return Err(invalid(
+            "usage: joint-selection-replay CAMPAIGN_JSON SEALED_CHECKPOINT RETAINED_EVALUATE_ROOT NEW_REPORT_ROOT cpu",
+        ));
+    }
+    let out = Path::new(&args[4]);
+    report_output::claim(out)?;
+    let result = (|| {
+        let cfg = Campaign::load(Path::new(&args[1]))?;
+        let evaluator = load_evaluator(&cfg.evaluator_path)?;
+        let source = Path::new(&args[2]);
+        let mut input =
+            load_bound_checkpoint(source, &candle_core::Device::Cpu, &evaluator.sha256)?;
+        same_learning_configuration(&cfg, &input.campaign)?;
+        input.campaign = cfg;
+        let tokenizer = load_tokenizer(&evaluator.document)?;
+        let prompts_path = verify_identity(&evaluator.document["prompt_source"])?;
+        let prompts: Value = serde_json::from_slice(&fs::read(prompts_path)?)?;
+        let prompt_array = prompts["prompts"]
+            .as_array()
+            .ok_or_else(|| invalid("prompts"))?;
+
+        let retained_root = Path::new(&args[3]);
+        let retained_probes_path = retained_root.join("story-probes.json");
+        let retained_generations_path = retained_root.join("generations.json");
+        let retained_probes: Value = serde_json::from_slice(&fs::read(&retained_probes_path)?)?;
+        let retained_generations: Value =
+            serde_json::from_slice(&fs::read(&retained_generations_path)?)?;
+        let retained_probes_sha256 = sha256_file(&retained_probes_path)?;
+        let retained_generations_sha256 = sha256_file(&retained_generations_path)?;
+        let retained_probe_rows = retained_probes
+            .as_array()
+            .ok_or_else(|| invalid("retained story-probes are not an array"))?;
+        let retained_stories = retained_generations
+            .as_array()
+            .ok_or_else(|| invalid("retained generations are not an array"))?;
+
+        // Greedy story-probe replay; exact parity is required before any claim.
+        let replay_results =
+            joint_evaluation::run_story_probes(&input.model, &tokenizer, ReadMode::Enabled)?;
+        let replay_values = replay_results
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<std::result::Result<Vec<Value>, serde_json::Error>>()?;
+        let mut probe_mismatches = Vec::new();
+        let mut probe_mismatch_count = 0usize;
+        for (index, replay) in replay_values.iter().enumerate() {
+            let missing = Value::Null;
+            let retained = retained_probe_rows.get(index).unwrap_or(&missing);
+            let mismatches = compare_probe_pair(index, replay, retained);
+            probe_mismatch_count += mismatches.len();
+            probe_mismatches.extend(mismatches);
+        }
+        if replay_values.len() != retained_probe_rows.len() {
+            probe_mismatch_count += replay_values.len().abs_diff(retained_probe_rows.len());
+            probe_mismatches.push(json!({
+                "field":"probe_count",
+                "replay":replay_values.len(),
+                "retained":retained_probe_rows.len()
+            }));
+        }
+        let (counts, failing_rows) = selection_replay_summary(&replay_values);
+
+        // Greedy free continuations of the same five frozen prompts.
+        if prompt_array.len() != retained_stories.len() {
+            return Err(invalid(
+                "retained generation count differs from the evaluator prompts",
+            ));
+        }
+        let mut continuations = Vec::with_capacity(prompt_array.len());
+        let mut divergence_indices = Vec::with_capacity(prompt_array.len());
+        for (i, prompt) in prompt_array.iter().enumerate() {
+            let prompt_text = prompt["text"]
+                .as_str()
+                .ok_or_else(|| invalid("prompt text"))?;
+            let greedy = joint_evaluation::generate(
+                &input.model,
+                &tokenizer,
+                prompt_text,
+                ReadMode::Enabled,
+                None,
+                128,
+            )?;
+            let greedy_value = serde_json::to_value(&greedy)?;
+            let sampled = &retained_stories[i];
+            let greedy_ids = generation_ids(&greedy_value);
+            let sampled_ids = generation_ids(sampled);
+            let divergence = first_divergence(&greedy_ids, &sampled_ids);
+            let divergence_value = match divergence {
+                Some(index) => json!({
+                    "divergence_index": index,
+                    "greedy_token": greedy_ids.get(index),
+                    "greedy_text": greedy_value["response_text"],
+                    "sampled_token": sampled_ids.get(index),
+                    "sampled_text": sampled["response_text"],
+                    "greedy_length": greedy_ids.len(),
+                    "sampled_length": sampled_ids.len(),
+                    "greedy_stop": greedy_value["stop"],
+                    "sampled_stop": sampled["stop"],
+                }),
+                None => Value::Null,
+            };
+            divergence_indices.push(divergence);
+            continuations.push(json!({
+                "story": i,
+                "prompt": prompt_text,
+                "greedy_length": greedy_ids.len(),
+                "greedy_stop": greedy_value["stop"],
+                "greedy_response_text": greedy_value["response_text"],
+                "greedy_raw_decoded": greedy_value["raw_decoded"],
+                "greedy_generated_token_ids": greedy_ids,
+                "sampled_length": sampled_ids.len(),
+                "sampled_stop": sampled["stop"],
+                "sampled_response_text": sampled["response_text"],
+                "divergence": divergence_value,
+                "length_difference": greedy_ids.len() as i64 - sampled_ids.len() as i64,
+            }));
+        }
+        let diverged_stories = divergence_indices.iter().filter(|d| d.is_some()).count();
+        let divergence_summary = json!({
+            "stories": prompt_array.len(),
+            "diverged_stories": diverged_stories,
+            "identical_token_prefix_stories": prompt_array.len() - diverged_stories,
+            "first_divergence_indices": divergence_indices,
+        });
+
+        let parity = json!({
+            "schema":"uor-r4.joint-selection-replay-parity/1",
+            "status": if probe_mismatch_count == 0 { "PARITY_EXACT" } else { "PARITY_FAILED" },
+            "mismatch_count": probe_mismatch_count,
+            "first_mismatches": probe_mismatches.iter().take(200).collect::<Vec<_>>(),
+            "retained_story_probes_sha256": retained_probes_sha256,
+            "retained_generations_sha256": retained_generations_sha256,
+        });
+        let replay_report = json!({
+            "schema":"uor-r4.joint-selection-replay/1",
+            "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNBOUND"),
+            "operation":args[0],
+            "device":args[5],
+            "checkpoint":source,
+            "campaign":Path::new(&args[1]),
+            "retained_evaluate_root":retained_root,
+            "retained_story_probes_sha256":retained_probes_sha256,
+            "retained_generations_sha256":retained_generations_sha256,
+            "read_mode":"enabled",
+            "selection_policy":"greedy_argmax",
+            "story_probe_scope":STORY_PROBE_SCOPE,
+            "story_probe_stop_policy":STORY_STOP_POLICY,
+            "tokenizer_cid":tokenizer.address(),
+            "story_probe_replay":replay_values,
+            "story_probe_counts":counts,
+            "failing_rows":failing_rows,
+            "greedy_free_continuations":continuations,
+            "divergence_summary":divergence_summary,
+        });
+        save_json(&out.join("selection-replay.json"), &replay_report)?;
+        save_json(&out.join("parity.json"), &parity)?;
+        if probe_mismatch_count != 0 {
+            return Err(invalid(format!(
+                "PARITY_FAILED: {probe_mismatch_count} field/story mismatches against the retained story probes; sealed replay retained at {}",
+                out.display()
+            )));
+        }
+        Ok(())
+    })();
+    finish_attempt(out, result)
+}
+
+const SELECTION_REPLAY_SIDE_FIELDS: [&str; 2] = ["first_noun_correct", "complete_correct"];
+const SELECTION_REPLAY_GENERATION_FIELDS: [&str; 4] =
+    ["prompt", "generated_token_ids", "stop", "response_text"];
+const SELECTION_REPLAY_DECISION_FIELDS: [&str; 12] = [
+    "selected_token",
+    "greedy_token",
+    "selected_probability",
+    "selected_model_nll_nats",
+    "probability_sum",
+    "probabilities_sha256_le_f32",
+    "no_read_mass",
+    "copy_gate",
+    "effective_copy_mass",
+    "top_read_occurrence",
+    "top_read_token",
+    "top_read_mass",
+];
+
+fn nested_value<'a>(mut value: Option<&'a Value>, path: &[&str]) -> Option<&'a Value> {
+    for key in path {
+        value = value.and_then(|current| current.get(*key));
+    }
+    value
+}
+
+fn record_replay_mismatch(
+    mismatches: &mut Vec<Value>,
+    base: Value,
+    replay: Option<&Value>,
+    retained: Option<&Value>,
+) {
+    let mut entry = base;
+    if let Some(object) = entry.as_object_mut() {
+        object.insert("replay".to_owned(), replay.cloned().unwrap_or(Value::Null));
+        object.insert(
+            "retained".to_owned(),
+            retained.cloned().unwrap_or(Value::Null),
+        );
+    }
+    mismatches.push(entry);
+}
+
+/// Exact field comparison for one pair index and both sides. Only the declared
+/// fields are compared; timing and other self-describing metadata are excluded.
+fn compare_probe_pair(index: usize, replay: &Value, retained: &Value) -> Vec<Value> {
+    let mut mismatches = Vec::new();
+    let replay_id = replay.get("probe").and_then(|probe| probe.get("id"));
+    let retained_id = retained.get("probe").and_then(|probe| probe.get("id"));
+    if replay_id != retained_id {
+        record_replay_mismatch(
+            &mut mismatches,
+            json!({"field":"probe.id","pair":index}),
+            replay_id,
+            retained_id,
+        );
+    }
+    for field in ["pair_complete_correct", "outputs_differ"] {
+        let replay_value = replay.get(field);
+        let retained_value = retained.get(field);
+        if replay_value != retained_value {
+            record_replay_mismatch(
+                &mut mismatches,
+                json!({"field":field,"pair":index}),
+                replay_value,
+                retained_value,
+            );
+        }
+    }
+    for side in ["original", "edited"] {
+        let replay_side = replay.get(side);
+        let retained_side = retained.get(side);
+        for field in SELECTION_REPLAY_SIDE_FIELDS {
+            let replay_value = nested_value(replay_side, &[field]);
+            let retained_value = nested_value(retained_side, &[field]);
+            if replay_value != retained_value {
+                record_replay_mismatch(
+                    &mut mismatches,
+                    json!({"field":field,"pair":index,"side":side}),
+                    replay_value,
+                    retained_value,
+                );
+            }
+        }
+        for field in SELECTION_REPLAY_GENERATION_FIELDS {
+            let replay_value = nested_value(replay_side, &["generation", field]);
+            let retained_value = nested_value(retained_side, &["generation", field]);
+            if replay_value != retained_value {
+                record_replay_mismatch(
+                    &mut mismatches,
+                    json!({"field":field,"pair":index,"side":side,"scope":"generation"}),
+                    replay_value,
+                    retained_value,
+                );
+            }
+        }
+        let replay_decisions =
+            nested_value(replay_side, &["generation", "decisions"]).and_then(Value::as_array);
+        let retained_decisions =
+            nested_value(retained_side, &["generation", "decisions"]).and_then(Value::as_array);
+        let replay_len = replay_decisions.map_or(0, Vec::len);
+        let retained_len = retained_decisions.map_or(0, Vec::len);
+        if replay_decisions.is_none() || retained_decisions.is_none() || replay_len != retained_len
+        {
+            record_replay_mismatch(
+                &mut mismatches,
+                json!({"field":"decision_count","pair":index,"side":side}),
+                Some(&json!(replay_len)),
+                Some(&json!(retained_len)),
+            );
+        }
+        if let (Some(replay_decisions), Some(retained_decisions)) =
+            (replay_decisions, retained_decisions)
+        {
+            for (decision_index, (replay_decision, retained_decision)) in replay_decisions
+                .iter()
+                .zip(retained_decisions.iter())
+                .enumerate()
+            {
+                for field in SELECTION_REPLAY_DECISION_FIELDS {
+                    let replay_value = replay_decision.get(field);
+                    let retained_value = retained_decision.get(field);
+                    if replay_value != retained_value {
+                        record_replay_mismatch(
+                            &mut mismatches,
+                            json!({"field":field,"pair":index,"side":side,
+                                "decision":decision_index}),
+                            replay_value,
+                            retained_value,
+                        );
+                    }
+                }
+            }
+        }
+    }
+    mismatches
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SelectionReplayCounts {
+    complete_correct: usize,
+    first_noun_correct: usize,
+    pair_complete_correct: usize,
+    complete_correct_denominator: usize,
+    first_noun_correct_denominator: usize,
+    pair_denominator: usize,
+}
+
+fn selection_replay_summary(replay: &[Value]) -> (SelectionReplayCounts, Vec<Value>) {
+    let mut counts = SelectionReplayCounts {
+        complete_correct: 0,
+        first_noun_correct: 0,
+        pair_complete_correct: 0,
+        complete_correct_denominator: 0,
+        first_noun_correct_denominator: 0,
+        pair_denominator: replay.len(),
+    };
+    let mut failing_rows = Vec::new();
+    for row in replay {
+        let pair_id = row
+            .get("probe")
+            .and_then(|probe| probe.get("id"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        if row.get("pair_complete_correct").and_then(Value::as_bool) == Some(true) {
+            counts.pair_complete_correct += 1;
+        }
+        for side in ["original", "edited"] {
+            let judged = row.get(side).unwrap_or(&Value::Null);
+            counts.complete_correct_denominator += 1;
+            counts.first_noun_correct_denominator += 1;
+            let complete_correct =
+                judged.get("complete_correct").and_then(Value::as_bool) == Some(true);
+            let first_noun_correct =
+                judged.get("first_noun_correct").and_then(Value::as_bool) == Some(true);
+            if complete_correct {
+                counts.complete_correct += 1;
+            }
+            if first_noun_correct {
+                counts.first_noun_correct += 1;
+            }
+            if !complete_correct {
+                failing_rows.push(json!({
+                    "pair": pair_id,
+                    "side": side,
+                    "noun": nested_value(row.get("probe"), &[side, "item"]),
+                    "first_noun_correct": first_noun_correct,
+                    "stop": nested_value(Some(judged), &["generation", "stop"]),
+                    "response_text": nested_value(
+                        Some(judged),
+                        &["generation", "response_text"]
+                    ),
+                }));
+            }
+        }
+    }
+    (counts, failing_rows)
+}
+
+fn generation_ids(value: &Value) -> Vec<u32> {
+    value
+        .get("generated_token_ids")
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(|id| id.as_u64().and_then(|n| u32::try_from(n).ok()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// First index where the two token sequences differ, compared over their common
+/// prefix. `None` covers identical sequences and a length-only difference.
+fn first_divergence(greedy: &[u32], sampled: &[u32]) -> Option<usize> {
+    greedy
+        .iter()
+        .zip(sampled.iter())
+        .position(|(greedy_token, sampled_token)| greedy_token != sampled_token)
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1671,6 +2331,11 @@ pub(crate) fn finish_attempt<T>(out: &Path, result: Result<T>) -> Result<T> {
 }
 
 fn same_learning_configuration(a: &Campaign, b: &Campaign) -> Result<()> {
+    same_read_initialization(a, b)?;
+    // `end_weight` is deliberately not compared: it is a declared
+    // objective-resume difference recorded in the campaign and fit report, so
+    // the same weights may be resumed or evaluated under a different
+    // termination weight while model, optimizer, data and evaluator still match.
     if a.model != b.model
         || a.optimizer != b.optimizer
         || a.data_seed != b.data_seed
@@ -1908,6 +2573,11 @@ fn calibrate_shadow_cli(args: &[String]) -> Result<()> {
         cfg.trial_scope = "CALIBRATED_SHADOW_NO_MODEL_UPDATES: original continuous parent retained; only alpha code learning may consume this checkpoint; total_steps retains unused schema headroom, not completed exposure".into();
         let mut report = metadata(&cfg, "joint-calibrate-shadow", "cpu")?;
         report["calibration"] = calibration.clone();
+        let transfer_receipt =
+            crate::joint_transfer::validate_binding(&parent.campaign, &parent.binding)?;
+        if let Some(receipt) = &transfer_receipt {
+            report["transfer_receipt"] = json!(receipt);
+        }
         save_checkpoint_with_calibration(
             &parent.model,
             &optimizer,
@@ -1917,6 +2587,7 @@ fn calibrate_shadow_cli(args: &[String]) -> Result<()> {
             "CALIBRATED_SHADOW_NO_MODEL_UPDATES",
             &evaluator.sha256,
             Some(&calibration),
+            transfer_receipt.as_ref(),
         )?;
         let restored =
             load_bound_checkpoint(&target, &candle_core::Device::Cpu, &evaluator.sha256)?;
@@ -2009,6 +2680,11 @@ pub(crate) fn write_hard_export(
     out: &Path,
 ) -> Result<BoundModel> {
     let mut report = metadata(&parent.campaign, "joint-export-hard", "cpu")?;
+    if let Some(receipt) =
+        crate::joint_transfer::validate_binding(&parent.campaign, &parent.binding)?
+    {
+        report["transfer_receipt"] = json!(receipt);
+    }
     let state = serde_json::to_value(parent.model.quantization())?;
     let step = state["completed_step"]
         .as_u64()
@@ -2190,6 +2866,10 @@ pub(crate) fn evaluate_loaded(
 ) -> Result<()> {
     let model = &input.model;
     let mut report = metadata(&input.campaign, operation, device_name)?;
+    if let Some(receipt) = crate::joint_transfer::validate_binding(&input.campaign, &input.binding)?
+    {
+        report["transfer_receipt"] = json!(receipt);
+    }
     report["artifact"] = input.artifact.clone();
     report["training_projection_transition"] = json!(input.campaign.projection_transition);
     report["parameter_projection_during_evaluation"] = json!(false);
@@ -2291,6 +2971,370 @@ pub(crate) fn evaluate_loaded(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn radial_initialization_is_typed_and_legacy_serialization_is_unchanged() -> Result<()> {
+        let cfg = transition_campaign();
+        let legacy = serde_json::to_vec(&cfg)?;
+        let mut value = serde_json::to_value(&cfg)?;
+        assert!(value.get("read_initialization").is_none());
+        assert!(value.get("shared_parameter_transfer").is_none());
+        let decoded: Campaign = serde_json::from_slice(&legacy)?;
+        assert_eq!(decoded.read_initialization, None);
+        assert_eq!(decoded.shared_parameter_transfer, None);
+        assert_eq!(serde_json::to_vec(&decoded)?, legacy);
+        value["read_initialization"] = Value::Null;
+        let explicit_default: Campaign = serde_json::from_value(value.clone())?;
+        assert_eq!(serde_json::to_vec(&explicit_default)?, legacy);
+        value["read_initialization"] = json!("unit_scale");
+        let mut unit: Campaign = serde_json::from_value(value.clone())?;
+        assert_eq!(
+            unit.read_initialization,
+            Some(ReadInitialization::UnitScale)
+        );
+        assert!(unit.fresh_model(&candle_core::Device::Cpu).is_err());
+        assert!(matches!(
+            unit.validate_read_initialization(),
+            Err(crate::TrainingError::Invalid(_))
+        ));
+        for geometry in [ReadGeometry::Lorentz, ReadGeometry::LorentzAffine] {
+            unit.model.read_geometry = geometry;
+            unit.validate_read_initialization()?;
+        }
+        value["read_initialization"] = json!("unit_sclae");
+        assert!(serde_json::from_value::<Campaign>(value).is_err());
+        Ok(())
+    }
+
+    fn parameter_bits(model: &JointModel) -> Result<BTreeMap<String, Vec<u32>>> {
+        model
+            .variables()
+            .iter()
+            .map(|(name, variable)| {
+                Ok((
+                    name.clone(),
+                    variable
+                        .flatten_all()?
+                        .to_vec1::<f32>()?
+                        .into_iter()
+                        .map(f32::to_bits)
+                        .collect(),
+                ))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn radial_initialization_changes_only_shared_log_scale() -> Result<()> {
+        let mut cfg = transition_campaign();
+        cfg.model.width = 128;
+        cfg.model.context = 8;
+        cfg.model.seed = 7;
+        let mut first_arm = None;
+        for geometry in [ReadGeometry::Lorentz, ReadGeometry::LorentzAffine] {
+            cfg.model.read_geometry = geometry;
+            cfg.read_initialization = None;
+            let constructor = JointModel::new(cfg.model.clone(), &candle_core::Device::Cpu)?;
+            let default = cfg.fresh_model(&candle_core::Device::Cpu)?;
+            assert_eq!(parameter_bits(&default)?, parameter_bits(&constructor)?);
+            cfg.read_initialization = Some(ReadInitialization::UnitScale);
+            let unit = cfg.fresh_model(&candle_core::Device::Cpu)?;
+            assert_eq!(unit.numerical_contract(), constructor.numerical_contract());
+            let actual = parameter_bits(&unit)?;
+            let mut expected = parameter_bits(&constructor)?;
+            assert_ne!(expected[LORENTZ_LOG_BETA], [0.0f32.to_bits()]);
+            expected.insert(LORENTZ_LOG_BETA.into(), vec![0.0f32.to_bits()]);
+            assert_eq!(actual, expected);
+            if let Some(previous) = &first_arm {
+                assert_eq!(
+                    &actual, previous,
+                    "same initial arrays and both scalars across radial operators"
+                );
+            } else {
+                first_arm = Some(actual);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn radial_initialization_rejects_changed_or_missing_lineage() -> Result<()> {
+        let mut historical = transition_campaign();
+        historical.model.read_geometry = ReadGeometry::Lorentz;
+        let mut unit = historical.clone();
+        unit.read_initialization = Some(ReadInitialization::UnitScale);
+        let binding = json!({"read_initialization":"unit_scale"});
+        validate_read_initialization_binding(&unit, &binding)?;
+        validate_read_initialization_binding(&historical, &json!({}))?;
+        assert!(validate_read_initialization_binding(&unit, &json!({})).is_err());
+        assert!(validate_read_initialization_binding(&historical, &binding).is_err());
+        for (next, old) in [(&unit, &historical), (&historical, &unit)] {
+            assert!(same_learning_configuration(next, old).is_err());
+            assert!(quantization_resume_transition(next, old, "unused", "unused", 1).is_err());
+            assert!(
+                projection_resume_transition(next, old, "unused", "unused", &Value::Null, 1)
+                    .is_err()
+            );
+        }
+        // A legitimate first quantization or projection transition cannot also
+        // replace the original initializer declaration.
+        let (mut old, mut projected, state) = projection_fixture();
+        for cfg in [&mut old, &mut projected] {
+            cfg.model.read_geometry = ReadGeometry::Lorentz;
+            cfg.read_initialization = Some(ReadInitialization::UnitScale);
+        }
+        let checkpoint_sha = "c".repeat(64);
+        let campaign_sha = "d".repeat(64);
+        assert!(projection_resume_transition(
+            &projected,
+            &old,
+            &checkpoint_sha,
+            &campaign_sha,
+            &state,
+            7836
+        )?);
+        projected.read_initialization = None;
+        assert!(projection_resume_transition(
+            &projected,
+            &old,
+            &checkpoint_sha,
+            &campaign_sha,
+            &state,
+            7836
+        )
+        .is_err());
+        let transition = old.quantization_transition.as_ref().unwrap();
+        assert!(quantization_resume_transition(
+            &old,
+            &unit,
+            &transition.parent_checkpoint_sha256,
+            &transition.parent_campaign_sha256,
+            transition.parent_optimizer_step,
+        )?);
+        old.read_initialization = None;
+        let transition = old.quantization_transition.as_ref().unwrap();
+        assert!(quantization_resume_transition(
+            &old,
+            &unit,
+            &transition.parent_checkpoint_sha256,
+            &transition.parent_campaign_sha256,
+            transition.parent_optimizer_step,
+        )
+        .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn radial_initialization_resume_preserves_evolved_beta_and_next_update() -> Result<()> {
+        let mut cfg = transition_campaign();
+        cfg.model.width = 128;
+        cfg.model.context = 8;
+        cfg.model.seed = 7;
+        cfg.batch = 1;
+        cfg.context = 8;
+        cfg.cpu_gradient_shards = 1;
+        cfg.total_steps = 3;
+        cfg.read_initialization = Some(ReadInitialization::UnitScale);
+        let stores = vec![(0..64).collect::<Vec<u16>>()];
+        let evaluator_sha = "c".repeat(64);
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| invalid("test clock"))?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-radial-initialization-{}-{nonce}",
+            std::process::id()
+        ));
+        report_output::claim(&root)?;
+        for geometry in [ReadGeometry::Lorentz, ReadGeometry::LorentzAffine] {
+            cfg.model.read_geometry = geometry;
+            let model = cfg.fresh_model(&candle_core::Device::Cpu)?;
+            let mut optimizer = NamedAdamW::new(model.variables(), cfg.optimizer.clone())?;
+            let (inputs, targets) = training_batch(&stores, &cfg, 0)?;
+            let gradients =
+                crate::joint_parallel::batch_gradients(&model, &inputs, &targets, None, 1, 8, 1)?;
+            optimizer.step(model.variables(), &gradients.gradients)?;
+            let evolved = model.variables()[LORENTZ_LOG_BETA].to_vec1::<f32>()?;
+            assert_ne!(evolved[0].to_bits(), 0.0f32.to_bits());
+            let checkpoint = root.join(geometry.name());
+            report_output::claim(&checkpoint)?;
+            save_checkpoint(
+                &model,
+                &optimizer,
+                &cfg,
+                &checkpoint,
+                1,
+                "TEST_ONLY",
+                &evaluator_sha,
+                None,
+            )?;
+            let restored =
+                load_bound_checkpoint(&checkpoint, &candle_core::Device::Cpu, &evaluator_sha)?;
+            same_learning_configuration(&cfg, &restored.campaign)?;
+            assert_eq!(restored.binding["read_initialization"], "unit_scale");
+            assert_eq!(
+                restored.model.variables()[LORENTZ_LOG_BETA].to_vec1::<f32>()?,
+                evolved
+            );
+            assert_eq!(parameter_bits(&restored.model)?, parameter_bits(&model)?);
+            let mut resumed =
+                NamedAdamW::load(&checkpoint, restored.model.variables(), &cfg.optimizer)?;
+            assert_eq!(
+                resumed.continuity_fingerprint()?,
+                optimizer.continuity_fingerprint()?
+            );
+            let next_step = resumed.step_count() as usize;
+            let (inputs, targets) = training_batch(&stores, &cfg, next_step)?;
+            assert_eq!(
+                (inputs.clone(), targets.clone()),
+                training_batch(&stores, &restored.campaign, next_step)?
+            );
+            let uninterrupted =
+                crate::joint_parallel::batch_gradients(&model, &inputs, &targets, None, 1, 8, 1)?;
+            let continuation = crate::joint_parallel::batch_gradients(
+                &restored.model,
+                &inputs,
+                &targets,
+                None,
+                1,
+                8,
+                1,
+            )?;
+            assert_eq!(
+                uninterrupted.mean_nll.to_bits(),
+                continuation.mean_nll.to_bits()
+            );
+            optimizer.step(model.variables(), &uninterrupted.gradients)?;
+            resumed.step(restored.model.variables(), &continuation.gradients)?;
+            assert_eq!(parameter_bits(&restored.model)?, parameter_bits(&model)?);
+            assert_eq!(
+                resumed.continuity_fingerprint()?,
+                optimizer.continuity_fingerprint()?
+            );
+            let mut changed = restored.campaign.clone();
+            changed.read_initialization = None;
+            assert!(same_learning_configuration(&cfg, &changed).is_err());
+        }
+        report_output::seal(&root)?;
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn radial_transfer_checkpoint_resume_preserves_receipt_and_next_update() -> Result<()> {
+        let stores = vec![(0..64).collect::<Vec<u16>>()];
+        for geometry in [
+            ReadGeometry::Dot,
+            ReadGeometry::Lorentz,
+            ReadGeometry::LorentzAffine,
+        ] {
+            let (root, mut cfg) = crate::joint_transfer::transfer_test_fixture()?;
+            cfg.model.read_geometry = geometry;
+            cfg.read_initialization =
+                (geometry != ReadGeometry::Dot).then_some(ReadInitialization::UnitScale);
+            let evaluator_sha = sha256_file(&cfg.evaluator_path)?;
+            let (model, receipt) = cfg.fresh_model_with_provenance(&candle_core::Device::Cpu)?;
+            let receipt = receipt.ok_or_else(|| invalid("test transfer receipt missing"))?;
+            assert_eq!(
+                receipt.initial_radial_scalars.is_some(),
+                geometry != ReadGeometry::Dot
+            );
+            let initial_bits = parameter_bits(&model)?;
+            let mut optimizer = NamedAdamW::new(model.variables(), cfg.optimizer.clone())?;
+            assert_eq!(optimizer.step_count(), 0);
+            let (inputs, targets) = training_batch(&stores, &cfg, 0)?;
+            let gradients = crate::joint_parallel::batch_gradients(
+                &model,
+                &inputs,
+                &targets,
+                None,
+                cfg.batch,
+                cfg.context,
+                1,
+            )?;
+            optimizer.step(model.variables(), &gradients.gradients)?;
+            assert_ne!(parameter_bits(&model)?, initial_bits);
+            let checkpoint = root.join("adapted-checkpoint");
+            report_output::claim(&checkpoint)?;
+            save_checkpoint(
+                &model,
+                &optimizer,
+                &cfg,
+                &checkpoint,
+                1,
+                "SYNTHETIC_FIXTURE",
+                &evaluator_sha,
+                Some(&receipt),
+            )?;
+            // Remove only this test's synthetic original parent. A saved child
+            // resumes from its own weights/Adam, with historical hashes intact.
+            fs::remove_dir_all(&receipt.specification.parent_checkpoint)?;
+            let restored =
+                load_bound_checkpoint(&checkpoint, &candle_core::Device::Cpu, &evaluator_sha)?;
+            same_learning_configuration(&cfg, &restored.campaign)?;
+            assert_eq!(
+                crate::joint_transfer::validate_binding(&restored.campaign, &restored.binding)?,
+                Some(receipt.clone()),
+            );
+            assert_eq!(restored.binding["optimizer_step"], 1);
+            assert_eq!(restored.binding["next_data_step"], 1);
+            assert_eq!(
+                restored.binding["sampled_target_visits"],
+                cfg.batch * cfg.context
+            );
+            assert_eq!(parameter_bits(&model)?, parameter_bits(&restored.model)?);
+            let mut resumed =
+                NamedAdamW::load(&checkpoint, restored.model.variables(), &cfg.optimizer)?;
+            assert_eq!(
+                optimizer.continuity_fingerprint()?,
+                resumed.continuity_fingerprint()?
+            );
+            let next_step = resumed.step_count() as usize;
+            let (inputs, targets) = training_batch(&stores, &cfg, next_step)?;
+            assert_eq!(
+                (inputs.clone(), targets.clone()),
+                training_batch(&stores, &restored.campaign, next_step)?,
+            );
+            let next = crate::joint_parallel::batch_gradients(
+                &model,
+                &inputs,
+                &targets,
+                None,
+                cfg.batch,
+                cfg.context,
+                1,
+            )?;
+            let continued = crate::joint_parallel::batch_gradients(
+                &restored.model,
+                &inputs,
+                &targets,
+                None,
+                cfg.batch,
+                cfg.context,
+                1,
+            )?;
+            assert_eq!(next.mean_nll.to_bits(), continued.mean_nll.to_bits());
+            optimizer.step(model.variables(), &next.gradients)?;
+            resumed.step(restored.model.variables(), &continued.gradients)?;
+            assert_eq!(parameter_bits(&model)?, parameter_bits(&restored.model)?);
+            assert_eq!(
+                optimizer.continuity_fingerprint()?,
+                resumed.continuity_fingerprint()?
+            );
+            let mut missing = restored.binding.clone();
+            missing
+                .as_object_mut()
+                .ok_or_else(|| invalid("test binding"))?
+                .remove("transfer_receipt");
+            assert!(crate::joint_transfer::validate_binding(&cfg, &missing).is_err());
+            let mut changed = restored.campaign.clone();
+            changed.shared_parameter_transfer = None;
+            assert!(same_learning_configuration(&cfg, &changed).is_err());
+            report_output::seal(&root)?;
+            fs::remove_dir_all(root)?;
+        }
+        Ok(())
+    }
 
     #[test]
     fn calibrated_shadow_preserves_fractional_weights_clocks_and_packed_metadata() -> Result<()> {
@@ -2414,6 +3458,7 @@ mod tests {
             "CALIBRATED_SHADOW_NO_MODEL_UPDATES",
             &"c".repeat(64),
             Some(&witness),
+            None,
         )?;
         let restored = load_bound_checkpoint(&checkpoint, &Device::Cpu, &"c".repeat(64))?;
         let restored_optimizer =
@@ -2497,6 +3542,8 @@ mod tests {
             schema: "uor-r4.joint-recurrent-campaign/1".into(),
             evaluator_path: PathBuf::new(),
             model: JointConfig::default(),
+            read_initialization: None,
+            shared_parameter_transfer: None,
             optimizer: AdamConfig::default(),
             data_seed: 42,
             batch: 16,
@@ -2511,8 +3558,108 @@ mod tests {
             training_window_transition: None,
             quantization_transition: None,
             projection_transition: None,
+            end_weight: None,
             trial_scope: "transition unit check".into(),
         }
+    }
+
+    #[test]
+    fn end_weight_loss_math() -> Result<()> {
+        use crate::joint_model::JointOutput;
+        use candle_core::{Device, Tensor};
+        let device = Device::Cpu;
+        let output = JointOutput {
+            probabilities: Tensor::from_vec(vec![0.2f32, 0.8, 0.5, 0.5], (2, 1, 2), &device)?,
+            no_read_mass: Tensor::from_vec(vec![0f32], (1,), &device)?,
+            read_masses: Tensor::from_vec(vec![0f32], (1,), &device)?,
+            copy_gate: Tensor::from_vec(vec![0f32], (1,), &device)?,
+            states: Tensor::from_vec(vec![0f32], (1,), &device)?,
+        };
+        let expected = (1.0_f64 * -(0.2_f64).ln() + 3.0 * -(0.5_f64).ln()) / 4.0;
+        let actual = output
+            .weighted_loss(&[0, 1], &[1.0, 3.0])?
+            .to_scalar::<f32>()? as f64;
+        assert!((actual - expected).abs() < 1e-5, "{actual} vs {expected}");
+        let uniform = output.weighted_loss(&[0, 1], &[1.0, 1.0])?;
+        let plain = output.loss(&[0, 1])?;
+        assert!((uniform.to_scalar::<f32>()? - plain.to_scalar::<f32>()?).abs() < 1e-6);
+        assert!(output.weighted_loss(&[0, 1], &[0.0, 0.0]).is_err());
+        assert!(output.weighted_loss(&[0, 1], &[1.0]).is_err());
+        assert!(output.weighted_loss(&[0, 3], &[1.0, 1.0]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn end_weight_default_serialization() -> Result<()> {
+        let base = transition_campaign();
+        let absent_value = serde_json::to_value(&base)?;
+        assert!(absent_value.get("end_weight").is_none());
+        let parsed: Campaign = serde_json::from_value(absent_value)?;
+        assert_eq!(parsed.end_weight, None);
+
+        let present = Campaign {
+            end_weight: Some(2.5),
+            ..base.clone()
+        };
+        let present_value = serde_json::to_value(&present)?;
+        assert_eq!(present_value["end_weight"], json!(2.5));
+        let parsed: Campaign = serde_json::from_value(present_value)?;
+        assert_eq!(parsed.end_weight, Some(2.5));
+
+        for weight in [
+            0.0_f32,
+            -1.0,
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            16.000_1,
+        ] {
+            assert!(!valid_end_weight(weight), "{weight} must be rejected");
+        }
+        for weight in [0.000_1_f32, 1.0, 2.5, 16.0] {
+            assert!(valid_end_weight(weight), "{weight} must be accepted");
+        }
+
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| invalid("test clock"))?
+            .as_nanos();
+        for (weight, accepted) in [
+            (0.0_f32, false),
+            (-1.0, false),
+            (16.000_1, false),
+            (2.5, true),
+        ] {
+            let cfg = Campaign {
+                end_weight: Some(weight),
+                ..base.clone()
+            };
+            let path = std::env::temp_dir().join(format!(
+                "uor-end-weight-{}-{nonce}.json",
+                std::process::id()
+            ));
+            std::fs::write(&path, serde_json::to_vec(&cfg)?)?;
+            let loaded = Campaign::load(&path);
+            let _ = std::fs::remove_file(&path);
+            assert_eq!(loaded.is_ok(), accepted, "end_weight {weight}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn end_weight_boundary_helper() {
+        let decoded = vec![
+            (1u32, "<|endoftext|>".to_string()),
+            (9, ".".to_string()),
+            (10, " ?".to_string()),
+            (11, "! ".to_string()),
+            (12, "hello".to_string()),
+            (13, ",".to_string()),
+            (14, " .".to_string()),
+        ];
+        assert_eq!(boundary_token_ids(&decoded), vec![1, 9, 10, 11, 14]);
+        assert_eq!(boundary_token_ids(&[(1, "<eos>".into())]), vec![1]);
+        assert!(boundary_token_ids(&[(3, "?".into()), (3, "!".into())]) == vec![1, 3]);
     }
 
     #[test]
@@ -2864,6 +4011,8 @@ mod tests {
             schema: "uor-r4.joint-recurrent-campaign/1".into(),
             evaluator_path: PathBuf::new(),
             model: JointConfig::default(),
+            read_initialization: None,
+            shared_parameter_transfer: None,
             optimizer: AdamConfig::default(),
             data_seed: 42,
             batch: 4,
@@ -2878,6 +4027,7 @@ mod tests {
             training_window_transition: None,
             quantization_transition: None,
             projection_transition: None,
+            end_weight: None,
             trial_scope: "sampler".into(),
         };
         let stores = vec![
@@ -2999,5 +4149,92 @@ mod tests {
         assert_eq!(mismatch.mismatches, 1);
         assert!(mismatch.max_abs_float_delta > 0.099);
         assert_eq!(mismatch.decision_matches, vec![false]);
+    }
+
+    fn selection_replay_row(id: &str) -> Value {
+        let generation = |item: &str, complete: bool, response: &str| {
+            json!({
+                "first_noun_correct": true,
+                "complete_correct": complete,
+                "generation": {
+                    "prompt": item,
+                    "generated_token_ids": [1, 2],
+                    "stop": {"reason": "first_sentence_boundary"},
+                    "response_text": response,
+                    "decisions": [{
+                        "selected_token": 5, "greedy_token": 5, "selected_probability": 0.1,
+                        "selected_model_nll_nats": 2.0, "probability_sum": 1.0,
+                        "probabilities_sha256_le_f32": "aa", "no_read_mass": 0.9,
+                        "copy_gate": 0.01, "effective_copy_mass": 0.001,
+                        "top_read_occurrence": 3, "top_read_token": 7, "top_read_mass": 0.02,
+                        "sampler_state_before": Value::Null, "sampler_state_after": Value::Null
+                    }]
+                }
+            })
+        };
+        json!({
+            "probe": {"id": id, "template": 0,
+                "original": {"item": "apple", "prompt": "orig"},
+                "edited": {"item": "pear", "prompt": "edit"}},
+            "pair_complete_correct": false,
+            "outputs_differ": true,
+            "original": generation("orig", false, "apple."),
+            "edited": generation("edit", true, "pear.")
+        })
+    }
+
+    #[test]
+    fn selection_replay_first_divergence() {
+        assert_eq!(first_divergence(&[1, 2, 3], &[1, 2, 3]), None);
+        assert_eq!(first_divergence(&[1, 2, 3], &[1, 9, 3]), Some(1));
+        assert_eq!(first_divergence(&[1, 2], &[1, 2, 3]), None);
+        assert_eq!(first_divergence(&[1, 2, 3], &[1, 2]), None);
+    }
+
+    #[test]
+    fn selection_replay_probe_parity_detects_field_mismatch() {
+        let row = selection_replay_row("story-source-edit-00");
+        assert!(compare_probe_pair(0, &row, &row).is_empty());
+        let mut changed = row.clone();
+        changed["original"]["first_noun_correct"] = json!(false);
+        let field_mismatch = compare_probe_pair(0, &changed, &row);
+        assert_eq!(field_mismatch.len(), 1);
+        assert_eq!(field_mismatch[0]["field"], "first_noun_correct");
+        let mut decision_changed = row.clone();
+        decision_changed["original"]["generation"]["decisions"][0]["selected_probability"] =
+            json!(0.2);
+        assert_eq!(compare_probe_pair(0, &decision_changed, &row).len(), 1);
+        let mut count_changed = row.clone();
+        count_changed["original"]["generation"]["decisions"] = json!([]);
+        let count_mismatch = compare_probe_pair(0, &count_changed, &row);
+        assert_eq!(count_mismatch.len(), 1);
+        assert_eq!(count_mismatch[0]["field"], "decision_count");
+    }
+
+    #[test]
+    fn selection_replay_summary_counts() {
+        let mut first = selection_replay_row("story-source-edit-00");
+        first["original"]["complete_correct"] = json!(true);
+        first["original"]["first_noun_correct"] = json!(true);
+        first["edited"]["complete_correct"] = json!(false);
+        first["edited"]["first_noun_correct"] = json!(false);
+        let mut second = selection_replay_row("story-source-edit-01");
+        second["pair_complete_correct"] = json!(true);
+        second["original"]["complete_correct"] = json!(true);
+        second["edited"]["complete_correct"] = json!(true);
+        second["edited"]["first_noun_correct"] = json!(true);
+        let (counts, failing) = selection_replay_summary(&[first, second]);
+        assert_eq!(counts.complete_correct, 3);
+        assert_eq!(counts.complete_correct_denominator, 4);
+        assert_eq!(counts.first_noun_correct, 3);
+        assert_eq!(counts.first_noun_correct_denominator, 4);
+        assert_eq!(counts.pair_complete_correct, 1);
+        assert_eq!(counts.pair_denominator, 2);
+        assert_eq!(failing.len(), 1);
+        assert_eq!(failing[0]["pair"], "story-source-edit-00");
+        assert_eq!(failing[0]["side"], "edited");
+        assert_eq!(failing[0]["noun"], "pear");
+        assert_eq!(failing[0]["first_noun_correct"], false);
+        assert_eq!(failing[0]["stop"]["reason"], "first_sentence_boundary");
     }
 }
