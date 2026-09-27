@@ -410,7 +410,7 @@ fn test_chat_session_hyperbolic_streaming_latency_and_rss_invariants() {
     let mut chat = ChatSession::new(&bundle, Some(persona), 777).expect("chat session creation");
     chat.set_policy(SamplePolicy::Categorical { top_k: 4 });
 
-    let initial_rss = get_process_rss_mb().unwrap_or(12.0);
+    let initial_rss = get_process_rss_mb();
 
     // Ingest 128 tokens across hyperbolic cache
     let mut pending = Vec::with_capacity(256);
@@ -423,15 +423,24 @@ fn test_chat_session_hyperbolic_streaming_latency_and_rss_invariants() {
         latencies_ms.push(start.elapsed().as_secs_f64() * 1000.0);
     }
 
-    let final_rss = get_process_rss_mb().unwrap_or(initial_rss);
+    let final_rss = get_process_rss_mb();
     let mean_latency = latencies_ms.iter().sum::<f64>() / (latencies_ms.len() as f64);
 
+    let initial_rss_str = match initial_rss {
+        Some(rss) => format!("{:.2} MB", rss),
+        None => "unavailable".to_string(),
+    };
+    let final_rss_str = match final_rss {
+        Some(rss) => format!("{:.2} MB", rss),
+        None => "unavailable".to_string(),
+    };
+
     println!(
-        "Hyperbolic Cache Telemetry: {} tokens, mean latency: {:.3} ms/token, RSS: {:.2} MB -> {:.2} MB",
+        "Hyperbolic Cache Telemetry: {} tokens, mean latency: {:.3} ms/token, RSS: {} -> {}",
         latencies_ms.len(),
         mean_latency,
-        initial_rss,
-        final_rss,
+        initial_rss_str,
+        final_rss_str,
     );
 
     assert_eq!(latencies_ms.len(), 128);
