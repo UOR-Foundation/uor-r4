@@ -102,20 +102,35 @@ if [[ ! -d "$FF_CHECKPOINT" ]]; then
 fi
 
 # Dry-run execution test
-echo ""
-echo "[Dry-Run Preflight: Testing Functional Execution]"
-echo "Testing Integer Model (16 tokens):"
-RAYON_NUM_THREADS=1 "$INTEGER_CHAT" --bundle "$BUNDLE_DIR" --temperature 0.0 --max-tokens 16 --prompt "$PROMPT"
-
-echo ""
-echo "Testing Continuous FF Parent (16 tokens):"
-RAYON_NUM_THREADS=1 "$FF_GENERATE" --checkpoint "$FF_CHECKPOINT" --tokenizer "$FF_TOKENIZER" --prompt "$PROMPT" --tokens 16
-
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo ""
   echo "================================================================================"
+  echo "[DRY RUN: Testing Functional Execution on 128 and 512 Tokens Without Powermetrics]"
+  echo "================================================================================"
+  for TOKENS in 128 512; do
+    echo "--- Testing Integer Model ($TOKENS tokens) ---"
+    env RAYON_NUM_THREADS=1 "$INTEGER_CHAT" \
+      --bundle "$BUNDLE_DIR" \
+      --temperature 0.0 \
+      --max-tokens "$TOKENS" \
+      --prompt "$PROMPT"
+    echo ""
+    echo "--- Testing Continuous FF Parent ($TOKENS tokens) ---"
+    env RAYON_NUM_THREADS=1 "$FF_GENERATE" \
+      --checkpoint "$FF_CHECKPOINT" \
+      --tokenizer "$FF_TOKENIZER" \
+      --prompt "$PROMPT" \
+      --tokens "$TOKENS"
+    echo ""
+    if [[ -n "${LLAMA_CLI:-}" ]] && [[ -n "${GGUF:-}" ]]; then
+      echo "--- Testing llama.cpp SmolLM2 ($TOKENS tokens) ---"
+      "$LLAMA_CLI" -m "$GGUF" -p "$PROMPT" -n "$TOKENS" -t 1 --temp 0 -no-cnv
+      echo ""
+    fi
+  done
+  echo "================================================================================"
   echo "[DRY RUN COMPLETE]"
-  echo "Preflight execution verified cleanly."
+  echo "Preflight execution verified cleanly across 128 and 512 token horizons."
   echo ""
   echo "To execute actual powermetrics energy measurement, run under sudo with the"
   echo "model slot lock claimed:"
@@ -171,8 +186,7 @@ for TOKENS in 128 512; do
     echo "[Integer Model] Tokens: $TOKENS, Repeat: $repeat"
     sudo python3 "$SCRIPT_DIR/energy_per_token.py" \
       --label "integer-w256-k${TOKENS}-rep${repeat}" \
-      --idle-seconds "$IDLE_SECONDS" \
-      --tokens "$TOKENS" -- \
+      --idle-seconds "$IDLE_SECONDS" -- \
       env RAYON_NUM_THREADS=1 "$INTEGER_CHAT" \
         --bundle "$BUNDLE_DIR" \
         --temperature 0.0 \
@@ -182,8 +196,7 @@ for TOKENS in 128 512; do
     echo "[Continuous FF Parent] Tokens: $TOKENS, Repeat: $repeat"
     sudo python3 "$SCRIPT_DIR/energy_per_token.py" \
       --label "continuous-ff-k${TOKENS}-rep${repeat}" \
-      --idle-seconds "$IDLE_SECONDS" \
-      --tokens "$TOKENS" -- \
+      --idle-seconds "$IDLE_SECONDS" -- \
       env RAYON_NUM_THREADS=1 "$FF_GENERATE" \
         --checkpoint "$FF_CHECKPOINT" \
         --tokenizer "$FF_TOKENIZER" \
@@ -204,5 +217,8 @@ done
 
 echo ""
 echo "================================================================================"
-echo "Energy measurements complete. Files saved in $OUT"
+echo "Computing Marginal Energy per Token (ΔE/ΔN) and Evaluating Decision Rules..."
+echo "================================================================================"
+python3 "$SCRIPT_DIR/analyze_marginal_energy.py" "$OUT" --repeats "$REPEATS"
+echo "Energy measurements complete. Files and summary saved in $OUT"
 echo "================================================================================"

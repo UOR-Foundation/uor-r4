@@ -6,7 +6,7 @@
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process;
-use uor_r4_integer::bundle::{Bundle, create_test_bundle_with_byte_vocab};
+use uor_r4_integer::bundle::{create_test_bundle_with_byte_vocab, Bundle};
 use uor_r4_integer::config::ReadMode;
 use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::sampling::SamplePolicy;
@@ -694,45 +694,89 @@ fn main() {
 
     if let Some(user_prompt) = cli.prompt.as_deref() {
         let start_time = std::time::Instant::now();
-        match session.generate_stream(user_prompt, cli.max_tokens, &[]) {
-            Ok(mut stream) => {
-                while let Some(chunk) = stream.next() {
-                    print!("{}", chunk);
-                    io::stdout().flush().ok();
-                }
-                println!();
+        let block_size = 128.min(cli.max_tokens);
+        let num_blocks = (cli.max_tokens + block_size - 1) / block_size;
+        let mut generated_so_far = 0;
 
-                let stop = match completed_stream_stop(&stream) {
-                    Ok(stop) => stop,
-                    Err(error) => {
-                        eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Generation failed: {error}");
-                        process::exit(1);
-                    }
-                };
-                let elapsed = start_time.elapsed();
-                let tok_count = stream.tokens_generated();
-                let elapsed_secs = elapsed.as_secs_f64();
-                let ms_per_tok = if tok_count > 0 {
-                    (elapsed_secs * 1000.0) / (tok_count as f64)
-                } else {
-                    0.0
-                };
-                let tok_per_sec = if elapsed_secs > 0.0 {
-                    (tok_count as f64) / elapsed_secs
-                } else {
-                    0.0
-                };
-                println!(
-                    "[telemetry] Generated {} tokens in {:.2}s ({:.1} tok/s, {:.3} ms/tok); stop={stop:?}",
-                    tok_count, elapsed_secs, tok_per_sec, ms_per_tok
-                );
-                process::exit(0);
+        for _ in 0..num_blocks {
+            let n_tokens = (cli.max_tokens - generated_so_far).min(block_size);
+            if n_tokens == 0 {
+                break;
             }
-            Err(err) => {
-                eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Generation error: {err}");
-                process::exit(1);
+            let mut block_session = match ChatSession::new(
+                &bundle,
+                cli.system_prompt.as_deref(),
+                cli.seed,
+            ) {
+                Ok(mut s) => {
+                    s.set_read_mode(cli.read_mode);
+                    s.set_policy(policy);
+                    s
+                }
+                Err(err) => {
+                    eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} failed to initialize chat session: {err}");
+                    process::exit(1);
+                }
+            };
+            let block_start = std::time::Instant::now();
+            match block_session.generate_stream(user_prompt, n_tokens, &[]) {
+                Ok(mut stream) => {
+                    while let Some(chunk) = stream.next() {
+                        print!("{}", chunk);
+                        io::stdout().flush().ok();
+                    }
+                    println!();
+
+                    let stop = match completed_stream_stop(&stream) {
+                        Ok(stop) => stop,
+                        Err(error) => {
+                            eprintln!(
+                                "{ANSI_RED_BOLD}[error]{ANSI_RESET} Generation failed: {error}"
+                            );
+                            process::exit(1);
+                        }
+                    };
+                    let block_elapsed = block_start.elapsed().as_secs_f64();
+                    let tok_count = stream.tokens_generated();
+                    generated_so_far += tok_count;
+                    let tok_per_sec = if block_elapsed > 0.0 {
+                        tok_count as f64 / block_elapsed
+                    } else {
+                        0.0
+                    };
+                    let ms_per_tok = if tok_count > 0 {
+                        (block_elapsed * 1000.0) / tok_count as f64
+                    } else {
+                        0.0
+                    };
+                    println!(
+                        "[telemetry] Generated {} tokens in {:.2}s ({:.1} tok/s, {:.3} ms/tok); stop={stop:?}",
+                        tok_count, block_elapsed, tok_per_sec, ms_per_tok
+                    );
+                }
+                Err(err) => {
+                    eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Generation error: {err}");
+                    process::exit(1);
+                }
             }
         }
+
+        let total_elapsed = start_time.elapsed().as_secs_f64();
+        let total_tok_per_sec = if total_elapsed > 0.0 {
+            generated_so_far as f64 / total_elapsed
+        } else {
+            0.0
+        };
+        let total_ms_per_tok = if generated_so_far > 0 {
+            (total_elapsed * 1000.0) / generated_so_far as f64
+        } else {
+            0.0
+        };
+        eprintln!(
+            "[summary] Total generated: {} tokens in {:.2}s ({:.1} tok/s, {:.3} ms/tok)",
+            generated_so_far, total_elapsed, total_tok_per_sec, total_ms_per_tok
+        );
+        process::exit(0);
     }
 
     print_welcome_banner(&bundle, policy, cli.read_mode);
