@@ -21,9 +21,10 @@ development runs, one seed per arm. Nothing here is a final holdout or a languag
 | `integer/<model>/steps64/evaluation.json` (with `attempt.json`, `manifest.json`) | The engine's step rate alone on 64 of the windows (commit `cb60c8bd`), apart from the f64 scoring loop |
 | `integer/<model>/samples/samples.json` (with `attempt.json`, `manifest.json`) | The integer engine's greedy and sampled continuations of three development prompts (commit `cb60c8bd`), as token ids and decoded text |
 | `integer/<model>/reference/evaluation.json` (with `attempt.json`, `manifest.json`) | Float, grid reference and integer NLL on the 512 windows (commit `feeef7e4`): the split of the integer gap into weight rounding and integer arithmetic |
+| `integer/<model>/gptq-export/export.json`, `gptq-evaluation/evaluation.json` (each with `attempt.json`, `manifest.json`) | The GPTQ export (commit `6bc7dd6d`): calibration settings and cost, and each matrix's relative output error under GPTQ and round-to-nearest; then float, grid reference and integer NLL of that artifact on the 512 windows |
 | `integer/run.log` | Start and end times and the executable identities of the integer stage |
 | `sources/` | The launchers: pilot, post-pilot chain (with the selection rule), ablations, main comparison, the restartable `pipeline.sh` and the integer stage |
-| `packet.json` | Per run: group, source commit, settings, threads, final metrics, cost and identities. Per integer model: float and integer NLL, agreement, speed and the artifact's identity. Also the SHA-256 and size of every file in this directory |
+| `packet.json` | Per run: group, source commit, settings, threads, final metrics, cost and identities. Per integer model: float and integer NLL, agreement, speed and the artifact's identity, and under `gptq` the same for the calibrated artifact. Also the SHA-256 and size of every file in this directory |
 
 Each `report.json` records:
 - settings and the complete model configuration;
@@ -41,7 +42,7 @@ Each `report.json` records:
 - **Executables.** Release builds with `-C target-cpu=native`; any rebuild on another host differs in bytes.
   - The pilot used commit `dca1b790` (SHA-256 `fcf710ad…`).
   - The ablations used commit `b87acd63` (SHA-256 `05889874…`). Relative to `dca1b790` it changes only the example's sample decoding, its evaluate mode and early-stop checkpoint retention, not the model, optimizer or training loop.
-  - The integer stage used commit `2a681bb7` (SHA-256 `cb0bb647…`), `cb60c8bd` (SHA-256 `3fed0f7c…`) for the step timing and continuations, and `feeef7e4` (SHA-256 `20e265e5…`) for the rounding/arithmetic split.
+  - The integer stage used commit `2a681bb7` (SHA-256 `cb0bb647…`), `cb60c8bd` (SHA-256 `3fed0f7c…`) for the step timing and continuations, `feeef7e4` (SHA-256 `20e265e5…`) for the rounding/arithmetic split, and `6bc7dd6d` (SHA-256 `6c1f4721…`) for the GPTQ exports.
 - **Corpora.** The repository code split is cycle 3's (`b12707b0…` training, `3f7c50ef…` development), in the [cycle-3 packet](../native-lorentz-packet-2026-09-26/README.md). The registry corpus for the main comparison is `af93ca73…` (29,039,409 tokens), built with `geometric-stack corpus` and encoded with `geometric-stack encode`.
 
 ## Cost
@@ -60,3 +61,4 @@ Each `report.json` records:
 - Rounds 1 and 2 shared the machine with builds and tests of this branch and of #1410.
 - The ablations, claim to seal: `dot` 56.6 min and `norot` 57.5 min together, two threads each; then `readsonly` 46.5 min alone, four threads. Training alone took 2,739–3,386 s per run. Thread count changes speed and floating-point summation order, not the model or the update rule.
 - The integer stage: 19 min for five exports and evaluations, one thread each, beside two training runs (09:28–09:47 UTC). An earlier start with an uncommitted build was stopped after 3 min and discarded.
+- The GPTQ stage: 31 min for five calibrated exports and their evaluations with the grid reference, one thread each, beside the main comparison and builds (12:30–13:01 UTC).

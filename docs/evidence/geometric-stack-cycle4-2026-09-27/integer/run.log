@@ -11,3 +11,10 @@ integer samples start 2026-09-27T11:29:54Z source cb60c8bd binary 3fed0f7c5c97cd
 integer samples end 2026-09-27T11:30:00Z
 reference split start 2026-09-27T11:35:52Z source feeef7e4 binary 20e265e5bfb1c5b6d56644ea41092c9dca3e0f760b8ec8bc2008436a90b55f47
 reference split end 2026-09-27T12:01:35Z
+gptq start 2026-09-27T12:30:39Z source 6bc7dd6d binary 6c1f4721a3167411ec27582702e2575f8564e80cfb24c69a5c97d32cdd9a62ba
+gptq done pilot-geometric_lr0.004 2026-09-27T12:36:38Z
+gptq done pilot-transformer_lr0.002 2026-09-27T12:42:06Z
+gptq done ablation-dot 2026-09-27T12:48:16Z
+gptq done ablation-norot 2026-09-27T12:54:20Z
+gptq done ablation-readsonly 2026-09-27T13:01:39Z
+gptq end 2026-09-27T13:01:39Z
