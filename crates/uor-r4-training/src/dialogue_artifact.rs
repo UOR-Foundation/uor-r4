@@ -701,6 +701,7 @@ mod tests {
             vocab.insert(token, json!(id));
         }
         let bytes = serde_json::to_vec(&json!({"model":{"type":"BPE","vocab":vocab,"merges":[]},
+            "pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},
             "added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}))?;
         let tokenizer = HfBpeTokenizer::from_tokenizer_json_bytes(&bytes)
             .ok_or_else(|| invalid("test tokenizer"))?;
