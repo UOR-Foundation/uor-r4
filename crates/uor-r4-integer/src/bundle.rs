@@ -332,6 +332,32 @@ pub fn pack_dialogue576(
     output: &Path,
 ) -> Result<()> {
     report_output::claim(output)?;
+    let outcome = pack_dialogue576_claimed(packed, tables, tokenizer, output);
+    if let Err(error) = &outcome {
+        // A successfully sealed bundle remains immutable even if its final
+        // reload fails. Earlier failures preserve a sealed, explicit attempt.
+        if !output.join("manifest.json").try_exists()? {
+            fs::write(
+                output.join("failed-attempt.json"),
+                serde_json::to_vec_pretty(&json!({
+                    "schema":"uor-r4.native-dialogue576-package-failure/1",
+                    "status":"PACKAGING_FAILED","error":error.to_string(),
+                    "serving_profile":"dialogue576","provenance_kind":"development"
+                }))?,
+            )?;
+            report_output::seal(output)?;
+            report_output::verify(output)?;
+        }
+    }
+    outcome
+}
+
+fn pack_dialogue576_claimed(
+    packed: &Path,
+    tables: &Path,
+    tokenizer: &Path,
+    output: &Path,
+) -> Result<()> {
     format::verify_sealed(packed)?;
     format::verify_sealed(tables)?;
     let profile = ServingProfile::Dialogue576;
@@ -454,6 +480,29 @@ fn validate_dialogue_conversion(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dialogue576_bundle_seals_failed_packaging_without_overwrite() -> Result<()> {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| invalid("test clock before epoch"))?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-dialogue576-pack-{}-{nonce}",
+            std::process::id()
+        ));
+        let missing = root.join("missing-input");
+        assert!(pack_dialogue576(&missing, &missing, &missing, &root).is_err());
+        report_output::verify(&root)?;
+        let failure: Value = serde_json::from_slice(&fs::read(root.join("failed-attempt.json"))?)?;
+        assert_eq!(failure["status"], "PACKAGING_FAILED");
+        let original_seal = fs::read(root.join("manifest.json"))?;
+        assert!(pack_dialogue576(&missing, &missing, &missing, &root).is_err());
+        assert_eq!(fs::read(root.join("manifest.json"))?, original_seal);
+        assert!(Bundle::load(&root).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
 
     #[test]
     fn dialogue576_bundle_requires_explicit_development_profile() -> Result<()> {
