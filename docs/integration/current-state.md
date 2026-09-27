@@ -165,12 +165,21 @@ focused Rust checks pass. Both saved models reproduce last-batch loss exactly;
 neither answers Paris or recalls Alex in the final memory turn. All ten replies,
 source identities and the 40.528-second combined process wall cost are retained
 in its [packet](../evidence/dialogue-prefix-implementation-2026-09-27.json).
-This is integrated execution, not useful chat or conditioning advantage. The
-substantive 1,024-update pair remains NOT_RUN. Next freeze source-stratified open
-development IDs/reporting, the existing open request panel and a complete
-prospective cost before that one paired study; restart from the retained parent,
-not the two-update descendants. Other labs retain their CLI, trainer and deeper
-stack ownership. Native, multiplier-free serving remains the target.
+This is integrated execution, not useful chat or conditioning advantage.
+The [substantive complete-prefix study](dialogue-prefix-study-2026-09-27.md)
+is now **RUNNING** from the retained parent: full-prefix first, with role-only
+queued under one sequential supervisor. The source-stratified open-development
+panel is sealed before learning: 161 distinct responses, with source counts
+23/32/10/32/32/32. Three focused selection/aggregation checks pass. Each arm is
+fixed at 1,024 updates, followed by saved-weight reload and all 58 existing
+open-development replies. The [launch packet](../evidence/dialogue-prefix-study-2026-09-27.json)
+binds the source, executable, both campaigns, actual panel IDs, prospective
+resources and independently reviewed decision method. It records a live launch,
+not a completed pair or language result. Wait for the declared endpoints, then
+review actual request fulfillment and history correctness against the parent
+and control, with source-specific losses and regressions. No automatic dose,
+seed or decoder extension follows. Other labs retain their CLI, trainer and
+deeper stack ownership. Native, multiplier-free serving remains the target.
 
 The fourth lab's [source review of Google PR #1410 at `9722200c`](https://github.com/UOR-Foundation/uor-r4/pull/1410#issuecomment-5851958824)
 identifies useful serving optimization alongside unresolved integration and
