@@ -194,6 +194,11 @@ Final NLL in nats per token, with bits per byte in parentheses:
 
 *(Filled in when the runs finish.)*
 
+**Queued: the reads-only Lorentz stack at the same exposure.** At 1,000 updates the reads-only Lorentz stack is the best configuration measured (§7). A third arm trains it (pattern `aaaaaa`, no rotation, learning rate 4e-3) with the main pair's executable, data, seed and settings, after the cycle-5 arms and the reads-only Dot seed (`c5/pipeline4.sh` in the lab sandbox). It reuses the main pair's control. Its reading, fixed before it runs:
+- at least 0.03 nats below the `rrarra` stack → the owner M1 scripts' default pattern becomes `aaaaaa`;
+- within 0.03 nats, or worse → `rrarra` stays the default, since its recurrences hold a fixed state and read less cache per token at long context;
+- its distance from the control is reported either way.
+
 ## 7. Ablations
 
 *Measured*, seed 1. Each arm makes one architectural change to the geometric stack and keeps the settings of the pilot's selected stack run:
