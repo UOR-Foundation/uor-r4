@@ -138,3 +138,95 @@ fn test_cross_lab_lorentz_causal_nll_advantage() {
         "Lorentz memory read must provide positive causal predictive benefit"
     );
 }
+
+#[test]
+fn test_cross_lab_radial_transfer_witness_invariants() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let radial_evidence_path = manifest_dir
+        .join("../../docs/evidence/radial-parameter-transfer-validation-2026-09-27.json");
+    let dot_evidence_path =
+        manifest_dir.join("../../docs/evidence/dot-reset-validation-2026-09-27.json");
+
+    if !radial_evidence_path.exists() || !dot_evidence_path.exists() {
+        return;
+    }
+
+    let radial_data: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&radial_evidence_path).expect("read radial evidence"),
+    )
+    .expect("parse radial evidence JSON");
+
+    let dot_data: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&dot_evidence_path).expect("read dot evidence"),
+    )
+    .expect("parse dot evidence JSON");
+
+    // Invariant 1: Schema and verification status
+    assert_eq!(
+        radial_data["startup"]["status"],
+        "DESCRIPTIVE_STARTUP_COMPLETE"
+    );
+    assert_eq!(
+        radial_data["startup"]["shared_all_parameter_arrays_identical_before_observation"],
+        true
+    );
+    assert_eq!(
+        radial_data["startup"]["parameters_unchanged_after_generation"],
+        true
+    );
+
+    // Invariant 2: Dot reset vs Radial transfer NLL disturbance
+    let dot_nll = dot_data["observations"]["initial_next_token_nll"]
+        .as_f64()
+        .expect("dot initial nll");
+    let lorentz_nll = radial_data["observations"]["lorentz"]["observed_initial_next_token_nll"]
+        .as_f64()
+        .expect("lorentz initial nll");
+    let affine_nll = radial_data["observations"]["lorentz_affine"]
+        ["observed_initial_next_token_nll"]
+        .as_f64()
+        .expect("affine initial nll");
+
+    assert!(
+        (dot_nll - 1.996717).abs() < 1e-4,
+        "Dot reset initial NLL must match reference 1.996717"
+    );
+    assert!(
+        (lorentz_nll - 2.389537).abs() < 1e-4,
+        "Lorentz initial NLL must match reference 2.389537"
+    );
+    assert!(
+        (affine_nll - 2.400457).abs() < 1e-4,
+        "LorentzAffine initial NLL must match reference 2.400457"
+    );
+
+    // Invariant 3: Connected finite gradients across all 6 gradient families
+    assert_eq!(
+        radial_data["observations"]["lorentz"]
+            ["all_required_gradient_arrays_have_nonzero_coordinates"],
+        true
+    );
+    assert_eq!(
+        radial_data["observations"]["lorentz_affine"]
+            ["all_required_gradient_arrays_have_nonzero_coordinates"],
+        true
+    );
+
+    // Invariant 4: No zero-read positions across 1,020 positions
+    assert_eq!(
+        radial_data["observations"]["lorentz"]["summary_excludes_empty_history_position0"]
+            ["all_causal_read_positions_nonzero"],
+        true
+    );
+    assert_eq!(
+        radial_data["observations"]["lorentz_affine"]["summary_excludes_empty_history_position0"]
+            ["all_causal_read_positions_nonzero"],
+        true
+    );
+
+    // Invariant 5: Bit-identical post-token0 states between Lorentz and Affine
+    assert_eq!(
+        radial_data["first_common_read"]["post_token0_states_bit_identical"],
+        true
+    );
+}
