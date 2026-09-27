@@ -247,6 +247,11 @@ struct RecurrentState {
     key_events: Vec<Tensor>,
     value_events: Vec<Tensor>,
     dense_batch_history: bool,
+    // Detached geometric-read hard-path caches, appended with the key writes.
+    // They exist only while the optional kernel is enabled; the default-off
+    // path never allocates them.
+    kernel_key_codes: Option<Tensor>,
+    kernel_key_coords: Option<Tensor>,
 }
 
 /// Detached incremental state; the context bound is enforced without eviction.
@@ -1025,6 +1030,8 @@ impl JointModel {
             key_events: Vec::new(),
             value_events: Vec::new(),
             dense_batch_history: false,
+            kernel_key_codes: None,
+            kernel_key_coords: None,
         })
     }
 
@@ -1290,7 +1297,14 @@ impl JointModel {
                 .values
                 .as_ref()
                 .ok_or_else(|| invalid("missing prior value history"))?;
-            let scores = self.read_scores(&query, keys, training)?;
+            let caches = match (&memory.kernel_key_codes, &memory.kernel_key_coords) {
+                (Some(codes), Some(coords)) => Some(crate::geometric_read::GeometricReadKeyCache {
+                    codes: codes.clone(),
+                    hard_coords: coords.clone(),
+                }),
+                _ => None,
+            };
+            let scores = self.read_scores_with_cache(&query, keys, caches.as_ref(), training)?;
             let age_indices =
                 self.age_order
                     .narrow(0, self.config.context - 1 - previous, previous)?;
@@ -1346,6 +1360,19 @@ impl JointModel {
         if self.admission == AdmissionPolicy::Full || memory.dense_batch_history {
             memory.keys = Some(append_history(memory.keys.as_ref(), &key, training)?);
             memory.values = Some(append_history(memory.values.as_ref(), &value, training)?);
+        }
+        if let Some(kernel) = &self.geometric_read {
+            if self.admission == AdmissionPolicy::Full {
+                let (codes, coords) = kernel.encode_keys(&key)?;
+                memory.kernel_key_codes = Some(match memory.kernel_key_codes.as_ref() {
+                    Some(previous) => Tensor::cat(&[previous, &codes], 1)?,
+                    None => codes,
+                });
+                memory.kernel_key_coords = Some(match memory.kernel_key_coords.as_ref() {
+                    Some(previous) => Tensor::cat(&[previous, &coords], 1)?,
+                    None => coords,
+                });
+            }
         }
         if self.admission != AdmissionPolicy::Full {
             let key_rows = key.detach().to_vec2::<f32>()?;
@@ -1405,6 +1432,16 @@ impl JointModel {
     /// operations and order; `Lorentz` is
     /// exp(read.lorentz_log_beta)*(read.lorentz_offset - arcosh(z)).
     fn read_scores(&self, query: &Tensor, keys: &Tensor, training: bool) -> Result<Tensor> {
+        self.read_scores_with_cache(query, keys, None, training)
+    }
+
+    fn read_scores_with_cache(
+        &self,
+        query: &Tensor,
+        keys: &Tensor,
+        caches: Option<&crate::geometric_read::GeometricReadKeyCache>,
+        training: bool,
+    ) -> Result<Tensor> {
         if let Some(kernel) = &self.geometric_read {
             if self.config.read_geometry != ReadGeometry::Dot {
                 return Err(invalid(
@@ -1420,7 +1457,7 @@ impl JointModel {
                 weight2: self.weight(crate::geometric_read::RELATION_WEIGHT2, training)?,
                 bias2: self.weight(crate::geometric_read::RELATION_BIAS2, training)?,
             };
-            return kernel.score(query, keys, &weights);
+            return kernel.score(query, keys, caches, &weights);
         }
         match self.config.read_geometry {
             ReadGeometry::Dot => Ok(query

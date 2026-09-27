@@ -220,18 +220,34 @@ impl GeometricReadUsage {
     }
 }
 
+/// Detached hard-path caches for one read: integer key codes and their exact
+/// root coordinates, both shaped `[batch, candidates, lanes]` (codes, `u32`)
+/// and `[batch, candidates, lanes, 4]` (coordinates, `f32`). They are built
+/// once per written key and gathered per read, so the 120-root nearest search
+/// runs on the `batch * lanes` newly written keys rather than on every
+/// candidate of every position. Forward semantics are unchanged: the codes and
+/// coordinates equal a direct recompute on the same written rows.
+#[derive(Clone)]
+pub(crate) struct GeometricReadKeyCache {
+    pub codes: Tensor,
+    pub hard_coords: Tensor,
+}
+
 /// Cached immutable kernel state attached to a [`crate::JointModel`].
 ///
 /// Holds the versioned configuration, the four parameter names, the cached
-/// constant root tensor used to materialize hard coordinates, and integer
-/// usage counters accumulated during enabled forwards. Cloning shares the
-/// usage mailbox so prepared/detached views report one histogram.
+/// constant root tensor used to materialize hard coordinates, the flat exact
+/// product table used to compose relative codes without a host loop, and
+/// integer usage counters accumulated during enabled forwards. Cloning shares
+/// the usage mailbox so prepared/detached views report one histogram.
 #[derive(Clone)]
 pub struct GeometricReadState {
     config: GeometricReadConfig,
     parameter_names: Vec<String>,
     roots: Box<[[f32; 4]; GROUP_ORDER]>,
     root_tensor: Tensor,
+    /// Flat `product[a * ROW_STRIDE + b]` table as `u32`, gathered per relation.
+    product: Tensor,
     usage: Arc<Mutex<GeometricReadUsage>>,
 }
 
@@ -253,11 +269,22 @@ impl GeometricReadState {
             flat.extend_from_slice(&roots[index]);
         }
         let root_tensor = Tensor::from_vec(flat, (GROUP_ORDER, 4), device)?;
+        let table = group_table();
+        let product = Tensor::from_vec(
+            table
+                .product
+                .iter()
+                .map(|&code| code as u32)
+                .collect::<Vec<u32>>(),
+            (GROUP_ORDER * ROW_STRIDE,),
+            device,
+        )?;
         Ok(Self {
             config,
             parameter_names: parameter_names().iter().map(|n| (*n).to_owned()).collect(),
             roots: Box::new(roots),
             root_tensor,
+            product,
             usage: Arc::new(Mutex::new(GeometricReadUsage::new(GEOMETRIC_READ_LANES))),
         })
     }
@@ -291,11 +318,64 @@ impl GeometricReadState {
         best
     }
 
+    /// Quantize `rows` normalized lane rows of `[rows, lanes, 4]` to signed
+    /// nearest-root codes on the host. Used for the query and for the
+    /// write-time cache; the candidate history is never re-coded per read.
+    fn quantize_flat(&self, host: &[f32], rows: usize) -> Vec<u32> {
+        let lanes = self.config.lanes;
+        let lane_width = GEOMETRIC_READ_LANE_WIDTH;
+        let mut codes = vec![0u32; rows * lanes];
+        for row in 0..rows {
+            for lane in 0..lanes {
+                let base = (row * lanes + lane) * lane_width;
+                codes[row * lanes + lane] = self.quantize_signed([
+                    host[base],
+                    host[base + 1],
+                    host[base + 2],
+                    host[base + 3],
+                ]) as u32;
+            }
+        }
+        codes
+    }
+
+    /// Encode one written key batch `[batch, read_width]` into the detached
+    /// hard-path cache: integer codes `[batch, 1, lanes]` and their exact root
+    /// coordinates `[batch, 1, lanes, 4]`. The row uses the same 4-D lane
+    /// normalization as the read path, so these codes equal a direct recompute
+    /// of the corresponding row of the differentiable history.
+    pub(crate) fn encode_keys(&self, key: &Tensor) -> Result<(Tensor, Tensor)> {
+        let (batch, read_width) = key.dims2()?;
+        let lanes = self.config.lanes;
+        let lane_width = GEOMETRIC_READ_LANE_WIDTH;
+        if read_width != lanes * lane_width {
+            return Err(invalid("geometric read key shape mismatch"));
+        }
+        let device = key.device();
+        let eps_sq = self.config.norm_eps * self.config.norm_eps;
+        let key_lanes = key.reshape((batch, 1, lanes, lane_width))?.detach();
+        let unit = normalize_lane_4d(&key_lanes, eps_sq, device)?;
+        let host = unit.flatten_all()?.to_vec1::<f32>()?;
+        let codes = self.quantize_flat(&host, batch);
+        let codes_tensor = Tensor::from_vec(codes.clone(), (batch, 1, lanes), device)?;
+        let coords = self
+            .root_tensor
+            .index_select(&Tensor::from_vec(codes, (batch * lanes,), device)?, 0)?
+            .reshape((batch, 1, lanes, lane_width))?;
+        Ok((codes_tensor, coords))
+    }
+
     /// Learned signed relative-group score, shaped `[batch, candidates]`.
+    ///
+    /// When `caches` is present the hard branch reads the detached write-time
+    /// codes and coordinates; when absent it recomputes them from `keys` with
+    /// the identical quantizer. Both paths produce the same hard tensors, and
+    /// the smooth branch always differentiates the current `keys` history.
     pub(crate) fn score(
         &self,
         query: &Tensor,
         keys: &Tensor,
+        caches: Option<&GeometricReadKeyCache>,
         weights: &KernelWeights,
     ) -> Result<Tensor> {
         let device = query.device();
@@ -319,42 +399,40 @@ impl GeometricReadState {
         let query_unit = normalize_lane_3d(&query_lanes, eps_sq, device)?;
         let key_unit = normalize_lane_4d(&key_lanes, eps_sq, device)?;
 
-        // Hard path: quantize, compose through the bound table, materialize
-        // coordinates from the cached root tensor. All of this is detached.
+        // Query coding is per position and small (batch * lanes).
         let query_host = query_unit.detach().flatten_all()?.to_vec1::<f32>()?;
-        let key_host = key_unit.detach().flatten_all()?.to_vec1::<f32>()?;
-        let mut query_codes = vec![0u32; batch * lanes];
-        for lane in 0..batch * lanes {
-            let base = lane * lane_width;
-            query_codes[lane] = self.quantize_signed([
-                query_host[base],
-                query_host[base + 1],
-                query_host[base + 2],
-                query_host[base + 3],
-            ]) as u32;
-        }
-        let mut key_codes = vec![0u32; batch * candidates * lanes];
-        let table = group_table();
-        let identity = table.identity as usize;
-        let mut relation_codes = vec![0u32; batch * candidates * lanes];
-        for row in 0..batch * candidates {
-            for lane in 0..lanes {
-                let base = (row * lanes + lane) * lane_width;
-                let code = self.quantize_signed([
-                    key_host[base],
-                    key_host[base + 1],
-                    key_host[base + 2],
-                    key_host[base + 3],
-                ]);
-                key_codes[row * lanes + lane] = code as u32;
-                let query_code = query_codes[(row / candidates) * lanes + lane] as usize;
-                let relation =
-                    table.product[table.inverse[query_code] as usize * ROW_STRIDE + code];
-                relation_codes[row * lanes + lane] = relation as u32;
-            }
-        }
-        self.record_usage(&key_codes, &relation_codes, batch, candidates, identity)?;
+        let query_codes = self.quantize_flat(&query_host, batch);
 
+        // Hard key codes: the detached write-time cache when present, otherwise
+        // the declared scalar recompute (reference and equality tests).
+        let (key_codes, key_hard) = match caches {
+            Some(cache)
+                if cache.codes.dims() == [batch, candidates, lanes].as_slice()
+                    && cache.hard_coords.dims()
+                        == [batch, candidates, lanes, lane_width].as_slice() =>
+            {
+                (cache.codes.clone(), cache.hard_coords.clone())
+            }
+            Some(_) => return Err(invalid("geometric read key cache shape mismatch")),
+            None => {
+                let key_host = key_unit.detach().flatten_all()?.to_vec1::<f32>()?;
+                let codes = self.quantize_flat(&key_host, batch * candidates);
+                let codes_tensor =
+                    Tensor::from_vec(codes.clone(), (batch, candidates, lanes), device)?;
+                let hard = self
+                    .root_tensor
+                    .index_select(
+                        &Tensor::from_vec(codes, (batch * candidates * lanes,), device)?,
+                        0,
+                    )?
+                    .reshape((batch, candidates, lanes, lane_width))?;
+                (codes_tensor, hard)
+            }
+        };
+
+        // Query hard coordinates, then the exact relative code per candidate:
+        // `inverse(q_code) * ROW_STRIDE + k_code` gathered from the flat product
+        // table (no host loop over candidates).
         let query_hard = self
             .root_tensor
             .index_select(
@@ -362,20 +440,29 @@ impl GeometricReadState {
                 0,
             )?
             .reshape((batch, lanes, lane_width))?;
-        let key_hard = self
-            .root_tensor
+        let table = group_table();
+        let mut query_shift = vec![0u32; batch * lanes];
+        for (row, lane_codes) in query_codes.chunks(lanes).enumerate() {
+            for (lane, &code) in lane_codes.iter().enumerate() {
+                query_shift[row * lanes + lane] =
+                    table.inverse[code as usize] as u32 * ROW_STRIDE as u32;
+            }
+        }
+        let relation_codes = self
+            .product
             .index_select(
-                &Tensor::from_vec(key_codes, (batch * candidates * lanes,), device)?,
+                &Tensor::from_vec(query_shift, (batch, lanes), device)?
+                    .unsqueeze(1)?
+                    .broadcast_add(&key_codes)?
+                    .flatten_all()?,
                 0,
             )?
-            .reshape((batch, candidates, lanes, lane_width))?;
+            .reshape((batch, candidates, lanes))?;
         let relation_hard = self
             .root_tensor
-            .index_select(
-                &Tensor::from_vec(relation_codes, (batch * candidates * lanes,), device)?,
-                0,
-            )?
+            .index_select(&relation_codes.flatten_all()?, 0)?
             .reshape((batch, candidates, lanes, lane_width))?;
+        self.record_usage(&key_codes, &relation_codes, batch * candidates)?;
 
         // Straight-through surrogates: forward is the exact hard value, the
         // derivative is the identity through the smooth branch.
@@ -384,51 +471,48 @@ impl GeometricReadState {
         let smooth = smooth_relative(&query_st, &key_st)?;
         let relation_st = smooth.add(&relation_hard.sub(&smooth.detach())?.detach())?;
 
+        // Batch every lane into one broadcast matmul pair instead of 16 sets of
+        // narrow/matmul/broadcast_add launches. Lane accumulation order is kept
+        // (0..lanes) so the sum is bitwise the declared per-lane sequence.
+        let permuted = relation_st.permute((2, 0, 1, 3))?.contiguous()?;
+        let flat = permuted.reshape((lanes, batch * candidates, lane_width))?;
+        let hidden = flat
+            .broadcast_matmul(&weights.weight1.transpose(1, 2)?)?
+            .broadcast_add(&weights.bias1.unsqueeze(1)?)?
+            .tanh()?;
+        let lane_scores = hidden
+            .broadcast_matmul(&weights.weight2.transpose(1, 2)?)?
+            .broadcast_add(&weights.bias2.reshape((lanes, 1, 1))?)?;
         let mut total: Option<Tensor> = None;
         for lane in 0..lanes {
-            let lane_relation = relation_st
-                .narrow(2, lane, 1)?
-                .squeeze(2)?
-                .contiguous()?
-                .reshape((batch * candidates, lane_width))?;
-            let hidden = lane_relation
-                .matmul(&weights.weight1.narrow(0, lane, 1)?.squeeze(0)?.t()?)?
-                .broadcast_add(&weights.bias1.narrow(0, lane, 1)?.squeeze(0)?)?
-                .tanh()?;
-            let score = hidden
-                .matmul(&weights.weight2.narrow(0, lane, 1)?.squeeze(0)?.t()?)?
-                .broadcast_add(&weights.bias2.narrow(0, lane, 1)?.squeeze(0)?)?
-                .reshape((batch, candidates))?;
+            let score = lane_scores.narrow(0, lane, 1)?.squeeze(0)?.contiguous()?;
             total = Some(match total {
                 None => score,
                 Some(previous) => previous.add(&score)?,
             });
         }
-        total.ok_or_else(|| invalid("geometric read kernel has no lanes"))
+        Ok(total
+            .ok_or_else(|| invalid("geometric read kernel has no lanes"))?
+            .reshape((batch, candidates))?)
     }
 
-    fn record_usage(
-        &self,
-        key_codes: &[u32],
-        relation_codes: &[u32],
-        batch: usize,
-        candidates: usize,
-        identity: usize,
-    ) -> Result<()> {
+    fn record_usage(&self, key_codes: &Tensor, relation_codes: &Tensor, rows: usize) -> Result<()> {
         let lanes = self.config.lanes;
+        let identity = group_table().identity as usize;
+        let key_host = key_codes.flatten_all()?.to_vec1::<u32>()?;
+        let relation_host = relation_codes.flatten_all()?.to_vec1::<u32>()?;
         let mut usage = self
             .usage
             .lock()
             .map_err(|_| invalid("geometric read usage lock poisoned"))?;
-        for row in 0..batch * candidates {
-            for lane in 0..lanes {
-                usage.key_counts[lane][key_codes[row * lanes + lane] as usize] += 1;
-                let relation = relation_codes[row * lanes + lane] as usize;
-                usage.relation_counts[lane][relation] += 1;
-                usage.relation_total += 1;
-                if relation != identity {
-                    usage.non_identity_relations += 1;
-                }
+        for index in 0..rows * lanes {
+            let lane = index % lanes;
+            usage.key_counts[lane][key_host[index] as usize] += 1;
+            let relation = relation_host[index] as usize;
+            usage.relation_counts[lane][relation] += 1;
+            usage.relation_total += 1;
+            if relation != identity {
+                usage.non_identity_relations += 1;
             }
         }
         Ok(())
@@ -813,7 +897,7 @@ mod tests {
         };
         let state = GeometricReadState::new(GeometricReadConfig::signed_2i(), &Device::Cpu)?;
         let actual = state
-            .score(&query, &keys, &weights)?
+            .score(&query, &keys, None, &weights)?
             .flatten_all()?
             .to_vec1::<f32>()?;
         let expected = reference_hard_scores(
@@ -1137,7 +1221,7 @@ mod tests {
             weight2: kernel_tensor(&model, RELATION_WEIGHT2)?,
             bias2: kernel_tensor(&model, RELATION_BIAS2)?,
         };
-        let scores = state.score(&query, &keys, &weights)?;
+        let scores = state.score(&query, &keys, None, &weights)?;
         assert_eq!(scores.dims().to_vec(), vec![1usize, candidates]);
         assert!(scores
             .flatten_all()?
@@ -1164,6 +1248,184 @@ mod tests {
             );
         }
         assert!(usage["relation_observations"].as_u64().unwrap_or(0) > 0);
+        Ok(())
+    }
+
+    fn fixed_query(seed: u64) -> Result<Tensor> {
+        let values = random_ids(64, seed)
+            .into_iter()
+            .map(|id| (id as f32 - 2048.0) / 2048.0)
+            .collect::<Vec<f32>>();
+        Ok(Tensor::from_vec(values, (1, 64), &Device::Cpu)?)
+    }
+
+    fn fixed_keys(candidates: usize, seed: u64) -> Result<Tensor> {
+        let values = random_ids(candidates * 64, seed)
+            .into_iter()
+            .map(|id| (id as f32 - 2048.0) / 2048.0)
+            .collect::<Vec<f32>>();
+        Ok(Tensor::from_vec(values, (1, candidates, 64), &Device::Cpu)?)
+    }
+
+    /// Build the detached write-time cache row by row, exactly as `core_step`
+    /// appends it, and return it with the flattened code vector.
+    fn encode_row_by_row(
+        state: &GeometricReadState,
+        keys: &Tensor,
+        candidates: usize,
+    ) -> Result<(GeometricReadKeyCache, Vec<u32>)> {
+        let mut codes: Option<Tensor> = None;
+        let mut coords: Option<Tensor> = None;
+        for candidate in 0..candidates {
+            let row = keys.narrow(1, candidate, 1)?.squeeze(1)?;
+            let (row_codes, row_coords) = state.encode_keys(&row)?;
+            codes = Some(match codes {
+                Some(previous) => Tensor::cat(&[&previous, &row_codes], 1)?,
+                None => row_codes,
+            });
+            coords = Some(match coords {
+                Some(previous) => Tensor::cat(&[&previous, &row_coords], 1)?,
+                None => row_coords,
+            });
+        }
+        let codes = codes.ok_or_else(|| invalid("no candidates"))?;
+        let coords = coords.ok_or_else(|| invalid("no candidates"))?;
+        let flat = codes.flatten_all()?.to_vec1::<u32>()?;
+        Ok((
+            GeometricReadKeyCache {
+                codes,
+                hard_coords: coords,
+            },
+            flat,
+        ))
+    }
+
+    fn recompute_codes(
+        state: &GeometricReadState,
+        keys: &Tensor,
+        candidates: usize,
+    ) -> Result<Vec<u32>> {
+        let lanes = GEOMETRIC_READ_LANES;
+        let lane_width = GEOMETRIC_READ_LANE_WIDTH;
+        let key_lanes = keys.reshape((1, candidates, lanes, lane_width))?;
+        let unit = normalize_lane_4d(&key_lanes, 1e-12, &Device::Cpu)?;
+        let host = unit.flatten_all()?.to_vec1::<f32>()?;
+        Ok(state.quantize_flat(&host, candidates))
+    }
+
+    #[test]
+    fn geometric_read_cached_codes_match_recompute() -> Result<()> {
+        let state = GeometricReadState::new(GeometricReadConfig::signed_2i(), &Device::Cpu)?;
+        let candidates = 7usize;
+        let lanes = GEOMETRIC_READ_LANES;
+        let query = fixed_query(0x5EED_0001)?;
+        let keys = fixed_keys(candidates, 0x5EED_0002)?;
+        let (cache, cached_flat) = encode_row_by_row(&state, &keys, candidates)?;
+        assert_eq!(cache.codes.dims().to_vec(), vec![1usize, candidates, lanes]);
+        assert_eq!(
+            cache.hard_coords.dims().to_vec(),
+            vec![1usize, candidates, lanes, GEOMETRIC_READ_LANE_WIDTH]
+        );
+        let recomputed = recompute_codes(&state, &keys, candidates)?;
+        assert_eq!(
+            cached_flat, recomputed,
+            "cached and recomputed key codes differ"
+        );
+
+        // The write-time hard coordinates equal the root of the recomputed key
+        // codes, and the relation rows agree candidate by candidate and lane by
+        // lane.
+        let query_host = normalize_lane_3d(&query.reshape((1, lanes, 4))?, 1e-12, &Device::Cpu)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let query_codes = state.quantize_flat(&query_host, 1);
+        let table = group_table();
+        let relation_from = |codes: &[u32]| -> Vec<u32> {
+            (0..candidates * lanes)
+                .map(|index| {
+                    let lane = index % lanes;
+                    let query_code = query_codes[lane] as usize;
+                    let key_code = codes[index] as usize;
+                    table.product[table.inverse[query_code] as usize * ROW_STRIDE + key_code] as u32
+                })
+                .collect()
+        };
+        let cached_relations = relation_from(&cached_flat);
+        let recomputed_relations = relation_from(&recomputed);
+        assert_eq!(
+            cached_relations, recomputed_relations,
+            "cached and recomputed hard relation codes differ"
+        );
+
+        let key_coords = cache.hard_coords.flatten_all()?.to_vec1::<f32>()?;
+        let expected_key_coords = state
+            .root_tensor
+            .index_select(
+                &Tensor::from_vec(recomputed.clone(), (candidates * lanes,), &Device::Cpu)?,
+                0,
+            )?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let relation_coords = state
+            .root_tensor
+            .index_select(
+                &Tensor::from_vec(cached_relations, (candidates * lanes,), &Device::Cpu)?,
+                0,
+            )?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let expected_relation_coords = state
+            .root_tensor
+            .index_select(
+                &Tensor::from_vec(recomputed_relations, (candidates * lanes,), &Device::Cpu)?,
+                0,
+            )?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert_eq!(key_coords.len(), expected_key_coords.len());
+        assert_eq!(relation_coords.len(), expected_relation_coords.len());
+        for (index, (actual, wanted)) in key_coords.iter().zip(&expected_key_coords).enumerate() {
+            assert_eq!(
+                actual.to_bits(),
+                wanted.to_bits(),
+                "hard key coordinate {index} differs"
+            );
+        }
+        for (index, (actual, wanted)) in relation_coords
+            .iter()
+            .zip(&expected_relation_coords)
+            .enumerate()
+        {
+            assert_eq!(
+                actual.to_bits(),
+                wanted.to_bits(),
+                "hard relation coordinate {index} differs"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_read_cached_path_matches_uncached_scores() -> Result<()> {
+        let (model, _) = kernel_model()?;
+        let state = GeometricReadState::new(GeometricReadConfig::signed_2i(), &Device::Cpu)?;
+        let candidates = 6usize;
+        let query = fixed_query(0xC0FF_0001)?;
+        let keys = fixed_keys(candidates, 0xC0FF_0002)?;
+        let (cache, _) = encode_row_by_row(&state, &keys, candidates)?;
+        let weights = KernelWeights {
+            weight1: kernel_tensor(&model, RELATION_WEIGHT1)?,
+            bias1: kernel_tensor(&model, RELATION_BIAS1)?,
+            weight2: kernel_tensor(&model, RELATION_WEIGHT2)?,
+            bias2: kernel_tensor(&model, RELATION_BIAS2)?,
+        };
+        let cached = state.score(&query, &keys, Some(&cache), &weights)?;
+        let uncached = state.score(&query, &keys, None, &weights)?;
+        assert_eq!(cached.dims(), uncached.dims());
+        assert!(
+            same_bits(&cached, &uncached)?,
+            "cached and uncached scores differ"
+        );
         Ok(())
     }
 }
