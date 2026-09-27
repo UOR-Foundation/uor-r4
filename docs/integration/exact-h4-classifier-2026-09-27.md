@@ -143,4 +143,5 @@ Initial ownership is recorded in the [shared work card](https://github.com/UOR-F
 and the measured integer-only build exception in the
 [scheduling amendment](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5857979897).
 References #973 and #820. The donor check and model-dependent integration retain
-their separate scheduling; the running fixed dialogue fit remains unchanged.
+their separate scheduling. The fixed dialogue experiment and its recovery
+status remain in [the owning issue](https://github.com/UOR-Foundation/uor-r4/issues/973).
