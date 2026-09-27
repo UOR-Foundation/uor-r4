@@ -175,7 +175,11 @@ pub(crate) struct Corpus {
     sources: Vec<SourceSpan>,
 }
 impl Corpus {
-    pub(crate) fn load(binding: &DatasetBinding, prepared: &Value, manifest_path: &Path) -> Result<Self> {
+    pub(crate) fn load(
+        binding: &DatasetBinding,
+        prepared: &Value,
+        manifest_path: &Path,
+    ) -> Result<Self> {
         let split = &prepared[&binding.split];
         let root = manifest_path
             .parent()
