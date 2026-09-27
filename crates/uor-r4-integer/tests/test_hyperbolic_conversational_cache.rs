@@ -115,7 +115,7 @@ fn test_chat_session_hyperbolic_cache_creation_and_streaming() {
     let bundle = Bundle::synthetic_lorentz_for_test();
     assert!(bundle.model().is_lorentz());
 
-    let persona = "You are a geometric AI running hyperbolic cache memory.";
+    let persona = "Hyperbolic bot.";
     let mut chat = ChatSession::new(&bundle, Some(persona), 42).expect("chat session creation");
 
     // Hyperbolic cache should be automatically enabled for Lorentz bundle
@@ -146,7 +146,7 @@ fn test_chat_session_hyperbolic_cache_creation_and_streaming() {
 #[test]
 fn test_chat_session_hyperbolic_serialization_roundtrip() {
     let bundle = Bundle::synthetic_lorentz_for_test();
-    let persona = "Frontier hyperbolic geometry assistant.";
+    let persona = "Lorentz assistant.";
     let mut chat = ChatSession::new(&bundle, Some(persona), 12345).expect("chat session creation");
     chat.set_policy(SamplePolicy::Categorical { top_k: 4 });
 
@@ -196,6 +196,12 @@ fn test_chat_session_hyperbolic_serialization_roundtrip() {
             chat.state().dialogue_key_norms[i]
         );
     }
+    for i in 0..chat.state().l2_len() {
+        assert_eq!(
+            restored.state().l2_page_norms[i],
+            chat.state().l2_page_norms[i]
+        );
+    }
 
     // Verify determinism: next turn generation from original and restored must yield identical tokens
     let test_prompt = "Verify deterministic continuation.";
@@ -216,5 +222,222 @@ fn test_chat_session_hyperbolic_serialization_roundtrip() {
     assert_eq!(
         tokens_orig, tokens_rest,
         "Original and restored hyperbolic sessions must produce bit-identical token sequences!"
+    );
+}
+
+fn get_process_rss_mb() -> Option<f64> {
+    let pid = std::process::id();
+    let output = std::process::Command::new("ps")
+        .args(["-o", "rss=", "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = std::str::from_utf8(&output.stdout).ok()?.trim();
+    let rss_kib: f64 = text.parse().ok()?;
+    Some(rss_kib / 1024.0)
+}
+
+#[test]
+fn test_conversational_hyperbolic_cache_l2_wrapping_past_64_pages() {
+    let model = IntegerModel::synthetic_lorentz_for_test();
+    let mut session = model.new_conversational_session();
+    session.enable_hyperbolic_cache();
+
+    // 1. Ingest 3 persistent persona slots
+    for tok in [101, 102, 103] {
+        model
+            .step_conversational(&mut session, tok, SlotTarget::Persistent, ReadMode::Enabled)
+            .expect("persistent slot stepping");
+    }
+    session.seal_persistent();
+
+    // 2. Generate 90 turns, each with 10 tokens (900 dialogue steps)
+    // Dialogue capacity is 224, so turns will be evicted and compressed into L2 pages.
+    // Evicting 90 - 22 = ~68 turns will wrap L2 cursor (capacity 64) past 64!
+    for turn in 1..=90 {
+        session.start_turn();
+        for tok in 0..10 {
+            let token_id = ((turn * 17 + tok * 3) % 4000 + 7) as u32;
+            let step = model
+                .step_conversational_hyperbolic(
+                    &mut session,
+                    token_id,
+                    SlotTarget::Dialogue,
+                    ReadMode::Enabled,
+                )
+                .expect("stepping dialogue with hyperbolic cache");
+            let sum: u64 = step.probabilities.iter().sum();
+            assert_eq!(sum, TOTAL, "step probabilities must sum to TOTAL");
+        }
+    }
+
+    // Verify L2 page wrapping invariants
+    assert!(
+        session.l2_seen >= 65,
+        "Must have compressed >= 65 turns into L2 pages (seen: {})",
+        session.l2_seen
+    );
+    assert_eq!(
+        session.l2_len(),
+        64,
+        "L2 capacity is 64; len must be clamped at 64"
+    );
+    assert_eq!(
+        session.l2_cursor,
+        (session.l2_seen % 64) as usize,
+        "L2 cursor must wrap modulo 64"
+    );
+
+    // Verify all 64 L2 page norms are strictly positive
+    for (idx, &norm) in session.l2_page_norms.iter().enumerate() {
+        assert!(
+            norm > 0,
+            "L2 page norm at index {idx} must be strictly positive: {norm}"
+        );
+    }
+
+    // Verify stepping with 64 wrapped L2 pages succeeds and read_masses covers all candidates
+    let step_with_wrapped_l2 = model
+        .step_conversational(&mut session, 2048, SlotTarget::Dialogue, ReadMode::Enabled)
+        .expect("stepping with wrapped L2 pages");
+    let sum_wrapped: u64 = step_with_wrapped_l2.probabilities.iter().sum();
+    assert_eq!(sum_wrapped, TOTAL);
+    assert_eq!(
+        step_with_wrapped_l2.read_masses.len(),
+        3 + 224 + 64, // 291 active candidate slots
+        "Candidate read masses must cover 3 persistent + 224 dialogue + 64 L2 slots"
+    );
+}
+
+#[test]
+fn test_chat_session_hyperbolic_serialization_roundtrip_with_wrapped_l2_pages() {
+    let bundle = Bundle::synthetic_lorentz_for_test();
+    let persona = "Lorentz memory.";
+    let mut chat = ChatSession::new(&bundle, Some(persona), 99999).expect("chat session creation");
+    chat.set_policy(SamplePolicy::Categorical { top_k: 4 });
+
+    // Multi-turn exchanges to fill dialogue capacity and generate multiple L2 pages
+    for turn in 1..=30 {
+        let msg = format!("Message for turn {turn} testing L2 compression");
+        let mut stream = chat
+            .generate_stream(&msg, 10, &[])
+            .expect("stream for turn");
+        while let Some(_) = stream.next() {}
+    }
+
+    assert!(
+        chat.state().l2_len() > 0,
+        "ChatSession must have generated L2 prime pages after 30 turns (l2_len: {})",
+        chat.state().l2_len()
+    );
+
+    let tmp_dir = std::env::temp_dir();
+    let save_path = tmp_dir.join(format!(
+        "uor_r4_hyperbolic_l2_session_{}.json",
+        std::process::id()
+    ));
+
+    chat.save_session_default(&save_path)
+        .expect("save session with L2 pages to json");
+    assert!(save_path.exists());
+
+    let mut restored = bundle
+        .load_chat_session(&save_path, "")
+        .expect("load hyperbolic chat session with L2 pages");
+    let _ = std::fs::remove_file(&save_path);
+
+    // Verify state equality
+    assert_eq!(
+        restored.state().allow_hyperbolic_cache,
+        chat.state().allow_hyperbolic_cache
+    );
+    assert_eq!(
+        restored.state().persistent_len(),
+        chat.state().persistent_len()
+    );
+    assert_eq!(restored.state().dialogue_len(), chat.state().dialogue_len());
+    assert_eq!(restored.state().l2_len(), chat.state().l2_len());
+    assert_eq!(restored.state().l2_cursor, chat.state().l2_cursor);
+    assert_eq!(restored.state().l2_seen, chat.state().l2_seen);
+
+    // Verify key norms bit-identity across persistent, dialogue, and L2 pages
+    assert_eq!(
+        restored.state().persistent_key_norms,
+        chat.state().persistent_key_norms
+    );
+    for i in 0..chat.state().dialogue_len() {
+        assert_eq!(
+            restored.state().dialogue_key_norms[i],
+            chat.state().dialogue_key_norms[i]
+        );
+    }
+    for i in 0..chat.state().l2_len() {
+        assert_eq!(
+            restored.state().l2_page_norms[i],
+            chat.state().l2_page_norms[i],
+            "L2 page norm at {i} must match exactly after deserialization"
+        );
+    }
+
+    // Verify deterministic continuation
+    let test_prompt = "Verify post-L2 restoration deterministic continuation.";
+    let mut stream_orig = chat
+        .generate_stream(test_prompt, 15, &[])
+        .expect("stream orig");
+    let mut tokens_orig = Vec::new();
+    while let Some(_) = stream_orig.next() {}
+    tokens_orig.extend_from_slice(stream_orig.generated_tokens());
+
+    let mut stream_rest = restored
+        .generate_stream(test_prompt, 15, &[])
+        .expect("stream rest");
+    let mut tokens_rest = Vec::new();
+    while let Some(_) = stream_rest.next() {}
+    tokens_rest.extend_from_slice(stream_rest.generated_tokens());
+
+    assert_eq!(
+        tokens_orig, tokens_rest,
+        "Original and restored hyperbolic sessions with active L2 pages must produce bit-identical token sequences!"
+    );
+}
+
+#[test]
+fn test_chat_session_hyperbolic_streaming_latency_and_rss_invariants() {
+    let bundle = Bundle::synthetic_lorentz_for_test();
+    let persona = "Latency bot.";
+    let mut chat = ChatSession::new(&bundle, Some(persona), 777).expect("chat session creation");
+    chat.set_policy(SamplePolicy::Categorical { top_k: 4 });
+
+    let initial_rss = get_process_rss_mb().unwrap_or(12.0);
+
+    // Ingest 128 tokens across hyperbolic cache
+    let mut pending = Vec::with_capacity(256);
+    let mut latencies_ms = Vec::with_capacity(128);
+
+    for i in 0..128 {
+        let token = 7 + (i % 250) as u32;
+        let start = std::time::Instant::now();
+        let _ = chat.step_stream(token, &mut pending).expect("step_stream");
+        latencies_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+    }
+
+    let final_rss = get_process_rss_mb().unwrap_or(initial_rss);
+    let mean_latency = latencies_ms.iter().sum::<f64>() / (latencies_ms.len() as f64);
+
+    println!(
+        "Hyperbolic Cache Telemetry: {} tokens, mean latency: {:.3} ms/token, RSS: {:.2} MB -> {:.2} MB",
+        latencies_ms.len(),
+        mean_latency,
+        initial_rss,
+        final_rss,
+    );
+
+    assert_eq!(latencies_ms.len(), 128);
+    assert!(
+        mean_latency <= 4.0,
+        "Mean latency {:.3} ms must be <= 4.0 ms/token",
+        mean_latency
     );
 }

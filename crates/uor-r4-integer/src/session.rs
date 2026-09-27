@@ -1031,7 +1031,7 @@ impl<'a> ChatSession<'a> {
             vec![L2PrimePage::default(); L2_PAGE_CAPACITY]
                 .into_boxed_slice()
                 .try_into()
-                .unwrap_or_else(|_| panic!("l2_pages size mismatch"));
+                .map_err(|_| invalid("l2_pages size mismatch"))?;
         for (i, page) in s_state.l2_pages.into_iter().enumerate() {
             if i < L2_PAGE_CAPACITY {
                 l2_pages[i] = page;
@@ -1053,7 +1053,7 @@ impl<'a> ChatSession<'a> {
         let mut dialogue_key_norms: Box<[i128; DIALOGUE_CAPACITY]> = vec![0i128; DIALOGUE_CAPACITY]
             .into_boxed_slice()
             .try_into()
-            .unwrap_or_else(|_| panic!("dialogue_key_norms size mismatch"));
+            .map_err(|_| invalid("dialogue_key_norms size mismatch"))?;
         if is_lorentz {
             for i in 0..DIALOGUE_CAPACITY {
                 dialogue_key_norms[i] = crate::lorentz::squared_norm(&dialogue_keys[i])?;
@@ -1063,7 +1063,7 @@ impl<'a> ChatSession<'a> {
         let mut l2_page_norms: Box<[i128; L2_PAGE_CAPACITY]> = vec![0i128; L2_PAGE_CAPACITY]
             .into_boxed_slice()
             .try_into()
-            .unwrap_or_else(|_| panic!("l2_page_norms size mismatch"));
+            .map_err(|_| invalid("l2_page_norms size mismatch"))?;
         if is_lorentz {
             for i in 0..L2_PAGE_CAPACITY {
                 l2_page_norms[i] = crate::lorentz::squared_norm(&l2_pages[i].key)?;
@@ -1106,7 +1106,7 @@ impl<'a> ChatSession<'a> {
             last_probabilities: vec![0u64; 4096]
                 .into_boxed_slice()
                 .try_into()
-                .unwrap_or_else(|_| panic!("probabilities size mismatch")),
+                .map_err(|_| invalid("probabilities size mismatch"))?,
             last_read_masses: Vec::with_capacity(TOTAL_MEMORY_CANDIDATES),
             last_no_read_mass: 0,
             last_copy_gate: 0,
