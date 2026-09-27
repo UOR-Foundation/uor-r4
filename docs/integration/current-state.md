@@ -23,6 +23,17 @@ record the executed scope. No model fit or capability promotion
 follows from the lab setup. Accepted models and the continuation negative below
 remain unchanged. Other labs' active source and model jobs are preserved.
 
+The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
+and consistent optional stop-token handling. Six focused checks pass. A loaded
+accepted-bundle witness matches exact prefix IDs and all 16 prediction records
+across two selection policies against direct integer stepping; both short outputs
+remain incoherent for chat. The
+[adapter receipt](../evidence/dialogue-token-session-validation-2026-09-27.json)
+records actual text, source/artifact identity and cost. This is verified input
+and prediction transport, not trained chat. Existing chatbot CLI, corpus builder
+and panel adoption, and the separate width-576 dialogue checkpoint loader, remain
+open. No accepted bundle was changed.
+
 **Concurrent discovery:** the [fourth-lab native-read review](fourth-lab-native-read-review-2026-09-26.md)
 inspects Claude PR#1401's full-context Lorentz implementation and reported
 development results. Claude fixed the two reported implementation defects and
@@ -66,9 +77,11 @@ completed without meeting coherent-language criteria. Preserve the accepted
 parents and close exposure-only fitting. The recommended same-checkpoint
 emission/selection diagnostic is now executed read-only at the same step-15,672
 artifacts; its witnessed malformed decisions are predominantly low-probability
-draws from the model's own ranking, so the selection interface is supported for
-a later bounded experiment, while the retained greedy source-panel regressions
-remain a separate ranking-side obligation. Admission pruning remains deferred.
+draws from the model's own ranking. The follow-on selection-policy diagnostic is
+now executed too: with the draw removed the sampled malformed clauses do not
+recur, but greedy prose still misses the frozen acceptability bar (quaternion
+2/5, ordinary pair 0/5) and the greedy source panel still fails 11/32 and 9/32
+rows, so ranking/emission is the supported next target. Admission pruning remains deferred.
 The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged.
 
 ## Latest result: completed continuation, useful-language target unmet
@@ -459,6 +472,28 @@ listed only in the result's [delivery section](language-continuation-result-2026
   better-ranked token is not a coherent alternate trajectory.
 - **Stop:** this packet is closed. #973 and #820 remain open at their wider
   acceptance scope.
+
+### Executed: same-checkpoint selection-policy diagnostic (September 27)
+
+- **Executed read-only** from the [predeclared plan](selection-policy-diagnostic-plan-2026-09-27.md)
+  and [result](selection-policy-diagnostic-result-2026-09-27.md): deterministic
+  greedy replay at the same step-15,672 checkpoints. The greedy source panel
+  reproduced the retained `story-probes.json` exactly (`PARITY_EXACT`, 0
+  mismatches; complete answers21/32 quaternion,23/32 ordinary pair), and the five
+  frozen prompts were replayed with the draw removed.
+- **Witnessed result:** all five greedy trajectories diverge within the first
+  three tokens, so the sampled malformed clauses do not recur; nevertheless
+  greedy prose stays below the frozen acceptability bar in both arms (quaternion
+  2/5, ordinary pair0/5) and the greedy source panel keeps failing11/32 and9/32
+  rows. The independent evidence auditor returned identical verdicts.
+- **Supported next target:** ranking/emission, on the concrete greedy regression
+  rows (lost versus the accepted parent:9 and6 complete answers) and the two
+  dominant modes (correct-noun-then-extra phrase13/20; wrong first noun7/20). No
+  promotion and no weight/serving-decoding change; selection policy did not reach
+  the positive branch.
+- **Correction:** the plan's `5/2`/`7/4` citation is the new hard artifact's row,
+  not this continuous panel's (`9/2` and `6/5`); the plan carries a corrigendum.
+- **Stop:** this packet is closed. #973 and #820 remain open at their wider scope.
 
 The full256 baseline is finite; terminal D5 parameter sparsity remains open.
 Standalone integer generation is **executed at the scoped numerical boundary**.
