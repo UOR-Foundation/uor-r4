@@ -858,9 +858,11 @@
  },
  "post_hoc_refinement": {
   "label": "POST-HOC_NOT_THE_PREDECLARED_VERDICT",
-  "signature": "READ_RANKING: the emitted token equals the read top-1 token in 5/5 distractor rows (emitted \" clouds\"); the correct entity is present in the read at rank 2-3 with 16-32% share; the entity-specific near-query mention (D) yields 5/5 complete with the entity at rank 1-2 (share 0.39-0.64), while the matched non-entity control (D-prime) yields 0/5 and the model emits the inserted control noun (\" carrot\") in 5/5. The emission is a faithful readout of the read ranking; the distractor failures are read-ranking (recency/age prior), not entity absence and not emission.",
+  "signature": "READ_RANKING: in the five condition-A distractor rows the emitted token equals the read top-1 token (5/5) (emitted \" clouds\"); the correct entity is present in the read at rank 2-3 with 16-32% share; the entity-specific near-query mention (D) yields 5/5 complete with the entity at rank 1-2 (share 0.39-0.64), while the matched non-entity control (D-prime) yields 0/5 and the model emits the inserted control noun (\" carrot\") in 5/5. The emission is a faithful readout of the read ranking; the distractor failures are read-ranking (recency/age prior), not entity absence and not emission.",
   "extra_phrase_class": "A 0/5, D 3/5, D-prime 4/5: no entity specificity; the clause insertion itself fixes most of this class, which is a termination/structure phenomenon consistent with the earlier termination-weighting INERT result.",
-  "morphology_class": "The single row emits the correct singular noun at rank 1 (share 0.79) but fails the completion; unaffected by every condition. Separate emission/morphology issue."
+  "morphology_class": "The single row emits the correct singular noun at rank 1 (share 0.79) but fails the completion; unaffected by every condition. Separate emission/morphology issue.",
+  "aggregation_caveat": "The copy path aggregates per-token read mass into the vocabulary row, so emissions are not per-occurrence top-1 readouts in general; the top-read-equals-emitted identity is asserted only for the five condition-A distractor rows. Counterexample: under D, row 04|edited emitted ` bear` while the top single occurrence was ` clouds`.",
+  "rule_wording_correction": "The frozen READ_ACCESS_LIMITED disjunction was \"entity share >= 15% (or rank <= 3)\"; D share was 39-64% and D-prime share 1.4-4.2%, so the SHARE alone separated, but the disjunction did not because the sparse D-prime read row attained rank 3. The result therefore says the share-or-rank clause is non-discriminative, not the share metric."
  },
  "conditions": {
   "A": "baseline frozen prompt",
@@ -875,6 +877,45 @@
  },
  "limits": {
   "scope": "Exposed 32-row development panel, one parent, one deterministic greedy policy; no training and no weight change. D makes the entity the most recent noun, so the flip demonstrates recency/ranking sensitivity but does not show that a long-range ranking repair is learnable.",
-  "no_promotion": true
+  "no_promotion": true,
+  "audit_caveat": "The D intervention changes recency, duplication and local context together; the flip demonstrates ranking sensitivity but not that a long-range ranking repair is learnable, and it is consistent with local clause continuation."
+ },
+ "executed_artifact": {
+  "binary_kind": "cargo example `joint-read-localize` (release)",
+  "binary_sha256": "1c1c589d5f61d560add1f2f86c429aa593fd1688370fc34f7a3c01b6ae86c8a9",
+  "cache_path": "/Volumes/UOR-Workspace/BuildCaches/uor-r4-emission-20260926-1/release/examples/joint-read-localize",
+  "preserved_copy": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/binaries/joint-read-localize-1c1c589d",
+  "embedded_source_commit": "621635926573dfcca6d6a6e3fd462fae6722d8f7",
+  "verified_source_hashes": {
+   "module_sha256": "c0536b14a1a83ebe60b37bd128e26b60fe672dad036230d583eb07b5fcacdab1",
+   "example_sha256": "82c0cf82ecddd5c3e01cf9dfe8c8d92090d94f9ae7f8966fe4ac53c9cbb8fdea",
+   "retained_story_probes_sha256": "0b58b65b647bc217f3b7fea54f26c677f6e3781b72f297f878709a28655c02ca"
+  },
+  "note": "The executed binary is the example, not the crate's lib binary; it was built from the working tree whose two new source files have the verified hashes above (the delivered commits are 62163592 plan, aac22690 instrument, 604b0e16 docs). The example binary is preserved at the recorded path; hashing it reproduces the recorded sha exactly. The lib binary at the shared cache path was separately preserved (1dfea84e) before a rebuild check; it is not the executed artifact."
+ },
+ "attempts": [
+  {
+   "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/read-localization-opencode-1",
+   "note": "Superseded first full attempt (earlier binary, before the D/D-prime length flag). Preserved, not deleted; its numbers are identical apart from the flagged length row."
+  },
+  {
+   "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/read-localization-smoke-opencode-1",
+   "note": "Superseded first smoke attempt; preserved."
+  }
+ ],
+ "guardrail_notes": {
+  "causality": "The report carries a static `no_future_reads_enforced: true` declaration; causality is enforced by construction (read occurrences are validated against `written_occurrence`) and the `positions_are_causal` helper is unit-tested, but the report does not carry a measured per-row causality flag. Recorded as a declaration, not a measurement.",
+  "mutations": "Condition clause/control strings are tokenized and spliced by token id; each row records `decoded_matches_intended` and `length_change`, and one row (15|edited) is declared length-mismatched between D and D-prime. This differs from a literal \"never re-tokenize a string\" reading of the plan; the per-row decoded-text check is the mitigation."
+ },
+ "audit": {
+  "performed": true,
+  "verdicts": {
+   "baseline_parity": "CONFIRMED (comparator covers all 32 rows and all required fields; spot-checked rows incl. morphology and two distractor rows; retained decision-0 fields present)",
+   "class_counts": "CONFIRMED",
+   "predeclared_MIXED": "CONFIRMED clause-by-clause; rule not relaxed",
+   "post_hoc_READ_RANKING": "CONFIRMED (a-f) with two corrections applied here: restrict \"emitted = read top-1\" to the five condition-A distractor rows, and note the copy path aggregates per-token mass so D-row emissions are not per-occurrence top-1 (counterexample D p4|edited emitted ` bear` while the top single occurrence was ` clouds`)",
+   "identities": "module/example/retained shas verified by the lead; executed example binary preserved"
+  },
+  "most_likely_wrong": "The D/D-prime flip may reflect local recency/bigram copy (the entity becomes the most recent and repeated noun) rather than proving the long-range read ranking is the bottleneck; the instrument cannot separate \"recency prior over the whole read\" from \"continue the local clause\". The predeclared MIXED outcome and the labeled post-hoc signature stand at this scope."
  }
 }

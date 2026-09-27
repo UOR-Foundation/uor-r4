@@ -2,6 +2,24 @@
 
 **Current research direction, after the September 23 joint-fit milestone:** the joint fit is executed and it is a scoped negative. Doubling the prose-only window-objective recipe's steps from 2,000 to 4,000 changed the served development loss from 6.6841 to 6.7090 — **+0.0249 [−0.0422, +0.0967], interval includes zero** — with the trajectory oscillating instead of descending, so the model has converged operationally and training budget is not the constraint. The two cheapest output-side levers (an in-class readout refit at −0.1313 and a longer schedule) are exhausted at about a quarter of the 0.4634 bits of matched-normalisation headroom, so the remaining deficit against the tuned `(prev, cur)` count reference is an interface fact about the state/readout interface, not optimisation. Next: the **count-prior blend** measurement on the served path (complementarity versus domination), before any table or bypass is built. [Current state](docs/integration/current-state.md) and [canonical plan](docs/integration/project-track.md) own live results and sequencing; [result](docs/integration/ordinary-lexical-joint-fit-result-2026-09-23.md) owns the numbers. Older “next” paragraphs below are historical.
 
+## Research labs (owner brief, September 27)
+
+Three labs share this repository: **Claude (Lab 1, director)**, **OpenCode (Lab 2)**,
+**Anti-Gravity (Lab 3)**. Branch convention `lab/<lab>/<topic>`; changes land through
+draft PRs for cross-lab review and are merged only with director approval. The runtime
+constraints stay hard: **no transformer, no matrix multiplication and no floating-point
+arithmetic in the serving path**; training, data preparation and offline analysis may use
+floats and matmul.
+
+| Track | Goal | Current hypothesis | Owning lab | Status | Next decision point |
+|---|---|---|---|---|---|
+| Mainline joint learner — source-answer failures (read side) | Close the retained joint learner's measured source-answer failures toward useful prose | The distractor-class failures (`clouds.`) are a read-ranking/recency effect — the correct entity is present in the read at rank 2–3 but is outranked by a later noun — not entity absence or an emission defect | OpenCode (Lab 2) | Read-side localization executed (PR parity exact; predeclared rule MIXED; post-hoc READ_RANKING signature). Read-only, no weight or serving change | Oracle read re-rank intervention (clamp decision-0 read mass onto the entity occurrence) to confirm the ranking bottleneck before any mechanism change — director approval to proceed |
+
+Parked on this track (do not restart without new causal evidence): termination-weighted
+objective (**INERT**), radial Lorentz/affine readers (**worse than Dot**), signed-2I
+finite geometric read score (**HARM**). Labs 1 and 3 add their own entries as their
+tracks land.
+
 ## Historical roadmap notes
 
 **PR #1349, principal review:** retain the learned Copy/Insert/Stop interface as an exposed four-word construction. It changes uncopied words from a history/provenance flag, but the authored targets misuse tense (`was` for the current value; `now` for computation). Correct temporal language and the lexical milestone remain **incomplete**. The 392 retained rows bypass the realizer; five explicit legacy cases do load it. [Review](docs/integration/grounded-lexical-realization-review-2026-09-22.md) and [independent audit](docs/evidence/grounded-lexical-realization-principal-audit-2026-09-22.json) distinguish implementation, semantic validity, exposure and same-artifact scope.
