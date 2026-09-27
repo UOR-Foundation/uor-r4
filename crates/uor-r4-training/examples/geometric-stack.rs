@@ -19,7 +19,8 @@
 //!   [lens=LENS.u16]
 //! geometric-stack encode merges=MERGES.txt input=TEXT out=TOKENS.u16
 //! geometric-stack corpus registry=CARGO_REGISTRY_SRC_INDEX out=TEXT [max_file_bytes=200000]
-//! geometric-stack export model=ROOT/model out=NEW_REPORT_ROOT
+//! geometric-stack export model=ROOT/model out=NEW_REPORT_ROOT [calibration=TRAIN.u16] \
+//!   [calibration_windows=64] [calibration_time=CONTEXT] [damp=0.01]
 //! geometric-stack lut-evaluate artifact=ROOT/model.lut valid=VALID.u16 out=NEW_REPORT_ROOT \
 //!   [model=ROOT/model] [windows=64] [blocks=false] [tune_blocks=64] [threads=1] [lens=LENS.u16] \
 //!   [reference=false]
@@ -54,7 +55,10 @@
 //! `export` writes the integer serving artifact of a trained model under owner
 //! decision D10 (`uor_r4_training::stack_export`): a stack artifact for a
 //! geometric stack, served by `uor_r4_lut::stack`, or a Llama artifact for the
-//! transformer control, served by `uor_r4_lut::engine`. `lut-evaluate` runs
+//! transformer control, served by `uor_r4_lut::engine`. Weights round to
+//! nearest, or with `calibration=` by GPTQ against the input moments of every
+//! weight map over `calibration_windows` evenly spaced windows of that token
+//! file, which should be training data. `lut-evaluate` runs
 //! either engine position by position over the evenly spaced windows of
 //! `train`'s evaluation (`windows=512` is the final evaluation's 131,072
 //! targets), with a fresh session per window, and reports its NLL beside the
@@ -76,6 +80,7 @@ use uor_r4_training::geometric_stack::{ReadScore, StackAdamW, StackArch, StackCo
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_export::{
     control_checkpoint, control_grid_reference, export_stack, stack_grid_reference,
+    StackCalibration,
 };
 use uor_r4_training::{sha256_file, Result, TrainingError};
 
@@ -1103,28 +1108,75 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
 
 /// The integer serving artifact of a trained model (owner decision D10).
 fn export_mode(arguments: &[String]) -> Result<()> {
-    let args = Args::parse(arguments, &["model", "out"])?;
+    let args = Args::parse(
+        arguments,
+        &[
+            "model",
+            "out",
+            "calibration",
+            "calibration_windows",
+            "calibration_time",
+            "damp",
+        ],
+    )?;
     let model_dir = PathBuf::from(args.required("model")?);
     let out = PathBuf::from(args.required("out")?);
+    let calibration_tokens = args.optional("calibration").map(PathBuf::from);
+    let windows: usize = args.number("calibration_windows", 64)?;
+    let damp: f64 = args.number("damp", 0.01)?;
+    if windows == 0 || !damp.is_finite() || damp < 0.0 {
+        return Err(invalid(
+            "calibration_windows must be positive and damp >= 0",
+        ));
+    }
     report_output::claim(&out)?;
     let result = (|| -> Result<()> {
+        let started = Instant::now();
         let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let time: usize = args.number("calibration_time", model.config.context)?;
+        if time == 0 || time > model.config.context {
+            return Err(invalid("calibration_time must be within the context"));
+        }
         let weights = model_dir.join("model.safetensors");
+        let calibration = match &calibration_tokens {
+            Some(path) => {
+                let tokens = read_tokens(path, model.config.vocab_size)?;
+                Some(StackCalibration::collect(&model, &tokens, windows, time)?)
+            }
+            None => None,
+        };
+        let calibration_seconds = started.elapsed().as_secs_f64();
+        let quantizer = match &calibration_tokens {
+            Some(path) => json!({
+                "method": "gptq",
+                "calibration": identity(path)?,
+                "calibration_windows": windows,
+                "calibration_time": time,
+                "damp": damp,
+            }),
+            None => json!({"method": "round_to_nearest"}),
+        };
         let source = json!({
             "exporter": "geometric-stack export",
             "model": identity(&weights)?,
             "config": model.config,
             "executable": identity(&std::env::current_exe()?)?,
+            "quantizer": quantizer,
         });
         let (bytes, report) = match model.config.arch {
-            StackArch::Geometric => export_stack(&model, source.clone())?,
+            StackArch::Geometric => export_stack(
+                &model,
+                source.clone(),
+                calibration.as_ref().map(|c| (c, damp)),
+            )?,
             StackArch::Transformer => {
                 let checkpoint = control_checkpoint(&model, sha256_file(&weights)?)?;
+                let llama = calibration.as_ref().map(|c| c.llama()).transpose()?;
                 export_llama(
                     &checkpoint,
                     model.config.context,
                     source.clone(),
-                    None,
+                    llama.as_ref().map(|c| (c, damp)),
                     None,
                 )?
             }
@@ -1138,6 +1190,8 @@ fn export_mode(arguments: &[String]) -> Result<()> {
                 "source": source,
                 "artifact": identity(&artifact)?,
                 "quantization": report,
+                "calibration_seconds": calibration_seconds,
+                "seconds": started.elapsed().as_secs_f64(),
             }))?,
         )?;
         Ok(())

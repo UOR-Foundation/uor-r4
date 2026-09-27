@@ -290,6 +290,46 @@ fn matched_mlp_hidden(config: &StackConfig, target: usize) -> Result<usize> {
 }
 
 /// SplitMix64 with Box-Muller normals: a deterministic initializer.
+/// Where a weight map reads its input ([`StackModel::hidden_with_capture`]),
+/// for calibrating the rounding of the integer export.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StackSite {
+    /// The normalized state before its gain, read by a recurrence's input and
+    /// gate maps.
+    Recurrence(usize),
+    /// The recurrence core's output, read by `rec.out`.
+    RecurrenceOut(usize),
+    /// The normalized state before its gain, read by a read layer's query,
+    /// key, value and NoRead maps, or by the control's attention.
+    Read(usize),
+    /// The merged heads, read by `read.out` or the control's `attn.o`.
+    ReadOut(usize),
+    /// The normalized state before its gain, read by the MLP's gate and up maps.
+    Mlp(usize),
+    /// The SwiGLU activation, read by `mlp.down`.
+    Down(usize),
+    /// The final normalized state before its gain, read by the head.
+    Head,
+}
+
+/// The capture of [`StackModel::hidden_with_capture`], if any.
+type Capture<'a> = Option<&'a mut dyn FnMut(StackSite, &Tensor) -> Result<()>>;
+
+/// Present a map's input, as `(rows, columns)`, to the capture. `input` runs
+/// only when there is one, so an uncaptured forward pass does no extra work.
+fn tap(
+    capture: &mut Capture<'_>,
+    site: StackSite,
+    input: impl FnOnce() -> Result<Tensor>,
+) -> Result<()> {
+    if let Some(capture) = capture {
+        let x = input()?.detach();
+        let cols = x.dim(x.rank() - 1)?;
+        capture(site, &x.reshape((x.elem_count() / cols, cols))?)?;
+    }
+    Ok(())
+}
+
 struct Initializer(u64);
 
 impl Initializer {
@@ -433,6 +473,13 @@ impl StackModel {
             .apply_op2(&weight.contiguous()?, RmsNorm)?)
     }
 
+    /// The normalized state before its gain: what a map with the gain folded
+    /// in reads.
+    fn unit_norm(&self, input: &Tensor) -> Result<Tensor> {
+        let ones = Tensor::ones(self.config.width, DType::F32, &self.device)?;
+        self.rms_norm(input, &ones)
+    }
+
     /// `input @ weight^T` over the last dimension, as one matrix product.
     fn linear(input: &Tensor, weight: &Tensor) -> Result<Tensor> {
         let dims = input.dims().to_vec();
@@ -447,11 +494,13 @@ impl StackModel {
         Ok(output.reshape(shape)?)
     }
 
-    fn mlp(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn mlp(&self, layer: usize, x: &Tensor, capture: &mut Capture<'_>) -> Result<Tensor> {
+        tap(capture, StackSite::Mlp(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "mlp_norm.weight")?)?;
         let gate = Self::linear(&u, self.layer_weight(layer, "mlp.gate.weight")?)?;
         let up = Self::linear(&u, self.layer_weight(layer, "mlp.up.weight")?)?;
         let mixed = gate.contiguous()?.apply_op2(&up.contiguous()?, SwiGlu)?;
+        tap(capture, StackSite::Down(layer), || Ok(mixed.clone()))?;
         Self::linear(&mixed, self.layer_weight(layer, "mlp.down.weight")?)
     }
 
@@ -469,8 +518,9 @@ impl StackModel {
             .reshape((batch, time, self.config.width))?)
     }
 
-    fn attention(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn attention(&self, layer: usize, x: &Tensor, capture: &mut Capture<'_>) -> Result<Tensor> {
         let (batch, time, _) = x.dims3()?;
+        tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "attn_norm.weight")?)?;
         let project = |part: &str| -> Result<Tensor> {
             self.heads(
@@ -494,15 +544,20 @@ impl StackModel {
             false,
             true,
         )?;
-        Self::linear(
-            &self.merge_heads(&read, batch, time)?,
-            self.layer_weight(layer, "attn.o.weight")?,
-        )
+        let merged = self.merge_heads(&read, batch, time)?;
+        tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
+        Self::linear(&merged, self.layer_weight(layer, "attn.o.weight")?)
     }
 
-    fn geometric_read(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn geometric_read(
+        &self,
+        layer: usize,
+        x: &Tensor,
+        capture: &mut Capture<'_>,
+    ) -> Result<Tensor> {
         let (batch, time, _) = x.dims3()?;
         let heads = self.config.heads;
+        tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "read_norm.weight")?)?;
         let project = |part: &str| -> Result<Tensor> {
             self.heads(
@@ -542,14 +597,14 @@ impl StackModel {
             true,
             false,
         )?;
-        Self::linear(
-            &self.merge_heads(&read, batch, time)?,
-            self.layer_weight(layer, "read.out.weight")?,
-        )
+        let merged = self.merge_heads(&read, batch, time)?;
+        tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
+        Self::linear(&merged, self.layer_weight(layer, "read.out.weight")?)
     }
 
-    fn recurrence(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn recurrence(&self, layer: usize, x: &Tensor, capture: &mut Capture<'_>) -> Result<Tensor> {
         let (batch, time, width) = x.dims3()?;
+        tap(capture, StackSite::Recurrence(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "rec_norm.weight")?)?;
         let branches = Self::linear(&u, self.layer_weight(layer, "rec.in.weight")?)?;
         let gates = Self::linear(&u, self.layer_weight(layer, "rec.gate.weight")?)?
@@ -572,6 +627,11 @@ impl StackModel {
                 rotation: self.config.rotation,
             },
         )?;
+        tap(
+            capture,
+            StackSite::RecurrenceOut(layer),
+            || Ok(core.clone()),
+        )?;
         Self::linear(&core, self.layer_weight(layer, "rec.out.weight")?)
     }
 
@@ -585,6 +645,31 @@ impl StackModel {
     /// The final normalized states [batch * time, width], which the tied
     /// embedding maps to logits.
     pub fn hidden(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
+        self.hidden_hooked(ids, batch, time, &mut None)
+    }
+
+    /// [`hidden`](Self::hidden), presenting the input of every weight map to
+    /// `capture` as detached `(batch * time, columns)` tensors (see
+    /// [`StackSite`]). Maps that read a normalized state see it before its gain,
+    /// as the export folds the gains into them. The embedding is a lookup and
+    /// has no site.
+    pub fn hidden_with_capture(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        capture: &mut dyn FnMut(StackSite, &Tensor) -> Result<()>,
+    ) -> Result<Tensor> {
+        self.hidden_hooked(ids, batch, time, &mut Some(capture))
+    }
+
+    fn hidden_hooked(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        capture: &mut Capture<'_>,
+    ) -> Result<Tensor> {
         if ids.len() != batch * time || time == 0 || time > self.config.context {
             return Err(invalid(
                 "stack forward needs batch * time ids within the context",
@@ -600,13 +685,14 @@ impl StackModel {
             .reshape((batch, time, self.config.width))?;
         for layer in 0..self.config.layers() {
             let mixed = match (self.config.arch, self.config.layer_kind(layer)) {
-                (StackArch::Transformer, _) => self.attention(layer, &x)?,
-                (StackArch::Geometric, 'r') => self.recurrence(layer, &x)?,
-                (StackArch::Geometric, _) => self.geometric_read(layer, &x)?,
+                (StackArch::Transformer, _) => self.attention(layer, &x, capture)?,
+                (StackArch::Geometric, 'r') => self.recurrence(layer, &x, capture)?,
+                (StackArch::Geometric, _) => self.geometric_read(layer, &x, capture)?,
             };
             x = x.add(&mixed)?;
-            x = x.add(&self.mlp(layer, &x)?)?;
+            x = x.add(&self.mlp(layer, &x, capture)?)?;
         }
+        tap(capture, StackSite::Head, || self.unit_norm(&x))?;
         let x = self.rms_norm(&x, self.weight("final_norm.weight")?)?;
         Ok(x.reshape((batch * time, self.config.width))?)
     }
@@ -2505,7 +2591,7 @@ mod tests {
                 var.set(&random(&mut Initializer(43), var.dims(), 0.5))?;
             }
             let x = random(&mut Initializer(47), &[2, 9, 16], 1.0);
-            let fused = model.recurrence(0, &x)?;
+            let fused = model.recurrence(0, &x, &mut None)?;
             let composed = model.composed_recurrence(0, &x)?;
             let gap = fused.sub(&composed)?.abs()?.max_all()?.to_scalar::<f32>()?;
             assert!(
@@ -2525,7 +2611,10 @@ mod tests {
                 .iter()
                 .map(|name| model.variables()[*name].clone())
                 .collect();
-            let fused_loss = model.recurrence(0, &x)?.mul(&weights)?.sum_all()?;
+            let fused_loss = model
+                .recurrence(0, &x, &mut None)?
+                .mul(&weights)?
+                .sum_all()?;
             let composed_loss = model.composed_recurrence(0, &x)?.mul(&weights)?.sum_all()?;
             let (a, b) = (fused_loss.backward()?, composed_loss.backward()?);
             for (name, var) in names.iter().zip(&vars) {
