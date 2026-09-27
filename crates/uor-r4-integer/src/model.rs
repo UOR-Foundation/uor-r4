@@ -1792,6 +1792,11 @@ impl IntegerModel {
         // The read geometry selects the contract: the retained legacy contract
         // for the dot read, with the quantized Lorentz declaration otherwise.
         let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
+        if config.read_geometry == ReadGeometry::LorentzAffine {
+            return Err(crate::IntegerError::UnsupportedReadGeometry(
+                config.read_geometry,
+            ));
+        }
         if manifest["schema"] != "uor-r4.joint-recurrent-packed-emulator/1"
             || manifest
                 .get("admission")
@@ -1949,6 +1954,11 @@ impl IntegerModel {
         let mut identity = format!("{}:{}", crate::sha256_file(&manifest_path)?, tables.sha256);
         let lorentz = match config.read_geometry {
             ReadGeometry::Dot => None,
+            ReadGeometry::LorentzAffine => {
+                return Err(crate::IntegerError::UnsupportedReadGeometry(
+                    config.read_geometry,
+                ));
+            }
             ReadGeometry::Lorentz => {
                 let Some(arcosh) = &tables.arcosh_sha256 else {
                     return Err(invalid(
