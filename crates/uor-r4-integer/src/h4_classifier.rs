@@ -98,18 +98,40 @@ fn family_candidates(lane: &[i32; 4]) -> [u8; 14] {
     for (axis, bit) in positive.iter().enumerate() {
         candidates[1] += *bit << axis;
     }
+    let positive_mask = candidates[1] - 8;
     for (block, permutation) in EVEN_PERMUTATIONS.iter().enumerate() {
-        let mut signs = 0u8;
-        for (axis, &base_coordinate) in permutation.iter().enumerate() {
-            if base_coordinate != 0 {
-                // Invert the output-axis -> base-coordinate mapping by placing
-                // each query sign into its base sign bit: s1=4, s2=2, s3=1.
-                signs |= positive[axis] << (3 - base_coordinate);
-            }
-        }
+        let signs = golden_sign_bits(positive_mask, permutation);
         candidates[block + 2] = 24 + ((block as u8) << 3) + signs;
     }
     candidates
+}
+
+// Consume the four-bit query mask serially. Keep a runtime permutation behind
+// this scalar boundary: inlining twelve constant permutations lets LLVM pack
+// the signs through vector registers and emit FMOV transfers in the kernel.
+#[inline(never)]
+fn golden_sign_bits(mut positive_mask: u8, permutation: &[usize; 4]) -> u8 {
+    let mut axis = 0;
+    let mut signs = 0u8;
+    while positive_mask != 0 {
+        if positive_mask & 1 != 0 {
+            let base_coordinate = permutation[axis];
+            if base_coordinate != 0 {
+                // Invert output axis -> base coordinate: s1=4, s2=2, s3=1.
+                signs |= 1 << (3 - base_coordinate);
+            }
+        }
+        positive_mask >>= 1;
+        axis += 1;
+    }
+    signs
+}
+
+// Separate runtime operands keep LLVM from recognizing 4*b_square+b_square as
+// a u128 product by five and emitting UMULH. The checked addition is unchanged.
+#[inline(never)]
+fn checked_add_square_terms(left: u128, right: u128) -> MathResult<u128> {
+    left.checked_add(right).ok_or(IntegerMathError::Overflow)
 }
 
 // Total for all i8 coefficients and i32 coordinates: the product magnitude is
@@ -166,9 +188,7 @@ fn score_difference_order([a, b]: [i64; 2]) -> MathResult<Ordering> {
     let b_magnitude = u128::from(b.unsigned_abs());
     let rational_square = checked_mul_unsigned(magnitude, magnitude)?;
     let b_square = checked_mul_unsigned(b_magnitude, b_magnitude)?;
-    let irrational_square = (b_square << 2)
-        .checked_add(b_square)
-        .ok_or(IntegerMathError::Overflow)?;
+    let irrational_square = checked_add_square_terms(b_square << 2, b_square)?;
     Ok(match rational_square.cmp(&irrational_square) {
         Ordering::Greater => rational.cmp(&0),
         Ordering::Less => b.cmp(&0),

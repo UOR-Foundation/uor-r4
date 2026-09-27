@@ -298,6 +298,8 @@ EXACT_GEOMETRY_SYMBOLS = [
     for name in (
         "signed_h4_code_i32",
         "family_candidates",
+        "golden_sign_bits",
+        "checked_add_square_terms",
         "coefficient_term",
         "score",
         "score_difference_order",
