@@ -1413,23 +1413,50 @@ fn low_bit_dot_4_contiguous_wide<const WIDTH: usize>(
     products: &[[i64; 16]; WIDTH],
     weights: &[u8],
 ) -> [i64; 4] {
-    let mut a = [0i64; 4];
-    let mut b = [0i64; 4];
-    for i in (0..(WIDTH >> 1)).step_by(2) {
+    let row_stride = WIDTH >> 1;
+    let required_len = WIDTH << 1;
+    if weights.len() < required_len {
+        return [0; 4];
+    }
+    let r0 = &weights[0..row_stride];
+    let r1 = &weights[row_stride..2 * row_stride];
+    let r2 = &weights[2 * row_stride..3 * row_stride];
+    let r3 = &weights[3 * row_stride..4 * row_stride];
+    let mut a0 = 0i64;
+    let mut a1 = 0i64;
+    let mut a2 = 0i64;
+    let mut a3 = 0i64;
+    let mut b0 = 0i64;
+    let mut b1 = 0i64;
+    let mut b2 = 0i64;
+    let mut b3 = 0i64;
+    for i in (0..row_stride).step_by(2) {
         let p0 = &products[i << 1];
         let p1 = &products[(i << 1) + 1];
         let p2 = &products[(i << 1) + 2];
         let p3 = &products[(i << 1) + 3];
-        let mut offset = i;
-        for row in 0..4 {
-            let w0 = weights[offset];
-            let w1 = weights[offset + 1];
-            a[row] += p0[usize::from(w0 & 15)] + p1[usize::from(w0 >> 4)];
-            b[row] += p2[usize::from(w1 & 15)] + p3[usize::from(w1 >> 4)];
-            offset += WIDTH >> 1;
-        }
+
+        let w0_0 = r0[i];
+        let w0_1 = r0[i + 1];
+        a0 += p0[usize::from(w0_0 & 15)] + p1[usize::from(w0_0 >> 4)];
+        b0 += p2[usize::from(w0_1 & 15)] + p3[usize::from(w0_1 >> 4)];
+
+        let w1_0 = r1[i];
+        let w1_1 = r1[i + 1];
+        a1 += p0[usize::from(w1_0 & 15)] + p1[usize::from(w1_0 >> 4)];
+        b1 += p2[usize::from(w1_1 & 15)] + p3[usize::from(w1_1 >> 4)];
+
+        let w2_0 = r2[i];
+        let w2_1 = r2[i + 1];
+        a2 += p0[usize::from(w2_0 & 15)] + p1[usize::from(w2_0 >> 4)];
+        b2 += p2[usize::from(w2_1 & 15)] + p3[usize::from(w2_1 >> 4)];
+
+        let w3_0 = r3[i];
+        let w3_1 = r3[i + 1];
+        a3 += p0[usize::from(w3_0 & 15)] + p1[usize::from(w3_0 >> 4)];
+        b3 += p2[usize::from(w3_1 & 15)] + p3[usize::from(w3_1 >> 4)];
     }
-    [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]]
+    [a0 + b0, a1 + b1, a2 + b2, a3 + b3]
 }
 
 /// Build each input coordinate's signed4 multiples once for reuse across rows.
@@ -2142,6 +2169,9 @@ impl IntegerModel {
                 .try_into()
                 .map_err(|_| invalid("products width must be 576"))?;
             let rows = output_bias.len().min(vocab_size);
+            if output_shifts.len() < rows || output_bias.len() < rows {
+                return Err(invalid("output_bias or output_shifts too small for vocab"));
+            }
             let blocked_rows = rows & !3;
             let mut start = 0;
             for first in (0..blocked_rows).step_by(4) {
@@ -2149,16 +2179,16 @@ impl IntegerModel {
                 let dots = low_bit_dot_4_contiguous_wide(products, chunk);
                 for (offset, dot) in dots.into_iter().enumerate() {
                     let row = first + offset;
-                    let value = scaled(i128::from(dot), output_shifts[row])?;
-                    logits[row] = quantize(value + output_bias[row], WORK_BITS, 8)?;
+                    logits[row] =
+                        scale_and_quantize_logit(dot, output_shifts[row], output_bias[row]);
                 }
                 start += 576 << 2;
             }
             for row_idx in blocked_rows..rows {
                 let row = embedding.codes.packed_range(start, 576)?;
                 let dot = low_bit_dot(products, row);
-                let scaled_val = scaled(i128::from(dot), output_shifts[row_idx])?;
-                logits[row_idx] = quantize(scaled_val + output_bias[row_idx], WORK_BITS, 8)?;
+                logits[row_idx] =
+                    scale_and_quantize_logit(dot, output_shifts[row_idx], output_bias[row_idx]);
                 start += 576;
             }
         } else {
@@ -2440,6 +2470,9 @@ impl IntegerModel {
         if out.len() < num_rows {
             return Err(invalid("output buffer too small for affine"));
         }
+        if !bias.is_empty() && bias.len() < num_rows {
+            return Err(invalid("bias buffer too small for affine"));
+        }
         let input_exponent = -input_bits;
         match input_len {
             256 => {
@@ -2521,6 +2554,8 @@ impl IntegerModel {
                 }
                 Ok(())
             }
+            576 => self.affine_wide_into::<576>(products, p, bias, input_exponent, out),
+            1152 => self.affine_wide_into::<1152>(products, p, bias, input_exponent, out),
             _ => {
                 let values = self.matrix_work_direct(products, p, input_len, input_exponent)?;
                 if bias.is_empty() {
@@ -2535,6 +2570,48 @@ impl IntegerModel {
                 Ok(())
             }
         }
+    }
+
+    /// Dedicated zero-allocation affine projection for wide matrix rows (576, 1152).
+    /// Uses 4-row blocked product table reuse with register-resident accumulators,
+    /// followed by scalar tail processing and scale_and_quantize_logit.
+    fn affine_wide_into<const WIDTH: usize>(
+        &self,
+        products: &[[i64; 16]],
+        p: &Parameter,
+        bias: &[i128],
+        input_exponent: i32,
+        out: &mut [i32],
+    ) -> Result<()> {
+        let products: &[[i64; 16]; WIDTH] = products[..WIDTH]
+            .try_into()
+            .map_err(|_| invalid("wide products width mismatch"))?;
+        let rows = p.spec.row_exponents.len();
+        if !bias.is_empty() && bias.len() < rows {
+            return Err(invalid("bias buffer too small for affine"));
+        }
+        let blocked_rows = rows & !3;
+        let mut start = 0;
+        for first in (0..blocked_rows).step_by(4) {
+            let chunk = p.codes.packed_range(start, WIDTH << 2)?;
+            let dots = low_bit_dot_4_contiguous_wide(products, chunk);
+            for (offset, dot) in dots.into_iter().enumerate() {
+                let row = first + offset;
+                let shift = WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[row]);
+                let b = if bias.is_empty() { 0 } else { bias[row] };
+                out[row] = scale_and_quantize_logit(dot, shift, b);
+            }
+            start += WIDTH << 2;
+        }
+        for (row, out_row) in out.iter_mut().enumerate().take(rows).skip(blocked_rows) {
+            let weights = p.codes.packed_range(start, WIDTH)?;
+            let dot = low_bit_dot(products, weights);
+            let shift = WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[row]);
+            let b = if bias.is_empty() { 0 } else { bias[row] };
+            *out_row = scale_and_quantize_logit(dot, shift, b);
+            start += WIDTH;
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -4270,7 +4347,30 @@ mod tests {
                 }
                 assert_eq!(sums[rows], i128::MIN);
                 assert_eq!(affine[rows], i32::MIN);
+                let mut affine_nobias = vec![i32::MIN; rows + 1];
+                model.affine_direct_into(
+                    &products,
+                    &parameter,
+                    &[],
+                    width,
+                    10,
+                    &mut affine_nobias,
+                )?;
+                for row in 0..rows {
+                    let dot: i64 = input
+                        .iter()
+                        .zip(&decoded[row * width..(row + 1) * width])
+                        .map(|(&x, &w)| i64::from(x) * i64::from(w))
+                        .sum();
+                    let expected = scaled(
+                        i128::from(dot),
+                        30 + i32::from(parameter.spec.row_exponents[row]),
+                    )?;
+                    assert_eq!(affine_nobias[row], quantize(expected, WORK_BITS, 8)?);
+                }
+                assert_eq!(affine_nobias[rows], i32::MIN);
                 let mut untouched = vec![123i128; rows];
+                let mut untouched_affine = vec![123i32; rows];
                 assert!(model
                     .matrix_work_direct_into(
                         &products[..width - 1],
@@ -4291,6 +4391,41 @@ mod tests {
                     )
                     .is_err());
                 assert_eq!(untouched, vec![123; rows]);
+                assert!(model
+                    .affine_direct_into(
+                        &products[..width - 1],
+                        &parameter,
+                        &biases,
+                        width,
+                        10,
+                        &mut untouched_affine
+                    )
+                    .is_err());
+                assert_eq!(untouched_affine, vec![123; rows]);
+                assert!(model
+                    .affine_direct_into(
+                        &products,
+                        &parameter,
+                        &biases,
+                        width,
+                        10,
+                        &mut untouched_affine[..rows - 1],
+                    )
+                    .is_err());
+                assert_eq!(untouched_affine, vec![123; rows]);
+                if rows > 1 {
+                    assert!(model
+                        .affine_direct_into(
+                            &products,
+                            &parameter,
+                            &biases[..rows - 1],
+                            width,
+                            10,
+                            &mut untouched_affine,
+                        )
+                        .is_err());
+                    assert_eq!(untouched_affine, vec![123; rows]);
+                }
                 // A truncated final packed row must return a range error even
                 // when complete four-row groups precede it.
                 let mut truncated = parameter.clone();
@@ -4298,6 +4433,16 @@ mod tests {
                     CoefficientCodes::from_decoded(decoded[..decoded.len() - 2].to_vec(), 4)?;
                 assert!(model
                     .matrix_work_direct_into(&products, &truncated, width, -10, &mut untouched)
+                    .is_err());
+                assert!(model
+                    .affine_direct_into(
+                        &products,
+                        &truncated,
+                        &biases,
+                        width,
+                        10,
+                        &mut untouched_affine
+                    )
                     .is_err());
             }
         }

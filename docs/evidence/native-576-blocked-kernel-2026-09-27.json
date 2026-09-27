@@ -11,12 +11,12 @@
     "strict_arm64_audit_tap_v13": "5/5 ok"
   },
   "benchmarks_apple_silicon_m1": {
-    "project_vocab_latency_ms": 1.103,
-    "step_conversational_latency_ms": 1.693,
-    "streaming_generation_quaternion_ms_per_token": 1.920,
-    "streaming_generation_householder_pair_ms_per_token": 3.424,
+    "project_vocab_latency_ms": 0.844,
+    "step_conversational_latency_ms": 1.583,
+    "streaming_generation_quaternion_ms_per_token": 1.464,
+    "streaming_generation_householder_pair_ms_per_token": 1.050,
     "latency_ceiling_ms_per_token": 4.0,
-    "peak_rss_mb": 18.20,
+    "peak_rss_mb": 20.62,
     "rss_ceiling_mb": 35.0,
     "steady_state_rss_growth_mb": 0.00
   },

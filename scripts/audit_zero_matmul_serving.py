@@ -280,6 +280,7 @@ PACKED_KERNEL_CALLERS = [
         "matrix_work_wide_into",
         "matrix_work_direct",
         "affine_direct_into",
+        "affine_wide_into",
         "affine_direct",
         "step_conversational_into",
     )
