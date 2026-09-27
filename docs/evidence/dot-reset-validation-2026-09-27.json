@@ -261,5 +261,37 @@
       "/System/Volumes/Data": 35838500864,
       "/Volumes/UOR-Workspace": 173795053568
     }
+  },
+  "integration_compile": {
+    "status": "PASS",
+    "execution": {
+      "started_at": "2026-09-27T03:48:51.354573+00:00",
+      "source_commit": "c4d1837d0f9de26a3ba30a6e68e3f233c6df1c63",
+      "build_jobs": 2,
+      "rayon_threads": 2,
+      "wall_limit_seconds": 420,
+      "commands": [
+        {
+          "command": [
+            "/usr/bin/time",
+            "-l",
+            "/Users/casey.allard/.cargo/bin/cargo",
+            "check",
+            "--offline",
+            "-p",
+            "uor-r4-training"
+          ],
+          "started_at": "2026-09-27T03:48:51.355470+00:00",
+          "exit_code": 0,
+          "wall_seconds": 82.3483830417972
+        }
+      ],
+      "wall_seconds": 82.35014895908535,
+      "finished_at": "2026-09-27T03:50:13.707204+00:00",
+      "maximum_child_rss_bytes": 1156055040
+    },
+    "log_sha256": "4ee42bd403927c24a7bdcf087839630ccf745ad6a23592654f1b51b59ab4c732",
+    "upstream_merge": "5d3a993286ed61386f7baa898404309003d8e05a",
+    "scope": "Dependency compilation after integrating changed integer implementation. Continuous training/model/tokenizer/config source unchanged by upstream. The actual Dot witness and four transfer checks retain their998ff0b3 source; they were not repeated."
   }
 }

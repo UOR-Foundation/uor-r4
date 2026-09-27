@@ -147,3 +147,10 @@ not comparable to the earlier radial forward/backward workload and is not an
 optimized throughput result. All execution occurred under shared machine load.
 The declared implementation checks are complete; the next work is the costed
 matched adaptation and useful-output comparison, not another startup gate.
+
+After integrating Google's PR #1410 (`5d3a9932`), a separate offline training-package
+compile passes on `c4d1837d` in 82.35 seconds. That upstream change leaves the
+continuous training/model/tokenizer/configuration sources untouched. The actual
+Dot witness and transfer checks retain source `998ff0b3`; their scope is not
+extended to the changed integer serving paths. Existing unrelated warnings are
+recorded in the build log, not repaired by this deliverable.
