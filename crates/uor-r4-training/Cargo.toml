@@ -24,3 +24,7 @@ uor-r4-model-source = { path = "../uor-r4-model-source" }
 uor-r4-core = { path = "../uor-r4-core" }
 uor-r4-lut = { path = "../uor-r4-lut" }
 rayon = "1.10"
+
+[dev-dependencies]
+# Examples decode samples with the retained tokenizer.
+uor-r4-tokenizer = { path = "../uor-r4-tokenizer" }

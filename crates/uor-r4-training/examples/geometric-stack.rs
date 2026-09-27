@@ -13,6 +13,8 @@
 //!   [sample_tokens=128]
 //! geometric-stack sample model=ROOT/model valid=VALID.u16 merges=MERGES.txt out=NEW_REPORT_ROOT \
 //!   [prompts=3] [prompt_tokens=64] [sample_tokens=128] [temperature=0.8] [top_k=40] [seed=1]
+//! geometric-stack evaluate model=ROOT/model tokens=DEV.u16 out=NEW_REPORT_ROOT [tune_blocks=64] \
+//!   [lens=LENS.u16]
 //! geometric-stack encode merges=MERGES.txt input=TEXT out=TOKENS.u16
 //! geometric-stack corpus registry=CARGO_REGISTRY_SRC_INDEX out=TEXT [max_file_bytes=200000]
 //! ```
@@ -24,6 +26,15 @@
 //! continues with `resume=OLD_ROOT/checkpoint` in a new root, with identical
 //! settings. Every report root is claimed before loading and sealed at the end.
 //! Set RAYON_NUM_THREADS to bound the threads.
+//!
+//! `evaluate` scores consecutive 256-input blocks with a fresh state per
+//! block (257 stored ids, 256 targets), the retained evaluator's protocol
+//! (`docs/integration/reference-evaluator-v2.json`): it reports the first
+//! `tune_blocks` blocks, the remaining comparison blocks and all blocks
+//! separately. On the retained TinyStories development store that is 976
+//! blocks, 64 tune and 912 comparison (233,472 targets), where #1017 scores
+//! 1.574024 nats. Samples decode with `merges=` (the lab BPE) or
+//! `tokenizer=` (a `tokenizer.json`, such as the retained 4,096-token one).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -267,6 +278,33 @@ impl Bpe {
     }
 }
 
+/// Decodes sample ids for the report.
+enum Decoder {
+    Lab(Bpe),
+    Retained(Box<uor_r4_tokenizer::ByteBpeTokenizer>),
+}
+
+impl Decoder {
+    fn load(merges: Option<&Path>, tokenizer: Option<&Path>) -> Result<Option<Self>> {
+        match (merges, tokenizer) {
+            (Some(_), Some(_)) => Err(invalid("give merges= or tokenizer=, not both")),
+            (Some(path), None) => Ok(Some(Self::Lab(Bpe::load(path)?))),
+            (None, Some(path)) => Ok(Some(Self::Retained(Box::new(
+                uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(path)?)
+                    .ok_or_else(|| invalid("unreadable tokenizer.json"))?,
+            )))),
+            (None, None) => Ok(None),
+        }
+    }
+
+    fn decode(&self, ids: &[u32]) -> String {
+        match self {
+            Self::Lab(bpe) => bpe.decode(ids),
+            Self::Retained(tokenizer) => tokenizer.decode(ids),
+        }
+    }
+}
+
 fn encode_mode(arguments: &[String]) -> Result<()> {
     let args = Args::parse(arguments, &["merges", "input", "out"])?;
     let out = PathBuf::from(args.required("out")?);
@@ -370,6 +408,7 @@ struct Settings {
     valid: PathBuf,
     lens: Option<PathBuf>,
     merges: Option<PathBuf>,
+    tokenizer: Option<PathBuf>,
     config: StackConfig,
     steps: usize,
     batch: usize,
@@ -391,7 +430,7 @@ impl Settings {
     fn record(&self) -> Value {
         json!({
             "train": self.train, "train_weights": self.train_weights, "valid": self.valid,
-            "lens": self.lens, "merges": self.merges,
+            "lens": self.lens, "merges": self.merges, "tokenizer": self.tokenizer,
             "config": self.config, "steps": self.steps, "batch": self.batch, "lr": self.lr,
             "warmup": self.warmup, "min_lr": self.min_lr, "weight_decay": self.weight_decay,
             "clip": self.clip, "eval_every": self.eval_every, "eval_windows": self.eval_windows,
@@ -461,6 +500,7 @@ fn train_settings(args: &Args) -> Result<Settings> {
         valid: PathBuf::from(args.required("valid")?),
         lens: args.optional("lens").map(PathBuf::from),
         merges: args.optional("merges").map(PathBuf::from),
+        tokenizer: args.optional("tokenizer").map(PathBuf::from),
         config,
         steps: args.number("steps", 7324)?,
         batch: args.number("batch", 16)?,
@@ -602,7 +642,7 @@ fn generate(
 fn samples(
     model: &StackModel,
     valid: &[u32],
-    bpe: Option<&Bpe>,
+    decoder: Option<&Decoder>,
     prompts: usize,
     prompt_tokens: usize,
     new_tokens: usize,
@@ -617,7 +657,7 @@ fn samples(
         let prompt = &valid[index * stride..index * stride + prompt_tokens];
         let greedy = generate(model, prompt, new_tokens, 0.0, 1, &mut rng)?;
         let sampled = generate(model, prompt, new_tokens, temperature, top_k, &mut rng)?;
-        let text = |ids: &[u32]| bpe.map(|bpe| bpe.decode(ids));
+        let text = |ids: &[u32]| decoder.map(|decoder| decoder.decode(ids));
         out.push(json!({
             "prompt_start": index * stride, "prompt": text(prompt),
             "greedy": text(&greedy), "sampled": text(&sampled),
@@ -676,11 +716,7 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
     if lens.as_ref().is_some_and(|lens| lens.len() != vocabulary) {
         return Err(invalid("lens must hold one byte length per token id"));
     }
-    let bpe = settings
-        .merges
-        .as_ref()
-        .map(|path| Bpe::load(path))
-        .transpose()?;
+    let decoder = Decoder::load(settings.merges.as_deref(), settings.tokenizer.as_deref())?;
     let time = settings.config.context;
     if train.iter().any(|stream| stream.len() <= time + 1)
         || valid.len() <= time + settings.final_windows
@@ -804,12 +840,16 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
     let final_evaluation = evaluate(&model, &valid, lens.as_deref(), settings.final_windows)?;
     eprintln!("final: {}", final_evaluation.record());
     model.save(&out.join("model"))?;
-    let _ = fs::remove_dir_all(out.join("checkpoint"));
+    if !stopped_early {
+        // A completed run keeps only its final model; a stopped one keeps the
+        // checkpoint that `resume=` continues from.
+        let _ = fs::remove_dir_all(out.join("checkpoint"));
+    }
     let sample_record = if settings.sample_tokens > 0 {
         samples(
             &model,
             &valid,
-            bpe.as_ref(),
+            decoder.as_ref(),
             3,
             64,
             settings.sample_tokens,
@@ -840,6 +880,7 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
             "valid": identity(&settings.valid)?,
             "lens": settings.lens.as_ref().map(|p| identity(p)).transpose()?,
             "merges": settings.merges.as_ref().map(|p| identity(p)).transpose()?,
+            "tokenizer": settings.tokenizer.as_ref().map(|p| identity(p)).transpose()?,
         },
         "executable": identity(&executable)?,
         "model_sha256": sha256_file(&out.join("model").join("model.safetensors"))?,
@@ -855,6 +896,7 @@ fn sample_mode(arguments: &[String]) -> Result<()> {
             "model",
             "valid",
             "merges",
+            "tokenizer",
             "out",
             "prompts",
             "prompt_tokens",
@@ -866,7 +908,11 @@ fn sample_mode(arguments: &[String]) -> Result<()> {
     )?;
     let model_dir = PathBuf::from(args.required("model")?);
     let valid_path = PathBuf::from(args.required("valid")?);
-    let merges = PathBuf::from(args.required("merges")?);
+    let merges = args.optional("merges").map(PathBuf::from);
+    let tokenizer = args.optional("tokenizer").map(PathBuf::from);
+    if merges.is_none() && tokenizer.is_none() {
+        return Err(invalid("sample needs merges= or tokenizer="));
+    }
     let out = PathBuf::from(args.required("out")?);
     let prompts: usize = args.number("prompts", 3)?;
     let prompt_tokens: usize = args.number("prompt_tokens", 64)?;
@@ -878,11 +924,11 @@ fn sample_mode(arguments: &[String]) -> Result<()> {
     let result = (|| -> Result<()> {
         let model = StackModel::load(&model_dir, &Device::Cpu)?;
         let valid = read_tokens(&valid_path, model.config.vocab_size)?;
-        let bpe = Bpe::load(&merges)?;
+        let decoder = Decoder::load(merges.as_deref(), tokenizer.as_deref())?;
         let record = samples(
             &model,
             &valid,
-            Some(&bpe),
+            decoder.as_ref(),
             prompts,
             prompt_tokens,
             sample_tokens,
@@ -895,6 +941,80 @@ fn sample_mode(arguments: &[String]) -> Result<()> {
             serde_json::to_vec_pretty(&json!({
                 "model": identity(&model_dir.join("model.safetensors"))?, "config": model.config,
                 "samples": record,
+            }))?,
+        )?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
+/// Consecutive 256-input blocks, fresh state per block: the retained
+/// evaluator's protocol. Reports tune, comparison and full means.
+fn evaluate_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &["model", "tokens", "out", "tune_blocks", "lens"],
+    )?;
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokens_path = PathBuf::from(args.required("tokens")?);
+    let lens_path = args.optional("lens").map(PathBuf::from);
+    let out = PathBuf::from(args.required("out")?);
+    let tune_blocks: usize = args.number("tune_blocks", 64)?;
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let time = model.config.context;
+        let tokens = read_tokens(&tokens_path, model.config.vocab_size)?;
+        let lens = lens_path
+            .as_ref()
+            .map(|path| read_tokens(path, u16::MAX as usize + 1))
+            .transpose()?;
+        let blocks = (tokens.len() - 1) / time;
+        if blocks <= tune_blocks {
+            return Err(invalid("fewer blocks than tune_blocks"));
+        }
+        let mut block_nll = Vec::with_capacity(blocks);
+        let mut block_bytes = Vec::with_capacity(blocks);
+        for group in (0..blocks).collect::<Vec<_>>().chunks(16) {
+            let mut ids = Vec::with_capacity(group.len() * time);
+            let mut targets = Vec::with_capacity(group.len() * time);
+            for &block in group {
+                ids.extend_from_slice(&tokens[block * time..(block + 1) * time]);
+                targets.extend_from_slice(&tokens[block * time + 1..(block + 1) * time + 1]);
+            }
+            let nll = model.target_nll(&ids, &targets, group.len(), time)?;
+            for (index, _) in group.iter().enumerate() {
+                block_nll.push(nll[index * time..(index + 1) * time].iter().sum::<f64>());
+                block_bytes.push(lens.as_ref().map(|lens| {
+                    targets[index * time..(index + 1) * time]
+                        .iter()
+                        .map(|&id| f64::from(lens[id as usize]))
+                        .sum::<f64>()
+                }));
+            }
+        }
+        let summary = |range: std::ops::Range<usize>| {
+            let targets = range.len() * time;
+            let nll: f64 = block_nll[range.clone()].iter().sum();
+            let bytes: Option<f64> = block_bytes[range].iter().copied().sum();
+            json!({
+                "blocks": targets / time, "targets": targets, "nll": nll / targets as f64,
+                "bits_per_byte": bytes.map(|bytes| nll / std::f64::consts::LN_2 / bytes),
+            })
+        };
+        fs::write(
+            out.join("evaluation.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-evaluation/1",
+                "protocol": "consecutive blocks of 256 inputs and 256 shifted targets, fresh state per block",
+                "model": identity(&model_dir.join("model.safetensors"))?,
+                "config": model.config,
+                "tokens": identity(&tokens_path)?,
+                "lens": lens_path.as_ref().map(|p| identity(p)).transpose()?,
+                "tune": summary(0..tune_blocks),
+                "comparison": summary(tune_blocks..blocks),
+                "full": summary(0..blocks),
+                "block_nll": block_nll,
             }))?,
         )?;
         Ok(())
@@ -918,7 +1038,7 @@ fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let Some((mode, rest)) = arguments.split_first() else {
         return Err(invalid(
-            "usage: geometric-stack train|sample|encode|corpus key=value ...",
+            "usage: geometric-stack train|sample|evaluate|encode|corpus key=value ...",
         ));
     };
     match mode.as_str() {
@@ -947,6 +1067,7 @@ fn main() -> Result<()> {
                     "final_windows",
                     "lens",
                     "merges",
+                    "tokenizer",
                     "checkpoint_every",
                     "resume",
                     "max_seconds",
@@ -960,6 +1081,7 @@ fn main() -> Result<()> {
             finish(&out, result)
         }
         "sample" => sample_mode(rest),
+        "evaluate" => evaluate_mode(rest),
         "encode" => encode_mode(rest),
         "corpus" => corpus_mode(rest),
         other => Err(invalid(format!("unknown mode {other}"))),
