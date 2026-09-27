@@ -4,7 +4,10 @@ This source work prepares the classification step of native geometric attention.
 It does not integrate a new reader or qualify a learned artifact. OpenCode owns
 the finite signed-group reader and its language comparison. The fourth lab’s
 active dialogue code-choice experiment and its fixed endpoints remain separate.
-Compilation, focused checks and emitted instruction inspection are pending.
+At source `43e543fd`, all three focused integer checks and release compilation
+pass. The frozen library passes strict instruction inspection in 33 emitted
+symbol ranges, including the classifier and both scalar helpers. The separate
+training-crate donor-order check remains NOT_RUN; no reader integration follows.
 
 ## Chosen mathematical contract
 
@@ -82,6 +85,40 @@ the emitted instructions of a particular optimized build. Later inspection must
 cover the actual classifier and arithmetic callees, without treating an absent
 inline symbol as inspected. No performance or energy measurement is supplied.
 
+## Executed result and compiler correction
+
+The first release artifact at `7e4129b0` passed the three arithmetic checks but
+failed the existing strict instruction audit: LLVM emitted one `UMULH` for
+checked `4*B²+B²`, plus nineteen `FMOV` transfers from vectorized golden sign
+packing. That frozen artifact and failed result are retained.
+
+At `43e543fd`, two private non-inlined scalar helpers preserve the same exact
+algorithm while separating runtime sign scattering and checked addition. The
+same three checks pass. The rebuilt library SHA256 is
+`715bb4492a75c8a55ff63bde31553ff4d769d2503858f3d6726cf4d19c9d88c7`.
+With Rust 1.97.1 / LLVM 22.1.6 on aarch64-apple-darwin, the unchanged strict
+forbidden-instruction policy reports zero violations in 33 emitted ranges and
+zero missing mandatory symbols. The classifier (651 instructions),
+`golden_sign_bits` (67) and `checked_add_square_terms` (11) are actually present
+and checked. Independent relocation inspection confirms that these two helpers
+are the only numerical callees; shift/add squares, family selection and score
+comparison occur inline. Other external calls are bounds-panic paths excluded
+by the reviewed input/table/index bounds. Absent helpers are not independently
+audited. This scoped H4 inspection is not whole-process certification, nor a
+claim about future linked builds.
+
+The corrected build/check supervisor took 81.655 seconds with sampled group
+peak 353,845,248 bytes; its read-only audit took 1.499 seconds. Two earlier
+correction attempts stopped on foreign Cargo, with no test failure: one before
+launch and one after 22.519 seconds. Their elapsed time was deducted from the
+same 180-second correction allowance, totaling 104.309 seconds across all three
+attempts. The earlier source's complete build/check took 114.858 seconds and
+failed opcode inspection took 1.976 seconds. Concurrent model/build elapsed,
+preparation, reviews and delivery are charged once in the existing ledger.
+Independent compiled-call inspection added 1.041 seconds of read-only work.
+[Portable source, artifact, commands, check log and cost evidence](../evidence/exact-h4-classifier-2026-09-27.json)
+preserve both outcomes. No core/training build or model execution occurred.
+
 ## Integration boundary and next evidence
 
 Focused arithmetic checks cover zero, signed identities, ties, extreme i32
@@ -98,7 +135,12 @@ modify candidate admission, infer semantics from hash addresses, remove dense
 vocabulary access, or establish geometric advantage. It also leaves the paired
 H4/icosian state and its retained orientation untouched.
 
-Source-only ownership and scope are recorded in the [shared work card](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5857712244).
-References #973 and #820. Cargo, model and instruction checks wait for the active
-fit and its declared endpoints; source work/review overlaps are charged once to
-the existing cumulative ledger.
+The [learning and exact-table reuse review](finite-h4-learning-and-native-reuse-2026-09-27.md)
+separates estimator and capacity limitations from the numerical bridge and
+identifies the existing exact group compiler to reuse. It selects no new fit.
+
+Initial ownership is recorded in the [shared work card](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5857712244),
+and the measured integer-only build exception in the
+[scheduling amendment](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5857979897).
+References #973 and #820. The donor check and model-dependent integration retain
+their separate scheduling; the running fixed dialogue fit remains unchanged.

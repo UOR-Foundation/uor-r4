@@ -40,9 +40,13 @@ Parallel preparation for native attention now includes an
 [exact signed H4 classifier](exact-h4-classifier-2026-09-27.md) over common-scale
 quantized vectors. OpenCode retains the learned reader and its language study.
 The standalone classifier preserves exact root identity and ordering without
-choosing reader weights, a quantization recipe or another fit. Compilation and
-instruction checks remain pending; integration depends on the learned reader's
-actual behavior and a separately observed numerical bridge.
+choosing reader weights, a quantization recipe or another fit. Focused arithmetic,
+release compilation and scoped instruction inspection now pass at `43e543fd`;
+the training-crate donor check remains pending. Integration depends on the
+learned reader's actual behavior and a separately observed numerical bridge.
+The [source/literature synthesis](finite-h4-learning-and-native-reuse-2026-09-27.md)
+guides the outcome-dependent choice between native integration and a learning
+intervention; it selects no new fit.
 
 The first fourth-lab implementation is the shared Rust dialogue-protocol seam:
 current training uses literal role prefixes, while the chatbot branch can fall
@@ -53,12 +57,13 @@ Broader source/evidence findings are in the [integration review](fourth-lab-inte
 Current status remains in [current state](current-state.md), and #820/#973 retain
 their programme/model responsibilities.
 
-**Adaptive next action:** [review of concurrent Claude PR#1401](fourth-lab-native-read-review-2026-09-26.md)
-identified an existing native Lorentz read/configuration/export interface.
-Review and reuse that seam before adding a competing finite-group reader;
-retain radius/initialization controls and the reported numerical limitations.
-Its separate D10 backbone/arithmetic exceptions are not adopted by this lab under
-the owner clarification above.
+**Historical radial investigation — completed:** [review of Claude PR#1401](fourth-lab-native-read-review-2026-09-26.md)
+identified the native Lorentz read/configuration/export interface reused in the
+comparison below. Radius/initialization controls and numerical limitations were
+retained. The [completed matched result](radial-adaptation-result-2026-09-27.md)
+parks these transferred radial configurations and retains Dot. Its separate D10
+backbone/arithmetic exceptions are not adopted by this lab under the owner
+clarification above.
 The [offline radial comparison](radial-read-control-2026-09-26.md) is implemented:
 it adds an affine tangent score to the continuous Lorentz reader with the same
 lifted radial information and learned scalar count. This distinguishes nonlinear
@@ -73,22 +78,23 @@ observation completed with connected finite gradients and unchanged parameters;
 no calibration correction is indicated. The explicit same-geometry Dot reset
 control now preserves the actual parent's arrays, predictions and generated
 decisions while beginning a fresh optimizer lineage. The
-[fixed adaptation screen](radial-adaptation-study-2026-09-27.md) selects 1,024
+[fixed adaptation screen](radial-adaptation-study-2026-09-27.md) selected 1,024
 updates per arm with one descriptive midpoint. Its complete local resource
-projection is recorded and its Rust analysis preserves matched transfer,
+projection was recorded and its Rust analysis preserves matched transfer,
 execution, data and output identities. Lorentz versus affine
 isolates the nonlinear score within this representation;
 a fitted practical improvement claim also needs that Dot control with the same
 reset, objective, stream and exposure.
-The future language comparison must report calibration differences and useful generated behavior;
-implementation checks do not trigger a training sweep or serving promotion.
-Keep the independently owned termination objective separate. Exact-token
-dialogue adoption can advance through the retained integer session while these
-learning conditions are resolved. The [persistent conversation adapter](dialogue-continuity-2026-09-27.md)
+The comparison required calibration differences and useful generated behavior;
+its [completed result](radial-adaptation-result-2026-09-27.md) parks both radial
+configurations. These historical preparation steps do not trigger a new training
+sweep or serving promotion.
+The independently owned termination-objective result remains separate evidence.
+The subsequent [persistent conversation adapter](dialogue-continuity-2026-09-27.md)
 now preserves exact generated history, explicit turn closure and continued
 sampler state; focused checks and a short actual two-turn transport witness pass.
 Google retains CLI adoption. This is an integration result, not learned-chat
-qualification or a reason to change the frozen reader study.
+qualification or a revision of the completed reader result.
 
 The separate [R1d artifact replay](dialogue-artifact-replay-2026-09-27.md) now
 closes its retained response learner's fit→reload→output gap. Actual replies

@@ -88,11 +88,16 @@ numerical loss alone does not preserve complete answers. No new alpha fit ran.
 Parallel source preparation adds a standalone
 [exact signed H4 integer classifier](exact-h4-classifier-2026-09-27.md), with an
 immutable historical-order coefficient table and explicit zero/tie behavior.
-Principal and independent source reviews found no concrete defect. Formatting,
-diff and claim-wording checks pass; Rust compilation, arithmetic/donor tests and
-emitted instruction inspection are NOT_RUN while the dialogue fit continues.
-It is not connected to a reader or promoted artifact, and does not establish
-F32 decision parity, language retention or serving speed.
+At source `43e543fd`, all three focused integer checks and release compilation
+pass. After preserving an initial compiler-lowering failure, the corrected
+frozen library passes strict instruction inspection in 33 emitted ranges,
+including the classifier and both scalar helpers. The separate training-crate
+donor-order check is NOT_RUN; no core/training or model execution occurred.
+[Source, artifact, failed/passing outcomes and complete build breakdown](../evidence/exact-h4-classifier-2026-09-27.json)
+retain their scope. It is not connected to a reader or promoted artifact, and
+does not establish F32 decision parity, language retention or serving speed.
+The [learning and exact-table reuse review](finite-h4-learning-and-native-reuse-2026-09-27.md)
+guides conditional integration and selects no additional fit.
 
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded
