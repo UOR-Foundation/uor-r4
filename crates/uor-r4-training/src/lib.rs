@@ -40,6 +40,9 @@ pub mod ngram;
 pub mod reference_campaign;
 pub mod reference_eval;
 
+#[cfg(test)]
+mod native_h4_contract;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;

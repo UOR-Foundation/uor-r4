@@ -115,6 +115,15 @@ remains dated; [sequential evidence](../evidence/dialogue-code-choice-sequential
 owns the new execution/resource bindings. No learned candidate or language
 qualification is established by this normalization.
 
+Parallel source preparation adds a standalone
+[exact signed H4 integer classifier](exact-h4-classifier-2026-09-27.md), with an
+immutable historical-order coefficient table and explicit zero/tie behavior.
+Principal and independent source reviews found no concrete defect. Formatting,
+diff and claim-wording checks pass; Rust compilation, arithmetic/donor tests and
+emitted instruction inspection are NOT_RUN while the dialogue fit continues.
+It is not connected to a reader or promoted artifact, and does not establish
+F32 decision parity, language retention or serving speed.
+
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded
 accepted-bundle witness matches exact prefix IDs and all 16 prediction records

@@ -36,6 +36,14 @@ retain old criteria/results. Geometry remains an architectural priority and its
 predictive/efficiency contribution remains a measured question. A failed
 parameterization does not retire a whole geometric family.
 
+Parallel preparation for native attention now includes an
+[exact signed H4 classifier](exact-h4-classifier-2026-09-27.md) over common-scale
+quantized vectors. OpenCode retains the learned reader and its language study.
+The standalone classifier preserves exact root identity and ordering without
+choosing reader weights, a quantization recipe or another fit. Compilation and
+instruction checks remain pending; integration depends on the learned reader's
+actual behavior and a separately observed numerical bridge.
+
 The first fourth-lab implementation is the shared Rust dialogue-protocol seam:
 current training uses literal role prefixes, while the chatbot branch can fall
 back to BOS/UNK role IDs. Exact protocol identity and shared encoding remove
