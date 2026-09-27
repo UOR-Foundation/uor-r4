@@ -162,3 +162,31 @@ That establishment witness preceded the retained-session adapter above. It did
 not execute either model path or establish repaired language quality. The later
 adapter's executed scope is recorded separately; the partitioned chatbot and
 dialogue panel remain independent consumers requiring explicit adoption.
+
+### Executed retained-bundle witness
+
+Source `79c7c9e0d9cb712af0361cf1dd9d21cfdd8cd9d0` passes all six focused generation
+checks: four new session/protocol checks plus retained budget and cycle checks.
+The source-bound `dialogue-token-witness` example then loaded the unchanged
+accepted quaternion bundle and generated at most eight tokens from the exact
+13-ID `Hi` prefix above under greedy and seeded top-40 selection. For both
+policies the adapter, direct token appending and independent `IntegerModel::step`
+plus `Sampler` agree on every selected ID, full probability-vector hash, causal
+slot count, NoRead mass and sampler state. The direct replay follows the
+adapter's emitted count; the separate unit checks validate stopping semantics.
+
+The actual responses were `10 and the1 of the1` and `“Is there the“ver?” J`.
+Both reached the eight-token cap. This is a successful protocol/prediction
+transport witness and an unqualified chat model; correct ingestion does not
+create conversational training. Context capacity was 256, while this short
+witness consumed the stated prompt and output, not a full256 workload.
+
+The [receipt](../evidence/dialogue-token-session-validation-2026-09-27.json)
+contains source/executable/bundle/protocol identities, actual decisions/output,
+the sealed local report's file hashes, prior build failure and cumulative elapsed
+accounting. A stale shared tokenizer dependency initially lacked the new module;
+rebuilding that dependency from the unchanged local source resolved the compile
+failure without cache deletion. The passing tests took 0.09 seconds, their
+build/check command 13.05 seconds, the witness build 3.56 seconds, and the loaded
+model witness 4.32 seconds. These debug execution timings are not an optimized
+serving or energy result. No new fit or capability promotion occurred.
