@@ -31,7 +31,12 @@
   },
   "C": {
    "status": "DEFERRED",
-   "reason": "The predeclared trigger fired (|dNLL| >= 0.015 and |dComplete| >= 4), but the decision is already HARM on the row criteria; C would only attribute the cause of a parked mechanism, and its ~2 h fit would breach the predeclared 735,000,000 ms stop margin. Recorded as the predeclared conditional next step."
+   "trigger_fired": true,
+   "trigger": [
+    "|dNLL| = 0.019719 >= 0.015",
+    "|dComplete| = 10 >= 4"
+   ],
+   "reason": "The predeclared attribution arm (norm-controlled dot) was not run. Accounting at the decision point: the shared ledger read 712,153,247 / 744,000,000 ms at 19:08Z (up from 698,847,339 at the plan freeze, i.e. +13,299,908 ms of concurrent cross-lab consumption during this milestone). This milestone's uncharged accrual at delivery is about 5.0 h (18.1M ms) for two full fits, cost smokes, evaluations, builds, analysis and delivery, projecting a post-charge cumulative near 730M ms against the predeclared 735,000,000 ms stop margin. Arm C would add roughly 0.75 h implementation/build, 1.4 h fit, 0.05 h evaluations and ~0.3 h extra delivery (about 9.0M ms), projecting near 739M ms and leaving under 5M ms (<1.3 h) below the hard 744,000,000 ms ceiling while another lab charges concurrently. C is therefore deferred to a fresh budget decision rather than dropped; the plan's freeze-time projection would have fitted C, and this departure is caused by unforecast concurrent consumption of the shared margin, recorded here rather than silently."
   }
  },
  "fits": {
@@ -714,33 +719,54 @@
    "dComplete <= -4",
    "new unique losses >= 4"
   ],
-  "statement": "The finite signed-2I read score harms the same-dose baseline: 1.984753 -> 2.004471 comparison-tail Read NLL (+0.019719, just inside the +0.02 bound), complete source answers 27/32 -> 17/32 with 10 unique losses and 0 unique gains, and sampled prose unchanged at 0/5 in both arms. Per the predeclared rule the outcome is HARM: park the mechanism at this exact scope with no automatic repair-fit; the finite relation is not supported at this dose and representation.",
+  "statement": "The finite signed-2I read score harms the same-dose baseline: 1.984753 -> 2.004471 comparison-tail Read NLL (+0.019719, inside the +0.02 bound), complete source answers 27/32 -> 17/32 with 10 unique losses and 0 unique gains, and sampled prose unchanged at 0/5 in both arms. Per the predeclared rule the outcome is HARM (dComplete <= -4, unique losses >= 4; and independently the missed cost gate, which shares the plan heading). Scope: this rejects the finite relation score as parameterized here, including its 784 added parameters, at this dose and representation. The attribution between finite-relation coding and added per-lane capacity/optimizer interaction is UNRESOLVED because arm C was deferred; the narrow supported statement is that this parameterization does not improve and measurably degrades the baseline.",
   "next": "The state/read path remains the supported next target, but not by re-parameterising this score; the predeclared attribution arm C is the conditional next step only if a future milestone revisits the finite read under a fresh budget decision."
  },
  "attempts": [
   {
    "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/fit-quaternion-kerneloff-smoke-8a6d",
-   "note": "argument error: total_steps=16676 gave a 341-update run stopped by max_process_seconds=900 (RESOURCE_CHECKPOINT); its 341-step curve exactly replays the historical plain-16696 curve (0 NLL mismatches), which is retained as an instrument check."
+   "status": "RESOURCE_CHECKPOINT (argument error: total_steps=16676 gave a 341-update run stopped by max_process_seconds=900)",
+   "note": "Its 341-step curve exactly replays the historical fit-quaternion-plain-16696 curve (0 NLL mismatches); retained as an instrument check."
   },
   {
    "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/fit-quaternion-kernelon-smoke-8a6d",
-   "note": "aborted mid-run when the launching shell timed out; 92 curve lines, no report; first kernel-on cost sample (~7.5 s/step under load)."
+   "status": "ABORTED",
+   "note": "Shell timeout killed the launching command mid-run; 92 curve lines, no report."
   },
   {
    "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/fit-quaternion-kerneloff-smoke4-8a6d",
-   "note": "4-update cost smoke (14.7 s wall)."
+   "status": "TARGET_COMPLETE",
+   "note": "4-update cost smoke, 14.7 s wall, per-step 3.170/2.036/1.931/2.150."
   },
   {
    "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/fit-quaternion-kernelon-smoke4-8a6d",
-   "note": "4-update cost smoke before optimization: per-step 15.300/8.742/12.879/10.247 s."
+   "status": "TARGET_COMPLETE",
+   "note": "4-update cost smoke BEFORE optimization: per-step 15.300/8.742/12.879/10.247 (mean 11.79)."
   },
   {
    "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/fit-quaternion-kernelon-smoke5-8a6d",
-   "note": "4-update cost smoke after optimization: per-step 6.081/5.443/6.603/9.808 s (paired same-session ratio 1.84x vs kernel-off 3.796 s; historical-baseline ratio 3.01x)."
+   "status": "TARGET_COMPLETE",
+   "note": "4-update cost smoke AFTER optimization: per-step 6.081/5.443/6.603/9.808 (mean 6.984); historical-idle-baseline ratio 3.01x."
+  },
+  {
+   "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/fit-quaternion-kerneloff-smoke5-3f2c",
+   "status": "TARGET_COMPLETE",
+   "note": "Paired same-session kernel-off smoke: per-step 4.247/3.561/3.240/4.136 (mean 3.796); paired ratio 6.984/3.796 = 1.84x (the plan-gate comparison)."
+  },
+  {
+   "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/fit-quaternion-kernelon-smoke6-7b1e",
+   "status": "TARGET_COMPLETE",
+   "note": "Later contended kernel-on smoke: per-step 19.916/13.744/13.397/15.976 (mean 15.758), showing load sensitivity under concurrent cross-lab work."
   },
   {
    "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/evaluate-quaternion-baseline-invariance-8a6d-read",
-   "note": "kernel-off new-binary parent evaluation; token-identical to the retained parent evaluation."
+   "status": "FAILED_ATTEMPT",
+   "note": "First baseline-invariance evaluation: rejected with \"joint campaign requires source-bound build\" because the binary was built without UOR_BUILD_SOURCE_COMMIT; the root exists with an attempt record and no report. Superseded by the 8a6d2 root."
+  },
+  {
+   "root": "/Users/casey.allard/uor-r4/.uor-models/investigations/language-continuation-20260925/evaluate-quaternion-baseline-invariance-8a6d2-read",
+   "status": "joint-evaluate (successful)",
+   "note": "The actual baseline-invariance witness: kernel-off new-binary evaluation of the untouched parent; blocks.jsonl bit-identical to evaluate-quaternion-continuous-read-6 and generation/story-probe outputs identical, i.e. the kernel-off path is unchanged at evaluation scope."
   }
  ],
  "cost": {
@@ -752,5 +778,43 @@
   "assessment_scope": "exposed development evaluator and authored source panel; single seed and single parent; no fresh holdout; concurrent cross-lab machine load inflated wall times.",
   "no_promotion": true,
   "literature": null
+ },
+ "cost_gate": {
+  "predeclared_threshold": "kernel adds > 1.5x per-update wall over the kernel-off arm => stop and optimize before the full screen",
+  "pre_optimization_per_step_s": [
+   15.3,
+   8.742,
+   12.879,
+   10.247
+  ],
+  "post_optimization_per_step_s": [
+   6.081,
+   5.443,
+   6.603,
+   9.808
+  ],
+  "paired_kernel_off_per_step_s": [
+   4.247,
+   3.561,
+   3.24,
+   4.136
+  ],
+  "paired_ratio": 1.84,
+  "historical_idle_baseline_ratio": 3.01,
+  "result": "FAILED (1.84x paired same-session > 1.5x). Carried to the full screen as an explicit budgeted exception: the residual cost is the frozen straight-through smooth Hamilton composition and is inherent to the declared operator, so further reduction would change the frozen mechanism. Under the plan heading (\"Guardrails and instrument checks\") a guardrail failure is itself a HARM condition, so the HARM decision holds independently of the row criteria. The optimization itself (per-event detached key-code caching + vectorized per-lane score) reduced the kernel from ~5x to 1.84x and is retained.",
+  "attribution_note": "The claim that the smooth Hamilton composition dominates the residual cost comes from the implementer profiler sampling, not an independent measurement."
+ },
+ "usage_scope_note": "The usage histogram is cumulative over the whole fit and its evaluations; it is not the plan's zero-update-window measurement. All 16 lanes show 120 distinct key codes and 120 distinct relation codes with a 0.9925 non-identity relation share.",
+ "ledger_accounting": {
+  "freeze_utc_balance_ms": 698847339,
+  "decision_time_utc": "2026-09-27T19:08:58Z",
+  "decision_time_balance_ms": 712153247,
+  "concurrent_cross_lab_drift_ms": 13299908,
+  "milestone_uncharged_elapsed_h": 5.0,
+  "projected_post_milestone_ms": 730300000,
+  "arm_c_projected_additional_ms": 9000000,
+  "projected_with_arm_c_ms": 739300000,
+  "predeclared_stop_margin_ms": 735000000,
+  "hard_ceiling_ms": 744000000
  }
 }

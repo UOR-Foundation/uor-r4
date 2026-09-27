@@ -897,18 +897,24 @@ separate obligations. One paired seed remains exploratory for geometry claims.
   answers are 27/32 → 17/32 with ten unique losses and zero unique gains;
   five-prompt sampled prose stays **0/5** in both arms. The NoRead penalty and the
   parent-relative bound hold, no short cycles occur, and hard-path usage is
-  non-collapsed (120/120 codes per lane; 99.25% non-identity relations).
+  non-collapsed (120/120 codes per lane; 99.25% non-identity relations; cumulative over
+  the fit). The predeclared 1.5× cost gate **failed** (1.84× paired same-session) and is
+  carried as a recorded budgeted exception; under the plan heading a guardrail failure is
+  itself a HARM condition.
 - **Instrument checks:** the kernel-off path reproduces the retained parent
   evaluation token-for-token and replays the historical `plain-16696` learning
   curve with zero NLL mismatches; arm B reproduces that historical evaluation
   exactly. The predeclared cost optimization cut kernel per-step cost
   (15.3/8.7/12.9/10.2 s → 6.1/5.4/6.6/9.8 s); the paired same-session ratio is
-  1.84× and the residual cost is the frozen smooth Hamilton composition, recorded
-  as a budgeted exception. Conditional attribution arm C is **deferred** with the
-  stop-margin reason recorded.
+  1.84× and the residual cost is the frozen smooth Hamilton composition. Conditional
+  attribution arm C is **deferred** with the ledger arithmetic recorded
+  (decision-time balance 712,153,247 ms; projected ~739M with C against the
+  predeclared 735M stop margin and the 744M ceiling).
 - **Decision:** park the mechanism at this exact scope; no repair-fit follows
-  automatically and no promotion. The state/read path remains the next target, not
-  a re-parameterisation of this score.
+  automatically and no promotion. The harm is measured for this parameterization
+  including its 784 added per-lane parameters; the capacity/normalization
+  attribution control is unrun. The state/read path remains the next target, not a
+  re-parameterisation of this score.
 - **Stop:** this packet is closed. #973 and #820 remain open at their wider scope.
 
 ## Retained result: paired learned-code retention accepted
