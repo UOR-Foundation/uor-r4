@@ -24,6 +24,13 @@ the legacy and current ordinary Dot/Quaternion operations supports a scoped
 compatibility case; a current full-window/incremental check does not reproduce
 the historical backend bit for bit.
 
+The source review follows the
+[historical Dot expression](https://github.com/UOR-Foundation/uor-r4/blob/5109861c93dee0e39d3aa189c325b3a13c4ededc/crates/uor-r4-training/src/joint_model.rs#L1028)
+into the [current Dot dispatch](https://github.com/UOR-Foundation/uor-r4/blob/2d3ee5f6fa1b3135a1f9bbff2f29d1d818edc4b1/crates/uor-r4-training/src/joint_model.rs#L1191).
+The recurrent transport, normalization, copy and output expressions retain their
+order. The later scan prototype is optional and was not selected by the
+[dialogue constructor](https://github.com/UOR-Foundation/uor-r4/blob/d22e2b50da85e527efcd4f60acc1e82644194b91/crates/uor-r4-training/src/dialogue.rs#L502).
+
 The prior negative is preserved: after 2,237 updates and 9,162,752 sampled targets,
 reported response NLL 3.0678578 remained above the matched count comparator's
 2.4656426. No automatic longer fit follows. The stronger R1d interpretation
@@ -35,6 +42,12 @@ model/data seed; changed batch and F32 reduction create a distinct trajectory,
 not an independent-seed replication. Close training/development loss also does
 not exclude objective or data issues: arbitrary 256-token response windows can
 begin inside a response without its complete user request.
+
+The fit report's `supervised_targets` field duplicates nominal sampled positions.
+Summing the retained learning curve's 2,237 consecutive per-update records gives
+9,162,752 sampled positions and **6,280,627 response-supervised positions**.
+Keep these quantities distinct; neither counts unique corpus coverage. This is
+a retrospective accounting correction, not a changed training run or criterion.
 
 A spending rule may support declining a longer run without establishing
 convergence or a universal model-size floor. The methodological distinction
@@ -88,4 +101,52 @@ The [prospective work card](https://github.com/UOR-Foundation/uor-r4/issues/973#
 records the 90-minute complete cap, 600-second/1 GiB inference ceiling, prospective
 short-probe concurrency refinement, fixed requests and shared resource limits.
 The frozen Dot/Lorentz/Affine study and other labs' artifacts remain separate.
-Executed results will be recorded here and in the source-bound receipt.
+
+## Executed result
+
+The [source-bound receipt](../evidence/dialogue-r1d-replay-2026-09-27.json) retains
+all 58 response texts, IDs, stops, input history and complete-report identities.
+Source `e3fc0a587115d34b41a0fc9edacc09745ccc0746` passed all four focused checks.
+The initial attempt on `7e67e2c2` passed three and failed one before model
+construction: its synthetic tokenizer lacked the required ByteLevel declaration.
+Only that fixture line changed. Both attempts and their cost remain recorded.
+
+The optimized CPU-Accelerate replay completed all 38 requests and 58 assistant
+turns in 18.132 seconds, with 58,572,800 bytes maximum child RSS. There were
+1,766 generated selections, 4,331 generation step calls, plus a separate 15-step
+incremental and 15-position full-forward comparison. Across 61,440 compared
+probabilities, the maximum absolute delta was 9.6857548e-7 and there were no
+argmax disagreements. This establishes consistency of the new executable's two
+paths on that prefix, not historical backend identity.
+
+Actual output is **response-shaped but not useful dialogue**. It frequently
+echoes the user's topic inside repeated email-like language, omits requested
+facts, drifts and repeats. None of the eight factual replies gives the requested
+fact. Some third-turn replies reuse a fact from history (Momo, teacher, blue car,
+piano; the color reply also mixes blue and green), but this is not a controlled
+memory-utility result or a set of reliable answers. It uses model EOS 11 times,
+the existing cycle stop 4 times and the token cap 43 times. A capped continuation's
+unobserved future is unknown; no extra decoding was performed to seek a better
+ending.
+
+| Request | Actual response excerpt | Stop |
+|---|---|---|
+| What is the capital of France? | `Yes, there are the capital of France of France, France, France,` | Cycle (period 3) |
+| Write a sentence about a dog. | `I'm excited to share a dog.` followed by a generic email closing | Model EOS |
+| What is my cat's name? | `Yes, I'm sure to sleep.` followed by `your cat is named Momo` inside a drifting reply | 32-token cap |
+| What is my name? (after Alex was supplied) | `Yes, there are many a more concise and effective way to make it more effectively.` | 32-token cap |
+
+The model and loader are retained as a diagnostic baseline. The observed weak
+answers do not identify capacity, data, objective, exposure or read geometry as
+the cause. No further fit, decoder sweep, integer width change or promotion is
+justified by this observation alone. The active reader, termination and stack
+studies retain their distinct decisions; use their complete results to choose
+the next native-learning intervention. This closes the fit→reload→actual-output
+gap for this retained artifact and leaves practical chat open.
+
+Build/check work totaled 1,067.794 seconds including the failed fixture attempt;
+the corrected cached checks and executable build took 173.724 seconds. Unused
+design time was prospectively reallocated to the build envelope while keeping
+the 90-minute phase and cumulative ceilings unchanged. Preparation, review,
+coordination and delivery elapsed is charged once through the shared ledger;
+the receipt distinguishes those costs from actual model inference.
