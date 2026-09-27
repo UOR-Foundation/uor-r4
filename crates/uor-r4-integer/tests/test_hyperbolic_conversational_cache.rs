@@ -451,6 +451,18 @@ fn test_chat_session_hyperbolic_streaming_latency_and_rss_invariants() {
         mean_latency,
         ceiling
     );
+
+    if let (Some(init), Some(fin)) = (initial_rss, final_rss) {
+        let growth = (fin - init).max(0.0);
+        assert!(
+            growth < 5.0,
+            "Hyperbolic cache memory leak detected: {:.2} MB growth across 128 tokens",
+            growth
+        );
+    }
+    if let Some(fin) = final_rss {
+        assert!(fin > 0.0, "Process RSS must be positive: {fin:.2} MB");
+    }
 }
 
 #[test]
@@ -562,7 +574,7 @@ fn test_invalid_serialized_key_coordinates_rejected() {
     assert!(res_l2_len.err().unwrap().to_string().contains("l2 len"));
 
     // 8. L2 pages count less than l2_len
-    let mut corrupted_l2_short = valid_serialized;
+    let mut corrupted_l2_short = valid_serialized.clone();
     corrupted_l2_short.session_state.l2_len = 10;
     corrupted_l2_short.session_state.l2_pages.truncate(5);
     let res_l2_short = ChatSession::from_serialized(&bundle, corrupted_l2_short, "");
@@ -572,4 +584,116 @@ fn test_invalid_serialized_key_coordinates_rejected() {
         .unwrap()
         .to_string()
         .contains("less than l2_len"));
+
+    // 9. Dialogue len exceeds capacity
+    let mut corrupted_dialogue_len = valid_serialized.clone();
+    corrupted_dialogue_len.session_state.dialogue_len = 225;
+    let res_dialogue_len = ChatSession::from_serialized(&bundle, corrupted_dialogue_len, "");
+    assert!(res_dialogue_len.is_err(), "must reject dialogue len > 224");
+    assert!(res_dialogue_len
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("dialogue len"));
+
+    // 10. Dialogue tokens count mismatch
+    let mut corrupted_dialogue_tokens = valid_serialized.clone();
+    corrupted_dialogue_tokens
+        .session_state
+        .dialogue_tokens
+        .truncate(10);
+    let res_dt = ChatSession::from_serialized(&bundle, corrupted_dialogue_tokens, "");
+    assert!(res_dt.is_err(), "must reject dialogue tokens count != 224");
+    assert!(res_dt
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("dialogue tokens"));
+
+    // 11. Dialogue sequences count mismatch
+    let mut corrupted_dialogue_seq = valid_serialized.clone();
+    corrupted_dialogue_seq
+        .session_state
+        .dialogue_sequences
+        .truncate(10);
+    let res_ds = ChatSession::from_serialized(&bundle, corrupted_dialogue_seq, "");
+    assert!(
+        res_ds.is_err(),
+        "must reject dialogue sequences count != 224"
+    );
+    assert!(res_ds
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("dialogue sequences"));
+
+    // 12. Dialogue turn IDs count mismatch
+    let mut corrupted_dialogue_turn = valid_serialized.clone();
+    corrupted_dialogue_turn
+        .session_state
+        .dialogue_turn_ids
+        .truncate(10);
+    let res_dturn = ChatSession::from_serialized(&bundle, corrupted_dialogue_turn, "");
+    assert!(
+        res_dturn.is_err(),
+        "must reject dialogue turn IDs count != 224"
+    );
+    assert!(res_dturn
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("dialogue turn IDs"));
+
+    // 13. Persistent values count does not match persistent keys count
+    let mut corrupted_pv = valid_serialized.clone();
+    corrupted_pv.session_state.persistent_values.truncate(0);
+    let res_pv = ChatSession::from_serialized(&bundle, corrupted_pv, "");
+    assert!(
+        res_pv.is_err(),
+        "must reject persistent values count mismatch"
+    );
+    assert!(res_pv
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("persistent values count"));
+
+    // 14. Persistent tokens count does not match persistent keys count
+    let mut corrupted_pt = valid_serialized.clone();
+    corrupted_pt.session_state.persistent_tokens.truncate(0);
+    let res_pt = ChatSession::from_serialized(&bundle, corrupted_pt, "");
+    assert!(
+        res_pt.is_err(),
+        "must reject persistent tokens count mismatch"
+    );
+    assert!(res_pt
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("persistent tokens count"));
+
+    // 15. Persistent capacity mismatch
+    let mut corrupted_pcap = valid_serialized.clone();
+    corrupted_pcap.session_state.persistent_capacity = 64;
+    let res_pcap = ChatSession::from_serialized(&bundle, corrupted_pcap, "");
+    assert!(
+        res_pcap.is_err(),
+        "must reject persistent capacity mismatch"
+    );
+    assert!(res_pcap
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("persistent capacity"));
+
+    // 16. Dialogue capacity mismatch
+    let mut corrupted_dcap = valid_serialized;
+    corrupted_dcap.session_state.dialogue_capacity = 512;
+    let res_dcap = ChatSession::from_serialized(&bundle, corrupted_dcap, "");
+    assert!(res_dcap.is_err(), "must reject dialogue capacity mismatch");
+    assert!(res_dcap
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("dialogue capacity"));
 }

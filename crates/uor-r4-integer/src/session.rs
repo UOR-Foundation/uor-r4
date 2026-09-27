@@ -946,11 +946,37 @@ impl<'a> ChatSession<'a> {
                 s_state.state.len()
             )));
         }
+        if s_state.persistent_capacity != PERSISTENT_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted persistent capacity: expected {}, found {}",
+                PERSISTENT_CAPACITY, s_state.persistent_capacity
+            )));
+        }
         if s_state.persistent_keys.len() > PERSISTENT_CAPACITY {
             return Err(invalid(format!(
                 "persistent slot count {} exceeds capacity {}",
                 s_state.persistent_keys.len(),
                 PERSISTENT_CAPACITY
+            )));
+        }
+        if s_state.persistent_values.len() != s_state.persistent_keys.len() {
+            return Err(invalid(format!(
+                "corrupted persistent values count: expected {} (matching keys), found {}",
+                s_state.persistent_keys.len(),
+                s_state.persistent_values.len()
+            )));
+        }
+        if s_state.persistent_tokens.len() != s_state.persistent_keys.len() {
+            return Err(invalid(format!(
+                "corrupted persistent tokens count: expected {} (matching keys), found {}",
+                s_state.persistent_keys.len(),
+                s_state.persistent_tokens.len()
+            )));
+        }
+        if s_state.dialogue_capacity != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue capacity: expected {}, found {}",
+                DIALOGUE_CAPACITY, s_state.dialogue_capacity
             )));
         }
         if s_state.dialogue_keys.len() != DIALOGUE_CAPACITY {
@@ -967,10 +993,37 @@ impl<'a> ChatSession<'a> {
                 s_state.dialogue_values.len()
             )));
         }
+        if s_state.dialogue_tokens.len() != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue tokens: expected {} slots, found {}",
+                DIALOGUE_CAPACITY,
+                s_state.dialogue_tokens.len()
+            )));
+        }
+        if s_state.dialogue_sequences.len() != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue sequences: expected {} slots, found {}",
+                DIALOGUE_CAPACITY,
+                s_state.dialogue_sequences.len()
+            )));
+        }
+        if s_state.dialogue_turn_ids.len() != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue turn IDs: expected {} slots, found {}",
+                DIALOGUE_CAPACITY,
+                s_state.dialogue_turn_ids.len()
+            )));
+        }
         if s_state.dialogue_cursor >= DIALOGUE_CAPACITY {
             return Err(invalid(format!(
                 "dialogue cursor {} out of bounds [0, {})",
                 s_state.dialogue_cursor, DIALOGUE_CAPACITY
+            )));
+        }
+        if s_state.dialogue_len > DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "dialogue len {} exceeds capacity {}",
+                s_state.dialogue_len, DIALOGUE_CAPACITY
             )));
         }
 
