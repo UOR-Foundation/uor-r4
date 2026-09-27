@@ -238,18 +238,15 @@ impl<'a> TextSession<'a> {
             });
             generated.push(selected as u32);
             self.pending = Some(selected as u32);
-            let turn_end_id = self
-                .bundle
-                .tokenizer()
-                .token_id("<|turn_end|>")
-                .unwrap_or(6);
             if selected == 1 {
                 stop = Stop::Eos;
                 break;
             }
-            if selected == turn_end_id as usize {
-                stop = Stop::TurnEnd;
-                break;
+            if let Some(turn_end_id) = self.bundle.tokenizer().token_id("<|turn_end|>") {
+                if selected == turn_end_id as usize {
+                    stop = Stop::TurnEnd;
+                    break;
+                }
             }
             if first_sentence
                 && self
