@@ -37,10 +37,14 @@ pub const LORENTZ_MIN_INNER: f64 = 1.0 + 1e-6;
 pub const QUATERNION_DELTA_SCALE: f64 = 0.1;
 pub const CHECKPOINT_SCHEMA: &str = "uor-r4.joint-recurrent-checkpoint/1";
 
-use uor_r4_integer::config::{valid_quantization_clock, QuantizationPreparation};
+use uor_r4_integer::config::{
+    packed_numerical_contract_for_profile, valid_quantization_clock, QuantizationPreparation,
+    ServingProfile,
+};
 pub use uor_r4_integer::{JointConfig, ReadMode, Transport};
 
-/// Forward-only precision interventions on one fully quantized floating parent.
+/// Forward-only precision interventions on one fully quantized floating parent,
+/// or the explicit QF view of a reloaded packed child.
 /// The first letter selects parameter precision; the second selects every
 /// declared recurrent/read/output interface. `Q` uses the existing fixed grid.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -362,6 +366,55 @@ impl JointModel {
         Self::from_variables(config, variables, device)
     }
 
+    /// Consume the verified retained R1d import for an explicitly declared
+    /// development export. Calibration chooses frozen dyadic scales from the
+    /// existing parameters; it performs no forward pass or optimizer update.
+    /// Historical model steps remain provenance, not a completed QAT ramp.
+    pub fn calibrated_dialogue_integer_parent(
+        artifact: crate::dialogue_artifact::LegacyDialogueArtifact,
+    ) -> Result<(Self, crate::dialogue_artifact::DialogueArtifactProvenance)> {
+        let parts = artifact.into_training_parts();
+        let mut model = parts.model;
+        model
+            .config
+            .validate_for_profile(ServingProfile::Dialogue576)?;
+        if model.admission != AdmissionPolicy::Full {
+            return Err(invalid("dialogue integer export requires Full admission"));
+        }
+        model.configure_quantization(parts.provenance.steps_completed, 1)?;
+        model
+            .quantization
+            .as_mut()
+            .ok_or_else(|| invalid("missing calibrated export state"))?
+            .preparation = Some(QuantizationPreparation::CalibratedForExport);
+        Ok((model, parts.provenance))
+    }
+
+    /// Calibrate only the verified evolved child; local completed steps remain
+    /// its training clock and no optimizer, forward or model update is run.
+    pub fn calibrated_dialogue_child_integer_parent(
+        artifact: crate::dialogue_child_artifact::DialogueChildArtifact,
+    ) -> Result<(
+        Self,
+        crate::dialogue_child_artifact::DialogueChildProvenance,
+    )> {
+        let (mut model, provenance) = artifact.into_export_parts()?;
+        model
+            .config
+            .validate_for_profile(ServingProfile::Dialogue576)?;
+        if model.admission != AdmissionPolicy::Full {
+            return Err(invalid("dialogue child export requires Full admission"));
+        }
+        model.configure_quantization(provenance.steps_completed, 1)?;
+        model
+            .quantization
+            .as_mut()
+            .ok_or_else(|| invalid("missing calibrated child export state"))?
+            .preparation = Some(QuantizationPreparation::CalibratedForExport);
+        provenance.validate_parameters(&model)?;
+        Ok((model, provenance))
+    }
+
     fn from_variables(
         config: JointConfig,
         variables: BTreeMap<String, Var>,
@@ -400,7 +453,7 @@ impl JointModel {
     /// New offline optimizer starts from the actual packed code values. Parent
     /// clock/scales remain immutable; campaign lineage records all new updates.
     pub(crate) fn packed_training_start(&self) -> Result<Self> {
-        if !self.hard_only || self.prepared_parameters.is_some() {
+        if !self.hard_only || self.prepared_parameters.is_some() || self.precision_mode.is_some() {
             return Err(invalid("bounded continuation requires a packed parent"));
         }
         let mut model = self.detached_view()?;
@@ -507,6 +560,42 @@ impl JointModel {
         state.spec.validate(&self.variables)?;
         let mut model = self.detached_view()?;
         model.precision_mode = Some(mode);
+        Ok(model)
+    }
+
+    /// Observe the actual reloaded packed parameters with continuous F32
+    /// interfaces (QF). This preserves the decoded hard values, frozen scales,
+    /// preparation metadata and clock; it neither recovers floating shadows
+    /// nor calibrates a new quantizer. The returned view remains hard-only and
+    /// evaluation-only. Bind the source hard artifact in the observation.
+    pub fn packed_parameter_precision_view(&self) -> Result<Self> {
+        require_quantized_read(self.config.read_geometry)?;
+        if !self.hard_only
+            || self.prepared_parameters.is_some()
+            || self.precision_mode.is_some()
+            || self.rounding_learning
+        {
+            return Err(invalid(
+                "packed parameter precision requires an unprepared loaded hard model",
+            ));
+        }
+        let state = self
+            .quantization
+            .as_ref()
+            .ok_or_else(|| invalid("packed parameter precision requires frozen quantizers"))?;
+        if !valid_quantization_clock(
+            state.start_step,
+            state.ramp_steps,
+            state.completed_step,
+            state.preparation,
+        ) {
+            return Err(invalid(
+                "packed parameter precision quantization clock differs",
+            ));
+        }
+        state.spec.validate(&self.variables)?;
+        let mut model = self.detached_view()?;
+        model.precision_mode = Some(PrecisionMode::QF);
         Ok(model)
     }
 
@@ -743,6 +832,9 @@ impl JointModel {
         let parameter_quantization = self.quantization.as_ref().filter(|_| {
             self.precision_mode
                 .is_none_or(PrecisionMode::quantizes_parameters)
+                // QF on a loaded hard child observes its decoded code values
+                // directly. Q denotes their source, not a second rounding.
+                && !(self.hard_only && self.precision_mode == Some(PrecisionMode::QF))
         });
         let parameters = self
             .variables
@@ -1727,6 +1819,16 @@ impl JointModel {
                 json!("Disabled: precision views reject training and use full-strength grids only where enabled");
             contract["quantization"]["artifact"] =
                 json!("In-memory diagnostic view of a floating checkpoint; cannot be saved as a training or packed model");
+            if self.hard_only {
+                contract["precision_evaluation"]["scope"] = json!(
+                    "Evaluation-only QF observation of actual decoded hard parameters with continuous F32 interfaces; frozen quantization and preparation clocks retained; no floating shadows, recalibration or model updates"
+                );
+                contract["precision_evaluation"]["parameter_source"] =
+                    json!("Decoded packed values used directly without another quantization");
+                contract["quantization"]["artifact"] = json!(
+                    "In-memory diagnostic view of a loaded packed child; hard-only remains set; cannot be trained, saved or exported"
+                );
+            }
         }
         admission_contract(
             read_geometry_contract(contract, self.config.read_geometry),
@@ -1738,6 +1840,161 @@ impl JointModel {
     /// deliberately not an integer execution kernel: the nonlinearities,
     /// accumulations, normalization and probability calculations remain F32.
     pub fn save_hard(&self, directory: &Path) -> Result<Value> {
+        self.save_hard_for_profile(directory, ServingProfile::Retained)
+    }
+
+    /// Explicit development-profile export. The retained entry point keeps its
+    /// original 128/256 configuration and numerical metadata. Profile576 binds
+    /// its separate integer RMS declaration without changing F32 emulation.
+    pub fn save_hard_for_profile(
+        &self,
+        directory: &Path,
+        profile: ServingProfile,
+    ) -> Result<Value> {
+        self.save_hard_profile(directory, profile, None)
+    }
+
+    /// Export a calibrated, unchanged retained R1d parent with portable lineage
+    /// in the hard child itself. Source bindings describe this conversion;
+    /// the historical training source and its limitations remain under parent.
+    pub fn save_dialogue_integer_hard(
+        &self,
+        directory: &Path,
+        parent: &crate::dialogue_artifact::DialogueArtifactProvenance,
+        source_commit: &str,
+        executable_sha256: &str,
+        source_sha256: &BTreeMap<String, String>,
+    ) -> Result<Value> {
+        self.config
+            .validate_for_profile(ServingProfile::Dialogue576)?;
+        let valid_hex = |value: &str, length| {
+            value.len() == length && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+        };
+        if self.config != parent.current_model
+            || parent.admission != "full"
+            || parent.read_geometry != "dot"
+            || parent.parameters.len() != self.variables.len()
+            || !valid_hex(&parent.tokenizer_sha256, 64)
+            || !valid_hex(source_commit, 40)
+            || !valid_hex(executable_sha256, 64)
+            || source_sha256.is_empty()
+            || source_sha256.values().any(|hash| !valid_hex(hash, 64))
+        {
+            return Err(invalid("dialogue conversion parent/source binding"));
+        }
+        let state = self
+            .quantization
+            .as_ref()
+            .ok_or_else(|| invalid("dialogue conversion requires calibrated scales"))?;
+        if state.preparation != Some(QuantizationPreparation::CalibratedForExport)
+            || state.start_step != parent.steps_completed
+            || state.completed_step != parent.steps_completed
+            || state.ramp_steps != 1
+            || self.hard_only
+        {
+            return Err(invalid(
+                "dialogue conversion must have zero new model updates",
+            ));
+        }
+        let mut names = BTreeSet::new();
+        for binding in &parent.parameters {
+            let variable = self
+                .variables
+                .get(&binding.name)
+                .ok_or_else(|| invalid("dialogue conversion parent parameter inventory"))?;
+            let values = variable.detach().flatten_all()?.to_vec1::<f32>()?;
+            let mut hash = Sha256::new();
+            for value in values {
+                hash.update(value.to_le_bytes());
+            }
+            if !names.insert(&binding.name)
+                || variable.dims() != binding.shape
+                || hex::encode(hash.finalize()) != binding.sha256_le_f32
+            {
+                return Err(invalid(format!(
+                    "dialogue conversion changed parent parameter {}",
+                    binding.name
+                )));
+            }
+        }
+        let provenance = json!({
+            "schema":"uor-r4.native-dialogue576-conversion/1",
+            "parent":parent,
+            "tokenizer_sha256":parent.tokenizer_sha256,
+            "protocol_identity":parent.protocol_identity,
+            "conversion_source_commit":source_commit,
+            "conversion_executable_sha256":executable_sha256,
+            "source_sha256":source_sha256,
+            "serving_profile":"dialogue576",
+            "admission":"full",
+            "new_forward_calls":0,"new_generation_calls":0,
+            "new_optimizer_updates":0,"new_model_updates":0,
+            "calibration":"Existing frozen-parent signed4 row reconstruction MSE and additive16 ceiling; no corpus/model evaluation or optimizer/model updates. ramp_steps=1 is compatibility metadata; start_step=completed_step records historical parent exposure, not QAT.",
+            "scope":"Development conversion only. Quantized numerical retention, generated behavior, useful dialogue and complete-path efficiency have not been evaluated. Historical source/mask/tokenizer limitations remain in parent provenance."
+        });
+        self.save_hard_profile(directory, ServingProfile::Dialogue576, Some(&provenance))
+    }
+
+    /// Nearest-hard export of an unchanged, verified learned dialogue child.
+    /// Historical R1d export retains its separate schema and validation path.
+    pub fn save_dialogue_child_integer_hard(
+        &self,
+        directory: &Path,
+        parent: &crate::dialogue_child_artifact::DialogueChildProvenance,
+        source_commit: &str,
+        executable_sha256: &str,
+        source_sha256: &BTreeMap<String, String>,
+    ) -> Result<Value> {
+        parent.validate_parameters(self)?;
+        self.config
+            .validate_for_profile(ServingProfile::Dialogue576)?;
+        let valid_hex = |value: &str, length| {
+            value.len() == length && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+        };
+        if !valid_hex(source_commit, 40)
+            || !valid_hex(executable_sha256, 64)
+            || source_sha256.is_empty()
+            || source_sha256.values().any(|h| !valid_hex(h, 64))
+        {
+            return Err(invalid("dialogue child conversion source binding"));
+        }
+        let state = self
+            .quantization
+            .as_ref()
+            .ok_or_else(|| invalid("dialogue child conversion requires calibrated scales"))?;
+        if state.preparation != Some(QuantizationPreparation::CalibratedForExport)
+            || state.start_step != parent.steps_completed
+            || state.completed_step != parent.steps_completed
+            || state.ramp_steps != 1
+            || self.hard_only
+            || self.admission != AdmissionPolicy::Full
+        {
+            return Err(invalid(
+                "dialogue child conversion must have zero new model updates",
+            ));
+        }
+        let provenance = json!({
+            "schema":"uor-r4.native-dialogue576-child-conversion/1", "parent":parent,
+            "tokenizer_sha256":parent.tokenizer_sha256, "protocol_identity":parent.protocol_identity,
+            "conversion_source_commit":source_commit,"conversion_executable_sha256":executable_sha256,
+            "source_sha256":source_sha256,"serving_profile":"dialogue576","admission":"full",
+            "new_forward_calls":0,"new_generation_calls":0,"new_optimizer_updates":0,"new_model_updates":0,
+            "calibration":"Frozen immediate-child signed4 row reconstruction MSE and additive16 ceiling; no new forward, generation or optimizer/model updates. start_step=completed_step is the child's local training clock, not ancestor exposure or QAT.",
+            "scope":"Development nearest-hard child conversion. Actual numerical/output retention requires separate observation; historical ancestor limitations remain explicit."
+        });
+        self.save_hard_profile(directory, ServingProfile::Dialogue576, Some(&provenance))
+    }
+
+    fn save_hard_profile(
+        &self,
+        directory: &Path,
+        profile: ServingProfile,
+        conversion_provenance: Option<&Value>,
+    ) -> Result<Value> {
+        self.config.validate_for_profile(profile)?;
+        if profile == ServingProfile::Dialogue576 && self.admission != AdmissionPolicy::Full {
+            return Err(invalid("dialogue576 packed export requires Full admission"));
+        }
         require_quantized_read(self.config.read_geometry)?;
         if self.prepared_parameters.is_some() || self.rounding_learning {
             return Err(invalid("materialize hard codes before export"));
@@ -1749,6 +2006,14 @@ impl JointModel {
             .quantization
             .as_ref()
             .ok_or_else(|| invalid("hard export requires frozen quantization scales"))?;
+        if !valid_quantization_clock(
+            state.start_step,
+            state.ramp_steps,
+            state.completed_step,
+            state.preparation,
+        ) {
+            return Err(invalid("hard export quantization clock differs"));
+        }
         let parameters =
             joint_quantization::save_hard_parameters(&state.spec, &self.variables, directory)?;
         let mut manifest = json!({
@@ -1766,6 +2031,16 @@ impl JointModel {
         if self.admission != AdmissionPolicy::Full {
             manifest["admission"] = json!(self.admission);
         }
+        if profile == ServingProfile::Dialogue576 {
+            manifest["serving_profile"] = json!(profile);
+            manifest["admission"] = json!("full");
+            manifest["numerical_contract"] =
+                packed_numerical_contract_for_profile(self.config.read_geometry, profile)?;
+            manifest["scope"] = json!("Explicit dialogue576 development artifact: signed4 multiplicative and signed16 additive parameters on frozen dyadic scales. Shared packed F32 emulation and separately declared integer RMS576 execution; conversion/reload is not numerical retention, useful dialogue, accepted-model status or efficiency evidence.");
+        }
+        if let Some(provenance) = conversion_provenance {
+            manifest["conversion_provenance"] = provenance.clone();
+        }
         let mut file = File::create_new(directory.join("hard-model.json"))?;
         serde_json::to_writer_pretty(&mut file, &manifest)?;
         file.write_all(b"\n")?;
@@ -1774,6 +2049,17 @@ impl JointModel {
     }
 
     pub fn load_hard(directory: &Path, device: &Device) -> Result<Self> {
+        Self::load_hard_for_profile(directory, device, ServingProfile::Retained)
+    }
+
+    /// Profile selection is explicit; a dialogue576 declaration cannot widen
+    /// the default loader. This reloads packed dyadic values into the existing
+    /// F32 emulator and does not execute the integer normalization algorithm.
+    pub fn load_hard_for_profile(
+        directory: &Path,
+        device: &Device,
+        profile: ServingProfile,
+    ) -> Result<Self> {
         let manifest: Value =
             serde_json::from_slice(&fs::read(directory.join("hard-model.json"))?)?;
         let admission: AdmissionPolicy = manifest
@@ -1782,13 +2068,33 @@ impl JointModel {
             .transpose()?
             .unwrap_or_default();
         let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
-        require_quantized_read(config.read_geometry)?;
-        if manifest["schema"] != "uor-r4.joint-recurrent-packed-emulator/1"
-            || manifest["numerical_contract"]
-                != admission_contract(
+        config.validate_for_profile(profile)?;
+        let expected_contract = match profile {
+            ServingProfile::Retained => {
+                if manifest
+                    .get("serving_profile")
+                    .is_some_and(|value| value != "retained")
+                {
+                    return Err(invalid("packed model requires explicit serving profile"));
+                }
+                admission_contract(
                     read_geometry_contract(quantized_numerical_contract(), config.read_geometry),
                     admission,
                 )
+            }
+            ServingProfile::Dialogue576 => {
+                if manifest["serving_profile"] != "dialogue576"
+                    || manifest["admission"] != "full"
+                    || admission != AdmissionPolicy::Full
+                {
+                    return Err(invalid("dialogue576 packed profile/admission binding"));
+                }
+                packed_numerical_contract_for_profile(config.read_geometry, profile)?
+            }
+        };
+        require_quantized_read(config.read_geometry)?;
+        if manifest["schema"] != "uor-r4.joint-recurrent-packed-emulator/1"
+            || manifest["numerical_contract"] != expected_contract
             || manifest["parameter_manifest_sha256"]
                 != crate::sha256_file(
                     &directory.join(joint_quantization::HARD_PARAMETERS_MANIFEST_FILE),
@@ -1804,7 +2110,6 @@ impl JointModel {
         if actual_manifest != manifest["parameter_manifest"] {
             return Err(invalid("packed model parameter manifest binding"));
         }
-        config.validate()?;
         let state: QuantizedTrainingState =
             serde_json::from_value(manifest["quantization"].clone())?;
         let (spec, variables) = joint_quantization::load_hard_parameters(directory, device)?;
@@ -2140,6 +2445,81 @@ impl Initializer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dialogue576_hard_profile_roundtrip_and_zero_update_clock() -> Result<()> {
+        let config = JointConfig {
+            width: 576,
+            ..JointConfig::default()
+        };
+        let parameters = config
+            .shapes()
+            .into_iter()
+            .map(|(name, shape)| {
+                let count = shape.iter().product();
+                let mut values = vec![0f32; count];
+                values[0] = 0.375;
+                values[count - 1] = -1.125;
+                (name, values)
+            })
+            .collect();
+        let mut model =
+            JointModel::from_offline_dialogue_parameters(config, parameters, &Device::Cpu)?;
+        model.configure_quantization(2237, 1)?;
+        model
+            .quantization
+            .as_mut()
+            .ok_or_else(|| invalid("test quantization"))?
+            .preparation = Some(QuantizationPreparation::CalibratedForExport);
+        assert_eq!(model.training_strength(), 1.0);
+        assert!(model.set_completed_step(2238).is_err());
+        let root = precision_test_root("dialogue576-hard")?;
+        assert!(model.save_hard(&root).is_err());
+        assert!(!root.join("hard-model.json").exists());
+        let manifest = model.save_hard_for_profile(&root, ServingProfile::Dialogue576)?;
+        assert_eq!(manifest["serving_profile"], "dialogue576");
+        assert_eq!(manifest["admission"], "full");
+        assert_eq!(
+            manifest["quantization"]["preparation"],
+            "calibrated_for_export"
+        );
+        assert_eq!(manifest["quantization"]["completed_step"], 2237);
+        assert!(JointModel::load_hard(&root, &Device::Cpu).is_err());
+        let hard =
+            JointModel::load_hard_for_profile(&root, &Device::Cpu, ServingProfile::Dialogue576)?;
+        assert_eq!(hard.config, model.config);
+        assert_eq!(hard.quantization(), model.quantization());
+        let spec = &model
+            .quantization()
+            .ok_or_else(|| invalid("test scales"))?
+            .spec;
+        for (name, variable) in model.variables() {
+            let expected = spec.parameter(name, variable, 1.0, false)?;
+            assert!(same_bits(&expected, &hard.variables()[name])?, "{name}");
+        }
+        // Metadata alone cannot silently change an explicit profile into a
+        // retained model or a bounded-admission experiment.
+        let mut changed = manifest.clone();
+        changed["serving_profile"] = json!("retained");
+        fs::write(root.join("hard-model.json"), serde_json::to_vec(&changed)?)?;
+        assert!(JointModel::load_hard_for_profile(
+            &root,
+            &Device::Cpu,
+            ServingProfile::Dialogue576
+        )
+        .is_err());
+        changed = manifest;
+        changed["admission"] = json!("recent64");
+        fs::write(root.join("hard-model.json"), serde_json::to_vec(&changed)?)?;
+        assert!(JointModel::load_hard_for_profile(
+            &root,
+            &Device::Cpu,
+            ServingProfile::Dialogue576
+        )
+        .is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
 
     fn radial_config(geometry: ReadGeometry) -> JointConfig {
         JointConfig {
@@ -2622,6 +3002,97 @@ mod tests {
         ));
         fs::create_dir(&root)?;
         Ok(root)
+    }
+
+    #[test]
+    fn packed_parameter_precision_view_preserves_hard_values_and_guards() -> Result<()> {
+        let mut parent = JointModel::new(small(Transport::Quaternion), &Device::Cpu)?;
+        assert!(parent.packed_parameter_precision_view().is_err());
+        parent.configure_quantization(2237, 1)?;
+        parent
+            .quantization
+            .as_mut()
+            .ok_or_else(|| invalid("test quantization"))?
+            .preparation = Some(QuantizationPreparation::CalibratedForExport);
+        // A zero-update calibrated preparation is not a completed QAT ramp.
+        assert!(parent.precision_view(PrecisionMode::QF).is_err());
+        assert!(parent.packed_parameter_precision_view().is_err());
+        let root = precision_test_root("packed-parameter-view")?;
+        parent.save_hard(&root)?;
+        let hard = JointModel::load_hard(&root, &Device::Cpu)?;
+        let mut view = hard.packed_parameter_precision_view()?;
+        assert_eq!(view.precision_mode(), Some(PrecisionMode::QF));
+        assert!(view.hard_only);
+        assert_eq!(view.config, hard.config);
+        assert_eq!(view.admission_policy(), hard.admission_policy());
+        assert_eq!(view.quantization(), hard.quantization());
+        assert_eq!(view.quantization(), parent.quantization());
+        let prepared = view.prepare(false)?;
+        assert!(prepared.hard_only);
+        assert_eq!(prepared.quantization(), hard.quantization());
+        for (name, variable) in hard.variables() {
+            assert!(same_bits(variable, &view.variables()[name])?, "{name}");
+            assert!(
+                same_bits(variable, &prepared.weight(name, false)?)?,
+                "{name}"
+            );
+        }
+        let probe = Tensor::from_vec(vec![-0.1234567f32, 0.345, 999.0], (3,), &Device::Cpu)?;
+        for kind in [
+            Interface::State,
+            Interface::Normalized,
+            Interface::Affine,
+            Interface::Unit,
+            Interface::Gate,
+        ] {
+            assert!(same_bits(
+                &probe,
+                &prepared.interface(&probe, kind, false)?
+            )?);
+            assert!(!same_bits(&probe, &hard.interface(&probe, kind, false)?)?);
+        }
+        // Independent continuous cell over these same decoded code values is
+        // a test reference only, not a floating-shadow recovery API.
+        let reference =
+            JointModel::from_variables(hard.config.clone(), hard.variables.clone(), &Device::Cpu)?;
+        let ids = [3, 17, 4];
+        let actual = view.forward(&ids, 1, ids.len(), ReadMode::Enabled, false)?;
+        let expected = reference.forward(&ids, 1, ids.len(), ReadMode::Enabled, false)?;
+        assert!(same_bits(&actual.probabilities, &expected.probabilities)?);
+        assert!(same_bits(&actual.states, &expected.states)?);
+        assert!(!actual.probabilities.track_op());
+        assert!(view
+            .forward(&ids, 1, ids.len(), ReadMode::Enabled, true)
+            .is_err());
+        assert!(prepared.prepare(true).is_err());
+        assert!(view.save(&root.join("forbidden-checkpoint")).is_err());
+        assert!(view.save_hard(&root.join("forbidden-export")).is_err());
+        assert!(!root.join("forbidden-checkpoint").exists());
+        assert!(!root.join("forbidden-export").exists());
+        assert!(view.configure_quantization(2237, 1).is_err());
+        assert!(view.set_completed_step(2238).is_err());
+        assert!(view.without_quantization().is_err());
+        assert!(view.precision_view(PrecisionMode::FF).is_err());
+        assert!(view.packed_training_start().is_err());
+        assert!(view.packed_parameter_precision_view().is_err());
+        assert!(hard
+            .prepare(false)?
+            .packed_parameter_precision_view()
+            .is_err());
+        assert_eq!(hard.precision_mode(), None);
+        assert_eq!(hard.quantization(), parent.quantization());
+        let contract = view.numerical_contract();
+        assert_eq!(contract["precision_evaluation"]["mode"], "QF");
+        assert_eq!(
+            contract["precision_evaluation"]["interface_quantization"],
+            false
+        );
+        assert_eq!(
+            contract["precision_evaluation"]["parameter_source"],
+            "Decoded packed values used directly without another quantization"
+        );
+        fs::remove_dir_all(root)?;
+        Ok(())
     }
 
     #[test]

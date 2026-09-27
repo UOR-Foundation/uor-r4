@@ -1,8 +1,11 @@
 //! Portable, sealed serving bundle binding exact model, tables and tokenizer.
-use crate::{format, invalid, report_output, sha256_file, tables, IntegerModel, Result};
+use crate::{
+    config::{packed_numerical_contract_for_profile, ServingProfile},
+    format, invalid, report_output, sha256_file, tables, IntegerModel, Result,
+};
 use serde_json::{json, Value};
 use std::{fs, path::Path};
-use uor_r4_tokenizer::ByteBpeTokenizer;
+use uor_r4_tokenizer::{dialogue::DialogueProtocol, ByteBpeTokenizer};
 
 const SCHEMA: &str = "uor-r4.integer-serving-bundle/1";
 const MODEL_FILES: [&str; 3] = [
@@ -35,7 +38,27 @@ impl Bundle {
         }
         let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(tokenizer_path)?)
             .ok_or_else(|| invalid("serving bundle tokenizer invalid"))?;
-        let model = IntegerModel::load_with_tables(&root.join("model"), &root.join("tables"))?;
+        let profile = bundle_profile(&metadata)?;
+        let model = IntegerModel::load_with_tables_profile(
+            &root.join("model"),
+            &root.join("tables"),
+            profile,
+        )?;
+        if profile == ServingProfile::Dialogue576 {
+            let manifest: Value =
+                serde_json::from_slice(&fs::read(root.join("model/hard-model.json"))?)?;
+            validate_dialogue_conversion_schema(
+                &manifest,
+                &metadata["tokenizer_sha256"],
+                &tokenizer,
+            )?;
+            if metadata["model"] != serde_json::to_value(model.config())?
+                || metadata["numerical_contract"] != manifest["numerical_contract"]
+                || !valid_hash(&metadata["parent_sealed_manifest_sha256"], 64)
+            {
+                return Err(invalid("dialogue576 bundle model/contract binding differs"));
+            }
+        }
         if tokenizer.vocab_size() != model.config().vocab_size
             || tokenizer.encode("<|bos|>") != [0]
             || tokenizer.encode("<|eos|>") != [1]
@@ -101,6 +124,14 @@ impl Bundle {
             tokenizer,
             identity: "synthetic-test-bundle-sha256".to_string(),
         }
+    }
+
+    /// Construct a synthetic Lorentz bundle in-memory with complete byte vocabulary for testing.
+    pub fn synthetic_lorentz_for_test() -> Self {
+        let mut bundle = Self::create_test_bundle_with_byte_vocab();
+        bundle.model = IntegerModel::synthetic_lorentz_for_test();
+        bundle.identity = "synthetic-lorentz-test-bundle-sha256".to_string();
+        bundle
     }
 
     /// Construct a bundle from explicit model, tokenizer, and identity components.
@@ -301,4 +332,495 @@ pub fn pack_development(
     report_output::seal(output)?;
     Bundle::load(output)?;
     Ok(())
+}
+
+/// Package the explicitly converted native width576 model as development
+/// evidence. The sealed child carries the verified historical parent and the
+/// caller's tokenizer must match that child; no source tree is needed to load it.
+pub fn pack_dialogue576(
+    packed: &Path,
+    tables: &Path,
+    tokenizer: &Path,
+    output: &Path,
+) -> Result<()> {
+    report_output::claim(output)?;
+    let outcome = pack_dialogue576_claimed(packed, tables, tokenizer, output);
+    if let Err(error) = &outcome {
+        // A successfully sealed bundle remains immutable even if its final
+        // reload fails. Earlier failures preserve a sealed, explicit attempt.
+        if !output.join("manifest.json").try_exists()? {
+            fs::write(
+                output.join("failed-attempt.json"),
+                serde_json::to_vec_pretty(&json!({
+                    "schema":"uor-r4.native-dialogue576-package-failure/1",
+                    "status":"PACKAGING_FAILED","error":error.to_string(),
+                    "serving_profile":"dialogue576","provenance_kind":"development"
+                }))?,
+            )?;
+            report_output::seal(output)?;
+            report_output::verify(output)?;
+        }
+    }
+    outcome
+}
+
+fn pack_dialogue576_claimed(
+    packed: &Path,
+    tables: &Path,
+    tokenizer: &Path,
+    output: &Path,
+) -> Result<()> {
+    format::verify_sealed(packed)?;
+    format::verify_sealed(tables)?;
+    let profile = ServingProfile::Dialogue576;
+    let model = IntegerModel::load_with_tables_profile(packed, tables, profile)?;
+    let manifest: Value = serde_json::from_slice(&fs::read(packed.join("hard-model.json"))?)?;
+    let bytes = fs::read(tokenizer)?;
+    let tokenizer_sha = sha256_file(tokenizer)?;
+    let codec = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
+        .ok_or_else(|| invalid("tokenizer parse failed"))?;
+    validate_dialogue_conversion_schema(&manifest, &json!(tokenizer_sha), &codec)?;
+    if codec.vocab_size() != model.config().vocab_size
+        || codec.encode("<|bos|>") != [0]
+        || codec.encode("<|eos|>") != [1]
+    {
+        return Err(invalid("dialogue576 tokenizer/model vocabulary differs"));
+    }
+    copy_model_and_tables(packed, tables, output)?;
+    fs::write(output.join("tokenizer.json"), &bytes)?;
+    let metadata = json!({
+        "schema":SCHEMA,"context":256,"admission":"full",
+        "serving_profile":profile,"provenance_kind":"development",
+        "model":model.config(),"tokenizer_sha256":tokenizer_sha,
+        "tokenizer_cid":codec.address(),
+        "model_manifest_sha256":sha256_file(&packed.join("hard-model.json"))?,
+        "tables_manifest_sha256":sha256_file(&tables.join("tables.json"))?,
+        "parent_sealed_manifest_sha256":sha256_file(&packed.join("manifest.json"))?,
+        "origin_packed_path":packed,"origin_tables_path":tables,
+        "numerical_contract":packed_numerical_contract_for_profile(model.config().read_geometry,profile)?,
+        "sampling":"greedy or categorical temperature1 Q48/top-k/xorshift64",
+        "provenance":"Explicit native dialogue576 conversion; portable parent/source/tokenizer bindings in model/hard-model.json. Development only; numerical retention, generated behavior and efficiency require separate observation. Dense coefficient access and allocation remain."
+    });
+    fs::write(
+        output.join("bundle.json"),
+        serde_json::to_vec_pretty(&metadata)?,
+    )?;
+    report_output::seal(output)?;
+    Bundle::load(output)?;
+    Ok(())
+}
+
+fn bundle_profile(metadata: &Value) -> Result<ServingProfile> {
+    let profile: ServingProfile = metadata
+        .get("serving_profile")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()?
+        .unwrap_or_default();
+    if profile == ServingProfile::Dialogue576 && metadata["provenance_kind"] != "development" {
+        return Err(invalid(
+            "dialogue576 requires explicit development provenance",
+        ));
+    }
+    Ok(profile)
+}
+
+fn valid_hash(value: &Value, length: usize) -> bool {
+    value.as_str().is_some_and(|text| {
+        text.len() == length && text.bytes().all(|byte| byte.is_ascii_hexdigit())
+    })
+}
+
+/// Historical conversion is intentionally not widened to accept learned
+/// children. Each schema has its own immediate-parent and clock contract.
+fn validate_dialogue_conversion_schema(
+    manifest: &Value,
+    tokenizer_sha: &Value,
+    tokenizer: &ByteBpeTokenizer,
+) -> Result<()> {
+    match manifest["conversion_provenance"]["schema"].as_str() {
+        Some("uor-r4.native-dialogue576-conversion/1") => {
+            validate_dialogue_conversion(manifest, tokenizer_sha, tokenizer)
+        }
+        Some("uor-r4.native-dialogue576-child-conversion/1") => {
+            validate_dialogue_child_conversion(manifest, tokenizer_sha, tokenizer)
+        }
+        _ => Err(invalid(
+            "unsupported dialogue576 conversion provenance schema",
+        )),
+    }
+}
+
+/// Portable consistency of the converter's verified immediate-child receipt.
+/// No original report/corpus paths are opened by serving. This establishes
+/// lineage binding, not historical execution attestation or language quality.
+fn validate_dialogue_child_conversion(
+    manifest: &Value,
+    tokenizer_sha: &Value,
+    tokenizer: &ByteBpeTokenizer,
+) -> Result<()> {
+    let p = &manifest["conversion_provenance"];
+    let child = &p["parent"];
+    let ancestor = &child["ancestor"];
+    let q = &manifest["quantization"];
+    let source_hashes = p["source_sha256"].as_object();
+    let protocol = DialogueProtocol::from_json(&serde_json::to_vec(&child["protocol"])?, tokenizer)
+        .map_err(|e| invalid(e.to_string()))?;
+    let config: crate::config::JointConfig = serde_json::from_value(manifest["model"].clone())?;
+    config.validate_for_profile(ServingProfile::Dialogue576)?;
+    let steps = child["steps_completed"].as_u64();
+    if manifest["serving_profile"] != "dialogue576"
+        || manifest["admission"] != "full"
+        || p["schema"] != "uor-r4.native-dialogue576-child-conversion/1"
+        || p["serving_profile"] != "dialogue576"
+        || p["admission"] != "full"
+        || child["schema"] != "uor-r4.dialogue-child-artifact/1"
+        || child["policy"] != "full_prefix"
+        || child["admission"] != "full"
+        || child["read_geometry"] != "dot"
+        || child["current_model"] != manifest["model"]
+        || ancestor["current_model"] != manifest["model"]
+        || ancestor["schema"] != "uor-r4.offline-dialogue-artifact/1"
+        || ancestor["admission"] != "full"
+        || ancestor["read_geometry"] != "dot"
+        || child["tokenizer_sha256"] != *tokenizer_sha
+        || p["tokenizer_sha256"] != *tokenizer_sha
+        || ancestor["tokenizer_sha256"] != *tokenizer_sha
+        || !valid_hash(tokenizer_sha, 64)
+        || child["protocol"] != ancestor["protocol"]
+        || child["protocol_identity"] != ancestor["protocol_identity"]
+        || p["protocol_identity"] != child["protocol_identity"]
+        || p["protocol_identity"] != protocol.identity().map_err(|e| invalid(e.to_string()))?
+        || child["prepared_manifest_sha256"] != ancestor["prepared_manifest_sha256"]
+        || child["learning_contract"]["policy"] != "full_prefix"
+        || child["learning_contract"]["total_steps"] != child["steps_completed"]
+        || child["learning_contract"]["tokenizer_sha256"] != *tokenizer_sha
+        || child["learning_contract"]["prepared_manifest_sha256"]
+            != child["prepared_manifest_sha256"]
+        || child["learning_contract"]["parent_parameter_sha256"] != ancestor["parameter_sha256"]
+        || child["sampler"] != "uor-r4.dialogue-response-uniform/splitmix64-counter-rejection-v1"
+        || child["schedule_chain"] != "uor-r4.dialogue-response-schedule-chain/1"
+        || steps.is_none_or(|n| n == 0)
+        || child["supervised_target_visits"]
+            .as_u64()
+            .is_none_or(|n| n == 0)
+        || q["preparation"] != "calibrated_for_export"
+        || q["ramp_steps"] != 1
+        || q["start_step"] != child["steps_completed"]
+        || q["completed_step"] != child["steps_completed"]
+        || !valid_hash(&p["conversion_source_commit"], 40)
+        || !valid_hash(&p["conversion_executable_sha256"], 64)
+        || !valid_hash(&child["training_source_commit"], 40)
+        || !valid_hash(&child["training_executable_sha256"], 64)
+        || source_hashes.is_none_or(|h| h.is_empty() || h.values().any(|v| !valid_hash(v, 64)))
+        || [
+            "new_forward_calls",
+            "new_generation_calls",
+            "new_optimizer_updates",
+            "new_model_updates",
+        ]
+        .iter()
+        .any(|k| p[*k] != 0)
+        || [
+            "report_sha256",
+            "report_seal_sha256",
+            "campaign_sha256",
+            "checkpoint_sha256",
+            "checkpoint_seal_sha256",
+            "configuration_sha256",
+            "parameter_sha256",
+            "parameter_fingerprint",
+            "train_index_sha256",
+            "executed_schedule_sha256",
+            "prepared_manifest_sha256",
+        ]
+        .iter()
+        .any(|k| !valid_hash(&child[*k], 64))
+        || ["parameter_sha256", "fit_seal_sha256", "fit_report_sha256"]
+            .iter()
+            .any(|k| !valid_hash(&ancestor[*k], 64))
+    {
+        return Err(invalid(
+            "dialogue576 child conversion lineage/tokenizer/clock mismatch",
+        ));
+    }
+    let shapes = config.shapes();
+    let parameters = child["parameters"]
+        .as_array()
+        .ok_or_else(|| invalid("child parameter bindings"))?;
+    let mut names = std::collections::BTreeSet::new();
+    if parameters.len() != shapes.len()
+        || child["parameter_count"].as_u64()
+            != Some(
+                shapes
+                    .values()
+                    .map(|shape| shape.iter().product::<usize>() as u64)
+                    .sum(),
+            )
+    {
+        return Err(invalid("child parameter inventory/count mismatch"));
+    }
+    for p in parameters {
+        let name = p["name"]
+            .as_str()
+            .ok_or_else(|| invalid("child parameter name"))?;
+        let expected = shapes
+            .get(name)
+            .ok_or_else(|| invalid("unknown child parameter"))?;
+        if !names.insert(name)
+            || p["shape"] != serde_json::to_value(expected)?
+            || !valid_hash(&p["sha256_le_f32"], 64)
+        {
+            return Err(invalid("child parameter shape/identity mismatch"));
+        }
+    }
+    Ok(())
+}
+
+/// Verify portable lineage consistency, not the truth of historical capability
+/// claims. The converter verifies parent bytes before authoring this record.
+fn validate_dialogue_conversion(
+    manifest: &Value,
+    tokenizer_sha: &Value,
+    tokenizer: &ByteBpeTokenizer,
+) -> Result<()> {
+    let provenance = &manifest["conversion_provenance"];
+    let parent = &provenance["parent"];
+    let quantization = &manifest["quantization"];
+    let source_hashes = provenance["source_sha256"].as_object();
+    let protocol =
+        DialogueProtocol::from_json(&serde_json::to_vec(&parent["protocol"])?, tokenizer)
+            .map_err(|error| invalid(error.to_string()))?;
+    if manifest["serving_profile"] != "dialogue576"
+        || provenance["schema"] != "uor-r4.native-dialogue576-conversion/1"
+        || provenance["serving_profile"] != "dialogue576"
+        || provenance["admission"] != "full"
+        || provenance["tokenizer_sha256"] != *tokenizer_sha
+        || parent["tokenizer_sha256"] != *tokenizer_sha
+        || !valid_hash(tokenizer_sha, 64)
+        || parent["current_model"] != manifest["model"]
+        || parent["admission"] != "full"
+        || parent["read_geometry"] != "dot"
+        || !valid_hash(&parent["fit_seal_sha256"], 64)
+        || !valid_hash(&parent["parameter_sha256"], 64)
+        || !valid_hash(&parent["prepared_manifest_sha256"], 64)
+        || provenance["protocol_identity"]
+            != protocol
+                .identity()
+                .map_err(|error| invalid(error.to_string()))?
+        || provenance["protocol_identity"] != parent["protocol_identity"]
+        || !valid_hash(&provenance["conversion_source_commit"], 40)
+        || !valid_hash(&provenance["conversion_executable_sha256"], 64)
+        || source_hashes.is_none_or(|hashes| {
+            hashes.is_empty() || hashes.values().any(|value| !valid_hash(value, 64))
+        })
+        || quantization["preparation"] != "calibrated_for_export"
+        || quantization["ramp_steps"] != 1
+        || parent["steps_completed"].as_u64().is_none()
+        || quantization["start_step"] != parent["steps_completed"]
+        || quantization["completed_step"] != parent["steps_completed"]
+        || [
+            "new_forward_calls",
+            "new_generation_calls",
+            "new_optimizer_updates",
+            "new_model_updates",
+        ]
+        .iter()
+        .any(|field| provenance[*field] != 0)
+    {
+        return Err(invalid(
+            "dialogue576 conversion provenance/tokenizer/clock mismatch",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dialogue576_bundle_seals_failed_packaging_without_overwrite() -> Result<()> {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| invalid("test clock before epoch"))?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-dialogue576-pack-{}-{nonce}",
+            std::process::id()
+        ));
+        let missing = root.join("missing-input");
+        assert!(pack_dialogue576(&missing, &missing, &missing, &root).is_err());
+        report_output::verify(&root)?;
+        let failure: Value = serde_json::from_slice(&fs::read(root.join("failed-attempt.json"))?)?;
+        assert_eq!(failure["status"], "PACKAGING_FAILED");
+        let original_seal = fs::read(root.join("manifest.json"))?;
+        assert!(pack_dialogue576(&missing, &missing, &missing, &root).is_err());
+        assert_eq!(fs::read(root.join("manifest.json"))?, original_seal);
+        assert!(Bundle::load(&root).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn dialogue576_bundle_requires_explicit_development_profile() -> Result<()> {
+        assert_eq!(bundle_profile(&json!({}))?, ServingProfile::Retained);
+        assert!(bundle_profile(&json!({"serving_profile":"dialogue576"})).is_err());
+        assert!(bundle_profile(&json!({"serving_profile":"unknown"})).is_err());
+        assert_eq!(
+            bundle_profile(
+                &json!({"serving_profile":"dialogue576", "provenance_kind":"development"})
+            )?,
+            ServingProfile::Dialogue576
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn dialogue576_bundle_rejects_tokenizer_lineage_and_clock_changes() -> Result<()> {
+        // A small metadata-only fixture. Full artifact import is exercised by
+        // the converter; this test isolates portable bundle binding failures.
+        let hash = "a".repeat(64);
+        let tokenizer = Bundle::create_test_bundle_with_byte_vocab().tokenizer;
+        let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+            .map_err(|error| invalid(error.to_string()))?;
+        let protocol_identity = protocol
+            .identity()
+            .map_err(|error| invalid(error.to_string()))?;
+        let config = crate::config::JointConfig {
+            width: 576,
+            ..Default::default()
+        };
+        let manifest = json!({
+            "serving_profile":"dialogue576","model":config,
+            "quantization":{"preparation":"calibrated_for_export","start_step":2237,"completed_step":2237,"ramp_steps":1},
+            "conversion_provenance":{
+                "schema":"uor-r4.native-dialogue576-conversion/1",
+                "serving_profile":"dialogue576","admission":"full",
+                "tokenizer_sha256":hash,"protocol_identity":protocol_identity,
+                "conversion_source_commit":"b".repeat(40),
+                "conversion_executable_sha256":hash,"source_sha256":{"example.rs":hash},
+                "new_forward_calls":0,"new_generation_calls":0,"new_optimizer_updates":0,"new_model_updates":0,
+                "parent":{"current_model":config,"admission":"full","read_geometry":"dot","tokenizer_sha256":hash,
+                    "protocol_identity":protocol_identity,"protocol":protocol,"fit_seal_sha256":hash,"parameter_sha256":hash,"prepared_manifest_sha256":hash,"steps_completed":2237}
+            }
+        });
+        validate_dialogue_conversion(&manifest, &json!(hash), &tokenizer)?;
+        assert!(
+            validate_dialogue_conversion(&manifest, &json!("c".repeat(64)), &tokenizer).is_err()
+        );
+        for path in [
+            "/conversion_provenance/parent/tokenizer_sha256",
+            "/conversion_provenance/source_sha256/example.rs",
+            "/conversion_provenance/protocol_identity",
+        ] {
+            let mut changed = manifest.clone();
+            *changed
+                .pointer_mut(path)
+                .ok_or_else(|| invalid("fixture pointer missing"))? = json!("invalid");
+            assert!(validate_dialogue_conversion(&changed, &json!(hash), &tokenizer).is_err());
+        }
+        for path in [
+            "/quantization/completed_step",
+            "/conversion_provenance/new_optimizer_updates",
+            "/conversion_provenance/parent/current_model/width",
+        ] {
+            let mut changed = manifest.clone();
+            *changed
+                .pointer_mut(path)
+                .ok_or_else(|| invalid("fixture pointer missing"))? = json!(42);
+            assert!(validate_dialogue_conversion(&changed, &json!(hash), &tokenizer).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn dialogue576_child_bundle_keeps_immediate_lineage_and_local_clock() -> Result<()> {
+        let hash = "a".repeat(64);
+        let tokenizer = Bundle::create_test_bundle_with_byte_vocab().tokenizer;
+        let protocol =
+            DialogueProtocol::literal_roles_v1(&tokenizer).map_err(|e| invalid(e.to_string()))?;
+        let identity = protocol.identity().map_err(|e| invalid(e.to_string()))?;
+        let config = crate::config::JointConfig {
+            width: 576,
+            ..Default::default()
+        };
+        let shapes = config.shapes();
+        let parameters: Vec<_> = shapes
+            .iter()
+            .map(|(name, shape)| {
+                json!({
+            "name":name,"shape":shape,"sha256_le_f32":hash})
+            })
+            .collect();
+        let count: usize = shapes
+            .values()
+            .map(|shape| shape.iter().product::<usize>())
+            .sum();
+        let ancestor = json!({"schema":"uor-r4.offline-dialogue-artifact/1","current_model":config,
+            "admission":"full","read_geometry":"dot","tokenizer_sha256":hash,
+            "protocol":protocol,"protocol_identity":identity,"prepared_manifest_sha256":hash,
+            "parameter_sha256":hash,"fit_seal_sha256":hash,"fit_report_sha256":hash,"steps_completed":2237});
+        let mut child = json!({"schema":"uor-r4.dialogue-child-artifact/1","current_model":config,
+            "admission":"full","read_geometry":"dot","policy":"full_prefix","steps_completed":1024,
+            "supervised_target_visits":1165549,"tokenizer_sha256":hash,"protocol":protocol,"protocol_identity":identity,
+            "ancestor":ancestor,"training_source_commit":"b".repeat(40),"training_executable_sha256":hash,
+            "sampler":"uor-r4.dialogue-response-uniform/splitmix64-counter-rejection-v1",
+            "schedule_chain":"uor-r4.dialogue-response-schedule-chain/1",
+            "learning_contract":{"policy":"full_prefix","total_steps":1024,"tokenizer_sha256":hash,
+                "prepared_manifest_sha256":hash,"parent_parameter_sha256":hash},
+            "parameters":parameters,"parameter_count":count});
+        for key in [
+            "report_sha256",
+            "report_seal_sha256",
+            "campaign_sha256",
+            "checkpoint_sha256",
+            "checkpoint_seal_sha256",
+            "configuration_sha256",
+            "parameter_sha256",
+            "parameter_fingerprint",
+            "train_index_sha256",
+            "executed_schedule_sha256",
+            "prepared_manifest_sha256",
+        ] {
+            child[key] = json!(hash);
+        }
+        let manifest = json!({"serving_profile":"dialogue576","admission":"full","model":config,
+            "quantization":{"preparation":"calibrated_for_export","ramp_steps":1,"start_step":1024,"completed_step":1024},
+            "conversion_provenance":{"schema":"uor-r4.native-dialogue576-child-conversion/1","parent":child,
+                "serving_profile":"dialogue576","admission":"full","tokenizer_sha256":hash,"protocol_identity":identity,
+                "conversion_source_commit":"c".repeat(40),"conversion_executable_sha256":hash,"source_sha256":{"bridge.rs":hash},
+                "new_forward_calls":0,"new_generation_calls":0,"new_optimizer_updates":0,"new_model_updates":0}});
+        validate_dialogue_conversion_schema(&manifest, &json!(hash), &tokenizer)?;
+        // The old schema's historical validator is not an alias for a child.
+        assert!(validate_dialogue_conversion(&manifest, &json!(hash), &tokenizer).is_err());
+        for (path, value) in [
+            ("/quantization/completed_step", json!(2237)),
+            ("/conversion_provenance/parent/policy", json!("role_only")),
+            (
+                "/conversion_provenance/parent/tokenizer_sha256",
+                json!("e".repeat(64)),
+            ),
+            (
+                "/conversion_provenance/parent/checkpoint_sha256",
+                json!("invalid"),
+            ),
+            (
+                "/conversion_provenance/parent/parameters/0/shape",
+                json!([99]),
+            ),
+            ("/conversion_provenance/new_optimizer_updates", json!(1)),
+            ("/conversion_provenance/schema", json!("unknown")),
+        ] {
+            let mut changed = manifest.clone();
+            *changed
+                .pointer_mut(path)
+                .ok_or_else(|| invalid("child fixture pointer"))? = value;
+            assert!(
+                validate_dialogue_conversion_schema(&changed, &json!(hash), &tokenizer).is_err(),
+                "{path}"
+            );
+        }
+        Ok(())
+    }
 }
