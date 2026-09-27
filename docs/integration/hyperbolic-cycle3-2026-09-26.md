@@ -410,6 +410,7 @@ Added later on 2026-09-26 (cycle 3b). **Measured** unless labelled. The numbers 
   - The `joint-integer-parity` example packs a checkpoint. A float checkpoint gets post-training scales; a quantization-aware one keeps its own. It then scores the same windows with the float weights, the packed F32 emulator and the integer runtime, read on and off.
   - `joint-read-geometry` gains `init=MODEL_DIR` (fine-tune a saved float model) and `quantize_ramp=N` (quantization-aware training on the packed format's frozen scales).
   - [`scripts/native-lorentz-m1.sh`](../../scripts/native-lorentz-m1.sh) runs §9.2's full-scale comparison through to integer serving on an Apple-silicon Mac.
+  - With `TOKENIZER=`, it also packs each fine-tuned model as a development serving bundle (`uor-r4-integer pack-development`) and generates text with the integer runtime. The bundle states that it has no accepted parent; `pack` for accepted artifacts is unchanged.
 
 **Kernel accuracy** (focused tests in `uor-r4-integer` and `joint_integer_tables`).
 - The integer arcosh is within 2·10⁻⁷ of the function across every octave, including between grid points.

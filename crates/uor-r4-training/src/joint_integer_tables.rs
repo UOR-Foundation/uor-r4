@@ -410,4 +410,98 @@ mod tests {
         }
         Ok(())
     }
+
+    /// A 4096-token byte-level tokenizer with `<|bos|>` = 0 and `<|eos|>` = 1:
+    /// the 256 byte symbols, then unused pieces, and no merges.
+    fn byte_level_tokenizer() -> Result<serde_json::Value> {
+        let mut vocab = serde_json::Map::new();
+        vocab.insert("<|bos|>".into(), json!(0));
+        vocab.insert("<|eos|>".into(), json!(1));
+        let mut shifted = 256u32;
+        for byte in 0u32..256 {
+            let printable = matches!(byte, 33..=126 | 161..=172 | 174..=255);
+            let code = if printable {
+                byte
+            } else {
+                shifted += 1;
+                shifted - 1
+            };
+            let symbol = char::from_u32(code).ok_or_else(|| invalid("byte symbol"))?;
+            vocab.insert(symbol.to_string(), json!(byte + 2));
+        }
+        for id in 258..4096 {
+            vocab.insert(format!("<|unused{id}|>"), json!(id));
+        }
+        Ok(json!({
+            "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
+            "added_tokens": [{"id": 0, "content": "<|bos|>"}, {"id": 1, "content": "<|eos|>"}],
+            "model": {"type": "BPE", "vocab": vocab, "merges": []}
+        }))
+    }
+
+    /// A packed Lorentz model becomes a development serving bundle and
+    /// generates text through the integer session; `pack` still refuses it,
+    /// because it has no accepted parent.
+    #[test]
+    fn development_bundle_generates_with_a_lorentz_model() -> Result<()> {
+        use uor_r4_integer::bundle::{self, Bundle};
+        use uor_r4_integer::generation::{Request, Selection};
+        let tables = test_root("bundle-tables")?;
+        export(&tables)?;
+        let mut model = JointModel::new(
+            JointConfig {
+                read_geometry: ReadGeometry::Lorentz,
+                ..JointConfig::default()
+            },
+            &Device::Cpu,
+        )?;
+        model.variables()[LORENTZ_LOG_BETA].set(&candle_core::Tensor::from_vec(
+            vec![0f32],
+            (1,),
+            &Device::Cpu,
+        )?)?;
+        model.configure_quantization(0, 1)?;
+        let packed = test_root("bundle-packed")?;
+        fs::create_dir(&packed)?;
+        model.save_hard(&packed)?;
+        let tokenizer = test_root("bundle-tokenizer")?;
+        fs::create_dir(&tokenizer)?;
+        let tokenizer_file = tokenizer.join("tokenizer.json");
+        fs::write(
+            &tokenizer_file,
+            serde_json::to_vec(&byte_level_tokenizer()?)?,
+        )?;
+        let root = test_root("bundle")?;
+        bundle::pack_development(&packed, &tables, &tokenizer_file, &root)?;
+        let served = Bundle::load(&root)?;
+        let generation = served.generate(&Request {
+            prompt: "Once upon a time".into(),
+            max_new_tokens: 8,
+            selection: Selection::Categorical { top_k: 40, seed: 1 },
+            read_mode: ReadMode::Enabled,
+            first_sentence: false,
+        })?;
+        let generated = generation.generated_token_ids.len();
+        assert!((1..=8).contains(&generated), "{generated}");
+        assert_eq!(
+            generation.prompt_token_ids.len(),
+            1 + "Once upon a time".len()
+        );
+        let metadata: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.join("bundle.json"))?)?;
+        assert!(metadata["provenance"]
+            .as_str()
+            .is_some_and(|text| text.starts_with("development")));
+        assert!(metadata["numerical_contract"]
+            .as_str()
+            .is_some_and(|text| text.contains("lorentz read")));
+        let accepted = test_root("bundle-accepted")?;
+        assert!(bundle::pack(&packed, &tables, &tokenizer_file, &accepted).is_err());
+        for directory in [tables, packed, tokenizer, root, accepted] {
+            if directory.exists() {
+                fs::remove_dir_all(directory)?;
+            }
+        }
+        Ok(())
+    }
 }

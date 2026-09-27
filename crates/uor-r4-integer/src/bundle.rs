@@ -92,6 +92,29 @@ pub fn pack(packed: &Path, tables: &Path, tokenizer: &Path, output: &Path) -> Re
     {
         return Err(invalid("tokenizer/model vocabulary differs"));
     }
+    copy_model_and_tables(packed, tables, output)?;
+    fs::write(output.join("tokenizer.json"), bytes)?;
+    let metadata = json!({"schema":SCHEMA,"context":256,"admission":"full","model":model.config(),
+        "tokenizer_sha256":tokenizer_sha,"tokenizer_cid":codec.address(),
+        "model_manifest_sha256":sha256_file(&packed.join("hard-model.json"))?,
+        "tables_manifest_sha256":sha256_file(&tables.join("tables.json"))?,
+        "parent_sealed_manifest_sha256":sha256_file(&packed.join("manifest.json"))?,
+        "parent_evaluator_sha256":sha256_file(&packed.join("evaluator.json"))?,
+        "origin_packed_path":packed,"origin_tables_path":tables,
+        "numerical_contract":"PR1396 integer Q48/Q11 computation; full256; signed4 additive maps; dense access and allocation",
+        "sampling":"greedy or categorical temperature1 Q48/top-k/xorshift64; new policy, not old floating sampler parity",
+        "legacy_metadata":"Old parameter diagnostics/numerical-contract labels retained for identity and loading only; no legacy floating model computation"});
+    fs::write(
+        output.join("bundle.json"),
+        serde_json::to_vec_pretty(&metadata)?,
+    )?;
+    report_output::seal(output)?;
+    Bundle::load(output)?;
+    Ok(())
+}
+
+/// The bundle's model and table files; the arcosh table only when present.
+fn copy_model_and_tables(packed: &Path, tables: &Path, output: &Path) -> Result<()> {
     fs::create_dir(output.join("model"))?;
     fs::create_dir(output.join("tables"))?;
     for name in MODEL_FILES {
@@ -106,17 +129,46 @@ pub fn pack(packed: &Path, tables: &Path, tokenizer: &Path, output: &Path) -> Re
     for name in TABLE_FILES.iter().chain(optional) {
         fs::copy(tables.join(name), output.join("tables").join(name))?;
     }
-    fs::write(output.join("tokenizer.json"), bytes)?;
+    Ok(())
+}
+
+/// Bundle a development model: one packed by a training tool (for example the
+/// `joint-integer-parity` example) rather than an accepted campaign artifact.
+/// The layout, sealing and loader are those of [`pack`], but no evaluator
+/// provenance exists: the caller supplies the tokenizer, and `bundle.json`
+/// records the bundle as a development bundle with no accepted parent.
+pub fn pack_development(
+    packed: &Path,
+    tables: &Path,
+    tokenizer: &Path,
+    output: &Path,
+) -> Result<()> {
+    report_output::claim(output)?;
+    format::verify_sealed(tables)?;
+    let model = IntegerModel::load_with_tables(packed, tables)?;
+    let bytes = fs::read(tokenizer)?;
+    let codec = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
+        .ok_or_else(|| invalid("tokenizer parse failed"))?;
+    if codec.vocab_size() != model.config().vocab_size
+        || codec.encode("<|bos|>") != [0]
+        || codec.encode("<|eos|>") != [1]
+    {
+        return Err(invalid("tokenizer/model vocabulary differs"));
+    }
+    if model.config().context != 256 {
+        return Err(invalid("serving bundles keep the context-256 shape"));
+    }
+    copy_model_and_tables(packed, tables, output)?;
+    fs::write(output.join("tokenizer.json"), &bytes)?;
+    let geometry = model.config().read_geometry.name();
     let metadata = json!({"schema":SCHEMA,"context":256,"admission":"full","model":model.config(),
-        "tokenizer_sha256":tokenizer_sha,"tokenizer_cid":codec.address(),
+        "tokenizer_sha256":sha256_file(tokenizer)?,"tokenizer_cid":codec.address(),
         "model_manifest_sha256":sha256_file(&packed.join("hard-model.json"))?,
         "tables_manifest_sha256":sha256_file(&tables.join("tables.json"))?,
-        "parent_sealed_manifest_sha256":sha256_file(&packed.join("manifest.json"))?,
-        "parent_evaluator_sha256":sha256_file(&packed.join("evaluator.json"))?,
+        "provenance":"development: no accepted parent or evaluator; the tokenizer was supplied by the caller",
         "origin_packed_path":packed,"origin_tables_path":tables,
-        "numerical_contract":"PR1396 integer Q48/Q11 computation; full256; signed4 additive maps; dense access and allocation",
-        "sampling":"greedy or categorical temperature1 Q48/top-k/xorshift64; new policy, not old floating sampler parity",
-        "legacy_metadata":"Old parameter diagnostics/numerical-contract labels retained for identity and loading only; no legacy floating model computation"});
+        "numerical_contract":format!("Integer Q48/Q11 computation; {geometry} read; full256; signed4 additive maps; dense access and allocation"),
+        "sampling":"greedy or categorical temperature1 Q48/top-k/xorshift64"});
     fs::write(
         output.join("bundle.json"),
         serde_json::to_vec_pretty(&metadata)?,

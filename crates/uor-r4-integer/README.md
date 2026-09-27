@@ -40,6 +40,13 @@ tokenizer's SHA-256 must match the parent's evaluator provenance. Packaging
 copies the existing parameter codes and tables; it performs no fitting or table
 construction. `NEW_BUNDLE` must not exist.
 
+For a model packed by a training tool rather than an accepted campaign (for
+example the `joint-integer-parity` example of `uor-r4-training`), use
+`pack-development PACKED TABLES TOKENIZER_JSON NEW_BUNDLE`. It produces the
+same sealed layout without evaluator provenance: the tokenizer is the caller's,
+and `bundle.json` records the bundle as a development bundle with no accepted
+parent. A Lorentz model's table root must carry the arcosh table.
+
 The resulting sealed bundle binds the model, table hashes, tokenizer bytes and
 identity, full context policy, and parent provenance. Loading uses the files
 inside the bundle; recorded source paths do not cause source lookups. Vocabulary
