@@ -2,6 +2,8 @@
 //! This is offline alpha learning, not another weight fit or a serving decoder.
 //! The complete response/EOS objective is reduced before one global penalty and
 //! one clipped Adam update. Model and alpha clocks are deliberately independent.
+//! Alpha response shards execute sequentially with immediate detached named
+//! reduction; other trainers retain their existing parallel execution.
 use crate::{
     dialogue_artifact::DatasetBinding,
     dialogue_episodes::{EpisodeBatch, EpisodeContract, EpisodeIndex, PrefixPolicy, SAMPLER_ID},
@@ -10,7 +12,7 @@ use crate::{
     invalid,
     joint_model::JointModel,
     joint_optimizer::{AdamConfig, NamedAdamW},
-    joint_parallel::{response_batch_gradients, ResponseGradients},
+    joint_parallel::{sequential_response_batch_gradients, ResponseGradients},
     joint_rounding::{LearnedRounding, RoundingConfig},
     sha256_file, Result,
 };
@@ -294,7 +296,7 @@ fn response_gradients(
 ) -> Result<ResponseGradients> {
     let view =
         parent.rounding_learning_view(learner.variables().clone(), learner.parameters(false)?)?;
-    response_batch_gradients(
+    sequential_response_batch_gradients(
         &view,
         &batch.inputs,
         &batch.targets,
@@ -866,6 +868,7 @@ fn run_operation(
             &out.join("execution-binding.json"),
             &json!({"source_commit":source,"executable_sha256":executable,
             "source_sha256":source_hashes(),"cpu_accelerate_compiled":cfg!(feature="cpu-accelerate"),
+            "response_gradient_execution":if evaluation_packed.is_some() {"not-run-evaluation-only"} else {"sequential-full-sequence-shards/immediate-named-reduction/v1"},
             "supplied_campaign_sha256":sha256_file(campaign_path)?,"saved_campaign_sha256":sha256_file(&out.join("campaign.json"))?,
             "normalization_only":normalization_only,"evaluation_packed":evaluation_packed}),
         )?;
@@ -969,6 +972,7 @@ mod tests {
     fn dialogue_rounding_response_alpha_global_objective() -> Result<()> {
         let parent = parent(576)?;
         let original = crate::dialogue_child_artifact::parameter_bindings(&parent)?.0;
+        let parallel_learner = learner(&parent, recipe())?;
         let learner = learner(&parent, recipe())?;
         let (ids, targets, weights) = masked();
         let view = parent
@@ -976,9 +980,43 @@ mod tests {
         let output = view.forward(&ids, 2, 8, ReadMode::Enabled, true)?;
         let loss = output.weighted_loss(&targets, &weights)?;
         let direct = loss.add(&learner.penalty(0)?)?.backward()?;
-        let mut reduced = response_batch_gradients(&view, &ids, &targets, &weights, 2, 8, 2)?;
+        let mut reduced =
+            sequential_response_batch_gradients(&view, &ids, &targets, &weights, 2, 8, 2)?;
+        let parallel_view = parent.rounding_learning_view(
+            parallel_learner.variables().clone(),
+            parallel_learner.parameters(false)?,
+        )?;
+        let mut parallel = crate::joint_parallel::response_batch_gradients(
+            &parallel_view,
+            &ids,
+            &targets,
+            &weights,
+            2,
+            8,
+            2,
+        )?;
         assert_eq!(reduced.supervised_targets, 8);
+        assert_eq!(parallel.supervised_targets, reduced.supervised_targets);
+        assert_eq!(parallel.mean_nll.to_bits(), reduced.mean_nll.to_bits());
         assert!((reduced.mean_nll - loss.to_scalar::<f32>()?).abs() < 2e-5);
+        // Identical two-shard shapes and reduction order change only graph
+        // concurrency. Require exact equality on this pinned CPU fixture;
+        // this is not a cross-backend bitwise-training guarantee.
+        for (name, var) in learner.variables() {
+            let reference_var = parallel_learner
+                .variables()
+                .get(name)
+                .ok_or_else(|| invalid("parallel fixture alpha"))?;
+            let actual = reduced
+                .gradients
+                .get(var.as_tensor())
+                .ok_or_else(|| invalid("sequential fixture gradient"))?;
+            let expected = parallel
+                .gradients
+                .get(reference_var.as_tensor())
+                .ok_or_else(|| invalid("parallel fixture gradient"))?;
+            assert_eq!(maximum_difference(actual, expected)?, 0.0, "{name}");
+        }
         let task_norms: [f32; 4] = [
             "embedding.weight",
             "recurrent.state.weight",
@@ -1022,6 +1060,10 @@ mod tests {
             .collect::<Result<BTreeMap<_, _>>>()?;
         let unit_once = learner.penalty(0)?.backward()?;
         let reg = add_penalty(&learner, 0, &mut reduced)?;
+        assert_eq!(
+            reg.to_bits(),
+            add_penalty(&parallel_learner, 0, &mut parallel)?.to_bits()
+        );
         let mut penalty_error = 0f64;
         let mut penalty_norm = 0f64;
         assert!(reg > 0.0);
@@ -1048,16 +1090,24 @@ mod tests {
         // A loose per-coordinate task tolerance cannot detect duplicated tiny
         // global-mean penalty gradients; compare their aggregate residual too.
         assert!(penalty_norm > 0.0 && penalty_error / penalty_norm < 1e-5);
-        let mut adam = NamedAdamW::new(
-            learner.variables(),
-            AdamConfig {
-                weight_decay: 0.,
-                parameter_abs_limit: 30.,
-                ..AdamConfig::default()
-            },
-        )?;
+        let adam_config = AdamConfig {
+            weight_decay: 0.,
+            parameter_abs_limit: 30.,
+            ..AdamConfig::default()
+        };
+        let mut adam = NamedAdamW::new(learner.variables(), adam_config.clone())?;
+        let mut parallel_adam = NamedAdamW::new(parallel_learner.variables(), adam_config)?;
         adam.step(learner.variables(), &reduced.gradients)?;
+        parallel_adam.step(parallel_learner.variables(), &parallel.gradients)?;
         assert_eq!(adam.step_count(), 1);
+        assert_eq!(parallel_adam.step_count(), 1);
+        for (name, var) in learner.variables() {
+            let expected = parallel_learner
+                .variables()
+                .get(name)
+                .ok_or_else(|| invalid("parallel updated alpha"))?;
+            assert_eq!(maximum_difference(var, expected)?, 0.0, "{name}");
+        }
         assert_eq!(
             crate::dialogue_child_artifact::parameter_bindings(&parent)?.0,
             original
