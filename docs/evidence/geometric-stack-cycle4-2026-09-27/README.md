@@ -43,6 +43,7 @@ Each `report.json` records:
   - The pilot used commit `dca1b790` (SHA-256 `fcf710ad…`).
   - The ablations used commit `b87acd63` (SHA-256 `05889874…`). Relative to `dca1b790` it changes only the example's sample decoding, its evaluate mode and early-stop checkpoint retention, not the model, optimizer or training loop.
   - The integer stage used commit `2a681bb7` (SHA-256 `cb0bb647…`), `cb60c8bd` (SHA-256 `3fed0f7c…`) for the step timing and continuations, `feeef7e4` (SHA-256 `20e265e5…`) for the rounding/arithmetic split, and `6bc7dd6d` (SHA-256 `6c1f4721…`) for the GPTQ exports.
+  - `6bc7dd6d` alone was built without `-C target-cpu=native`. Its float scores reproduce every run's final evaluation exactly. Training with it is not bitwise equal to a native build, because the matrix products take other kernels. The same source built natively reproduces the native builds' model hashes.
 - **Corpora.** The repository code split is cycle 3's (`b12707b0…` training, `3f7c50ef…` development), in the [cycle-3 packet](../native-lorentz-packet-2026-09-26/README.md). The registry corpus for the main comparison is `af93ca73…` (29,039,409 tokens), built with `geometric-stack corpus` and encoded with `geometric-stack encode`.
 
 ## Cost
