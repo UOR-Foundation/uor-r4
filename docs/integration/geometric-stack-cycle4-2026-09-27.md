@@ -236,6 +236,20 @@ Development NLL on 64 windows at 250, 500, 750 and 1,000 updates:
 
 The main comparison runs after them, unchanged.
 
+**Second seed of the Lorentz and Dot stacks.** Everything is as in seed 1 except the seed, which changes the initialization and the training windows. Both arms share it, so each seed gives a paired difference.
+
+| Seed | Lorentz | Dot | Lorentz − Dot |
+|---|---:|---:|---:|
+| 1 | 2.6097 | 2.5889 | +0.0208 |
+| 2 | 2.5699 | 2.5909 | −0.0210 |
+| Mean | 2.5898 | 2.5899 | −0.0001 |
+
+Development NLL on 64 windows at 250, 500, 750 and 1,000 updates, seed 2: Lorentz 3.7598, 3.2040, 2.8475, 2.6517; Dot 3.7983, 3.2227, 2.8559, 2.6694.
+
+- The two seeds give paired differences of equal size and opposite sign. So at this budget the score makes no measurable difference inside the stack. The Lorentz arm's own seed spread, 0.040 nats, is twice the difference either seed showed.
+- This does not transfer cycle 3's result to the stack or refute it. Cycle 3 measured 0.05–0.06 nats in favour of Lorentz in the retained one-layer learner at context 256. One hypothesis, not tested here, is that a deeper stack with MLPs builds the geometry the Lorentz score supplies to a shallow model.
+- The reads-only pair tests the score where every layer is a read.
+
 **Interruptions.** The container restarted twice, found at about 08:22 and 08:40 UTC, each time before the seed-2 pair reached its first checkpoint. The pair restarted from scratch in new report roots, `*_r1` and then `*_r2`; the interrupted roots are kept.
 - The pipeline now resumes any run from its latest checkpoint into a new root.
 - It checkpoints every 50 updates instead of 250. The cadence is outside the resume lineage and changes no computation, since the checkpoint carries the sampler state.
@@ -244,6 +258,7 @@ The main comparison runs after them, unchanged.
 - Elapsed from claim to seal: `dot` 56.6 min and `norot` 57.5 min, run together with two threads each; `readsonly` 46.5 min, alone with four threads. Thread count changes speed and floating-point summation order, not the model or the update rule.
 - Training alone took 2,739–3,386 s per arm. The stage ran from 05:58 to 07:42 UTC.
 - The two interrupted seed-2 attempts cost up to 56 minutes of two-arm time and kept no result.
+- The completed seed-2 pair (`*_r2`) took 74.4 min (Lorentz) and 69.6 min (Dot) from claim to seal, with two threads each. It shared the machine with the integer-serving work of §8, and trained at 934 and 999 tokens/s.
 
 ## 8. Integer serving under D10
 

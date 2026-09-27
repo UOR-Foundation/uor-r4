@@ -13,11 +13,13 @@ development runs, one seed per arm. Nothing here is a final holdout or a languag
 | `pilot/launch.log`, `pilot/chain.log` | Launch times, the executable identity and the learning rates the rule chose |
 | `ablation/<arm>/report.json`, `attempt.json`, `manifest.json`, `model/config.json` | Each seed-1 ablation run (§7): `dot`, `norot`, `readsonly`. The full-stack reference is `pilot/geometric_lr0.004` |
 | `ablation/launch.log` | Source commit, executable identity, learning rate and start/end times of the ablation stage |
+| `ablation-seed2/<arm>/report.json`, `attempt.json`, `manifest.json`, `model/config.json` | The seed-2 Lorentz and Dot stacks (§7), from the completed roots `*_r2`; the two interrupted roots per arm stay outside |
+| `ablation-seed2/chain.log` | The pipeline's launches, exits and restarts, including both container restarts |
 | `integer/<model>/export/export.json` (with `attempt.json`, `manifest.json`) | Integer serving export (§8): source model and executable identities, the artifact's size and SHA-256, and the quantization errors per matrix and per table of grid codes |
 | `integer/<model>/evaluation/evaluation.json` (with `attempt.json`, `manifest.json`) | The integer engine beside the float model on the 512 final-evaluation windows: NLL per window, bits per byte, top-1 agreement and the engine's speed |
 | `integer/<model>/steps64/evaluation.json` (with `attempt.json`, `manifest.json`) | The engine's step rate alone on 64 of the windows (commit `cb60c8bd`), apart from the f64 scoring loop |
 | `integer/run.log` | Start and end times and the executable identities of the integer stage |
-| `sources/` | The launchers: pilot, post-pilot chain (with the selection rule), ablations and main comparison |
+| `sources/` | The launchers: pilot, post-pilot chain (with the selection rule), ablations, main comparison, the restartable `pipeline.sh` and the integer stage |
 | `packet.json` | Per run: group, source commit, settings, threads, final metrics, cost and identities. Per integer model: float and integer NLL, agreement, speed and the artifact's identity. Also the SHA-256 and size of every file in this directory |
 
 Each `report.json` records:
