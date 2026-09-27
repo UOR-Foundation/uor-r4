@@ -116,6 +116,7 @@ fn observe(model: &JointModel, inputs: &[u32], targets: &[u32]) -> Result<Observ
     let gradients = loss.backward()?;
     let mut gradient_rows = BTreeMap::new();
     let mut integrity = nll.is_finite();
+    let mut all_required_gradients_nonzero = true;
     for name in GRADIENT_NAMES {
         let variable = model
             .variables()
@@ -124,6 +125,7 @@ fn observe(model: &JointModel, inputs: &[u32], targets: &[u32]) -> Result<Observ
         let Some(gradient) = gradients.get(variable.as_tensor()) else {
             gradient_rows.insert(name, json!({"status":"MISSING"}));
             integrity = false;
+            all_required_gradients_nonzero = false;
             continue;
         };
         let values = gradient.flatten_all()?.to_vec1::<f32>()?;
@@ -145,7 +147,8 @@ fn observe(model: &JointModel, inputs: &[u32], targets: &[u32]) -> Result<Observ
             json!({"coordinates":values.len(),"finite":finite,
             "nonzero_coordinates":nonzero,"l2_norm":norm,"maximum_absolute":max_abs}),
         );
-        integrity &= finite && nonzero > 0;
+        integrity &= finite;
+        all_required_gradients_nonzero &= nonzero > 0;
     }
     drop(gradients);
     let no_reads = output.no_read_mass.to_vec2::<f32>()?;
@@ -212,7 +215,7 @@ fn observe(model: &JointModel, inputs: &[u32], targets: &[u32]) -> Result<Observ
     }
     let after = parameter_hashes(model)?;
     let unchanged = before == after;
-    integrity &= unchanged && zero_read_positions == 0;
+    integrity &= unchanged;
     let count = (BLOCKS.len() * (CONTEXT - 1)) as f64;
     Ok(Observation {
         report: json!({"geometry":model.config.read_geometry,"model":model.config,
@@ -225,10 +228,13 @@ fn observe(model: &JointModel, inputs: &[u32], targets: &[u32]) -> Result<Observ
             "parameter_sha256_le_f32_before":before,"parameter_sha256_le_f32_after":after,
             "parameters_unchanged":unchanged,"observed_initial_next_token_nll":nll,
             "gradient_loss":"population mean next-token NLL over four full256 windows, read enabled",
-            "gradients":gradient_rows,"summary_excludes_empty_history_position0":{
+            "gradients":gradient_rows,
+            "all_required_gradient_arrays_have_nonzero_coordinates":all_required_gradients_nonzero,
+            "summary_excludes_empty_history_position0":{
                 "positions":count as usize,"mean_read_mass":mass_sum/count,"mean_no_read_mass":null_sum/count,
                 "mean_conditional_read_entropy_nats":(entropy_count>0).then(||entropy_sum/entropy_count as f64),
                 "defined_entropy_positions":entropy_count,"zero_read_positions":zero_read_positions,
+                "all_causal_read_positions_nonzero":zero_read_positions==0,
                 "maximum_mass_normalization_error":max_normalization_error},
             "positions":positions,"seconds":started.elapsed().as_secs_f64()}),
         first_states,
@@ -402,7 +408,7 @@ fn run(evaluator_path: &Path, out: &Path, phase: &mut &'static str) -> Result<St
         "post_token0_states_lorentz":left.first_states,"post_token0_states_affine":right.first_states,
         "observations":first_reads,
         "interpretation":"At position0 neither arm has a causal key. Identical parameters and post-token0 states imply common query/key/null/age at position1. Its single-key read log-odds difference observes the score-law difference, up to F32 normalization. Later trajectories differ; no later aggregate NoRead ordering is asserted. No private core formula is duplicated."});
-    report["decision_boundary"]=json!("Finite nonzero required gradients, unchanged shared parameters and no exactly zero causal read mass establish only an active initializer path on these inputs. No preferred read mass, entropy, loss threshold or language acceptance gate is imposed.");
+    report["decision_boundary"]=json!("Completion requires finite observations, connected finite required gradients and unchanged shared parameters. Measured zero gradients or causal read masses remain descriptive activation findings, not unverified data and not automatic retry triggers. Their explicit booleans and counts inform whether the useful-gradient premise holds. No preferred read mass, entropy, loss threshold or language acceptance gate is imposed.");
     report["elapsed_seconds"] = json!(started.elapsed().as_secs_f64());
     save_json(&out.join("startup.json"), &report)?;
     Ok(status.into())
