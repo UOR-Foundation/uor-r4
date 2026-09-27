@@ -2,7 +2,7 @@
 
 2026-09-27 · Claude lab track · References #820, #973 · Work card: [#973 comment](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5851700710)
 
-**Status.** An evidence note from the lab track, not a decision record. Labels: **Measured** (Rust runs in the lab sandbox, seeds stated), **Derived**, **Literature**, **Hypothesis**. Results are development measurements on code; nothing here is a final holdout or a language qualification.
+**Status.** An evidence note from the lab track, not a decision record. Run records: [cycle-4 packet](../evidence/geometric-stack-cycle4-2026-09-27/README.md). Labels: **Measured** (Rust runs in the lab sandbox, seeds stated), **Derived**, **Literature**, **Hypothesis**. Results are development measurements on code; nothing here is a final holdout or a language qualification.
 
 ## 0. Findings
 
@@ -175,14 +175,20 @@ Final NLL in nats per token, with bits per byte in parentheses:
 - **Selection.** The rule was fixed before any pilot run finished: each arm's rate is the one with the lowest final NLL. That gives 2e-3 for the control and 4e-3 for the stack. At the selected rates the stack leads by **0.158 nats** (0.064 bits per byte).
 - **Fairness.** The control's best rate lies inside the grid. The stack's best rate is the grid's largest, so its optimum may be higher. The tuning therefore does not disadvantage the control.
 - **At every rate the stack leads.** At 4e-3 the control degrades (2.834) while the stack keeps improving. The stack also trains stably at a rate that is too high for the control.
-- **Context, not a matched comparison.** The retained native learner of cycle 3 scored 3.119–3.124 with the flat Lorentz read and 3.169–3.185 with the Dot read, on the same windows and data after the same 4.1M target visits. It had width 128 and about 0.69M parameters. Both 7.2M-parameter arms here are 0.35–0.58 nats better. That gap is mostly capacity, which is the premise of this cycle, not a mechanism comparison.
+- **Context, not a matched comparison.** The retained native learner of cycle 3 scored 3.119–3.124 with the flat Lorentz read and 3.169–3.185 with the Dot read, on the same windows and data after the same 4.1M target visits. It had width 128 and about 0.69M parameters. Both 7.2M-parameter arms here are 0.35–0.58 nats better. Size, depth, layer structure and training configuration all differ between the two, so this cycle does not attribute the gap to any one of them.
 - **Samples.** Greedy continuations of three development prompts fall into repetition loops in both arms at this budget, for example a repeated `use std::path::PathBuf;` line. The report roots keep all six arms' greedy and sampled continuations.
-- **Throughput.** Two runs shared the 4-core sandbox, with two threads each, at 942–1,222 tokens/s per run, or 3,353–4,350 s of training per run. Rounds 1 and 2 overlapped builds and tests of this branch and of #1410, so their rates are lower bounds.
-- **Identities.**
+- **Cost.** Two runs shared the 4-core sandbox, with two threads each.
+  - Training alone ran at 942–1,222 tokens/s per run, or 3,353–4,350 s per run.
+  - Complete elapsed time per round, including evaluation, checkpointing and sampling, was 67.5, 59.9 and 73.8 minutes: 3 h 21 min for all six runs.
+  - Rounds 1 and 2 overlapped builds and tests of this branch and of #1410.
+  - These are training costs only. Neither number measures native serving.
+- **Identities and records.** The [run packet](../evidence/geometric-stack-cycle4-2026-09-27/README.md) holds each run's complete report: settings, curve, final metrics, samples as token ids and text, and input, executable and model SHA-256. It also holds the launchers and the chosen-rate log, with hashes of every file.
   - Executable `fcf710ad…` (commit `dca1b790`, host-tuned release build).
   - Training split `b12707b0…`, development split `3f7c50ef…`.
-  - Each report root binds its model SHA-256, settings, curve and samples.
-- **Scope.** One seed and a short budget. The 0.089–0.224 nat differences are several times the seed spread seen in cycle 3 (about 0.01–0.04), but they measure early training. The main comparison (§6) measures the endpoint.
+- **Scope.** One seed per arm and a short budget.
+  - The pilot carries no uncertainty estimate for these architectures. Cycle 3's seed spread belongs to the retained learner, not to these models.
+  - The differences are between complete architecture-and-training packages, each at its own selected rate.
+  - They measure early training. The main comparison (§6) measures the endpoint.
 
 ## 6. Main comparison
 
