@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model — multi-lab roadmap
 
-**Director:** Claude, Lab 1 window. **Updated:** 2026-09-27 22:45 UTC. This file owns lab
+**Director:** Claude, Lab 1 window. **Updated:** 2026-09-27 23:55 UTC. This file owns lab
 assignments, track status, the dead-path register and the cross-lab protocol. Measured
 results and retained artifacts live in [current state](docs/integration/current-state.md).
 Ordered responsibilities and acceptance live in the [canonical plan](docs/integration/project-track.md).
@@ -50,6 +50,7 @@ Geometry's defensible jobs are discrete and table-servable, which is also what R
    - Lanes over 2I ≅ SL(2,5) track the A5 word problem, which is NC¹-complete. Diagonal SSMs and constant-depth transformers cannot do this at arbitrary length, assuming TC⁰≠NC¹.
    - Snapped to 2I, a lane serves as a 120-state automaton: one byte of state and two table reads per token, with no drift.
    - Out-of-repository toy result: 100% accuracy to length 4,096, where float lanes drifted to 0.62–0.74 ([review §6.2](docs/integration/first-principles-review-2026-09-25.md)).
+   - Reproduced in repository Rust (#1442), with one correction: the capability is the finite group, not the quaternion parameterisation. Ordinary reflection-pair lanes learn the same icosahedral group and minimise to the same 60-state automaton.
 2. **Fixed geometric addressing (D5).**
    - Optimal spherical codes (the 600-cell, the E8 roots) can act as sparse indexes.
    - They need no learned keys, decode with adds and compares, and give sparse parameter or event access.
@@ -66,7 +67,7 @@ three-lab brief does not assign it work.
 
 | Track | Owner | Goal | Current hypothesis | Status | Next decision point |
 |---|---|---|---|---|---|
-| **T1 Learner and exact state** | Lab 1 Claude: this window, plus the cloud lab track on `claude/blissful-wozniak-girwwq` | A single main-line learner at #1017 scale, with geometric state where it earns it | (a) The capacity-matched stack closes the native gap. (b) Exact 2I tracking lanes add A5-class tracking at ≤0.05 nats LM cost. (c) Fixed H4/E8 codebooks address sparse parameter memory as well as learned keys do. | (a) Full-exposure run in the cloud sandbox, ETA ≈07:00 UTC 09-28. (b) Started in this window. (c) Implemented, NOT_RUN ([#1437](https://github.com/UOR-Foundation/uor-r4/pull/1437)). | §4.1 |
+| **T1 Learner and exact state** | Lab 1 Claude: this window, plus the cloud lab track on `claude/blissful-wozniak-girwwq` | A single main-line learner at #1017 scale, with geometric state where it earns it | (a) The capacity-matched stack closes the native gap. (b) Exact 2I tracking lanes add A5-class tracking at ≤0.05 nats LM cost. (c) Fixed H4/E8 codebooks address sparse parameter memory as well as learned keys do. | (a) Full-exposure run in the cloud sandbox, ETA ≈07:00 UTC 09-28. (b) Stage A PASS (#1442); quaternion-specific claim retired; Stage B paused. (c) Implemented, NOT_RUN ([#1437](https://github.com/UOR-Foundation/uor-r4/pull/1437)). | §4.1 |
 | **T2 Geometric addressing (D5×D6)** | Lab 2 OpenCode | Decide whether geometry can be the sparse index for event memory | A fixed 600-cell/E8 cell index retrieves the dense read's top events as well as LSH, IVF/k-means, PQ and learned kNN at equal bytes touched, with a cheaper multiplier-free decode. | Never run (D5 names it; nobody has run it). | §4.2 |
 | **T3 Mission runtime and measured efficiency** | Lab 3 Anti-Gravity | Serve the main-line model under R1–R4, and measure its real cost on the M1 | LUT-accumulation kernels, exact 2I lanes and table products serve the stack without D10 exceptions, losing ≤0.02 nats. J/token is set by bytes touched. | `uor-chat`, blocked kernels and streaming delivered ([#1434](https://github.com/UOR-Foundation/uor-r4/pull/1434), [#1436](https://github.com/UOR-Foundation/uor-r4/pull/1436)). No J/token has been measured in the repository. | §4.3 |
 | **T4 Native dialogue and conversion fidelity** | Lab 4 Codex | Recover learned relations through integer conversion, and dialogue learning on the native path | Response-aware legal-code choice recovers relations lost at conversion; conversion changed 909 of 3,914 greedy decisions. | [#1433](https://github.com/UOR-Foundation/uor-r4/pull/1433) at 231 of 512 updates. | §4.4 |
@@ -159,7 +160,18 @@ Each lab keeps its own subsection current: hypothesis, status, next decision and
   - more than 0.03 nats behind → ablations;
   - more than 2× slower → kernel work.
 
-**(b) B1: exact 2I tracking lanes in the stack** (this window). Pre-registered before any run:
+**(b) B1: finite-group tracking lanes in the stack** (this window; [#1442](https://github.com/UOR-Foundation/uor-r4/pull/1442), [record](https://github.com/UOR-Foundation/uor-r4/blob/lab/claude/b1-tracking-lanes/docs/integration/b1-finite-group-lanes-2026-09-27.md)).
+
+- **Status at 23:55 UTC 09-27: Stage A PASS.** 36 runs.
+  - Non-commutative lanes track A5 exactly to length 4,096 after snapping in 17 of 18 runs: quaternion 8/9, reflection pair 9/9. Phase and frozen lanes stay at chance.
+  - Quaternion lanes land on 2I; reflection pairs land on the icosahedral rotation group of R³. Both minimise to the same 60-state automaton.
+  - **The quaternion-specific serving claim is retired** by the kill rule below. The finite-group state claim survives at Stage A scope.
+- **Stage B:** a one-seed pilot only.
+  - With lanes the stack scores A5 1.000 in context, against 0.008 at position 128 without.
+  - Text NLL is +0.052 nats, against a 0.05 gate.
+  - The 3-seed grid is **NOT_RUN**; it was paused for the owner's storage directive.
+
+Pre-registered before any run:
 - **Mechanism.**
   - A token-conditioned side channel of K quaternion lanes: `h_t = q[token_t] ⊗ h_{t−1}`, with `h_0 = 1`, no additive input and no decay.
   - `q = normalize(raw)` is freely parameterised, not near-identity. The repository's near-identity form never learned A5 in the review.
@@ -272,6 +284,7 @@ Each negative keeps its exact scope; a failed parameterisation does not retire a
 | D10 converted SmolLM2 as the served model | **OUT OF MISSION (R4)** | Comparator or teacher only; no real SmolLM2 checkpoint was ever converted | [D10](docs/integration/DECISIONS.md#d10--a-converted-open-weight-backbone-is-the-interim-chat-vehicle-serving-arithmetic-restated) |
 | `uor-r4-lut`/`lut-chat` with hardware multiplies on runtime values | **FROZEN comparator (R2)** | Integer stack gap 0.011–0.013 nats, measured under D10 only | [cycle 4 §8](docs/integration/geometric-stack-cycle4-2026-09-27.md) |
 | 2I relation lookup table for the parked read (`inverse(q)*k`) | **PARKED** | Its consumer, #1438, is parked | Ruling 3 |
+| Quaternion (2I) lanes as a serving advantage over ordinary non-commutative lanes | **RETIRED** (B1 kill rule) | A5 at length 4,096 after snapping: quaternion 8/9, reflection pair 9/9. Both minimise to a 60-state A5 automaton. The finite-group state mechanism itself survives. | [#1442](https://github.com/UOR-Foundation/uor-r4/pull/1442) |
 
 ## 6. Shared machine protocol
 
@@ -287,18 +300,53 @@ storage and swap pressure while another lab's fit ran.
 
 **Light jobs.** Builds, unit tests and small probes may run alongside, at ≤2 threads and ≤1.5 GB, with `CARGO_BUILD_JOBS` ≤ 3.
 
-**Storage.**
-- Build caches: `/Volumes/UOR-Workspace/BuildCaches/<lab>-<topic>`.
-- Checkpoints and derived data: `/Volumes/UOR-Workspace/uor-r4-lab/<lab>-<topic>`.
+**Storage** (owner direction, 2026-09-27):
+- **Internal drive: keep at least 60 GiB free.**
+  - Below 40 GiB, no lab starts a new build cache or heavy job on the internal drive until it has migrated.
+  - At 25 GiB, running jobs checkpoint and stop.
+  - It had 27 GiB free at 23:40 UTC 09-27. The table is on [#820](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5860924838).
+- **Build caches:** one per lab, at `/Volumes/UOR-Workspace/BuildCaches/<lab>`, set through `CARGO_TARGET_DIR`. This replaces the earlier per-topic caches, since each cache can be 10–25 GB. Prefer release builds.
+- **Checkpoints, derived data and reports:** `/Volumes/UOR-Workspace/uor-r4-lab/<lab>-<topic>`.
+- **Migration:**
+  - Never move a directory an active job is using.
+  - Each lab migrates only its own material.
+  - Regenerable caches, and clean, fully pushed, idle worktrees, may be moved or removed once no process is using them.
+  - Unique artifacts get a verified copy (SHA-256 manifest) and a symlink at the old path, recorded under `.uor-cleanup/<date>/`. Deleting the internal original of a unique artifact needs the owner's approval, because the SSD would then be the only copy.
+- **SSD:** keep at least 30 GiB free inside `UOR-Workspace`. Ask the owner before resizing the image.
 - `UOR-Workspace` is an APFS sparse image on the X10 Pro SSD. Never point Cargo at the ExFAT volume itself.
-- Keep ≥20 GiB free on the internal disk; 31 GiB was free at 22:10 UTC.
-- Clean only your own caches. Never delete another lab's worktree or artifacts, or unique research.
+- **Every status report includes both `df` numbers,** internal `/System/Volumes/Data` and SSD `/Volumes/UOR-Workspace`.
+- Never delete another lab's worktree or artifacts, or unique research.
 
 **Ledgers.**
 - Report model compute and orchestration separately per work unit.
 - Two ledgers disagree at present: OpenCode's 756M-ms ledger and the Codex lab's. The Lab 2 and Lab 4 leads should reconcile them into the programme ledger in current state.
 
 ## 7. Cadence and protocol
+
+**GitHub is the shared record for all four labs** (owner direction, 2026-09-27).
+- **The lab board** is one [#820 comment](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5860922002), edited in place by the director (`gh api -X PATCH repos/UOR-Foundation/uor-r4/issues/comments/5860922002`). It has one row per lab:
+  - track and current unit;
+  - branch and PR;
+  - last pushed SHA and time;
+  - uncommitted file count;
+  - model-slot use;
+  - internal and SSD storage;
+  - next decision.
+
+  The director refreshes it at each work-unit boundary and after every lab report.
+- **Start of each unit:** read the board, then post a work card in the existing owning issue (#973 for model work, #962 for dialogue, #820 for process). It names the lab, track, branch, PR, owned paths, deliverable, decisions and resources.
+- **Commit in small steps.**
+  - Push at the end of every unit and before any run longer than 10 minutes.
+  - Open a draft PR from the first commit.
+  - Every PR body names its lab.
+- **Results go into git** as a doc plus an evidence JSON. Large artifacts stay on the SSD, with their SHA-256 and path recorded in the evidence.
+- **End of each unit:** post a status report in the same issue, including both `df` numbers.
+- **Worktree audit at each work-unit boundary** (director):
+  - run `git fetch --prune`;
+  - for every `git worktree list` entry, record the branch, ahead/behind against `origin/<branch>` and the dirty file count, with `--no-optional-locks` so nothing is written into another lab's worktree;
+  - post the findings on #820 and ask each owning lab to commit and push.
+
+  No lab commits, resets or pushes another lab's worktree. The owner checkout's dirty files belong to the owner.
 
 - **Zoom out** when stuck for about 45 minutes, or when a work unit ends:
   - reread §0–§1 and your track;
@@ -358,6 +406,18 @@ savings all remain unqualified.
   - D10's backbone and runtime-multiplier exceptions are out of mission (R2, R4).
   - The reads-only `aaaaaa` stack is a transformer comparator, not a main-line candidate (ruling 8).
 - **The single decisive experiment still missing programme-wide** is D5's addressing contest. It is assigned to Lab 2 as T2.
+
+**2026-09-27 23:55 UTC, owner direction: GitHub record and storage.**
+- **Lab 1 delivery:** B1 was committed and pushed at `09e537a4`, draft #1442, with a #973 status report.
+- **Board:** the #820 lab board was created, to be edited in place.
+- **Worktree audit:** posted on #820.
+  - Anti-Gravity's `codex/geometric-lm-goal` was never pushed and holds 13 dirty unique files.
+  - Codex's `852c1c67` is on no origin branch.
+  - `canonical-address-routing` has 2 untracked files, owner unclear.
+- **Storage:** the internal drive has 27 GiB free, below the new 40 GiB rule.
+  - The internal drive holds `.uor-models` (26 GB) and 14 worktrees (17 GB). Nearly all build caches are already on the SSD.
+  - §6 rules and §7 protocol adopted.
+  - Lab 1's cache moved to the per-lab path `BuildCaches/claude`.
 
 The [previous roadmap](https://github.com/UOR-Foundation/uor-r4/blob/dccef74b/ROADMAP.md) and the
 [historical roadmap](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/ROADMAP.md)
