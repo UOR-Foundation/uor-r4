@@ -207,16 +207,26 @@ repetition, malformed code and no useful coding/prose result. The packet records
 12,066 seconds elapsed over three pilot rounds; the sum of process durations is
 22,989 seconds and is not CPU time or complete preparation/build cost.
 [Packet review and limitations](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5853505407).
-Current head `35d8da2f` corrects the high-rate control wording to underperformance.
+The subsequent `35d8da2f` correction narrows the high-rate control wording to
+underperformance. At reviewed head `5ff59ebc`, the packet adds the actual Dot,
+identity-transport and reads-only Lorentz ablations: NLL 2.588881 / 2.668833 /
+2.553095 at the same 1,000-update dose. All 13 added ablation files plus the
+revised README match their packet identities. The author has corrected the
+causal interpretation: these compare whole configurations, not the isolated
+effect of recurrence. This pass verified the added records and source
+relationships; a new complete quality assessment was not executed.
+[Updated packet review](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5854404413).
 Source fixes for resume and scan/drive-bound claims remain separate from older
-executed binaries. Six raw model weights and two executables are still external;
-the fourth lab has designated an owner-SSD intake and requested an immutable
-transfer, with payload verification pending.
+executed binaries. Raw model weights and executables remain external;
+the designated owner-SSD intake is empty and no transfer branch is available.
+Payload verification remains pending.
 [Preservation coordination](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5853595061).
-This complementary Claude-owned track has no integrated integer/session path
-and neither supplies the matched Dot control nor changes its dose or serving
-policy. Its package-level likelihood result keeps deeper architecture as a
-candidate; useful generated behavior remains required.
+This complementary Claude-owned track has no integrated integer/session path.
+Its Dot ablation belongs to the deeper stack, not the fourth lab's already
+completed retained-reader comparison or running dialogue study. Its
+configuration-level likelihood results keep deeper architecture as a candidate;
+useful generated behavior remains required, and our fixed dose and native
+multiplier-free serving target stay unchanged.
 
 The separately owned termination-objective study has a
 [source-verified weighted-shard normalization/reporting defect](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852801075)
