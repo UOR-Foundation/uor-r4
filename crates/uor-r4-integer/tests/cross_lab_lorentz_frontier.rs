@@ -139,6 +139,13 @@ fn test_cross_lab_lorentz_causal_nll_advantage() {
     );
 }
 
+/// Assert empirical transfer invariants recorded in sealed cross-lab evidence receipts
+/// (`radial-parameter-transfer-validation-2026-09-27.json` and `dot-reset-validation-2026-09-27.json`).
+///
+/// Note (Scope Boundary): This test verifies artifact schema, source/parent SHA256 hashes,
+/// transfer tensor counts, clean Adam clock/moment resets, and empirical startup disturbance
+/// metrics recorded in sealed evidence. It is a receipt regression check, not a newly executed
+/// live model fit or independent serving witness.
 #[test]
 fn test_cross_lab_radial_transfer_witness_invariants() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -167,6 +174,25 @@ fn test_cross_lab_radial_transfer_witness_invariants() {
         &std::fs::read_to_string(&dot_evidence_path).expect("read dot evidence"),
     )
     .expect("parse dot evidence JSON");
+
+    // Invariant 0: Receipt Provenance & Schema Integrity
+    assert_eq!(
+        radial_data["schema"],
+        "uor-r4.radial-parameter-transfer-validation/1"
+    );
+    assert_eq!(dot_data["schema"], "uor-r4.dot-reset-validation/1");
+    assert_eq!(
+        radial_data["startup"]["evaluator_sha256"],
+        "d2432fbba0e24ba51d7568700d6718c4e85d01ccc08e4fc3cc3fa2a77e928a62"
+    );
+    assert_eq!(
+        dot_data["observations"]["evaluator_sha256"],
+        "d2432fbba0e24ba51d7568700d6718c4e85d01ccc08e4fc3cc3fa2a77e928a62"
+    );
+    assert_eq!(
+        dot_data["transfer"]["parent_model_sha256"],
+        "6defec21fc2be395a9505b9f10301c03aeb3c23529c6e1be4e2e1639c7ce6d79"
+    );
 
     // Invariant 1: Startup verification status and parent equality
     assert_eq!(
