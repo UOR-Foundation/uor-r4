@@ -384,12 +384,21 @@ impl StackModel {
                     vec![0.0; count]
                 }
                 // Sub-keys near unit norm, so first scores are of order one.
-                "memory.keys" => {
-                    let half = shape[1].max(1) as f64;
-                    (0..count)
-                        .map(|_| (rng.normal() / half.sqrt()) as f32)
-                        .collect()
-                }
+                "memory.keys" => match config.memory.as_ref().and_then(|m| m.codebook) {
+                    // Every head and side holds the whole codebook, in its order.
+                    Some(codebook) => {
+                        let vectors = codebook.vectors();
+                        (0..count / (codebook.size() * codebook.dim()))
+                            .flat_map(|_| vectors.iter().flatten().map(|&v| v as f32))
+                            .collect()
+                    }
+                    None => {
+                        let half = shape[1].max(1) as f64;
+                        (0..count)
+                            .map(|_| (rng.normal() / half.sqrt()) as f32)
+                            .collect()
+                    }
+                },
                 "read.offset" => vec![INITIAL_LORENTZ_OFFSET as f32; count],
                 "rec.gate.bias" => (0..count)
                     .map(|index| {
@@ -523,7 +532,13 @@ impl StackModel {
         let (batch, time, width) = u.dims3()?;
         let query = Self::linear(u, self.layer_weight(layer, "memory.query.weight")?)?
             .reshape((batch * time, memory.heads * memory.key_dim))?;
-        let mut aux = vec![self.layer_weight(layer, "memory.keys")?.flatten_all()?];
+        let keys = self.layer_weight(layer, "memory.keys")?.flatten_all()?;
+        // Fixed codebook keys carry no gradient, so they never move.
+        let mut aux = vec![if memory.codebook.is_some() {
+            keys.detach()
+        } else {
+            keys
+        }];
         if memory.score == MemoryScore::Lorentz {
             aux.push(self.layer_weight(layer, "memory.log_beta")?.exp()?);
         }
@@ -2785,8 +2800,49 @@ mod tests {
             heads: 2,
             key_dim: 8,
             score,
+            codebook: None,
         });
         config
+    }
+
+    #[test]
+    fn codebook_keys_are_fixed_and_the_rest_learns() -> Result<()> {
+        use crate::stack_memory::Codebook;
+        for codebook in [Codebook::H4, Codebook::E8] {
+            let mut config = tiny(StackArch::Geometric, "ra", ReadScore::Dot, true);
+            config.memory = Some(MemoryConfig {
+                layers: vec![1],
+                sub_keys: codebook.size(),
+                top_k: 4,
+                heads: 2,
+                key_dim: 2 * codebook.dim(),
+                score: MemoryScore::Dot,
+                codebook: Some(codebook),
+            });
+            let model = StackModel::new(config, &cpu())?;
+            let keys = model.variables()["layers.01.memory.keys"]
+                .as_tensor()
+                .to_vec2::<f32>()?;
+            let vectors = codebook.vectors();
+            for (row, key) in keys.iter().enumerate() {
+                let want = &vectors[row % codebook.size()];
+                assert!(key
+                    .iter()
+                    .zip(want)
+                    .all(|(a, b)| (f64::from(*a) - b).abs() < 1e-6));
+            }
+            let ids: Vec<u32> = (0..10u32).map(|i| (i * 5 + 1) % 37).collect();
+            let targets: Vec<u32> = (0..10u32).map(|i| (i * 3 + 2) % 37).collect();
+            let grads = model.loss(&ids, &targets, 1, 10)?.backward()?;
+            let names = model.variables();
+            assert!(grads
+                .get(names["layers.01.memory.keys"].as_tensor())
+                .is_none());
+            for name in ["layers.01.memory.query.weight", "layers.01.memory.values"] {
+                assert!(grads.get(names[name].as_tensor()).is_some(), "{name}");
+            }
+        }
+        Ok(())
     }
 
     #[test]

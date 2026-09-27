@@ -12,7 +12,7 @@
 //!   [merges=MERGES.txt] [checkpoint_every=250] [resume=OLD_ROOT/checkpoint] [max_seconds=inf] \
 //!   [sample_tokens=128] [tokenizer=TOKENIZER.json] [width=288] [heads=6] [layers=6] [mlp=768] \
 //!   [context=256] [memory_layers=L1,L2 [memory_sub_keys=256] [memory_top_k=32] [memory_heads=4] \
-//!   [memory_key_dim=128] [memory_score=dot|lorentz]]
+//!   [memory_key_dim=128] [memory_score=dot|lorentz] [memory_codebook=h4|e8]]
 //! geometric-stack sample model=ROOT/model valid=VALID.u16 merges=MERGES.txt|tokenizer=TOKENIZER.json \
 //!   out=NEW_REPORT_ROOT [prompts=3] [prompt_tokens=64] [sample_tokens=128] [temperature=0.8] [top_k=40] \
 //!   [seed=1]
@@ -75,7 +75,7 @@ use uor_r4_core::report_output;
 use uor_r4_training::geometric_stack::{ReadScore, StackAdamW, StackArch, StackConfig, StackModel};
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_export::{control_checkpoint, export_stack};
-use uor_r4_training::stack_memory::{MemoryConfig, MemoryScore};
+use uor_r4_training::stack_memory::{Codebook, MemoryConfig, MemoryScore};
 use uor_r4_training::{sha256_file, Result, TrainingError};
 
 fn invalid(message: impl Into<String>) -> TrainingError {
@@ -550,6 +550,15 @@ fn train_settings(args: &Args) -> Result<Settings> {
     // Product-key memories replace the listed layers' MLPs after the MLP width
     // is matched, so the other layers keep the matched width.
     if let Some(layers) = args.optional("memory_layers") {
+        // A fixed codebook sets the sub-key count and the key width.
+        let codebook = match args.optional("memory_codebook").as_deref() {
+            None => None,
+            Some("h4") => Some(Codebook::H4),
+            Some("e8") => Some(Codebook::E8),
+            Some(other) => return Err(invalid(format!("unknown memory_codebook {other}"))),
+        };
+        let (default_sub_keys, default_key_dim) =
+            codebook.map_or((256, 128), |c| (c.size(), 2 * c.dim()));
         config.memory = Some(MemoryConfig {
             layers: layers
                 .split(',')
@@ -558,15 +567,16 @@ fn train_settings(args: &Args) -> Result<Settings> {
                         .map_err(|_| invalid(format!("invalid memory layer {l}")))
                 })
                 .collect::<Result<_>>()?,
-            sub_keys: args.number("memory_sub_keys", 256)?,
+            sub_keys: args.number("memory_sub_keys", default_sub_keys)?,
             top_k: args.number("memory_top_k", 32)?,
             heads: args.number("memory_heads", 4)?,
-            key_dim: args.number("memory_key_dim", 128)?,
+            key_dim: args.number("memory_key_dim", default_key_dim)?,
             score: match args.optional("memory_score").as_deref() {
                 None | Some("dot") => MemoryScore::Dot,
                 Some("lorentz") => MemoryScore::Lorentz,
                 Some(other) => return Err(invalid(format!("unknown memory_score {other}"))),
             },
+            codebook,
         });
         config.validate()?;
     }
@@ -1651,6 +1661,7 @@ fn main() -> Result<()> {
                     "memory_heads",
                     "memory_key_dim",
                     "memory_score",
+                    "memory_codebook",
                 ],
             )?;
             let settings = train_settings(&args)?;

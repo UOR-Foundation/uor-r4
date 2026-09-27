@@ -15,6 +15,11 @@
 //! x)` with a learned scale per head. The selection is discrete: its gradient
 //! is taken with the selected slots held fixed, as in the original, and ties
 //! break toward the lower index so the backward pass reselects exactly.
+//!
+//! Sub-keys are learned, or fixed to a geometric codebook ([`Codebook`]): the
+//! 120 unit icosians (the vertices of the 600-cell, H4) for quaternion halves,
+//! or the 240 roots of E8 for 8-dimensional halves. A fixed codebook addresses
+//! the memory by fixed geometric codes; only the query map and the values learn.
 
 use candle_core::{CpuStorage, CustomOp3, Layout, Shape, Tensor};
 use rayon::prelude::*;
@@ -33,6 +38,118 @@ pub enum MemoryScore {
     Lorentz,
 }
 
+/// A fixed set of unit sub-keys.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Codebook {
+    /// The 120 unit icosians, the vertices of the 600-cell (H4), in 4 dimensions.
+    H4,
+    /// The 240 roots of E8, scaled to unit norm, in 8 dimensions.
+    E8,
+}
+
+impl Codebook {
+    pub fn dim(self) -> usize {
+        match self {
+            Self::H4 => 4,
+            Self::E8 => 8,
+        }
+    }
+
+    pub fn size(self) -> usize {
+        match self {
+            Self::H4 => 120,
+            Self::E8 => 240,
+        }
+    }
+
+    /// The codebook's unit vectors, in a fixed order.
+    pub fn vectors(self) -> Vec<Vec<f64>> {
+        let mut out = Vec::with_capacity(self.size());
+        match self {
+            Self::H4 => {
+                let phi = (1.0 + 5f64.sqrt()) / 2.0;
+                for axis in 0..4 {
+                    for sign in [1.0, -1.0] {
+                        let mut v = vec![0.0; 4];
+                        v[axis] = sign;
+                        out.push(v);
+                    }
+                }
+                for signs in 0..16u32 {
+                    out.push(
+                        (0..4)
+                            .map(|i| if signs >> i & 1 == 1 { -0.5 } else { 0.5 })
+                            .collect(),
+                    );
+                }
+                // Even permutations of (phi, 1, 1/phi, 0) / 2 with every sign.
+                let base = [phi / 2.0, 0.5, 0.5 / phi, 0.0];
+                for permutation in even_permutations() {
+                    for signs in 0..8u32 {
+                        let mut v = vec![0.0; 4];
+                        for (source, &target) in permutation.iter().enumerate() {
+                            let sign = if source < 3 && signs >> source & 1 == 1 {
+                                -1.0
+                            } else {
+                                1.0
+                            };
+                            v[target] = sign * base[source];
+                        }
+                        out.push(v);
+                    }
+                }
+            }
+            Self::E8 => {
+                let scale = 1.0 / 2f64.sqrt();
+                for i in 0..8 {
+                    for j in i + 1..8 {
+                        for (a, b) in [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)] {
+                            let mut v = vec![0.0; 8];
+                            v[i] = a * scale;
+                            v[j] = b * scale;
+                            out.push(v);
+                        }
+                    }
+                }
+                for signs in 0..256u32 {
+                    if signs.count_ones() % 2 == 0 {
+                        out.push(
+                            (0..8)
+                                .map(|i| if signs >> i & 1 == 1 { -0.5 } else { 0.5 } * scale)
+                                .collect(),
+                        );
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
+/// The twelve even permutations of four positions: `p[source] = target`.
+fn even_permutations() -> Vec<[usize; 4]> {
+    let mut out = Vec::with_capacity(12);
+    for a in 0..4 {
+        for b in 0..4 {
+            for c in 0..4 {
+                for d in 0..4 {
+                    let p = [a, b, c, d];
+                    let distinct = (0..4).all(|i| (i + 1..4).all(|j| p[i] != p[j]));
+                    let inversions = (0..4)
+                        .flat_map(|i| (i + 1..4).map(move |j| (i, j)))
+                        .filter(|&(i, j)| p[i] > p[j])
+                        .count();
+                    if distinct && inversions % 2 == 0 {
+                        out.push(p);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Where the memory layers are and how large they are.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryConfig {
@@ -46,6 +163,9 @@ pub struct MemoryConfig {
     /// Query width per head; each half has `key_dim / 2` coordinates.
     pub key_dim: usize,
     pub score: MemoryScore,
+    /// Fixed sub-keys; absent means learned sub-keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codebook: Option<Codebook>,
 }
 
 impl MemoryConfig {
@@ -64,6 +184,18 @@ impl MemoryConfig {
             return Err(invalid(
                 "memory needs distinct layers of the stack, 2 <= top_k <= sub_keys <= 4096 and an even key width",
             ));
+        }
+        if let Some(codebook) = self.codebook {
+            if self.key_dim / 2 != codebook.dim()
+                || self.sub_keys != codebook.size()
+                || self.score != MemoryScore::Dot
+            {
+                return Err(invalid(format!(
+                    "a {codebook:?} codebook needs key_dim {}, sub_keys {} and the Dot score",
+                    2 * codebook.dim(),
+                    codebook.size()
+                )));
+            }
         }
         Ok(())
     }
@@ -472,6 +604,43 @@ mod tests {
             heads: 2,
             key_dim: 6,
             score,
+            codebook: None,
+        }
+    }
+
+    #[test]
+    fn codebooks_are_the_600_cell_and_the_e8_roots() {
+        let phi = (1.0 + 5f64.sqrt()) / 2.0;
+        // Inner products of distinct unit icosians, and of distinct unit E8 roots.
+        let h4 = [
+            -1.0,
+            -phi / 2.0,
+            -0.5,
+            -0.5 / phi,
+            0.0,
+            0.5 / phi,
+            0.5,
+            phi / 2.0,
+        ];
+        let e8 = [-0.5, 0.0, 0.5, -1.0];
+        for (codebook, allowed) in [(Codebook::H4, &h4[..]), (Codebook::E8, &e8[..])] {
+            let vectors = codebook.vectors();
+            assert_eq!(vectors.len(), codebook.size());
+            for (i, a) in vectors.iter().enumerate() {
+                assert_eq!(a.len(), codebook.dim());
+                let norm: f64 = a.iter().map(|x| x * x).sum();
+                assert!(
+                    (norm - 1.0).abs() < 1e-12,
+                    "{codebook:?} vector {i} has norm {norm}"
+                );
+                for b in &vectors[i + 1..] {
+                    let inner: f64 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+                    assert!(
+                        allowed.iter().any(|v| (inner - v).abs() < 1e-12),
+                        "{codebook:?}: inner product {inner}"
+                    );
+                }
+            }
         }
     }
 
