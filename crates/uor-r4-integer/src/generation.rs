@@ -7,8 +7,8 @@ use crate::{
     SamplePolicy, Sampler, PROBABILITY_TOTAL,
 };
 pub use conversation::{
-    ConversationError, ConversationRequest, ConversationTurn, DialogueConversation, TurnBoundary,
-    TurnClosure,
+    ConversationError, ConversationRequest, ConversationTurn, DialogueConversation,
+    DialogueConversationStream, TurnBoundary, TurnClosure,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -321,6 +321,9 @@ impl<'a> TextSession<'a> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+    pub fn observed(&self) -> &[u32] {
+        &self.observed
+    }
 
     /// The explicit protocol binding for sessions constructed by `dialogue_session`.
     /// It describes input/termination semantics, not the model's training history.
@@ -345,6 +348,39 @@ impl<'a> TextSession<'a> {
         }
         Ok(tokens.len())
     }
+    pub(crate) fn stop_reason(&self, token: u32) -> Option<Stop> {
+        self.stop_tokens.reason(token)
+    }
+
+    pub(crate) fn step_next_token(
+        &mut self,
+        sampler: &mut Sampler,
+        policy: SamplePolicy,
+    ) -> Result<(u32, Decision)> {
+        self.consume_pending()?;
+        let step = self
+            .current
+            .as_ref()
+            .ok_or_else(|| invalid("missing session prediction"))?;
+        let selected = sampler
+            .select(&step.probabilities, policy)
+            .map_err(|e| invalid(format!("integer sampling: {e}")))?;
+        let mut hash = Sha256::new();
+        for mass in &step.probabilities {
+            hash.update(mass.to_le_bytes());
+        }
+        let decision = Decision {
+            selected_token: selected as u32,
+            probability_q48: step.probabilities[selected],
+            probability_sum_q48: PROBABILITY_TOTAL,
+            probability_sha256_le_u64: hex::encode(hash.finalize()),
+            exposed_causal_slots: step.read_masses.len(),
+            no_read_mass_q48: step.no_read_mass,
+        };
+        self.pending = Some(selected as u32);
+        Ok((selected as u32, decision))
+    }
+
     /// The seed is explicit per call; use sampler_state_after to continue its stream.
     pub fn generate(
         &mut self,
@@ -371,29 +407,10 @@ impl<'a> TextSession<'a> {
         let mut decisions = Vec::new();
         let mut stop = Stop::MaximumNewTokens;
         for position in 0..max_new_tokens {
-            self.consume_pending()?;
-            let step = self
-                .current
-                .as_ref()
-                .ok_or_else(|| invalid("missing session prediction"))?;
-            let selected = sampler
-                .select(&step.probabilities, policy)
-                .map_err(|e| invalid(format!("integer sampling: {e}")))?;
-            let mut hash = Sha256::new();
-            for mass in &step.probabilities {
-                hash.update(mass.to_le_bytes());
-            }
-            decisions.push(Decision {
-                selected_token: selected as u32,
-                probability_q48: step.probabilities[selected],
-                probability_sum_q48: PROBABILITY_TOTAL,
-                probability_sha256_le_u64: hex::encode(hash.finalize()),
-                exposed_causal_slots: step.read_masses.len(),
-                no_read_mass_q48: step.no_read_mass,
-            });
-            generated.push(selected as u32);
-            self.pending = Some(selected as u32);
-            if let Some(reason) = self.stop_tokens.reason(selected as u32) {
+            let (selected, decision) = self.step_next_token(&mut sampler, policy)?;
+            decisions.push(decision);
+            generated.push(selected);
+            if let Some(reason) = self.stop_tokens.reason(selected) {
                 stop = reason;
                 break;
             }
@@ -482,7 +499,7 @@ fn validate_generation_budget(existing: usize, generate: usize, capacity: usize)
     }
     Ok(())
 }
-fn short_cycle(tokens: &[u32]) -> Option<usize> {
+pub(crate) fn short_cycle(tokens: &[u32]) -> Option<usize> {
     for period in 1..=4 {
         let twice = period << 1;
         let span = twice + period;
