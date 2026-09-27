@@ -668,6 +668,7 @@ mod tests {
         let stop = completed_dialogue_stream_stop(&stream)?;
         assert_eq!(stop, Stop::ShortCycle { period: 1 });
         assert_eq!(stream.tokens_generated(), 3);
+        drop(stream);
 
         // Preflight rejection does not poison conversation
         let oversized = ConversationRequest {
@@ -707,6 +708,7 @@ mod tests {
         let stop1 = completed_dialogue_stream_stop(&stream1)?;
         assert_eq!(stop1, Stop::MaximumNewTokens);
         assert_eq!(stream1.tokens_generated(), 2);
+        drop(stream1);
 
         // Turn 2: continuity with exact ID retention
         let req2 = ConversationRequest {
@@ -724,6 +726,7 @@ mod tests {
         let stop2 = completed_dialogue_stream_stop(&stream2)?;
         assert_eq!(stop2, Stop::MaximumNewTokens);
         assert_eq!(stream2.tokens_generated(), 2);
+        drop(stream2);
         assert!(!conv.is_poisoned());
 
         Ok(())
