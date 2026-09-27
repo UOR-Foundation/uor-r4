@@ -79,10 +79,10 @@ This is a materially lossy development artifact, not an accepted model. The
 record 56.245 seconds of conversion/packaging/observation and 205,946,880 bytes
 peak child RSS. Same-input integer stepping takes 12.593 seconds versus FF
 2.823 in this instrumented pass; no speed or energy advantage is established.
-The next causal implementation is one response-aware choice of legal codes on
-the fixed child grids and complete-prefix population, with dose/resources still
-to be selected before fitting. Actual relation recovery and all-output retention
-govern that decision; the old width-256 rounding result warns that lower
+That observation motivates response-aware choice of legal codes on the fixed
+child grids and complete-prefix population; the subsequent implementation and
+fixed fitting decision are recorded below. Actual relation recovery and
+all-output retention govern that decision; the old width-256 rounding result warns that lower
 numerical loss alone does not preserve complete answers. That observation
 introduced no new alpha updates.
 
@@ -104,8 +104,13 @@ is now executed at source `b49a2810`: the changed-path objective comparison pass
 and three release binaries are frozen. Eight actual normalization batches retain
 exactly the saved schedule, loss, all recorded parameter-gradient norms and
 coefficient; peak RSS falls to 4,722,819,072 bytes while total time rises to
-154.612 seconds. A fresh fixed 512 restart is selected with checkpoints at
-32/128/256/384 and final 512 on the owner SSD, with graceful resource closeout.
+154.612 seconds. The fresh fixed 512 restart is **RUNNING**, launched at
+16:16:31 UTC on September 27 with the frozen `b49a2810` executable and checkpoints
+at 32/128/256/384 and final 512 on the owner SSD. Its first
+[32-update recovery checkpoint](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5857660452)
+has complete-file verification; it has not yet been reloaded or evaluated.
+Graceful resource closeout remains active. Merging current main into the source
+branch does not change or rebind this running executable.
 Measured batch costs support a 12,600-second soft fit limit and prospectively
 recorded owned allowance 75,600,000 ms; verified shared 722,400,000 ms is unchanged.
 The fixed 512 question, original 161-response panel and 58-turn endpoint remain;
