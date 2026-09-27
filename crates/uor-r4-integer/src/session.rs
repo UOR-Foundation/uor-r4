@@ -91,23 +91,41 @@ pub struct RoleTokens {
 
 impl RoleTokens {
     pub fn from_tokenizer(tokenizer: &ByteBpeTokenizer) -> Result<Self> {
-        let eos_id = tokenizer.token_id("<|eos|>").unwrap_or(RoleToken::EOS_ID);
-        let turn_end_id = tokenizer
-            .token_id(RoleToken::TURN_END_STR)
-            .or_else(|| tokenizer.token_id("<|eos|>"))
-            .unwrap_or(RoleToken::EOS_ID);
-        let system_id = tokenizer
-            .token_id(RoleToken::SYSTEM_STR)
-            .or_else(|| tokenizer.token_id("<|bos|>"))
-            .unwrap_or(RoleToken::BOS_ID);
-        let user_id = tokenizer
-            .token_id(RoleToken::USER_STR)
-            .or_else(|| tokenizer.token_id("<|unk|>"))
-            .unwrap_or(RoleToken::UNK_ID);
-        let assistant_id = tokenizer
-            .token_id(RoleToken::ASSISTANT_STR)
-            .or_else(|| tokenizer.token_id("<|bos|>"))
-            .unwrap_or(RoleToken::BOS_ID);
+        let (system_id, user_id, assistant_id, turn_end_id, eos_id) = if let Ok(protocol) =
+            uor_r4_tokenizer::dialogue::DialogueProtocol::literal_roles_v1(tokenizer)
+        {
+            let eos = protocol.eos_id;
+            let turn_end = tokenizer.token_id(RoleToken::TURN_END_STR).unwrap_or(eos);
+            let system = tokenizer
+                .token_id(RoleToken::SYSTEM_STR)
+                .unwrap_or(protocol.bos_id);
+            let user = tokenizer
+                .token_id(RoleToken::USER_STR)
+                .unwrap_or(protocol.unk_id);
+            let assistant = tokenizer
+                .token_id(RoleToken::ASSISTANT_STR)
+                .unwrap_or(protocol.bos_id);
+            (system, user, assistant, turn_end, eos)
+        } else {
+            let eos = tokenizer.token_id("<|eos|>").unwrap_or(RoleToken::EOS_ID);
+            let turn_end = tokenizer
+                .token_id(RoleToken::TURN_END_STR)
+                .or_else(|| tokenizer.token_id("<|eos|>"))
+                .unwrap_or(RoleToken::EOS_ID);
+            let system = tokenizer
+                .token_id(RoleToken::SYSTEM_STR)
+                .or_else(|| tokenizer.token_id("<|bos|>"))
+                .unwrap_or(RoleToken::BOS_ID);
+            let user = tokenizer
+                .token_id(RoleToken::USER_STR)
+                .or_else(|| tokenizer.token_id("<|unk|>"))
+                .unwrap_or(RoleToken::UNK_ID);
+            let assistant = tokenizer
+                .token_id(RoleToken::ASSISTANT_STR)
+                .or_else(|| tokenizer.token_id("<|bos|>"))
+                .unwrap_or(RoleToken::BOS_ID);
+            (system, user, assistant, turn_end, eos)
+        };
 
         // Verify that none of the resolved role tokens collide with ASCII punctuation tokens (!, ", #, $)
         let punctuation = ["!", "\"", "#", "$"];
@@ -1031,16 +1049,38 @@ impl<'a> ChatSession<'a> {
                 l2_pages[i] = page;
             }
         }
+        let mut persistent_key_norms = Vec::with_capacity(persistent_keys.len());
+        for k in &persistent_keys {
+            persistent_key_norms.push(crate::lorentz::squared_norm(k).unwrap_or(0));
+        }
+
+        let mut dialogue_key_norms: Box<[i128; DIALOGUE_CAPACITY]> = vec![0i128; DIALOGUE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("dialogue_key_norms size mismatch"));
+        for (i, k) in dialogue_keys.iter().enumerate() {
+            dialogue_key_norms[i] = crate::lorentz::squared_norm(k).unwrap_or(0);
+        }
+
+        let mut l2_key_norms: Box<[i128; L2_PAGE_CAPACITY]> = vec![0i128; L2_PAGE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("l2_key_norms size mismatch"));
+        for (i, page) in l2_pages.iter().enumerate() {
+            l2_key_norms[i] = crate::lorentz::squared_norm(&page.key).unwrap_or(0);
+        }
 
         let state = SessionState {
             identity: s_state.identity,
             state: s_state.state,
             persistent_keys,
+            persistent_key_norms,
             persistent_values,
             persistent_tokens: s_state.persistent_tokens,
             persistent_capacity: s_state.persistent_capacity,
             persistent_sealed: s_state.persistent_sealed,
             dialogue_keys,
+            dialogue_key_norms,
             dialogue_values,
             dialogue_tokens: s_state.dialogue_tokens,
             dialogue_sequences: s_state.dialogue_sequences,
@@ -1051,6 +1091,7 @@ impl<'a> ChatSession<'a> {
             dialogue_seen: s_state.dialogue_seen,
             current_turn_id: s_state.current_turn_id,
             l2_pages,
+            l2_key_norms,
             l2_cursor: s_state.l2_cursor % L2_PAGE_CAPACITY,
             l2_len: s_state.l2_len.min(L2_PAGE_CAPACITY),
             l2_seen: s_state.l2_seen,

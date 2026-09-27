@@ -38,6 +38,7 @@ pub enum SamplingError {
     AllocationFailed,
     RejectionLimit,
     InvalidDraw,
+    InvalidParameter,
 }
 
 impl fmt::Display for SamplingError {
@@ -52,6 +53,9 @@ impl fmt::Display for SamplingError {
             Self::AllocationFailed => formatter.write_str("cannot allocate top-k token indices"),
             Self::RejectionLimit => formatter.write_str("integer sampler rejection limit reached"),
             Self::InvalidDraw => formatter.write_str("integer sample is outside retained mass"),
+            Self::InvalidParameter => {
+                formatter.write_str("invalid sampling parameter: min_p_q16 exceeds 65536 (1.0)")
+            }
         }
     }
 }
@@ -114,14 +118,7 @@ impl Sampler {
         };
 
         let p_max = probabilities[best];
-        let min_p_threshold = if min_p_q16 > 0 {
-            let high = (p_max >> 16) as u128;
-            let low = (p_max & 0xffff) as u128;
-            let prod = (high * (min_p_q16 as u128)) + ((low * (min_p_q16 as u128)) >> 16);
-            prod as u64
-        } else {
-            0u64
-        };
+        let min_p_threshold = q16_mul_shift_add(p_max, min_p_q16)?;
 
         if (top_k == 0 || top_k >= probabilities.len()) && min_p_threshold == 0 {
             let draw = self.draw_below(PROBABILITY_ONE)?;
@@ -242,6 +239,32 @@ fn select_ticket(
         draw -= mass;
     }
     Err(SamplingError::InvalidDraw)
+}
+
+/// Multiply a 64-bit mass by a Q16 fraction (0..=65536) using strictly bitwise shifts and additions.
+/// Complies strictly with D0-b: zero hardware multiplier (`mul`), divider (`div`), or float instructions.
+#[inline(never)]
+pub fn q16_mul_shift_add(val: u64, factor_q16: u32) -> Result<u64, SamplingError> {
+    if factor_q16 > 65536 {
+        return Err(SamplingError::InvalidParameter);
+    }
+    if factor_q16 == 65536 {
+        return Ok(val);
+    }
+    if factor_q16 == 0 || val == 0 {
+        return Ok(0);
+    }
+    let mut acc: u128 = 0;
+    let mut shifted: u128 = val as u128;
+    let mut bits = factor_q16;
+    while bits > 0 {
+        if bits & 1 != 0 {
+            acc += shifted;
+        }
+        shifted <<= 1;
+        bits >>= 1;
+    }
+    Ok((acc >> 16) as u64)
 }
 
 #[cfg(test)]
@@ -475,5 +498,35 @@ mod tests {
             let token = sampler.select(&probabilities, policy_strict).unwrap();
             assert_eq!(token, 0, "Strict MinP must select only dominant token 0");
         }
+    }
+
+    #[test]
+    fn q16_mul_shift_add_correctness_and_bounds() {
+        assert_eq!(q16_mul_shift_add(1000, 0).unwrap(), 0);
+        assert_eq!(q16_mul_shift_add(1000, 65536).unwrap(), 1000);
+        assert_eq!(q16_mul_shift_add(65536, 32768).unwrap(), 32768);
+        assert_eq!(
+            q16_mul_shift_add(PROBABILITY_ONE, 65536).unwrap(),
+            PROBABILITY_ONE
+        );
+        assert_eq!(
+            q16_mul_shift_add(PROBABILITY_ONE, 32768).unwrap(),
+            PROBABILITY_ONE >> 1
+        );
+        assert_eq!(
+            q16_mul_shift_add(1000, 65537),
+            Err(SamplingError::InvalidParameter)
+        );
+
+        let mut sampler = Sampler::new(42);
+        let probs = [PROBABILITY_ONE];
+        let invalid_policy = SamplePolicy::MinP {
+            top_k: 10,
+            min_p_q16: 70000,
+        };
+        assert_eq!(
+            sampler.select(&probs, invalid_policy),
+            Err(SamplingError::InvalidParameter)
+        );
     }
 }

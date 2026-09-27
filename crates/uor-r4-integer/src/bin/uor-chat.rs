@@ -27,6 +27,7 @@ struct CliArgs {
     system_prompt: Option<String>,
     temperature: f64,
     top_k: usize,
+    min_p: Option<f64>,
     seed: u64,
     read_mode: ReadMode,
     max_tokens: usize,
@@ -40,6 +41,7 @@ impl Default for CliArgs {
             system_prompt: None,
             temperature: 0.0,
             top_k: 16,
+            min_p: None,
             seed: 0,
             read_mode: ReadMode::Enabled,
             max_tokens: 128,
@@ -60,6 +62,7 @@ fn print_usage() {
         "  -t, --temperature <FLOAT>   Sampling temperature (0.0 = greedy, >0.0 = categorical)"
     );
     eprintln!("  -k, --top-k <INT>           Top-K candidate cutoff (default: 16)");
+    eprintln!("  -p, --min-p <FLOAT>         Min-P truncation threshold in [0.0, 1.0] (e.g. 0.05)");
     eprintln!(
         "      --seed <INT>            PRNG seed for integer categorical sampler (default: 0)"
     );
@@ -141,6 +144,28 @@ fn parse_cli_args() -> CliArgs {
                     }
                 } else {
                     eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--top-k'");
+                    process::exit(1);
+                }
+            }
+            "-p" | "--min-p" => {
+                idx += 1;
+                if idx < raw.len() {
+                    if let Ok(val) = raw[idx].parse::<f64>() {
+                        if !(0.0..=1.0).contains(&val) {
+                            eprintln!(
+                                "{ANSI_RED_BOLD}error:{ANSI_RESET} min-p must be in range [0.0, 1.0]"
+                            );
+                            process::exit(1);
+                        }
+                        args.min_p = Some(val);
+                    } else {
+                        eprintln!(
+                            "{ANSI_RED_BOLD}error:{ANSI_RESET} invalid float value for '--min-p'"
+                        );
+                        process::exit(1);
+                    }
+                } else {
+                    eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--min-p'");
                     process::exit(1);
                 }
             }
@@ -584,7 +609,13 @@ fn main() {
         }
     };
 
-    let policy = if cli.temperature <= 0.0 {
+    let policy = if let Some(min_p) = cli.min_p {
+        let min_p_q16 = (min_p * 65536.0).round() as u32;
+        SamplePolicy::MinP {
+            top_k: cli.top_k,
+            min_p_q16,
+        }
+    } else if cli.temperature <= 0.0 {
         SamplePolicy::Greedy
     } else {
         SamplePolicy::Categorical { top_k: cli.top_k }

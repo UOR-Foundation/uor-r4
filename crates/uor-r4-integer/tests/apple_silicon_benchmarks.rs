@@ -24,49 +24,6 @@ fn get_process_rss_mb() -> Option<f64> {
     Some(rss_kib / 1024.0)
 }
 
-fn get_live_chatbot_rss_mb() -> f64 {
-    let bin_candidates = [
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/release/uor-chat"),
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/uor-chat"),
-        Path::new("/Users/casey.allard/uor-r4/target/release/uor-chat").to_path_buf(),
-    ];
-    for bin in &bin_candidates {
-        if bin.exists() {
-            let mut child = match Command::new(bin)
-                .args(["--bundle", "synthetic"])
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            if let Some(mut stdin) = child.stdin.take() {
-                use std::io::Write;
-                let _ = stdin.write_all(b"/stats\n/quit\n");
-            }
-            if let Ok(output) = child.wait_with_output() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                for line in stdout.lines() {
-                    if line.contains("Process RSS") {
-                        if let Some(pos) = line.find(':') {
-                            let rest = &line[pos + 1..];
-                            if let Some(mb_pos) = rest.find("MB") {
-                                let num_str = rest[..mb_pos].trim();
-                                if let Ok(val) = num_str.parse::<f64>() {
-                                    return val;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    get_process_rss_mb().unwrap_or(9.5)
-}
-
 #[test]
 fn test_m5_apple_silicon_peak_rss_under_35mb() {
     let _guard = BENCH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -80,20 +37,14 @@ fn test_m5_apple_silicon_peak_rss_under_35mb() {
         let token = 7 + (i % 250) as u32;
         let _ = session.step_stream(token, &mut pending);
     }
-    let live_rss = get_live_chatbot_rss_mb();
-    let process_rss = get_process_rss_mb().unwrap_or(live_rss);
-    let measured_rss = if process_rss < 35.0 {
-        process_rss
-    } else {
-        live_rss
-    };
+    let measured_rss = get_process_rss_mb().expect("process rss query");
     println!(
         "T1_F13_TC02: Generation RSS at 128 tokens = {:.2} MB (Ceiling: 35.0 MB)",
         measured_rss
     );
     assert!(
         measured_rss < 35.0,
-        "Process RSS {:.2} MB exceeds 35.0 MB ceiling",
+        "Peak RSS {:.2} MB exceeds 35.0 MB ceiling",
         measured_rss
     );
 
@@ -102,11 +53,7 @@ fn test_m5_apple_silicon_peak_rss_under_35mb() {
         let token = 7 + (i % 250) as u32;
         let _ = session.step_stream(token, &mut pending);
     }
-    let measured_rss_1000 = if process_rss < 35.0 {
-        process_rss
-    } else {
-        live_rss
-    };
+    let measured_rss_1000 = get_process_rss_mb().expect("process rss query");
     println!(
         "T1_F13_TC02: Generation RSS at 1000 tokens = {:.2} MB (Ceiling: 35.0 MB)",
         measured_rss_1000
@@ -194,6 +141,7 @@ fn test_m5_apple_silicon_latency_percentiles_p50_p90_p99() {
     let bundle = Bundle::create_test_bundle_with_byte_vocab();
     let num_tokens = 128;
 
+    let pre_rss = get_process_rss_mb().unwrap_or(0.0);
     let mut latencies_us = run_apple_silicon_latency_pass(&bundle, num_tokens, 42);
     let mut best_latencies_us = latencies_us.clone();
     let mut best_p99_ms = f64::MAX;
@@ -237,7 +185,9 @@ fn test_m5_apple_silicon_latency_percentiles_p50_p90_p99() {
     let p95_ms = latencies_us[p95_idx] / 1000.0;
     let p99_idx = (num_tokens as f64 * 0.99).min((num_tokens - 1) as f64) as usize;
     let p99_ms = latencies_us[p99_idx] / 1000.0;
-    let peak_rss = get_live_chatbot_rss_mb();
+    let post_rss = get_process_rss_mb().unwrap_or(pre_rss);
+    let peak_rss = post_rss.max(pre_rss);
+    let long_growth_mb = (post_rss - pre_rss).max(0.0);
 
     println!(
         "T1_F13_TC03: Latency percentiles over {} tokens: min = {:.3} ms, p50 = {:.3} ms, p90 = {:.3} ms, p95 = {:.3} ms, p99 = {:.3} ms, max = {:.3} ms",
@@ -246,8 +196,17 @@ fn test_m5_apple_silicon_latency_percentiles_p50_p90_p99() {
 
     // Emit structured telemetry line for runner ingestion
     println!(
-        r#"[TELEMETRY] {{"tokens": {}, "avg_ms": {:.4}, "min_ms": {:.4}, "p50_ms": {:.4}, "p90_ms": {:.4}, "p95_ms": {:.4}, "p99_ms": {:.4}, "max_ms": {:.4}, "peak_rss_mb": {:.2}, "long_growth_mb": 0.0000}}"#,
-        num_tokens, avg_ms, min_ms, p50_ms, p90_ms, p95_ms, p99_ms, max_ms, peak_rss
+        r#"[TELEMETRY] {{"tokens": {}, "avg_ms": {:.4}, "min_ms": {:.4}, "p50_ms": {:.4}, "p90_ms": {:.4}, "p95_ms": {:.4}, "p99_ms": {:.4}, "max_ms": {:.4}, "peak_rss_mb": {:.2}, "long_growth_mb": {:.4}}}"#,
+        num_tokens,
+        avg_ms,
+        min_ms,
+        p50_ms,
+        p90_ms,
+        p95_ms,
+        p99_ms,
+        max_ms,
+        peak_rss,
+        long_growth_mb
     );
 
     assert!(
@@ -341,15 +300,10 @@ fn test_m5_apple_silicon_steady_state_memory_stability() {
         "Memory leak detected: {:.2} MB growth",
         growth
     );
-    let final_check = if rss_final < 35.0 {
-        rss_final
-    } else {
-        get_live_chatbot_rss_mb()
-    };
     assert!(
-        final_check < 35.0,
+        rss_final < 35.0,
         "Final RSS {:.2} MB exceeds 35.0 MB ceiling",
-        final_check
+        rss_final
     );
 }
 
@@ -409,8 +363,9 @@ fn test_m5_score_token_salience_hardened_unclamped_keys() {
     let score_mixed = score_token_salience(b'A' as u32, &mixed_key);
     assert_eq!(score_mixed, 82_767);
 
-    // 5. Special/role tokens stay deeply penalized even with extreme keys
+    // 5. Delimiter tokens (BOS 0, EOS 1, role tokens <= 6) stay deeply penalized even with extreme keys
     assert_eq!(score_token_salience(0, &unclamped_max_key), -1_000_000);
+    assert_eq!(score_token_salience(1, &unclamped_max_key), -1_000_000);
     assert_eq!(score_token_salience(6, &unclamped_max_key), -1_000_000);
 
     // 6. Whitespace penalty with extreme keys

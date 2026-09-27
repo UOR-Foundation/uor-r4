@@ -138,3 +138,76 @@ fn test_cross_lab_lorentz_causal_nll_advantage() {
         "Lorentz memory read must provide positive causal predictive benefit"
     );
 }
+
+#[test]
+fn test_cross_lab_lorentz_conversational_step() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let model_path = manifest_dir.join(LORENTZ_MODEL_PATH);
+    let tables_path = manifest_dir.join(TABLES_PATH);
+
+    if !model_path.exists() || !tables_path.exists() {
+        eprintln!("Skipping: lorentz packet not present at {model_path:?}");
+        return;
+    }
+
+    let model = IntegerModel::load_with_tables(&model_path, &tables_path)
+        .expect("must load qat-lorentzflat_s1 with arcosh tables");
+
+    assert_eq!(model.config().read_geometry, ReadGeometry::Lorentz);
+    assert_eq!(model.config().width, 128);
+
+    let mut session = model.new_conversational_session();
+
+    // 1. Persistent persona ingestion
+    model
+        .step_conversational_into(
+            &mut session,
+            42,
+            uor_r4_integer::SlotTarget::Persistent,
+            ReadMode::Enabled,
+        )
+        .expect("step persistent persona with Lorentz model");
+    assert_eq!(session.persistent_len(), 1);
+    assert_eq!(session.persistent_key_norms.len(), 1);
+    assert!(
+        session.persistent_key_norms[0] > 0,
+        "Lorentz key norm must be positive"
+    );
+
+    session.seal_persistent();
+    assert!(session.is_persistent_sealed());
+
+    // 2. Dialogue slot step
+    session.start_turn();
+    model
+        .step_conversational_into(
+            &mut session,
+            100,
+            uor_r4_integer::SlotTarget::Dialogue,
+            ReadMode::Enabled,
+        )
+        .expect("step dialogue turn with Lorentz model");
+    assert_eq!(session.dialogue_len(), 1);
+    assert!(
+        session.dialogue_key_norms[0] > 0,
+        "Lorentz dialogue key norm must be positive"
+    );
+
+    // 3. Probabilities validity
+    let p_sum: u64 = session.last_probabilities()[..model.config().vocab_size]
+        .iter()
+        .sum();
+    assert_eq!(p_sum, TOTAL, "probabilities must sum to 1.0 (TOTAL)");
+
+    // 4. NoRead step on Lorentz model in conversational mode
+    model
+        .step_conversational_into(
+            &mut session,
+            105,
+            uor_r4_integer::SlotTarget::Dialogue,
+            ReadMode::NoRead,
+        )
+        .expect("step dialogue NoRead with Lorentz model");
+    assert_eq!(session.last_no_read_mass(), TOTAL);
+    assert!(session.last_read_masses().iter().all(|&m| m == 0));
+}

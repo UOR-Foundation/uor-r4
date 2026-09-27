@@ -248,6 +248,7 @@ pub struct SessionState {
 
     // --- Persistent Session Partition (Slots 0..32) ---
     pub persistent_keys: Vec<[i32; KEY_DIM]>,
+    pub persistent_key_norms: Vec<i128>,
     pub persistent_values: Vec<[i32; VAL_DIM]>,
     pub persistent_tokens: Vec<u32>,
     pub persistent_capacity: usize,
@@ -255,6 +256,7 @@ pub struct SessionState {
 
     // --- Rolling Dialogue Partition (Slots 32..256 = 224 slots) ---
     pub dialogue_keys: Box<[[i32; KEY_DIM]; DIALOGUE_CAPACITY]>,
+    pub dialogue_key_norms: Box<[i128; DIALOGUE_CAPACITY]>,
     pub dialogue_values: Box<[[i32; VAL_DIM]; DIALOGUE_CAPACITY]>,
     pub dialogue_tokens: Vec<u32>,
     pub dialogue_sequences: Vec<u64>,
@@ -267,6 +269,7 @@ pub struct SessionState {
 
     // --- L2 Prime Paging Store (64 pages) ---
     pub l2_pages: Box<[L2PrimePage; L2_PAGE_CAPACITY]>,
+    pub l2_key_norms: Box<[i128; L2_PAGE_CAPACITY]>,
     pub l2_cursor: usize,
     pub l2_len: usize,
     pub l2_seen: u64,
@@ -781,8 +784,9 @@ pub fn compute_turn_prime_signature(
     }
 }
 
-/// Heuristic token salience scoring for L2 compression.
-/// Zero multipliers, zero dividers, zero floats.
+/// Representation-grounded token salience scoring for L2 compression.
+/// Uses geometric Key L1 energy across the 64-dimensional key vector.
+/// Strictly 0 multipliers, 0 dividers, 0 floats.
 #[inline(always)]
 pub fn score_token_salience(token: u32, key: &[i32; KEY_DIM]) -> i32 {
     let mut score = 0i32;
@@ -2030,6 +2034,10 @@ impl IntegerModel {
             .into_boxed_slice()
             .try_into()
             .unwrap_or_else(|_| panic!("dialogue_keys size mismatch"));
+        let dialogue_key_norms = vec![0i128; DIALOGUE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("dialogue_key_norms size mismatch"));
         let dialogue_values = vec![[0i32; VAL_DIM]; DIALOGUE_CAPACITY]
             .into_boxed_slice()
             .try_into()
@@ -2038,6 +2046,10 @@ impl IntegerModel {
             .into_boxed_slice()
             .try_into()
             .unwrap_or_else(|_| panic!("l2_pages size mismatch"));
+        let l2_key_norms = vec![0i128; L2_PAGE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("l2_key_norms size mismatch"));
         let last_probabilities = vec![0u64; 4096]
             .into_boxed_slice()
             .try_into()
@@ -2047,11 +2059,13 @@ impl IntegerModel {
             identity: self.identity.clone(),
             state: vec![0; self.config.width],
             persistent_keys: Vec::with_capacity(PERSISTENT_CAPACITY),
+            persistent_key_norms: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_values: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_tokens: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_capacity: PERSISTENT_CAPACITY,
             persistent_sealed: false,
             dialogue_keys,
+            dialogue_key_norms,
             dialogue_values,
             dialogue_tokens: vec![0; DIALOGUE_CAPACITY],
             dialogue_sequences: vec![0; DIALOGUE_CAPACITY],
@@ -2062,6 +2076,7 @@ impl IntegerModel {
             dialogue_seen: 0,
             current_turn_id: 0,
             l2_pages,
+            l2_key_norms,
             l2_cursor: 0,
             l2_len: 0,
             l2_seen: 0,
@@ -2776,11 +2791,9 @@ impl IntegerModel {
         if session.identity != self.identity {
             return Err(invalid("conversational step identity mismatch"));
         }
-        // Partitioned conversational memory stores full-width values and scores
-        // keys by the dot read; a Lorentz or width-128 model uses `step`.
-        if self.lorentz.is_some() || self.config.width != VAL_DIM {
+        if self.config.width != VAL_DIM && self.config.width != 128 {
             return Err(invalid(
-                "conversational sessions serve only the width-256 dot-read shape",
+                "conversational sessions serve width-256 or width-128 models",
             ));
         }
         if token as usize >= self.config.vocab_size {
@@ -2921,153 +2934,217 @@ impl IntegerModel {
                 &fallback_age
             };
 
-            // Precompute query coordinate product tables on stack (64 x 16 i64 = 8 KB).
-            let mut query_products = [[0i64; 16]; KEY_DIM];
-            for d in 0..KEY_DIM {
-                query_products[d] = build_coord_products(query[d]);
-            }
+            let hyperbolic = match &self.lorentz {
+                Some(read) => Some((read, lorentz::squared_norm(&query)?, self.arcosh()?)),
+                None => None,
+            };
 
             let mut scores = [0i32; MAX_SCORES_CAPACITY];
             scores[0] = null;
             let mut score_count = 1;
 
-            // A. Persistent session slots: zero age decay (fixed to age[0]), tiled by 4
-            let n_sys_chunks = n_sys >> 2;
-            for c in 0..n_sys_chunks {
-                let base = c << 2;
-                let (d0, d1, d2, d3) = memory_dot_product_4x(
-                    &query_products,
-                    &session.persistent_keys[base],
-                    &session.persistent_keys[base + 1],
-                    &session.persistent_keys[base + 2],
-                    &session.persistent_keys[base + 3],
-                );
-                scores[score_count] = scale_and_quantize_score(d0, age[0]);
-                scores[score_count + 1] = scale_and_quantize_score(d1, age[0]);
-                scores[score_count + 2] = scale_and_quantize_score(d2, age[0]);
-                scores[score_count + 3] = scale_and_quantize_score(d3, age[0]);
-                score_count += 4;
-            }
-            for key in &session.persistent_keys[(n_sys_chunks << 2)..n_sys] {
-                let d = memory_dot_product_1x(&query_products, key);
-                scores[score_count] = scale_and_quantize_score(d, age[0]);
-                score_count += 1;
-            }
+            if let Some((read, query_norm, table)) = hyperbolic {
+                // A. Persistent session slots: zero age decay (fixed to age[0])
+                for idx in 0..n_sys {
+                    let key = &session.persistent_keys[idx];
+                    let mut dot = 0i128;
+                    for (&q, &k) in query.iter().zip(key) {
+                        dot += product(i128::from(q), i128::from(k))?;
+                    }
+                    let key_norm = *session
+                        .persistent_key_norms
+                        .get(idx)
+                        .ok_or_else(|| invalid("missing Lorentz persistent key norm"))?;
+                    let raw = read.score(query_norm, key_norm, dot, table, WORK_BITS)?;
+                    let score = raw + age[0];
+                    scores[score_count] = quantize(score, WORK_BITS, 8)?;
+                    score_count += 1;
+                }
 
-            // B. Dialogue slots: relative age with horizon clamp, tiled by 4 across active slots only
-            let n_dial_chunks = n_dial >> 2;
-            for c in 0..n_dial_chunks {
-                let base = c << 2;
-                let (d0, d1, d2, d3) = memory_dot_product_4x(
-                    &query_products,
-                    &session.dialogue_keys[base],
-                    &session.dialogue_keys[base + 1],
-                    &session.dialogue_keys[base + 2],
-                    &session.dialogue_keys[base + 3],
-                );
+                // B. Dialogue slots: relative age with horizon clamp
+                for idx in 0..n_dial {
+                    let key = &session.dialogue_keys[idx];
+                    let mut dot = 0i128;
+                    for (&q, &k) in query.iter().zip(key) {
+                        dot += product(i128::from(q), i128::from(k))?;
+                    }
+                    let key_norm = session.dialogue_key_norms[idx];
+                    let raw = read.score(query_norm, key_norm, dot, table, WORK_BITS)?;
+                    let delta = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.dialogue_sequences[idx]);
+                    let age_idx = (delta as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    let score = raw + age[age_idx];
+                    scores[score_count] = quantize(score, WORK_BITS, 8)?;
+                    score_count += 1;
+                }
 
-                let delta0 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.dialogue_sequences[base]);
-                let age_idx0 = (delta0 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
+                // C. L2 Prime Pages: relative age with horizon clamp
+                for idx in 0..n_page {
+                    let key = &session.l2_pages[idx].key;
+                    let mut dot = 0i128;
+                    for (&q, &k) in query.iter().zip(key) {
+                        dot += product(i128::from(q), i128::from(k))?;
+                    }
+                    let key_norm = session.l2_key_norms[idx];
+                    let raw = read.score(query_norm, key_norm, dot, table, WORK_BITS)?;
+                    let delta = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.l2_pages[idx].end_seq as u64);
+                    let age_idx = (delta as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    let score = raw + age[age_idx];
+                    scores[score_count] = quantize(score, WORK_BITS, 8)?;
+                    score_count += 1;
+                }
+            } else {
+                // Precompute query coordinate product tables on stack (64 x 16 i64 = 8 KB).
+                let mut query_products = [[0i64; 16]; KEY_DIM];
+                for d in 0..KEY_DIM {
+                    query_products[d] = build_coord_products(query[d]);
+                }
 
-                let delta1 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.dialogue_sequences[base + 1]);
-                let age_idx1 = (delta1 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
+                // A. Persistent session slots: zero age decay (fixed to age[0]), tiled by 4
+                let n_sys_chunks = n_sys >> 2;
+                for c in 0..n_sys_chunks {
+                    let base = c << 2;
+                    let (d0, d1, d2, d3) = memory_dot_product_4x(
+                        &query_products,
+                        &session.persistent_keys[base],
+                        &session.persistent_keys[base + 1],
+                        &session.persistent_keys[base + 2],
+                        &session.persistent_keys[base + 3],
+                    );
+                    scores[score_count] = scale_and_quantize_score(d0, age[0]);
+                    scores[score_count + 1] = scale_and_quantize_score(d1, age[0]);
+                    scores[score_count + 2] = scale_and_quantize_score(d2, age[0]);
+                    scores[score_count + 3] = scale_and_quantize_score(d3, age[0]);
+                    score_count += 4;
+                }
+                for key in &session.persistent_keys[(n_sys_chunks << 2)..n_sys] {
+                    let d = memory_dot_product_1x(&query_products, key);
+                    scores[score_count] = scale_and_quantize_score(d, age[0]);
+                    score_count += 1;
+                }
 
-                let delta2 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.dialogue_sequences[base + 2]);
-                let age_idx2 = (delta2 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
+                // B. Dialogue slots: relative age with horizon clamp, tiled by 4 across active slots only
+                let n_dial_chunks = n_dial >> 2;
+                for c in 0..n_dial_chunks {
+                    let base = c << 2;
+                    let (d0, d1, d2, d3) = memory_dot_product_4x(
+                        &query_products,
+                        &session.dialogue_keys[base],
+                        &session.dialogue_keys[base + 1],
+                        &session.dialogue_keys[base + 2],
+                        &session.dialogue_keys[base + 3],
+                    );
 
-                let delta3 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.dialogue_sequences[base + 3]);
-                let age_idx3 = (delta3 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
-                score_count += 4;
-            }
+                    let delta0 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.dialogue_sequences[base]);
+                    let age_idx0 = (delta0 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
 
-            for idx in (n_dial_chunks << 2)..n_dial {
-                let d = memory_dot_product_1x(&query_products, &session.dialogue_keys[idx]);
-                let delta = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.dialogue_sequences[idx]);
-                let age_idx = (delta as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
-                score_count += 1;
-            }
+                    let delta1 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.dialogue_sequences[base + 1]);
+                    let age_idx1 = (delta1 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
 
-            // C. L2 Prime Pages: relative age with horizon clamp, tiled by 4 across active pages only
-            let n_page_chunks = n_page >> 2;
-            for c in 0..n_page_chunks {
-                let base = c << 2;
-                let (d0, d1, d2, d3) = memory_dot_product_4x(
-                    &query_products,
-                    &session.l2_pages[base].key,
-                    &session.l2_pages[base + 1].key,
-                    &session.l2_pages[base + 2].key,
-                    &session.l2_pages[base + 3].key,
-                );
+                    let delta2 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.dialogue_sequences[base + 2]);
+                    let age_idx2 = (delta2 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
 
-                let delta0 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.l2_pages[base].end_seq as u64);
-                let age_idx0 = (delta0 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
+                    let delta3 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.dialogue_sequences[base + 3]);
+                    let age_idx3 = (delta3 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
+                    score_count += 4;
+                }
 
-                let delta1 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.l2_pages[base + 1].end_seq as u64);
-                let age_idx1 = (delta1 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
+                for idx in (n_dial_chunks << 2)..n_dial {
+                    let d = memory_dot_product_1x(&query_products, &session.dialogue_keys[idx]);
+                    let delta = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.dialogue_sequences[idx]);
+                    let age_idx = (delta as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
+                    score_count += 1;
+                }
 
-                let delta2 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.l2_pages[base + 2].end_seq as u64);
-                let age_idx2 = (delta2 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
+                // C. L2 Prime Pages: relative age with horizon clamp, tiled by 4 across active pages only
+                let n_page_chunks = n_page >> 2;
+                for c in 0..n_page_chunks {
+                    let base = c << 2;
+                    let (d0, d1, d2, d3) = memory_dot_product_4x(
+                        &query_products,
+                        &session.l2_pages[base].key,
+                        &session.l2_pages[base + 1].key,
+                        &session.l2_pages[base + 2].key,
+                        &session.l2_pages[base + 3].key,
+                    );
 
-                let delta3 = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.l2_pages[base + 3].end_seq as u64);
-                let age_idx3 = (delta3 as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
-                score_count += 4;
-            }
+                    let delta0 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.l2_pages[base].end_seq as u64);
+                    let age_idx0 = (delta0 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
 
-            for idx in (n_page_chunks << 2)..n_page {
-                let d = memory_dot_product_1x(&query_products, &session.l2_pages[idx].key);
-                let delta = session
-                    .dialogue_seen
-                    .saturating_sub(1 + session.l2_pages[idx].end_seq as u64);
-                let age_idx = (delta as usize)
-                    .min(age.len().saturating_sub(1))
-                    .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
-                score_count += 1;
+                    let delta1 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.l2_pages[base + 1].end_seq as u64);
+                    let age_idx1 = (delta1 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
+
+                    let delta2 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.l2_pages[base + 2].end_seq as u64);
+                    let age_idx2 = (delta2 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
+
+                    let delta3 = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.l2_pages[base + 3].end_seq as u64);
+                    let age_idx3 = (delta3 as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
+                    score_count += 4;
+                }
+
+                for idx in (n_page_chunks << 2)..n_page {
+                    let d = memory_dot_product_1x(&query_products, &session.l2_pages[idx].key);
+                    let delta = session
+                        .dialogue_seen
+                        .saturating_sub(1 + session.l2_pages[idx].end_seq as u64);
+                    let age_idx = (delta as usize)
+                        .min(age.len().saturating_sub(1))
+                        .min(session.age_horizon_clamp);
+                    scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
+                    score_count += 1;
+                }
             }
 
             all_masses.fill(0);
@@ -3160,17 +3237,18 @@ impl IntegerModel {
             no_read
         };
 
+        let in_dim = width * 2;
         let mut concat_buf = [0i32; 512];
         concat_buf[..width].copy_from_slice(&provisional[..width]);
-        concat_buf[width..width + width].copy_from_slice(&read[..width]);
-        fill_low_bit_products(&concat_buf, &mut scratch_products[..512]);
+        concat_buf[width..in_dim].copy_from_slice(&read[..width]);
+        fill_low_bit_products(&concat_buf[..in_dim], &mut scratch_products[..in_dim]);
 
         let mut update_raw = [0i32; 256];
         self.affine_direct_into(
-            &scratch_products[..512],
+            &scratch_products[..in_dim],
             &self.p_update,
             &self.update_bias,
-            512,
+            in_dim,
             STATE_BITS,
             &mut update_raw[..width],
         )?;
@@ -3181,10 +3259,10 @@ impl IntegerModel {
 
         let mut update_gate_raw = [0i32; 1];
         self.affine_direct_into(
-            &scratch_products[..512],
+            &scratch_products[..in_dim],
             &self.p_update_gate,
             &self.update_gate_bias,
-            512,
+            in_dim,
             STATE_BITS,
             &mut update_gate_raw,
         )?;
@@ -3198,14 +3276,17 @@ impl IntegerModel {
             &mut state[..width],
         )?;
 
-        fill_low_bit_products(&state[..width], &mut scratch_products[..width]);
+        let mut copy_buf = [0i32; 512];
+        copy_buf[..width].copy_from_slice(&state[..width]);
+        copy_buf[width..in_dim].copy_from_slice(&read[..width]);
+        fill_low_bit_products(&copy_buf[..in_dim], &mut scratch_products[..in_dim]);
 
         let mut copy_gate_raw = [0i32; 1];
         self.affine_direct_into(
-            &scratch_products[..512],
+            &scratch_products[..in_dim],
             &self.p_copy_gate,
             &self.copy_gate_bias,
-            512,
+            in_dim,
             STATE_BITS,
             &mut copy_gate_raw,
         )?;
@@ -3232,10 +3313,10 @@ impl IntegerModel {
             &self.read_value_bias,
             width,
             10,
-            &mut value_raw,
+            &mut value_raw[..width],
         )?;
         let mut value = [0i32; VAL_DIM];
-        for i in 0..VAL_DIM {
+        for i in 0..width {
             value[i] = self.tables.tanh[(value_raw[i] + 32767) as usize];
         }
 
@@ -3339,6 +3420,13 @@ impl IntegerModel {
                 val_arr.copy_from_slice(&value[..VAL_DIM]);
 
                 session.persistent_keys.push(key_arr);
+                if self.lorentz.is_some() {
+                    session
+                        .persistent_key_norms
+                        .push(lorentz::squared_norm(&key[..KEY_DIM])?);
+                } else {
+                    session.persistent_key_norms.push(0);
+                }
                 session.persistent_values.push(val_arr);
                 session.persistent_tokens.push(token);
             }
@@ -3395,6 +3483,11 @@ impl IntegerModel {
 
                             let p_idx = session.l2_cursor;
                             session.l2_pages[p_idx] = page;
+                            session.l2_key_norms[p_idx] = if self.lorentz.is_some() {
+                                lorentz::squared_norm(&session.l2_pages[p_idx].key)?
+                            } else {
+                                0
+                            };
                             session.l2_cursor = if p_idx + 1 >= L2_PAGE_CAPACITY {
                                 0
                             } else {
@@ -3409,6 +3502,11 @@ impl IntegerModel {
 
                 let idx = session.dialogue_cursor;
                 session.dialogue_keys[idx].copy_from_slice(&key[..KEY_DIM]);
+                session.dialogue_key_norms[idx] = if self.lorentz.is_some() {
+                    lorentz::squared_norm(&key[..KEY_DIM])?
+                } else {
+                    0
+                };
                 session.dialogue_values[idx].copy_from_slice(&value[..VAL_DIM]);
                 session.dialogue_tokens[idx] = token;
                 session.dialogue_sequences[idx] = session.dialogue_seen;
@@ -3436,6 +3534,9 @@ impl IntegerModel {
             d_phase += 2i64 << 30;
         }
         if d_phase == 0 {
+            // When recurrent state coordinates have zero instantaneous fiber change (e.g. synthetic
+            // test fixtures or state plateaus), sequence progression is driven by the primary
+            // T^8 Riemann zeta zero frequency to prevent zero-motion stagnation.
             d_phase = (math::ZETA_FREQUENCIES_Q30[0] as i64) >> 10;
         }
         session.cumulative_holonomy_q30 += d_phase;
@@ -3629,46 +3730,11 @@ impl IntegerModel {
 /// has 32 guard bits.
 #[inline(always)]
 fn normalize_state_into(input: &[i32], out: &mut [i32; 256]) -> Result<()> {
-    if input.len() != 256 {
-        return Err(invalid("integer normalization width must be 256"));
-    }
-    let mut sum = 0u64;
-    for &x in input {
-        let x64 = x as i64;
-        sum += mul_shift_add_i64(x64, x64) as u64;
-    }
-    const EPSILON: u128 = (1u128 << 86) / 100_000 + 1;
-    let variance = (u128::from(sum) << 56) + EPSILON;
-    let denominator = math::isqrt(variance);
-    let d_u64 = denominator as u64;
-    let table = build_div_table_u64(d_u64);
-    for i in 0..256 {
-        let x = input[i];
-        if x == 0 {
-            out[i] = 0;
-        } else {
-            let neg = x < 0;
-            let abs_x = x.unsigned_abs() as u128;
-            let q = fast_div_round_radix16_u64(abs_x << 42, &table, d_u64);
-            let val = if neg { -(q as i32) } else { q as i32 };
-            out[i] = val.clamp(-32767, 32767);
-        }
-    }
-    Ok(())
-}
-
-#[inline(never)]
-fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
     let shift = match input.len() {
         128 => 57,
         256 => 56,
         _ => return Err(invalid("integer normalization width must be 128 or 256")),
     };
-    if input.len() == 256 {
-        let mut output = [0i32; 256];
-        normalize_state_into(input, &mut output)?;
-        return Ok(output.to_vec());
-    }
     let mut sum = 0u64;
     for &x in input {
         let x64 = x as i64;
@@ -3679,7 +3745,6 @@ fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
     let denominator = math::isqrt(variance);
     let d_u64 = denominator as u64;
     let table = build_div_table_u64(d_u64);
-    let mut out = vec![0i32; input.len()];
     for i in 0..input.len() {
         let x = input[i];
         if x == 0 {
@@ -3692,7 +3757,17 @@ fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
             out[i] = val.clamp(-32767, 32767);
         }
     }
-    Ok(out)
+    if input.len() < 256 {
+        out[input.len()..].fill(0);
+    }
+    Ok(())
+}
+
+#[inline(never)]
+fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
+    let mut output = [0i32; 256];
+    normalize_state_into(input, &mut output)?;
+    Ok(output[..input.len()].to_vec())
 }
 
 #[inline(always)]

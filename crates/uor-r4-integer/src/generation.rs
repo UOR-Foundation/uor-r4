@@ -19,6 +19,11 @@ pub enum Selection {
         top_k: usize,
         seed: u64,
     },
+    MinP {
+        top_k: usize,
+        min_p_q16: u32,
+        seed: u64,
+    },
 }
 fn read_enabled() -> ReadMode {
     ReadMode::Enabled
@@ -360,6 +365,11 @@ impl<'a> TextSession<'a> {
         let (policy, seed) = match selection {
             Selection::Greedy => (SamplePolicy::Greedy, 0),
             Selection::Categorical { top_k, seed } => (SamplePolicy::Categorical { top_k }, seed),
+            Selection::MinP {
+                top_k,
+                min_p_q16,
+                seed,
+            } => (SamplePolicy::MinP { top_k, min_p_q16 }, seed),
         };
         let mut sampler = Sampler::new(seed);
         let mut generated = Vec::new();
