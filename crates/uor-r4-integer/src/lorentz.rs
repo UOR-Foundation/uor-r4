@@ -43,7 +43,11 @@ pub(crate) const ARCOSH_ANCHORS: [(usize, u32); 3] = [
 /// round(2^60 ln 2), a fixed offline constant.
 const LN2_Q60: i128 = 799_144_290_325_165_979;
 /// The learned scale must stay below 2^31, so that every score product fits.
+/// Octaves above this are refused before expansion; the result is then
+/// checked against the limit itself, since octave 31 still reaches 2^31.5.
 const MAXIMUM_SCALE_OCTAVE: i128 = 31;
+/// 2^31 at Q32: the first refused scale.
+const SCALE_LIMIT_Q32: i128 = 1 << 63;
 const GUARD_BITS: i32 = 24;
 const UNIT: i128 = 1 << 16;
 /// Fraction bits of the score product: a Q32 scale times a Q24 difference.
@@ -151,7 +155,11 @@ pub fn exp_q32(code: i128, exponent: i32) -> Result<i128> {
         }
         sum += term;
     }
-    arithmetic(math::scale_pow2(sum, octaves as i32 - 28))
+    let scale = arithmetic(math::scale_pow2(sum, octaves as i32 - 28))?;
+    if scale >= SCALE_LIMIT_Q32 {
+        return Err(invalid("Lorentz read scale reaches 2^31"));
+    }
+    Ok(scale)
 }
 
 /// The learned Lorentz read constants, fixed at load from the packed codes.
@@ -275,6 +283,11 @@ mod tests {
         assert_eq!(exp_q32(-1, 0)?, 1_580_030_169);
         assert!(exp_q32(22, 0).is_err());
         assert_eq!(exp_q32(-100, 0)?, 0);
+        // The limit is the scale itself, not its rounded octave: 31 ln 2 is
+        // 5500.82 at exponent -8, and 21.75 rounds to octave 31 but exceeds it.
+        assert!(exp_q32(5500, -8)? < 1 << 63);
+        assert!(exp_q32(5501, -8).is_err());
+        assert!(LorentzRead::new((87, -2), (0, 0)).is_err());
         let read = LorentzRead::new((0, 0), (5, -1))?;
         assert_eq!(read.scale_q32, 1 << 32);
         assert_eq!(read.offset_q24, 5 << 23);

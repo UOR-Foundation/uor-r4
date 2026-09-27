@@ -27,7 +27,9 @@
 //! windows, and the parent's hashes are recorded.
 //!
 //! `init=MODEL_DIR` fine-tunes a saved float model (its configuration must match
-//! the arguments) with a fresh optimizer and a separate window stream.
+//! the arguments) with a fresh optimizer and a separate window stream. To
+//! resume an interrupted fine-tune, repeat its `init=` and `quantize_ramp=`
+//! with `resume=`: the checkpoint supplies the weights, optimizer and ramp clock.
 //! `quantize_ramp=N` trains with the packed format's frozen dyadic scales,
 //! calibrated once on the starting weights: straight-through fake quantization
 //! whose strength ramps to full over N updates, the hard path in every
@@ -218,9 +220,11 @@ fn settings(args: &Args) -> Result<Settings> {
         quantize_ramp: args.number("quantize_ramp", 0)?,
         config,
     };
-    if settings.init.is_some() && (settings.flat_lorentz_start || settings.resume.is_some()) {
+    // A resumed fine-tune repeats its init= and quantize_ramp=; the checkpoint
+    // supplies the weights, and the settings bind the parent and window stream.
+    if settings.init.is_some() && settings.flat_lorentz_start {
         return Err(invalid(
-            "init starts from saved weights: lorentz_start and resume do not apply",
+            "init starts from saved weights: lorentz_start does not apply",
         ));
     }
     if settings.batch == 0

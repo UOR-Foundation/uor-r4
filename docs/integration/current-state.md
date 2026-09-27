@@ -71,6 +71,9 @@ track does not change the work card below.
     256 it wins by 0.051–0.061.
   - `uor-r4-integer` now serves the Lorentz read. The Dot contract, tables and
     arithmetic are unchanged.
+  - The Lorentz read adds two learned signed 16-bit scalars (log β and δ) beside
+    the ≤4-bit weight maps, plus a Q32 scale derived at load. They are not 4-bit
+    parameters; whether D10 admits them awaits the owner's clarification.
   - After 300 quantization-aware updates, 4-bit integer serving is within 0.035
     nats of equal float fine-tunes and keeps the Lorentz advantage (−0.062 and
     −0.059 nats)

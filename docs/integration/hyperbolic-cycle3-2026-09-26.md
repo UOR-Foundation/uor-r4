@@ -403,6 +403,7 @@ Added later on 2026-09-26 (cycle 3b). **Measured** unless labelled. The numbers 
 - **Contract.** A Lorentz model binds `packed_numerical_contract(Lorentz)`: the retained packed contract with a quantized Lorentz read declaration, one definition shared by training and the runtime. The Dot contract, the retained table files, Dot model identities and the Dot arithmetic are unchanged.
 - **Training side.**
   - The two scalars quantize as signed 16-bit codes with one frozen scale each, like the other additive parameters.
+  - *Precision, stated explicitly.* A Lorentz model thus carries two learned signed 16-bit scalars (log β and δ) beside its ≤4-bit weight maps, and the kernel derives a Q32 scale from log β at load. They are not 4-bit parameters. Whether D10's weight-map rule admits them is part of the owner clarification requested by the fourth lab.
   - Quantization, packed export and `load_hard` accept Lorentz models.
   - The table export adds `arcosh.json` and `arcosh.bin` next to the retained tables. A Lorentz model refuses a table root without them; older roots still serve Dot models.
 - **Shapes.** The runtime now also serves width-128 models: normalization divides by the state width. The width-256 arithmetic is unchanged; the parity test reproduces its earlier numbers exactly.
