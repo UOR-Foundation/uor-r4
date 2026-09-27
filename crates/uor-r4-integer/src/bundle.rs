@@ -1056,7 +1056,7 @@ mod tests {
             ),
             (
                 "/conversion_provenance/learned_parameters/0/shape",
-                json!([1]),
+                json!([999]),
             ),
             ("/quantization/completed_step", json!(1026)),
         ] {
