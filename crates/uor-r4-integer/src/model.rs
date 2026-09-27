@@ -3697,7 +3697,6 @@ fn blend_into(state: &[i32], candidate: &[i32], gates: &[i32], out: &mut [i32]) 
     }
     Ok(())
 }
-}
 
 #[inline(never)]
 fn blend(state: &[i32], candidate: &[i32], gates: &[i32]) -> Result<Vec<i32>> {
