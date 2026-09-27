@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model — multi-lab roadmap
 
-**Director:** Claude, Lab 1 window. **Updated:** 2026-09-27 23:55 UTC. This file owns lab
+**Director:** Claude, Lab 1 window. **Updated:** 2026-09-27 23:46 UTC. This file owns lab
 assignments, track status, the dead-path register and the cross-lab protocol. Measured
 results and retained artifacts live in [current state](docs/integration/current-state.md).
 Ordered responsibilities and acceptance live in the [canonical plan](docs/integration/project-track.md).
@@ -162,7 +162,7 @@ Each lab keeps its own subsection current: hypothesis, status, next decision and
 
 **(b) B1: finite-group tracking lanes in the stack** (this window; [#1442](https://github.com/UOR-Foundation/uor-r4/pull/1442), [record](https://github.com/UOR-Foundation/uor-r4/blob/lab/claude/b1-tracking-lanes/docs/integration/b1-finite-group-lanes-2026-09-27.md)).
 
-- **Status at 23:55 UTC 09-27: Stage A PASS.** 36 runs.
+- **Status at 23:43 UTC 09-27: Stage A PASS.** 36 runs.
   - Non-commutative lanes track A5 exactly to length 4,096 after snapping in 17 of 18 runs: quaternion 8/9, reflection pair 9/9. Phase and frozen lanes stay at chance.
   - Quaternion lanes land on 2I; reflection pairs land on the icosahedral rotation group of R³. Both minimise to the same 60-state automaton.
   - **The quaternion-specific serving claim is retired** by the kill rule below. The finite-group state claim survives at Stage A scope.
@@ -407,7 +407,7 @@ savings all remain unqualified.
   - The reads-only `aaaaaa` stack is a transformer comparator, not a main-line candidate (ruling 8).
 - **The single decisive experiment still missing programme-wide** is D5's addressing contest. It is assigned to Lab 2 as T2.
 
-**2026-09-27 23:55 UTC, owner direction: GitHub record and storage.**
+**2026-09-27 23:43 UTC, owner direction: GitHub record and storage.**
 - **Lab 1 delivery:** B1 was committed and pushed at `09e537a4`, draft #1442, with a #973 status report.
 - **Board:** the #820 lab board was created, to be edited in place.
 - **Worktree audit:** posted on #820.
