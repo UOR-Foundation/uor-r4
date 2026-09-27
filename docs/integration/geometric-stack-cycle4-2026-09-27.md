@@ -227,7 +227,7 @@ Development NLL on 64 windows at 250, 500, 750 and 1,000 updates:
 - **The reads-only configuration scored best.** Six read layers (MLP 764) scored 0.057 nats below the `rrarra` stack and 0.215 below the RoPE control.
   - So a stack without recurrent layers also leads the control at this budget.
   - It does not isolate what the recurrence contributes inside `rrarra`: replacing four recurrent layers also changes the MLP width and puts a read at every depth.
-  - Three things distinguish these read layers from the control's attention: the learned per-distance age bias with its ALiBi start, the NoRead slot, and the score. Seed 1 does not separate them.
+  - Three things distinguish these read layers from the control's attention: the learned per-distance age bias with its ALiBi start, the NoRead slot, and the score. The reads-only pair below separates the score from the other two.
 
 **Runs added in response.** Each is justified by the rule above or by the attribution question.
 - A second seed of the Lorentz and Dot stacks.
@@ -250,6 +250,32 @@ Development NLL on 64 windows at 250, 500, 750 and 1,000 updates, seed 2: Lorent
 - This does not transfer cycle 3's result to the stack or refute it. Cycle 3 measured 0.05–0.06 nats in favour of Lorentz in the retained one-layer learner at context 256. One hypothesis, not tested here, is that a deeper stack with MLPs builds the geometry the Lorentz score supplies to a shallow model.
 - The reads-only pair tests the score where every layer is a read.
 
+**Reads-only pair.** Six read layers (MLP 764), no recurrence and no RoPE, otherwise as above.
+
+| Seed | Lorentz | Dot | Lorentz − Dot |
+|---|---:|---:|---:|
+| 1 | 2.5531 | 2.6291 | −0.0760 |
+| 2 | 2.5382 | not run | — |
+
+Development NLL on 64 windows at 250, 500, 750 and 1,000 updates:
+
+| Arm | 250 | 500 | 750 | 1,000 |
+|---|---:|---:|---:|---:|
+| Lorentz, seed 1 | 3.7351 | 3.2036 | 2.8145 | 2.6302 |
+| Dot, seed 1 | 3.8586 | 3.2925 | 2.9047 | 2.7023 |
+| Lorentz, seed 2 | 3.7352 | 3.1695 | 2.8032 | 2.6106 |
+
+- **With every layer a read, the Lorentz score is 0.076 nats better than Dot**, with identical initialization and windows (seed 1). That is above the card's 0.03 threshold.
+  - The lead holds at every evaluation: 0.12, 0.09, 0.09 and 0.07 nats.
+  - Lorentz's second seed lands 0.015 from its first.
+  - There is one Dot seed, so the Dot arm's own seed spread is not measured here. In the full stack it was 0.002.
+- **The score's effect depends on the configuration.** It is not measurable in `rrarra` (±0.021 over two seeds) and is 0.076 when all six mixers are reads. A *Hypothesis*, not tested: the recurrence supplies ordering or recency structure that the Lorentz geometry otherwise gives the reads.
+- **The reads-only lead depended on the score.** With Dot reads, reads-only (2.6291) scores worse than the `rrarra` Dot stack (2.5889, seed 1).
+- **Against the control (2.7680), each arm at its pilot-selected learning rate:**
+  - reads-only Dot leads by 0.139, from what separates the reads from the control's attention apart from the score: the learned age bias with its ALiBi start, the NoRead slot, and no RoPE;
+  - the Lorentz score adds 0.076 on top.
+  - These are configuration comparisons, with the caveats above. The reads-only arms also use the stack's pilot learning rate; their own optimum was not searched.
+
 **Interruptions.** The container restarted twice, found at about 08:22 and 08:40 UTC, each time before the seed-2 pair reached its first checkpoint. The pair restarted from scratch in new report roots, `*_r1` and then `*_r2`; the interrupted roots are kept.
 - The pipeline now resumes any run from its latest checkpoint into a new root.
 - It checkpoints every 50 updates instead of 250. The cadence is outside the resume lineage and changes no computation, since the checkpoint carries the sampler state.
@@ -259,6 +285,7 @@ Development NLL on 64 windows at 250, 500, 750 and 1,000 updates, seed 2: Lorent
 - Training alone took 2,739–3,386 s per arm. The stage ran from 05:58 to 07:42 UTC.
 - The two interrupted seed-2 attempts cost up to 56 minutes of two-arm time and kept no result.
 - The completed seed-2 pair (`*_r2`) took 74.4 min (Lorentz) and 69.6 min (Dot) from claim to seal, with two threads each. It shared the machine with the integer-serving work of §8, and trained at 934 and 999 tokens/s.
+- The reads-only pair took 72.6 min (Dot, seed 1) and 83.9 min (Lorentz, seed 2), with two threads each, at 957 and 828 tokens/s, sharing the machine with builds and benchmarks of the next cycle's code.
 
 ## 8. Integer serving under D10
 

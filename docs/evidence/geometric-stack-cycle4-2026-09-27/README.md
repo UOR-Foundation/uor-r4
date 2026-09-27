@@ -15,6 +15,7 @@ development runs, one seed per arm. Nothing here is a final holdout or a languag
 | `ablation/launch.log` | Source commit, executable identity, learning rate and start/end times of the ablation stage |
 | `ablation-seed2/<arm>/report.json`, `attempt.json`, `manifest.json`, `model/config.json` | The seed-2 Lorentz and Dot stacks (§7), from the completed roots `*_r2`; the two interrupted roots per arm stay outside |
 | `ablation-seed2/chain.log` | The pipeline's launches, exits and restarts, including both container restarts |
+| `ablation-readsonly/<arm>/report.json`, `attempt.json`, `manifest.json`, `model/config.json` | The reads-only pair (§7): Dot with seed 1, Lorentz with seed 2 |
 | `integer/<model>/export/export.json` (with `attempt.json`, `manifest.json`) | Integer serving export (§8): source model and executable identities, the artifact's size and SHA-256, and the quantization errors per matrix and per table of grid codes |
 | `integer/<model>/evaluation/evaluation.json` (with `attempt.json`, `manifest.json`) | The integer engine beside the float model on the 512 final-evaluation windows: NLL per window, bits per byte, top-1 agreement and the engine's speed |
 | `integer/<model>/steps64/evaluation.json` (with `attempt.json`, `manifest.json`) | The engine's step rate alone on 64 of the windows (commit `cb60c8bd`), apart from the f64 scoring loop |
