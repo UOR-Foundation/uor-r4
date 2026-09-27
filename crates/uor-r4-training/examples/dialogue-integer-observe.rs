@@ -941,7 +941,7 @@ fn observe(args: &[PathBuf], source: &str) -> Result<()> {
         &json!({"schema":"uor-r4.native-dialogue576-observation-inputs/1",
         "status":"VALIDATED_BEFORE_FIRST_FORWARD","source_commit":source,"executable_sha256":sha256_file(&std::env::current_exe()?)?,
         "source_sha256":source_hashes(),"cpu_accelerate_compiled":cfg!(feature="cpu-accelerate"),
-        "thread_environment":["RAYON_NUM_THREADS","VECLIB_MAXIMUM_THREADS","OMP_NUM_THREADS","GEMM_NUM_THREADS"].into_iter().map(|k|(k,std::env::var(k).ok())).collect::<BTreeMap<_,_>>(),
+        "thread_environment":(["RAYON_NUM_THREADS","VECLIB_MAXIMUM_THREADS","OMP_NUM_THREADS","GEMM_NUM_THREADS"].into_iter().map(|k|(k,std::env::var(k).ok())).collect::<BTreeMap<_,_>>()),
         "inputs":identities,"historical_parent":provenance,"conversion_provenance":hard["conversion_provenance"],
         "packed_spec_and_scales":hard["quantization"],"bundle_identity":bundle.identity(),"protocol":artifact.protocol(),
         "FF_parameters":ff_parameters,"QF_QQ_parameters":qq_parameters,
