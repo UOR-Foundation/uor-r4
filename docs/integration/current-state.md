@@ -322,6 +322,19 @@ serving and the empty designated local payload intake remain unresolved for
 this lab's target. These reports do not promote a model or change the completed
 fixed dialogue pair.
 
+The [next Claude delta at `c22a97e6`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5856353989)
+now supplies trained GPTQ numerical-retention results. All 33 added/changed
+packet identities and five export/evaluation/parent/data joins match. Integer
+NLL gaps fall 40.5–54.3% relative to nearest, with 115.185 seconds of exports
+including 61.865 seconds of calibration across five models; the complete
+export/reference-evaluation stage spans 31 minutes. These are distinct nested
+costs. No new generated output binds the GPTQ artifacts; existing continuations
+still use nearest. New stack-dialogue source has no trained dialogue packet and
+its EOS/cap controller differs from the native study's short-cycle rule. The
+grouped codec, separate head, D10 arithmetic and unavailable local payloads
+remain distinct. Retain this useful alternative without changing the selected
+child's fixed-grid response-aware integration or choosing a dose from NLL alone.
+
 The separately owned termination-objective study has a
 [source-verified weighted-shard normalization/reporting defect](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852801075)
 at `c54d7801`: shard-normalized weighted losses are combined by equal batch mass,

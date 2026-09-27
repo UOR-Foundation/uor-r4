@@ -194,6 +194,14 @@ serving arithmetic differ from this native path; local payload intake remains
 unavailable. These results inform repair alternatives without changing
 the native target or the child-specific response-aware decision above.
 
+The [trained GPTQ delta at `c22a97e6`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5856353989)
+subsequently reduces those five integer NLL gaps by 40.5–54.3%. Packet and
+parent/data joins are verified, but generated GPTQ replies and local raw
+payloads remain unavailable. Use this as a data-aware conversion alternative,
+with its grouped grids, separate head and D10 arithmetic explicit. It does not
+supersede the native child's observed response losses or justify an additional
+automatic experimental arm.
+
 ## Active programme — learn the model, then harden its execution
 
 [D8](DECISIONS.md#d8--correct-the-training-method-and-reference-ladder) applies the owner's September 24 request to assess and act on the [stuck-point review](stuck-point-review-response-2026-09-24.md). It corrects D7's implementation sequence while preserving its integrated model goal, exact tape, separated admission/ranking, shared operators and ordinary control. D0-b and D4–D6 remain authority. The terminal target is a useful native transformerless geometric model with integer/table serving and per-token parameter sparsity.
