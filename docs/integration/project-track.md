@@ -145,6 +145,17 @@ whole-response recovery and retained relations govern the decision, with prior
 width-256 numerical improvements and source-answer losses preserved. Deeper
 geometric state/read and general prose remain independent programme obligations.
 
+That [code-choice path is now implemented and normalized](dialogue-code-choice-preparation-2026-09-27.md).
+Seventeen focused checks pass. Eight training-only normalization batches use
+9,179 supervised targets with zero updates and select coefficient 29.56681391929494;
+the measured peak is 6.920 GB. One prospectively fixed 512-update alpha run is
+underway, with the original child/grid/context/decoder held fixed. Complete
+cost includes both original 161-response QQ endpoints and the unchanged 58-turn
+native observation. Review all actual replies and source-level tradeoffs before
+retaining a candidate. This run neither introduces selected parameter access
+nor establishes a language or geometric-advantage result; no subsequent dose
+sweep is selected.
+
 The [completed termination-objective review](termination-objective-review-2026-09-27.md)
 parks the implemented weighting condition as INERT. Its three improvements on
 the original 20 failed source rows fall below the declared four, and actual

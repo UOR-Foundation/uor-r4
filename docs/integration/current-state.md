@@ -83,7 +83,22 @@ The next causal implementation is one response-aware choice of legal codes on
 the fixed child grids and complete-prefix population, with dose/resources still
 to be selected before fitting. Actual relation recovery and all-output retention
 govern that decision; the old width-256 rounding result warns that lower
-numerical loss alone does not preserve complete answers. No new alpha fit ran.
+numerical loss alone does not preserve complete answers. That observation
+introduced no new alpha updates.
+
+The [response-aware code-choice implementation](dialogue-code-choice-preparation-2026-09-27.md)
+is now validated at source `34964512`: seventeen focused checks pass and all
+three release binaries are frozen. One no-op negative-fixture mutation was
+corrected without changing production validation. Eight actual training-only
+normalization batches process 9,179 supervised targets with no optimizer updates,
+selecting coefficient 29.56681391929494; complete execution takes 61.107 seconds
+and peak child RSS is 6,919,520,256 bytes. The separately frozen 512-update alpha
+fit is running, with full256 context, unchanged grids, continuation counters
+1,024–1,535 and its own alpha clock. Dose/optimizer/schedule and complete resource
+projection were selected before updates. The same 161-response development
+panel and all 58 actual dialogue turns remain the endpoint; fitted quality is
+not yet available. The [preparation evidence](../evidence/dialogue-code-choice-preparation-2026-09-27.json)
+does not qualify language or selected parameter access.
 
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded
