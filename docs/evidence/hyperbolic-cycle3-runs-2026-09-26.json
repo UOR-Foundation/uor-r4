@@ -3273,7 +3273,851 @@
     "no_read_ms_per_step": 2.9260920693359376
    }
   ],
+  "fine_tunes": {
+   "qat_dot_s1": {
+    "root": "lab/exp/c3b/ft_qat_dot_s1",
+    "final": {
+     "bits_per_byte_no_read": 1.6098101627303005,
+     "bits_per_byte_read": 1.2586876512494978,
+     "nll_no_read": 4.003554874957302,
+     "nll_read": 3.1303225677627484,
+     "no_read_mass": 0.4120984275469182,
+     "read_effect_nats": 0.8732323071945531,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 1.7113484015722513,
+       "bits_per_byte_read": 1.3777757107072202,
+       "nll_no_read": 4.166888906036643,
+       "nll_read": 3.3546870518465184,
+       "no_read_mass": 0.49930869612590867,
+       "read_effect_nats": 0.8122018541901248,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 1.6803717603466826,
+       "bits_per_byte_read": 1.3420373405171337,
+       "nll_no_read": 4.0914652094062465,
+       "nll_read": 3.2676692253606383,
+       "no_read_mass": 0.4010436799982559,
+       "read_effect_nats": 0.8237959840456082,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 1.672962098745008,
+       "bits_per_byte_read": 1.3350460466063299,
+       "nll_no_read": 4.073423741814295,
+       "nll_read": 3.2506464233356356,
+       "no_read_mass": 0.44506533004066157,
+       "read_effect_nats": 0.8227773184786598,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": {
+     "final_strength": 1.0,
+     "ramp_steps": 100,
+     "scope": "Frozen dyadic scales calibrated once on the starting weights; straight-through fake quantization; evaluations use the hard path"
+    },
+    "init": {
+     "config_sha256": "e4f7ac7104bc1bb11a8e6d0acda24b6434bea8dcf55f5ea56f7aeead273f055b",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/dot_s1_r1/model",
+     "weights_sha256": "7c07f6809a547a1b3aeef172b5470b68928dcabe44a03d71da121b76de5a6013"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 108.528175036,
+     "training_updates": 1059.7935121499995,
+     "wall": 1231.083537275
+    },
+    "lorentz": {}
+   },
+   "qat_dot_s2": {
+    "root": "lab/exp/c3b/ft_qat_dot_s2",
+    "final": {
+     "bits_per_byte_no_read": 2.4405572486075076,
+     "bits_per_byte_read": 1.2588191333456722,
+     "nll_no_read": 6.06960068738983,
+     "nll_read": 3.1306495602239064,
+     "no_read_mass": 0.003999736834150663,
+     "read_effect_nats": 2.9389511271659234,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 2.406079084539038,
+       "bits_per_byte_read": 1.3842145448086005,
+       "nll_no_read": 5.858458882598979,
+       "nll_read": 3.370364693149834,
+       "no_read_mass": 0.003967236042386499,
+       "read_effect_nats": 2.4880941894491455,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 2.4544357325555715,
+       "bits_per_byte_read": 1.3497621579327317,
+       "nll_no_read": 5.97620041317691,
+       "nll_read": 3.2864780523421233,
+       "no_read_mass": 0.003984064157723979,
+       "read_effect_nats": 2.6897223608347867,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 2.428925012386219,
+       "bits_per_byte_read": 1.338335321085514,
+       "nll_no_read": 5.9140854535573375,
+       "nll_read": 3.258655336847127,
+       "no_read_mass": 0.003973427573855604,
+       "read_effect_nats": 2.6554301167102103,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": {
+     "final_strength": 1.0,
+     "ramp_steps": 100,
+     "scope": "Frozen dyadic scales calibrated once on the starting weights; straight-through fake quantization; evaluations use the hard path"
+    },
+    "init": {
+     "config_sha256": "b3a1457ccb18bebfdd6ecc45ead2587739a519cdae0b2c3d4dd669c09b0f8845",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/dot_s2_r1/model",
+     "weights_sha256": "378c24bc71202eb94ce60ed33c2d474dc2a6c8ee354af93f10837bcbaa2d7dbe"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 107.586882976,
+     "training_updates": 1039.5038721340002,
+     "wall": 1210.161227364
+    },
+    "lorentz": {}
+   },
+   "qat_lorentzflat_s1": {
+    "root": "lab/exp/c3b/ft_qat_lorentzflat_s1",
+    "final": {
+     "bits_per_byte_no_read": 1.584163656891679,
+     "bits_per_byte_read": 1.2336489215905149,
+     "nll_no_read": 3.939772699982279,
+     "nll_read": 3.0680519159121347,
+     "no_read_mass": 0.5892894943853841,
+     "read_effect_nats": 0.8717207840701442,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 1.6969692132693874,
+       "bits_per_byte_read": 1.3568558981546275,
+       "nll_no_read": 4.131877636465836,
+       "nll_read": 3.303750296501038,
+       "no_read_mass": 0.5939357625316433,
+       "read_effect_nats": 0.8281273399647979,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 1.659370637439722,
+       "bits_per_byte_read": 1.321209603326548,
+       "nll_no_read": 4.040330474962383,
+       "nll_read": 3.2169566603694504,
+       "no_read_mass": 0.5981541081674919,
+       "read_effect_nats": 0.8233738145929328,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 1.6525980927421793,
+       "bits_per_byte_read": 1.3135355522610512,
+       "nll_no_read": 4.023840296025178,
+       "nll_read": 3.1982714421989136,
+       "no_read_mass": 0.6129306789454105,
+       "read_effect_nats": 0.825568853826264,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": {
+     "final_strength": 1.0,
+     "ramp_steps": 100,
+     "scope": "Frozen dyadic scales calibrated once on the starting weights; straight-through fake quantization; evaluations use the hard path"
+    },
+    "init": {
+     "config_sha256": "f7a173a88c444281ebad29bfaef0a64547ff377cdf5f02ba90b224520ce4cf92",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/lorentzflat_s1_r1/model",
+     "weights_sha256": "4267dcb985ee5e6dd22d30ead5e844b614c305ee3eb93b0cd96ed65d609aa115"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 109.949864507,
+     "training_updates": 1001.1819892159992,
+     "wall": 1177.47855003
+    },
+    "lorentz": {
+     "read.lorentz_log_beta": [
+      1.3752659559249878
+     ],
+     "read.lorentz_offset": [
+      4.931334495544434
+     ]
+    }
+   },
+   "qat_lorentzflat_s2": {
+    "root": "lab/exp/c3b/ft_qat_lorentzflat_s2",
+    "final": {
+     "bits_per_byte_no_read": 1.5827565582118566,
+     "bits_per_byte_read": 1.2349495471506504,
+     "nll_no_read": 3.936273283150672,
+     "nll_read": 3.0712865369390903,
+     "no_read_mass": 0.6003445744613476,
+     "read_effect_nats": 0.8649867462115819,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 1.6898810604052643,
+       "bits_per_byte_read": 1.3622122971189914,
+       "nll_no_read": 4.1146189967249915,
+       "nll_read": 3.3167923628625156,
+       "no_read_mass": 0.6111007571966525,
+       "read_effect_nats": 0.797826633862476,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 1.6521015755339892,
+       "bits_per_byte_read": 1.3258382672780944,
+       "nll_no_read": 4.022631347546561,
+       "nll_read": 3.2282267959255715,
+       "no_read_mass": 0.60049061254864,
+       "read_effect_nats": 0.7944045516209894,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 1.6414527069968472,
+       "bits_per_byte_read": 1.3151015149737286,
+       "nll_no_read": 3.9967028737603387,
+       "nll_read": 3.2020843377196195,
+       "no_read_mass": 0.6072975986409617,
+       "read_effect_nats": 0.7946185360407192,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": {
+     "final_strength": 1.0,
+     "ramp_steps": 100,
+     "scope": "Frozen dyadic scales calibrated once on the starting weights; straight-through fake quantization; evaluations use the hard path"
+    },
+    "init": {
+     "config_sha256": "5fd0e99bbbc1f82e13916257e7d666ac1a82c87f9bf6298e4b16cc7ded7b9fde",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/lorentzflat_s2_r1/model",
+     "weights_sha256": "d81adff1a9f45b5dedc4c0dedd5d57d0272e1a6a53aacbe864a96363f7f80acc"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 108.882962472,
+     "training_updates": 1006.5195026120007,
+     "wall": 1181.134261377
+    },
+    "lorentz": {
+     "read.lorentz_log_beta": [
+      1.3344987630844116
+     ],
+     "read.lorentz_offset": [
+      4.948954105377197
+     ]
+    }
+   },
+   "float_dot_s1": {
+    "root": "lab/exp/c3b/ft_float_dot_s1",
+    "final": {
+     "bits_per_byte_no_read": 1.5943456714003776,
+     "bits_per_byte_read": 1.2446183334132976,
+     "nll_no_read": 3.9650950980929034,
+     "nll_read": 3.095332550110661,
+     "no_read_mass": 0.4096846061124235,
+     "read_effect_nats": 0.8697625479822424,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 1.6798419379389202,
+       "bits_per_byte_read": 1.342003880508914,
+       "nll_no_read": 4.09017516752404,
+       "nll_read": 3.267587755020106,
+       "no_read_mass": 0.41806284553880874,
+       "read_effect_nats": 0.8225874125039345,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 1.664864047581921,
+       "bits_per_byte_read": 1.3268555063938807,
+       "nll_no_read": 4.05370614397099,
+       "nll_read": 3.23070362786842,
+       "no_read_mass": 0.40822329365215426,
+       "read_effect_nats": 0.8230025161025698,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 1.6583453502926557,
+       "bits_per_byte_read": 1.3198703737479462,
+       "nll_no_read": 4.037834047212963,
+       "nll_read": 3.2136958276432885,
+       "no_read_mass": 0.4351555320270227,
+       "read_effect_nats": 0.824138219569674,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": null,
+    "init": {
+     "config_sha256": "e4f7ac7104bc1bb11a8e6d0acda24b6434bea8dcf55f5ea56f7aeead273f055b",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/dot_s1_r1/model",
+     "weights_sha256": "7c07f6809a547a1b3aeef172b5470b68928dcabe44a03d71da121b76de5a6013"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 71.13711194,
+     "training_updates": 782.3909863609997,
+     "wall": 888.142742994
+    },
+    "lorentz": {}
+   },
+   "float_dot_s2": {
+    "root": "lab/exp/c3b/ft_float_dot_s2",
+    "final": {
+     "bits_per_byte_no_read": 2.400113538413491,
+     "bits_per_byte_read": 1.2450270045661846,
+     "nll_no_read": 5.96901826043211,
+     "nll_read": 3.096348904351847,
+     "no_read_mass": 0.003958546098657631,
+     "read_effect_nats": 2.8726693560802627,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 2.4168176491522897,
+       "bits_per_byte_read": 1.3568276434148963,
+       "nll_no_read": 5.884605753518195,
+       "nll_read": 3.3036815002457454,
+       "no_read_mass": 0.003946414606529211,
+       "read_effect_nats": 2.5809242532724497,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 2.420602401697743,
+       "bits_per_byte_read": 1.3345095825479512,
+       "nll_no_read": 5.893821085346159,
+       "nll_read": 3.2493402099828828,
+       "no_read_mass": 0.003946006632594334,
+       "read_effect_nats": 2.644480875363276,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 2.4092096313479425,
+       "bits_per_byte_read": 1.3242668788928549,
+       "nll_no_read": 5.866081316906259,
+       "nll_read": 3.2244006896671884,
+       "no_read_mass": 0.003946196246295408,
+       "read_effect_nats": 2.6416806272390705,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": null,
+    "init": {
+     "config_sha256": "b3a1457ccb18bebfdd6ecc45ead2587739a519cdae0b2c3d4dd669c09b0f8845",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/dot_s2_r1/model",
+     "weights_sha256": "378c24bc71202eb94ce60ed33c2d474dc2a6c8ee354af93f10837bcbaa2d7dbe"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 71.154885564,
+     "training_updates": 780.1403973279994,
+     "wall": 885.549464877
+    },
+    "lorentz": {}
+   },
+   "float_lorentzflat_s1": {
+    "root": "lab/exp/c3b/ft_float_lorentzflat_s1",
+    "final": {
+     "bits_per_byte_no_read": 1.567796122224693,
+     "bits_per_byte_read": 1.2207030695377066,
+     "nll_no_read": 3.899067078459859,
+     "nll_read": 3.0358559276543686,
+     "no_read_mass": 0.5877231939148708,
+     "read_effect_nats": 0.8632111508054905,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 1.6640622026296144,
+       "bits_per_byte_read": 1.3255662293280397,
+       "nll_no_read": 4.051753766048962,
+       "nll_read": 3.227564422375532,
+       "no_read_mass": 0.600249381041877,
+       "read_effect_nats": 0.8241893436734298,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 1.6430409243340636,
+       "bits_per_byte_read": 1.307001325212149,
+       "nll_no_read": 4.00056995611291,
+       "nll_read": 3.1823615326944665,
+       "no_read_mass": 0.6019290529210721,
+       "read_effect_nats": 0.8182084234184437,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 1.6338786046805476,
+       "bits_per_byte_read": 1.2991370729264202,
+       "nll_no_read": 3.9782610165172545,
+       "nll_read": 3.163213201721316,
+       "no_read_mass": 0.6130843400629473,
+       "read_effect_nats": 0.8150478147959386,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": null,
+    "init": {
+     "config_sha256": "f7a173a88c444281ebad29bfaef0a64547ff377cdf5f02ba90b224520ce4cf92",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/lorentzflat_s1_r1/model",
+     "weights_sha256": "4267dcb985ee5e6dd22d30ead5e844b614c305ee3eb93b0cd96ed65d609aa115"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 72.984718637,
+     "training_updates": 803.2777839869989,
+     "wall": 914.283415656
+    },
+    "lorentz": {
+     "read.lorentz_log_beta": [
+      1.3658394813537598
+     ],
+     "read.lorentz_offset": [
+      4.9326581954956055
+     ]
+    }
+   },
+   "float_lorentzflat_s2": {
+    "root": "lab/exp/c3b/ft_float_lorentzflat_s2",
+    "final": {
+     "bits_per_byte_no_read": 1.564776841069486,
+     "bits_per_byte_read": 1.2213436807756801,
+     "nll_no_read": 3.891558206875091,
+     "nll_read": 3.037449110691797,
+     "no_read_mass": 0.6030347880389959,
+     "read_effect_nats": 0.854109096183294,
+     "targets": 131072
+    },
+    "curve": [
+     {
+      "step": 0,
+      "development": {
+       "bits_per_byte_no_read": 1.6583982030947624,
+       "bits_per_byte_read": 1.3282865870757055,
+       "nll_no_read": 4.037962736236512,
+       "nll_read": 3.234188104910769,
+       "no_read_mass": 0.6097388061021647,
+       "read_effect_nats": 0.803774631325743,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 100,
+      "development": {
+       "bits_per_byte_no_read": 1.633717758772082,
+       "bits_per_byte_read": 1.308890673912929,
+       "nll_no_read": 3.9778693797056324,
+       "nll_read": 3.1869618269032207,
+       "no_read_mass": 0.6073697796956665,
+       "read_effect_nats": 0.7909075528024117,
+       "targets": 16384
+      }
+     },
+     {
+      "step": 200,
+      "development": {
+       "bits_per_byte_no_read": 1.624487707760181,
+       "bits_per_byte_read": 1.3002640725926402,
+       "nll_no_read": 3.9553955239271663,
+       "nll_read": 3.165957284926095,
+       "no_read_mass": 0.605815112876968,
+       "read_effect_nats": 0.7894382390010715,
+       "targets": 16384
+      }
+     }
+    ],
+    "quantization": null,
+    "init": {
+     "config_sha256": "5fd0e99bbbc1f82e13916257e7d666ac1a82c87f9bf6298e4b16cc7ded7b9fde",
+     "model": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/runs/ctx256/lorentzflat_s2_r1/model",
+     "weights_sha256": "d81adff1a9f45b5dedc4c0dedd5d57d0272e1a6a53aacbe864a96363f7f80acc"
+    },
+    "optimizer": {
+     "allowed_missing_gradients": [],
+     "learning_rate": 0.0003,
+     "parameter_abs_limit": 1000000.0,
+     "weight_decay": 0.01
+    },
+    "steps_completed": 300,
+    "seconds": {
+     "final_evaluation": 72.364371892,
+     "training_updates": 805.1195942400001,
+     "wall": 915.307015898
+    },
+    "lorentz": {
+     "read.lorentz_log_beta": [
+      1.326474905014038
+     ],
+     "read.lorentz_offset": [
+      4.948443412780762
+     ]
+    }
+   }
+  },
+  "quantization_aware_integer": {
+   "dot_s1": {
+    "root": "lab/exp/c3b/qatparity_dot_s1",
+    "manifest_sha256_packed": "d8d7792ceaa8acccb62084738bc43d5af9d6c3a0a6e44cd83d6d192994b7c9f9",
+    "checkpoint_weights_sha256": "c28769f5eb5c85a3b7d6dcd46c2af33c49c82976f6f9abd46400bf569e1fa0f6",
+    "windows": 512,
+    "targets": 131072,
+    "stride": 403,
+    "quantization": "Quantization-aware checkpoint: its own frozen dyadic scales; float scores use its F32 shadow weights; signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces",
+    "read": {
+     "float_nll": 3.159678742808971,
+     "emulator_nll": 3.1303225677627107,
+     "integer_nll": 3.130332939641356,
+     "float_bits_per_byte": 1.2704916280661769,
+     "emulator_bits_per_byte": 1.2586876512494825,
+     "integer_bits_per_byte": 1.2586918217320089,
+     "emulator_minus_float_nll": -0.029356175046260535,
+     "integer_minus_emulator_nll": 1.0371878645276666e-05,
+     "mean_total_variation_integer_emulator": 0.0017992858265051736,
+     "maximum_probability_delta_integer_emulator": 0.012404740268259218,
+     "maximum_state_delta_integer_emulator": 0.01220703125,
+     "top1_agreement_integer_emulator": 0.9970779418945312,
+     "top1_agreement_integer_float": 0.7987442016601562,
+     "mean_no_read_mass_integer": 0.4120929577519433,
+     "mean_no_read_mass_emulator": 0.4120984275469186,
+     "integer_seconds_per_step": 0.0042728311454697104
+    },
+    "no_read": {
+     "float_nll": 4.0292634362448805,
+     "emulator_nll": 4.003554874957287,
+     "integer_nll": 4.003559390202625,
+     "float_bits_per_byte": 1.6201474515954521,
+     "emulator_bits_per_byte": 1.609810162730295,
+     "integer_bits_per_byte": 1.609811978288732,
+     "emulator_minus_float_nll": -0.025708561287593135,
+     "integer_minus_emulator_nll": 4.5152453376218205e-06,
+     "mean_total_variation_integer_emulator": 0.0017767620127122148,
+     "maximum_probability_delta_integer_emulator": 0.012233103358234132,
+     "maximum_state_delta_integer_emulator": 0.0078125,
+     "top1_agreement_integer_emulator": 0.9964218139648438,
+     "top1_agreement_integer_float": 0.7256622314453125,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.0026678888267288735
+    },
+    "read_effect_nats": {
+     "emulator": 0.8732323071945767,
+     "float": 0.8695846934359093,
+     "integer": 0.873226450561269
+    },
+    "seconds": {
+     "preparation": 0.109660399,
+     "total": 1125.703422439
+    }
+   },
+   "dot_s2": {
+    "root": "lab/exp/c3b/qatparity_dot_s2",
+    "manifest_sha256_packed": "735618b508c02bb646024cc8a5891d399473aff7054b71bf1f2ddc8ee67c26b3",
+    "checkpoint_weights_sha256": "691c3a54e43370bf203d9f0111e69a137f48fac82dfc4e318f543f74a04b1dba",
+    "windows": 512,
+    "targets": 131072,
+    "stride": 403,
+    "quantization": "Quantization-aware checkpoint: its own frozen dyadic scales; float scores use its F32 shadow weights; signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces",
+    "read": {
+     "float_nll": 3.151165111646759,
+     "emulator_nll": 3.130649560223902,
+     "integer_nll": 3.130643081561889,
+     "float_bits_per_byte": 1.2670683379166165,
+     "emulator_bits_per_byte": 1.2588191333456702,
+     "integer_bits_per_byte": 1.2588165283068298,
+     "emulator_minus_float_nll": -0.020515551422857214,
+     "integer_minus_emulator_nll": -6.478662013087444e-06,
+     "mean_total_variation_integer_emulator": 0.001670375556933875,
+     "maximum_probability_delta_integer_emulator": 0.01504283044605259,
+     "maximum_state_delta_integer_emulator": 0.013671875,
+     "top1_agreement_integer_emulator": 0.9973068237304688,
+     "top1_agreement_integer_float": 0.8116989135742188,
+     "mean_no_read_mass_integer": 0.0039997540664975075,
+     "mean_no_read_mass_emulator": 0.003999736834150674,
+     "integer_seconds_per_step": 0.004280502712600691
+    },
+    "no_read": {
+     "float_nll": 6.055079277744864,
+     "emulator_nll": 6.069600687389814,
+     "integer_nll": 6.069594591599432,
+     "float_bits_per_byte": 2.43471825962053,
+     "emulator_bits_per_byte": 2.4405572486075013,
+     "integer_bits_per_byte": 2.4405547975195026,
+     "emulator_minus_float_nll": 0.01452140964495019,
+     "integer_minus_emulator_nll": -6.095790381799304e-06,
+     "mean_total_variation_integer_emulator": 0.002652594105282274,
+     "maximum_probability_delta_integer_emulator": 0.030764334837716234,
+     "maximum_state_delta_integer_emulator": 0.0341796875,
+     "top1_agreement_integer_emulator": 0.994873046875,
+     "top1_agreement_integer_float": 0.6731796264648438,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.002701333667480459
+    },
+    "read_effect_nats": {
+     "emulator": 2.938951127165912,
+     "float": 2.9039141660981045,
+     "integer": 2.938951510037543
+    },
+    "seconds": {
+     "preparation": 0.094803579,
+     "total": 1131.569103731
+    }
+   },
+   "lorentzflat_s1": {
+    "root": "lab/exp/c3b/qatparity_lorentzflat_s1",
+    "manifest_sha256_packed": "579dd6c319c695e29f5e84c60a1ffb80def8719f464efeb06dcbe85fbeab137b",
+    "checkpoint_weights_sha256": "7e509fe08b2ef265e84abf069e5c44a9fa964db2eaa99cd24b11e22451f55954",
+    "windows": 512,
+    "targets": 131072,
+    "stride": 403,
+    "quantization": "Quantization-aware checkpoint: its own frozen dyadic scales; float scores use its F32 shadow weights; signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces",
+    "read": {
+     "float_nll": 3.086594152165209,
+     "emulator_nll": 3.068051915912154,
+     "integer_nll": 3.068046453944831,
+     "float_bits_per_byte": 1.2411046656210658,
+     "emulator_bits_per_byte": 1.2336489215905229,
+     "integer_bits_per_byte": 1.2336467253597279,
+     "emulator_minus_float_nll": -0.018542236253054956,
+     "integer_minus_emulator_nll": -5.461967323316941e-06,
+     "mean_total_variation_integer_emulator": 0.0018658343698007447,
+     "maximum_probability_delta_integer_emulator": 0.014383480300516283,
+     "maximum_state_delta_integer_emulator": 0.017578125,
+     "top1_agreement_integer_emulator": 0.997100830078125,
+     "top1_agreement_integer_float": 0.8073883056640625,
+     "mean_no_read_mass_integer": 0.5892973819861487,
+     "mean_no_read_mass_emulator": 0.5892894943853841,
+     "integer_seconds_per_step": 0.004460722919662501
+    },
+    "no_read": {
+     "float_nll": 3.964300773681826,
+     "emulator_nll": 3.939772699982262,
+     "integer_nll": 3.9398015875544665,
+     "float_bits_per_byte": 1.5940262773744696,
+     "emulator_bits_per_byte": 1.5841636568916722,
+     "integer_bits_per_byte": 1.5841752724455398,
+     "emulator_minus_float_nll": -0.02452807369956389,
+     "integer_minus_emulator_nll": 2.888757220453897e-05,
+     "mean_total_variation_integer_emulator": 0.0019796457793243524,
+     "maximum_probability_delta_integer_emulator": 0.012634369741178375,
+     "maximum_state_delta_integer_emulator": 0.01220703125,
+     "top1_agreement_integer_emulator": 0.996063232421875,
+     "top1_agreement_integer_float": 0.7306060791015625,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.002662025857177751
+    },
+    "read_effect_nats": {
+     "emulator": 0.8717207840701078,
+     "float": 0.8777066215166167,
+     "integer": 0.8717551336096356
+    },
+    "seconds": {
+     "preparation": 0.087462163,
+     "total": 1154.301922922
+    }
+   },
+   "lorentzflat_s2": {
+    "root": "lab/exp/c3b/qatparity_lorentzflat_s2",
+    "manifest_sha256_packed": "7caba0c601e10e72beeab449485eb327e0ea7535c054351c95ffd7d7cad500b4",
+    "checkpoint_weights_sha256": "facbe5636871f4f07e81b4d95296592852dcd94e5c1eb8f9b44c9ae45f964eb6",
+    "windows": 512,
+    "targets": 131072,
+    "stride": 403,
+    "quantization": "Quantization-aware checkpoint: its own frozen dyadic scales; float scores use its F32 shadow weights; signed4 weights, signed16 additive and Lorentz scalars; quantized interfaces",
+    "read": {
+     "float_nll": 3.0943190250392605,
+     "emulator_nll": 3.0712865369391324,
+     "integer_nll": 3.0712766438024737,
+     "float_bits_per_byte": 1.2442107998559762,
+     "emulator_bits_per_byte": 1.2349495471506673,
+     "integer_bits_per_byte": 1.2349455691679914,
+     "emulator_minus_float_nll": -0.023032488100128035,
+     "integer_minus_emulator_nll": -9.893136658778445e-06,
+     "mean_total_variation_integer_emulator": 0.0021015749663485287,
+     "maximum_probability_delta_integer_emulator": 0.0173427662448411,
+     "maximum_state_delta_integer_emulator": 0.0087890625,
+     "top1_agreement_integer_emulator": 0.9966354370117188,
+     "top1_agreement_integer_float": 0.7985916137695312,
+     "mean_no_read_mass_integer": 0.6003436362424898,
+     "mean_no_read_mass_emulator": 0.6003445744613476,
+     "integer_seconds_per_step": 0.004461498861160214
+    },
+    "no_read": {
+     "float_nll": 3.9622005188447362,
+     "emulator_nll": 3.9362732831506944,
+     "integer_nll": 3.9362730308432647,
+     "float_bits_per_byte": 1.5931817750042836,
+     "emulator_bits_per_byte": 1.5827565582118654,
+     "integer_bits_per_byte": 1.5827564567602612,
+     "emulator_minus_float_nll": -0.025927235694041872,
+     "integer_minus_emulator_nll": -2.5230742961568353e-07,
+     "mean_total_variation_integer_emulator": 0.0021958509005571805,
+     "maximum_probability_delta_integer_emulator": 0.014559210602378414,
+     "maximum_state_delta_integer_emulator": 0.00830078125,
+     "top1_agreement_integer_emulator": 0.9963226318359375,
+     "top1_agreement_integer_float": 0.7333297729492188,
+     "mean_no_read_mass_integer": 1.0,
+     "mean_no_read_mass_emulator": 1.0,
+     "integer_seconds_per_step": 0.002661835631347692
+    },
+    "read_effect_nats": {
+     "emulator": 0.8649867462115619,
+     "float": 0.8678814938054757,
+     "integer": 0.8649963870407911
+    },
+    "seconds": {
+     "preparation": 0.093746523,
+     "total": 1155.640395098
+    }
+   }
+  },
   "paths": "Relative to the session scratch directory; roots are claimed and sealed; models and tables are not committed",
-  "evaluation": "joint-integer-parity: evenly spaced windows of the code development split (valid.u16), fresh state per window; float and emulator by full-window forward, integer by incremental steps"
+  "evaluation": "joint-integer-parity: evenly spaced windows of the code development split (valid.u16), fresh state per window; float and emulator by full-window forward, integer by incremental steps. post_training_quantization uses 64 windows; quantization_aware_integer uses 512 windows, the same windows as the section-10 final evaluation",
+  "fine_tune_settings": {
+   "steps": 300,
+   "batch": 8,
+   "context": 256,
+   "learning_rate": 0.0003,
+   "quantize_ramp": 100,
+   "eval_every": 100,
+   "eval_windows": 64,
+   "final_windows": 512,
+   "window_stream": "fine-tune stream seed ^ 0x5EED0FD8 ^ 0xF1AE7C0E",
+   "arms": "qat (quantize_ramp=100) and float (same settings, no quantization), from each section-10 model"
+  },
+  "summary": {
+   "quantization_aware_integer_minus_float_fine_tune_nll": {
+    "dot_s1": 0.03500038953069495,
+    "dot_s2": 0.0342941772100418,
+    "lorentzflat_s1": 0.03219052629046226,
+    "lorentzflat_s2": 0.033827533110676544
+   },
+   "integer_lorentz_minus_dot_nll": {
+    "s1": -0.06228648569652506,
+    "s2": -0.05936643775941519
+   },
+   "float_fine_tune_lorentz_minus_dot_nll": {
+    "s1": -0.05947662245629237,
+    "s2": -0.05889979366004994
+   }
+  }
  }
 }

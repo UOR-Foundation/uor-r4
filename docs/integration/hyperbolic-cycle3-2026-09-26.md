@@ -445,4 +445,45 @@ Dot s2 is the read-dependent run of §10.
 - The difference between the geometries is within the run-to-run spread.
 - This measures the prototype runtime's software-multiply arithmetic, not an optimized serving speed.
 
-**Quantization-aware fine-tuning.** Running when this section was first committed: 300 updates from each §10 model with `quantize_ramp=100`, against float fine-tunes of the same length. Its results replace this paragraph.
+**Quantization-aware fine-tuning.**
+- *Design.* Each §10 model was fine-tuned for 300 updates (batch 8 × context 256, AdamW at learning rate 3·10⁻⁴) in two arms:
+  - with `quantize_ramp=100`: the packed format's frozen scales, calibrated once on the starting weights, with straight-through fake quantization ramped to full strength over 100 updates;
+  - a float control with the same updates, windows and optimizer.
+- *Evaluation.* The final evaluation covers the same 512 windows (131,072 targets) as §10's. The integer column is `joint-integer-parity` on those windows.
+- *Table.* Read enabled; NLL in nats per token.
+
+| Model | §10 float | Float fine-tune | Quantization-aware, integer | Integer − float fine-tune | Integer − emulator |
+|---|---:|---:|---:|---:|---:|
+| Dot s1 | 3.1694 | 3.0953 | 3.1303 | +0.035 | +0.00001 |
+| Dot s2 | 3.1851 | 3.0963 | 3.1306 | +0.034 | −0.00001 |
+| flat Lorentz s1 | 3.1186 | 3.0359 | 3.0680 | +0.032 | −0.00001 |
+| flat Lorentz s2 | 3.1238 | 3.0374 | 3.0713 | +0.034 | −0.00001 |
+
+- **After quantization-aware fine-tuning, 4-bit integer serving costs 0.032–0.035 nats per token** against a float model fine-tuned equally long: 0.013–0.014 bits per byte, down from 0.07–0.09 nats after post-training quantization.
+  - Every integer model is better than its §10 float parent (by 0.039–0.055 nats), because it trained 300 more updates.
+  - At update 100, when the ramp completes, the quantization-aware models already matched or beat their parents on the 64-window development evaluation.
+- **The Lorentz advantage is unchanged by 4-bit integer serving.** Integer Lorentz − Dot is −0.062 and −0.059 nats. The equal float fine-tunes give −0.060 and −0.059, and §10 gave −0.051 and −0.061.
+- **Integer against emulator.**
+  - NLL within 0.00001 nats; mean total variation 0.0017–0.0027; top-1 agreement 99.5–99.7%.
+  - The read-enabled NoRead mass is identical to four decimals.
+  - The read effect is kept: 0.865–0.873 nats for the healthy runs and 2.94 for read-dependent Dot s2.
+- **The largest single deviation**, over 131,072 positions, 4,096 tokens and every state coordinate, exceeds 0.01 in every model.
+  - With the read enabled, it is 0.012–0.015 (probability) and 0.012–0.014 (state) for Dot, and 0.014–0.017 and 0.009–0.018 for Lorentz. The two geometries are of the same size, and two seeds cannot separate them.
+  - Dot s2 reaches 0.031 and 0.034 with the read *disabled*, in the read-dependent model's weak read-free path.
+  - These maxima grow with the number of positions scored: the 64-window runs above stayed at 0.012 and 0.015.
+  - The mean total variation stays below 0.003.
+
+**What changes.**
+- The native model's hyperbolic read has an integer serving path. Trained models run in it at parity with their F32 emulator, at the Dot read's cost.
+- The Lorentz advantage over Dot measured in §4 and §10 carries through 4-bit weights and integer arithmetic unchanged, after quantization-aware fine-tuning.
+- Quantization-aware fine-tuning is the way to package a trained native model. A few hundred updates bring the 4-bit loss to about 0.03 nats; post-training quantization alone costs 0.07–0.09.
+- §9.2's full-scale test can now end in integer serving: [`scripts/native-lorentz-m1.sh`](../../scripts/native-lorentz-m1.sh) runs it on the owner's M1.
+- The retained 0.01 limit on the largest single deviation does not hold at this width and evaluation length, for either geometry. It is a limit on one position out of 131,072; a limit on the mean, or on a high quantile, would suit a long evaluation better.
+- *Not established.* Speed or energy on an M1; behaviour at width 256 or on TinyStories; a final holdout; any language capability beyond these development scores.
+
+**Cost.**
+- About 4.2 core-hours on the review sandbox's four cores; no external or accelerator cost.
+  - Fine-tunes: 8 runs, 2.3 core-hours, four at a time. A quantization-aware update took about 3.4 s and a float one 2.6 s at width 128, batch 8, context 256.
+  - Parity runs: 1.4 core-hours. They took 140–150 s each at 64 windows and 1,130–1,160 s each at 512 windows.
+  - Builds, tests, pilots and timing: about half a core-hour.
+- New scratch storage: 54 MB, including the packed models, tables and report roots. The repository gained one Rust module, one example, one script and these notes.
