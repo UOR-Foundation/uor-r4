@@ -13,8 +13,11 @@ development runs, one seed per arm. Nothing here is a final holdout or a languag
 | `pilot/launch.log`, `pilot/chain.log` | Launch times, the executable identity and the learning rates the rule chose |
 | `ablation/<arm>/report.json`, `attempt.json`, `manifest.json`, `model/config.json` | Each seed-1 ablation run (§7): `dot`, `norot`, `readsonly`. The full-stack reference is `pilot/geometric_lr0.004` |
 | `ablation/launch.log` | Source commit, executable identity, learning rate and start/end times of the ablation stage |
+| `integer/<model>/export/export.json` (with `attempt.json`, `manifest.json`) | Integer serving export (§8): source model and executable identities, the artifact's size and SHA-256, and the quantization errors per matrix and per table of grid codes |
+| `integer/<model>/evaluation/evaluation.json` (with `attempt.json`, `manifest.json`) | The integer engine beside the float model on the 512 final-evaluation windows: NLL per window, bits per byte, top-1 agreement and the engine's speed |
+| `integer/run.log` | Start and end times and the executable identity of the integer stage |
 | `sources/` | The launchers: pilot, post-pilot chain (with the selection rule), ablations and main comparison |
-| `packet.json` | Per run: group, source commit, settings, threads, final metrics, cost and identities. Also the SHA-256 and size of every file in this directory |
+| `packet.json` | Per run: group, source commit, settings, threads, final metrics, cost and identities. Per integer model: float and integer NLL, agreement, speed and the artifact's identity. Also the SHA-256 and size of every file in this directory |
 
 Each `report.json` records:
 - settings and the complete model configuration;
@@ -28,9 +31,11 @@ Each `report.json` records:
 ## Kept outside the repository
 
 - **Model weights.** Each run's `model/model.safetensors` is 28.6 MB. They stay in the lab sandbox's scratch directory, which is not durable. `packet.json` lists each file's size and SHA-256, which the reports also record.
+- **Integer artifacts.** Each `model.lut` is 4.5–5.0 MB. They stay beside the weights; `packet.json` and each `export.json` record their sizes and SHA-256.
 - **Executables.** Release builds with `-C target-cpu=native`; any rebuild on another host differs in bytes.
   - The pilot used commit `dca1b790` (SHA-256 `fcf710ad…`).
   - The ablations used commit `b87acd63` (SHA-256 `05889874…`). Relative to `dca1b790` it changes only the example's sample decoding, its evaluate mode and early-stop checkpoint retention, not the model, optimizer or training loop.
+  - The integer stage used commit `2a681bb7` (SHA-256 `cb0bb647…`).
 - **Corpora.** The repository code split is cycle 3's (`b12707b0…` training, `3f7c50ef…` development), in the [cycle-3 packet](../native-lorentz-packet-2026-09-26/README.md). The registry corpus for the main comparison is `af93ca73…` (29,039,409 tokens), built with `geometric-stack corpus` and encoded with `geometric-stack encode`.
 
 ## Cost
@@ -48,3 +53,4 @@ Each `report.json` records:
 - Training alone took 3,353–4,350 s per run.
 - Rounds 1 and 2 shared the machine with builds and tests of this branch and of #1410.
 - The ablations, claim to seal: `dot` 56.6 min and `norot` 57.5 min together, two threads each; then `readsonly` 46.5 min alone, four threads. Training alone took 2,739–3,386 s per run. Thread count changes speed and floating-point summation order, not the model or the update rule.
+- The integer stage: 19 min for five exports and evaluations, one thread each, beside two training runs (09:28–09:47 UTC). An earlier start with an uncommitted build was stopped after 3 min and discarded.

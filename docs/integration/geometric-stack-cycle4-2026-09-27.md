@@ -245,10 +245,58 @@ The main comparison runs after them, unchanged.
 - Training alone took 2,739–3,386 s per arm. The stage ran from 05:58 to 07:42 UTC.
 - The two interrupted seed-2 attempts cost up to 56 minutes of two-arm time and kept no result.
 
-## 8. What this changes
+## 8. Integer serving under D10
+
+*Measured*, except where marked *Derived*. Owner decision D10 permits serving without floating point: learned weight maps run without a multiplier, and runtime products may use the hardware multiplier. [`uor_r4_lut::stack`](../../crates/uor-r4-lut/src/stack.rs) serves the geometric stack that way. The control has the shape of a Llama checkpoint, so it is renamed to one and served by the existing Llama engine. [`stack_export`](../../crates/uor-r4-training/src/stack_export.rs) writes both artifacts, and the example's `export`, `lut-evaluate` and `lut-sample` modes run them.
+
+**How each part is served.**
+
+| Part | Served as |
+|---|---|
+| Weight maps: embedding, projections, MLP, head | 4-bit weights in groups of 32 with scales `(16 + m) 2^(e − 4)`, read through per-activation tables by the Llama engine's vector kernels; round-to-nearest export |
+| Norm gains | folded into the maps that read the normalized state |
+| Convolution taps, decay rates `8 softplus(−decay)`, Lorentz `β` | one grid code each, `±(16 + m) 2^(e − 4)`, applied by shifts and adds |
+| Biases, age tables, Lorentz offsets | integers, added |
+| Quaternion transport, gating, scores, value mixing | products of runtime values, on the hardware multiplier |
+| Sigmoid, exp, SiLU, GELU, arcosh | sealed tables with linear interpolation |
+| `sqrt(1 − λ²)`, rotation norms, Lorentz lifts `sqrt(1 + |x|²)` | integer square roots |
+| Softmax, rotation normalization | one division per head or quaternion |
+
+The recurrence state is held at `2^−32` in 64-bit integers. Read keys and values are held at `2^−16` in 32-bit integers.
+
+**Check.**
+- A float stack built from the artifact's own values matches the integer engine within `5 × 10^−4` nats per log-probability. Its values are the dequantized matrices, grid-code scalars, integer biases and unit gains.
+- The test logits span about 16 nats. The check covers Dot and Lorentz reads, with and without rotation, and the patterns `rarr`, `ra` and `aa`. It uses random small stacks (unit test `integer_stack_matches_its_grid_reference`).
+- So the integer arithmetic adds far less error than rounding the weights does.
+
+**Trained models.** Each seed-1 model at 1,000 updates was exported with commit `2a681bb7` and scored on the 512 final-evaluation windows (131,072 targets), with a fresh integer session per window. The float column reproduces each run's final evaluation exactly. The records are in the packet under `integer/`; the artifacts (4.5–5.0 MB each) stay outside with their hashes.
+
+| Model | Float NLL | Integer NLL | Integer − float | Top-1 agreement | Tokens/s, one thread |
+|---|---:|---:|---:|---:|---:|
+| Full stack (Lorentz) | 2.6097 | 2.6218 | +0.0121 | 92.7% | 763 |
+| `dot` | 2.5889 | 2.5997 | +0.0108 | 93.0% | 795 |
+| `norot` | 2.6688 | 2.6802 | +0.0114 | 93.1% | 792 |
+| `readsonly` | 2.5531 | 2.5659 | +0.0128 | 93.3% | 666 |
+| Transformer control | 2.7680 | 2.7757 | +0.0077 | 93.6% | 900 |
+
+- Integer serving costs the stacks 0.011–0.013 nats and the control 0.008. The full stack's lead over the control is 0.154 nats in integers, against 0.158 in float. The ablations keep their float order.
+- No calibration was used; GPTQ, which the Llama exporter already supports, is the first lever if the gap matters.
+- The tokens per second are not an architecture comparison:
+  - they were measured on one thread while two training runs shared the 4-core sandbox;
+  - the stack engine's reads use scalar loops over 32-bit keys and values, while the Llama engine uses vector kernels over 8-bit ones.
+
+**Per-token work (*Derived* from the shapes and artifact headers).**
+- Weights: every model reads about 7.2 million packed weights per token (3.8 MB with scales). The float model's fp32 weights are 28.6 MB.
+  - The stack reads 1.2% more than the control, because its MLP is padded from 749 to 768.
+- Cache: at position `t`, each read layer reads `t` keys and `t` values of width 288, while each recurrence layer reads its fixed state of 288. At the end of the context (`t = 256`):
+  - the control's six attention layers read 884,736 cached values per token;
+  - `readsonly`'s six read layers read the same;
+  - the `rrarra` stack's two read layers read 294,912, plus four states of 288.
+
+## 9. What this changes
 
 *(Filled in when the runs finish.)*
 
-## 9. Costs
+## 10. Costs
 
 *(Filled in when the runs finish.)*

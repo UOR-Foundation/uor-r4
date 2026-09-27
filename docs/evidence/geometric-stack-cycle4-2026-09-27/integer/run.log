@@ -1,0 +1,7 @@
+start 2026-09-27T09:28:24Z source 2a681bb7 binary cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177
+done pilot-geometric_lr0.004 2026-09-27T09:32:16Z
+done pilot-transformer_lr0.002 2026-09-27T09:35:39Z
+done ablation-dot 2026-09-27T09:39:16Z
+done ablation-norot 2026-09-27T09:42:59Z
+done ablation-readsonly 2026-09-27T09:47:30Z
+end 2026-09-27T09:47:30Z

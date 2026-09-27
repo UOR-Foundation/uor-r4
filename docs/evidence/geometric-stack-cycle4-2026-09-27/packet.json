@@ -1,5 +1,5 @@
 {
- "schema": "uor-r4.geometric-stack-cycle4-packet/2",
+ "schema": "uor-r4.geometric-stack-cycle4-packet/3",
  "label": "Measured, development, one seed per arm",
  "runs": [
   {
@@ -468,8 +468,8 @@
  "files": [
   {
    "path": "README.md",
-   "bytes": 3578,
-   "sha256": "6f42393fc94296df598a85ad4950907837b34ffe0d66767ecd88337690c5603e"
+   "bytes": 4685,
+   "sha256": "c4a147041ad231973c88e87f7127f43637813d8fe2f00c856830acc45e1c60b9"
   },
   {
    "path": "ablation/dot/attempt.json",
@@ -535,6 +535,161 @@
    "path": "ablation/readsonly/report.json",
    "bytes": 16436,
    "sha256": "2f0cb0e5df7f4dd2289d7914cc85e2d1b3a118fd94b934aaa821593cba39c589"
+  },
+  {
+   "path": "integer/ablation-dot/evaluation/attempt.json",
+   "bytes": 963,
+   "sha256": "aa7f26d864be97cfa28a591270f3b61fbfead4a841d811f3b7391f256349aea9"
+  },
+  {
+   "path": "integer/ablation-dot/evaluation/evaluation.json",
+   "bytes": 59624,
+   "sha256": "c0c33881a4282088583fcdcba5d64e49ce4d561566085f13f7c862f3d05ac227"
+  },
+  {
+   "path": "integer/ablation-dot/evaluation/manifest.json",
+   "bytes": 509,
+   "sha256": "fccb7c9c498aff9c64a4026d729537c694546c44f090de016456528ab297a2d4"
+  },
+  {
+   "path": "integer/ablation-dot/export/attempt.json",
+   "bytes": 554,
+   "sha256": "42fe1e170e9dd177d66e4b5d6376c63e4362a4ed15aaa9ae3eeb1a7179c19d63"
+  },
+  {
+   "path": "integer/ablation-dot/export/export.json",
+   "bytes": 3338,
+   "sha256": "510e82a168d0621a6da7816e59bdc46ac13b30a8b9478931859b4dedac5cbb9e"
+  },
+  {
+   "path": "integer/ablation-dot/export/manifest.json",
+   "bytes": 650,
+   "sha256": "5baa20745d6004db506bc663cf22f808d5f04fb361557ddcce52e6217fa5258f"
+  },
+  {
+   "path": "integer/ablation-norot/evaluation/attempt.json",
+   "bytes": 969,
+   "sha256": "55e0611c419e24d75e44aae9ec3e167515034752168e9ec8f4c476609a423fe6"
+  },
+  {
+   "path": "integer/ablation-norot/evaluation/evaluation.json",
+   "bytes": 59613,
+   "sha256": "db26dbbe216e2ef0d43f15e69322d3214c5dc204bc0c873e596597876d9e3b03"
+  },
+  {
+   "path": "integer/ablation-norot/evaluation/manifest.json",
+   "bytes": 511,
+   "sha256": "6a8e1980df002e1ef6efe54b5c76c40ea1d7d6c1f852c148851f8f44d4c2bcb2"
+  },
+  {
+   "path": "integer/ablation-norot/export/attempt.json",
+   "bytes": 558,
+   "sha256": "ef4ee9e7ae117b3ff0200afc80602b461f8a7524f88221dd3b94fd9e209f9d98"
+  },
+  {
+   "path": "integer/ablation-norot/export/export.json",
+   "bytes": 3424,
+   "sha256": "fef12ade5292953d5a56e2b786d5daf33ce3f996e9b6a876db3313e18bd70f1f"
+  },
+  {
+   "path": "integer/ablation-norot/export/manifest.json",
+   "bytes": 652,
+   "sha256": "baa81b0409c58728347c689bc7774b7a31fc37ec1977d82be3ddb9a24199ec6f"
+  },
+  {
+   "path": "integer/ablation-readsonly/evaluation/attempt.json",
+   "bytes": 981,
+   "sha256": "dfcc5b605aebb3bb3b7c4cb556a0654c23b3c9b4d4a4dd1b0828abba0d421fef"
+  },
+  {
+   "path": "integer/ablation-readsonly/evaluation/evaluation.json",
+   "bytes": 59686,
+   "sha256": "b5357384af9ff2dd5eef47c09cc1854da10894b977b6912b74627147837a18cd"
+  },
+  {
+   "path": "integer/ablation-readsonly/evaluation/manifest.json",
+   "bytes": 515,
+   "sha256": "2f30a868319a53b206faa70cc14c948a0534cc9d0fbae02290929616697a1bff"
+  },
+  {
+   "path": "integer/ablation-readsonly/export/attempt.json",
+   "bytes": 566,
+   "sha256": "0d4378e2ebdc32f57250d221463ca9e34ade97db846dcc70a7ffd601b3ac2f43"
+  },
+  {
+   "path": "integer/ablation-readsonly/export/export.json",
+   "bytes": 3495,
+   "sha256": "9f6a24aa5e4cc7ef173a3c90d6f02e0a8916b1ad3fb7a0081d827d5c0e68dc92"
+  },
+  {
+   "path": "integer/ablation-readsonly/export/manifest.json",
+   "bytes": 656,
+   "sha256": "dc6e0fae97dfa49986da05ae5a74a7a9314490f87491110579d39f41c7e2de4e"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/evaluation/attempt.json",
+   "bytes": 996,
+   "sha256": "38096733cabe9e176dabdeb53a0b21ea2f8873de9bf5a3b0cd85406f9415dbd9"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/evaluation/evaluation.json",
+   "bytes": 59663,
+   "sha256": "31ca86f5e52433aa01fc150e02e64a0e8ba407bc4452b825b24f55205af0c138"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/evaluation/manifest.json",
+   "bytes": 520,
+   "sha256": "ae5bfc90bc7c3eddb1f40797fd9cb2c05492f447b29c893fd4da8de7dc395666"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/export/attempt.json",
+   "bytes": 576,
+   "sha256": "5062b2a4fb5932f014bb27e96cd47da0c51b84ee8ed425aa7ab462ee8a52c56c"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/export/export.json",
+   "bytes": 3441,
+   "sha256": "d1c342c2b94862bfa2a0f37a6c6c9ef4f57ac703a0a043fdab08aaa8cec13e37"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/export/manifest.json",
+   "bytes": 661,
+   "sha256": "50191c2cdcb38d8daaacd6c52cb10f57037d68a1a41e3438c6919753f78cfd5f"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/evaluation/attempt.json",
+   "bytes": 1002,
+   "sha256": "e2261406b9667d2327e1d83bfc936d37e4b8a36f4887e4d4d57f6773cb7b6307"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/evaluation/evaluation.json",
+   "bytes": 59663,
+   "sha256": "20682fccc3caa90f501685706312d67ac439ef30f61f0e3d4b3e33bdd96ec45b"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/evaluation/manifest.json",
+   "bytes": 523,
+   "sha256": "f46ffb16d342cfcfafc25dbfbf309626af47eefcc71c48c43ec6884fec2d4e75"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/export/attempt.json",
+   "bytes": 580,
+   "sha256": "0831580cc1a83d21dbb7392fea81d856d3456d7ecb1a9192d198e9023a1849cc"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/export/export.json",
+   "bytes": 2910,
+   "sha256": "42708b8e3de64cb67c388af46ca0013dddf55bfbc14c63cc4e3538caee20063b"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/export/manifest.json",
+   "bytes": 663,
+   "sha256": "7bea2a0d65702fed56ee98884887b28129954c8931933363d06d2862dc2c25bd"
+  },
+  {
+   "path": "integer/run.log",
+   "bytes": 367,
+   "sha256": "57d657862eda25aa3ee32a1beb046bc9e09c0fc9fbed82dc7d42244f076d3c5d"
   },
   {
    "path": "pilot/chain.log",
@@ -685,10 +840,108 @@
    "path": "sources/launch_pilot.sh",
    "bytes": 1101,
    "sha256": "763c8aec3bb3607abebdab6fad23be66e425bdafdb29be9f1d033e32b5a6e817"
+  },
+  {
+   "path": "sources/lut-run512.sh",
+   "bytes": 1298,
+   "sha256": "e8a7d07f5e2afbb2f42f2351329fd0de6290f3a5c1326da2612916aeb97076ef"
   }
  ],
  "source_commits": {
   "dca1b790": "pilot runs",
-  "b87acd63": "ablation runs; relative to dca1b790 only the example's sample decoding, evaluate mode and early-stop checkpoint retention changed, not the model, optimizer or training loop"
- }
+  "b87acd63": "ablation runs; relative to dca1b790 only the example's sample decoding, evaluate mode and early-stop checkpoint retention changed, not the model, optimizer or training loop",
+  "2a681bb7": "integer serving: export and lut-evaluate of the pilot pair and seed-1 ablations"
+ },
+ "integer": [
+  {
+   "model": "pilot-geometric_lr0.004",
+   "schema": "uor-r4.geometric-stack-lut-evaluation/1",
+   "windows": 512,
+   "targets": 131072,
+   "float_nll": 2.6097290790013816,
+   "integer_nll": 2.621838308178381,
+   "integer_minus_float_nll": 0.012109229176999303,
+   "top1_agreement": 0.9268341064453125,
+   "integer_bits_per_byte": 1.0542285756945418,
+   "tokens_per_second_one_thread_shared_machine": 763.0945337705103,
+   "backend": "avx2",
+   "artifact_sha256": "d02c445df07dca2a83a546a6a8b66aa7914e606419e642d6e8ede738fe350ecf",
+   "artifact_bytes": 4969796,
+   "artifact_retained_outside": "scratchpad/c4/lut/v1/export-pilot-geometric_lr0.004/model.lut",
+   "float_model_sha256": "bd4c1aba018a3e4814ef82d98450782ff54f7b80aa94382424015d5e71e14c7b",
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+  },
+  {
+   "model": "pilot-transformer_lr0.002",
+   "schema": "uor-r4.geometric-stack-lut-evaluation/1",
+   "windows": 512,
+   "targets": 131072,
+   "float_nll": 2.7680414886746925,
+   "integer_nll": 2.775736476840226,
+   "integer_minus_float_nll": 0.0076949881655337116,
+   "top1_agreement": 0.93609619140625,
+   "integer_bits_per_byte": 1.116110289240447,
+   "tokens_per_second_one_thread_shared_machine": 899.9385239904626,
+   "backend": "avx2",
+   "artifact_sha256": "900d6b533ea94448876c04207d0e1f9882e4890637e5ebb791ae4f767c696351",
+   "artifact_bytes": 4524480,
+   "artifact_retained_outside": "scratchpad/c4/lut/v1/export-pilot-transformer_lr0.002/model.lut",
+   "float_model_sha256": "c0bc35e2fd3085cdf0c8962a247f58a2fdc5e1b98e6422a3fad88604bd83f9f4",
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+  },
+  {
+   "model": "ablation-dot",
+   "schema": "uor-r4.geometric-stack-lut-evaluation/1",
+   "windows": 512,
+   "targets": 131072,
+   "float_nll": 2.5888808893182316,
+   "integer_nll": 2.59968982475846,
+   "integer_minus_float_nll": 0.010808935440228318,
+   "top1_agreement": 0.929718017578125,
+   "integer_bits_per_byte": 1.0453227770200992,
+   "tokens_per_second_one_thread_shared_machine": 795.366436498555,
+   "backend": "avx2",
+   "artifact_sha256": "da005784d831a8ac7aa636ff15e04aed6bd08f3bdcc80416c728dc1a7cc4edfd",
+   "artifact_bytes": 4612676,
+   "artifact_retained_outside": "scratchpad/c4/lut/v1/export-ablation-dot/model.lut",
+   "float_model_sha256": "edf6306470d7e0a231c8bb5f6896d18546588937d905cf9b14b6af771b942df2",
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+  },
+  {
+   "model": "ablation-norot",
+   "schema": "uor-r4.geometric-stack-lut-evaluation/1",
+   "windows": 512,
+   "targets": 131072,
+   "float_nll": 2.6688332687605216,
+   "integer_nll": 2.6802037820070335,
+   "integer_minus_float_nll": 0.011370513246511837,
+   "top1_agreement": 0.93084716796875,
+   "integer_bits_per_byte": 1.0776970520503046,
+   "tokens_per_second_one_thread_shared_machine": 791.8102035121128,
+   "backend": "avx2",
+   "artifact_sha256": "099290c121aeed88304b97da25dfe9f8a6586d5231ef355f2e6d1d4f951addff",
+   "artifact_bytes": 4965252,
+   "artifact_retained_outside": "scratchpad/c4/lut/v1/export-ablation-norot/model.lut",
+   "float_model_sha256": "681588f74c819a201bb057bd77a1c52438c2ec5ff6669282c29fef427d1cacac",
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+  },
+  {
+   "model": "ablation-readsonly",
+   "schema": "uor-r4.geometric-stack-lut-evaluation/1",
+   "windows": 512,
+   "targets": 131072,
+   "float_nll": 2.5530951164888487,
+   "integer_nll": 2.5658512570054306,
+   "integer_minus_float_nll": 0.012756140516581915,
+   "top1_agreement": 0.9328231811523438,
+   "integer_bits_per_byte": 1.0317164516511619,
+   "tokens_per_second_one_thread_shared_machine": 666.2335132476093,
+   "backend": "avx2",
+   "artifact_sha256": "adb03ffe543c32861254cbc1f8b8c26277e059167105a538c33abe1c660b6160",
+   "artifact_bytes": 4935684,
+   "artifact_retained_outside": "scratchpad/c4/lut/v1/export-ablation-readsonly/model.lut",
+   "float_model_sha256": "1bfb0fbde0968287120404fbbc95348552f45fd7a534446e991d8e621aed649d",
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+  }
+ ]
 }
