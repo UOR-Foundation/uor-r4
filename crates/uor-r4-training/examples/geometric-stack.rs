@@ -19,6 +19,9 @@
 //!   [lens=LENS.u16]
 //! geometric-stack encode merges=MERGES.txt input=TEXT out=TOKENS.u16
 //! geometric-stack corpus registry=CARGO_REGISTRY_SRC_INDEX out=TEXT [max_file_bytes=200000]
+//! geometric-stack export model=ROOT/model out=NEW_REPORT_ROOT
+//! geometric-stack lut-evaluate artifact=ROOT/model.lut valid=VALID.u16 out=NEW_REPORT_ROOT \
+//!   [model=ROOT/model] [windows=64] [threads=1] [lens=LENS.u16]
 //! ```
 //!
 //! The shape options describe the transformer control (#1017's by default). A
@@ -43,6 +46,16 @@
 //! blocks, 64 tune and 912 comparison (233,472 targets), where #1017 scores
 //! 1.574024 nats. Samples decode with `merges=` (the lab BPE) or
 //! `tokenizer=` (a `tokenizer.json`, such as the retained 4,096-token one).
+//!
+//! `export` writes the integer serving artifact of a trained model under owner
+//! decision D10 (`uor_r4_training::stack_export`): a stack artifact for a
+//! geometric stack, served by `uor_r4_lut::stack`, or a Llama artifact for the
+//! transformer control, served by `uor_r4_lut::engine`. `lut-evaluate` runs
+//! either engine position by position over the evenly spaced windows of
+//! `train`'s evaluation (`windows=512` is the final evaluation's 131,072
+//! targets), with a fresh session per window, and reports its NLL beside the
+//! float model's on the same windows when `model=` is given, their top-1
+//! agreement and the engine's tokens per second.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -52,11 +65,17 @@ use std::time::Instant;
 use candle_core::Device;
 use serde_json::{json, Value};
 use uor_r4_core::report_output;
-use uor_r4_training::geometric_stack::{ReadScore, StackAdamW, StackConfig, StackModel};
+use uor_r4_training::geometric_stack::{ReadScore, StackAdamW, StackArch, StackConfig, StackModel};
+use uor_r4_training::lut_export::export_llama;
+use uor_r4_training::stack_export::{control_checkpoint, export_stack};
 use uor_r4_training::{sha256_file, Result, TrainingError};
 
 fn invalid(message: impl Into<String>) -> TrainingError {
     TrainingError::Invalid(message.into())
+}
+
+fn lut(error: uor_r4_lut::LutError) -> TrainingError {
+    invalid(error.to_string())
 }
 
 struct Args(BTreeMap<String, String>);
@@ -1062,6 +1081,252 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
     finish(&out, result)
 }
 
+/// The integer serving artifact of a trained model (owner decision D10).
+fn export_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(arguments, &["model", "out"])?;
+    let model_dir = PathBuf::from(args.required("model")?);
+    let out = PathBuf::from(args.required("out")?);
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let weights = model_dir.join("model.safetensors");
+        let source = json!({
+            "exporter": "geometric-stack export",
+            "model": identity(&weights)?,
+            "config": model.config,
+            "executable": identity(&std::env::current_exe()?)?,
+        });
+        let (bytes, report) = match model.config.arch {
+            StackArch::Geometric => export_stack(&model, source.clone())?,
+            StackArch::Transformer => {
+                let checkpoint = control_checkpoint(&model, sha256_file(&weights)?)?;
+                export_llama(
+                    &checkpoint,
+                    model.config.context,
+                    source.clone(),
+                    None,
+                    None,
+                )?
+            }
+        };
+        let artifact = out.join("model.lut");
+        fs::write(&artifact, &bytes)?;
+        fs::write(
+            out.join("export.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-export/1",
+                "source": source,
+                "artifact": identity(&artifact)?,
+                "quantization": report,
+            }))?,
+        )?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
+/// Either integer engine, behind one step function.
+enum Engine {
+    Stack(Box<uor_r4_lut::stack::StackModel>),
+    Llama(Box<uor_r4_lut::engine::Model>),
+}
+
+impl Engine {
+    fn load(bytes: Vec<u8>, threads: usize) -> Result<Self> {
+        use uor_r4_lut::format::{schema_of, Artifact, StackArtifact, SCHEMA, STACK_SCHEMA};
+        let schema = schema_of(&bytes).map_err(lut)?;
+        Ok(if schema == STACK_SCHEMA {
+            let mut model = uor_r4_lut::stack::StackModel::from_artifact(
+                StackArtifact::parse(bytes).map_err(lut)?,
+            )
+            .map_err(lut)?;
+            model.set_threads(threads).map_err(lut)?;
+            Self::Stack(Box::new(model))
+        } else if schema == SCHEMA {
+            let mut model =
+                uor_r4_lut::engine::Model::from_artifact(Artifact::parse(bytes).map_err(lut)?)
+                    .map_err(lut)?;
+            model.set_threads(threads).map_err(lut)?;
+            Self::Llama(Box::new(model))
+        } else {
+            return Err(invalid(format!("unknown artifact schema {schema}")));
+        })
+    }
+
+    fn vocabulary(&self) -> usize {
+        match self {
+            Self::Stack(model) => model.shape().vocab,
+            Self::Llama(model) => model.shape().vocab,
+        }
+    }
+
+    fn context(&self) -> usize {
+        match self {
+            Self::Stack(model) => model.shape().context,
+            Self::Llama(model) => model.shape().max_positions,
+        }
+    }
+
+    fn sha256(&self) -> &str {
+        match self {
+            Self::Stack(model) => model.artifact_sha256(),
+            Self::Llama(model) => model.artifact_sha256(),
+        }
+    }
+
+    fn backend(&self) -> &'static str {
+        match self {
+            Self::Stack(model) => model.backend().name(),
+            Self::Llama(model) => model.backend().name(),
+        }
+    }
+
+    /// Logits (exponent -16) after each id of one window, from a fresh session.
+    fn window(&self, ids: &[u32], mut visit: impl FnMut(usize, &[i32])) -> Result<()> {
+        match self {
+            Self::Stack(model) => {
+                let mut session = model.session();
+                for (t, &id) in ids.iter().enumerate() {
+                    visit(t, session.step(id).map_err(lut)?);
+                }
+            }
+            Self::Llama(model) => {
+                let mut session = model.session();
+                for (t, &id) in ids.iter().enumerate() {
+                    visit(t, session.step(id).map_err(lut)?);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `-log softmax(logits)[target]` and the argmax, in f64 (evaluation only).
+fn score_row(logits: impl Iterator<Item = f64> + Clone, target: usize) -> (f64, usize) {
+    let (mut best, mut max) = (0usize, f64::NEG_INFINITY);
+    for (i, v) in logits.clone().enumerate() {
+        if v > max {
+            (best, max) = (i, v);
+        }
+    }
+    let total: f64 = logits.clone().map(|v| (v - max).exp()).sum();
+    let at = logits.clone().nth(target).unwrap_or(f64::NEG_INFINITY);
+    (max + total.ln() - at, best)
+}
+
+/// Integer serving on evenly spaced development windows, beside the float
+/// model on the same windows when `model=` is given.
+fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &[
+            "artifact", "valid", "model", "windows", "threads", "lens", "out",
+        ],
+    )?;
+    let artifact_path = PathBuf::from(args.required("artifact")?);
+    let valid_path = PathBuf::from(args.required("valid")?);
+    let model_dir = args.optional("model").map(PathBuf::from);
+    let lens_path = args.optional("lens").map(PathBuf::from);
+    let windows: usize = args.number("windows", 64)?;
+    let threads: usize = args.number("threads", 1)?;
+    let out = PathBuf::from(args.required("out")?);
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        let engine = Engine::load(fs::read(&artifact_path)?, threads)?;
+        let time = engine.context();
+        let valid = read_tokens(&valid_path, engine.vocabulary())?;
+        let lens = lens_path
+            .as_ref()
+            .map(|path| read_tokens(path, u16::MAX as usize + 1))
+            .transpose()?;
+        let float = model_dir
+            .as_ref()
+            .map(|dir| StackModel::load(dir, &Device::Cpu))
+            .transpose()?;
+        if let Some(model) = &float {
+            if model.config.vocab_size != engine.vocabulary() || model.config.context != time {
+                return Err(invalid("the float model and the artifact differ in shape"));
+            }
+        }
+        if windows == 0 || valid.len() <= time + windows {
+            return Err(invalid("too few development tokens for the windows"));
+        }
+        let stride = (valid.len() - time - 1) / windows;
+        let (mut integer_nll, mut float_nll, mut bytes) = (0f64, 0f64, 0f64);
+        let (mut agree, mut targets, mut integer_seconds) = (0usize, 0usize, 0f64);
+        let mut per_window = Vec::with_capacity(windows);
+        for window in 0..windows {
+            let start = window * stride;
+            let ids = &valid[start..start + time];
+            let next = &valid[start + 1..start + time + 1];
+            let mut window_nll = 0f64;
+            let mut integer_top = vec![0usize; time];
+            let clock = Instant::now();
+            engine.window(ids, |t, logits| {
+                let (nll, top) = score_row(
+                    logits.iter().map(|&v| f64::from(v) / 65536.0),
+                    next[t] as usize,
+                );
+                window_nll += nll;
+                integer_top[t] = top;
+            })?;
+            integer_seconds += clock.elapsed().as_secs_f64();
+            integer_nll += window_nll;
+            let mut row = json!({"start": start, "integer_nll": window_nll / time as f64});
+            if let Some(model) = &float {
+                let logits = model.forward(ids, 1, time)?.to_vec2::<f32>()?;
+                let mut window_float = 0f64;
+                for (t, row) in logits.iter().enumerate() {
+                    let (nll, top) = score_row(row.iter().map(|&v| f64::from(v)), next[t] as usize);
+                    window_float += nll;
+                    agree += usize::from(top == integer_top[t]);
+                }
+                float_nll += window_float;
+                row["float_nll"] = json!(window_float / time as f64);
+            }
+            if let Some(lens) = &lens {
+                bytes += next
+                    .iter()
+                    .map(|&id| f64::from(lens[id as usize]))
+                    .sum::<f64>();
+            }
+            targets += time;
+            per_window.push(row);
+        }
+        let bits = |nll: f64| lens.as_ref().map(|_| nll / std::f64::consts::LN_2 / bytes);
+        fs::write(
+            out.join("evaluation.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-lut-evaluation/1",
+                "protocol": "evenly spaced windows of the development tokens (train's evaluation rule), one fresh integer session per window, position by position",
+                "artifact": identity(&artifact_path)?,
+                "artifact_sha256": engine.sha256(),
+                "float_model": model_dir.as_ref().map(|dir| identity(&dir.join("model.safetensors"))).transpose()?,
+                "valid": identity(&valid_path)?,
+                "windows": windows,
+                "targets": targets,
+                "integer": {
+                    "nll": integer_nll / targets as f64,
+                    "bits_per_byte": bits(integer_nll),
+                    "seconds": integer_seconds,
+                    "tokens_per_second": targets as f64 / integer_seconds,
+                    "threads": threads,
+                    "backend": engine.backend(),
+                },
+                "float": float.as_ref().map(|_| json!({
+                    "nll": float_nll / targets as f64,
+                    "bits_per_byte": bits(float_nll),
+                })),
+                "integer_minus_float_nll": float.as_ref().map(|_| (integer_nll - float_nll) / targets as f64),
+                "top1_agreement": float.as_ref().map(|_| agree as f64 / targets as f64),
+                "per_window": per_window,
+            }))?,
+        )?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
 fn finish(out: &Path, result: Result<()>) -> Result<()> {
     if let Err(error) = &result {
         fs::write(
@@ -1078,7 +1343,7 @@ fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let Some((mode, rest)) = arguments.split_first() else {
         return Err(invalid(
-            "usage: geometric-stack train|sample|evaluate|encode|corpus key=value ...",
+            "usage: geometric-stack train|sample|evaluate|encode|corpus|export|lut-evaluate key=value ...",
         ));
     };
     match mode.as_str() {
@@ -1129,6 +1394,8 @@ fn main() -> Result<()> {
         "evaluate" => evaluate_mode(rest),
         "encode" => encode_mode(rest),
         "corpus" => corpus_mode(rest),
+        "export" => export_mode(rest),
+        "lut-evaluate" => lut_evaluate_mode(rest),
         other => Err(invalid(format!("unknown mode {other}"))),
     }
 }
