@@ -305,6 +305,29 @@ impl<'s, 'a> ChatTokenStream<'s, 'a> {
     pub fn error(&self) -> Option<&IntegerError> {
         self.error.as_ref()
     }
+
+    /// Commit the terminal token before reporting a successful stop. A failed
+    /// model step may have changed state; retain its error rather than implying
+    /// that the turn closed successfully. Already buffered text is still flushed.
+    fn finish_turn(&mut self, token: u32, reason: StreamStopReason) -> Option<String> {
+        self.stopped = true;
+        match self.session.bundle.model().step_conversational_into(
+            &mut self.session.state,
+            token,
+            SlotTarget::Dialogue,
+            self.session.read_mode,
+        ) {
+            Ok(()) => {
+                self.stop_reason = Some(reason);
+                self.session.sync_last_step();
+            }
+            Err(error) => {
+                self.stop_reason = Some(StreamStopReason::ModelError);
+                self.error = Some(error);
+            }
+        }
+        self.decoder.flush()
+    }
 }
 
 fn short_cycle_check(tokens: &[u32]) -> Option<usize> {
@@ -378,32 +401,21 @@ impl<'s, 'a> Iterator for ChatTokenStream<'s, 'a> {
             let is_custom_stop = self.stop_tokens.contains(&selected_token);
 
             if is_turn_end || is_eos || is_custom_stop {
-                self.stopped = true;
-                if is_turn_end {
-                    self.stop_reason = Some(StreamStopReason::TurnEnd {
+                let reason = if is_turn_end {
+                    StreamStopReason::TurnEnd {
                         token_id: selected_token,
-                    });
+                    }
                 } else if is_eos {
-                    self.stop_reason = Some(StreamStopReason::Eos {
+                    StreamStopReason::Eos {
                         token_id: selected_token,
-                    });
+                    }
                 } else {
-                    self.stop_reason = Some(StreamStopReason::CustomStop {
+                    StreamStopReason::CustomStop {
                         token_id: selected_token,
-                    });
-                }
-
-                // Step the stop token into dialogue memory to conclude the turn cleanly
-                let _ = self.session.bundle.model().step_conversational_into(
-                    &mut self.session.state,
-                    selected_token,
-                    SlotTarget::Dialogue,
-                    self.session.read_mode,
-                );
-                self.session.sync_last_step();
-
+                    }
+                };
                 // Stop token is NOT emitted to user stream; flush any pending bytes
-                return self.decoder.flush();
+                return self.finish_turn(selected_token, reason);
             }
 
             self.tokens_generated += 1;
@@ -426,16 +438,10 @@ impl<'s, 'a> Iterator for ChatTokenStream<'s, 'a> {
             }
 
             if let Some(period) = short_cycle_check(&self.generated_tokens) {
-                self.stopped = true;
-                self.stop_reason = Some(StreamStopReason::CycleDetected { period });
-                let _ = self.session.bundle.model().step_conversational_into(
-                    &mut self.session.state,
+                return self.finish_turn(
                     self.session.roles.turn_end_id,
-                    SlotTarget::Dialogue,
-                    self.session.read_mode,
+                    StreamStopReason::CycleDetected { period },
                 );
-                self.session.sync_last_step();
-                return self.decoder.flush();
             }
 
             // Suppress literal `<|bos|>` (token 0) and `<|unk|>` (token 2) string tags
@@ -456,18 +462,12 @@ impl<'s, 'a> Iterator for ChatTokenStream<'s, 'a> {
             }
         }
 
-        self.stopped = true;
-        self.stop_reason = Some(StreamStopReason::MaxTokens {
-            count: self.tokens_generated,
-        });
-        let _ = self.session.bundle.model().step_conversational_into(
-            &mut self.session.state,
+        self.finish_turn(
             self.session.roles.turn_end_id,
-            SlotTarget::Dialogue,
-            self.session.read_mode,
-        );
-        self.session.sync_last_step();
-        self.decoder.flush()
+            StreamStopReason::MaxTokens {
+                count: self.tokens_generated,
+            },
+        )
     }
 }
 
@@ -520,6 +520,8 @@ pub struct SerializedSessionState {
     pub l2_seen: u64,
     #[serde(default = "default_last_compressed_turn_id")]
     pub last_compressed_turn_id: u32,
+    #[serde(default)]
+    pub allow_hyperbolic_cache: bool,
 }
 
 fn default_last_compressed_turn_id() -> u32 {
@@ -548,7 +550,10 @@ impl<'a> ChatSession<'a> {
     /// Initialize a new chat session with optional system prompt.
     pub fn new(bundle: &'a Bundle, system_prompt: Option<&str>, seed: u64) -> Result<Self> {
         let roles = RoleTokens::from_tokenizer(bundle.tokenizer())?;
-        let state = bundle.model().new_conversational_session();
+        let mut state = bundle.model().new_conversational_session();
+        if bundle.model().is_lorentz() {
+            state.enable_hyperbolic_cache();
+        }
         let mut session = Self {
             bundle,
             state,
@@ -856,6 +861,7 @@ impl<'a> ChatSession<'a> {
                 l2_len: self.state.l2_len,
                 l2_seen: self.state.l2_seen,
                 last_compressed_turn_id: self.state.last_compressed_turn_id,
+                allow_hyperbolic_cache: self.state.allow_hyperbolic_cache,
             },
             sampler_state: SerializedSamplerState {
                 state: self.sampler.state(),
@@ -940,11 +946,37 @@ impl<'a> ChatSession<'a> {
                 s_state.state.len()
             )));
         }
+        if s_state.persistent_capacity != PERSISTENT_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted persistent capacity: expected {}, found {}",
+                PERSISTENT_CAPACITY, s_state.persistent_capacity
+            )));
+        }
         if s_state.persistent_keys.len() > PERSISTENT_CAPACITY {
             return Err(invalid(format!(
                 "persistent slot count {} exceeds capacity {}",
                 s_state.persistent_keys.len(),
                 PERSISTENT_CAPACITY
+            )));
+        }
+        if s_state.persistent_values.len() != s_state.persistent_keys.len() {
+            return Err(invalid(format!(
+                "corrupted persistent values count: expected {} (matching keys), found {}",
+                s_state.persistent_keys.len(),
+                s_state.persistent_values.len()
+            )));
+        }
+        if s_state.persistent_tokens.len() != s_state.persistent_keys.len() {
+            return Err(invalid(format!(
+                "corrupted persistent tokens count: expected {} (matching keys), found {}",
+                s_state.persistent_keys.len(),
+                s_state.persistent_tokens.len()
+            )));
+        }
+        if s_state.dialogue_capacity != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue capacity: expected {}, found {}",
+                DIALOGUE_CAPACITY, s_state.dialogue_capacity
             )));
         }
         if s_state.dialogue_keys.len() != DIALOGUE_CAPACITY {
@@ -961,10 +993,37 @@ impl<'a> ChatSession<'a> {
                 s_state.dialogue_values.len()
             )));
         }
+        if s_state.dialogue_tokens.len() != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue tokens: expected {} slots, found {}",
+                DIALOGUE_CAPACITY,
+                s_state.dialogue_tokens.len()
+            )));
+        }
+        if s_state.dialogue_sequences.len() != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue sequences: expected {} slots, found {}",
+                DIALOGUE_CAPACITY,
+                s_state.dialogue_sequences.len()
+            )));
+        }
+        if s_state.dialogue_turn_ids.len() != DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "corrupted dialogue turn IDs: expected {} slots, found {}",
+                DIALOGUE_CAPACITY,
+                s_state.dialogue_turn_ids.len()
+            )));
+        }
         if s_state.dialogue_cursor >= DIALOGUE_CAPACITY {
             return Err(invalid(format!(
                 "dialogue cursor {} out of bounds [0, {})",
                 s_state.dialogue_cursor, DIALOGUE_CAPACITY
+            )));
+        }
+        if s_state.dialogue_len > DIALOGUE_CAPACITY {
+            return Err(invalid(format!(
+                "dialogue len {} exceeds capacity {}",
+                s_state.dialogue_len, DIALOGUE_CAPACITY
             )));
         }
 
@@ -974,6 +1033,13 @@ impl<'a> ChatSession<'a> {
                     "corrupted dialogue key at slot {i}: expected dimension {KEY_DIM}, found {}",
                     key.len()
                 )));
+            }
+            for (d, &coord) in key.iter().enumerate() {
+                if !(-32767..=32767).contains(&coord) {
+                    return Err(invalid(format!(
+                        "corrupted dialogue key coordinate at slot {i}, dim {d}: {coord} outside [-32767, 32767]"
+                    )));
+                }
             }
         }
         for (i, val) in s_state.dialogue_values.iter().enumerate() {
@@ -1003,6 +1069,13 @@ impl<'a> ChatSession<'a> {
                     key.len()
                 )));
             }
+            for (d, &coord) in key.iter().enumerate() {
+                if !(-32767..=32767).contains(&coord) {
+                    return Err(invalid(format!(
+                        "corrupted persistent key coordinate at slot {i}, dim {d}: {coord} outside [-32767, 32767]"
+                    )));
+                }
+            }
             let mut arr = [0i32; KEY_DIM];
             arr.copy_from_slice(&key);
             persistent_keys.push(arr);
@@ -1021,14 +1094,80 @@ impl<'a> ChatSession<'a> {
             persistent_values.push(arr);
         }
 
+        if s_state.l2_pages.len() > L2_PAGE_CAPACITY {
+            return Err(invalid(format!(
+                "l2 page count {} exceeds capacity {}",
+                s_state.l2_pages.len(),
+                L2_PAGE_CAPACITY
+            )));
+        }
+        if s_state.l2_cursor >= L2_PAGE_CAPACITY {
+            return Err(invalid(format!(
+                "l2 cursor {} out of bounds [0, {})",
+                s_state.l2_cursor, L2_PAGE_CAPACITY
+            )));
+        }
+        if s_state.l2_len > L2_PAGE_CAPACITY {
+            return Err(invalid(format!(
+                "l2 len {} exceeds capacity {}",
+                s_state.l2_len, L2_PAGE_CAPACITY
+            )));
+        }
+        if s_state.l2_pages.len() < s_state.l2_len {
+            return Err(invalid(format!(
+                "l2 pages count {} is less than l2_len {}",
+                s_state.l2_pages.len(),
+                s_state.l2_len
+            )));
+        }
+
         let mut l2_pages: Box<[L2PrimePage; L2_PAGE_CAPACITY]> =
             vec![L2PrimePage::default(); L2_PAGE_CAPACITY]
                 .into_boxed_slice()
                 .try_into()
-                .unwrap_or_else(|_| panic!("l2_pages size mismatch"));
+                .map_err(|_| invalid("l2_pages size mismatch"))?;
         for (i, page) in s_state.l2_pages.into_iter().enumerate() {
             if i < L2_PAGE_CAPACITY {
+                for (d, &coord) in page.key.iter().enumerate() {
+                    if !(-32767..=32767).contains(&coord) {
+                        return Err(invalid(format!(
+                            "corrupted L2 page key coordinate at page {i}, dim {d}: {coord} outside [-32767, 32767]"
+                        )));
+                    }
+                }
                 l2_pages[i] = page;
+            }
+        }
+
+        let is_lorentz = bundle.model().is_lorentz();
+        let allow_hyperbolic_cache = s_state.allow_hyperbolic_cache || is_lorentz;
+
+        let mut persistent_key_norms = Vec::with_capacity(persistent_keys.len());
+        if is_lorentz {
+            for key in &persistent_keys {
+                persistent_key_norms.push(crate::lorentz::squared_norm(key)?);
+            }
+        } else {
+            persistent_key_norms.resize(persistent_keys.len(), 0i128);
+        }
+
+        let mut dialogue_key_norms: Box<[i128; DIALOGUE_CAPACITY]> = vec![0i128; DIALOGUE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .map_err(|_| invalid("dialogue_key_norms size mismatch"))?;
+        if is_lorentz {
+            for i in 0..DIALOGUE_CAPACITY {
+                dialogue_key_norms[i] = crate::lorentz::squared_norm(&dialogue_keys[i])?;
+            }
+        }
+
+        let mut l2_page_norms: Box<[i128; L2_PAGE_CAPACITY]> = vec![0i128; L2_PAGE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .map_err(|_| invalid("l2_page_norms size mismatch"))?;
+        if is_lorentz {
+            for i in 0..L2_PAGE_CAPACITY {
+                l2_page_norms[i] = crate::lorentz::squared_norm(&l2_pages[i].key)?;
             }
         }
 
@@ -1051,20 +1190,24 @@ impl<'a> ChatSession<'a> {
             dialogue_seen: s_state.dialogue_seen,
             current_turn_id: s_state.current_turn_id,
             l2_pages,
-            l2_cursor: s_state.l2_cursor % L2_PAGE_CAPACITY,
-            l2_len: s_state.l2_len.min(L2_PAGE_CAPACITY),
+            l2_cursor: s_state.l2_cursor,
+            l2_len: s_state.l2_len,
             l2_seen: s_state.l2_seen,
             last_compressed_turn_id: s_state.last_compressed_turn_id,
             zeta_state: s_state.zeta_state,
             hopf_state: s_state.hopf_state,
             cumulative_holonomy_q30: s_state.cumulative_holonomy_q30,
             age_horizon_clamp: s_state.age_horizon_clamp,
+            persistent_key_norms,
+            dialogue_key_norms,
+            l2_page_norms,
+            allow_hyperbolic_cache,
             scratch_products: vec![[0i64; 16]; 512],
             copy_scratch: vec![0u64; 4096],
             last_probabilities: vec![0u64; 4096]
                 .into_boxed_slice()
                 .try_into()
-                .unwrap_or_else(|_| panic!("probabilities size mismatch")),
+                .map_err(|_| invalid("probabilities size mismatch"))?,
             last_read_masses: Vec::with_capacity(TOTAL_MEMORY_CANDIDATES),
             last_no_read_mass: 0,
             last_copy_gate: 0,
@@ -1099,6 +1242,182 @@ impl Bundle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn force_prediction(session: &mut ChatSession<'_>, token: u32) {
+        session.state.last_probabilities.fill(0);
+        session.state.last_probabilities[token as usize] = crate::PROBABILITY_TOTAL;
+        session.state.has_step = true;
+    }
+
+    #[test]
+    fn chat_stream_closure_errors_are_terminal() -> Result<()> {
+        let bundle = crate::bundle::create_test_bundle_with_byte_vocab();
+        let text_token = *bundle
+            .tokenizer()
+            .encode("x")
+            .first()
+            .ok_or_else(|| invalid("test tokenizer lacks x"))?;
+
+        // A sampled EOS used to report success even when its model write failed.
+        let mut session = ChatSession::new(&bundle, None, 17)?;
+        let eos = session.roles.eos_id;
+        force_prediction(&mut session, eos);
+        session.state.identity = "injected identity mismatch".into();
+        let mut stream = ChatTokenStream::new(&mut session, 8, &[]);
+        assert_eq!(stream.decoder.push_bytes(&[0xc3]), None);
+        assert_eq!(stream.next(), Some("\u{fffd}".into()));
+        assert_eq!(stream.stop_reason(), Some(StreamStopReason::ModelError));
+        assert!(stream
+            .error()
+            .is_some_and(|error| error.to_string().contains("identity")));
+        assert!(stream.generated_tokens().is_empty());
+        assert_eq!(stream.next(), None);
+
+        // Cap closure fails before any generated token or sampling operation.
+        let mut session = ChatSession::new(&bundle, None, 17)?;
+        session.roles.turn_end_id = bundle.model().config().vocab_size as u32;
+        let sampler_before = session.sampler.state();
+        let mut stream = ChatTokenStream::new(&mut session, 0, &[]);
+        assert_eq!(stream.next(), None);
+        assert_eq!(stream.stop_reason(), Some(StreamStopReason::ModelError));
+        assert!(stream
+            .error()
+            .is_some_and(|error| error.to_string().contains("bounds")));
+        assert_eq!(stream.session.state.dialogue_seen, 0);
+        assert_eq!(stream.session.sampler.state(), sampler_before);
+        assert_eq!(stream.next(), None);
+
+        // The third ordinary token is successfully written; only the inserted
+        // turn-end write fails. Preserve those generated IDs and report failure.
+        let mut session = ChatSession::new(&bundle, None, 17)?;
+        session.roles.turn_end_id = bundle.model().config().vocab_size as u32;
+        let mut stream = ChatTokenStream::new(&mut session, 8, &[]);
+        for _ in 0..2 {
+            force_prediction(stream.session, text_token);
+            assert_eq!(stream.next(), Some("x".into()));
+        }
+        force_prediction(stream.session, text_token);
+        assert_eq!(stream.next(), None);
+        assert_eq!(stream.stop_reason(), Some(StreamStopReason::ModelError));
+        assert!(stream
+            .error()
+            .is_some_and(|error| error.to_string().contains("bounds")));
+        assert_eq!(stream.generated_tokens(), &[text_token; 3]);
+        assert_eq!(stream.session.state.dialogue_seen, 3);
+        assert_eq!(stream.next(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn chat_stream_successful_closures_preserve_history_and_sampler() -> Result<()> {
+        let bundle = crate::bundle::create_test_bundle_with_byte_vocab();
+        let text_token = *bundle
+            .tokenizer()
+            .encode("x")
+            .first()
+            .ok_or_else(|| invalid("test tokenizer lacks x"))?;
+        for case in 0..5 {
+            let mut session = ChatSession::new(&bundle, None, 17)?;
+            let mut expected = ChatSession::new(&bundle, None, 17)?;
+            let (selected, count, cap, stops, reason, policy) = match case {
+                0 => (
+                    session.roles.eos_id,
+                    1,
+                    8,
+                    vec![],
+                    StreamStopReason::Eos {
+                        token_id: session.roles.eos_id,
+                    },
+                    SamplePolicy::Categorical { top_k: 0 },
+                ),
+                1 => (
+                    session.roles.turn_end_id,
+                    1,
+                    8,
+                    vec![],
+                    StreamStopReason::TurnEnd {
+                        token_id: session.roles.turn_end_id,
+                    },
+                    SamplePolicy::Greedy,
+                ),
+                2 => (
+                    text_token,
+                    1,
+                    8,
+                    vec![text_token],
+                    StreamStopReason::CustomStop {
+                        token_id: text_token,
+                    },
+                    SamplePolicy::Categorical { top_k: 0 },
+                ),
+                3 => (
+                    text_token,
+                    1,
+                    1,
+                    vec![],
+                    StreamStopReason::MaxTokens { count: 1 },
+                    SamplePolicy::Categorical { top_k: 0 },
+                ),
+                _ => (
+                    text_token,
+                    3,
+                    8,
+                    vec![],
+                    StreamStopReason::CycleDetected { period: 1 },
+                    SamplePolicy::Categorical { top_k: 0 },
+                ),
+            };
+            session.set_policy(policy);
+            expected.set_policy(policy);
+            let turn_end = session.roles.turn_end_id;
+            let mut stream = ChatTokenStream::new(&mut session, cap, &stops).with_policy(policy);
+            let mut visible = String::new();
+            for _ in 0..count {
+                force_prediction(stream.session, selected);
+                force_prediction(&mut expected, selected);
+                let sampled = expected
+                    .sampler
+                    .select(&expected.state.last_probabilities[..], policy)
+                    .map_err(|error| invalid(error.to_string()))?;
+                assert_eq!(sampled, selected as usize);
+                expected.step_token(selected, SlotTarget::Dialogue)?;
+                if let Some(chunk) = stream.next() {
+                    visible.push_str(&chunk);
+                }
+            }
+            if case >= 3 {
+                expected.step_token(turn_end, SlotTarget::Dialogue)?;
+            }
+            // The cap closure occurs on the next iterator call after its text.
+            assert_eq!(stream.next(), None);
+            assert_eq!(stream.stop_reason(), Some(reason));
+            assert!(stream.error().is_none());
+            let generated = if case < 3 {
+                vec![]
+            } else {
+                vec![text_token; count]
+            };
+            assert_eq!(stream.generated_tokens(), generated);
+            assert_eq!(
+                visible,
+                match case {
+                    3 => "x",
+                    4 => "xx",
+                    _ => "",
+                }
+            );
+            drop(stream);
+            assert_eq!(
+                serde_json::to_value(session.to_serialized(None))?,
+                serde_json::to_value(expected.to_serialized(None))?
+            );
+            assert_eq!(
+                session.last_step().map(|step| &step.probabilities),
+                expected.last_step().map(|step| &step.probabilities)
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_incremental_utf8_split_emoji_4bytes() {
