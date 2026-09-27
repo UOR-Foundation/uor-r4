@@ -11,6 +11,7 @@ pub mod bundle;
 pub mod config;
 pub mod format;
 pub mod generation;
+pub mod lorentz;
 pub mod math;
 pub mod model;
 pub mod report_output;
@@ -56,7 +57,7 @@ impl fmt::Display for IntegerError {
             Self::Invalid(error) => write!(f, "invalid integer runtime input: {error}"),
             Self::UnsupportedReadGeometry(geometry) => write!(
                 f,
-                "{} read is offline-only; quantization, packed export and integer serving require dot read",
+                "{} read is offline-only; quantization, packed export and integer serving support dot and lorentz reads",
                 geometry.name()
             ),
         }

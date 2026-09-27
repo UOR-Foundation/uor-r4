@@ -15,7 +15,10 @@ The native reader is derived from the continuous implementation in
 The [independent review](fourth-lab-native-read-review-2026-09-26.md) preserves
 the scope of that lab's reported results. Its converted transformer engine,
 integer Lorentz kernel, wide learned serving scale and proposed D10 are not
-adopted by this offline comparison.
+adopted by this offline comparison. During development PR #1401 merged into
+main, so the final increment extends that existing reader with LorentzAffine
+and preserves its upstream behavior. It does not overwrite the concurrently
+delivered Lorentz implementation with a second implementation.
 
 ## Mechanism and control
 
@@ -68,21 +71,25 @@ create an unnecessary checkpoint-format fork. LorentzAffine has its own
 serialized operator identity and versioned continuous contract. Checkpoint
 loading retains exact contract validation; a geometry label alone is insufficient.
 Source-derived compatibility checks are separate from replay of Claude's
-trained checkpoints, which remain unavailable in this lab at this update.
+continuous trained checkpoints, which remain external to the newly shared
+[native packet](../evidence/native-lorentz-packet-2026-09-26/README.md). Its four
+packed QAT models are available, but are not a continuous parent for this control.
 
-This increment supports continuous offline training and evaluation only.
-Non-Dot quantization, packed export and integer loading are explicitly refused
-until the corresponding operator is implemented and adopted. This prevents an
-artifact from silently receiving the retained Dot computation. The current
-chatbot's persistent and dialogue readers are separate integration paths;
-supporting a new geometry requires both, along with compatible value width.
+The new LorentzAffine control supports continuous offline training and
+evaluation only. Its quantization, packed export and integer loading are
+explicitly refused until the corresponding operator is implemented and adopted.
+Existing Dot and upstream Lorentz paths retain their behavior. This prevents
+an affine-control artifact from silently receiving another computation. The
+current chatbot's persistent and dialogue readers are separate integration
+paths; supporting a new geometry requires both, along with compatible value
+width. Upstream now rejects unsupported Lorentz/width-128 conversational use.
 The two cross-branch risks are recorded in the
 [integration review comment](https://github.com/UOR-Foundation/uor-r4/pull/1401#issuecomment-5851495403).
 
 The existing `joint-fit CAMPAIGN_JSON NEW_REPORT_ROOT {cpu|metal}` command reads
 `Campaign.model` as `JointConfig`. Set `model.read_geometry` to `lorentz` or
-`lorentz_affine` in a prospectively declared research campaign, with no
-quantization transition. `joint-evaluate` reads the saved checkpoint identity.
+`lorentz_affine` in a prospectively declared continuous research campaign, with
+no quantization transition for this comparison. `joint-evaluate` reads the saved checkpoint identity.
 This command wiring was inspected in source; no new paired campaign has been
 prepared or executed for this implementation increment.
 
@@ -98,6 +105,12 @@ draws, shared initial matrices, optimizer, full 256-token access and complete
 resource projection. Keep training length, evaluation length, memory access
 and vector width separate. Compare actual generated behavior along with loss
 and read/copy diagnostics; retain the existing Dot result as an anchor.
+Keep the selection policy identical between the reader arms. The concurrently
+delivered [emission diagnostic](emission-selection-diagnostic-result-2026-09-27.md)
+localizes several exposed failures to sampling departures, without executing
+an alternative trajectory. Its separate same-checkpoint policy investigation
+can proceed under its existing owner; it is neither a new reader gate nor
+evidence that the radial score has fixed the prose failures.
 
 - If the affine arm retains the useful benefit, prefer its simpler score law
   provisionally while retaining the radial geometric mechanism.

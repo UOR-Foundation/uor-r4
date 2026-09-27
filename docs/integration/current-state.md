@@ -1,6 +1,6 @@
 # Current UOR-R4 research state
 
-Updated September 26, 2026. **Pre-alpha; no useful general-language, coding,
+Updated September 27, 2026. **Pre-alpha; no useful general-language, coding,
 frontier, geometric-advantage or full-path energy qualification.**
 
 ## Fourth lab: shared research and integration
@@ -25,12 +25,17 @@ remain unchanged. Other labs' active source and model jobs are preserved.
 
 **Concurrent discovery:** the [fourth-lab native-read review](fourth-lab-native-read-review-2026-09-26.md)
 inspects Claude PR#1401's full-context Lorentz implementation and reported
-development results. Reuse its reader interface before a competing 2I
-integration; obtain its retained source/artifact packet and resolve the two
-reported bounded implementation defects. Independent replay and general
-language/M1 qualification remain unavailable or unmeasured at this review.
-That branch's D10 converted-backbone/arithmetic policy awaits owner
-clarification in this lab; native review does not adopt it implicitly.
+development results. Claude fixed the two reported implementation defects and
+guarded the conversational integration risks; PR #1401 is now merged. PR #1406
+supplies its [native packet](../evidence/native-lorentz-packet-2026-09-26/README.md),
+whose 104 listed file identities were verified by the fourth lab. Continuous
+checkpoints and several replay inputs remain external. The
+[radial read comparison](radial-read-control-2026-09-26.md) extends the merged
+reader with an offline affine control while preserving existing upstream paths.
+Its implementation and a future language comparison have distinct scope.
+General language/M1 qualification remains unmeasured here. D10's policy
+clarification remains pending in this lab; the new control introduces no
+additional serving exception or converted backbone.
 
 ## Decision and active work
 
@@ -54,8 +59,12 @@ The full-context standalone integer serving session is now implemented and retai
 at the scope below. An exact arithmetic optimization makes actual generation
 4.5–6.6 times faster on the measured workloads. The subsequent fixed exposure
 completed without meeting coherent-language criteria. Preserve the accepted
-parents and close exposure-only fitting; one later localization from existing
-evidence is the recommended next work card. Admission pruning remains deferred.
+parents and close exposure-only fitting. The recommended same-checkpoint
+emission/selection diagnostic is now executed read-only at the same step-15,672
+artifacts; its witnessed malformed decisions are predominantly low-probability
+draws from the model's own ranking, so the selection interface is supported for
+a later bounded experiment, while the retained greedy source-panel regressions
+remain a separate ranking-side obligation. Admission pruning remains deferred.
 The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged.
 
 ## Latest result: completed continuation, useful-language target unmet
@@ -71,6 +80,50 @@ without qualifying coherent language. Ordinary numerical/source-retention gates
 also fail; quaternion has source regressions against the accepted parent and an
 actual integer short-cycle. No candidate is promoted. The [next single work card](#next-single-work-card--failure-localization)
 localizes these failures from existing records; it authorizes no fit or sweep.
+
+## Parallel lab track: integer chat vehicle and hyperbolic reads, September26
+
+A separate lab on branch `claude/blissful-wozniak-girwwq` followed the owner's
+decisions of 2026-09-26 ([D10](DECISIONS.md)). An open instruct model, converted
+and served without floating point or multiplier-based weight maps, is the interim
+chat vehicle, reported as dense; hyperbolic geometry is the lead mechanism. This
+track does not change the work card below.
+
+- **Integer chat engine** (`crates/uor-r4-lut`, the audited SIMD crate
+  `crates/uor-r4-simd`, the exporter `lut_export` and `lut-chat`). It has 4-bit
+  table GEMV (AVX2/NEON), integer attention and integer sampling.
+  - A 4.2M-parameter stand-in Llama exported with GPTQ scores +0.0034 nats with
+    97.95% top-1 agreement against bf16.
+  - A SmolLM2-135M-shaped model decodes 36.5–54.8 tokens/s on the 4-core x86
+    sandbox.
+  - M1 speed, energy and real SmolLM2 fidelity are unmeasured
+    ([lab note §7](geometric-lab-phase2-2026-09-26.md#7-m3-the-integer-serving-engine)).
+- **Hyperbolic cache memory.** A learned Lorentz cache over a frozen backbone
+  beats equal Euclidean and dot caches. Its integer form keeps 99.3% of the float
+  gain on the stand-in
+  ([§8](geometric-lab-phase2-2026-09-26.md#8-m4a-work-card-a-learned-cache-memory-over-a-frozen-backbone)).
+- **The native model's Lorentz read** ([cycle 3](hyperbolic-cycle3-2026-09-26.md)).
+  At reduced scale (code corpus, width 128), the flat-start Lorentz read beats the
+  retained Dot read.
+  - At context 128 it wins in 3 of 4 seeds, by 0.018 nats on average; at context
+    256 it wins by 0.051–0.061.
+  - `uor-r4-integer` now serves the Lorentz read. The Dot contract, tables and
+    arithmetic are unchanged.
+  - The Lorentz read adds two learned signed 16-bit scalars (log β and δ) beside
+    the ≤4-bit weight maps, plus a Q32 scale derived at load. They are not 4-bit
+    parameters; whether D10 admits them awaits the owner's clarification.
+  - After 300 quantization-aware updates, 4-bit integer serving is within 0.035
+    nats of equal float fine-tunes and keeps the Lorentz advantage (−0.062 and
+    −0.059 nats)
+    ([§11](hyperbolic-cycle3-2026-09-26.md#11-addendum-the-integer-lorentz-read)).
+- **Owner-runnable M1 scripts.**
+  - `scripts/lut-m1-chat.sh`: integer SmolLM2 chat, with an optional cache stage
+    and joules per token.
+  - `scripts/kappa-m1-pilot.sh`: the curvature drive test on real SmolLM2 heads.
+  - `scripts/native-lorentz-m1.sh`: the full-scale native Dot/Lorentz comparison
+    through integer serving.
+- **Scope.** Development measurements on stand-ins and at reduced scale. No
+  chat-quality, M1-energy or general-language qualification.
 
 ## Retained result: standalone integer serving and exact speedup, September25
 
@@ -383,43 +436,25 @@ integer goose short-cycle. Different continuous/integer sampling policies preven
 attributing sample differences alone to conversion. Final delivery items are
 listed only in the result's [delivery section](language-continuation-result-2026-09-26.md#delivery-and-cost-closeout).
 
-### Next single work card — failure localization
+### Executed: same-checkpoint emission/selection diagnostic (September 27)
 
-- **Completed evidence review:** the fixed dose and output packet are closed.
-  The [existing trace analysis](../evidence/language-continuation-trace-coverage-2026-09-26.json)
-  and [independent direction review](../evidence/language-continuation-direction-review-2026-09-26.json)
-  justify prioritizing the emission/selection interface. They do not establish a
-  sole cause or a successful decoder repair. #973 and #820 remain open at their
-  wider acceptance scope.
-- **Observed blocker:** continuous prose misses the frozen criterion despite
-  improved natural likelihood. Ordinary numerical/source retention fails;
-  quaternion source regressions and an integer short-cycle also remain. Existing
-  greedy source-panel regressions prevent a sampling-only explanation of all
-  failures. Neither absent attention, capacity saturation nor a necessary new
-  Hamiltonian follows from this result.
-- **One recommended later causal diagnostic:** use the same checkpoints and
-  witnessed failing prefixes in both arms to distinguish a poorly ranked
-  semantic token from a stochastic choice that departs from a better-ranked
-  alternative. Define the decision this observation can change and its complete
-  prospective cost before execution. Capture missing per-token vocabulary/copy
-  components only where necessary. This work card is a recommendation, not an
-  executed replay or authorization to change decoding or model weights.
-- **Existing evidence and limits:** continuous generations already retain top-read
-  occurrence/token/mass, copy gate/effective copy mass, selected raw model
-  probability and greedy token; integer records retain selected probability,
-  NoRead mass and hashes. Selected model probability is not the post-temperature,
-  top-k sampling probability. Low total copy mass cannot exclude copying of a
-  particular low-probability token. Full source-weight distributions, separate
-  vocabulary/copy components and alternate state trajectories are absent; claims
-  needing those records remain UNRESOLVED. A greedy alternative at a sampled
-  prefix does not establish coherent greedy generation.
-- **Decision and stop:** finish with one supported implementation decision or an
-  explicit UNRESOLVED finding. Keep accepted parents, both new final paths,
-  negative history, full256 access, ordinary controls and the original output
-  criteria. No new fit, exposure tranche, prompt acceptance panel, coefficient/
-  scale/admission sweep or expanded test programme follows from this closeout.
-  Numerical repair alone cannot qualify the continuous-language result that
-  already failed. Remaining machine allowance is not a reason to repeat a run.
+- **Executed read-only** from the [predeclared plan](emission-selection-diagnostic-plan-2026-09-27.md)
+  and [result](emission-selection-diagnostic-result-2026-09-27.md) at the same
+  step-15,672 checkpoints, frozen prompts/seeds/policy and Read mode. The new
+  additive `joint-emission-trace` instrument reproduced the retained packet
+  exactly (`PARITY_EXACT`, 0 mismatches, maximum float delta0.0, all five
+  stories in both arms); [evidence](../evidence/emission-selection-diagnostic-2026-09-27.json).
+- **Witnessed result:** 8 of 12 witnessed decisions are low-probability draws
+  that departed from a materially better-ranked alternative (2 near-ties,
+  2 top choices, 0 copy-dominated). The witnessed malformed tokens were
+  vocabulary-side, not copy-side.
+- **Supported interface:** selection policy. The next work card, not started, is
+  one separately authorized bounded same-checkpoint selection-policy diagnostic
+  with no weight change; it must also explain the retained greedy source-panel
+  regressions. No decoding/weight change and no candidate promotion follows; a
+  better-ranked token is not a coherent alternate trajectory.
+- **Stop:** this packet is closed. #973 and #820 remain open at their wider
+  acceptance scope.
 
 The full256 baseline is finite; terminal D5 parameter sparsity remains open.
 Standalone integer generation is **executed at the scoped numerical boundary**.
