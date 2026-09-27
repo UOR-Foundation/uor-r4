@@ -196,7 +196,48 @@ Final NLL in nats per token, with bits per byte in parentheses:
 
 ## 7. Ablations
 
-*(Filled in when the runs finish.)*
+*Measured*, seed 1. Each arm changes one thing in the geometric stack and keeps everything else of the pilot's selected stack run:
+- learning rate 4e-3;
+- 1,000 updates, 4,096,000 target visits, on the repository code split;
+- identical training windows, because the seed is shared;
+- the 512-window final evaluation (131,072 targets).
+
+Each arm's MLP width is re-matched to the control's parameter count. The full stack is the pilot run itself.
+
+| Arm | What changes | MLP | Final NLL (bits/byte) | − full stack |
+|---|---|---:|---:|---:|
+| Full stack | `rrarra`, Lorentz reads, quaternion transport | 749 | 2.6097 (1.0494) | — |
+| `dot` | Dot reads instead of Lorentz | 749 | 2.5889 (1.0410) | −0.021 |
+| `norot` | Identity transport (a real gated linear recurrence) | 814 | 2.6688 (1.0731) | +0.059 |
+| `readsonly` | Six Lorentz read layers, no recurrence, no RoPE | 764 | **2.5531** (1.0266) | −0.057 |
+| Transformer control (§5) | RoPE softmax attention, 2e-3 | 768 | 2.7680 (1.1130) | +0.158 |
+
+Development NLL on 64 windows at 250, 500, 750 and 1,000 updates:
+
+| Arm | 250 | 500 | 750 | 1,000 |
+|---|---:|---:|---:|---:|
+| Full stack | 3.7626 | 3.2337 | 2.8752 | 2.6864 |
+| `dot` | 3.7893 | 3.2204 | 2.8493 | 2.6640 |
+| `norot` | 3.7739 | 3.2313 | 2.9008 | 2.7374 |
+| `readsonly` | 3.7351 | 3.2036 | 2.8145 | 2.6302 |
+
+**What seed 1 shows, at this budget.**
+- **The quaternion transport carries weight inside the recurrence.** Fixing it to the identity costs 0.059 nats, even though that arm spends the freed rotation parameters on a wider MLP.
+- **The Lorentz score does not help inside the stack.** The Dot read is 0.021 nats better. That is below the 0.03 threshold stated on the card, so it calls for a second seed before any conclusion. In the retained one-layer learner, cycle 3 measured the opposite sign, 0.05–0.06 nats in favour of Lorentz at context 256.
+- **The recurrence does not help at this budget.** Six read layers beat the `rrarra` stack by 0.057 nats and the RoPE control by 0.215 nats.
+  - So the stack's lead over the control comes from the read layers, not from the recurrence.
+  - Three things distinguish those read layers from the control's attention: the learned per-distance age bias with its ALiBi start, the NoRead slot, and the score. Seed 1 does not separate them.
+
+**Runs added in response.** Each is justified by the rule above or by the attribution question.
+- A second seed of the Lorentz and Dot stacks.
+- A reads-only Dot arm (seed 1), which separates the Lorentz score from the age bias and NoRead within the best configuration.
+- A second seed of the reads-only Lorentz arm.
+
+The main comparison runs after them, unchanged.
+
+**Interruptions.** A container reboot at about 08:22 UTC killed the first seed-2 pair before its first checkpoint. It restarted from scratch in new report roots (`*_r1`). The interrupted roots are kept. The pipeline now resumes any run from its latest checkpoint after a restart, into a new root.
+
+**Cost.** Training took 2,739–3,386 s per arm, with two arms sharing the sandbox; `readsonly` ran alone at the end. The ablation stage ran from 05:58 to 07:42 UTC.
 
 ## 8. What this changes
 
