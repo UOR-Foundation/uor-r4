@@ -12,18 +12,39 @@ Usage:
 """
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
 import sys
 
 DEFAULT_TARGETS = [
-    "/Users/casey.allard/uor-r4/target/release/libuor_r4_integer.rlib",
     "target/release/libuor_r4_integer.rlib",
-    "/Users/casey.allard/uor-r4/target/release/uor-r4-integer",
     "target/release/uor-r4-integer",
     "target/release/uor-chat",
 ]
+
+
+def get_artifact_metadata(path):
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            sha256.update(chunk)
+    artifact_hash = sha256.hexdigest()
+
+    commit = "unknown"
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        commit = res.stdout.strip()
+    except Exception:
+        pass
+    return artifact_hash, commit
+
 
 # Class I: Hardware Multipliers (AArch64 / ARM64)
 CLASS_I_PATTERN = re.compile(
@@ -110,8 +131,8 @@ RLIB_MANDATORY_SYMBOLS = [
     },
     {
         "name": "IntegerModel::step_conversational",
-        "pattern": re.compile(r"IntegerModel.*step_conversational\b"),
-        "mangled": re.compile(r"__RNv.*IntegerModel.*19step_conversational\b"),
+        "pattern": re.compile(r"IntegerModel.*step_conversational(?:_into)?\b"),
+        "mangled": re.compile(r"__RNv.*IntegerModel.*(?:19step_conversational|24step_conversational_into)\b"),
         "description": "Conversational autoregressive step with partitioned memory",
     },
     {
@@ -210,6 +231,74 @@ RLIB_MANDATORY_SYMBOLS = [
         "mangled": re.compile(r"__RNv.*(?:model.*)?(?:22)?extract_salient_tokens\b"),
         "description": "Top-4 salient entity token extraction via zero-matmul scoring",
     },
+    # Lorentz read and hyperbolic cache scoring symbols
+    {
+        "name": "LorentzRead::score",
+        "pattern": re.compile(r"LorentzRead.*score\b"),
+        "mangled": re.compile(r"__RNv.*LorentzRead.*5score\b"),
+        "description": "Hyperbolic Lorentz read score with sealed arcosh table",
+    },
+    {
+        "name": "LorentzRead::new",
+        "pattern": re.compile(r"LorentzRead.*new\b"),
+        "mangled": re.compile(r"__RNv.*LorentzRead.*3new\b"),
+        "description": "Learned Lorentz read scaling initialization",
+    },
+    {
+        "name": "lorentz::excess_q32",
+        "pattern": re.compile(r"lorentz.*excess_q32\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*10excess_q32\b"),
+        "description": "Hyperbolic distance excess z - 1 at Q32",
+    },
+    {
+        "name": "lorentz::arcosh1p_q24",
+        "pattern": re.compile(r"lorentz.*arcosh1p_q24\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*12arcosh1p_q24\b"),
+        "description": "Tabulated arcosh(1+u) at Q24 via dyadic octave interpolation",
+    },
+    {
+        "name": "lorentz::squared_norm",
+        "pattern": re.compile(r"lorentz.*squared_norm\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*12squared_norm\b"),
+        "description": "Exact integer sum of squared codes for Lorentz lifting",
+    },
+    {
+        "name": "lorentz::exp_q32",
+        "pattern": re.compile(r"lorentz.*exp_q32\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*7exp_q32\b"),
+        "description": "Fixed-point exponential via Taylor series with zero hardware multipliers",
+    },
+    # Sampling symbols
+    {
+        "name": "sampling::exact_min_p_threshold",
+        "pattern": re.compile(r"sampling.*exact_min_p_threshold\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*21exact_min_p_threshold\b"),
+        "description": "Zero-matmul bit-for-bit shift-add MinP threshold over set bits",
+    },
+    {
+        "name": "Sampler::select",
+        "pattern": re.compile(r"Sampler.*select\b"),
+        "mangled": re.compile(r"__RNv.*Sampler.*6select\b"),
+        "description": "Integer token selection for normalized Q48 output distribution",
+    },
+    {
+        "name": "sampling::validate_distribution",
+        "pattern": re.compile(r"sampling.*validate_distribution\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*21validate_distribution\b"),
+        "description": "Validation of Q48 probability normalization",
+    },
+    {
+        "name": "sampling::select_ticket",
+        "pattern": re.compile(r"sampling.*select_ticket\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*13select_ticket\b"),
+        "description": "Exact ticket interval search over unnormalized masses",
+    },
+    {
+        "name": "Sampler::draw_below",
+        "pattern": re.compile(r"Sampler.*draw_below\b"),
+        "mangled": re.compile(r"__RNv.*Sampler.*10draw_below\b"),
+        "description": "Unbiased pseudo-random draw below bound using xorshift64",
+    },
 ]
 
 # Mandatory serving symbols for compiled executable binary (e.g. uor-r4-integer, uor-chat)
@@ -224,8 +313,8 @@ BIN_MANDATORY_SYMBOLS = [
     },
     {
         "name": "IntegerModel::step_conversational",
-        "pattern": re.compile(r"IntegerModel.*step_conversational\b"),
-        "mangled": re.compile(r"__RNv.*IntegerModel.*19step_conversational\b"),
+        "pattern": re.compile(r"IntegerModel.*step_conversational(?:_into)?\b"),
+        "mangled": re.compile(r"__RNv.*IntegerModel.*(?:19step_conversational|24step_conversational_into)\b"),
         "description": "Conversational autoregressive step with partitioned memory",
         "alternative_group": "step_transition",
         "group_display": "IntegerModel::step (or IntegerModel::step_conversational)",
@@ -260,6 +349,74 @@ BIN_MANDATORY_SYMBOLS = [
         "mangled": re.compile(r"__RNv.*(?:model.*)?(?:22)?extract_salient_tokens\b"),
         "description": "Top-4 salient entity token extraction via zero-matmul scoring",
     },
+    # Lorentz read and hyperbolic cache scoring symbols
+    {
+        "name": "LorentzRead::score",
+        "pattern": re.compile(r"LorentzRead.*score\b"),
+        "mangled": re.compile(r"__RNv.*LorentzRead.*5score\b"),
+        "description": "Hyperbolic Lorentz read score with sealed arcosh table",
+    },
+    {
+        "name": "LorentzRead::new",
+        "pattern": re.compile(r"LorentzRead.*new\b"),
+        "mangled": re.compile(r"__RNv.*LorentzRead.*3new\b"),
+        "description": "Learned Lorentz read scaling initialization",
+    },
+    {
+        "name": "lorentz::excess_q32",
+        "pattern": re.compile(r"lorentz.*excess_q32\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*10excess_q32\b"),
+        "description": "Hyperbolic distance excess z - 1 at Q32",
+    },
+    {
+        "name": "lorentz::arcosh1p_q24",
+        "pattern": re.compile(r"lorentz.*arcosh1p_q24\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*12arcosh1p_q24\b"),
+        "description": "Tabulated arcosh(1+u) at Q24 via dyadic octave interpolation",
+    },
+    {
+        "name": "lorentz::squared_norm",
+        "pattern": re.compile(r"lorentz.*squared_norm\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*12squared_norm\b"),
+        "description": "Exact integer sum of squared codes for Lorentz lifting",
+    },
+    {
+        "name": "lorentz::exp_q32",
+        "pattern": re.compile(r"lorentz.*exp_q32\b"),
+        "mangled": re.compile(r"__RNv.*lorentz.*7exp_q32\b"),
+        "description": "Fixed-point exponential via Taylor series with zero hardware multipliers",
+    },
+    # Sampling symbols
+    {
+        "name": "sampling::exact_min_p_threshold",
+        "pattern": re.compile(r"sampling.*exact_min_p_threshold\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*21exact_min_p_threshold\b"),
+        "description": "Zero-matmul bit-for-bit shift-add MinP threshold over set bits",
+    },
+    {
+        "name": "Sampler::select",
+        "pattern": re.compile(r"Sampler.*select\b"),
+        "mangled": re.compile(r"__RNv.*Sampler.*6select\b"),
+        "description": "Integer token selection for normalized Q48 output distribution",
+    },
+    {
+        "name": "sampling::validate_distribution",
+        "pattern": re.compile(r"sampling.*validate_distribution\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*21validate_distribution\b"),
+        "description": "Validation of Q48 probability normalization",
+    },
+    {
+        "name": "sampling::select_ticket",
+        "pattern": re.compile(r"sampling.*select_ticket\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*13select_ticket\b"),
+        "description": "Exact ticket interval search over unnormalized masses",
+    },
+    {
+        "name": "Sampler::draw_below",
+        "pattern": re.compile(r"Sampler.*draw_below\b"),
+        "mangled": re.compile(r"__RNv.*Sampler.*10draw_below\b"),
+        "description": "Unbiased pseudo-random draw below bound using xorshift64",
+    },
 ]
 
 # The packed block kernels are inline functions. Inspect their actual emitted
@@ -280,25 +437,49 @@ PACKED_KERNEL_CALLERS = [
         "matrix_work_direct",
         "affine_direct_into",
         "affine_direct",
+        "affine_wide_into",
         "step_conversational_into",
     )
 ]
 
 
 def find_target_artifact(user_arg=None):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    target_dirs = []
+    if "CARGO_TARGET_DIR" in os.environ:
+        target_dirs.append(os.environ["CARGO_TARGET_DIR"])
+    target_dirs.append(os.path.join(repo_root, "target"))
+
     if user_arg:
         if os.path.exists(user_arg):
-            return user_arg
-        # Check relative to repo root if path not directly found
-        candidate = os.path.join("/Users/casey.allard/uor-r4-worktrees/geometric-chatbot", user_arg)
+            return os.path.abspath(user_arg)
+        candidate = os.path.join(repo_root, user_arg)
         if os.path.exists(candidate):
-            return candidate
+            return os.path.abspath(candidate)
+        for tdir in target_dirs:
+            candidate = os.path.join(tdir, "release", user_arg)
+            if os.path.exists(candidate):
+                return os.path.abspath(candidate)
+            candidate = os.path.join(tdir, user_arg)
+            if os.path.exists(candidate):
+                return os.path.abspath(candidate)
         sys.exit(f"ERROR: Specified target artifact does not exist: {user_arg}")
-    for candidate in DEFAULT_TARGETS:
+
+    candidates_to_try = []
+    for tdir in target_dirs:
+        for t in ["libuor_r4_integer.rlib", "uor-r4-integer", "uor-chat"]:
+            candidates_to_try.append(os.path.join(tdir, "release", t))
+            candidates_to_try.append(os.path.join(tdir, "release", "deps", t))
+    for t in DEFAULT_TARGETS:
+        candidates_to_try.append(os.path.join(repo_root, t))
+        candidates_to_try.append(t)
+
+    for candidate in candidates_to_try:
         if os.path.exists(candidate):
-            return candidate
+            return os.path.abspath(candidate)
+
     sys.exit(
-        f"ERROR: No target artifact found. Checked: {', '.join(DEFAULT_TARGETS)}.\n"
+        f"ERROR: No target artifact found. Checked: {', '.join(candidates_to_try[:4])}...\n"
         "Build with: cargo build --release -p uor-r4-integer"
     )
 
@@ -388,8 +569,11 @@ def run_audit(per_symbol, is_demangled, target_path, strict_arm64=True):
     is_rlib = target_path.endswith(".rlib")
     mandatory_list = RLIB_MANDATORY_SYMBOLS if is_rlib else BIN_MANDATORY_SYMBOLS
 
+    artifact_hash, commit = get_artifact_metadata(target_path)
     results = {
         "target": target_path,
+        "artifact_sha256": artifact_hash,
+        "git_commit": commit,
         "is_rlib": is_rlib,
         "strict": strict_arm64,
         "total_symbols_indexed": len(per_symbol),
@@ -522,6 +706,9 @@ def print_tap_output(results, tools_found):
     """Emit authentic TAP version 13 results across the 5 standard test cases."""
     print("TAP version 13")
     print("1..5")
+    print(f"# Target: {results['target']}")
+    print(f"# Artifact SHA-256: {results.get('artifact_sha256', 'unknown')}")
+    print(f"# Source Commit: {results.get('git_commit', 'unknown')}")
     print(f"# Matched symbol ranges checked: {results['symbols_checked']}")
     print("# Scope: matched instruction ranges only; no transitive call-graph certification.")
     for name, _ in results["missing_optional"]:
@@ -601,6 +788,8 @@ def print_standard_report(results):
     print("=" * 80)
     print(f"ZERO-MATMUL SERVING KERNEL AUDIT [{mode_str}]")
     print(f"Target Artifact: {results['target']}")
+    print(f"Artifact SHA-256: {results.get('artifact_sha256', 'unknown')}")
+    print(f"Source Commit:   {results.get('git_commit', 'unknown')}")
     print("=" * 80)
 
     for name, sym, n_instrs, desc in results["passed_symbols"]:
@@ -626,11 +815,15 @@ def print_standard_report(results):
     print(f"Missing Mandatory Symbols:        {len(results['missing_mandatory'])}")
     print("=" * 80)
 
-    if results["all_violations"] or results["missing_mandatory"]:
-        print("FAILED: Serving kernel contains forbidden instructions or missing mandatory symbols.")
+    if results["all_violations"]:
+        print("FAILED: Serving kernel contains forbidden instructions.")
         return 1
 
-    print("SUCCESS: 0 forbidden instructions in the matched symbol ranges; mandatory coverage satisfied.")
+    if results["missing_mandatory"]:
+        print(f"PARTIAL PASS: 0 forbidden instructions found, but {len(results['missing_mandatory'])} mandatory symbols missing.")
+        return 1
+
+    print("FULL PASS: 0 forbidden instructions in all matched symbol ranges; mandatory coverage satisfied.")
     print("Unmatched or inlined functions are not independently audited; this is not a transitive call-graph or whole-process D0-b certification.")
     return 0
 

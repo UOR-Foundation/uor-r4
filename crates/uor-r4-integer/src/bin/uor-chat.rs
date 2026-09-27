@@ -6,7 +6,7 @@
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process;
-use uor_r4_integer::bundle::{create_test_bundle_with_byte_vocab, Bundle};
+use uor_r4_integer::bundle::{Bundle, create_test_bundle_with_byte_vocab};
 use uor_r4_integer::config::ReadMode;
 use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::sampling::SamplePolicy;
@@ -25,6 +25,7 @@ const ANSI_RESET: &str = "\x1b[0m";
 struct CliArgs {
     bundle_path: Option<PathBuf>,
     system_prompt: Option<String>,
+    prompt: Option<String>,
     temperature: f64,
     top_k: usize,
     seed: u64,
@@ -38,6 +39,7 @@ impl Default for CliArgs {
         Self {
             bundle_path: None,
             system_prompt: None,
+            prompt: None,
             temperature: 0.0,
             top_k: 16,
             seed: 0,
@@ -57,6 +59,9 @@ fn print_usage() {
     );
     eprintln!("  -s, --system <PROMPT>       Initial persistent system persona (slots 0..31)");
     eprintln!(
+        "  -p, --prompt <TEXT>         Generate response to a single prompt, stream output, and exit"
+    );
+    eprintln!(
         "  -t, --temperature <FLOAT>   Sampling temperature (0.0 = greedy, >0.0 = categorical)"
     );
     eprintln!("  -k, --top-k <INT>           Top-K candidate cutoff (default: 16)");
@@ -67,7 +72,9 @@ fn print_usage() {
         "  -m, --read-mode <MODE>      Memory read mode: 'enabled' or 'no_read' (default: enabled)"
     );
     eprintln!("      --max-tokens <INT>      Maximum response tokens per turn (default: 128)");
-    eprintln!("      --verify-kernel         Run self-test verifying Zero-MatMul kernel retention and exit");
+    eprintln!(
+        "      --verify-kernel         Run self-test verifying Zero-MatMul kernel retention and exit"
+    );
     eprintln!("  -h, --help                  Print help information");
     eprintln!("  -V, --version               Print version information");
 }
@@ -108,17 +115,30 @@ fn parse_cli_args() -> CliArgs {
                     process::exit(1);
                 }
             }
+            "-p" | "--prompt" => {
+                idx += 1;
+                if idx < raw.len() {
+                    args.prompt = Some(raw[idx].clone());
+                } else {
+                    eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--prompt'");
+                    process::exit(1);
+                }
+            }
             "-t" | "--temperature" => {
                 idx += 1;
                 if idx < raw.len() {
                     if let Ok(val) = raw[idx].parse::<f64>() {
                         if val < 0.0 {
-                            eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} temperature must be non-negative");
+                            eprintln!(
+                                "{ANSI_RED_BOLD}error:{ANSI_RESET} temperature must be non-negative"
+                            );
                             process::exit(1);
                         }
                         args.temperature = val;
                     } else {
-                        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} invalid float value for '--temperature'");
+                        eprintln!(
+                            "{ANSI_RED_BOLD}error:{ANSI_RESET} invalid float value for '--temperature'"
+                        );
                         process::exit(1);
                     }
                 } else {
@@ -186,7 +206,9 @@ fn parse_cli_args() -> CliArgs {
                     if let Ok(val) = raw[idx].parse::<usize>() {
                         args.max_tokens = val;
                     } else {
-                        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} invalid integer value for '--max-tokens'");
+                        eprintln!(
+                            "{ANSI_RED_BOLD}error:{ANSI_RESET} invalid integer value for '--max-tokens'"
+                        );
                         process::exit(1);
                     }
                 } else {
@@ -257,8 +279,12 @@ fn print_help() {
         "  /reset                Clear dialogue slots (32..255) and retain persistent persona"
     );
     println!("  /verify               Execute self-test verifying Zero-MatMul kernel retention");
-    println!("  /save <path>          Save current session state to JSON file (uor-r4.integer-session/1)");
-    println!("  /load <path>          Load session state from JSON file with bundle checksum verification");
+    println!(
+        "  /save <path>          Save current session state to JSON file (uor-r4.integer-session/1)"
+    );
+    println!(
+        "  /load <path>          Load session state from JSON file with bundle checksum verification"
+    );
     println!(
         "  /stats                Display session telemetry, geometric coordinates, and process RSS"
     );
@@ -274,9 +300,15 @@ fn print_stats(session: &ChatSession) {
         None => "Unavailable".to_string(),
     };
 
-    println!("{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}");
-    println!("{ANSI_MAGENTA_BOLD}|                          Chat Session Telemetry                            |{ANSI_RESET}");
-    println!("{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}");
+    println!(
+        "{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}"
+    );
+    println!(
+        "{ANSI_MAGENTA_BOLD}|                          Chat Session Telemetry                            |{ANSI_RESET}"
+    );
+    println!(
+        "{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}"
+    );
     println!("| Turn Count             : {:<50}|", t.current_turn_id);
     println!(
         "| Active Tokens          : {:<50}|",
@@ -301,8 +333,12 @@ fn print_stats(session: &ChatSession) {
         "| Sampling Policy        : {:<50}|",
         format!("{:?}", session.policy())
     );
-    println!("{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}");
-    println!("{ANSI_MAGENTA_BOLD}| Geometric State Coordinates:                                               |{ANSI_RESET}");
+    println!(
+        "{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}"
+    );
+    println!(
+        "{ANSI_MAGENTA_BOLD}| Geometric State Coordinates:                                               |{ANSI_RESET}"
+    );
     println!(
         "| Hopf Holonomy DeltaPsi : {:<50}|",
         format!("Q30: {}, S1 winding != 0", t.cumulative_holonomy_q30)
@@ -319,11 +355,17 @@ fn print_stats(session: &ChatSession) {
         t.zeta_phases[7]
     );
     println!("| Zeta T^8 Phase Vector  : {:<50}|", zeta_sample);
-    println!("{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}");
-    println!("{ANSI_MAGENTA_BOLD}| Apple Silicon Host Resources:                                              |{ANSI_RESET}");
+    println!(
+        "{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}"
+    );
+    println!(
+        "{ANSI_MAGENTA_BOLD}| Apple Silicon Host Resources:                                              |{ANSI_RESET}"
+    );
     println!("| Process RSS            : {:<50}|", rss_str);
     println!("| Hardware Multipliers   : 0 (Static Audit Certified - PASS)                 |");
-    println!("{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}");
+    println!(
+        "{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}"
+    );
 }
 
 fn handle_slash_command<'a>(line: &str, session: &mut ChatSession<'a>, bundle: &'a Bundle) -> bool {
@@ -442,11 +484,15 @@ fn handle_slash_command<'a>(line: &str, session: &mut ChatSession<'a>, bundle: &
                 match parts[1].to_lowercase().as_str() {
                     "on" | "enabled" => {
                         session.set_read_mode(ReadMode::Enabled);
-                        println!("{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Memory read mode set to Enabled.");
+                        println!(
+                            "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Memory read mode set to Enabled."
+                        );
                     }
                     "off" | "no_read" | "noread" => {
                         session.set_read_mode(ReadMode::NoRead);
-                        println!("{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Memory read mode set to NoRead.");
+                        println!(
+                            "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Memory read mode set to NoRead."
+                        );
                     }
                     other => {
                         eprintln!(
@@ -484,7 +530,9 @@ fn run_kernel_verification(bundle: &Bundle) -> Result<()> {
     let mut session = model.new_session();
     let step = model.step(&mut session, 0, ReadMode::Enabled)?;
     std::hint::black_box(&step);
-    println!("{ANSI_GREEN_BOLD}[PASS]{ANSI_RESET} Zero-MatMul numerical serving kernel verified (IntegerModel::step retained).");
+    println!(
+        "{ANSI_GREEN_BOLD}[PASS]{ANSI_RESET} Zero-MatMul numerical serving kernel verified (IntegerModel::step retained)."
+    );
     Ok(())
 }
 
@@ -643,6 +691,49 @@ fn main() {
             process::exit(1);
         }
     };
+
+    if let Some(user_prompt) = cli.prompt.as_deref() {
+        let start_time = std::time::Instant::now();
+        match session.generate_stream(user_prompt, cli.max_tokens, &[]) {
+            Ok(mut stream) => {
+                while let Some(chunk) = stream.next() {
+                    print!("{}", chunk);
+                    io::stdout().flush().ok();
+                }
+                println!();
+
+                let stop = match completed_stream_stop(&stream) {
+                    Ok(stop) => stop,
+                    Err(error) => {
+                        eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Generation failed: {error}");
+                        process::exit(1);
+                    }
+                };
+                let elapsed = start_time.elapsed();
+                let tok_count = stream.tokens_generated();
+                let elapsed_secs = elapsed.as_secs_f64();
+                let ms_per_tok = if tok_count > 0 {
+                    (elapsed_secs * 1000.0) / (tok_count as f64)
+                } else {
+                    0.0
+                };
+                let tok_per_sec = if elapsed_secs > 0.0 {
+                    (tok_count as f64) / elapsed_secs
+                } else {
+                    0.0
+                };
+                println!(
+                    "[telemetry] Generated {} tokens in {:.2}s ({:.1} tok/s, {:.3} ms/tok); stop={stop:?}",
+                    tok_count, elapsed_secs, tok_per_sec, ms_per_tok
+                );
+                process::exit(0);
+            }
+            Err(err) => {
+                eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Generation error: {err}");
+                process::exit(1);
+            }
+        }
+    }
 
     print_welcome_banner(&bundle, policy, cli.read_mode);
 
