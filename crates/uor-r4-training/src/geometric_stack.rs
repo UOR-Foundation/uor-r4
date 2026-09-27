@@ -678,6 +678,13 @@ impl StackModel {
     /// Logits [batch * time, vocabulary] for a batch of windows. Positions see
     /// only themselves and earlier positions of the same window.
     pub fn forward(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
+        let embedding = self.weight("embedding.weight")?;
+        Ok(self.hidden(ids, batch, time)?.matmul(&embedding.t()?)?)
+    }
+
+    /// The final normalized states [batch * time, width], which the tied
+    /// embedding maps to logits.
+    pub fn hidden(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
         if ids.len() != batch * time || time == 0 || time > self.config.context {
             return Err(invalid(
                 "stack forward needs batch * time ids within the context",
@@ -701,8 +708,7 @@ impl StackModel {
             x = x.add(&self.mlp(layer, &x)?)?;
         }
         let x = self.rms_norm(&x, self.weight("final_norm.weight")?)?;
-        Ok(x.reshape((batch * time, self.config.width))?
-            .matmul(&embedding.t()?)?)
+        Ok(x.reshape((batch * time, self.config.width))?)
     }
 
     /// Mean next-token negative log-likelihood (nats) over all targets.

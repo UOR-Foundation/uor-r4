@@ -402,11 +402,201 @@ pub fn control_checkpoint(model: &StackModel, weights_sha256: String) -> Result<
     })
 }
 
+/// A float model whose weights are an artifact's own values: dequantized
+/// matrices, grid-code scalars, integer biases and unit norm gains. `head` is
+/// the artifact's output map (the final gain folded in), which the float
+/// model cannot hold because it ties its head to the embedding. Scoring it
+/// beside the float original and the integer engine splits the integer gap
+/// into weight rounding and integer arithmetic.
+pub struct GridReference {
+    pub model: StackModel,
+    pub head: Tensor,
+}
+
+impl GridReference {
+    /// Logits [batch * time, vocabulary] through the artifact's head.
+    pub fn logits(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
+        Ok(self
+            .model
+            .hidden(ids, batch, time)?
+            .matmul(&self.head.t()?)?)
+    }
+}
+
+fn lut_error(error: uor_r4_lut::LutError) -> crate::TrainingError {
+    invalid(error.to_string())
+}
+
+/// Dequantized values of one packed matrix, with its shape.
+fn packed_values<H: uor_r4_lut::format::Sections>(
+    artifact: &uor_r4_lut::format::Container<H>,
+    name: &str,
+) -> Result<(Vec<f32>, usize, usize)> {
+    let spec = artifact.matrix(name).map_err(lut_error)?;
+    let values = crate::lut_export::dequantize_matrix(
+        spec.rows,
+        spec.cols,
+        spec.exp_base,
+        artifact.section(spec.nibbles),
+        artifact.section(spec.scales),
+    )?;
+    Ok((values, spec.rows, spec.cols))
+}
+
+/// The first `rows x cols` block of a row-major `stride`-column matrix.
+fn block(values: &[f32], stride: usize, rows: usize, cols: usize) -> Vec<f32> {
+    (0..rows)
+        .flat_map(|r| values[r * stride..r * stride + cols].iter().copied())
+        .collect()
+}
+
+fn set(model: &StackModel, name: &str, values: Vec<f32>) -> Result<()> {
+    let var = model
+        .variables()
+        .get(name)
+        .ok_or_else(|| invalid(format!("the reference has no tensor {name}")))?;
+    var.set(&Tensor::from_vec(
+        values,
+        var.as_tensor().shape(),
+        var.as_tensor().device(),
+    )?)?;
+    Ok(())
+}
+
+/// The grid reference of a geometric stack's artifact.
+pub fn stack_grid_reference(
+    model: &StackModel,
+    artifact: &uor_r4_lut::format::StackArtifact,
+) -> Result<GridReference> {
+    let c = model.config.clone();
+    if c.arch != StackArch::Geometric || c.memory.is_some() {
+        return Err(invalid(
+            "a stack grid reference needs a geometric stack without memories",
+        ));
+    }
+    let reference = StackModel::new(c.clone(), model.device())?;
+    let d = c.width;
+    let matrix = |name: &str| -> Result<Vec<f32>> { Ok(packed_values(artifact, name)?.0) };
+    let ints = |name: &str, exp: i32| -> Result<Vec<f32>> {
+        Ok(artifact
+            .table_i32(name)
+            .map_err(lut_error)?
+            .iter()
+            .map(|&v| (f64::from(v) * 2f64.powi(exp)) as f32)
+            .collect())
+    };
+    let codes = |name: &str| -> Result<Vec<f64>> {
+        Ok(artifact
+            .table_i16(name)
+            .map_err(lut_error)?
+            .iter()
+            .map(|&v| grid_value(v))
+            .collect())
+    };
+    let mlp = artifact.header.shape.mlp;
+    set(&reference, "embedding.weight", matrix("embed")?)?;
+    set(&reference, "final_norm.weight", vec![1.0; d])?;
+    for (l, kind) in c.pattern.bytes().enumerate() {
+        let t = |suffix: &str| format!("layers.{l:02}.{suffix}");
+        let a = |part: &str| format!("l{l}.{part}");
+        if kind == b'r' {
+            set(&reference, &t("rec_norm.weight"), vec![1.0; d])?;
+            set(&reference, &t("rec.in.weight"), matrix(&a("rec_in"))?)?;
+            set(&reference, &t("rec.gate.weight"), matrix(&a("rec_gate"))?)?;
+            set(&reference, &t("rec.out.weight"), matrix(&a("rec_out"))?)?;
+            let taps = codes(&a("conv_taps"))?.iter().map(|&v| v as f32).collect();
+            set(&reference, &t("rec.conv.weight"), taps)?;
+            set(&reference, &t("rec.conv.bias"), ints(&a("conv_bias"), -16)?)?;
+            set(&reference, &t("rec.gate.bias"), ints(&a("gate_bias"), -16)?)?;
+            // The decay whose rate 8 softplus(-decay) is the grid code's value.
+            let decay = codes(&a("decay_rate"))?
+                .iter()
+                .map(|&rate| -((rate / DECAY_EXPONENT).exp_m1().ln()) as f32)
+                .collect();
+            set(&reference, &t("rec.decay"), decay)?;
+        } else {
+            set(&reference, &t("read_norm.weight"), vec![1.0; d])?;
+            for part in ["query", "key", "value", "null", "out"] {
+                set(
+                    &reference,
+                    &t(&format!("read.{part}.weight")),
+                    matrix(&a(part))?,
+                )?;
+            }
+            set(
+                &reference,
+                &t("read.null.bias"),
+                ints(&a("null_bias"), -16)?,
+            )?;
+            set(&reference, &t("read.age"), ints(&a("age"), -16)?)?;
+            if c.read == ReadScore::Lorentz {
+                let beta = codes(&a("beta"))?.iter().map(|&v| v.ln() as f32).collect();
+                set(&reference, &t("read.log_beta"), beta)?;
+                set(&reference, &t("read.offset"), ints(&a("offset"), -24)?)?;
+            }
+        }
+        set(&reference, &t("mlp_norm.weight"), vec![1.0; d])?;
+        for part in ["gate", "up"] {
+            let values = block(&matrix(&a(part))?, d, c.mlp_hidden, d);
+            set(&reference, &t(&format!("mlp.{part}.weight")), values)?;
+        }
+        let down = block(&matrix(&a("down"))?, mlp, d, c.mlp_hidden);
+        set(&reference, &t("mlp.down.weight"), down)?;
+    }
+    let (head, rows, cols) = packed_values(artifact, "head")?;
+    Ok(GridReference {
+        head: Tensor::from_vec(head, (rows, cols), model.device())?,
+        model: reference,
+    })
+}
+
+/// The grid reference of the transformer control's Llama artifact.
+pub fn control_grid_reference(
+    model: &StackModel,
+    artifact: &uor_r4_lut::format::Artifact,
+) -> Result<GridReference> {
+    let c = model.config.clone();
+    if c.arch != StackArch::Transformer || c.memory.is_some() {
+        return Err(invalid(
+            "a control grid reference needs the transformer control without memories",
+        ));
+    }
+    let reference = StackModel::new(c.clone(), model.device())?;
+    let d = c.width;
+    let matrix = |name: &str| -> Result<Vec<f32>> { Ok(packed_values(artifact, name)?.0) };
+    set(&reference, "embedding.weight", matrix("embed")?)?;
+    set(&reference, "final_norm.weight", vec![1.0; d])?;
+    for l in 0..c.layers() {
+        let t = |suffix: &str| format!("layers.{l:02}.{suffix}");
+        for norm in ["attn_norm.weight", "mlp_norm.weight"] {
+            set(&reference, &t(norm), vec![1.0; d])?;
+        }
+        for part in ["q", "k", "v", "o"] {
+            set(
+                &reference,
+                &t(&format!("attn.{part}.weight")),
+                matrix(&format!("l{l}.{part}"))?,
+            )?;
+        }
+        for part in ["gate", "up", "down"] {
+            set(
+                &reference,
+                &t(&format!("mlp.{part}.weight")),
+                matrix(&format!("l{l}.{part}"))?,
+            )?;
+        }
+    }
+    let (head, rows, cols) = packed_values(artifact, "head")?;
+    Ok(GridReference {
+        head: Tensor::from_vec(head, (rows, cols), model.device())?,
+        model: reference,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::geometric_stack::StackConfig;
-    use crate::lut_export::dequantize_matrix;
     use candle_core::Device;
     use uor_r4_lut::format::StackArtifact;
     use uor_r4_lut::stack::StackModel as IntegerStack;
@@ -436,11 +626,6 @@ mod tests {
             ((state >> 11) as f64) / ((1u64 << 53) as f64) - 0.5
         };
         for (name, var) in model.variables() {
-            // The tied head carries the final gain in the artifact but not in a
-            // float reference, so the parity test keeps that gain at one.
-            if name == "final_norm.weight" {
-                continue;
-            }
             let values = var
                 .as_tensor()
                 .flatten_all()
@@ -471,118 +656,6 @@ mod tests {
         }
     }
 
-    /// The float stack whose weights are the artifact's own values: gains 1,
-    /// dequantized matrices (unpadded), grid-code scalars and integer biases.
-    /// It isolates the integer arithmetic from the weight rounding.
-    fn grid_reference(model: &StackModel, artifact: &StackArtifact) -> StackModel {
-        let c = model.config.clone();
-        let reference = StackModel::new(c.clone(), &Device::Cpu).unwrap();
-        let d = c.width;
-        let mlp = artifact.header.shape.mlp;
-        let matrix = |name: &str| -> Vec<f32> {
-            let spec = artifact.matrix(name).unwrap();
-            dequantize_matrix(
-                spec.rows,
-                spec.cols,
-                spec.exp_base,
-                artifact.section(spec.nibbles),
-                artifact.section(spec.scales),
-            )
-            .unwrap()
-        };
-        let unpad = |values: Vec<f32>,
-                     cols: usize,
-                     rows: usize,
-                     keep_rows: usize,
-                     keep_cols: usize|
-         -> Vec<f32> {
-            (0..keep_rows.min(rows))
-                .flat_map(|r| values[r * cols..r * cols + keep_cols].to_vec())
-                .collect()
-        };
-        let set = |name: &str, values: Vec<f32>| {
-            let var = reference.variables().get(name).unwrap();
-            var.set(&Tensor::from_vec(values, var.as_tensor().shape(), &Device::Cpu).unwrap())
-                .unwrap();
-        };
-        let ints = |name: &str, exp: i32| -> Vec<f32> {
-            artifact
-                .table_i32(name)
-                .unwrap()
-                .iter()
-                .map(|&v| (f64::from(v) * 2f64.powi(exp)) as f32)
-                .collect()
-        };
-        let codes = |name: &str| -> Vec<f64> {
-            artifact
-                .table_i16(name)
-                .unwrap()
-                .iter()
-                .map(|&v| grid_value(v))
-                .collect()
-        };
-        set("embedding.weight", matrix("embed"));
-        set("final_norm.weight", vec![1.0; d]);
-        for (l, kind) in c.pattern.bytes().enumerate() {
-            let t = |suffix: &str| format!("layers.{l:02}.{suffix}");
-            let a = |part: &str| format!("l{l}.{part}");
-            if kind == b'r' {
-                set(&t("rec_norm.weight"), vec![1.0; d]);
-                set(&t("rec.in.weight"), matrix(&a("rec_in")));
-                set(&t("rec.gate.weight"), matrix(&a("rec_gate")));
-                set(&t("rec.out.weight"), matrix(&a("rec_out")));
-                set(
-                    &t("rec.conv.weight"),
-                    codes(&a("conv_taps")).iter().map(|&v| v as f32).collect(),
-                );
-                set(&t("rec.conv.bias"), ints(&a("conv_bias"), -16));
-                set(&t("rec.gate.bias"), ints(&a("gate_bias"), -16));
-                // decay with 8 softplus(-decay) = rate.
-                set(
-                    &t("rec.decay"),
-                    codes(&a("decay_rate"))
-                        .iter()
-                        .map(|&rate| -((rate / DECAY_EXPONENT).exp_m1().ln()) as f32)
-                        .collect(),
-                );
-            } else {
-                set(&t("read_norm.weight"), vec![1.0; d]);
-                for (part, tensor) in [
-                    ("query", "query"),
-                    ("key", "key"),
-                    ("value", "value"),
-                    ("null", "null"),
-                    ("out", "out"),
-                ] {
-                    set(&t(&format!("read.{tensor}.weight")), matrix(&a(part)));
-                }
-                set(&t("read.null.bias"), ints(&a("null_bias"), -16));
-                set(&t("read.age"), ints(&a("age"), -16));
-                if c.read == ReadScore::Lorentz {
-                    set(
-                        &t("read.log_beta"),
-                        codes(&a("beta")).iter().map(|&v| v.ln() as f32).collect(),
-                    );
-                    set(&t("read.offset"), ints(&a("offset"), -24));
-                }
-            }
-            set(&t("mlp_norm.weight"), vec![1.0; d]);
-            set(
-                &t("mlp.gate.weight"),
-                unpad(matrix(&a("gate")), d, mlp, c.mlp_hidden, d),
-            );
-            set(
-                &t("mlp.up.weight"),
-                unpad(matrix(&a("up")), d, mlp, c.mlp_hidden, d),
-            );
-            set(
-                &t("mlp.down.weight"),
-                unpad(matrix(&a("down")), mlp, d, d, c.mlp_hidden),
-            );
-        }
-        reference
-    }
-
     fn log_softmax(logits: &[f64]) -> Vec<f64> {
         let max = logits.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let total: f64 = logits.iter().map(|v| (v - max).exp()).sum();
@@ -598,14 +671,14 @@ mod tests {
         perturb(&model, 3);
         let (bytes, _) = export_stack(&model, json!({"test": true})).unwrap();
         let artifact = StackArtifact::parse(bytes.clone()).unwrap();
-        let reference = grid_reference(&model, &artifact);
+        let reference = stack_grid_reference(&model, &artifact).unwrap();
         let integer = IntegerStack::from_artifact(StackArtifact::parse(bytes).unwrap()).unwrap();
         let ids: Vec<u32> = (0..model.config.context as u32)
             .map(|i| (i * 37 + 5) % 96)
             .collect();
         let time = ids.len();
         let logits = reference
-            .forward(&ids, 1, time)
+            .logits(&ids, 1, time)
             .unwrap()
             .to_vec2::<f32>()
             .unwrap();

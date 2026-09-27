@@ -13,3 +13,7 @@ exit 0 /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scra
 exit 0 /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c4/runs/ablation-seed2/lorentz_r2 2026-09-27T09:59:22Z
 launch /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c4/runs/ablation-readsonly/dot_s1 fresh 2026-09-27T09:59:22Z
 launch /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c4/runs/ablation-readsonly/lorentz_s2 fresh 2026-09-27T09:59:22Z
+exit 0 /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c4/runs/ablation-readsonly/dot_s1 2026-09-27T11:11:58Z
+exit 0 /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c4/runs/ablation-readsonly/lorentz_s2 2026-09-27T11:23:15Z
+launch /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c4/runs/main/geometric_s1 fresh 2026-09-27T11:23:15Z
+launch /tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c4/runs/main/transformer_s1 fresh 2026-09-27T11:23:15Z
