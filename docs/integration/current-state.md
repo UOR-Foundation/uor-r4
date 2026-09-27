@@ -29,6 +29,62 @@ record the executed scope. No model fit or capability promotion
 follows from the lab setup. Accepted models and the continuation negative below
 remain unchanged. Other labs' active source and model jobs are preserved.
 
+The [shared packed-coefficient candidate](packed-integer-preparation-2026-09-27.md)
+now preserves signed4 arrays in shared packed storage and reads them directly in
+the supported width-128/256 integer kernels. Four focused arithmetic checks and
+release compilation pass. Static inspection covers 30 emitted library ranges
+and 28 conversational-binary ranges with no forbidden opcode found; the ordinary
+CLI retains three missing conversational symbols in both baseline and candidate.
+The [completed comparison](packed-integer-comparison-2026-09-27.md) now preserves
+all declared stable fields in eight paired workloads on the retained width-256
+Quaternion and Householder-pair artifacts: 4,096 paired replay positions, 138
+generation requests per version and four complete saved chat DTOs per version.
+All 16 processes exit successfully. Logical retained coefficient payload falls
+from 6,702,340 to 847,876 bytes; observed peak child RSS is 13.04–16.83% lower.
+Timing changes are small and mixed; the complete supervisor took 50.774 seconds.
+Independent review supports protected delivery without another sweep. This
+preserves the existing weak language behavior and establishes neither useful
+language, width-576 equivalence, D5 selected access nor energy savings.
+
+The [explicit width-576 integer development profile](native-dialogue576-preparation-2026-09-27.md)
+now has a [completed historical-parent observation](native-dialogue576-observation-2026-09-27.md).
+Conversion, packaging and 174 actual replies completed through frozen sources
+`e75acd94` / `b9bea957`; four new focused observer checks pass. On 4,331 identical
+saved trace positions, parameter conversion changes 746 greedy decisions,
+interface quantization another 6, and integer arithmetic another 8. QQ and integer
+produce identical tokens on 55/58 turns, with all 58 request prefixes matching.
+Both lose Momo and final blue-car recall relative to the weak continuous parent.
+Retain the converted artifact for diagnosis, without language promotion.
+The [portable packet](../evidence/native-dialogue576-observation-2026-09-27.json)
+contains every output and both independent reviews. Complete execution took
+61.469 seconds, peak child RSS 161,349,632 bytes. On the same trace, integer
+stepping took 13.983 seconds versus FF 3.173; this single instrumented run
+establishes no speed advantage and measures no energy. Dense parameter access
+remains; D5 selected access is not established. Reconcile existing precision and
+learned-rounding evidence before selecting a new discretization experiment.
+This historical-parent observation does not qualify the new full-prefix child.
+
+The [selected child's separate native observation](dialogue-child-native-observation-2026-09-27.md)
+is now complete at source `03bfaaf5`. Its strict typed loader and separate
+conversion schema preserve the actual 1,024-step child and its 2,237-step
+ancestor as distinct identities. Thirteen focused release checks pass. The
+current FF reproduces all 58 saved child replies; all 174 FF/QQ/integer outputs
+are retained. On 3,914 common positions per form, FF→QF changes 909 greedy
+decisions, QF→QQ another 3, and QQ→integer another 4. QQ and integer agree on
+52/58 generated replies, with all native history/pending-token accounts checked.
+Both hard forms lose Momo and green; teacher/July/piano partial answers also
+worsen. Paris is cleaner, Tokyo remains partial, and blue-car recall is retained.
+This is a materially lossy development artifact, not an accepted model. The
+[portable evidence and reviews](../evidence/dialogue-child-native-observation-2026-09-27.json)
+record 56.245 seconds of conversion/packaging/observation and 205,946,880 bytes
+peak child RSS. Same-input integer stepping takes 12.593 seconds versus FF
+2.823 in this instrumented pass; no speed or energy advantage is established.
+The next causal implementation is one response-aware choice of legal codes on
+the fixed child grids and complete-prefix population, with dose/resources still
+to be selected before fitting. Actual relation recovery and all-output retention
+govern that decision; the old width-256 rounding result warns that lower
+numerical loss alone does not preserve complete answers. No new alpha fit ran.
+
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded
 accepted-bundle witness matches exact prefix IDs and all 16 prediction records
@@ -55,6 +111,21 @@ Google retains CLI wiring ownership; this resolves its follow-up's
 [display-history reconstruction seam](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852795123)
 at the reusable library boundary, with adoption still pending.
 
+The separate `ChatTokenStream`/`uor-chat` path now reports failed terminal model
+writes instead of presenting a successful EOS, cap or cycle stop. Two synthetic
+library checks cover closure failures and successful history, probability and
+sampler preservation against direct stepping; one CLI completion-helper check
+and the release build also pass. The helper test does not spawn the CLI to test
+its exit status. Terminal errors now exit before success telemetry, while
+existing stream-construction errors remain visible and return to the prompt;
+exit status zero alone therefore does not establish that every command succeeded.
+The [source-bound validation and cost](../evidence/chat-stream-error-validation-2026-09-27.json)
+record 34.816 seconds of build/check work, including the initial 6.148-second
+test-only compile failure and its repair. No learned-model execution occurred.
+This improves runtime-versus-model diagnosis without adding rollback, recovery
+or a chat-quality result; Google's separate geometry/cache work remains outside
+this repair.
+
 The [retained R1d dialogue artifact](dialogue-artifact-replay-2026-09-27.md) now
 reloads through a strict offline continuous Full/Dot/Quaternion importer. All
 four focused checks pass; an initial malformed tokenizer fixture and its repair
@@ -70,9 +141,10 @@ record 18.132 seconds of actual inference and 58,572,800 bytes peak child RSS.
 The historical fit remains 9,162,752 sampled positions; summing its per-update
 records gives 6,280,627 response-supervised positions, correcting a duplicated
 report field. Its bounded no-longer-fit decision remains; unstable extrapolated
-floors do not establish capacity as the cause. No training extension or integer
-loader widening follows. The frozen reader study and other labs' mechanisms
-remain independent.
+floors do not establish capacity as the cause. That replay alone did not select
+a training extension or integer loader widening; subsequent learning and profile
+preparation have separate work cards and evidence. The frozen reader study and
+other labs' mechanisms remain independent.
 
 The [R1d training-context audit](dialogue-context-audit-2026-09-27.md) now
 reconstructs all 2,237 update denominators exactly. Of 6,280,627 response-target
@@ -166,20 +238,33 @@ neither answers Paris or recalls Alex in the final memory turn. All ten replies,
 source identities and the 40.528-second combined process wall cost are retained
 in its [packet](../evidence/dialogue-prefix-implementation-2026-09-27.json).
 This is integrated execution, not useful chat or conditioning advantage.
-The [substantive complete-prefix study](dialogue-prefix-study-2026-09-27.md)
-is now **RUNNING** from the retained parent: full-prefix first, with role-only
-queued under one sequential supervisor. The source-stratified open-development
-panel is sealed before learning: 161 distinct responses, with source counts
-23/32/10/32/32/32. Three focused selection/aggregation checks pass. Each arm is
-fixed at 1,024 updates, followed by saved-weight reload and all 58 existing
-open-development replies. The [launch packet](../evidence/dialogue-prefix-study-2026-09-27.json)
-binds the source, executable, both campaigns, actual panel IDs, prospective
-resources and independently reviewed decision method. It records a live launch,
-not a completed pair or language result. Wait for the declared endpoints, then
-review actual request fulfillment and history correctness against the parent
-and control, with source-specific losses and regressions. No automatic dose,
-seed or decoder extension follows. Other labs retain their CLI, trainer and
-deeper stack ownership. Native, multiplier-free serving remains the target.
+The [fixed complete-prefix dialogue pair](dialogue-prefix-paired-result-2026-09-27.md)
+is complete. Each arm reached 1,024 updates, 1,165,549 response/EOS targets and
+4,194,304 tensor positions, with all 1,024 retained schedule rows matched.
+Role-only resumed the preserved model/Adam at step 512 after the storage
+interruption; discarded 46 updates and 50,798 targets remain charged. Saved
+models reloaded and generated all 58 fixed replies each. The
+[portable result](../evidence/dialogue-prefix-paired-result-2026-09-27.json)
+preserves all parent/full/role outputs, six source strata, artifact identity,
+cost and reviewer disagreements.
+
+Retain full-prefix as a narrow conditioning candidate, with retention limits.
+Development NLL is 3.022131 parent, 2.773887 full-prefix and 2.863946 role-only.
+Paris on the correct request and Alex/green/Tokyo recall improve over both
+comparators. Greeting and pizza gains are shared; Momo/blue-car payload predates
+this study. Role-only handles the morning greeting better, while full-prefix
+rewrite first-four NLL regresses from 0.583383 to 0.927748 (role 0.713295).
+Neither model handles the ten middle memory turns coherently or establishes
+general instruction-following, prose, chat or reasoning. The 161-response
+source-stratified panel is exposed development; the complete-prefix population
+excludes most long responses. No general non-regression or geometric advantage
+is claimed, and no automatic dose, seed or decoder extension follows.
+
+The independent packed-coefficient workload comparison is now complete above;
+the selected-child native observation makes parameter discretization
+the leading numerical question. Preserve the fixed studies and accepted models.
+Other labs retain their CLI, trainer and deeper stack ownership. Native,
+multiplier-free serving remains the target.
 
 The fourth lab's [source review of Google PR #1410 at `9722200c`](https://github.com/UOR-Foundation/uor-r4/pull/1410#issuecomment-5851958824)
 identifies useful serving optimization alongside unresolved integration and
@@ -195,9 +280,20 @@ remain. The merge changes integer execution, not the continuous transfer/model
 path measured in the Dot witness. Future integer measurements must bind this
 changed source separately.
 
+The [frontier geometric transfer synthesis](frontier-geometric-transfer-synthesis-2026-09-27.md)
+binds the continuous radial parameter transfer lineage (`step-15,672` parent,
+21 shared tensors, 1,678,466 scalars, zero moment pollution) with the zero-matmul
+serving model on Apple Silicon. Four focused checks in `cross_lab_lorentz_frontier.rs`
+pass, verifying empirical transfer startup NLLs (Dot reset 1.996717 nats vs Lorentz
+2.389537 and Affine 2.400457 nats disturbance), 6/6 connected gradient families,
+non-zero causal read mass across all 1,020 positions, bit-identical post-token0
+states, and 5.8450 nats causal NLL advantage. Static disassembly across all 24
+mandatory numerical serving symbols in `libuor_r4_integer.rlib` certifies zero
+hardware multipliers, zero dividers, and zero floats under D0-b. Delivery is tracked
+in PR #1417.
 
 Claude's [draft stack experiment, PR #1414](https://github.com/UOR-Foundation/uor-r4/pull/1414)
-now has a reviewed six-pilot packet at `dc721f0a`: all 31 listed file identities
+initially supplied a reviewed six-pilot packet at `dc721f0a`: all 31 listed file identities
 match. Each pilot used 1,000 updates / 4,096,000 visits at one seed, with final
 evaluation on 131,072 exposed development targets. The selected geometric
 lr0.004 NLL is 2.609729 versus the selected transformer lr0.002 control's 2.768041.
@@ -221,12 +317,36 @@ executed binaries. Raw model weights and executables remain external;
 the designated owner-SSD intake is empty and no transfer branch is available.
 Payload verification remains pending.
 [Preservation coordination](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5853595061).
-This complementary Claude-owned track has no integrated integer/session path.
+This complementary Claude-owned track has no integrated native multiplier-free
+integer/session path; its subsequent D10 runtime is a separate contract.
 Its Dot ablation belongs to the deeper stack, not the fourth lab's already
 completed retained-reader comparison or running dialogue study. Its
 configuration-level likelihood results keep deeper architecture as a candidate;
 useful generated behavior remains required, and our fixed dose and native
 multiplier-free serving target stay unchanged.
+
+The subsequent [stack review at `86f5b4e6`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5855426807)
+verifies 58 added/changed report identities in the 101-file packet. A second
+seed reverses Lorentz-versus-Dot ordering, leaving mean NLL difference about
+-0.000100 across two seeds: no consistent reader advantage is established.
+All twelve new continuous continuations remain repetitive or malformed. Five
+trained D10 integer-retention reports show NLL gaps +0.007695 to +0.012756 and
+92.68–93.61% top-1 agreement on exposed development. These are AVX2 results with
+hardware multiplication/division and dense parameter reads, not this lab's
+native serving contract. The engine timer now excludes floating scoring, but
+integer continuation records and locally validated raw payloads were absent
+at that review. The [later precision review through `6bc7dd6d`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5856120502)
+verifies 41 added/changed file identities and five trained reference joins.
+Reference-minus-float NLL is +0.007543 to +0.012756; integer-minus-reference is
+-0.00000170 to +0.00015188. The reference substitutes packed matrices, scalars,
+biases, folded normalization gains and head values, so the localization is to
+the packed representation collectively, not uniquely four-bit matrix rounding.
+New integer continuations remain weak. GPTQ source and synthetic checks are
+present without a trained GPTQ result packet. Grouped scales and a separate
+embedding/head differ from the native tied-readout codec. Hardware multiply/divide
+serving and the empty designated local payload intake remain unresolved for
+this lab's target. These reports do not promote a model or change the completed
+fixed dialogue pair.
 
 The separately owned termination-objective study has a
 [source-verified weighted-shard normalization/reporting defect](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852801075)
@@ -317,7 +437,7 @@ also fail; quaternion has source regressions against the accepted parent and an
 actual integer short-cycle. No candidate is promoted. The [next single work card](#next-single-work-card--failure-localization)
 localizes these failures from existing records; it authorizes no fit or sweep.
 
-## Parallel lab track: integer chat vehicle and hyperbolic reads, September26
+## Parallel lab track: integer chat vehicle, hyperbolic reads and a geometric stack, September26–27
 
 A separate lab on branch `claude/blissful-wozniak-girwwq` followed the owner's
 decisions of 2026-09-26 ([D10](DECISIONS.md)). An open instruct model, converted
@@ -354,12 +474,31 @@ track does not change the work card below.
     nats of equal float fine-tunes and keeps the Lorentz advantage (−0.062 and
     −0.059 nats)
     ([§11](hyperbolic-cycle3-2026-09-26.md#11-addendum-the-integer-lorentz-read)).
+- **A capacity-matched geometric stack** ([cycle 4](geometric-stack-cycle4-2026-09-27.md),
+  interim, September 27). It combines quaternion-transport recurrences, multi-head
+  Lorentz reads and MLPs, at 7.15M parameters, against a 7.16M-parameter
+  transformer control on Rust code.
+  - At 1,000 updates it leads by 0.158 nats at each arm's selected rate.
+  - Reads-only Lorentz is the best configuration measured (2.5531 and 2.5382 over
+    two seeds). Inside the default `rrarra`, Dot and Lorentz trade places across
+    two seeds.
+  - Under D10, integer serving costs 0.011–0.013 nats, or 0.006–0.007 with GPTQ.
+    The cost is in the exported parameters, not the integer arithmetic. The engine
+    uses the hardware multiplier on runtime values, so it does not meet D0-b.
+  - Continuations still repeat or are malformed.
+  - The full-exposure comparison (29,999,104 target visits per arm) is running;
+    its result follows the card's fixed reading.
+  - A dialogue path (`dialogue-train`, `lut-chat`) follows the retained study's
+    episodes, stop rules and panel limits. It is checked on synthetic data only.
 - **Owner-runnable M1 scripts.**
   - `scripts/lut-m1-chat.sh`: integer SmolLM2 chat, with an optional cache stage
     and joules per token.
   - `scripts/kappa-m1-pilot.sh`: the curvature drive test on real SmolLM2 heads.
   - `scripts/native-lorentz-m1.sh`: the full-scale native Dot/Lorentz comparison
     through integer serving.
+  - `scripts/geometric-stack-m1.sh` and `scripts/geometric-stack-chat-m1.sh`: the
+    cycle-4 stack's training and integer serving, and its dialogue learning and
+    chat.
 - **Scope.** Development measurements on stand-ins and at reduced scale. No
   chat-quality, M1-energy or general-language qualification.
 

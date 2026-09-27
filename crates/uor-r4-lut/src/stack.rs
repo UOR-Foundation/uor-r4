@@ -371,6 +371,7 @@ impl StackModel {
                         keys: Vec::with_capacity(s.context * s.width),
                         values: Vec::with_capacity(s.context * s.width),
                         lifts: Vec::new(),
+                        bounds: Bounds::default(),
                     }
                 }
             })
@@ -395,6 +396,7 @@ impl StackModel {
                 scores: Vec::with_capacity(s.context),
                 weights: Vec::with_capacity(s.context),
                 mix: Vec::new(),
+                mix64: Vec::new(),
                 proj: vec![0; s.width],
                 gate: vec![0; s.mlp],
                 up: vec![0; s.mlp],
@@ -417,7 +419,31 @@ enum LayerState {
         values: Vec<i32>,
         /// Lorentz key lifts `[position][head]` at exponent -32.
         lifts: Vec<u64>,
+        bounds: Bounds,
     },
+}
+
+/// The largest key and value magnitudes a read has stored. They prove when
+/// its sums fit 64 bits, so the exact 64-bit loops can replace the 128-bit
+/// ones without changing any result.
+#[derive(Clone, Copy, Debug, Default)]
+struct Bounds {
+    key: u64,
+    value: u64,
+}
+
+fn max_abs(values: &[i32]) -> u64 {
+    values
+        .iter()
+        .map(|v| u64::from(v.unsigned_abs()))
+        .max()
+        .unwrap_or(0)
+}
+
+/// Whether `terms` products each at most `a b` in magnitude, and all their
+/// partial sums, fit `i64`.
+fn fits_i64(terms: u64, a: u64, b: u64) -> bool {
+    u128::from(terms) * u128::from(a) * u128::from(b) <= i64::MAX as u128
 }
 
 struct Buffers {
@@ -436,6 +462,7 @@ struct Buffers {
     scores: Vec<i64>,
     weights: Vec<u64>,
     mix: Vec<i128>,
+    mix64: Vec<i64>,
     proj: Vec<i32>,
     gate: Vec<i32>,
     up: Vec<i32>,
@@ -468,10 +495,12 @@ impl StackSession<'_> {
                     keys,
                     values,
                     lifts,
+                    bounds,
                 } => {
                     keys.clear();
                     values.clear();
                     lifts.clear();
+                    *bounds = Bounds::default();
                 }
             }
         }
@@ -529,8 +558,16 @@ impl StackSession<'_> {
                         keys,
                         values,
                         lifts,
+                        bounds,
                     },
-                ) => read(model, r, keys, values, lifts, self.position, b, parallel)?,
+                ) => read(
+                    model,
+                    r,
+                    (keys, values, lifts, bounds),
+                    self.position,
+                    b,
+                    parallel,
+                )?,
                 _ => return Err(invalid("layer state does not match its mixer")),
             }
             for (x, p) in b.x.iter_mut().zip(&b.proj) {
@@ -704,9 +741,7 @@ fn recurrence(
 fn read(
     model: &StackModel,
     r: &Read,
-    keys: &mut Vec<i32>,
-    values: &mut Vec<i32>,
-    lifts: &mut Vec<u64>,
+    (keys, values, lifts, bounds): (&mut Vec<i32>, &mut Vec<i32>, &mut Vec<u64>, &mut Bounds),
     position: usize,
     b: &mut Buffers,
     parallel: bool,
@@ -732,6 +767,8 @@ fn read(
     }
     keys.extend_from_slice(&b.k);
     values.extend_from_slice(&b.v);
+    bounds.key = bounds.key.max(max_abs(&b.k));
+    bounds.value = bounds.value.max(max_abs(&b.v));
     if lorentz {
         for h in 0..heads {
             lifts.push(lift(&b.k[h * hd..(h + 1) * hd]));
@@ -745,13 +782,24 @@ fn read(
         let null_score = i64::from(b.null[h]) + i64::from(r.null_bias[h]);
         let mut max = null_score;
         b.scores.clear();
+        let narrow = fits_i64(hd as u64, max_abs(query), bounds.key);
         for j in 0..=position {
             let key = &keys[j * d + h * hd..j * d + (h + 1) * hd];
-            let dot: i128 = query
-                .iter()
-                .zip(key)
-                .map(|(a, b)| i128::from(*a) * i128::from(*b))
-                .sum();
+            let dot: i128 = if narrow {
+                i128::from(
+                    query
+                        .iter()
+                        .zip(key)
+                        .map(|(a, b)| i64::from(*a) * i64::from(*b))
+                        .sum::<i64>(),
+                )
+            } else {
+                query
+                    .iter()
+                    .zip(key)
+                    .map(|(a, b)| i128::from(*a) * i128::from(*b))
+                    .sum()
+            };
             let score = if lorentz {
                 let distance =
                     lorentz_distance(query_lift, lifts[j * heads + h], dot, &model.arcosh);
@@ -782,14 +830,31 @@ fn read(
             b.weights.push(w);
         }
         b.mix.clear();
-        b.mix.resize(hd, 0);
-        for (j, &w) in b.weights.iter().enumerate() {
-            if w == 0 {
-                continue;
+        if fits_i64(1, total, bounds.value) {
+            // Every partial sum is at most `total` times the largest value.
+            b.mix64.clear();
+            b.mix64.resize(hd, 0);
+            for (j, &w) in b.weights.iter().enumerate() {
+                if w == 0 {
+                    continue;
+                }
+                let value = &values[j * d + h * hd..j * d + (h + 1) * hd];
+                let w = w as i64;
+                for (m, v) in b.mix64.iter_mut().zip(value) {
+                    *m += w * i64::from(*v);
+                }
             }
-            let value = &values[j * d + h * hd..j * d + (h + 1) * hd];
-            for (m, v) in b.mix.iter_mut().zip(value) {
-                *m += i128::from(w) * i128::from(*v);
+            b.mix.extend(b.mix64.iter().map(|&m| i128::from(m)));
+        } else {
+            b.mix.resize(hd, 0);
+            for (j, &w) in b.weights.iter().enumerate() {
+                if w == 0 {
+                    continue;
+                }
+                let value = &values[j * d + h * hd..j * d + (h + 1) * hd];
+                for (m, v) in b.mix.iter_mut().zip(value) {
+                    *m += i128::from(w) * i128::from(*v);
+                }
             }
         }
         // Q31-weighted sum over the Q31 total, back to exponent -16.

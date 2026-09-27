@@ -18,12 +18,15 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::config::{
-    JointConfig, QuantizedTrainingState, ReadGeometry, ReadMode, Transport, LORENTZ_LOG_BETA,
-    LORENTZ_OFFSET,
+    JointConfig, QuantizedTrainingState, ReadGeometry, ReadMode, ServingProfile, Transport,
+    LORENTZ_LOG_BETA, LORENTZ_OFFSET,
 };
 use crate::format::{self as joint_quantization, ParameterQuantization};
 use crate::lorentz::{self, LorentzRead};
 use crate::math::{self, MathResult};
+use crate::packed_rows::{
+    low_bit_dot, low_bit_dot_4_contiguous_512, low_bit_dot_8_contiguous, CoefficientCodes,
+};
 use crate::tables::{Tables, TOTAL};
 use crate::{invalid, Result};
 
@@ -33,12 +36,24 @@ const STATE_BITS: i32 = 11;
 
 #[derive(Clone)]
 struct Parameter {
-    codes: Vec<i16>,
+    codes: CoefficientCodes,
     spec: ParameterQuantization,
+}
+
+/// Unique shared coefficient payload retained by a loaded model. This excludes
+/// scales, caches, Arc/allocator metadata, loading temporaries and session state;
+/// it is not a process RSS or physical memory-traffic measurement.
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize)]
+pub struct CoefficientStorage {
+    pub signed4_coefficients: usize,
+    pub packed_signed4_bytes: usize,
+    pub signed16_coefficients: usize,
+    pub signed16_bytes: usize,
 }
 
 pub struct IntegerModel {
     config: JointConfig,
+    serving_profile: ServingProfile,
     parameters: BTreeMap<String, Parameter>,
     tables: Tables,
     /// Load-time constants of a Lorentz read; `None` for the dot read.
@@ -74,8 +89,69 @@ pub struct IntegerSession {
     keys: Vec<[i32; KEY_DIM]>,
     /// Squared key norms in code units, kept for a Lorentz read only.
     key_norms: Vec<i128>,
-    values: Vec<[i32; VAL_DIM]>,
+    values: SessionValues,
     tokens: Vec<u32>,
+}
+
+// Ordinary sessions retain their original 256-coordinate allocation; only the
+// explicit wide profile allocates 576-coordinate rows. Google's SessionState
+// and its fixed VAL_DIM storage are independent of this enum.
+enum SessionValues {
+    Retained(Vec<[i32; VAL_DIM]>),
+    Dialogue576(Vec<[i32; 576]>),
+}
+
+impl SessionValues {
+    fn read(&self, masses: &[u64], width: usize) -> Result<Vec<i32>> {
+        let mut read = vec![0i32; width];
+        match self {
+            Self::Retained(values) => {
+                if !matches!(width, 128 | 256) || masses.len() != values.len() {
+                    return Err(invalid("retained value memory shape differs"));
+                }
+                let mut sum_coords = [0i64; VAL_DIM];
+                for (&mass, value) in masses.iter().zip(values) {
+                    accumulate_slot_value_1x(&mut sum_coords, mass, value);
+                }
+                for (coordinate, out) in read.iter_mut().enumerate() {
+                    *out = quantize(sum_coords[coordinate] as i128, 48 + 14, STATE_BITS)?;
+                }
+            }
+            Self::Dialogue576(values) => {
+                if width != 576 || masses.len() != values.len() {
+                    return Err(invalid("dialogue576 value memory shape differs"));
+                }
+                let mut sum_coords = [0i64; 576];
+                for (&mass, value) in masses.iter().zip(values) {
+                    accumulate_slot_value_576(&mut sum_coords, mass, value);
+                }
+                for (coordinate, out) in read.iter_mut().enumerate() {
+                    *out = quantize(sum_coords[coordinate] as i128, 48 + 14, STATE_BITS)?;
+                }
+            }
+        }
+        Ok(read)
+    }
+
+    fn push(&mut self, value: &[i32]) -> Result<()> {
+        match self {
+            Self::Retained(values) => {
+                if !matches!(value.len(), 128 | 256) {
+                    return Err(invalid("retained value write width differs"));
+                }
+                let mut row = [0; VAL_DIM];
+                row[..value.len()].copy_from_slice(value);
+                values.push(row);
+            }
+            Self::Dialogue576(values) => {
+                let row: [i32; 576] = value
+                    .try_into()
+                    .map_err(|_| invalid("dialogue576 value write width differs"))?;
+                values.push(row);
+            }
+        }
+        Ok(())
+    }
 }
 
 impl IntegerSession {
@@ -279,6 +355,12 @@ pub struct SessionState {
 
     pub age_horizon_clamp: usize,
 
+    // --- Hyperbolic & Metric Cache Geometry ---
+    pub persistent_key_norms: Vec<i128>,
+    pub dialogue_key_norms: Box<[i128; DIALOGUE_CAPACITY]>,
+    pub l2_page_norms: Box<[i128; L2_PAGE_CAPACITY]>,
+    pub allow_hyperbolic_cache: bool,
+
     // --- Scratch Buffers (Reused across steps to eliminate stack/heap allocations) ---
     pub scratch_products: Vec<[i64; 16]>,
     pub copy_scratch: Vec<u64>,
@@ -322,6 +404,15 @@ impl SessionState {
 
     pub fn seal_persistent(&mut self) {
         self.persistent_sealed = true;
+    }
+
+    pub fn with_hyperbolic_cache(mut self) -> Self {
+        self.allow_hyperbolic_cache = true;
+        self
+    }
+
+    pub fn enable_hyperbolic_cache(&mut self) {
+        self.allow_hyperbolic_cache = true;
     }
 
     pub fn is_persistent_sealed(&self) -> bool {
@@ -1293,20 +1384,21 @@ fn fill_low_bit_products(input: &[i32], out: &mut [[i64; 16]]) {
 }
 
 #[inline(always)]
-fn fill_low_bit_products_i16(input: &[i16], out: &mut [[i64; 16]]) {
-    let len = input.len().min(out.len());
-    for i in 0..len {
-        let x = i64::from(input[i]);
-        let twice = x << 1;
-        let four = x << 2;
-        let three = x + twice;
-        let five = x + four;
-        let six = twice + four;
-        let seven = (x << 3) - x;
-        out[i] = [
-            0, x, twice, three, four, five, six, seven, 0, -seven, -six, -five, -four, -three,
-            -twice, -x,
-        ];
+fn fill_packed_low_bit_products(input: &[u8], out: &mut [[i64; 16]]) {
+    for (&byte, pair) in input.iter().zip(out.chunks_exact_mut(2)) {
+        for (nibble, table) in [byte & 15, byte >> 4].into_iter().zip(pair) {
+            let x = i64::from((nibble as i8) << 4 >> 4);
+            let twice = x << 1;
+            let four = x << 2;
+            let three = x + twice;
+            let five = x + four;
+            let six = twice + four;
+            let seven = (x << 3) - x;
+            *table = [
+                0, x, twice, three, four, five, six, seven, 0, -seven, -six, -five, -four, -three,
+                -twice, -x,
+            ];
+        }
     }
 }
 
@@ -1319,269 +1411,6 @@ fn low_bit_products(input: &[i32]) -> Vec<[i64; 16]> {
     let mut products = vec![[0i64; 16]; input.len()];
     fill_low_bit_products(input, &mut products);
     products
-}
-
-/// Coefficients are signed4, validated at import. The retained shape bounds
-/// (at most 512 input coordinates) keep even full-i32 products/sums inside i64.
-/// Coordinate order is unchanged; replacing recomputation with table reads adds
-/// no rounding. This hot path is separate from model-driver shape arithmetic.
-/// Unrolled by 8 with 8 independent accumulators for optimal instruction-level
-/// parallelism and register reuse on Apple Silicon M1 (zero hardware multipliers).
-#[inline(never)]
-fn low_bit_dot(products: &[[i64; 16]], weights: &[i16]) -> i64 {
-    let len = products.len().min(weights.len());
-    let mut p_chunks = products[..len].chunks_exact(8);
-    let mut w_chunks = weights[..len].chunks_exact(8);
-
-    let mut acc0 = 0i64;
-    let mut acc1 = 0i64;
-    let mut acc2 = 0i64;
-    let mut acc3 = 0i64;
-    let mut acc4 = 0i64;
-    let mut acc5 = 0i64;
-    let mut acc6 = 0i64;
-    let mut acc7 = 0i64;
-
-    for (p, w) in p_chunks.by_ref().zip(w_chunks.by_ref()) {
-        let p: &[[i64; 16]; 8] = match p.try_into() {
-            Ok(arr) => arr,
-            Err(_) => continue,
-        };
-        let w: &[i16; 8] = match w.try_into() {
-            Ok(arr) => arr,
-            Err(_) => continue,
-        };
-        acc0 += p[0][usize::from((w[0] as u16) & 15)];
-        acc1 += p[1][usize::from((w[1] as u16) & 15)];
-        acc2 += p[2][usize::from((w[2] as u16) & 15)];
-        acc3 += p[3][usize::from((w[3] as u16) & 15)];
-        acc4 += p[4][usize::from((w[4] as u16) & 15)];
-        acc5 += p[5][usize::from((w[5] as u16) & 15)];
-        acc6 += p[6][usize::from((w[6] as u16) & 15)];
-        acc7 += p[7][usize::from((w[7] as u16) & 15)];
-    }
-
-    let mut total = (acc0 + acc1) + (acc2 + acc3) + (acc4 + acc5) + (acc6 + acc7);
-    for (multiples, &weight) in p_chunks.remainder().iter().zip(w_chunks.remainder()) {
-        total += multiples[usize::from((weight as u16) & 15)];
-    }
-    total
-}
-
-/// 4-row cache-coherent table-lookup dot product for 4K vocabulary un-embedding.
-/// Reuses each coordinate's 16-element product table across 4 adjacent vocabulary rows
-/// in a single cache-coherent pass. Achieves optimal L1 data cache locality and register
-/// reuse on Apple Silicon M1 with strictly 0 hardware multipliers, dividers, or floats.
-#[inline(always)]
-fn low_bit_dot_4x(
-    products: &[[i64; 16]; 256],
-    w0: &[i16; 256],
-    w1: &[i16; 256],
-    w2: &[i16; 256],
-    w3: &[i16; 256],
-) -> (i64, i64, i64, i64) {
-    let mut acc0_a = 0i64;
-    let mut acc0_b = 0i64;
-    let mut acc1_a = 0i64;
-    let mut acc1_b = 0i64;
-    let mut acc2_a = 0i64;
-    let mut acc2_b = 0i64;
-    let mut acc3_a = 0i64;
-    let mut acc3_b = 0i64;
-
-    for i in (0..256).step_by(4) {
-        let p0 = &products[i];
-        let p1 = &products[i + 1];
-        let p2 = &products[i + 2];
-        let p3 = &products[i + 3];
-
-        acc0_a += p0[usize::from((w0[i] as u16) & 15)] + p1[usize::from((w0[i + 1] as u16) & 15)];
-        acc0_b +=
-            p2[usize::from((w0[i + 2] as u16) & 15)] + p3[usize::from((w0[i + 3] as u16) & 15)];
-
-        acc1_a += p0[usize::from((w1[i] as u16) & 15)] + p1[usize::from((w1[i + 1] as u16) & 15)];
-        acc1_b +=
-            p2[usize::from((w1[i + 2] as u16) & 15)] + p3[usize::from((w1[i + 3] as u16) & 15)];
-
-        acc2_a += p0[usize::from((w2[i] as u16) & 15)] + p1[usize::from((w2[i + 1] as u16) & 15)];
-        acc2_b +=
-            p2[usize::from((w2[i + 2] as u16) & 15)] + p3[usize::from((w2[i + 3] as u16) & 15)];
-
-        acc3_a += p0[usize::from((w3[i] as u16) & 15)] + p1[usize::from((w3[i + 1] as u16) & 15)];
-        acc3_b +=
-            p2[usize::from((w3[i + 2] as u16) & 15)] + p3[usize::from((w3[i + 3] as u16) & 15)];
-    }
-
-    (
-        acc0_a + acc0_b,
-        acc1_a + acc1_b,
-        acc2_a + acc2_b,
-        acc3_a + acc3_b,
-    )
-}
-
-#[allow(dead_code)]
-#[inline(always)]
-fn low_bit_dot_4_contiguous(
-    products: &[[i64; 16]; 256],
-    weights_1024: &[i16; 1024],
-) -> (i64, i64, i64, i64) {
-    let w0: &[i16; 256] = match weights_1024[0..256].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w1: &[i16; 256] = match weights_1024[256..512].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w2: &[i16; 256] = match weights_1024[512..768].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w3: &[i16; 256] = match weights_1024[768..1024].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    low_bit_dot_4x(products, w0, w1, w2, w3)
-}
-
-#[inline(always)]
-fn low_bit_dot_8_contiguous(
-    products: &[[i64; 16]; 256],
-    weights_2048: &[i16; 2048],
-) -> (i64, i64, i64, i64, i64, i64, i64, i64) {
-    let w0: &[i16; 256] = match weights_2048[0..256].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w1: &[i16; 256] = match weights_2048[256..512].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w2: &[i16; 256] = match weights_2048[512..768].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w3: &[i16; 256] = match weights_2048[768..1024].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w4: &[i16; 256] = match weights_2048[1024..1280].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w5: &[i16; 256] = match weights_2048[1280..1536].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w6: &[i16; 256] = match weights_2048[1536..1792].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w7: &[i16; 256] = match weights_2048[1792..2048].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-
-    let mut acc0 = 0i64;
-    let mut acc1 = 0i64;
-    let mut acc2 = 0i64;
-    let mut acc3 = 0i64;
-    let mut acc4 = 0i64;
-    let mut acc5 = 0i64;
-    let mut acc6 = 0i64;
-    let mut acc7 = 0i64;
-
-    for i in (0..256).step_by(2) {
-        let p0 = &products[i];
-        let p1 = &products[i + 1];
-
-        acc0 += p0[usize::from((w0[i] as u16) & 15)] + p1[usize::from((w0[i + 1] as u16) & 15)];
-        acc1 += p0[usize::from((w1[i] as u16) & 15)] + p1[usize::from((w1[i + 1] as u16) & 15)];
-        acc2 += p0[usize::from((w2[i] as u16) & 15)] + p1[usize::from((w2[i + 1] as u16) & 15)];
-        acc3 += p0[usize::from((w3[i] as u16) & 15)] + p1[usize::from((w3[i + 1] as u16) & 15)];
-        acc4 += p0[usize::from((w4[i] as u16) & 15)] + p1[usize::from((w4[i + 1] as u16) & 15)];
-        acc5 += p0[usize::from((w5[i] as u16) & 15)] + p1[usize::from((w5[i + 1] as u16) & 15)];
-        acc6 += p0[usize::from((w6[i] as u16) & 15)] + p1[usize::from((w6[i + 1] as u16) & 15)];
-        acc7 += p0[usize::from((w7[i] as u16) & 15)] + p1[usize::from((w7[i + 1] as u16) & 15)];
-    }
-
-    (acc0, acc1, acc2, acc3, acc4, acc5, acc6, acc7)
-}
-
-/// 4-row cache-coherent table-lookup dot product for 512-wide inputs (update affine).
-/// Reuses each coordinate's 16-element product table across 4 adjacent rows.
-/// Strictly 0 hardware multipliers, dividers, or floats in ARM64 disassembly.
-#[inline(always)]
-fn low_bit_dot_4x_512(
-    products: &[[i64; 16]; 512],
-    w0: &[i16; 512],
-    w1: &[i16; 512],
-    w2: &[i16; 512],
-    w3: &[i16; 512],
-) -> (i64, i64, i64, i64) {
-    let mut acc0_a = 0i64;
-    let mut acc0_b = 0i64;
-    let mut acc1_a = 0i64;
-    let mut acc1_b = 0i64;
-    let mut acc2_a = 0i64;
-    let mut acc2_b = 0i64;
-    let mut acc3_a = 0i64;
-    let mut acc3_b = 0i64;
-
-    for i in (0..512).step_by(4) {
-        let p0 = &products[i];
-        let p1 = &products[i + 1];
-        let p2 = &products[i + 2];
-        let p3 = &products[i + 3];
-
-        acc0_a += p0[usize::from((w0[i] as u16) & 15)] + p1[usize::from((w0[i + 1] as u16) & 15)];
-        acc0_b +=
-            p2[usize::from((w0[i + 2] as u16) & 15)] + p3[usize::from((w0[i + 3] as u16) & 15)];
-
-        acc1_a += p0[usize::from((w1[i] as u16) & 15)] + p1[usize::from((w1[i + 1] as u16) & 15)];
-        acc1_b +=
-            p2[usize::from((w1[i + 2] as u16) & 15)] + p3[usize::from((w1[i + 3] as u16) & 15)];
-
-        acc2_a += p0[usize::from((w2[i] as u16) & 15)] + p1[usize::from((w2[i + 1] as u16) & 15)];
-        acc2_b +=
-            p2[usize::from((w2[i + 2] as u16) & 15)] + p3[usize::from((w2[i + 3] as u16) & 15)];
-
-        acc3_a += p0[usize::from((w3[i] as u16) & 15)] + p1[usize::from((w3[i + 1] as u16) & 15)];
-        acc3_b +=
-            p2[usize::from((w3[i + 2] as u16) & 15)] + p3[usize::from((w3[i + 3] as u16) & 15)];
-    }
-
-    (
-        acc0_a + acc0_b,
-        acc1_a + acc1_b,
-        acc2_a + acc2_b,
-        acc3_a + acc3_b,
-    )
-}
-
-#[inline(always)]
-fn low_bit_dot_4_contiguous_512(
-    products: &[[i64; 16]; 512],
-    weights_2048: &[i16; 2048],
-) -> (i64, i64, i64, i64) {
-    let w0: &[i16; 512] = match weights_2048[0..512].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w1: &[i16; 512] = match weights_2048[512..1024].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w2: &[i16; 512] = match weights_2048[1024..1536].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    let w3: &[i16; 512] = match weights_2048[1536..2048].try_into() {
-        Ok(arr) => arr,
-        Err(_) => unreachable!(),
-    };
-    low_bit_dot_4x_512(products, w0, w1, w2, w3)
 }
 
 /// Precompute 16 multiples (0..15) of coordinate `x` using only shifts, adds, and subtracts.
@@ -1782,16 +1611,55 @@ fn accumulate_slot_value_1x(sum_coords: &mut [i64; VAL_DIM], mass: u64, val: &[i
     }
 }
 
+/// Wide values retain the same Q14 range and total Q48 attention mass as the
+/// retained path. Each coordinate's magnitude is at most 2^62; increasing the
+/// number of coordinates does not increase a coordinate's accumulation bound.
+#[inline(never)]
+fn accumulate_slot_value_576(sum_coords: &mut [i64; 576], mass: u64, val: &[i32; 576]) {
+    if mass == 0 {
+        return;
+    }
+    let t = build_mass_table_i64(mass);
+    for i in (0..576).step_by(4) {
+        sum_coords[i] = sum_coords[i].wrapping_add(mul_mass_coord(&t, val[i]));
+        sum_coords[i + 1] = sum_coords[i + 1].wrapping_add(mul_mass_coord(&t, val[i + 1]));
+        sum_coords[i + 2] = sum_coords[i + 2].wrapping_add(mul_mass_coord(&t, val[i + 2]));
+        sum_coords[i + 3] = sum_coords[i + 3].wrapping_add(mul_mass_coord(&t, val[i + 3]));
+    }
+}
+
 impl IntegerModel {
     pub fn load_with_tables(directory: &Path, tables: &Path) -> Result<Self> {
+        Self::load_with_tables_profile(directory, tables, ServingProfile::Retained)
+    }
+
+    /// Load an explicitly requested serving profile. Shape alone never opts an
+    /// artifact into the wider runtime or changes the canonical import scope.
+    pub fn load_with_tables_profile(
+        directory: &Path,
+        tables: &Path,
+        profile: ServingProfile,
+    ) -> Result<Self> {
         let manifest_path = directory.join("hard-model.json");
         if fs::metadata(&manifest_path)?.len() > 8 * 1024 * 1024 {
             return Err(invalid("integer model manifest too large"));
         }
         let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+        let stored_profile: ServingProfile = manifest
+            .get("serving_profile")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()?
+            .unwrap_or_default();
+        if stored_profile != profile {
+            return Err(invalid(
+                "integer serving profile differs from requested profile",
+            ));
+        }
         // The read geometry selects the contract: the retained legacy contract
         // for the dot read, with the quantized Lorentz declaration otherwise.
         let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
+        config.validate_for_profile(profile)?;
         if config.read_geometry == ReadGeometry::LorentzAffine {
             return Err(crate::IntegerError::UnsupportedReadGeometry(
                 config.read_geometry,
@@ -1801,8 +1669,12 @@ impl IntegerModel {
             || manifest
                 .get("admission")
                 .is_some_and(|value| value != "full")
+            || (profile == ServingProfile::Dialogue576 && manifest["admission"] != "full")
             || manifest["numerical_contract"]
-                != crate::config::packed_numerical_contract(config.read_geometry)?
+                != crate::config::packed_numerical_contract_for_profile(
+                    config.read_geometry,
+                    profile,
+                )?
             || manifest["parameter_manifest_sha256"]
                 != crate::sha256_file(
                     &directory.join(joint_quantization::HARD_PARAMETERS_MANIFEST_FILE),
@@ -1823,8 +1695,7 @@ impl IntegerModel {
         if descriptor != manifest["parameter_manifest"] {
             return Err(invalid("integer parameter manifest binding differs"));
         }
-        config.validate()?;
-        // `validate` bounds width to 128 or 256 and context to 2..256.
+        // Profile validation above bounds every shape and keeps read width64.
         if config.read_width != 64 {
             return Err(invalid("integer bridge fixes read64"));
         }
@@ -1850,18 +1721,19 @@ impl IntegerModel {
         let parameters: BTreeMap<String, Parameter> = codes
             .into_iter()
             .map(|(name, codes)| {
+                let parameter_spec = spec.parameters[&name].clone();
                 let parameter = Parameter {
-                    codes,
-                    spec: spec.parameters[&name].clone(),
+                    codes: CoefficientCodes::from_decoded(codes, parameter_spec.bits)?,
+                    spec: parameter_spec,
                 };
-                (name, parameter)
+                Ok((name, parameter))
             })
-            .collect();
+            .collect::<Result<_>>()?;
         let output_bias = match parameters.get("output.bias") {
             Some(p) => p
                 .codes
                 .iter()
-                .map(|&v| {
+                .map(|v| {
                     scaled(
                         i128::from(v),
                         WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -1883,7 +1755,7 @@ impl IntegerModel {
             Some(p) => p
                 .codes
                 .iter()
-                .map(|&v| {
+                .map(|v| {
                     scaled(
                         i128::from(v),
                         WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -1896,7 +1768,7 @@ impl IntegerModel {
             Some(p) => p
                 .codes
                 .iter()
-                .map(|&v| {
+                .map(|v| {
                     scaled(
                         i128::from(v),
                         WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -1910,7 +1782,7 @@ impl IntegerModel {
                 Some(p) => p
                     .codes
                     .iter()
-                    .map(|&v| {
+                    .map(|v| {
                         scaled(
                             i128::from(v),
                             WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -1930,7 +1802,7 @@ impl IntegerModel {
 
         let get_param = |name: &str| -> Parameter {
             parameters.get(name).cloned().unwrap_or_else(|| Parameter {
-                codes: Vec::new(),
+                codes: CoefficientCodes::ones(0, 4),
                 spec: ParameterQuantization {
                     bits: 4,
                     shape: Vec::new(),
@@ -1970,7 +1842,7 @@ impl IntegerModel {
                     let p = parameters
                         .get(name)
                         .ok_or_else(|| invalid(format!("missing integer parameter {name}")))?;
-                    Ok((p.codes[0], p.spec.row_exponents[0]))
+                    Ok((p.codes.code(0)?, p.spec.row_exponents[0]))
                 };
                 Some(LorentzRead::new(
                     scalar(LORENTZ_LOG_BETA)?,
@@ -1980,6 +1852,7 @@ impl IntegerModel {
         };
         Ok(Self {
             config,
+            serving_profile: profile,
             parameters,
             tables,
             lorentz,
@@ -2013,13 +1886,40 @@ impl IntegerModel {
         &self.config
     }
 
+    pub fn serving_profile(&self) -> ServingProfile {
+        self.serving_profile
+    }
+
+    /// Count each parameter's shared code allocation once, including arrays
+    /// also referenced by cached hot-parameter fields.
+    pub fn coefficient_storage(&self) -> CoefficientStorage {
+        let mut result = CoefficientStorage::default();
+        for parameter in self.parameters.values() {
+            if parameter.codes.is_signed4() {
+                result.signed4_coefficients += parameter.codes.len();
+                result.packed_signed4_bytes += parameter.codes.payload_bytes();
+            } else {
+                result.signed16_coefficients += parameter.codes.len();
+                result.signed16_bytes += parameter.codes.payload_bytes();
+            }
+        }
+        result
+    }
+
     pub fn new_session(&self) -> IntegerSession {
         IntegerSession {
             identity: self.identity.clone(),
             state: vec![0; self.config.width],
             keys: Vec::with_capacity(self.config.context),
             key_norms: Vec::with_capacity(self.config.context),
-            values: Vec::with_capacity(self.config.context),
+            values: match self.serving_profile {
+                ServingProfile::Retained => {
+                    SessionValues::Retained(Vec::with_capacity(self.config.context))
+                }
+                ServingProfile::Dialogue576 => {
+                    SessionValues::Dialogue576(Vec::with_capacity(self.config.context))
+                }
+            },
             tokens: Vec::with_capacity(self.config.context),
         }
     }
@@ -2034,10 +1934,18 @@ impl IntegerModel {
             .into_boxed_slice()
             .try_into()
             .unwrap_or_else(|_| panic!("dialogue_values size mismatch"));
+        let dialogue_key_norms = vec![0i128; DIALOGUE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("dialogue_key_norms size mismatch"));
         let l2_pages = vec![L2PrimePage::default(); L2_PAGE_CAPACITY]
             .into_boxed_slice()
             .try_into()
             .unwrap_or_else(|_| panic!("l2_pages size mismatch"));
+        let l2_page_norms = vec![0i128; L2_PAGE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("l2_page_norms size mismatch"));
         let last_probabilities = vec![0u64; 4096]
             .into_boxed_slice()
             .try_into()
@@ -2049,6 +1957,7 @@ impl IntegerModel {
             persistent_keys: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_values: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_tokens: Vec::with_capacity(PERSISTENT_CAPACITY),
+            persistent_key_norms: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_capacity: PERSISTENT_CAPACITY,
             persistent_sealed: false,
             dialogue_keys,
@@ -2056,12 +1965,14 @@ impl IntegerModel {
             dialogue_tokens: vec![0; DIALOGUE_CAPACITY],
             dialogue_sequences: vec![0; DIALOGUE_CAPACITY],
             dialogue_turn_ids: vec![0; DIALOGUE_CAPACITY],
+            dialogue_key_norms,
             dialogue_capacity: DIALOGUE_CAPACITY,
             dialogue_cursor: 0,
             dialogue_len: 0,
             dialogue_seen: 0,
             current_turn_id: 0,
             l2_pages,
+            l2_page_norms,
             l2_cursor: 0,
             l2_len: 0,
             l2_seen: 0,
@@ -2070,6 +1981,7 @@ impl IntegerModel {
             hopf_state: HopfFiberPointQ30::default(),
             cumulative_holonomy_q30: 0,
             age_horizon_clamp: AGE_HORIZON_CLAMP,
+            allow_hyperbolic_cache: false,
             scratch_products: vec![[0i64; 16]; 512],
             copy_scratch: vec![0u64; 4096],
             last_probabilities,
@@ -2078,6 +1990,11 @@ impl IntegerModel {
             last_copy_gate: 0,
             has_step: false,
         }
+    }
+
+    /// Whether this model uses Lorentz hyperbolic distance scoring for its read memory.
+    pub fn is_lorentz(&self) -> bool {
+        self.lorentz.is_some()
     }
 
     /// Look up signed 4-bit token embedding codes from embedding.weight.
@@ -2094,13 +2011,13 @@ impl IntegerModel {
         let start = match width {
             256 => token_index << 8,
             128 => token_index << 7,
+            576 => (token_index << 9) + (token_index << 6),
             _ => return Err(invalid("unsupported embedding width")),
         };
         let end = start + width;
-        Ok(embedding.codes[start..end]
-            .iter()
-            .map(|&x| i32::from(x))
-            .collect())
+        (start..end)
+            .map(|index| embedding.codes.code(index).map(i32::from))
+            .collect()
     }
 
     /// Project normalized hidden state to vocabulary logits using pure signed-4
@@ -2138,8 +2055,8 @@ impl IntegerModel {
 
         let width = self.config.width;
         let vocab_size = self.config.vocab_size;
-        if logits.len() < vocab_size {
-            return Err(invalid("logits buffer too small"));
+        if logits.len() < vocab_size || products.len() < width {
+            return Err(invalid("logits or product buffer too small"));
         }
         if width == 256 {
             let p_256: &[[i64; 16]; 256] = products[..256]
@@ -2149,10 +2066,11 @@ impl IntegerModel {
             for c in 0..chunks_8_count {
                 let r0 = c * 8;
                 let s0 = r0 << 8;
-                let chunk_arr: &[i16; 2048] = match embedding.codes[s0..s0 + 2048].try_into() {
-                    Ok(arr) => arr,
-                    Err(_) => continue,
-                };
+                let chunk_arr: &[u8; 1024] =
+                    match embedding.codes.packed_range(s0, 2048)?.try_into() {
+                        Ok(arr) => arr,
+                        Err(_) => continue,
+                    };
 
                 let (dot0, dot1, dot2, dot3, dot4, dot5, dot6, dot7) =
                     low_bit_dot_8_contiguous(p_256, chunk_arr);
@@ -2176,8 +2094,8 @@ impl IntegerModel {
             for row_idx in (chunks_8_count * 8)..vocab_size {
                 let start = row_idx << 8;
                 let end = start + 256;
-                let row = &embedding.codes[start..end];
-                let dot = low_bit_dot(products, row);
+                let row = embedding.codes.packed_range(start, end - start)?;
+                let dot = low_bit_dot(&products[..width], row);
                 logits[row_idx] =
                     scale_and_quantize_logit(dot, output_shifts[row_idx], output_bias[row_idx]);
             }
@@ -2185,8 +2103,16 @@ impl IntegerModel {
             for (row_idx, &bias) in output_bias.iter().enumerate().take(vocab_size) {
                 let start = row_idx << 7;
                 let end = start + 128;
-                let row = &embedding.codes[start..end];
-                let dot = low_bit_dot(products, row);
+                let row = embedding.codes.packed_range(start, end - start)?;
+                let dot = low_bit_dot(&products[..width], row);
+                let scaled_val = scaled(i128::from(dot), output_shifts[row_idx])?;
+                logits[row_idx] = quantize(scaled_val + bias, WORK_BITS, 8)?;
+            }
+        } else if width == 576 {
+            for (row_idx, &bias) in output_bias.iter().enumerate().take(vocab_size) {
+                let start = (row_idx << 9) + (row_idx << 6);
+                let row = embedding.codes.packed_range(start, 576)?;
+                let dot = low_bit_dot(&products[..576], row);
                 let scaled_val = scaled(i128::from(dot), output_shifts[row_idx])?;
                 logits[row_idx] = quantize(scaled_val + bias, WORK_BITS, 8)?;
             }
@@ -2226,7 +2152,7 @@ impl IntegerModel {
         let p = self.parameter(name)?;
         p.codes
             .iter()
-            .map(|&v| {
+            .map(|v| {
                 scaled(
                     i128::from(v),
                     WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -2263,7 +2189,11 @@ impl IntegerModel {
         input_exponent: i32,
         out: &mut [i128],
     ) -> Result<()> {
-        if p.spec.bits != 4 || p.spec.shape.len() != 2 || p.spec.shape[1] != input_len {
+        if p.spec.bits != 4
+            || p.spec.shape.len() != 2
+            || p.spec.shape[1] != input_len
+            || products.len() < input_len
+        {
             return Err(invalid("integer affine input shape or bit width"));
         }
         let num_rows = p.spec.row_exponents.len();
@@ -2279,7 +2209,9 @@ impl IntegerModel {
                 for c in 0..chunks_8 {
                     let r0 = c * 8;
                     let s0 = r0 << 8;
-                    let chunk: &[i16; 2048] = p.codes[s0..s0 + 2048]
+                    let chunk: &[u8; 1024] = p
+                        .codes
+                        .packed_range(s0, 2048)?
                         .try_into()
                         .map_err(|_| invalid("parameter code slice"))?;
 
@@ -2320,8 +2252,8 @@ impl IntegerModel {
                 }
                 for (r, out_r) in out.iter_mut().enumerate().take(num_rows).skip(chunks_8 * 8) {
                     let s = r << 8;
-                    let row = &p.codes[s..s + 256];
-                    let d = low_bit_dot(products, row);
+                    let row = p.codes.packed_range(s, 256)?;
+                    let d = low_bit_dot(&products[..input_len], row);
                     *out_r = scaled(
                         i128::from(d),
                         WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[r]),
@@ -2341,7 +2273,9 @@ impl IntegerModel {
                     let r3 = r0 + 3;
 
                     let s0 = r0 << 9;
-                    let chunk: &[i16; 2048] = p.codes[s0..s0 + 2048]
+                    let chunk: &[u8; 1024] = p
+                        .codes
+                        .packed_range(s0, 2048)?
                         .try_into()
                         .map_err(|_| invalid("parameter code slice"))?;
 
@@ -2366,8 +2300,8 @@ impl IntegerModel {
                 }
                 for (r, out_r) in out.iter_mut().enumerate().take(num_rows).skip(chunks_4 * 4) {
                     let s = r << 9;
-                    let row = &p.codes[s..s + 512];
-                    let d = low_bit_dot(products, row);
+                    let row = p.codes.packed_range(s, 512)?;
+                    let d = low_bit_dot(&products[..input_len], row);
                     *out_r = scaled(
                         i128::from(d),
                         WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[r]),
@@ -2376,16 +2310,26 @@ impl IntegerModel {
                 Ok(())
             }
             128 => {
-                for (r, (row, &exponent)) in p
-                    .codes
-                    .chunks_exact(128)
-                    .zip(&p.spec.row_exponents)
-                    .enumerate()
-                {
+                for (r, &exponent) in p.spec.row_exponents.iter().enumerate() {
+                    let row = p.codes.packed_range(r << 7, 128)?;
                     out[r] = scaled(
-                        i128::from(low_bit_dot(products, row)),
+                        i128::from(low_bit_dot(&products[..128], row)),
                         WORK_BITS + input_exponent + i32::from(exponent),
                     )?;
+                }
+                Ok(())
+            }
+            576 | 1152 => {
+                // Both non-power-of-two strides use a monotonic address, so
+                // row indexing does not request a variable hardware product.
+                let mut start = 0;
+                for (r, &exponent) in p.spec.row_exponents.iter().enumerate() {
+                    let row = p.codes.packed_range(start, input_len)?;
+                    out[r] = scaled(
+                        i128::from(low_bit_dot(&products[..input_len], row)),
+                        WORK_BITS + input_exponent + i32::from(exponent),
+                    )?;
+                    start += input_len;
                 }
                 Ok(())
             }
@@ -2414,6 +2358,13 @@ impl IntegerModel {
         input_bits: i32,
         out: &mut [i32],
     ) -> Result<()> {
+        if p.spec.bits != 4
+            || p.spec.shape.len() != 2
+            || p.spec.shape[1] != input_len
+            || products.len() < input_len
+        {
+            return Err(invalid("integer affine input shape or bit width"));
+        }
         let num_rows = p.spec.row_exponents.len();
         if out.len() < num_rows {
             return Err(invalid("output buffer too small for affine"));
@@ -2428,7 +2379,9 @@ impl IntegerModel {
                 for c in 0..chunks_8 {
                     let r0 = c * 8;
                     let s0 = r0 << 8;
-                    let chunk: &[i16; 2048] = p.codes[s0..s0 + 2048]
+                    let chunk: &[u8; 1024] = p
+                        .codes
+                        .packed_range(s0, 2048)?
                         .try_into()
                         .map_err(|_| invalid("parameter code slice"))?;
 
@@ -2444,8 +2397,8 @@ impl IntegerModel {
                 }
                 for (r, out_r) in out.iter_mut().enumerate().take(num_rows).skip(chunks_8 * 8) {
                     let s_row = r << 8;
-                    let row = &p.codes[s_row..s_row + 256];
-                    let d = low_bit_dot(products, row);
+                    let row = p.codes.packed_range(s_row, 256)?;
+                    let d = low_bit_dot(&products[..input_len], row);
                     let shift = WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[r]);
                     let b = if bias.is_empty() { 0 } else { bias[r] };
                     *out_r = scale_and_quantize_logit(d, shift, b);
@@ -2464,7 +2417,9 @@ impl IntegerModel {
                     let r3 = r0 + 3;
 
                     let s0 = r0 << 9;
-                    let chunk: &[i16; 2048] = p.codes[s0..s0 + 2048]
+                    let chunk: &[u8; 1024] = p
+                        .codes
+                        .packed_range(s0, 2048)?
                         .try_into()
                         .map_err(|_| invalid("parameter code slice"))?;
 
@@ -2487,8 +2442,8 @@ impl IntegerModel {
                 }
                 for r in (chunks_4 * 4)..num_rows {
                     let s_row = r << 9;
-                    let row = &p.codes[s_row..s_row + 512];
-                    let d = low_bit_dot(products, row);
+                    let row = p.codes.packed_range(s_row, 512)?;
+                    let d = low_bit_dot(&products[..input_len], row);
                     let shift = WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[r]);
                     let b = if bias.is_empty() { 0 } else { bias[r] };
                     out[r] = scale_and_quantize_logit(d, shift, b);
@@ -2620,27 +2575,78 @@ impl IntegerModel {
             let mut scores = Vec::with_capacity(previous + 1);
             scores.push(null);
 
+            let mut query_products = [[0i64; 16]; KEY_DIM];
+            let q_len = query.len().min(KEY_DIM);
+            for d in 0..q_len {
+                query_products[d] = build_coord_products(query[d]);
+            }
+
             if let Some((read, query_norm, table)) = hyperbolic {
-                for (index, key) in session.keys.iter().enumerate() {
-                    let mut dot = 0i128;
-                    for (&q, &k) in query.iter().zip(key) {
-                        dot += product(i128::from(q), i128::from(k))?;
-                    }
-                    let key_norm = *session
+                let n_chunks = session.keys.len() >> 2;
+                let mut key_idx = 0;
+                for c in 0..n_chunks {
+                    let base = c << 2;
+                    let (d0, d1, d2, d3) = memory_dot_product_4x(
+                        &query_products,
+                        &session.keys[base],
+                        &session.keys[base + 1],
+                        &session.keys[base + 2],
+                        &session.keys[base + 3],
+                    );
+                    let kn0 = *session
                         .key_norms
-                        .get(index)
+                        .get(base)
                         .ok_or_else(|| invalid("missing Lorentz key norm"))?;
-                    let raw = read.score(query_norm, key_norm, dot, table, WORK_BITS)?;
-                    let score = raw + age[previous - 1 - index];
-                    scores.push(quantize(score, WORK_BITS, 8)?);
+                    let raw0 = read.score(query_norm, kn0, i128::from(d0), table, WORK_BITS)?;
+                    scores.push(quantize(raw0 + age[previous - 1 - key_idx], WORK_BITS, 8)?);
+
+                    let kn1 = *session
+                        .key_norms
+                        .get(base + 1)
+                        .ok_or_else(|| invalid("missing Lorentz key norm"))?;
+                    let raw1 = read.score(query_norm, kn1, i128::from(d1), table, WORK_BITS)?;
+                    scores.push(quantize(
+                        raw1 + age[previous - 1 - (key_idx + 1)],
+                        WORK_BITS,
+                        8,
+                    )?);
+
+                    let kn2 = *session
+                        .key_norms
+                        .get(base + 2)
+                        .ok_or_else(|| invalid("missing Lorentz key norm"))?;
+                    let raw2 = read.score(query_norm, kn2, i128::from(d2), table, WORK_BITS)?;
+                    scores.push(quantize(
+                        raw2 + age[previous - 1 - (key_idx + 2)],
+                        WORK_BITS,
+                        8,
+                    )?);
+
+                    let kn3 = *session
+                        .key_norms
+                        .get(base + 3)
+                        .ok_or_else(|| invalid("missing Lorentz key norm"))?;
+                    let raw3 = read.score(query_norm, kn3, i128::from(d3), table, WORK_BITS)?;
+                    scores.push(quantize(
+                        raw3 + age[previous - 1 - (key_idx + 3)],
+                        WORK_BITS,
+                        8,
+                    )?);
+
+                    key_idx += 4;
+                }
+                for (rem_idx, key) in session.keys[(n_chunks << 2)..].iter().enumerate() {
+                    let base = (n_chunks << 2) + rem_idx;
+                    let d = memory_dot_product_1x(&query_products, key);
+                    let kn = *session
+                        .key_norms
+                        .get(base)
+                        .ok_or_else(|| invalid("missing Lorentz key norm"))?;
+                    let raw = read.score(query_norm, kn, i128::from(d), table, WORK_BITS)?;
+                    scores.push(quantize(raw + age[previous - 1 - key_idx], WORK_BITS, 8)?);
+                    key_idx += 1;
                 }
             } else {
-                let mut query_products = [[0i64; 16]; KEY_DIM];
-                let q_len = query.len().min(KEY_DIM);
-                for d in 0..q_len {
-                    query_products[d] = build_coord_products(query[d]);
-                }
-
                 let n_chunks = session.keys.len() >> 2;
                 let mut key_idx = 0;
                 for c in 0..n_chunks {
@@ -2674,14 +2680,7 @@ impl IntegerModel {
             }
 
             let masses = softmax(&scores, &self.tables)?;
-            let mut sum_coords = [0i64; VAL_DIM];
-            for (&mass, value) in masses[1..].iter().zip(&session.values) {
-                accumulate_slot_value_1x(&mut sum_coords, mass, value);
-            }
-            let mut read = vec![0i32; width];
-            for (coordinate, out) in read.iter_mut().enumerate() {
-                *out = quantize(sum_coords[coordinate] as i128, 48 + 14, STATE_BITS)?;
-            }
+            let read = session.values.read(&masses[1..], width)?;
             (masses[0], masses[1..].to_vec(), read)
         };
         let mut update_input = provisional.clone();
@@ -2702,8 +2701,8 @@ impl IntegerModel {
         let norm = self.parameter("output.norm.weight")?;
         let hidden = write_normalized
             .iter()
-            .zip(&norm.codes)
-            .map(|(&x, &w)| {
+            .zip(norm.codes.iter())
+            .map(|(&x, w)| {
                 let value = product(i128::from(x), i128::from(w))?;
                 Ok(
                     scaled(value, i32::from(norm.spec.row_exponents[0]))?.clamp(-32767, 32767)
@@ -2744,16 +2743,15 @@ impl IntegerModel {
         normalize_residual(&mut probabilities)?;
         // Commit after the complete prediction succeeds. Current input is
         // written here and cannot be a source for this step's contextual copy.
+        // The value shape check precedes all mutation; after its successful
+        // push, the remaining commits below are infallible.
+        session.values.push(&value)?;
         session.state = state.clone();
         let mut key_arr = [0i32; KEY_DIM];
         let key_len = key.len().min(KEY_DIM);
         key_arr[..key_len].copy_from_slice(&key[..key_len]);
         session.keys.push(key_arr);
         session.key_norms.extend(key_norm);
-        let mut val_arr = [0i32; VAL_DIM];
-        let val_len = value.len().min(VAL_DIM);
-        val_arr[..val_len].copy_from_slice(&value[..val_len]);
-        session.values.push(val_arr);
         session.tokens.push(token);
         Ok(IntegerStep {
             probabilities,
@@ -2777,8 +2775,14 @@ impl IntegerModel {
             return Err(invalid("conversational step identity mismatch"));
         }
         // Partitioned conversational memory stores full-width values and scores
-        // keys by the dot read; a Lorentz or width-128 model uses `step`.
-        if self.lorentz.is_some() || self.config.width != VAL_DIM {
+        // keys by the dot read by default; a Lorentz or width-128 model uses `step`
+        // unless hyperbolic cache memory is explicitly enabled on the session.
+        if self.config.width != VAL_DIM {
+            return Err(invalid(
+                "conversational sessions serve only the width-256 shape",
+            ));
+        }
+        if self.lorentz.is_some() && !session.allow_hyperbolic_cache {
             return Err(invalid(
                 "conversational sessions serve only the width-256 dot-read shape",
             ));
@@ -2809,8 +2813,8 @@ impl IntegerModel {
             _ => return Err(invalid("unsupported embedding width")),
         };
         let end = start + width;
-        fill_low_bit_products_i16(
-            &self.p_embedding.codes[start..end],
+        fill_packed_low_bit_products(
+            self.p_embedding.codes.packed_range(start, end - start)?,
             &mut scratch_products[..width],
         );
 
@@ -2921,6 +2925,11 @@ impl IntegerModel {
                 &fallback_age
             };
 
+            let hyperbolic = match &self.lorentz {
+                Some(read) => Some((read, lorentz::squared_norm(&query)?, self.arcosh()?)),
+                None => None,
+            };
+
             // Precompute query coordinate product tables on stack (64 x 16 i64 = 8 KB).
             let mut query_products = [[0i64; 16]; KEY_DIM];
             for d in 0..KEY_DIM {
@@ -2942,15 +2951,43 @@ impl IntegerModel {
                     &session.persistent_keys[base + 2],
                     &session.persistent_keys[base + 3],
                 );
-                scores[score_count] = scale_and_quantize_score(d0, age[0]);
-                scores[score_count + 1] = scale_and_quantize_score(d1, age[0]);
-                scores[score_count + 2] = scale_and_quantize_score(d2, age[0]);
-                scores[score_count + 3] = scale_and_quantize_score(d3, age[0]);
+                if let Some((read, query_norm, table)) = hyperbolic {
+                    let kn0 = session.persistent_key_norms[base];
+                    let raw0 = read.score(query_norm, kn0, i128::from(d0), table, WORK_BITS)?;
+                    scores[score_count] = quantize(raw0 + age[0], WORK_BITS, 8)?;
+
+                    let kn1 = session.persistent_key_norms[base + 1];
+                    let raw1 = read.score(query_norm, kn1, i128::from(d1), table, WORK_BITS)?;
+                    scores[score_count + 1] = quantize(raw1 + age[0], WORK_BITS, 8)?;
+
+                    let kn2 = session.persistent_key_norms[base + 2];
+                    let raw2 = read.score(query_norm, kn2, i128::from(d2), table, WORK_BITS)?;
+                    scores[score_count + 2] = quantize(raw2 + age[0], WORK_BITS, 8)?;
+
+                    let kn3 = session.persistent_key_norms[base + 3];
+                    let raw3 = read.score(query_norm, kn3, i128::from(d3), table, WORK_BITS)?;
+                    scores[score_count + 3] = quantize(raw3 + age[0], WORK_BITS, 8)?;
+                } else {
+                    scores[score_count] = scale_and_quantize_score(d0, age[0]);
+                    scores[score_count + 1] = scale_and_quantize_score(d1, age[0]);
+                    scores[score_count + 2] = scale_and_quantize_score(d2, age[0]);
+                    scores[score_count + 3] = scale_and_quantize_score(d3, age[0]);
+                }
                 score_count += 4;
             }
-            for key in &session.persistent_keys[(n_sys_chunks << 2)..n_sys] {
+            for (rem_idx, key) in session.persistent_keys[(n_sys_chunks << 2)..n_sys]
+                .iter()
+                .enumerate()
+            {
+                let base = (n_sys_chunks << 2) + rem_idx;
                 let d = memory_dot_product_1x(&query_products, key);
-                scores[score_count] = scale_and_quantize_score(d, age[0]);
+                if let Some((read, query_norm, table)) = hyperbolic {
+                    let kn = session.persistent_key_norms[base];
+                    let raw = read.score(query_norm, kn, i128::from(d), table, WORK_BITS)?;
+                    scores[score_count] = quantize(raw + age[0], WORK_BITS, 8)?;
+                } else {
+                    scores[score_count] = scale_and_quantize_score(d, age[0]);
+                }
                 score_count += 1;
             }
 
@@ -2972,7 +3009,6 @@ impl IntegerModel {
                 let age_idx0 = (delta0 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
 
                 let delta1 = session
                     .dialogue_seen
@@ -2980,7 +3016,6 @@ impl IntegerModel {
                 let age_idx1 = (delta1 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
 
                 let delta2 = session
                     .dialogue_seen
@@ -2988,7 +3023,6 @@ impl IntegerModel {
                 let age_idx2 = (delta2 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
 
                 let delta3 = session
                     .dialogue_seen
@@ -2996,7 +3030,29 @@ impl IntegerModel {
                 let age_idx3 = (delta3 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
+
+                if let Some((read, query_norm, table)) = hyperbolic {
+                    let kn0 = session.dialogue_key_norms[base];
+                    let raw0 = read.score(query_norm, kn0, i128::from(d0), table, WORK_BITS)?;
+                    scores[score_count] = quantize(raw0 + age[age_idx0], WORK_BITS, 8)?;
+
+                    let kn1 = session.dialogue_key_norms[base + 1];
+                    let raw1 = read.score(query_norm, kn1, i128::from(d1), table, WORK_BITS)?;
+                    scores[score_count + 1] = quantize(raw1 + age[age_idx1], WORK_BITS, 8)?;
+
+                    let kn2 = session.dialogue_key_norms[base + 2];
+                    let raw2 = read.score(query_norm, kn2, i128::from(d2), table, WORK_BITS)?;
+                    scores[score_count + 2] = quantize(raw2 + age[age_idx2], WORK_BITS, 8)?;
+
+                    let kn3 = session.dialogue_key_norms[base + 3];
+                    let raw3 = read.score(query_norm, kn3, i128::from(d3), table, WORK_BITS)?;
+                    scores[score_count + 3] = quantize(raw3 + age[age_idx3], WORK_BITS, 8)?;
+                } else {
+                    scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
+                    scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
+                    scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
+                    scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
+                }
                 score_count += 4;
             }
 
@@ -3008,7 +3064,13 @@ impl IntegerModel {
                 let age_idx = (delta as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
+                if let Some((read, query_norm, table)) = hyperbolic {
+                    let kn = session.dialogue_key_norms[idx];
+                    let raw = read.score(query_norm, kn, i128::from(d), table, WORK_BITS)?;
+                    scores[score_count] = quantize(raw + age[age_idx], WORK_BITS, 8)?;
+                } else {
+                    scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
+                }
                 score_count += 1;
             }
 
@@ -3030,7 +3092,6 @@ impl IntegerModel {
                 let age_idx0 = (delta0 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
 
                 let delta1 = session
                     .dialogue_seen
@@ -3038,7 +3099,6 @@ impl IntegerModel {
                 let age_idx1 = (delta1 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
 
                 let delta2 = session
                     .dialogue_seen
@@ -3046,7 +3106,6 @@ impl IntegerModel {
                 let age_idx2 = (delta2 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
 
                 let delta3 = session
                     .dialogue_seen
@@ -3054,7 +3113,29 @@ impl IntegerModel {
                 let age_idx3 = (delta3 as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
+
+                if let Some((read, query_norm, table)) = hyperbolic {
+                    let kn0 = session.l2_page_norms[base];
+                    let raw0 = read.score(query_norm, kn0, i128::from(d0), table, WORK_BITS)?;
+                    scores[score_count] = quantize(raw0 + age[age_idx0], WORK_BITS, 8)?;
+
+                    let kn1 = session.l2_page_norms[base + 1];
+                    let raw1 = read.score(query_norm, kn1, i128::from(d1), table, WORK_BITS)?;
+                    scores[score_count + 1] = quantize(raw1 + age[age_idx1], WORK_BITS, 8)?;
+
+                    let kn2 = session.l2_page_norms[base + 2];
+                    let raw2 = read.score(query_norm, kn2, i128::from(d2), table, WORK_BITS)?;
+                    scores[score_count + 2] = quantize(raw2 + age[age_idx2], WORK_BITS, 8)?;
+
+                    let kn3 = session.l2_page_norms[base + 3];
+                    let raw3 = read.score(query_norm, kn3, i128::from(d3), table, WORK_BITS)?;
+                    scores[score_count + 3] = quantize(raw3 + age[age_idx3], WORK_BITS, 8)?;
+                } else {
+                    scores[score_count] = scale_and_quantize_score(d0, age[age_idx0]);
+                    scores[score_count + 1] = scale_and_quantize_score(d1, age[age_idx1]);
+                    scores[score_count + 2] = scale_and_quantize_score(d2, age[age_idx2]);
+                    scores[score_count + 3] = scale_and_quantize_score(d3, age[age_idx3]);
+                }
                 score_count += 4;
             }
 
@@ -3066,7 +3147,13 @@ impl IntegerModel {
                 let age_idx = (delta as usize)
                     .min(age.len().saturating_sub(1))
                     .min(session.age_horizon_clamp);
-                scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
+                if let Some((read, query_norm, table)) = hyperbolic {
+                    let kn = session.l2_page_norms[idx];
+                    let raw = read.score(query_norm, kn, i128::from(d), table, WORK_BITS)?;
+                    scores[score_count] = quantize(raw + age[age_idx], WORK_BITS, 8)?;
+                } else {
+                    scores[score_count] = scale_and_quantize_score(d, age[age_idx]);
+                }
                 score_count += 1;
             }
 
@@ -3243,7 +3330,7 @@ impl IntegerModel {
         let row_exp = i32::from(self.p_output_norm.spec.row_exponents[0]);
         for d in 0..width {
             let x = write_normalized[d] as i64;
-            let w = self.p_output_norm.codes[d];
+            let w = self.p_output_norm.codes.code(d)?;
             let val = i128::from(mul_code_i64(x, w));
             hidden[d] = scaled(val, row_exp)?.clamp(-32767, 32767) as i32;
         }
@@ -3337,10 +3424,16 @@ impl IntegerModel {
                 key_arr.copy_from_slice(&key[..KEY_DIM]);
                 let mut val_arr = [0i32; VAL_DIM];
                 val_arr.copy_from_slice(&value[..VAL_DIM]);
+                let kn = if self.lorentz.is_some() {
+                    lorentz::squared_norm(&key_arr)?
+                } else {
+                    0i128
+                };
 
                 session.persistent_keys.push(key_arr);
                 session.persistent_values.push(val_arr);
                 session.persistent_tokens.push(token);
+                session.persistent_key_norms.push(kn);
             }
             SlotTarget::Dialogue => {
                 if session.dialogue_len >= session.dialogue_capacity {
@@ -3394,7 +3487,13 @@ impl IntegerModel {
                             page.turn_id = evict_turn_id;
 
                             let p_idx = session.l2_cursor;
+                            let p_kn = if self.lorentz.is_some() {
+                                lorentz::squared_norm(&page.key)?
+                            } else {
+                                0i128
+                            };
                             session.l2_pages[p_idx] = page;
+                            session.l2_page_norms[p_idx] = p_kn;
                             session.l2_cursor = if p_idx + 1 >= L2_PAGE_CAPACITY {
                                 0
                             } else {
@@ -3407,12 +3506,18 @@ impl IntegerModel {
                     }
                 }
 
+                let kn = if self.lorentz.is_some() {
+                    lorentz::squared_norm(&key[..KEY_DIM])?
+                } else {
+                    0i128
+                };
                 let idx = session.dialogue_cursor;
                 session.dialogue_keys[idx].copy_from_slice(&key[..KEY_DIM]);
                 session.dialogue_values[idx].copy_from_slice(&value[..VAL_DIM]);
                 session.dialogue_tokens[idx] = token;
                 session.dialogue_sequences[idx] = session.dialogue_seen;
                 session.dialogue_turn_ids[idx] = session.current_turn_id;
+                session.dialogue_key_norms[idx] = kn;
                 let next_cursor = session.dialogue_cursor + 1;
                 session.dialogue_cursor = if next_cursor >= session.dialogue_capacity {
                     0
@@ -3478,14 +3583,30 @@ impl IntegerModel {
         })
     }
 
+    /// Step conversational session with hyperbolic cache scoring explicitly enabled.
+    #[inline(never)]
+    pub fn step_conversational_hyperbolic(
+        &self,
+        session: &mut SessionState,
+        token: u32,
+        target: SlotTarget,
+        mode: ReadMode,
+    ) -> Result<IntegerStep> {
+        session.enable_hyperbolic_cache();
+        self.step_conversational(session, token, target, mode)
+    }
+
     pub fn synthetic_for_test() -> Self {
-        let config = JointConfig::default();
+        Self::synthetic_with_config(JointConfig::default(), ServingProfile::Retained)
+    }
+
+    fn synthetic_with_config(config: JointConfig, serving_profile: ServingProfile) -> Self {
         let mut parameters = BTreeMap::new();
         let shapes = config.shapes();
         for (name, shape) in shapes {
             let total_elements: usize = shape.iter().product();
             let bits = if shape.len() == 2 { 4 } else { 16 };
-            let codes = vec![1i16; total_elements];
+            let codes = CoefficientCodes::ones(total_elements, bits);
             let row_count = if shape.len() == 2 { shape[0] } else { 1 };
             let spec = ParameterQuantization {
                 bits,
@@ -3498,7 +3619,7 @@ impl IntegerModel {
             Some(p) => p
                 .codes
                 .iter()
-                .map(|&v| {
+                .map(|v| {
                     scaled(
                         i128::from(v),
                         WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -3521,7 +3642,7 @@ impl IntegerModel {
             Some(p) => p
                 .codes
                 .iter()
-                .map(|&v| {
+                .map(|v| {
                     scaled(
                         i128::from(v),
                         WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -3535,7 +3656,7 @@ impl IntegerModel {
             Some(p) => p
                 .codes
                 .iter()
-                .map(|&v| {
+                .map(|v| {
                     scaled(
                         i128::from(v),
                         WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -3550,7 +3671,7 @@ impl IntegerModel {
                 Some(p) => p
                     .codes
                     .iter()
-                    .map(|&v| {
+                    .map(|v| {
                         scaled(
                             i128::from(v),
                             WORK_BITS + i32::from(p.spec.row_exponents[0]),
@@ -3571,7 +3692,7 @@ impl IntegerModel {
 
         let get_param = |name: &str| -> Parameter {
             parameters.get(name).cloned().unwrap_or_else(|| Parameter {
-                codes: Vec::new(),
+                codes: CoefficientCodes::ones(0, 4),
                 spec: ParameterQuantization {
                     bits: 4,
                     shape: Vec::new(),
@@ -3594,10 +3715,15 @@ impl IntegerModel {
         let tables = Tables::synthetic_for_test();
         Self {
             config,
+            serving_profile,
             parameters,
             tables,
             lorentz: None,
-            identity: "synthetic_model".to_owned(),
+            identity: match serving_profile {
+                ServingProfile::Retained => "synthetic_model",
+                ServingProfile::Dialogue576 => "synthetic_dialogue576",
+            }
+            .to_owned(),
             output_bias,
             output_shifts,
             recurrent_bias,
@@ -3621,6 +3747,33 @@ impl IntegerModel {
             p_read_value,
             p_output_norm,
         }
+    }
+
+    pub fn synthetic_lorentz_for_test() -> Self {
+        let mut model = Self::synthetic_for_test();
+        model.config.read_geometry = ReadGeometry::Lorentz;
+        let mut arcosh = vec![0u32; crate::lorentz::ARCOSH_ENTRIES];
+        let (i0, v0) = crate::lorentz::ARCOSH_ANCHORS[0];
+        let (i1, v1) = crate::lorentz::ARCOSH_ANCHORS[1];
+        let (i2, v2) = crate::lorentz::ARCOSH_ANCHORS[2];
+        arcosh[0] = 0;
+        arcosh[i0] = v0;
+        for i in (i0 + 1)..i1 {
+            let frac = (i - i0) as u64;
+            let span = (i1 - i0) as u64;
+            arcosh[i] = v0 + ((v1 - v0) as u64 * frac / span) as u32;
+        }
+        arcosh[i1] = v1;
+        for i in (i1 + 1)..=i2 {
+            let frac = (i - i1) as u64;
+            let span = (i2 - i1) as u64;
+            arcosh[i] = v1 + ((v2 - v1) as u64 * frac / span) as u32;
+        }
+        model.tables.arcosh = Some(arcosh);
+        model.tables.arcosh_sha256 = Some("synthetic_arcosh_hash".to_owned());
+        model.lorentz = Some(LorentzRead::new((0, 0), (5, 0)).expect("valid lorentz read"));
+        model.identity = "synthetic_lorentz_model".to_owned();
+        model
     }
 }
 
@@ -3659,6 +3812,9 @@ fn normalize_state_into(input: &[i32], out: &mut [i32; 256]) -> Result<()> {
 
 #[inline(never)]
 fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
+    if input.len() == 576 {
+        return normalize_state_576(input);
+    }
     let shift = match input.len() {
         128 => 57,
         256 => 56,
@@ -3690,6 +3846,39 @@ fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
             let q = fast_div_round_radix16_u64(abs_x << 42, &table, d_u64);
             let val = if neg { -(q as i32) } else { q as i32 };
             out[i] = val.clamp(-32767, 32767);
+        }
+    }
+    Ok(out)
+}
+
+/// Q11 -> Q10 with the explicit width576 rational variance. The signed16
+/// interface bound gives S<9*2^36, (S<<58)<2^98, D<2^47 and a radix16 divisor
+/// table below 2^51. Reject a wider private-helper domain before accumulating.
+/// The division by9 floors BEFORE epsilon and square root; rounding it or
+/// first dividing S by576 would define a different numerical contract.
+#[inline(never)]
+fn normalize_state_576(input: &[i32]) -> Result<Vec<i32>> {
+    if input.len() != 576 || input.iter().any(|&x| !(-32767..=32767).contains(&x)) {
+        return Err(invalid(
+            "dialogue576 normalization requires 576 signed16 interface codes",
+        ));
+    }
+    let mut sum = 0u64;
+    for &x in input {
+        let x64 = i64::from(x);
+        sum += mul_shift_add_i64(x64, x64) as u64;
+    }
+    const EPSILON: u128 = (1u128 << 86) / 100_000 + 1;
+    let variance = arithmetic(math::div_rem_unsigned(u128::from(sum) << 58, 9))?.0 + EPSILON;
+    let denominator = math::isqrt(variance) as u64;
+    let table = build_div_table_u64(denominator);
+    let mut out = vec![0i32; 576];
+    for (value, &x) in out.iter_mut().zip(input) {
+        if x != 0 {
+            let q =
+                fast_div_round_radix16_u64(u128::from(x.unsigned_abs()) << 42, &table, denominator);
+            let signed = if x < 0 { -(q as i32) } else { q as i32 };
+            *value = signed.clamp(-32767, 32767);
         }
     }
     Ok(out)
@@ -3918,7 +4107,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn signed4_affine_accumulation() {
+    fn packed_signed4_affine_accumulation() -> Result<()> {
         let input = [i32::MIN, -32767, -3, 0, 1, 16384, 32767, i32::MAX];
         let products = low_bit_products(&input);
         for code in -7i16..=7 {
@@ -3928,15 +4117,19 @@ mod tests {
                     i64::from(x) * i64::from(code)
                 );
             }
-            let weights = vec![code; input.len()];
+            let weights = CoefficientCodes::from_decoded(vec![code; input.len()], 4)?;
             let expected: i64 = input.iter().map(|&x| i64::from(x) * i64::from(code)).sum();
-            assert_eq!(low_bit_dot(&products, &weights), expected);
+            assert_eq!(
+                low_bit_dot(&products, weights.packed_range(0, input.len())?),
+                expected
+            );
         }
         for x in [i32::MIN, i32::MAX] {
             let products = low_bit_products(&[x; 512]);
             for code in [-7, 7] {
+                let weights = CoefficientCodes::from_decoded(vec![code; 512], 4)?;
                 assert_eq!(
-                    low_bit_dot(&products, &[code; 512]),
+                    low_bit_dot(&products, weights.packed_range(0, 512)?),
                     i64::from(x) * i64::from(code) * 512
                 );
             }
@@ -3948,49 +4141,123 @@ mod tests {
             .zip(&mixed_codes)
             .map(|(&x, &code)| i64::from(x) * i64::from(code))
             .sum();
+        let weights = CoefficientCodes::from_decoded(mixed_codes, 4)?;
         assert_eq!(
-            low_bit_dot(&low_bit_products(&mixed_input), &mixed_codes),
+            low_bit_dot(
+                &low_bit_products(&mixed_input),
+                weights.packed_range(0, 512)?
+            ),
             expected
         );
+        Ok(())
     }
 
     #[test]
-    fn low_bit_dot_4x_matches_low_bit_dot_and_scalar() {
-        let input: Vec<i32> = (0..256i32).map(|i| i * 17 - 1234).collect();
-        let products = low_bit_products(&input);
-
-        let w0: Vec<i16> = (0..256).map(|i| ((i % 15) as i16) - 7).collect();
-        let w1: Vec<i16> = (0..256).map(|i| (((i * 3) % 15) as i16) - 7).collect();
-        let w2: Vec<i16> = (0..256).map(|i| (((i * 5 + 2) % 15) as i16) - 7).collect();
-        let w3: Vec<i16> = (0..256).map(|i| (((i * 7 + 4) % 15) as i16) - 7).collect();
-
-        let p_256: &[[i64; 16]; 256] = (&products[..256]).try_into().unwrap();
-        let w0_arr: &[i16; 256] = (&w0[..256]).try_into().unwrap();
-        let w1_arr: &[i16; 256] = (&w1[..256]).try_into().unwrap();
-        let w2_arr: &[i16; 256] = (&w2[..256]).try_into().unwrap();
-        let w3_arr: &[i16; 256] = (&w3[..256]).try_into().unwrap();
-
-        let (d0, d1, d2, d3) = low_bit_dot_4x(p_256, w0_arr, w1_arr, w2_arr, w3_arr);
-
-        let scalar_dot = |weights: &[i16]| -> i64 {
-            input
-                .iter()
-                .zip(weights)
-                .map(|(&x, &w)| i64::from(x) * i64::from(w))
-                .sum()
-        };
-
-        assert_eq!(d0, low_bit_dot(&products, &w0));
-        assert_eq!(d0, scalar_dot(&w0));
-
-        assert_eq!(d1, low_bit_dot(&products, &w1));
-        assert_eq!(d1, scalar_dot(&w1));
-
-        assert_eq!(d2, low_bit_dot(&products, &w2));
-        assert_eq!(d2, scalar_dot(&w2));
-
-        assert_eq!(d3, low_bit_dot(&products, &w3));
-        assert_eq!(d3, scalar_dot(&w3));
+    fn packed_signed4_matrix_dispatch_rows_scales_and_embedding() -> Result<()> {
+        let mut model = IntegerModel::synthetic_for_test();
+        for width in [128, 256, 512, 576, 1152] {
+            // Mixed signs, zero, and non-block-aligned row counts exercise all
+            // dispatches, including the tail after a blocked group and the
+            // non-power-of-two wide rows.
+            let rows = 9;
+            let input: Vec<i32> = (0..width)
+                .map(|i| [i32::MIN, -32767, -1, 0, 1, 32767, i32::MAX][i % 7])
+                .collect();
+            let products = low_bit_products(&input);
+            let decoded: Vec<i16> = (0..rows * width)
+                .map(|i| ((i * 11 + 3) % 15) as i16 - 7)
+                .collect();
+            let parameter = Parameter {
+                codes: CoefficientCodes::from_decoded(decoded.clone(), 4)?,
+                spec: ParameterQuantization {
+                    bits: 4,
+                    shape: vec![rows, width],
+                    row_exponents: (0..rows).map(|r| r as i16 - 5).collect(),
+                },
+            };
+            let mut sums = vec![i128::MIN; rows];
+            model.matrix_work_direct_into(&products, &parameter, width, -10, &mut sums)?;
+            let biases: Vec<i128> = (0..rows).map(|i| (i as i128 - 4) << 30).collect();
+            let mut affine = vec![0; rows];
+            model.affine_direct_into(&products, &parameter, &biases, width, 10, &mut affine)?;
+            for row in 0..rows {
+                let dot: i64 = input
+                    .iter()
+                    .zip(&decoded[row * width..(row + 1) * width])
+                    .map(|(&x, &w)| i64::from(x) * i64::from(w))
+                    .sum();
+                let expected = scaled(
+                    i128::from(dot),
+                    30 + i32::from(parameter.spec.row_exponents[row]),
+                )?;
+                assert_eq!(sums[row], expected);
+                assert_eq!(affine[row], quantize(expected + biases[row], WORK_BITS, 8)?);
+            }
+            let mut untouched = vec![123i128; rows];
+            assert!(model
+                .matrix_work_direct_into(
+                    &products[..width - 1],
+                    &parameter,
+                    width,
+                    -10,
+                    &mut untouched
+                )
+                .is_err());
+            assert_eq!(untouched, vec![123; rows]);
+        }
+        for width in [128, 256, 576] {
+            let decoded: Vec<i16> = (0..4096 * width)
+                .map(|i| ((i * 7 + 2) % 15) as i16 - 7)
+                .collect();
+            let embedding = Parameter {
+                codes: CoefficientCodes::from_decoded(decoded.clone(), 4)?,
+                spec: ParameterQuantization {
+                    bits: 4,
+                    shape: vec![4096, width],
+                    row_exponents: vec![-3; 4096],
+                },
+            };
+            model.config.width = width;
+            model
+                .parameters
+                .insert("embedding.weight".into(), embedding.clone());
+            model.p_embedding = embedding;
+            model.output_shifts.fill(27);
+            for token in [0, 1, 4095] {
+                assert_eq!(
+                    model.embed(token as u32)?,
+                    decoded[token * width..(token + 1) * width]
+                        .iter()
+                        .map(|&x| i32::from(x))
+                        .collect::<Vec<_>>()
+                );
+            }
+            let input: Vec<i32> = (0..width).map(|i| i as i32 - 83).collect();
+            let products = low_bit_products(&input);
+            let actual = model.project_vocab_with_products(&products)?;
+            for row in 0..4096 {
+                let dot: i64 = input
+                    .iter()
+                    .zip(&decoded[row * width..(row + 1) * width])
+                    .map(|(&x, &w)| i64::from(x) * i64::from(w))
+                    .sum();
+                assert_eq!(
+                    actual[row],
+                    quantize(
+                        scaled(i128::from(dot), 27)? + model.output_bias[row],
+                        WORK_BITS,
+                        8
+                    )?
+                );
+            }
+            let mut from_packed = vec![[0; 16]; width];
+            fill_packed_low_bit_products(
+                model.p_embedding.codes.packed_range(width, width)?,
+                &mut from_packed,
+            );
+            assert_eq!(from_packed, low_bit_products(&model.embed(1)?));
+        }
+        Ok(())
     }
 
     #[test]
@@ -4022,6 +4289,226 @@ mod tests {
         );
         assert_eq!(blend(&state, &[0; 4], &[0; 4])?, state);
         assert_eq!(blend(&state, &[16384; 4], &[32768; 4])?, vec![2048; 4]);
+        Ok(())
+    }
+
+    #[test]
+    fn dialogue576_normalization_matches_rational_reference() -> Result<()> {
+        let mut sparse = vec![0; 576];
+        sparse[575] = -32767;
+        let mixed: Vec<i32> = (0..576)
+            .map(|i| [-32767, -2048, -1, 0, 1, 2, 16384, 32767][i % 8])
+            .collect();
+        for input in [
+            vec![0; 576],
+            vec![2048; 576],
+            vec![32767; 576],
+            sparse,
+            mixed,
+        ] {
+            // Test-only ordinary arithmetic independently evaluates the new
+            // rational variance and the existing ties-away quotient rule.
+            let sum: u128 = input
+                .iter()
+                .map(|&x| (i128::from(x) * i128::from(x)) as u128)
+                .sum();
+            let variance = (sum << 58) / 9 + (1u128 << 86) / 100_000 + 1;
+            let denominator = math::isqrt(variance);
+            let expected: Vec<i32> = input
+                .iter()
+                .map(|&x| {
+                    let numerator = u128::from(x.unsigned_abs()) << 42;
+                    let rounded = (numerator / denominator)
+                        + u128::from(
+                            numerator % denominator >= denominator - numerator % denominator,
+                        );
+                    let signed = if x < 0 {
+                        -(rounded as i32)
+                    } else {
+                        rounded as i32
+                    };
+                    signed.clamp(-32767, 32767)
+                })
+                .collect();
+            assert_eq!(normalize_state(&input)?, expected);
+        }
+        assert_eq!(normalize_state(&vec![2048; 576])?, vec![1024; 576]);
+        assert!(normalize_state_576(&vec![1; 575]).is_err());
+        for bad in [i32::MIN, -32768, 32768, i32::MAX] {
+            let mut input = vec![0; 576];
+            input[575] = bad;
+            assert!(normalize_state(&input).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn dialogue576_full_value_memory_and_step() -> Result<()> {
+        // All 256 slots and coordinates beyond the old limit participate.
+        let mut memory = SessionValues::Dialogue576(Vec::with_capacity(256));
+        let mut row = [0; 576];
+        row[0] = 8192;
+        row[255] = -8192;
+        row[256] = 16384;
+        row[575] = -16384;
+        for _ in 0..256 {
+            memory.push(&row)?;
+        }
+        let read = memory.read(&[TOTAL >> 8; 256], 576)?;
+        assert_eq!(
+            (read[0], read[255], read[256], read[575]),
+            (1024, -1024, 2048, -2048)
+        );
+        assert!(memory.push(&row[..256]).is_err());
+        assert_eq!(memory.read(&[TOTAL >> 8; 256], 576)?, read);
+        assert!(memory.read(&[TOTAL >> 8; 255], 576).is_err());
+
+        let config = JointConfig {
+            width: 576,
+            ..JointConfig::default()
+        };
+        config.validate_for_profile(ServingProfile::Dialogue576)?;
+        let model = IntegerModel::synthetic_with_config(config, ServingProfile::Dialogue576);
+        assert_eq!(model.serving_profile(), ServingProfile::Dialogue576);
+        for mode in [ReadMode::Enabled, ReadMode::NoRead] {
+            let mut session = model.new_session();
+            let first = model.step(&mut session, 0, mode)?;
+            let second = model.step(&mut session, 10, mode)?;
+            assert_eq!(first.state.len(), 576);
+            assert_eq!(second.state.len(), 576);
+            assert_eq!(second.probabilities.iter().sum::<u64>(), TOTAL);
+            assert_eq!(second.read_masses.len(), 1);
+            if mode == ReadMode::NoRead {
+                assert_eq!(second.read_masses, [0]);
+            }
+            let SessionValues::Dialogue576(values) = &session.values else {
+                return Err(invalid("wide session allocated retained values"));
+            };
+            assert_eq!(values.len(), 2);
+            assert!(values.iter().all(|value| value[575] != 0));
+            let old_state = session.state.clone();
+            session.tokens.resize(256, 0);
+            assert!(model.step(&mut session, 0, mode).is_err());
+            assert_eq!(session.state, old_state);
+        }
+        // The separate, fixed256 Google API remains outside this profile.
+        let mut conversational = model.new_conversational_session();
+        assert!(model
+            .step_conversational(
+                &mut conversational,
+                0,
+                SlotTarget::Dialogue,
+                ReadMode::Enabled
+            )
+            .is_err());
+        let retained = IntegerModel::synthetic_for_test().new_session();
+        assert!(matches!(retained.values, SessionValues::Retained(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn dialogue576_profile_manifest_is_explicit_and_separate() -> Result<()> {
+        use crate::config::packed_numerical_contract_for_profile;
+        use crate::IntegerError;
+        let config = JointConfig {
+            width: 576,
+            ..JointConfig::default()
+        };
+        assert!(config.validate().is_err());
+        config.validate_for_profile(ServingProfile::Dialogue576)?;
+        assert!(JointConfig::default()
+            .validate_for_profile(ServingProfile::Dialogue576)
+            .is_err());
+        let value = serde_json::to_value(&config)?;
+        for (field, bad) in [
+            ("vocab_size", serde_json::json!(2048)),
+            ("width", serde_json::json!(256)),
+            ("read_width", serde_json::json!(128)),
+            ("context", serde_json::json!(128)),
+            ("transport", serde_json::json!("householder_pair")),
+            ("read_geometry", serde_json::json!("lorentz")),
+        ] {
+            let mut changed = value.clone();
+            changed[field] = bad;
+            assert!(serde_json::from_value::<JointConfig>(changed)?
+                .validate_for_profile(ServingProfile::Dialogue576)
+                .is_err());
+        }
+        let retained = crate::config::packed_numerical_contract(ReadGeometry::Dot)?;
+        assert_eq!(
+            serde_json::to_vec(&packed_numerical_contract_for_profile(
+                ReadGeometry::Dot,
+                ServingProfile::Retained
+            )?)?,
+            serde_json::to_vec(&retained)?
+        );
+        let wide =
+            packed_numerical_contract_for_profile(ReadGeometry::Dot, ServingProfile::Dialogue576)?;
+        assert_eq!(wide["native_integer_profile"]["width"], 576);
+        assert!(packed_numerical_contract_for_profile(
+            ReadGeometry::Lorentz,
+            ServingProfile::Dialogue576
+        )
+        .is_err());
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| invalid("test clock before epoch"))?
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "uor-integer-dialogue576-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory)?;
+        let manifest = serde_json::json!({
+            "schema": "uor-r4.joint-recurrent-packed-emulator/1",
+            "serving_profile": "dialogue576", "admission": "full",
+            "model": config, "numerical_contract": wide,
+        });
+        for (field, replacement) in [
+            ("serving_profile", None),
+            ("serving_profile", Some(serde_json::json!("retained"))),
+            ("admission", None),
+            ("admission", Some(serde_json::json!("recent64"))),
+            ("numerical_contract", Some(retained)),
+        ] {
+            let mut changed = manifest.clone();
+            if let Some(replacement) = replacement {
+                changed[field] = replacement;
+            } else if let Some(object) = changed.as_object_mut() {
+                object.remove(field);
+            }
+            fs::write(
+                directory.join("hard-model.json"),
+                serde_json::to_vec(&changed)?,
+            )?;
+            assert!(matches!(
+                IntegerModel::load_with_tables_profile(
+                    &directory,
+                    &directory,
+                    ServingProfile::Dialogue576
+                ),
+                Err(IntegerError::Invalid(_))
+            ));
+        }
+        fs::write(
+            directory.join("hard-model.json"),
+            serde_json::to_vec(&manifest)?,
+        )?;
+        assert!(matches!(
+            IntegerModel::load_with_tables(&directory, &directory),
+            Err(IntegerError::Invalid(_))
+        ));
+        // Correct metadata reaches the absent parameter descriptor; this is
+        // profile/contract evidence, not a loaded learned artifact replay.
+        assert!(matches!(
+            IntegerModel::load_with_tables_profile(
+                &directory,
+                &directory,
+                ServingProfile::Dialogue576
+            ),
+            Err(IntegerError::Io(_))
+        ));
+        fs::remove_dir_all(directory)?;
         Ok(())
     }
 
@@ -4220,7 +4707,7 @@ mod tests {
     }
 
     #[test]
-    fn low_bit_dot_8_contiguous_matches_scalar() {
+    fn packed_signed4_eight_rows_match_scalar() -> Result<()> {
         let input: Vec<i32> = (0..256i32).map(|i| i * 19 - 2468).collect();
         let products = low_bit_products(&input);
         let p_256: &[[i64; 16]; 256] = (&products[..256]).try_into().unwrap();
@@ -4230,7 +4717,12 @@ mod tests {
             *w = (((i * 11 + 3) % 15) as i16) - 7;
         }
 
-        let (d0, d1, d2, d3, d4, d5, d6, d7) = low_bit_dot_8_contiguous(p_256, &weights_2048);
+        let packed = CoefficientCodes::from_decoded(weights_2048.to_vec(), 4)?;
+        let bytes: &[u8; 1024] = packed
+            .packed_range(0, 2048)?
+            .try_into()
+            .map_err(|_| invalid("test packed tile"))?;
+        let (d0, d1, d2, d3, d4, d5, d6, d7) = low_bit_dot_8_contiguous(p_256, bytes);
 
         let scalar_dot = |weights: &[i16]| -> i64 {
             input
@@ -4248,6 +4740,7 @@ mod tests {
         assert_eq!(d5, scalar_dot(&weights_2048[1280..1536]));
         assert_eq!(d6, scalar_dot(&weights_2048[1536..1792]));
         assert_eq!(d7, scalar_dot(&weights_2048[1792..2048]));
+        Ok(())
     }
 
     #[test]

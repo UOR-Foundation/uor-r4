@@ -107,16 +107,43 @@ not reconstruct the historical sampler or identify that sampler as the cause of
 failure. The [integrated parameter-start → learning → save/reload → actual
 reply path](dialogue-prefix-implementation-2026-09-27.md) is now executed in two
 matched two-update witnesses. Eight focused checks pass, but actual replies
-remain weak. The [substantive study](dialogue-prefix-study-2026-09-27.md) now
-runs one fixed 1,024-update pair from the retained parent, using 161 sealed,
-source-stratified development responses and the same 58 existing open replies
-per saved model. Full-prefix is running; role-only follows sequentially.
-Judge actual request/history correctness against both parent and control,
-preserving source-specific gains and regressions. A loss-only improvement or a
-gap caused by harming the control does not establish useful dialogue. Preserve
-the fixed endpoint and select the next causal action from the complete result;
-no automatic dose/seed/decoder extension. Foreign trainer and CLI ownership
-remain preserved.
+remain weak. The [fixed paired result](dialogue-prefix-paired-result-2026-09-27.md) is now
+complete at 1,024 matched updates and 1,165,549 response/EOS targets per arm.
+Retain full-prefix as a narrow conditioning integration candidate: selected
+Paris/Alex/green/Tokyo answers improve over parent and control, alongside shared
+adaptation gains, failed middle conversation turns, and a rewrite first-four
+regression. The result changes prefix content, length and response position
+together; it does not establish a content-only cause or general chat. Preserve
+both endpoints, the interrupted/recovered control and all costs. No automatic
+training dose, seed or decoder extension follows.
+
+The independent [packed coefficient comparison](packed-integer-comparison-2026-09-27.md)
+is complete. All eight pairs preserve their declared stable loaded behavior on
+the two retained width-256 artifacts, with lower observed peak child RSS in every
+pair and small, mixed timing changes. Independent review supports scoped
+protected delivery without another sweep. This is an interim dense-access
+storage improvement; D5 selected access, width-576 preservation and useful
+language remain separate responsibilities.
+
+The [width-576 native observation](native-dialogue576-observation-2026-09-27.md)
+has completed historical-parent conversion, packing, four-form common-input
+traces and all 174 generated replies. Parameter conversion is the largest
+observed numerical change; smaller integer differences still change three
+complete continuations. Quantized outputs lose Momo and final blue-car recall.
+Keep this artifact diagnostic. The current native path provides no speed or
+energy advantage; its dense parameter access remains an unresolved limit.
+The subsequent precision/history reconciliation and
+[selected-child observation](dialogue-child-native-observation-2026-09-27.md)
+now bind the actual 1,024-update complete-prefix child, without confusing it with
+R1d. All 58 saved continuous replies reproduce; nearest-hard loses Momo and
+green while retaining Paris, Tokyo and blue-car relations. Parameter conversion
+is the largest common-input numerical perturbation. Keep the converted child
+diagnostic and select one response-aware legal-code repair using the existing
+complete-prefix population and fixed exported grids. Its dose and full cost
+must be selected prospectively; no fit or sweep follows automatically. Useful
+whole-response recovery and retained relations govern the decision, with prior
+width-256 numerical improvements and source-answer losses preserved. Deeper
+geometric state/read and general prose remain independent programme obligations.
 
 The [completed termination-objective review](termination-objective-review-2026-09-27.md)
 parks the implemented weighting condition as INERT. Its three improvements on
@@ -128,10 +155,9 @@ The [completed fixed reader comparison](radial-adaptation-result-2026-09-27.md)
 now parks the transferred radial configurations: both lose to matched Dot on
 likelihood and complete source responses. Lorentz's isolated greedy story gain
 is preserved alongside concrete source regressions. Keep the native Dot path;
-no new serving operator, extra dose or seed sweep is selected. Advance the
-fixed complete-prefix dialogue study after its implemented integration
-witness and prospective work card. Deeper geometric state/read
-structure remains a complementary Claude-owned candidate; its distinct
+no new serving operator, extra dose or seed sweep is selected. The completed
+complete-prefix result above supplies the next retained conditioning candidate.
+Deeper geometric state/read structure remains a complementary Claude-owned candidate; its distinct
 population and serving contracts remain explicit.
 
 
@@ -145,13 +171,28 @@ identities were verified; raw model preservation is being coordinated on the
 owner SSD, with transfer/verification still pending. The input-content resume
 and scan/stability source corrections do not retroactively change older runs.
 Its implementation batches windows while scanning recurrence time sequentially;
-it has no integrated integer/session path. The [source review](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5852370380)
+it has no integrated native multiplier-free integer/session path. The [source review](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5852370380)
 records the concrete lineage and claim corrections, with the
 [delta review](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5852801270)
 confirming their resolution in new source. Keep this Claude-owned
 experiment complementary to the retained-reader comparison. Completed results
 may change the next architecture investment; an offline package comparison
 does not by itself isolate curvature, qualify efficient serving, or adopt D10.
+
+The [later stack packet review at `86f5b4e6`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5855426807)
+adds a second seed with reversed Lorentz/Dot ordering and no consistent reader
+advantage across the two seeds. Trained D10 integer-retention reports are now
+available, but use a different arithmetic contract; useful generated output and
+local payload validation remain open. Preserve these findings alongside the
+historical pilot results. The [subsequent precision review through `6bc7dd6d`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5856120502)
+verifies 41 added/changed packet identities and the five trained reference joins.
+Integer continuations remain weak; the new grid reference attributes most mean
+loss to packed parameter representation collectively, including scalar/bias/gain
+and head changes, not uniquely four-bit matrix rounding. GPTQ is implemented in
+source with no trained result packet at that reviewed head. Its codec and
+serving arithmetic differ from this native path; local payload intake remains
+unavailable. These results inform repair alternatives without changing
+the native target or the child-specific response-aware decision above.
 
 ## Active programme — learn the model, then harden its execution
 

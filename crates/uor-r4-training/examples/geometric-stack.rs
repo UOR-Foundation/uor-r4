@@ -92,7 +92,9 @@
 //! writes the float model's greedy replies. `lut-chat` talks through either
 //! integer engine under the same protocol: replies to `requests=`, or an
 //! interactive conversation on standard input (`/reset` starts over; a full
-//! 256-position context starts a new conversation).
+//! 256-position context starts a new conversation). Replies stop as the
+//! study's do: at EOS, at a terminal cycle of one to four ids repeated three
+//! times, or at `max_new_tokens`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -107,8 +109,8 @@ use uor_r4_training::dialogue_episodes::{PrefixPolicy, EPISODE_CONTEXT};
 use uor_r4_training::geometric_stack::{ReadScore, StackAdamW, StackArch, StackConfig, StackModel};
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
-    development, episode_contract, greedy_reply, load_requests, reply_panel, trim, DialogueSplit,
-    Reply,
+    check_panel, development, episode_contract, greedy_reply, load_requests, reply_panel, trim,
+    DialogueSplit, Reply, MAX_NEW_TOKENS,
 };
 use uor_r4_training::stack_export::{
     control_checkpoint, control_grid_reference, export_stack, stack_grid_reference,
@@ -198,7 +200,14 @@ fn read_tokens(path: &Path, vocabulary: usize) -> Result<Vec<u32>> {
                 path.display()
             )));
         }
-        return Ok(reader.as_slice().iter().map(|&id| u32::from(id)).collect());
+        let tokens: Vec<u32> = reader.as_slice().iter().map(|&id| u32::from(id)).collect();
+        if tokens.iter().any(|&id| id as usize >= vocabulary) {
+            return Err(invalid(format!(
+                "{} has ids outside the vocabulary",
+                path.display()
+            )));
+        }
+        return Ok(tokens);
     }
     if bytes.len() % 2 != 0 {
         return Err(invalid(format!(
@@ -888,9 +897,23 @@ fn load_checkpoint(
 ) -> Result<(StackModel, StackAdamW, Progress, Value)> {
     let state: Value = serde_json::from_slice(&fs::read(checkpoint.join("state.json"))?)?;
     if &state["lineage"] != lineage {
-        return Err(invalid(
-            "resume settings or input contents differ from the checkpoint",
-        ));
+        let keys = |value: &Value| -> Vec<String> {
+            value
+                .as_object()
+                .map(|object| object.keys().cloned().collect())
+                .unwrap_or_default()
+        };
+        let mut differing: Vec<String> = keys(lineage)
+            .into_iter()
+            .chain(keys(&state["lineage"]))
+            .filter(|key| state["lineage"][key.as_str()] != lineage[key.as_str()])
+            .collect();
+        differing.sort();
+        differing.dedup();
+        return Err(invalid(format!(
+            "the resume differs from the checkpoint's lineage in: {}",
+            differing.join(", ")
+        )));
     }
     let model = StackModel::load(&checkpoint.join("model"), device)?;
     let optimizer = StackAdamW::load(&checkpoint.join("optimizer"), &model)?;
@@ -1810,7 +1833,8 @@ impl DialogueSettings {
         })
     }
 
-    /// Settings and input contents a resumed run must share with its parent.
+    /// Settings, input contents and executable a resumed run must share with
+    /// its parent, so one run's updates all come from the same build.
     fn lineage(&self, config: &StackConfig) -> Result<Value> {
         let content = |path: &Path| -> Result<Value> {
             Ok(json!({"bytes": fs::metadata(path)?.len(), "sha256": sha256_file(path)?}))
@@ -1824,6 +1848,7 @@ impl DialogueSettings {
             "min_lr": self.min_lr, "weight_decay": self.weight_decay, "clip": self.clip,
             "eval_every": self.eval_every, "dev_seed": self.dev_seed,
             "dev_per_source": self.dev_per_source,
+            "executable": content(&std::env::current_exe()?)?,
             "inputs": {
                 "tokenizer": content(&self.tokenizer)?, "train": split(&self.train)?,
                 "dev": split(&self.dev)?,
@@ -1833,29 +1858,37 @@ impl DialogueSettings {
     }
 }
 
-/// A model to continue must have learned the same token ids: when the run
-/// that wrote it recorded its tokenizer or lab merges (`ROOT/report.json`
-/// beside `ROOT/model`), they must be this tokenizer.
+/// A model to continue must have learned the same token ids. The run that
+/// wrote it records its inputs: in `ROOT/report.json` beside `ROOT/model`, or,
+/// for a checkpoint's model (`ROOT/checkpoint/model`), in the lineage of the
+/// checkpoint's `state.json`. The model is refused unless one of them records
+/// this tokenizer.json and no lab merges.
 fn check_init_tokenizer(model: &Path, tokenizer: &Path) -> Result<()> {
-    let Some(report) = model
+    let root = model
         .parent()
-        .map(|root| root.join("report.json"))
-        .filter(|path| path.exists())
-    else {
-        return Ok(());
+        .ok_or_else(|| invalid("init= has no parent directory"))?;
+    let inputs = if root.join("report.json").exists() {
+        let report: Value = serde_json::from_slice(&fs::read(root.join("report.json"))?)?;
+        report["inputs"].clone()
+    } else if root.join("state.json").exists() {
+        let state: Value = serde_json::from_slice(&fs::read(root.join("state.json"))?)?;
+        state["lineage"]["inputs"].clone()
+    } else {
+        return Err(invalid(
+            "init= needs the report.json or checkpoint state.json of the run that wrote it",
+        ));
     };
-    let report: Value = serde_json::from_slice(&fs::read(report)?)?;
-    let inputs = &report["inputs"];
     if !inputs["merges"].is_null() {
         return Err(invalid(
             "init= was trained on the lab BPE's ids, not this tokenizer's",
         ));
     }
     match inputs["tokenizer"]["sha256"].as_str() {
-        Some(recorded) if recorded != sha256_file(tokenizer)? => {
-            Err(invalid("init= was trained with a different tokenizer.json"))
-        }
-        _ => Ok(()),
+        Some(recorded) if recorded == sha256_file(tokenizer)? => Ok(()),
+        Some(_) => Err(invalid("init= was trained with a different tokenizer.json")),
+        None => Err(invalid(
+            "init= does not record the tokenizer.json its ids came from",
+        )),
     }
 }
 
@@ -1936,18 +1969,19 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         resume: args.optional("resume").map(PathBuf::from),
         max_seconds: args.number("max_seconds", f64::INFINITY)?,
         requests: args.optional("requests").map(PathBuf::from),
-        max_new_tokens: args.number("max_new_tokens", 96)?,
+        max_new_tokens: args.number("max_new_tokens", 32)?,
     };
     if settings.steps == 0
         || !(1..=64).contains(&settings.batch)
         || settings.eval_every == 0
-        || settings.max_new_tokens == 0
+        || !(1..=MAX_NEW_TOKENS).contains(&settings.max_new_tokens)
         || settings.lr.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater)
         || !(0.0..=1.0).contains(&settings.min_lr)
     {
-        return Err(invalid(
-            "steps, eval_every, max_new_tokens and lr must be positive, batch 1..64, min_lr in [0, 1]",
-        ));
+        return Err(invalid(format!(
+            "steps, eval_every and lr must be positive, batch 1..64, max_new_tokens \
+             1..{MAX_NEW_TOKENS}, min_lr in [0, 1]"
+        )));
     }
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
@@ -1982,6 +2016,13 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         return Err(invalid(
             "the model's context must be the episodes' 256 and its vocabulary the corpus's",
         ));
+    }
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(e.to_string()))?;
+    // The panel is answered after training; check it before any update.
+    if let Some(requests) = &requests {
+        check_panel(&encoder, requests, config.context, s.max_new_tokens)?;
     }
     let lineage = s.lineage(&config)?;
     let (model, mut optimizer, mut progress, resumed_from) = match &s.resume {
@@ -2087,9 +2128,6 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
     let final_development = development(&model, &dev, &panel, 16)?;
     let replies = match &requests {
         Some(requests) => {
-            let encoder = protocol
-                .bind(&tokenizer)
-                .map_err(|e| invalid(e.to_string()))?;
             let clock = Instant::now();
             let mut panel = reply_panel(
                 &encoder,
@@ -2176,15 +2214,19 @@ impl<S: Stepper> IntegerChat<S> {
                 .map_err(lut)?;
             ids.push(next);
             seen.push(next);
-            if next == eos {
-                return Ok(Reply { ids, eos: true });
+            if let Some(reply) = Reply::stop(&ids, eos) {
+                return Ok(reply);
             }
             if step + 1 < cap {
                 self.logits = self.session.advance(next)?.to_vec();
                 self.fed.push(next);
             }
         }
-        Ok(Reply { ids, eos: false })
+        Ok(Reply {
+            ids,
+            eos: false,
+            cycle: None,
+        })
     }
 }
 
@@ -2211,15 +2253,18 @@ fn lut_chat_mode(arguments: &[String]) -> Result<()> {
     let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
     let requests_path = args.optional("requests").map(PathBuf::from);
     let out = PathBuf::from(args.required("out")?);
-    let max_new_tokens: usize = args.number("max_new_tokens", 96)?;
+    let max_new_tokens: usize = args.number("max_new_tokens", 32)?;
     let temperature: f64 = args.number("temperature", 0.0)?;
     let top_k: usize = args.number("top_k", 40)?;
     let top_p: f64 = args.number("top_p", 1.0)?;
     let seed: u64 = args.number("seed", 1)?;
     let threads: usize = args.number("threads", 1)?;
-    if max_new_tokens == 0 {
-        return Err(invalid("max_new_tokens must be positive"));
+    if !(1..=MAX_NEW_TOKENS).contains(&max_new_tokens) {
+        return Err(invalid(format!(
+            "max_new_tokens must be 1..{MAX_NEW_TOKENS}"
+        )));
     }
+    let requests = requests_path.as_deref().map(load_requests).transpose()?;
     report_output::claim(&out)?;
     let result = (|| -> Result<()> {
         use uor_r4_lut::sampling::{Sampler, SamplingSettings};
@@ -2241,14 +2286,14 @@ fn lut_chat_mode(arguments: &[String]) -> Result<()> {
         let decode = |ids: &[u32]| tokenizer.decode(ids);
         let clock = Instant::now();
         let mut positions = 0usize;
-        let record = match &engine {
+        let (record, failure) = match &engine {
             Engine::Stack(model) => chat_with(
                 &|| model.session(),
                 model.exp_table(),
                 engine.context(),
                 &encoder,
                 &protocol,
-                requests_path.as_deref(),
+                requests.as_deref(),
                 max_new_tokens,
                 &decode,
                 &mut sampler,
@@ -2260,7 +2305,7 @@ fn lut_chat_mode(arguments: &[String]) -> Result<()> {
                 engine.context(),
                 &encoder,
                 &protocol,
-                requests_path.as_deref(),
+                requests.as_deref(),
                 max_new_tokens,
                 &decode,
                 &mut sampler,
@@ -2284,11 +2329,14 @@ fn lut_chat_mode(arguments: &[String]) -> Result<()> {
                 "record": record,
             }))?,
         )?;
-        Ok(())
+        failure.map_or(Ok(()), Err)
     })();
     finish(&out, result)
 }
 
+/// Replies to a request panel, or one interactive conversation. The record
+/// comes back with the error that ended an interactive conversation, if one
+/// did, so its transcript is still written.
 #[allow(clippy::too_many_arguments)]
 fn chat_with<S: Stepper>(
     new_session: &dyn Fn() -> S,
@@ -2296,24 +2344,23 @@ fn chat_with<S: Stepper>(
     context: usize,
     encoder: &uor_r4_tokenizer::dialogue::DialogueEncoder<'_>,
     protocol: &uor_r4_tokenizer::dialogue::DialogueProtocol,
-    requests: Option<&Path>,
+    requests: Option<&[uor_r4_training::stack_dialogue::Request]>,
     max_new_tokens: usize,
     decode: &dyn Fn(&[u32]) -> String,
     sampler: &mut uor_r4_lut::sampling::Sampler,
     positions: &mut usize,
-) -> Result<Value> {
+) -> Result<(Value, Option<TrainingError>)> {
     let mut chat = IntegerChat {
         session: new_session(),
         fed: Vec::new(),
         logits: Vec::new(),
     };
     let eos = protocol.eos_id;
-    if let Some(path) = requests {
-        let requests = load_requests(path)?;
-        return reply_panel(
+    if let Some(requests) = requests {
+        let record = reply_panel(
             encoder,
             protocol,
-            &requests,
+            requests,
             context,
             max_new_tokens,
             decode,
@@ -2322,51 +2369,66 @@ fn chat_with<S: Stepper>(
                 *positions += reply.ids.len();
                 Ok(reply)
             },
-        );
+        )?;
+        return Ok((record, None));
     }
-    use std::io::{BufRead, Write};
-    let mut history = vec![protocol.bos_id];
-    let mut turns = Vec::new();
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
-    write!(stdout, "you> ")?;
-    stdout.flush()?;
-    for line in stdin.lock().lines() {
-        let line = line?;
-        let text = line.trim();
-        if text == "/reset" {
-            history = vec![protocol.bos_id];
-            writeln!(stdout, "[new conversation]")?;
-        } else if !text.is_empty() {
-            let mut prefix = encoder.encode_user_prefix(text, history.len() > 1);
-            if history.len() + prefix.tokens.len() + max_new_tokens + 1 > context {
-                writeln!(stdout, "[the context is full; starting a new conversation]")?;
-                history = vec![protocol.bos_id];
-                prefix = encoder.encode_user_prefix(text, false);
-            }
-            if prefix.emitted_turns != 1
-                || history.len() + prefix.tokens.len() + max_new_tokens + 1 > context
-            {
-                writeln!(stdout, "[that message is too long for the context]")?;
-            } else {
-                history.extend(&prefix.tokens);
-                let reply = chat.reply(new_session, &history, max_new_tokens, eos, sampler, exp)?;
-                *positions += reply.ids.len();
-                let words: Vec<u32> = reply.ids.iter().copied().filter(|&id| id != eos).collect();
-                writeln!(stdout, "model> {}", decode(&words))?;
-                history.extend(&reply.ids);
-                if !reply.eos {
-                    history.push(eos);
-                }
-                turns.push(json!({"user": text, "reply": decode(&words),
-                    "reply_ids": reply.ids, "model_eos": reply.eos}));
-            }
-        }
+    let mut events = Vec::new();
+    let outcome = (|| -> Result<()> {
+        use std::io::{BufRead, Write};
+        let mut history = vec![protocol.bos_id];
+        let mut stdout = std::io::stdout();
         write!(stdout, "you> ")?;
         stdout.flush()?;
-    }
-    writeln!(stdout)?;
-    Ok(json!({"interactive_turns": turns}))
+        for line in std::io::stdin().lock().lines() {
+            let line = line?;
+            let text = line.trim();
+            if text == "/reset" {
+                history = vec![protocol.bos_id];
+                events.push(json!({"reset": "user"}));
+                writeln!(stdout, "[new conversation]")?;
+            } else if !text.is_empty() {
+                let mut prefix = encoder.encode_user_prefix(text, history.len() > 1);
+                let fresh = encoder.encode_user_prefix(text, false);
+                if prefix.emitted_turns != 1 || prefix.special_token_occurrences != 0 {
+                    events.push(json!({"user": text, "rejected": "not one plain user turn"}));
+                    writeln!(stdout, "[that message has special tokens or role markers]")?;
+                } else if 1 + fresh.tokens.len() + max_new_tokens > context {
+                    events.push(json!({"user": text, "rejected": "too long for the context"}));
+                    writeln!(stdout, "[that message is too long for the context]")?;
+                } else {
+                    if history.len() + prefix.tokens.len() + max_new_tokens > context {
+                        history = vec![protocol.bos_id];
+                        events.push(json!({"reset": "context_full"}));
+                        writeln!(stdout, "[the context is full; starting a new conversation]")?;
+                        prefix = fresh;
+                    }
+                    history.extend(&prefix.tokens);
+                    let reply =
+                        chat.reply(new_session, &history, max_new_tokens, eos, sampler, exp)?;
+                    *positions += reply.ids.len();
+                    let words: Vec<u32> =
+                        reply.ids.iter().copied().filter(|&id| id != eos).collect();
+                    writeln!(stdout, "model> {}", decode(&words))?;
+                    history.extend(&reply.ids);
+                    if !reply.eos {
+                        history.push(eos);
+                    }
+                    events.push(json!({"user": text, "reply": decode(&words),
+                        "reply_ids": reply.ids, "model_eos": reply.eos,
+                        "stop": reply.stop_record()}));
+                }
+            }
+            write!(stdout, "you> ")?;
+            stdout.flush()?;
+        }
+        writeln!(stdout)?;
+        Ok(())
+    })();
+    let error = outcome.as_ref().err().map(|e| e.to_string());
+    Ok((
+        json!({"interactive": events, "error": error}),
+        outcome.err(),
+    ))
 }
 
 fn finish(out: &Path, result: Result<()>) -> Result<()> {

@@ -20,7 +20,7 @@ development runs, one seed per arm. Nothing here is a final holdout or a languag
 | `integer/<model>/evaluation/evaluation.json` (with `attempt.json`, `manifest.json`) | The integer engine beside the float model on the 512 final-evaluation windows: NLL per window, bits per byte, top-1 agreement and the engine's speed |
 | `integer/<model>/steps64/evaluation.json` (with `attempt.json`, `manifest.json`) | The engine's step rate alone on 64 of the windows (commit `cb60c8bd`), apart from the f64 scoring loop |
 | `integer/<model>/samples/samples.json` (with `attempt.json`, `manifest.json`) | The integer engine's greedy and sampled continuations of three development prompts (commit `cb60c8bd`), as token ids and decoded text |
-| `integer/<model>/reference/evaluation.json` (with `attempt.json`, `manifest.json`) | Float, grid reference and integer NLL on the 512 windows (commit `feeef7e4`): the split of the integer gap into weight rounding and integer arithmetic |
+| `integer/<model>/reference/evaluation.json` (with `attempt.json`, `manifest.json`) | Float, grid reference and integer NLL on the 512 windows (commit `feeef7e4`): the split of the integer gap into parameter representation (every exported value, not only the 4-bit matrices) and integer arithmetic |
 | `integer/<model>/gptq-export/export.json`, `gptq-evaluation/evaluation.json` (each with `attempt.json`, `manifest.json`) | The GPTQ export (commit `6bc7dd6d`): calibration settings and cost, and each matrix's relative output error under GPTQ and round-to-nearest; then float, grid reference and integer NLL of that artifact on the 512 windows |
 | `integer/run.log` | Start and end times and the executable identities of the integer stage |
 | `sources/` | The launchers: pilot, post-pilot chain (with the selection rule), ablations, main comparison, the restartable `pipeline.sh` and the integer stage |
@@ -43,6 +43,7 @@ Each `report.json` records:
   - The pilot used commit `dca1b790` (SHA-256 `fcf710ad…`).
   - The ablations used commit `b87acd63` (SHA-256 `05889874…`). Relative to `dca1b790` it changes only the example's sample decoding, its evaluate mode and early-stop checkpoint retention, not the model, optimizer or training loop.
   - The integer stage used commit `2a681bb7` (SHA-256 `cb0bb647…`), `cb60c8bd` (SHA-256 `3fed0f7c…`) for the step timing and continuations, `feeef7e4` (SHA-256 `20e265e5…`) for the rounding/arithmetic split, and `6bc7dd6d` (SHA-256 `6c1f4721…`) for the GPTQ exports.
+  - `6bc7dd6d` alone was built without `-C target-cpu=native`. Its float scores reproduce every run's final evaluation exactly. Training with it is not bitwise equal to a native build, because the matrix products take other kernels. The same source built natively reproduces the native builds' model hashes.
 - **Corpora.** The repository code split is cycle 3's (`b12707b0…` training, `3f7c50ef…` development), in the [cycle-3 packet](../native-lorentz-packet-2026-09-26/README.md). The registry corpus for the main comparison is `af93ca73…` (29,039,409 tokens), built with `geometric-stack corpus` and encoded with `geometric-stack encode`.
 
 ## Cost

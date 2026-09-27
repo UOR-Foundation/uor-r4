@@ -25,6 +25,28 @@ libraries. It has no dependency on Candle, the training crate, the core crate,
 model-source, a transformer implementation, or an external model provider.
 Training evaluation re-exports the same integer computation used here.
 
+The [packed coefficient candidate](../../docs/integration/packed-integer-preparation-2026-09-27.md)
+keeps signed4 arrays in shared `Arc<[u8]>` storage after loading and consumes
+packed rows directly. Signed16 arrays are shared separately.
+`IntegerModel::coefficient_storage()` reports unique coefficient payload bytes,
+excluding metadata, loading temporaries and session state. Artifact formats and
+supported dimensions are unchanged. The [completed comparison](../../docs/integration/packed-integer-comparison-2026-09-27.md)
+preserves every declared stable field across eight paired workloads on the two
+retained width-256 artifacts. Logical retained coefficient payload falls from
+6,702,340 to 847,876 bytes; observed peak child RSS is 13.04–16.83% lower.
+Timing changes are small and mixed in this single pass. Dense access and the
+artifacts' language limitations remain; no general speed or energy gain is established.
+
+The separate [width-576 dialogue development profile](../../docs/integration/dialogue-child-native-observation-2026-09-27.md)
+now accepts a verified complete-prefix child through its own conversion schema.
+Use the training example `dialogue-child-integer-bridge` to construct its packed
+model and `pack-dialogue576` to package it. This keeps the selected child's
+actual arrays and local clocks separate from its historical R1d ancestor.
+The observer's `--child` mode compares this child's saved reference and actual
+FF/QQ/integer replies. The nearest-hard child loses useful relationships and
+remains diagnostic; it is not an accepted bundle or useful chat qualification.
+The linked result supplies complete CLI arguments, artifact identity and costs.
+
 ## Build and package
 
 From the repository root:
@@ -154,6 +176,20 @@ The random seed is explicit for every `generate` call. Pass
 reusing the original seed restarts that stream. Stops apply per call. Resuming
 after a returned EOS is an explicit caller decision. Session state is in memory;
 the generated report is not a serialized session checkpoint.
+
+The separate `session::ChatSession`/`ChatTokenStream` API used by `uor-chat` has
+its own session lifecycle. After draining a stream, callers must inspect
+`error()` and `stop_reason()`; iterator exhaustion alone is not success. If the
+model write that commits a sampled EOS, turn-end or custom stop, or an inserted
+cap/cycle turn-end, fails, the stream retains the error and reports `ModelError`
+while flushing already buffered text. `uor-chat` exits with status 1 before
+success telemetry on a terminal error and reports the actual stop on success.
+Existing stream-construction errors still print and return to the prompt, so
+exit status zero alone does not establish that all earlier commands succeeded.
+A failed model step may have changed state; this reporting provides no rollback
+or recovery. The [focused validation](../../docs/evidence/chat-stream-error-validation-2026-09-27.json)
+uses synthetic library and CLI-helper checks plus a release build, with no
+learned-model execution, spawned CLI exit-status test or chat-quality claim.
 
 ## Arithmetic and cost boundaries
 
