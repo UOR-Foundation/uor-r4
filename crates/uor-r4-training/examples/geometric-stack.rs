@@ -1242,16 +1242,21 @@ impl Engine {
     }
 
     /// Logits (exponent -16) after each id of one window, from a fresh session.
-    fn window(&self, ids: &[u32], mut visit: impl FnMut(usize, &[i32])) -> Result<()> {
+    /// Returns the seconds spent inside the engine's steps, without `visit`.
+    fn window(&self, ids: &[u32], mut visit: impl FnMut(usize, &[i32])) -> Result<f64> {
         fn run(
             session: &mut impl Stepper,
             ids: &[u32],
             visit: &mut impl FnMut(usize, &[i32]),
-        ) -> Result<()> {
+        ) -> Result<f64> {
+            let mut seconds = 0f64;
             for (t, &id) in ids.iter().enumerate() {
-                visit(t, session.advance(id)?);
+                let clock = Instant::now();
+                let logits = session.advance(id)?;
+                seconds += clock.elapsed().as_secs_f64();
+                visit(t, logits);
             }
-            Ok(())
+            Ok(seconds)
         }
         match self {
             Self::Stack(model) => run(&mut model.session(), ids, &mut visit),
@@ -1359,14 +1364,14 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
         };
         // Per window: integer NLL, float NLL, target bytes (sums over targets).
         let mut sums: Vec<(f64, f64, f64)> = Vec::with_capacity(starts.len());
-        let (mut agree, mut integer_seconds) = (0usize, 0f64);
+        let (mut agree, mut step_seconds, mut loop_seconds) = (0usize, 0f64, 0f64);
         for &start in &starts {
             let ids = &valid[start..start + time];
             let next = &valid[start + 1..start + time + 1];
             let mut window_nll = 0f64;
             let mut integer_top = vec![0usize; time];
             let clock = Instant::now();
-            engine.window(ids, |t, logits| {
+            step_seconds += engine.window(ids, |t, logits| {
                 let (nll, top) = score_row(
                     logits.iter().map(|&v| f64::from(v) / 65536.0),
                     next[t] as usize,
@@ -1374,7 +1379,7 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
                 window_nll += nll;
                 integer_top[t] = top;
             })?;
-            integer_seconds += clock.elapsed().as_secs_f64();
+            loop_seconds += clock.elapsed().as_secs_f64();
             let mut window_float = 0f64;
             if let Some(model) = &float {
                 let logits = model.forward(ids, 1, time)?.to_vec2::<f32>()?;
@@ -1407,7 +1412,7 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
         };
         let targets = starts.len() * time;
         let mut record = json!({
-            "schema": "uor-r4.geometric-stack-lut-evaluation/2",
+            "schema": "uor-r4.geometric-stack-lut-evaluation/3",
             "protocol": if blocks {
                 "consecutive blocks of 256 inputs and 256 shifted targets (the retained evaluator's), one fresh integer session per block, position by position"
             } else {
@@ -1421,8 +1426,11 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
             "targets": targets,
             "all": summary(0..starts.len()),
             "engine": {
-                "seconds": integer_seconds,
-                "tokens_per_second": targets as f64 / integer_seconds,
+                "step_seconds": step_seconds,
+                "tokens_per_second": targets as f64 / step_seconds,
+                "loop_seconds": loop_seconds,
+                "loop_tokens_per_second": targets as f64 / loop_seconds,
+                "scope": "step: the engine's steps only; loop: the steps plus scoring each position's logits in f64",
                 "threads": threads,
                 "backend": engine.backend(),
             },
@@ -1545,6 +1553,7 @@ fn lut_sample_mode(arguments: &[String]) -> Result<()> {
                 "settings": {"temperature": temperature, "top_k": top_k, "top_p": top_p, "seed": seed},
                 "engine": {"positions": generated, "seconds": seconds,
                     "positions_per_second": generated as f64 / seconds,
+                    "scope": "prompt reading and generation: the engine's steps and integer sampling, greedy and sampled",
                     "threads": threads, "backend": engine.backend()},
                 "rows": rows,
             }))?,

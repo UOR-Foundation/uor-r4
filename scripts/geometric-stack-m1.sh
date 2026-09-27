@@ -114,7 +114,7 @@ if [ "$INTEGER" = 1 ]; then
       "$STACK" lut-evaluate artifact="$OUT/integer-$arm-s$seed/model.lut" valid="$DEV" model="$OUT/$arm-s$seed/model" \
         blocks=true tune_blocks=64 threads=1 out="$OUT/integer-evaluate-$arm-s$seed"
       python3 -c 'import json,sys; e=json.load(open(sys.argv[1])); c=e["comparison"]; g=e["engine"]
-print(sys.argv[2], "integer comparison tail %.6f nats (float %.6f; #1017: 1.574024); top-1 agreement %.4f; %.0f tokens/s on one thread (%s)" % (c["integer"]["nll"], c["float"]["nll"], e["top1_agreement"], g["tokens_per_second"], g["backend"]))' \
+print(sys.argv[2], "integer comparison tail %.6f nats (float %.6f; #1017: 1.574024); top-1 agreement %.4f; %.0f tokens/s in engine steps on one thread (%s)" % (c["integer"]["nll"], c["float"]["nll"], e["top1_agreement"], g["tokens_per_second"], g["backend"]))' \
         "$OUT/integer-evaluate-$arm-s$seed/evaluation.json" "$arm-s$seed" | tee -a "$OUT/summary.txt"
       "$STACK" lut-sample artifact="$OUT/integer-$arm-s$seed/model.lut" valid="$DEV" tokenizer="$TOKENIZER" \
         out="$OUT/integer-samples-$arm-s$seed"
