@@ -6,7 +6,18 @@
 
 ## 0. Findings
 
-*(Filled in when the runs finish.)*
+*Measured* on code, one seed per arm unless stated. Development NLL on the repository split's 512 evenly spaced windows (131,072 targets). This note is an interim record: the main comparison at full exposure (§6) is still running, and its result and the card's reading follow in a separate change.
+
+- **At 1,000 updates the stack leads the control at every learning rate piloted** (§5): by 0.158 nats at each arm's selected rate (4e-3 for the stack, 2e-3 for the control), with 7.15M and 7.16M parameters.
+- **Configuration matters more than the read's score** (§7).
+  - Reads-only Lorentz is the best configuration measured: 2.5531 and 2.5382 over two seeds.
+  - Inside `rrarra`, Dot and Lorentz trade places across two seeds.
+  - With every layer a read, Lorentz leads Dot by 0.076 at seed 1. The second Dot seed is queued with its reading fixed.
+- **Integer serving costs little, and the cost is in the exported parameters, not the arithmetic** (§8).
+  - Under D10 the stacks lose 0.011–0.013 nats with round-to-nearest, and 0.006–0.007 with GPTQ, which recalibrates only the matrices.
+  - The integer arithmetic adds nothing measurable.
+- **Generated code is still not useful.** Every continuation, float or integer, repeats or is malformed.
+- **The stack has a dialogue path** (`dialogue-train`, `lut-chat`, `scripts/geometric-stack-chat-m1.sh`). It is checked on synthetic data only; the prepared corpus is on the owner's machine.
 
 ## 1. Why capacity, and why a parallel layout
 
@@ -192,7 +203,20 @@ Final NLL in nats per token, with bits per byte in parentheses:
 
 ## 6. Main comparison
 
-*(Filled in when the runs finish.)*
+**Running.** Both arms train from scratch with seed 1 on identical windows.
+- Exposure: 7,324 updates of 16 × 256 targets, or 29,999,104 target visits.
+- Schedule: warmup 200, then cosine decay to 10%, with weight decay 0.1 and clipping at 1.0.
+- Rates: each arm's pilot-selected rate, 2e-3 for the control and 4e-3 for the stack (`rrarra`, Lorentz reads, rotation).
+- Data: windows are drawn from the repository and registry streams with equal probability (§4).
+- Evaluation: 64 development windows every 250 updates, and the final score on 512.
+- Launch: 11:23 UTC, with executable `b87acd63`, two threads per arm on the shared sandbox.
+
+The final scores and the reading follow in a separate change. The card fixed the reading before the pilots:
+- stack within 0.03 nats of the control, or better → the stack is viable; next come its integer serving and an owner M1 run;
+- behind by more than 0.03 → ablations first;
+- more than twice as slow → kernel work first.
+
+Interim development points are not a result and are not reported here.
 
 **Queued: the reads-only Lorentz stack at the same exposure.** At 1,000 updates the reads-only Lorentz stack is the best configuration measured (§7). A third arm trains it (pattern `aaaaaa`, no rotation, learning rate 4e-3) with the main pair's executable, data, seed and settings, after the cycle-5 arms and the reads-only Dot seed (`c5/pipeline4.sh` in the lab sandbox). It reuses the main pair's control. Its reading, fixed before it runs:
 - at least 0.03 nats below the `rrarra` stack → the owner M1 scripts' default pattern becomes `aaaaaa`;
@@ -380,8 +404,30 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 
 ## 9. What this changes
 
-*(Filled in when the runs finish.)*
+- **For the native architecture.** Nothing yet. The main comparison (§6) decides whether the stack is viable at full exposure, by the card's rule.
+- **For the read's geometry.** At this scale the Lorentz score's benefit depends on the configuration.
+  - It is not measurable in `rrarra`.
+  - It is 0.076 nats at one seed when every layer is a read. The queued Dot seed decides whether that lead is recorded (§7).
+  - Cycle 5 moves the geometry to the index of sparse memory layers, where D5 needs it.
+- **For serving.** The stack serves under D10 with no float and no multiplier on learned weights, and GPTQ halves the cost of representing its parameters.
+  - The stack engine is dense and reads every weight per token.
+  - It uses the hardware multiplier on runtime values, so it does not meet D0-b. D0-b remains the native model's target.
+- **For chat.** The stack can learn the prepared dialogue corpus under the retained study's episodes, and talk through the integer engine.
+  - Replies follow the study's stop rules and panel limits.
+  - This path is checked on synthetic data only.
 
 ## 10. Costs
 
-*(Filled in when the runs finish.)*
+*Measured*, lab sandbox (4 cores, 15 GB), charged cumulatively; no paid or external compute. Elapsed times are wall clock from the run records.
+
+| Stage | Elapsed | Notes |
+|---|---:|---|
+| Pilot, three rounds | 3 h 21 min | two arms at a time, two threads each |
+| Seed-1 ablations | 1 h 44 min | `dot` and `norot` together, then `readsonly` |
+| Seed-2 pair | 2 h 17 min | including about 56 min lost to two container restarts before the first checkpoint |
+| Reads-only pair | 1 h 24 min | two arms at a time |
+| Main comparison | running since 11:23 UTC | two arms, two threads each |
+| Integer stages | about 50 min of one-thread engine time | evaluations 14.1 min, references 14.9, GPTQ exports 1.9, GPTQ evaluations 17.2, step timing 1.7, samples 6 s; round-to-nearest exports untimed; run beside training |
+| Implementation, tests and builds | not metered separately | |
+
+- **Storage.** The packet in the repository is 2.4 MB (171 files). Run roots in the sandbox hold 585 MB. Models and executables stay outside the repository, pinned by SHA-256 in the packet.
