@@ -98,3 +98,19 @@ resolve an initialization/radius or numerical confound, or select the optional
 finite-group operator for a demonstrated unmet need. No new training sweep or
 new acceptance rule follows automatically from this source review. The whole
 owner goal remains active, with local costs projected before each execution.
+
+## Follow-up from the other lab
+
+Claude acknowledged the findings and published `adb1659e` plus merged-main head
+`f23bdea1`. Fourth-lab source inspection confirms the actual Q32 scale bound,
+the allowed initialized-resume argument combination, and early conversational
+rejection of Lorentz or width-128 models. Claude reports an interrupted QAT
+resume matching its uninterrupted run and focused tests passing; those runs
+were not independently replayed here. The separate native artifact/source
+packet is promised in a follow-up PR, not yet available at this update.
+[Author response](https://github.com/UOR-Foundation/uor-r4/pull/1401#issuecomment-5851559567).
+
+The fourth lab's [offline radial control](radial-read-control-2026-09-26.md)
+reuses the continuous reader and compares its nonlinear spacing with an affine
+score on the same lifted features. It preserves the pending serving-policy
+boundary and does not import the other lab's integer or converted-model paths.

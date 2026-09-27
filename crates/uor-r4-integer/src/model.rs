@@ -225,6 +225,13 @@ impl IntegerModel {
             return Err(invalid("integer model manifest too large"));
         }
         let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+        let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
+        config.validate()?;
+        if !config.read_geometry.is_dot() {
+            return Err(crate::IntegerError::UnsupportedReadGeometry(
+                config.read_geometry,
+            ));
+        }
         if manifest["schema"] != "uor-r4.joint-recurrent-packed-emulator/1"
             || manifest
                 .get("admission")
@@ -250,8 +257,6 @@ impl IntegerModel {
         if descriptor != manifest["parameter_manifest"] {
             return Err(invalid("integer parameter manifest binding differs"));
         }
-        let config: JointConfig = serde_json::from_value(manifest["model"].clone())?;
-        config.validate()?;
         if config.context != 256 || config.width != 256 || config.read_width != 64 {
             return Err(invalid("integer bridge fixes context256/state256/read64"));
         }

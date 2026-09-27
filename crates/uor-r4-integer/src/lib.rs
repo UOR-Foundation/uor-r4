@@ -19,7 +19,7 @@ pub mod session;
 pub mod tables;
 
 pub use bundle::{create_test_bundle_with_byte_vocab, Bundle};
-pub use config::{JointConfig, ReadMode, Transport};
+pub use config::{JointConfig, ReadGeometry, ReadMode, Transport};
 pub use model::{
     atan2_q30, HopfFiberPointQ30, IntegerModel, IntegerSession, IntegerStep, SessionState,
     SlotTarget, T8ZetaState, UnitS3Q30, AGE_HORIZON_CLAMP, DIALOGUE_CAPACITY, PERSISTENT_CAPACITY,
@@ -45,6 +45,8 @@ pub enum IntegerError {
     Io(std::io::Error),
     Json(serde_json::Error),
     Invalid(String),
+    /// A model declares an offline read operator with no retained integer path.
+    UnsupportedReadGeometry(ReadGeometry),
 }
 impl fmt::Display for IntegerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -52,6 +54,11 @@ impl fmt::Display for IntegerError {
             Self::Io(error) => write!(f, "integer runtime I/O: {error}"),
             Self::Json(error) => write!(f, "integer runtime JSON: {error}"),
             Self::Invalid(error) => write!(f, "invalid integer runtime input: {error}"),
+            Self::UnsupportedReadGeometry(geometry) => write!(
+                f,
+                "{} read is offline-only; quantization, packed export and integer serving require dot read",
+                geometry.name()
+            ),
         }
     }
 }

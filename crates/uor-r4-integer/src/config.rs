@@ -21,6 +21,37 @@ pub enum ReadMode {
     NoRead,
 }
 
+/// Raw query/key scoring. The radial variants are offline F32 operators;
+/// integer serving accepts only the retained `Dot` geometry.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadGeometry {
+    #[default]
+    Dot,
+    Lorentz,
+    /// Affine spacing of the same Lorentz lift, tangent at the fixed initial
+    /// radius. This is a control operator, not a geodesic distance.
+    LorentzAffine,
+}
+
+impl ReadGeometry {
+    pub const fn is_dot(&self) -> bool {
+        matches!(self, Self::Dot)
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Dot => "dot",
+            Self::Lorentz => "lorentz",
+            Self::LorentzAffine => "lorentz_affine",
+        }
+    }
+}
+
+/// Shared learned scalars of the offline radial arms; absent from Dot models.
+pub const LORENTZ_LOG_BETA: &str = "read.lorentz_log_beta";
+pub const LORENTZ_OFFSET: &str = "read.lorentz_offset";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct JointConfig {
     pub vocab_size: usize,
@@ -29,6 +60,9 @@ pub struct JointConfig {
     pub context: usize,
     pub transport: Transport,
     pub seed: u64,
+    /// Omitted for Dot so retained serialized configurations stay unchanged.
+    #[serde(default, skip_serializing_if = "ReadGeometry::is_dot")]
+    pub read_geometry: ReadGeometry,
 }
 impl Default for JointConfig {
     fn default() -> Self {
@@ -39,6 +73,7 @@ impl Default for JointConfig {
             context: 256,
             transport: Transport::Quaternion,
             seed: 0,
+            read_geometry: ReadGeometry::Dot,
         }
     }
 }
@@ -59,7 +94,7 @@ impl JointConfig {
     pub fn shapes(&self) -> BTreeMap<String, Vec<usize>> {
         let d = self.width;
         let r = self.read_width;
-        BTreeMap::from([
+        let mut shapes = BTreeMap::from([
             ("embedding.weight".into(), vec![self.vocab_size, d]),
             ("recurrent.input.weight".into(), vec![3 * d, d]),
             ("recurrent.state.weight".into(), vec![3 * d, d]),
@@ -81,7 +116,12 @@ impl JointConfig {
             ("copy.gate.bias".into(), vec![1]),
             ("output.norm.weight".into(), vec![d]),
             ("output.bias".into(), vec![self.vocab_size]),
-        ])
+        ]);
+        if !self.read_geometry.is_dot() {
+            shapes.insert(LORENTZ_LOG_BETA.into(), vec![1]);
+            shapes.insert(LORENTZ_OFFSET.into(), vec![1]);
+        }
+        shapes
     }
 }
 
