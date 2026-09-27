@@ -117,11 +117,13 @@ together; it does not establish a content-only cause or general chat. Preserve
 both endpoints, the interrupted/recovered control and all costs. No automatic
 training dose, seed or decoder extension follows.
 
-The independent [packed coefficient implementation](packed-integer-preparation-2026-09-27.md)
-is ready for its frozen loaded-artifact workload comparison now that the dialogue
-pair has released the model slot. Keep it as a draft until actual output/state/RNG
-and workload evidence are reviewed. It is an interim dense-access optimization;
-D5 selected access remains separate architectural work.
+The independent [packed coefficient comparison](packed-integer-comparison-2026-09-27.md)
+is complete. All eight pairs preserve their declared stable loaded behavior on
+the two retained width-256 artifacts, with lower observed peak child RSS in every
+pair and small, mixed timing changes. Independent review supports scoped
+protected delivery without another sweep. This is an interim dense-access
+storage improvement; D5 selected access, width-576 preservation and useful
+language remain separate responsibilities.
 
 The [width-576 native observation](native-dialogue576-observation-2026-09-27.md)
 has completed historical-parent conversion, packing, four-form common-input

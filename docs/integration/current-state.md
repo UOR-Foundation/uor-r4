@@ -35,9 +35,16 @@ the supported width-128/256 integer kernels. Four focused arithmetic checks and
 release compilation pass. Static inspection covers 30 emitted library ranges
 and 28 conversational-binary ranges with no forbidden opcode found; the ordinary
 CLI retains three missing conversational symbols in both baseline and candidate.
-This remains a draft pending actual loaded-output/state/RNG equality and workload
-cost after the single owned model slot is free. It leaves the running dialogue
-pair unchanged and establishes neither useful language nor D5 selected access.
+The [completed comparison](packed-integer-comparison-2026-09-27.md) now preserves
+all declared stable fields in eight paired workloads on the retained width-256
+Quaternion and Householder-pair artifacts: 4,096 paired replay positions, 138
+generation requests per version and four complete saved chat DTOs per version.
+All 16 processes exit successfully. Logical retained coefficient payload falls
+from 6,702,340 to 847,876 bytes; observed peak child RSS is 13.04–16.83% lower.
+Timing changes are small and mixed; the complete supervisor took 50.774 seconds.
+Independent review supports protected delivery without another sweep. This
+preserves the existing weak language behavior and establishes neither useful
+language, width-576 equivalence, D5 selected access nor energy savings.
 
 The [explicit width-576 integer development profile](native-dialogue576-preparation-2026-09-27.md)
 now has a [completed historical-parent observation](native-dialogue576-observation-2026-09-27.md).
