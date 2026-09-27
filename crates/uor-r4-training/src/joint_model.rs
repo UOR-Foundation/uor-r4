@@ -25,6 +25,7 @@ use crate::joint_admission::{AdmissionIndex, AdmissionPolicy, AdmissionWork};
 use crate::joint_quantization::{self, QuantizationSpec};
 use crate::{invalid, Result};
 
+use crate::geometric_read::{GeometricReadConfig, GeometricReadState};
 pub use uor_r4_integer::config::{ReadGeometry, LORENTZ_LOG_BETA, LORENTZ_OFFSET};
 
 pub const UNIFORM_MIXTURE: f64 = 1e-8;
@@ -102,6 +103,9 @@ pub struct JointModel {
     interface_audit: Option<Arc<Mutex<BTreeMap<String, InterfaceAudit>>>>,
     admission: AdmissionPolicy,
     admission_audit: Option<Arc<Mutex<Value>>>,
+    // Optional finite geometric read kernel. `None` preserves every existing
+    // parameter set, graph path and numerical contract exactly.
+    geometric_read: Option<GeometricReadState>,
 }
 
 /// Scales are calibrated once from the sealed parent and retained on resume.
@@ -286,7 +290,26 @@ struct CoreStep {
 
 impl JointModel {
     pub fn new(config: JointConfig, device: &Device) -> Result<Self> {
+        Self::new_with_geometric_read(config, None, device)
+    }
+
+    /// Construct a model with the optional finite geometric read kernel. `None`
+    /// is identical to [`Self::new`]; an enabled kernel draws its own tensors
+    /// from a domain-separated stream so base parameter values are unchanged.
+    pub fn new_with_geometric_read(
+        config: JointConfig,
+        kernel: Option<GeometricReadConfig>,
+        device: &Device,
+    ) -> Result<Self> {
         config.validate()?;
+        if let Some(kernel) = &kernel {
+            kernel.validate()?;
+            if config.read_geometry != ReadGeometry::Dot {
+                return Err(invalid(
+                    "geometric read kernel requires the Dot read geometry",
+                ));
+            }
+        }
         let mut rng = Initializer(config.seed);
         let mut variables = BTreeMap::new();
         // Stable lexical parameter order and one seed give identical initial
@@ -331,7 +354,16 @@ impl JointModel {
             }
             variables.insert(name, Var::from_vec(values, shape.as_slice(), device)?);
         }
-        Self::from_variables(config, variables, device)
+        if let Some(kernel) = &kernel {
+            variables.extend(crate::geometric_read::initialize_kernel_variables(
+                kernel, &config, device,
+            )?);
+        }
+        let mut model = Self::from_variables(config, variables, device)?;
+        model.geometric_read = kernel
+            .map(|kernel| GeometricReadState::new(kernel, device))
+            .transpose()?;
+        Ok(model)
     }
 
     /// Import only the retained R1d continuous dialogue cell. This does not
@@ -435,6 +467,7 @@ impl JointModel {
             interface_audit: None,
             admission: AdmissionPolicy::Full,
             admission_audit: None,
+            geometric_read: None,
         })
     }
 
@@ -443,6 +476,9 @@ impl JointModel {
     }
 
     pub fn set_admission_policy(&mut self, policy: AdmissionPolicy) -> Result<()> {
+        if self.geometric_read.is_some() && policy != AdmissionPolicy::Full {
+            return Err(invalid("geometric read kernel requires Full admission"));
+        }
         if self.prepared_parameters.is_some() {
             return Err(invalid("admission cannot change inside a prepared graph"));
         }
@@ -536,6 +572,11 @@ impl JointModel {
     /// The caller binds the sealed source checkpoint in its diagnostic report.
     pub fn precision_view(&self, mode: PrecisionMode) -> Result<Self> {
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "precision views are unavailable with the geometric read kernel",
+            ));
+        }
         if self.hard_only || self.prepared_parameters.is_some() || self.precision_mode.is_some() {
             return Err(invalid(
                 "precision views require an unprepared floating checkpoint, not a packed or diagnostic view",
@@ -663,6 +704,11 @@ impl JointModel {
 
     fn validate_rounding_parent(&self) -> Result<()> {
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "rounding is unavailable with the geometric read kernel",
+            ));
+        }
         if self.hard_only
             || self.prepared_parameters.is_some()
             || self.precision_mode.is_some()
@@ -709,6 +755,11 @@ impl JointModel {
 
     pub fn configure_quantization(&mut self, start_step: usize, ramp_steps: usize) -> Result<()> {
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "quantization is unavailable with the geometric read kernel",
+            ));
+        }
         if self.quantization.is_some()
             || self.hard_only
             || self.precision_mode.is_some()
@@ -787,6 +838,7 @@ impl JointModel {
         model.interface_audit = self.interface_audit.clone();
         model.admission = self.admission;
         model.admission_audit = self.admission_audit.clone();
+        model.geometric_read = self.geometric_read.clone();
         Ok(model)
     }
 
@@ -1353,6 +1405,23 @@ impl JointModel {
     /// operations and order; `Lorentz` is
     /// exp(read.lorentz_log_beta)*(read.lorentz_offset - arcosh(z)).
     fn read_scores(&self, query: &Tensor, keys: &Tensor, training: bool) -> Result<Tensor> {
+        if let Some(kernel) = &self.geometric_read {
+            if self.config.read_geometry != ReadGeometry::Dot {
+                return Err(invalid(
+                    "geometric read kernel requires the Dot read geometry",
+                ));
+            }
+            if self.admission != AdmissionPolicy::Full {
+                return Err(invalid("geometric read kernel requires Full admission"));
+            }
+            let weights = crate::geometric_read::KernelWeights {
+                weight1: self.weight(crate::geometric_read::RELATION_WEIGHT1, training)?,
+                bias1: self.weight(crate::geometric_read::RELATION_BIAS1, training)?,
+                weight2: self.weight(crate::geometric_read::RELATION_WEIGHT2, training)?,
+                bias2: self.weight(crate::geometric_read::RELATION_BIAS2, training)?,
+            };
+            return kernel.score(query, keys, &weights);
+        }
         match self.config.read_geometry {
             ReadGeometry::Dot => Ok(query
                 .unsqueeze(1)?
@@ -1690,6 +1759,10 @@ impl JointModel {
             numerical_contract: self.numerical_contract(),
             quantization: self.quantization.clone(),
             admission: self.admission,
+            geometric_read: self
+                .geometric_read
+                .as_ref()
+                .map(|state| state.config().clone()),
         };
         let mut weights = File::create_new(directory.join("model.safetensors"))?;
         weights.write_all(&bytes)?;
@@ -1705,7 +1778,22 @@ impl JointModel {
         let config: CheckpointConfig =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
         config.model.validate()?;
-        Self::load_checkpoint_parameters(directory, config, device)
+        Self::load_checkpoint_parameters(directory, config, device, KernelSelection::Checkpoint)
+    }
+
+    /// Load a checkpoint with an explicit target kernel. `Some(None)` disables
+    /// the kernel and rejects a checkpoint that already carries one; `Some(Some)`
+    /// admits a checkpoint without a kernel, initializing kernel parameters
+    /// fresh while every base parameter still loads from the parent.
+    pub(crate) fn load_with_geometric_read(
+        directory: &Path,
+        device: &Device,
+        target: Option<&GeometricReadConfig>,
+    ) -> Result<Self> {
+        let config: CheckpointConfig =
+            serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
+        config.model.validate()?;
+        Self::load_checkpoint_parameters(directory, config, device, KernelSelection::Target(target))
     }
 
     /// Reload a sealed checkpoint from an explicitly declared offline dialogue
@@ -1725,12 +1813,15 @@ impl JointModel {
         let config: CheckpointConfig =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
         crate::dialogue_artifact::validate_model_config(&config.model)?;
-        if config.quantization.is_some() || config.admission != AdmissionPolicy::Full {
+        if config.quantization.is_some()
+            || config.admission != AdmissionPolicy::Full
+            || config.geometric_read.is_some()
+        {
             return Err(invalid(
-                "offline dialogue checkpoint requires continuous Full admission",
+                "offline dialogue checkpoint requires continuous Full admission without a geometric read kernel",
             ));
         }
-        Self::load_checkpoint_parameters(directory, config, device)
+        Self::load_checkpoint_parameters(directory, config, device, KernelSelection::Checkpoint)
     }
 
     /// Shared hash, numerical-contract and complete named-tensor validation.
@@ -1739,7 +1830,28 @@ impl JointModel {
         directory: &Path,
         config: CheckpointConfig,
         device: &Device,
+        selection: KernelSelection<'_>,
     ) -> Result<Self> {
+        let checkpoint_kernel = config.geometric_read.clone();
+        let effective_kernel = match selection {
+            KernelSelection::Checkpoint => checkpoint_kernel.clone(),
+            KernelSelection::Target(target) => {
+                if let Some(checkpoint) = &checkpoint_kernel {
+                    if target != Some(checkpoint) {
+                        return Err(invalid("geometric read kernel differs from the checkpoint"));
+                    }
+                }
+                target.cloned()
+            }
+        };
+        if let Some(kernel) = &effective_kernel {
+            kernel.validate()?;
+            if config.model.read_geometry != ReadGeometry::Dot || config.quantization.is_some() {
+                return Err(invalid(
+                    "geometric read kernel requires continuous Dot geometry",
+                ));
+            }
+        }
         if config.quantization.is_some() {
             require_quantized_read(config.model.read_geometry)?;
         }
@@ -1748,10 +1860,16 @@ impl JointModel {
         } else {
             numerical_contract()
         };
-        let expected_contract = admission_contract(
-            read_geometry_contract(expected_contract, config.model.read_geometry),
-            config.admission,
+        let expected_contract =
+            read_geometry_contract(expected_contract, config.model.read_geometry);
+        // The saved contract describes what the checkpoint itself contains, so a
+        // fresh kernel admitted into a kernel-free parent is validated against
+        // the checkpoint kernel rather than the newly declared target.
+        let expected_contract = crate::geometric_read::with_geometric_read_contract(
+            expected_contract,
+            checkpoint_kernel.as_ref(),
         );
+        let expected_contract = admission_contract(expected_contract, config.admission);
         if config.schema != CHECKPOINT_SCHEMA || config.numerical_contract != expected_contract {
             return Err(invalid(
                 "joint checkpoint schema or numerical contract mismatch",
@@ -1762,7 +1880,8 @@ impl JointModel {
             return Err(invalid("joint checkpoint weights hash mismatch"));
         }
         let tensors = SafeTensors::deserialize(&bytes)?;
-        let shapes = config.model.shapes();
+        let shapes =
+            crate::geometric_read::parameter_shapes(&config.model, checkpoint_kernel.as_ref());
         let observed: BTreeSet<_> = tensors.names().into_iter().collect();
         let expected: BTreeSet<_> = shapes.keys().map(String::as_str).collect();
         if observed != expected {
@@ -1784,7 +1903,19 @@ impl JointModel {
             }
             variables.insert(name, Var::from_vec(values, shape.as_slice(), device)?);
         }
+        if checkpoint_kernel.is_none() {
+            if let Some(kernel) = &effective_kernel {
+                variables.extend(crate::geometric_read::initialize_kernel_variables(
+                    kernel,
+                    &config.model,
+                    device,
+                )?);
+            }
+        }
         let mut model = Self::from_variables(config.model, variables, device)?;
+        model.geometric_read = effective_kernel
+            .map(|kernel| GeometricReadState::new(kernel, device))
+            .transpose()?;
         if let Some(state) = &config.quantization {
             state.spec.validate(model.variables())?;
             if !valid_quantization_clock(
@@ -1831,9 +1962,25 @@ impl JointModel {
             }
         }
         admission_contract(
-            read_geometry_contract(contract, self.config.read_geometry),
+            crate::geometric_read::with_geometric_read_contract(
+                read_geometry_contract(contract, self.config.read_geometry),
+                self.geometric_read.as_ref().map(GeometricReadState::config),
+            ),
             self.admission,
         )
+    }
+
+    /// The bound kernel configuration, or `None` when the kernel is disabled.
+    pub fn geometric_read_config(&self) -> Option<&GeometricReadConfig> {
+        self.geometric_read.as_ref().map(GeometricReadState::config)
+    }
+
+    /// Integer hard-path usage counters, or JSON null when the kernel is off.
+    pub fn geometric_read_usage(&self) -> Result<Value> {
+        match &self.geometric_read {
+            Some(state) => state.usage_snapshot(),
+            None => Ok(Value::Null),
+        }
     }
 
     /// Packed parameter export for the shared quantized F32 evaluator. This is
@@ -1996,6 +2143,11 @@ impl JointModel {
             return Err(invalid("dialogue576 packed export requires Full admission"));
         }
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "packed export is unavailable with the geometric read kernel",
+            ));
+        }
         if self.prepared_parameters.is_some() || self.rounding_learning {
             return Err(invalid("materialize hard codes before export"));
         }
@@ -2148,6 +2300,14 @@ struct CheckpointConfig {
     quantization: Option<QuantizedTrainingState>,
     #[serde(default, skip_serializing_if = "admission_is_full")]
     admission: AdmissionPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    geometric_read: Option<GeometricReadConfig>,
+}
+
+/// Whether a load reproduces the checkpoint kernel or targets a declared one.
+enum KernelSelection<'a> {
+    Checkpoint,
+    Target(Option<&'a GeometricReadConfig>),
 }
 
 fn require_quantized_read(geometry: ReadGeometry) -> Result<()> {
@@ -2430,9 +2590,9 @@ fn transport_lanes_with_unit(
     Ok(result.reshape((batch, width))?)
 }
 
-struct Initializer(u64);
+pub(crate) struct Initializer(pub(crate) u64);
 impl Initializer {
-    fn symmetric(&mut self) -> f32 {
+    pub(crate) fn symmetric(&mut self) -> f32 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut value = self.0;
         value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
