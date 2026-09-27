@@ -111,6 +111,21 @@ Google retains CLI wiring ownership; this resolves its follow-up's
 [display-history reconstruction seam](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852795123)
 at the reusable library boundary, with adoption still pending.
 
+The separate `ChatTokenStream`/`uor-chat` path now reports failed terminal model
+writes instead of presenting a successful EOS, cap or cycle stop. Two synthetic
+library checks cover closure failures and successful history, probability and
+sampler preservation against direct stepping; one CLI completion-helper check
+and the release build also pass. The helper test does not spawn the CLI to test
+its exit status. Terminal errors now exit before success telemetry, while
+existing stream-construction errors remain visible and return to the prompt;
+exit status zero alone therefore does not establish that every command succeeded.
+The [source-bound validation and cost](../evidence/chat-stream-error-validation-2026-09-27.json)
+record 34.816 seconds of build/check work, including the initial 6.148-second
+test-only compile failure and its repair. No learned-model execution occurred.
+This improves runtime-versus-model diagnosis without adding rollback, recovery
+or a chat-quality result; Google's separate geometry/cache work remains outside
+this repair.
+
 The [retained R1d dialogue artifact](dialogue-artifact-replay-2026-09-27.md) now
 reloads through a strict offline continuous Full/Dot/Quaternion importer. All
 four focused checks pass; an initial malformed tokenizer fixture and its repair
@@ -265,6 +280,17 @@ remain. The merge changes integer execution, not the continuous transfer/model
 path measured in the Dot witness. Future integer measurements must bind this
 changed source separately.
 
+The [frontier geometric transfer synthesis](frontier-geometric-transfer-synthesis-2026-09-27.md)
+binds the continuous radial parameter transfer lineage (`step-15,672` parent,
+21 shared tensors, 1,678,466 scalars, zero moment pollution) with the zero-matmul
+serving model on Apple Silicon. Four focused checks in `cross_lab_lorentz_frontier.rs`
+pass, verifying empirical transfer startup NLLs (Dot reset 1.996717 nats vs Lorentz
+2.389537 and Affine 2.400457 nats disturbance), 6/6 connected gradient families,
+non-zero causal read mass across all 1,020 positions, bit-identical post-token0
+states, and 5.8450 nats causal NLL advantage. Static disassembly across all 24
+mandatory numerical serving symbols in `libuor_r4_integer.rlib` certifies zero
+hardware multipliers, zero dividers, and zero floats under D0-b. Delivery is tracked
+in PR #1417.
 
 Claude's [draft stack experiment, PR #1414](https://github.com/UOR-Foundation/uor-r4/pull/1414)
 initially supplied a reviewed six-pilot packet at `dc721f0a`: all 31 listed file identities
