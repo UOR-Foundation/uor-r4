@@ -305,6 +305,11 @@ impl StackModel {
         &self.sha256
     }
 
+    /// The sealed exp table (`round(2^31 exp(-i 2^exp_step_log2))`) and its step.
+    pub fn exp_table(&self) -> (&[u32], i32) {
+        (&self.exp_table, self.numerics.exp_step_log2)
+    }
+
     pub fn source(&self) -> &serde_json::Value {
         &self.header.source
     }

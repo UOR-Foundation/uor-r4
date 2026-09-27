@@ -22,11 +22,15 @@
 #      resume=ROOT/checkpoint in a new root)
 #   3. evaluate each trained model on DEV with the block protocol (tune, comparison and full means)
 #   4. write summary.txt: comparison-tail NLL per arm next to #1017's 1.574024, and greedy/sampled continuations
+#   5. unless INTEGER=0: export each trained model to its integer serving artifact (owner decision D10: 4-bit table
+#      weight maps, no floating point), score it with the same block protocol beside the float model, and sample
+#      from it with the integer sampler; summary.txt gains the integer comparison tail and the engine's tokens per
+#      second on this machine (one thread)
 #
 # Knobs: SEEDS ("1"), STEPS (7324), BATCH (16), THREADS (4), SEQUENTIAL (0), LR_TRANSFORMER (0.002) and
 # LR_GEOMETRIC (0.004), the lab pilot's choices on code (section 5 of the note), WARMUP (200), PATTERN (rrarra),
-# READ (lorentz), ROTATION (true), TRAIN_WEIGHTS (unset: proportional), EVAL_EVERY (250), FEATURES (cpu-accelerate
-# on macOS, none elsewhere).
+# READ (lorentz), ROTATION (true), TRAIN_WEIGHTS (unset: proportional), EVAL_EVERY (250), INTEGER (1), FEATURES
+# (cpu-accelerate on macOS, none elsewhere).
 #
 # Shared machine: by default both arms run at once with THREADS threads each (8 threads). Before launching, check
 # #973 for other labs' active fits and do not start beside one; SEQUENTIAL=1 runs the arms one after the other,
@@ -53,6 +57,7 @@ PATTERN=${PATTERN:-rrarra}
 READ=${READ:-lorentz}
 ROTATION=${ROTATION:-true}
 EVAL_EVERY=${EVAL_EVERY:-250}
+INTEGER=${INTEGER:-1}
 if [ -z "${FEATURES+x}" ]; then
   if [ "$(uname -s)" = Darwin ]; then FEATURES=cpu-accelerate; else FEATURES=; fi
 fi
@@ -102,4 +107,23 @@ for row in json.load(open(sys.argv[1]))["samples"]["rows"]:
   done
 done
 
-echo "done: */report.json, evaluate-*/evaluation.json, summary.txt and samples.txt are in $OUT"
+if [ "$INTEGER" = 1 ]; then
+  for seed in $SEEDS; do
+    for arm in transformer geometric; do
+      "$STACK" export model="$OUT/$arm-s$seed/model" out="$OUT/integer-$arm-s$seed"
+      "$STACK" lut-evaluate artifact="$OUT/integer-$arm-s$seed/model.lut" valid="$DEV" model="$OUT/$arm-s$seed/model" \
+        blocks=true tune_blocks=64 threads=1 out="$OUT/integer-evaluate-$arm-s$seed"
+      python3 -c 'import json,sys; e=json.load(open(sys.argv[1])); c=e["comparison"]; g=e["engine"]
+print(sys.argv[2], "integer comparison tail %.6f nats (float %.6f; #1017: 1.574024); top-1 agreement %.4f; %.0f tokens/s on one thread (%s)" % (c["integer"]["nll"], c["float"]["nll"], e["top1_agreement"], g["tokens_per_second"], g["backend"]))' \
+        "$OUT/integer-evaluate-$arm-s$seed/evaluation.json" "$arm-s$seed" | tee -a "$OUT/summary.txt"
+      "$STACK" lut-sample artifact="$OUT/integer-$arm-s$seed/model.lut" valid="$DEV" tokenizer="$TOKENIZER" \
+        out="$OUT/integer-samples-$arm-s$seed"
+      python3 -c 'import json,sys
+for row in json.load(open(sys.argv[1]))["rows"]:
+    print(sys.argv[2], "integer |", (row["prompt"] or "") + " ->", (row["sampled"] or "").replace("\n", " "))' \
+        "$OUT/integer-samples-$arm-s$seed/samples.json" "$arm-s$seed" | tee -a "$OUT/samples.txt"
+    done
+  done
+fi
+
+echo "done: */report.json, evaluate-*/evaluation.json, integer-*/, summary.txt and samples.txt are in $OUT"

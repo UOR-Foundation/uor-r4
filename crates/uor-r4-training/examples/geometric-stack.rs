@@ -21,7 +21,10 @@
 //! geometric-stack corpus registry=CARGO_REGISTRY_SRC_INDEX out=TEXT [max_file_bytes=200000]
 //! geometric-stack export model=ROOT/model out=NEW_REPORT_ROOT
 //! geometric-stack lut-evaluate artifact=ROOT/model.lut valid=VALID.u16 out=NEW_REPORT_ROOT \
-//!   [model=ROOT/model] [windows=64] [threads=1] [lens=LENS.u16]
+//!   [model=ROOT/model] [windows=64] [blocks=false] [tune_blocks=64] [threads=1] [lens=LENS.u16]
+//! geometric-stack lut-sample artifact=ROOT/model.lut out=NEW_REPORT_ROOT (valid=VALID.u16 | prompt=TEXT) \
+//!   [merges=MERGES.txt | tokenizer=TOKENIZER.json] [prompts=3] [prompt_tokens=64] [sample_tokens=128] \
+//!   [temperature=0.8] [top_k=40] [top_p=1] [seed=1] [threads=1]
 //! ```
 //!
 //! The shape options describe the transformer control (#1017's by default). A
@@ -55,7 +58,10 @@
 //! `train`'s evaluation (`windows=512` is the final evaluation's 131,072
 //! targets), with a fresh session per window, and reports its NLL beside the
 //! float model's on the same windows when `model=` is given, their top-1
-//! agreement and the engine's tokens per second.
+//! agreement and the engine's tokens per second; `blocks=true` uses
+//! `evaluate`'s consecutive blocks and tune/comparison split instead.
+//! `lut-sample` writes greedy and sampled continuations from the integer
+//! engine (the integer sampler of `uor_r4_lut::sampling`).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -328,6 +334,17 @@ impl Decoder {
         match self {
             Self::Lab(bpe) => bpe.decode(ids),
             Self::Retained(tokenizer) => tokenizer.decode(ids),
+        }
+    }
+
+    fn encode(&self, text: &str) -> Vec<u32> {
+        match self {
+            Self::Lab(bpe) => bpe
+                .encode(text.as_bytes())
+                .into_iter()
+                .map(u32::from)
+                .collect(),
+            Self::Retained(tokenizer) => tokenizer.encode(text),
         }
     }
 }
@@ -1131,6 +1148,49 @@ enum Engine {
     Llama(Box<uor_r4_lut::engine::Model>),
 }
 
+/// An integer decoding session of either engine.
+trait Stepper {
+    /// Feed one id; the next-token logits at exponent -16.
+    fn advance(&mut self, id: u32) -> Result<&[i32]>;
+}
+
+impl Stepper for uor_r4_lut::stack::StackSession<'_> {
+    fn advance(&mut self, id: u32) -> Result<&[i32]> {
+        self.step(id).map_err(lut)
+    }
+}
+
+impl Stepper for uor_r4_lut::engine::Session<'_> {
+    fn advance(&mut self, id: u32) -> Result<&[i32]> {
+        self.step(id).map_err(lut)
+    }
+}
+
+/// Feed `prompt`, then draw `new_tokens` ids with `sampler`.
+fn continue_prompt(
+    session: &mut impl Stepper,
+    prompt: &[u32],
+    new_tokens: usize,
+    sampler: &mut uor_r4_lut::sampling::Sampler,
+    exp: (&[u32], i32),
+) -> Result<Vec<u32>> {
+    let mut seen = prompt.to_vec();
+    let mut logits = Vec::new();
+    for &id in prompt {
+        logits = session.advance(id)?.to_vec();
+    }
+    let mut generated = Vec::with_capacity(new_tokens);
+    for step in 0..new_tokens {
+        let next = sampler.sample(&logits, &seen, exp.0, exp.1).map_err(lut)?;
+        generated.push(next);
+        seen.push(next);
+        if step + 1 < new_tokens {
+            logits = session.advance(next)?.to_vec();
+        }
+    }
+    Ok(generated)
+}
+
 impl Engine {
     fn load(bytes: Vec<u8>, threads: usize) -> Result<Self> {
         use uor_r4_lut::format::{schema_of, Artifact, StackArtifact, SCHEMA, STACK_SCHEMA};
@@ -1183,21 +1243,45 @@ impl Engine {
 
     /// Logits (exponent -16) after each id of one window, from a fresh session.
     fn window(&self, ids: &[u32], mut visit: impl FnMut(usize, &[i32])) -> Result<()> {
-        match self {
-            Self::Stack(model) => {
-                let mut session = model.session();
-                for (t, &id) in ids.iter().enumerate() {
-                    visit(t, session.step(id).map_err(lut)?);
-                }
+        fn run(
+            session: &mut impl Stepper,
+            ids: &[u32],
+            visit: &mut impl FnMut(usize, &[i32]),
+        ) -> Result<()> {
+            for (t, &id) in ids.iter().enumerate() {
+                visit(t, session.advance(id)?);
             }
-            Self::Llama(model) => {
-                let mut session = model.session();
-                for (t, &id) in ids.iter().enumerate() {
-                    visit(t, session.step(id).map_err(lut)?);
-                }
-            }
+            Ok(())
         }
-        Ok(())
+        match self {
+            Self::Stack(model) => run(&mut model.session(), ids, &mut visit),
+            Self::Llama(model) => run(&mut model.session(), ids, &mut visit),
+        }
+    }
+
+    /// A continuation of `prompt` from a fresh session.
+    fn generate(
+        &self,
+        prompt: &[u32],
+        new_tokens: usize,
+        sampler: &mut uor_r4_lut::sampling::Sampler,
+    ) -> Result<Vec<u32>> {
+        match self {
+            Self::Stack(model) => continue_prompt(
+                &mut model.session(),
+                prompt,
+                new_tokens,
+                sampler,
+                model.exp_table(),
+            ),
+            Self::Llama(model) => continue_prompt(
+                &mut model.session(),
+                prompt,
+                new_tokens,
+                sampler,
+                model.exp_table(),
+            ),
+        }
     }
 }
 
@@ -1214,13 +1298,23 @@ fn score_row(logits: impl Iterator<Item = f64> + Clone, target: usize) -> (f64, 
     (max + total.ln() - at, best)
 }
 
-/// Integer serving on evenly spaced development windows, beside the float
-/// model on the same windows when `model=` is given.
+/// Integer serving on development windows, beside the float model on the same
+/// windows when `model=` is given: evenly spaced windows (`train`'s rule), or
+/// with `blocks=true` the retained evaluator's consecutive blocks with its
+/// tune/comparison split.
 fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
     let args = Args::parse(
         arguments,
         &[
-            "artifact", "valid", "model", "windows", "threads", "lens", "out",
+            "artifact",
+            "valid",
+            "model",
+            "windows",
+            "blocks",
+            "tune_blocks",
+            "threads",
+            "lens",
+            "out",
         ],
     )?;
     let artifact_path = PathBuf::from(args.required("artifact")?);
@@ -1228,6 +1322,8 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
     let model_dir = args.optional("model").map(PathBuf::from);
     let lens_path = args.optional("lens").map(PathBuf::from);
     let windows: usize = args.number("windows", 64)?;
+    let blocks: bool = args.number("blocks", false)?;
+    let tune_blocks: usize = args.number("tune_blocks", 64)?;
     let threads: usize = args.number("threads", 1)?;
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
@@ -1248,15 +1344,23 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
                 return Err(invalid("the float model and the artifact differ in shape"));
             }
         }
-        if windows == 0 || valid.len() <= time + windows {
-            return Err(invalid("too few development tokens for the windows"));
-        }
-        let stride = (valid.len() - time - 1) / windows;
-        let (mut integer_nll, mut float_nll, mut bytes) = (0f64, 0f64, 0f64);
-        let (mut agree, mut targets, mut integer_seconds) = (0usize, 0usize, 0f64);
-        let mut per_window = Vec::with_capacity(windows);
-        for window in 0..windows {
-            let start = window * stride;
+        let starts: Vec<usize> = if blocks {
+            let count = (valid.len() - 1) / time;
+            if count <= tune_blocks {
+                return Err(invalid("fewer blocks than tune_blocks"));
+            }
+            (0..count).map(|block| block * time).collect()
+        } else {
+            if windows == 0 || valid.len() <= time + windows {
+                return Err(invalid("too few development tokens for the windows"));
+            }
+            let stride = (valid.len() - time - 1) / windows;
+            (0..windows).map(|window| window * stride).collect()
+        };
+        // Per window: integer NLL, float NLL, target bytes (sums over targets).
+        let mut sums: Vec<(f64, f64, f64)> = Vec::with_capacity(starts.len());
+        let (mut agree, mut integer_seconds) = (0usize, 0f64);
+        for &start in &starts {
             let ids = &valid[start..start + time];
             let next = &valid[start + 1..start + time + 1];
             let mut window_nll = 0f64;
@@ -1271,55 +1375,178 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
                 integer_top[t] = top;
             })?;
             integer_seconds += clock.elapsed().as_secs_f64();
-            integer_nll += window_nll;
-            let mut row = json!({"start": start, "integer_nll": window_nll / time as f64});
+            let mut window_float = 0f64;
             if let Some(model) = &float {
                 let logits = model.forward(ids, 1, time)?.to_vec2::<f32>()?;
-                let mut window_float = 0f64;
                 for (t, row) in logits.iter().enumerate() {
                     let (nll, top) = score_row(row.iter().map(|&v| f64::from(v)), next[t] as usize);
                     window_float += nll;
                     agree += usize::from(top == integer_top[t]);
                 }
-                float_nll += window_float;
-                row["float_nll"] = json!(window_float / time as f64);
             }
-            if let Some(lens) = &lens {
-                bytes += next
-                    .iter()
+            let bytes = lens.as_ref().map_or(0.0, |lens| {
+                next.iter()
                     .map(|&id| f64::from(lens[id as usize]))
-                    .sum::<f64>();
-            }
-            targets += time;
-            per_window.push(row);
+                    .sum::<f64>()
+            });
+            sums.push((window_nll, window_float, bytes));
         }
-        let bits = |nll: f64| lens.as_ref().map(|_| nll / std::f64::consts::LN_2 / bytes);
+        let summary = |range: std::ops::Range<usize>| -> Value {
+            let part = &sums[range];
+            let targets = (part.len() * time) as f64;
+            let (integer, float_sum, bytes) = part
+                .iter()
+                .fold((0.0, 0.0, 0.0), |a, s| (a.0 + s.0, a.1 + s.1, a.2 + s.2));
+            let bits = |nll: f64| lens.as_ref().map(|_| nll / std::f64::consts::LN_2 / bytes);
+            json!({
+                "windows": part.len(), "targets": part.len() * time,
+                "integer": {"nll": integer / targets, "bits_per_byte": bits(integer)},
+                "float": float.as_ref().map(|_| json!({"nll": float_sum / targets, "bits_per_byte": bits(float_sum)})),
+                "integer_minus_float_nll": float.as_ref().map(|_| (integer - float_sum) / targets),
+            })
+        };
+        let targets = starts.len() * time;
+        let mut record = json!({
+            "schema": "uor-r4.geometric-stack-lut-evaluation/2",
+            "protocol": if blocks {
+                "consecutive blocks of 256 inputs and 256 shifted targets (the retained evaluator's), one fresh integer session per block, position by position"
+            } else {
+                "evenly spaced windows of the development tokens (train's evaluation rule), one fresh integer session per window, position by position"
+            },
+            "artifact": identity(&artifact_path)?,
+            "artifact_sha256": engine.sha256(),
+            "float_model": model_dir.as_ref().map(|dir| identity(&dir.join("model.safetensors"))).transpose()?,
+            "valid": identity(&valid_path)?,
+            "windows": starts.len(),
+            "targets": targets,
+            "all": summary(0..starts.len()),
+            "engine": {
+                "seconds": integer_seconds,
+                "tokens_per_second": targets as f64 / integer_seconds,
+                "threads": threads,
+                "backend": engine.backend(),
+            },
+            "top1_agreement": float.as_ref().map(|_| agree as f64 / targets as f64),
+            "per_window": starts.iter().zip(&sums).map(|(start, s)| json!({
+                "start": start, "integer_nll": s.0 / time as f64,
+                "float_nll": float.as_ref().map(|_| s.1 / time as f64),
+            })).collect::<Vec<_>>(),
+        });
+        if blocks {
+            record["tune"] = summary(0..tune_blocks);
+            record["comparison"] = summary(tune_blocks..starts.len());
+        }
         fs::write(
             out.join("evaluation.json"),
+            serde_json::to_vec_pretty(&record)?,
+        )?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
+/// Continuations generated by an integer engine, greedy and sampled, from
+/// evenly spaced development prompts or from `prompt=` text.
+fn lut_sample_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &[
+            "artifact",
+            "valid",
+            "merges",
+            "tokenizer",
+            "prompt",
+            "out",
+            "prompts",
+            "prompt_tokens",
+            "sample_tokens",
+            "temperature",
+            "top_k",
+            "top_p",
+            "seed",
+            "threads",
+        ],
+    )?;
+    let artifact_path = PathBuf::from(args.required("artifact")?);
+    let valid_path = args.optional("valid").map(PathBuf::from);
+    let merges = args.optional("merges").map(PathBuf::from);
+    let tokenizer = args.optional("tokenizer").map(PathBuf::from);
+    let prompt_text = args.optional("prompt");
+    let out = PathBuf::from(args.required("out")?);
+    let prompts: usize = args.number("prompts", 3)?;
+    let prompt_tokens: usize = args.number("prompt_tokens", 64)?;
+    let sample_tokens: usize = args.number("sample_tokens", 128)?;
+    let temperature: f64 = args.number("temperature", 0.8)?;
+    let top_k: usize = args.number("top_k", 40)?;
+    let top_p: f64 = args.number("top_p", 1.0)?;
+    let seed: u64 = args.number("seed", 1)?;
+    let threads: usize = args.number("threads", 1)?;
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        use uor_r4_lut::sampling::{Sampler, SamplingSettings};
+        let engine = Engine::load(fs::read(&artifact_path)?, threads)?;
+        let decoder = Decoder::load(merges.as_deref(), tokenizer.as_deref())?;
+        let prompt_ids: Vec<(Option<usize>, Vec<u32>)> = match (&prompt_text, &valid_path) {
+            (Some(text), _) => {
+                let decoder = decoder
+                    .as_ref()
+                    .ok_or_else(|| invalid("a text prompt needs merges= or tokenizer="))?;
+                vec![(None, decoder.encode(text))]
+            }
+            (None, Some(path)) => {
+                let valid = read_tokens(path, engine.vocabulary())?;
+                if prompts == 0 || valid.len() < prompt_tokens + prompts {
+                    return Err(invalid("too few development tokens for the prompts"));
+                }
+                let stride = (valid.len() - prompt_tokens) / prompts;
+                (0..prompts)
+                    .map(|index| {
+                        let start = index * stride;
+                        (Some(start), valid[start..start + prompt_tokens].to_vec())
+                    })
+                    .collect()
+            }
+            (None, None) => return Err(invalid("give prompt= text or valid= prompts")),
+        };
+        let greedy_settings = SamplingSettings::default();
+        let sampled_settings =
+            SamplingSettings::from_decimal(temperature, top_k, top_p, 0.0).map_err(lut)?;
+        let text = |ids: &[u32]| decoder.as_ref().map(|decoder| decoder.decode(ids));
+        let (mut rows, mut generated, mut seconds) = (Vec::new(), 0usize, 0f64);
+        for (index, (start, prompt)) in prompt_ids.iter().enumerate() {
+            if prompt.is_empty() || prompt.len() + sample_tokens > engine.context() {
+                return Err(invalid("the prompt and continuation exceed the context"));
+            }
+            let clock = Instant::now();
+            let greedy = engine.generate(
+                prompt,
+                sample_tokens,
+                &mut Sampler::new(greedy_settings, seed),
+            )?;
+            let sampled = engine.generate(
+                prompt,
+                sample_tokens,
+                &mut Sampler::new(sampled_settings, seed.wrapping_add(index as u64)),
+            )?;
+            seconds += clock.elapsed().as_secs_f64();
+            generated += 2 * (prompt.len() + sample_tokens);
+            rows.push(json!({
+                "prompt_start": start, "prompt": text(prompt), "prompt_ids": prompt,
+                "greedy": text(&greedy), "sampled": text(&sampled),
+                "greedy_ids": greedy, "sampled_ids": sampled,
+            }));
+        }
+        fs::write(
+            out.join("samples.json"),
             serde_json::to_vec_pretty(&json!({
-                "schema": "uor-r4.geometric-stack-lut-evaluation/1",
-                "protocol": "evenly spaced windows of the development tokens (train's evaluation rule), one fresh integer session per window, position by position",
+                "schema": "uor-r4.geometric-stack-lut-samples/1",
                 "artifact": identity(&artifact_path)?,
                 "artifact_sha256": engine.sha256(),
-                "float_model": model_dir.as_ref().map(|dir| identity(&dir.join("model.safetensors"))).transpose()?,
-                "valid": identity(&valid_path)?,
-                "windows": windows,
-                "targets": targets,
-                "integer": {
-                    "nll": integer_nll / targets as f64,
-                    "bits_per_byte": bits(integer_nll),
-                    "seconds": integer_seconds,
-                    "tokens_per_second": targets as f64 / integer_seconds,
-                    "threads": threads,
-                    "backend": engine.backend(),
-                },
-                "float": float.as_ref().map(|_| json!({
-                    "nll": float_nll / targets as f64,
-                    "bits_per_byte": bits(float_nll),
-                })),
-                "integer_minus_float_nll": float.as_ref().map(|_| (integer_nll - float_nll) / targets as f64),
-                "top1_agreement": float.as_ref().map(|_| agree as f64 / targets as f64),
-                "per_window": per_window,
+                "settings": {"temperature": temperature, "top_k": top_k, "top_p": top_p, "seed": seed},
+                "engine": {"positions": generated, "seconds": seconds,
+                    "positions_per_second": generated as f64 / seconds,
+                    "threads": threads, "backend": engine.backend()},
+                "rows": rows,
             }))?,
         )?;
         Ok(())
@@ -1343,7 +1570,7 @@ fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let Some((mode, rest)) = arguments.split_first() else {
         return Err(invalid(
-            "usage: geometric-stack train|sample|evaluate|encode|corpus|export|lut-evaluate key=value ...",
+            "usage: geometric-stack train|sample|evaluate|encode|corpus|export|lut-evaluate|lut-sample key=value ...",
         ));
     };
     match mode.as_str() {
@@ -1396,6 +1623,7 @@ fn main() -> Result<()> {
         "corpus" => corpus_mode(rest),
         "export" => export_mode(rest),
         "lut-evaluate" => lut_evaluate_mode(rest),
+        "lut-sample" => lut_sample_mode(rest),
         other => Err(invalid(format!("unknown mode {other}"))),
     }
 }
