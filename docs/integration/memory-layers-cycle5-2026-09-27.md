@@ -79,16 +79,18 @@ The dense per-token work would then be the reads and the remaining MLPs, and the
 
 **Base.** The best reads-only configuration of cycle 4, chosen by the reads-only pair's final result before this experiment starts: Dot reads if they are within 0.03 nats of Lorentz reads, otherwise the better score.
 - **Chosen: Lorentz reads.** At seed 1, Lorentz scored 2.5531 and Dot 2.6291, 0.076 apart ([cycle 4 §7](geometric-stack-cycle4-2026-09-27.md#7-ablations)).
-- The base arm is that cycle-4 Lorentz run itself, which was not repeated. It ran alone with four threads, and the memory arms run two at a time with two threads each.
-  - Without a memory, this cycle's build reproduced the cycle-4 build's model hash over eight updates.
-  - Thread count changes only floating-point summation order.
+- **Amended before any arm ran** (2026-09-27, 17:40 UTC). A container restart rolled the lab sandbox back to its 08:24 UTC state and moved it to a different CPU: a Cascade Lake Xeon at 2.8 GHz, where the earlier runs had a Xeon at 2.1 GHz with AVX512-VBMI.
+  - The matrix library chooses its blocking from the host's caches, so the same code no longer reproduces the earlier model hashes. The same configuration without a memory now gives a different 3-update hash.
+  - The base is therefore **re-run** beside the memory arms, with the same executable on the same host, so all five arms differ only in the memory.
+  - The cycle-4 Lorentz run (2.5531) stays as a reference. It ran alone with four threads on the earlier host.
+  - This amendment changes no arm, setting or decision rule. The rollback also lost this branch's commits; they were rebuilt by replaying this session's recorded edits, and the rebuilt diff matches the recorded one line for line.
 - Its MLP is 764 wide, and its settings are the ablations':
 - learning rate 4e-3;
 - 1,000 updates (4,096,000 target visits) on the repository code split;
 - seed 1;
 - the 512-window final evaluation (131,072 targets).
 
-**Arms.** The base, and the base with a memory in place of layer 3's MLP (4 heads, `k = 32`), in each of the four index geometries of §1. `c5/pipeline2.sh` in the lab sandbox runs them in two pairs, learned Dot with learned Lorentz and then H4 with E8, after the cycle-4 main comparison.
+**Arms.** The base, and the base with a memory in place of layer 3's MLP (4 heads, `k = 32`), in each of the four index geometries of §1. The lab sandbox runs them two at a time with two threads each, after the cycle-4 main comparison: the base with learned Dot, learned Lorentz with H4, then E8.
 
 **Decisions, fixed before any arm runs.**
 1. **Does sparse memory help?** The learned Dot memory ≥ 0.02 nats better than the base → yes at this scale. Otherwise memories are recorded as not helping at this budget, and the index comparison is still read as relative evidence.
@@ -96,8 +98,8 @@ The dense per-token work would then be the reads and the remaining MLPs, and the
 3. **Fixed codes against learned keys.** If a fixed codebook is within 0.02 nats of the learned Dot index, fixed geometric addressing matches learned addressing at this budget. That result answers D10's open question 2 at this scope.
 
 **Cost (*Derived*).**
-- Four memory runs, two at a time with two threads each, at about 85 minutes per arm.
-- About three hours of the sandbox, after the main comparison.
+- Five runs, two at a time with two threads each, at about 85 minutes per arm.
+- About four and a quarter hours of the sandbox, after the main comparison.
 - Storage: each memory model is 103 MB (25.6M fp32 parameters), and its checkpoint is 3 times that.
 
 ## 5. What would change the plan
