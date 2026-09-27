@@ -1402,6 +1402,36 @@ fn fill_packed_low_bit_products(input: &[u8], out: &mut [[i64; 16]]) {
     }
 }
 
+/// Four adjacent wide rows share each four-coordinate product-table group.
+/// Instantiated only at 576/1152, after callers validate products and packed
+/// ranges. Low nibble is the earlier coefficient; no decoded row is built.
+/// With signed4 codes in [-7,7] and i32 inputs, even the full 1152-term
+/// absolute sum is <=1152*7*2^31<2^44. Regrouping cannot overflow i64 and
+/// introduces no rounding; checked row scaling remains outside this kernel.
+#[inline(always)]
+fn low_bit_dot_4_contiguous_wide<const WIDTH: usize>(
+    products: &[[i64; 16]; WIDTH],
+    weights: &[u8],
+) -> [i64; 4] {
+    let mut a = [0i64; 4];
+    let mut b = [0i64; 4];
+    for i in (0..(WIDTH >> 1)).step_by(2) {
+        let p0 = &products[i << 1];
+        let p1 = &products[(i << 1) + 1];
+        let p2 = &products[(i << 1) + 2];
+        let p3 = &products[(i << 1) + 3];
+        let mut offset = i;
+        for row in 0..4 {
+            let w0 = weights[offset];
+            let w1 = weights[offset + 1];
+            a[row] += p0[usize::from(w0 & 15)] + p1[usize::from(w0 >> 4)];
+            b[row] += p2[usize::from(w1 & 15)] + p3[usize::from(w1 >> 4)];
+            offset += WIDTH >> 1;
+        }
+    }
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]]
+}
+
 /// Build each input coordinate's signed4 multiples once for reuse across rows.
 /// Slots use the coefficient's low nibble: 0..7 and -7..-1; reserved -8 is
 /// unreachable after import validation and its slot is zero. i64 intermediates
@@ -2021,10 +2051,9 @@ impl IntegerModel {
     }
 
     /// Project normalized hidden state to vocabulary logits using pure signed-4
-    /// shift-and-add dot products over embedding.weight.
-    /// Project normalized hidden state to vocabulary logits using pure signed-4
     /// shift-and-add dot products over embedding.weight with precomputed products.
-    /// Row stride uses exact power-of-two shift (`<< 8` for width 256).
+    /// Power-of-two widths use shifted row addresses; width576 advances a
+    /// monotonic coefficient offset across four-row blocks and scalar tails.
     /// Strictly 0 hardware multipliers, 0 floating point.
     #[inline(never)]
     pub fn project_vocab_with_products_into(
@@ -2109,12 +2138,28 @@ impl IntegerModel {
                 logits[row_idx] = quantize(scaled_val + bias, WORK_BITS, 8)?;
             }
         } else if width == 576 {
-            for (row_idx, &bias) in output_bias.iter().enumerate().take(vocab_size) {
-                let start = (row_idx << 9) + (row_idx << 6);
+            let products: &[[i64; 16]; 576] = products[..576]
+                .try_into()
+                .map_err(|_| invalid("products width must be 576"))?;
+            let rows = output_bias.len().min(vocab_size);
+            let blocked_rows = rows & !3;
+            let mut start = 0;
+            for first in (0..blocked_rows).step_by(4) {
+                let chunk = embedding.codes.packed_range(start, 576 << 2)?;
+                let dots = low_bit_dot_4_contiguous_wide(products, chunk);
+                for (offset, dot) in dots.into_iter().enumerate() {
+                    let row = first + offset;
+                    let value = scaled(i128::from(dot), output_shifts[row])?;
+                    logits[row] = quantize(value + output_bias[row], WORK_BITS, 8)?;
+                }
+                start += 576 << 2;
+            }
+            for row_idx in blocked_rows..rows {
                 let row = embedding.codes.packed_range(start, 576)?;
-                let dot = low_bit_dot(&products[..576], row);
+                let dot = low_bit_dot(products, row);
                 let scaled_val = scaled(i128::from(dot), output_shifts[row_idx])?;
-                logits[row_idx] = quantize(scaled_val + bias, WORK_BITS, 8)?;
+                logits[row_idx] = quantize(scaled_val + output_bias[row_idx], WORK_BITS, 8)?;
+                start += 576;
             }
         } else {
             return Err(invalid("unsupported width for project_vocab"));
@@ -2131,7 +2176,7 @@ impl IntegerModel {
 
     /// Project normalized hidden state to vocabulary logits using pure signed-4
     /// shift-and-add dot products over embedding.weight.
-    /// Row stride uses exact power-of-two shift (`<< 8` for width 256).
+    /// Builds signed4 product tables, then uses the admitted-width dispatch.
     /// Strictly 0 hardware multipliers, 0 floating point.
     #[inline(never)]
     pub fn project_vocab(&self, hidden: &[i32]) -> Result<Vec<i32>> {
@@ -2319,22 +2364,48 @@ impl IntegerModel {
                 }
                 Ok(())
             }
-            576 | 1152 => {
-                // Both non-power-of-two strides use a monotonic address, so
-                // row indexing does not request a variable hardware product.
-                let mut start = 0;
-                for (r, &exponent) in p.spec.row_exponents.iter().enumerate() {
-                    let row = p.codes.packed_range(start, input_len)?;
-                    out[r] = scaled(
-                        i128::from(low_bit_dot(&products[..input_len], row)),
-                        WORK_BITS + input_exponent + i32::from(exponent),
-                    )?;
-                    start += input_len;
-                }
-                Ok(())
-            }
+            576 => self.matrix_work_wide_into::<576>(products, p, input_exponent, out),
+            1152 => self.matrix_work_wide_into::<1152>(products, p, input_exponent, out),
             other => Err(invalid(format!("unsupported matrix input width {other}"))),
         }
+    }
+
+    /// Only called by the shape/bit-width/output-checked dispatch above.
+    fn matrix_work_wide_into<const WIDTH: usize>(
+        &self,
+        products: &[[i64; 16]],
+        p: &Parameter,
+        input_exponent: i32,
+        out: &mut [i128],
+    ) -> Result<()> {
+        let products: &[[i64; 16]; WIDTH] = products[..WIDTH]
+            .try_into()
+            .map_err(|_| invalid("wide products width mismatch"))?;
+        let rows = p.spec.row_exponents.len();
+        let blocked_rows = rows & !3;
+        // Monotonic addresses avoid a variable product for either wide stride.
+        let mut start = 0;
+        for first in (0..blocked_rows).step_by(4) {
+            let chunk = p.codes.packed_range(start, WIDTH << 2)?;
+            let dots = low_bit_dot_4_contiguous_wide(products, chunk);
+            for (offset, dot) in dots.into_iter().enumerate() {
+                let row = first + offset;
+                out[row] = scaled(
+                    i128::from(dot),
+                    WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[row]),
+                )?;
+            }
+            start += WIDTH << 2;
+        }
+        for (row, out_row) in out.iter_mut().enumerate().take(rows).skip(blocked_rows) {
+            let weights = p.codes.packed_range(start, WIDTH)?;
+            *out_row = scaled(
+                i128::from(low_bit_dot(products, weights)),
+                WORK_BITS + input_exponent + i32::from(p.spec.row_exponents[row]),
+            )?;
+            start += WIDTH;
+        }
+        Ok(())
     }
 
     fn matrix_work_direct(
@@ -4156,54 +4227,79 @@ mod tests {
     fn packed_signed4_matrix_dispatch_rows_scales_and_embedding() -> Result<()> {
         let mut model = IntegerModel::synthetic_for_test();
         for width in [128, 256, 512, 576, 1152] {
-            // Mixed signs, zero, and non-block-aligned row counts exercise all
-            // dispatches, including the tail after a blocked group and the
-            // non-power-of-two wide rows.
-            let rows = 9;
-            let input: Vec<i32> = (0..width)
-                .map(|i| [i32::MIN, -32767, -1, 0, 1, 32767, i32::MAX][i % 7])
-                .collect();
-            let products = low_bit_products(&input);
-            let decoded: Vec<i16> = (0..rows * width)
-                .map(|i| ((i * 11 + 3) % 15) as i16 - 7)
-                .collect();
-            let parameter = Parameter {
-                codes: CoefficientCodes::from_decoded(decoded.clone(), 4)?,
-                spec: ParameterQuantization {
-                    bits: 4,
-                    shape: vec![rows, width],
-                    row_exponents: (0..rows).map(|r| r as i16 - 5).collect(),
-                },
+            // Wide rows exercise fewer than one block, complete blocks and
+            // every tail length. Existing widths retain their nine-row case.
+            let row_counts: &[usize] = if width >= 576 {
+                &[1, 2, 3, 4, 5, 6, 7, 9]
+            } else {
+                &[9]
             };
-            let mut sums = vec![i128::MIN; rows];
-            model.matrix_work_direct_into(&products, &parameter, width, -10, &mut sums)?;
-            let biases: Vec<i128> = (0..rows).map(|i| (i as i128 - 4) << 30).collect();
-            let mut affine = vec![0; rows];
-            model.affine_direct_into(&products, &parameter, &biases, width, 10, &mut affine)?;
-            for row in 0..rows {
-                let dot: i64 = input
-                    .iter()
-                    .zip(&decoded[row * width..(row + 1) * width])
-                    .map(|(&x, &w)| i64::from(x) * i64::from(w))
-                    .sum();
-                let expected = scaled(
-                    i128::from(dot),
-                    30 + i32::from(parameter.spec.row_exponents[row]),
-                )?;
-                assert_eq!(sums[row], expected);
-                assert_eq!(affine[row], quantize(expected + biases[row], WORK_BITS, 8)?);
+            for &rows in row_counts {
+                let input: Vec<i32> = (0..width)
+                    .map(|i| [i32::MIN, -32767, -1, 0, 1, 32767, i32::MAX][i % 7])
+                    .collect();
+                let products = low_bit_products(&input);
+                let decoded: Vec<i16> = (0..rows * width)
+                    .map(|i| ((i * 11 + 3) % 15) as i16 - 7)
+                    .collect();
+                let parameter = Parameter {
+                    codes: CoefficientCodes::from_decoded(decoded.clone(), 4)?,
+                    spec: ParameterQuantization {
+                        bits: 4,
+                        shape: vec![rows, width],
+                        row_exponents: (0..rows).map(|r| r as i16 - 5).collect(),
+                    },
+                };
+                let mut sums = vec![i128::MIN; rows + 1];
+                model.matrix_work_direct_into(&products, &parameter, width, -10, &mut sums)?;
+                let biases: Vec<i128> = (0..rows).map(|i| (i as i128 - 4) << 30).collect();
+                let mut affine = vec![i32::MIN; rows + 1];
+                model.affine_direct_into(&products, &parameter, &biases, width, 10, &mut affine)?;
+                for row in 0..rows {
+                    let dot: i64 = input
+                        .iter()
+                        .zip(&decoded[row * width..(row + 1) * width])
+                        .map(|(&x, &w)| i64::from(x) * i64::from(w))
+                        .sum();
+                    let expected = scaled(
+                        i128::from(dot),
+                        30 + i32::from(parameter.spec.row_exponents[row]),
+                    )?;
+                    assert_eq!(sums[row], expected);
+                    assert_eq!(affine[row], quantize(expected + biases[row], WORK_BITS, 8)?);
+                }
+                assert_eq!(sums[rows], i128::MIN);
+                assert_eq!(affine[rows], i32::MIN);
+                let mut untouched = vec![123i128; rows];
+                assert!(model
+                    .matrix_work_direct_into(
+                        &products[..width - 1],
+                        &parameter,
+                        width,
+                        -10,
+                        &mut untouched
+                    )
+                    .is_err());
+                assert_eq!(untouched, vec![123; rows]);
+                assert!(model
+                    .matrix_work_direct_into(
+                        &products,
+                        &parameter,
+                        width,
+                        -10,
+                        &mut untouched[..rows - 1],
+                    )
+                    .is_err());
+                assert_eq!(untouched, vec![123; rows]);
+                // A truncated final packed row must return a range error even
+                // when complete four-row groups precede it.
+                let mut truncated = parameter.clone();
+                truncated.codes =
+                    CoefficientCodes::from_decoded(decoded[..decoded.len() - 2].to_vec(), 4)?;
+                assert!(model
+                    .matrix_work_direct_into(&products, &truncated, width, -10, &mut untouched)
+                    .is_err());
             }
-            let mut untouched = vec![123i128; rows];
-            assert!(model
-                .matrix_work_direct_into(
-                    &products[..width - 1],
-                    &parameter,
-                    width,
-                    -10,
-                    &mut untouched
-                )
-                .is_err());
-            assert_eq!(untouched, vec![123; rows]);
         }
         for width in [128, 256, 576] {
             let decoded: Vec<i16> = (0..4096 * width)
@@ -4249,6 +4345,25 @@ mod tests {
                         8
                     )?
                 );
+            }
+            if width == 576 {
+                // The admitted vocabulary has 4096 rows. A shortened private
+                // fixture also checks its scalar tail without a new profile.
+                model.config.vocab_size = 4095;
+                assert_eq!(
+                    model.project_vocab_with_products(&products)?,
+                    actual[..4095]
+                );
+                model.config.vocab_size = 4096;
+                let mut untouched = vec![123; 4096];
+                assert!(model
+                    .project_vocab_with_products_into(&products[..575], &mut untouched)
+                    .is_err());
+                assert_eq!(untouched, vec![123; 4096]);
+                assert!(model
+                    .project_vocab_with_products_into(&products, &mut untouched[..4095])
+                    .is_err());
+                assert_eq!(untouched, vec![123; 4096]);
             }
             let mut from_packed = vec![[0; 16]; width];
             fill_packed_low_bit_products(
