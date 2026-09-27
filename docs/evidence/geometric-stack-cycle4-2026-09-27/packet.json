@@ -678,8 +678,8 @@
  "files": [
   {
    "path": "README.md",
-   "bytes": 5696,
-   "sha256": "6836e67a8c43df1d34044cb82b30be48779010b4d3f85593110999821ee054f6"
+   "bytes": 6024,
+   "sha256": "d25a43ee5099903bb6520d397d2fb0e753c20eb9fac7b42c321316aed9b7fa3f"
   },
   {
    "path": "ablation-readsonly/dot_s1/attempt.json",
@@ -862,6 +862,21 @@
    "sha256": "5baa20745d6004db506bc663cf22f808d5f04fb361557ddcce52e6217fa5258f"
   },
   {
+   "path": "integer/ablation-dot/reference/attempt.json",
+   "bytes": 990,
+   "sha256": "458592f6ab9622d05c3e59066e3d635926bef01c99ea40472da04e1effdb51ee"
+  },
+  {
+   "path": "integer/ablation-dot/reference/evaluation.json",
+   "bytes": 82075,
+   "sha256": "a5373c95d3d8b40fc4ec5aa48f01407dcd459571be9c34ce65661a93642182fd"
+  },
+  {
+   "path": "integer/ablation-dot/reference/manifest.json",
+   "bytes": 514,
+   "sha256": "0a6f317324b2dec7082991ab5adeb556a2d2984b8f03e4820e9473012f67c12a"
+  },
+  {
    "path": "integer/ablation-dot/samples/attempt.json",
    "bytes": 944,
    "sha256": "1abeb52bb522426400f2e2eeb7cfd3e67d056f559f3b43b200d11840de03d904"
@@ -920,6 +935,21 @@
    "path": "integer/ablation-norot/export/manifest.json",
    "bytes": 652,
    "sha256": "baa81b0409c58728347c689bc7774b7a31fc37ec1977d82be3ddb9a24199ec6f"
+  },
+  {
+   "path": "integer/ablation-norot/reference/attempt.json",
+   "bytes": 996,
+   "sha256": "ee72a8842432352bf2707e53e510821b5ceb7f40c27ae752115da314deedac70"
+  },
+  {
+   "path": "integer/ablation-norot/reference/evaluation.json",
+   "bytes": 82037,
+   "sha256": "a400e21fbc88d8cf7dfa185fd602d21fb1c92a11fc88c3176443c23e0e8502ed"
+  },
+  {
+   "path": "integer/ablation-norot/reference/manifest.json",
+   "bytes": 516,
+   "sha256": "5de7ed6c666c8122cb330b0f4a1a2bd9b1629b432a93e4ab280929c5dd0a448b"
   },
   {
    "path": "integer/ablation-norot/samples/attempt.json",
@@ -982,6 +1012,21 @@
    "sha256": "dc6e0fae97dfa49986da05ae5a74a7a9314490f87491110579d39f41c7e2de4e"
   },
   {
+   "path": "integer/ablation-readsonly/reference/attempt.json",
+   "bytes": 1008,
+   "sha256": "4c24cd90c79824e3a53887fcb5343f4e5874b70299dbd28122163dccd92bce92"
+  },
+  {
+   "path": "integer/ablation-readsonly/reference/evaluation.json",
+   "bytes": 82119,
+   "sha256": "ee8f089afc53345765b210b9b9436cdc3c4f3d222d9920082e977a3a1dc82a2e"
+  },
+  {
+   "path": "integer/ablation-readsonly/reference/manifest.json",
+   "bytes": 521,
+   "sha256": "e5b596477897431975dfa7af23e9845312c911ea017cca0fb60c885ab879e454"
+  },
+  {
    "path": "integer/ablation-readsonly/samples/attempt.json",
    "bytes": 956,
    "sha256": "7b1655ac00209226ee72cc6454c656b22264e1bcc768aad04bfb609f67456c05"
@@ -1040,6 +1085,21 @@
    "path": "integer/pilot-geometric_lr0.004/export/manifest.json",
    "bytes": 661,
    "sha256": "50191c2cdcb38d8daaacd6c52cb10f57037d68a1a41e3438c6919753f78cfd5f"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/reference/attempt.json",
+   "bytes": 1023,
+   "sha256": "bb96123d50bae3f6519c3e16b62def556169212f78d7a722706de0f1eb0712a1"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/reference/evaluation.json",
+   "bytes": 82099,
+   "sha256": "9cb01432c3fdebdc059db4d7e5a9a22d89abe0a68dc6f7c6fd6f4acae40bde89"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/reference/manifest.json",
+   "bytes": 526,
+   "sha256": "3ff08ab94a7a712a75edce6d6c7ab04fe30218c5184f5e775baf21ed1a5303fc"
   },
   {
    "path": "integer/pilot-geometric_lr0.004/samples/attempt.json",
@@ -1102,6 +1162,21 @@
    "sha256": "7bea2a0d65702fed56ee98884887b28129954c8931933363d06d2862dc2c25bd"
   },
   {
+   "path": "integer/pilot-transformer_lr0.002/reference/attempt.json",
+   "bytes": 1029,
+   "sha256": "d164182a15cb503b603cf2c2113bce6456f323fe5ac900245a62159d73cdff16"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/reference/evaluation.json",
+   "bytes": 82086,
+   "sha256": "f5d9da1aca051596ac4f53693387d9315e6dfbc7dc088d216b23cb2892969467"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/reference/manifest.json",
+   "bytes": 528,
+   "sha256": "a3831ecf95466a6e9df706ae7e77d31bbc561a1318685951ec31b2e51488ab8a"
+  },
+  {
    "path": "integer/pilot-transformer_lr0.002/samples/attempt.json",
    "bytes": 970,
    "sha256": "dd5dc46441827b398d6bf7d792c2071ce1422338fee5a6e17d58f90e7216368d"
@@ -1133,8 +1208,8 @@
   },
   {
    "path": "integer/run.log",
-   "bytes": 703,
-   "sha256": "2800946d32f7e1f68d9d86b944fb25c5b78fc399427026752f573af6423afd94"
+   "bytes": 875,
+   "sha256": "a32b4acb5d3fa3e28e10adea61815ee7b62367d3b5b5972f06ce0835c0bda0f9"
   },
   {
    "path": "pilot/chain.log",
@@ -1301,7 +1376,8 @@
   "dca1b790": "pilot runs",
   "b87acd63": "ablation runs; relative to dca1b790 only the example's sample decoding, evaluate mode and early-stop checkpoint retention changed, not the model, optimizer or training loop",
   "2a681bb7": "integer serving: export and lut-evaluate of the pilot pair and seed-1 ablations",
-  "cb60c8bd": "integer serving: engine step timing on 64 windows, apart from the f64 scoring loop"
+  "cb60c8bd": "integer serving: engine step timing on 64 windows, apart from the f64 scoring loop",
+  "feeef7e4": "integer serving: the grid-reference split of the integer gap into weight rounding and integer arithmetic"
  },
  "integer": [
   {
@@ -1327,6 +1403,13 @@
     "path": "integer/pilot-geometric_lr0.004/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "d02c445df07dca2a83a546a6a8b66aa7914e606419e642d6e8ede738fe350ecf"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.6218385674520417,
+    "weight_rounding_nll": 0.012109488450660066,
+    "integer_arithmetic_nll": -2.592736607631707e-07,
+    "path": "integer/pilot-geometric_lr0.004/reference/evaluation.json"
    }
   },
   {
@@ -1352,6 +1435,13 @@
     "path": "integer/pilot-transformer_lr0.002/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "900d6b533ea94448876c04207d0e1f9882e4890637e5ebb791ae4f767c696351"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.775584600360291,
+    "weight_rounding_nll": 0.007543111685598625,
+    "integer_arithmetic_nll": 0.0001518764799350869,
+    "path": "integer/pilot-transformer_lr0.002/reference/evaluation.json"
    }
   },
   {
@@ -1377,6 +1467,13 @@
     "path": "integer/ablation-dot/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "da005784d831a8ac7aa636ff15e04aed6bd08f3bdcc80416c728dc1a7cc4edfd"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.5996912657288,
+    "weight_rounding_nll": 0.010810376410568256,
+    "integer_arithmetic_nll": -1.4409703399387297e-06,
+    "path": "integer/ablation-dot/reference/evaluation.json"
    }
   },
   {
@@ -1402,6 +1499,13 @@
     "path": "integer/ablation-norot/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "099290c121aeed88304b97da25dfe9f8a6586d5231ef355f2e6d1d4f951addff"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.6802054774485726,
+    "weight_rounding_nll": 0.011372208688051,
+    "integer_arithmetic_nll": -1.6954415391623456e-06,
+    "path": "integer/ablation-norot/reference/evaluation.json"
    }
   },
   {
@@ -1427,6 +1531,13 @@
     "path": "integer/ablation-readsonly/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "adb03ffe543c32861254cbc1f8b8c26277e059167105a538c33abe1c660b6160"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.5658508634417267,
+    "weight_rounding_nll": 0.012755746952878066,
+    "integer_arithmetic_nll": 3.9356370384879824e-07,
+    "path": "integer/ablation-readsonly/reference/evaluation.json"
    }
   }
  ]

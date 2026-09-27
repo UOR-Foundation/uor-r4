@@ -9,3 +9,5 @@ step timing start 2026-09-27T09:51:03Z source cb60c8bd binary 3fed0f7c5c97cdf4db
 step timing end 2026-09-27T09:52:47Z
 integer samples start 2026-09-27T11:29:54Z source cb60c8bd binary 3fed0f7c5c97cdf4dbd7ce47faa07f5effa30f8f4186b4a8c0d828aa6c1f4259
 integer samples end 2026-09-27T11:30:00Z
+reference split start 2026-09-27T11:35:52Z source feeef7e4 binary 20e265e5bfb1c5b6d56644ea41092c9dca3e0f760b8ec8bc2008436a90b55f47
+reference split end 2026-09-27T12:01:35Z

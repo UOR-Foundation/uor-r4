@@ -310,7 +310,7 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 - A float stack built from the artifact's own values matches the integer engine within `5 × 10^−4` nats per log-probability. Its values are the dequantized matrices, grid-code scalars, integer biases and unit gains.
 - The test logits span about 16 nats. The check covers Dot and Lorentz reads, with and without rotation, and the patterns `rarr`, `ra` and `aa`. It uses random small stacks (unit test `integer_stack_matches_its_grid_reference`).
 - So the integer arithmetic adds far less error than rounding the weights does, on those small stacks.
-- The check has not been run on the trained artifacts. On those, the split of the 0.008–0.013 nat gap between weight rounding and integer arithmetic is not measured.
+- The trained models' split is measured below.
 
 **Trained models.** Each seed-1 model at 1,000 updates was exported with commit `2a681bb7` and scored on the 512 final-evaluation windows (131,072 targets), with a fresh integer session per window. The float column reproduces each run's final evaluation exactly. The records are in the packet under `integer/`; the artifacts (4.5–5.0 MB each) stay outside with their hashes.
 
@@ -323,7 +323,18 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 | Transformer control | 2.7680 | 2.7757 | +0.0077 | 93.6% | 958 |
 
 - Integer serving costs the stacks 0.011–0.013 nats and the control 0.008. The full stack's lead over the control is 0.154 nats in integers, against 0.158 in float. The ablations keep their float order.
-- No calibration was used; GPTQ, which the Llama exporter already supports, is the first lever if the gap matters.
+- **The gap is weight rounding.** The same grid reference, built from each trained artifact with its own head, was scored on the same 512 windows (commit `feeef7e4`, `lut-evaluate reference=true`):
+
+  | Model | Float | Reference: 4-bit weights, float arithmetic | Integer | Weight rounding | Integer arithmetic |
+  |---|---:|---:|---:|---:|---:|
+  | Full stack | 2.609729 | 2.621839 | 2.621838 | +0.012109 | −0.000000 |
+  | `dot` | 2.588881 | 2.599691 | 2.599690 | +0.010810 | −0.000001 |
+  | `norot` | 2.668833 | 2.680205 | 2.680204 | +0.011372 | −0.000002 |
+  | `readsonly` | 2.553095 | 2.565851 | 2.565851 | +0.012756 | +0.000000 |
+  | Control | 2.768041 | 2.775585 | 2.775736 | +0.007543 | +0.000152 |
+
+  - The integer arithmetic adds at most 0.000152 nats per target: the control's, whose engine keeps an 8-bit key/value cache. It adds none measurable for the stacks, which keep 32-bit keys and values.
+  - All of the rest is the round-to-nearest 4-bit weights. No calibration was used. GPTQ, which the Llama exporter already supports, or quantization-aware training is the lever if the gap matters.
 - The integer engine's own continuations are in the packet under `integer/<model>/samples/`: three development prompts, greedy and sampled, with commit `cb60c8bd`. Like the float ones, the greedy ones repeat and the sampled ones are locally plausible but malformed.
 - The engine rates time the engine's steps alone, on 64 of the windows, with commit `cb60c8bd`. The 512-window runs timed each window's whole loop, including scoring every position's 4,096 logits in f64, and ran 2–3% slower.
 - The tokens per second are not an architecture comparison:
