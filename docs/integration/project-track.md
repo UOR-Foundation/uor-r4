@@ -151,11 +151,12 @@ Seventeen focused checks pass. Eight training-only normalization batches use
 the measured peak is 6.920 GB. One prospectively fixed 512-update alpha run is
 interrupted at190 updates by shared storage growth, before an alpha checkpoint
 or export. Retain its cost and curve as an execution failure, with final quality
-unavailable. The selected operational correction serializes the same two full
-sequence shards and reduces gradients immediately; actual normalization memory
-and a focused objective comparison must support a newly projected attempt with
-earlier checkpoint preservation. Keep the original child/grid/context/decoder
-and fixed512-update question. Complete
+unavailable. The [sequential correction](dialogue-code-choice-sequential-preparation-2026-09-27.md)
+now passes the focused objective comparison and repeats the same normalization
+statistics at 4.723 GB peak RSS instead of 6.920 GB. Its slower measured batch cost
+is prospectively included in one fresh fixed 512 attempt with earlier checkpoints
+32/128/256/384 and final 512. Keep the original child/grid/context/decoder and
+coefficient. Complete
 cost includes both original 161-response QQ endpoints and the unchanged 58-turn
 native observation. Review all actual replies and source-level tradeoffs before
 retaining a candidate. This run neither introduces selected parameter access

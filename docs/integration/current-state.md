@@ -99,15 +99,21 @@ neither its first scheduled checkpoint nor an export. The sealed curve and
 1,460.259 seconds of execution are retained; there is no alpha/Adam state to
 resume and no learned artifact to evaluate. This is unavailable execution, not
 a model-quality failure. The [interruption record](../evidence/dialogue-code-choice-interruption-2026-09-27.json)
-binds the resource failure and complete cost. Both B8 shard graphs currently run
-concurrently. The next operational correction is sequential full-sequence shards
-with immediate gradient reduction, followed by a focused objective check and
-actual peak-memory normalization before selecting a restart. Any later attempt
-must preserve work earlier and request graceful closeout before the hard storage
-limit. The fixed 512-update question, 161-response development panel and 58-turn
-endpoint remain; no new dose or quality-selection sweep is selected. The
+binds the resource failure and complete cost. The [sequential correction](dialogue-code-choice-sequential-preparation-2026-09-27.md)
+is now executed at source `b49a2810`: the changed-path objective comparison passes
+and three release binaries are frozen. Eight actual normalization batches retain
+exactly the saved schedule, loss, all recorded parameter-gradient norms and
+coefficient; peak RSS falls to 4,722,819,072 bytes while total time rises to
+154.612 seconds. A fresh fixed 512 restart is selected with checkpoints at
+32/128/256/384 and final 512 on the owner SSD, with graceful resource closeout.
+Measured batch costs support a 12,600-second soft fit limit and prospectively
+recorded owned allowance 75,600,000 ms; verified shared 722,400,000 ms is unchanged.
+The fixed 512 question, original 161-response panel and 58-turn endpoint remain;
+no new dose or quality-selection sweep is selected. The original
 [preparation evidence](../evidence/dialogue-code-choice-preparation-2026-09-27.json)
-remains a dated preparation record and does not qualify language or selected access.
+remains dated; [sequential evidence](../evidence/dialogue-code-choice-sequential-preparation-2026-09-27.json)
+owns the new execution/resource bindings. No learned candidate or language
+qualification is established by this normalization.
 
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded
