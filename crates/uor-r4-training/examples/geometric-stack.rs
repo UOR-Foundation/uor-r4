@@ -91,7 +91,9 @@
 //! writes the float model's greedy replies. `lut-chat` talks through either
 //! integer engine under the same protocol: replies to `requests=`, or an
 //! interactive conversation on standard input (`/reset` starts over; a full
-//! 256-position context starts a new conversation).
+//! 256-position context starts a new conversation). Replies stop as the
+//! study's do: at EOS, at a terminal cycle of one to four ids repeated three
+//! times, or at `max_new_tokens`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -2138,15 +2140,19 @@ impl<S: Stepper> IntegerChat<S> {
                 .map_err(lut)?;
             ids.push(next);
             seen.push(next);
-            if next == eos {
-                return Ok(Reply { ids, eos: true });
+            if let Some(reply) = Reply::stop(&ids, eos) {
+                return Ok(reply);
             }
             if step + 1 < cap {
                 self.logits = self.session.advance(next)?.to_vec();
                 self.fed.push(next);
             }
         }
-        Ok(Reply { ids, eos: false })
+        Ok(Reply {
+            ids,
+            eos: false,
+            cycle: None,
+        })
     }
 }
 
@@ -2321,7 +2327,7 @@ fn chat_with<S: Stepper>(
                     history.push(eos);
                 }
                 turns.push(json!({"user": text, "reply": decode(&words),
-                    "reply_ids": reply.ids, "model_eos": reply.eos}));
+                    "reply_ids": reply.ids, "model_eos": reply.eos, "short_cycle": reply.cycle}));
             }
         }
         write!(stdout, "you> ")?;

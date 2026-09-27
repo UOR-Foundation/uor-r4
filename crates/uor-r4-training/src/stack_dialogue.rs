@@ -9,8 +9,10 @@
 //! ([`crate::dialogue_development::select`]). The contract is built the way
 //! that study builds it: UNK pads, and the assistant marker is the empty
 //! assistant prefix after BOS. Replies to a request panel also follow the
-//! study: greedy, stopped at EOS or a token cap, and an unfinished reply is
-//! closed with EOS by the caller before the next user turn.
+//! study: greedy, stopped at EOS, at a short terminal cycle
+//! ([`crate::reference_eval::short_cycle_period`]) or at a token cap, and an
+//! unfinished reply is closed with EOS by the caller before the next user
+//! turn.
 //!
 //! A prepared split is a UORT token store ([`MmapCorpusReader`]), one
 //! response-mask byte per token, and the split manifest, whose `files` give
@@ -30,6 +32,7 @@ use crate::dialogue_episodes::{
     EpisodeBatch, EpisodeContract, EpisodeIndex, PrefixPolicy, SourceSpan, EPISODE_CONTEXT,
 };
 use crate::geometric_stack::StackModel;
+use crate::reference_eval::short_cycle_period;
 use crate::{invalid, Result};
 
 /// One prepared split of the dialogue corpus.
@@ -303,11 +306,41 @@ pub fn load_requests(path: &Path) -> Result<Vec<Request>> {
     Ok(requests)
 }
 
-/// A generated reply: its ids (ending in EOS when the model ended it) and
-/// whether the model ended it.
+/// A generated reply: its ids (ending in EOS when the model ended it),
+/// whether the model ended it, and the period of the short terminal cycle
+/// that stopped it, if one did.
 pub struct Reply {
     pub ids: Vec<u32>,
     pub eos: bool,
+    pub cycle: Option<usize>,
+}
+
+impl Reply {
+    /// The retained study's stop rules after each generated id: EOS, then a
+    /// short terminal cycle. `None` means the reply continues.
+    pub fn stop(ids: &[u32], eos: u32) -> Option<Self> {
+        let last = *ids.last()?;
+        if last == eos {
+            return Some(Self {
+                ids: ids.to_vec(),
+                eos: true,
+                cycle: None,
+            });
+        }
+        short_cycle_period(ids).map(|period| Self {
+            ids: ids.to_vec(),
+            eos: false,
+            cycle: Some(period),
+        })
+    }
+
+    fn stop_record(&self) -> Value {
+        match (self.eos, self.cycle) {
+            (true, _) => json!("eos"),
+            (false, Some(period)) => json!({"short_cycle": period}),
+            (false, None) => json!("max_new_tokens"),
+        }
+    }
 }
 
 /// Answer every request. For each user turn, the turn's prefix is appended
@@ -358,6 +391,7 @@ pub fn reply_panel(
             turns.push(json!({
                 "turn": turn + 1, "user": user, "reply": decode(&text_ids),
                 "reply_ids": generated.ids, "model_eos": generated.eos,
+                "stop": generated.stop_record(),
                 "caller_eos_inserted_before_next_request": closed,
             }));
         }
@@ -370,7 +404,8 @@ pub fn reply_panel(
 }
 
 /// The float stack's greedy reply to `history`: the highest logit (ties to the
-/// lower id) until EOS or `cap` ids. Each step recomputes the whole window.
+/// lower id) until EOS, a short terminal cycle or `cap` ids. Each step
+/// recomputes the whole window.
 pub fn greedy_reply(model: &StackModel, history: &[u32], cap: usize, eos: u32) -> Result<Reply> {
     let mut window = history.to_vec();
     let mut ids = Vec::with_capacity(cap);
@@ -389,11 +424,15 @@ pub fn greedy_reply(model: &StackModel, history: &[u32], cap: usize, eos: u32) -
         let next = best as u32;
         ids.push(next);
         window.push(next);
-        if next == eos {
-            return Ok(Reply { ids, eos: true });
+        if let Some(reply) = Reply::stop(&ids, eos) {
+            return Ok(reply);
         }
     }
-    Ok(Reply { ids, eos: false })
+    Ok(Reply {
+        ids,
+        eos: false,
+        cycle: None,
+    })
 }
 
 #[cfg(test)]
@@ -631,6 +670,7 @@ mod tests {
         assert_eq!(turns.len(), 2);
         assert_eq!(turns[0]["reply"], "blue");
         assert_eq!(turns[0]["model_eos"], true);
+        assert_eq!(turns[0]["stop"], "eos");
         assert_eq!(turns[1]["reply"], "green");
         let history: Vec<u32> =
             serde_json::from_value(panel["rows"][0]["history_ids"].clone()).unwrap();
@@ -639,5 +679,17 @@ mod tests {
             "<|bos|>User: sky?\nAssistant: blue<|eos|>\nUser: grass?\nAssistant: green<|eos|>"
         );
         let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn replies_stop_at_eos_then_at_a_short_terminal_cycle() {
+        let stop = |ids: &[u32]| Reply::stop(ids, 1).map(|r| (r.eos, r.cycle));
+        assert_eq!(stop(&[5, 6, 1]), Some((true, None)));
+        assert_eq!(stop(&[5, 6, 7]), None);
+        assert_eq!(stop(&[7, 7, 7]), Some((false, Some(1))));
+        assert_eq!(stop(&[3, 8, 9, 8, 9, 8, 9]), Some((false, Some(2))));
+        assert_eq!(stop(&[8, 9, 8, 9]), None);
+        // EOS is checked first, as in the retained study.
+        assert_eq!(stop(&[1, 1, 1]), Some((true, None)));
     }
 }
