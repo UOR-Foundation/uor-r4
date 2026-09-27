@@ -93,12 +93,21 @@ corrected without changing production validation. Eight actual training-only
 normalization batches process 9,179 supervised targets with no optimizer updates,
 selecting coefficient 29.56681391929494; complete execution takes 61.107 seconds
 and peak child RSS is 6,919,520,256 bytes. The separately frozen 512-update alpha
-fit is running, with full256 context, unchanged grids, continuation counters
-1,024–1,535 and its own alpha clock. Dose/optimizer/schedule and complete resource
-projection were selected before updates. The same 161-response development
-panel and all 58 actual dialogue turns remain the endpoint; fitted quality is
-not yet available. The [preparation evidence](../evidence/dialogue-code-choice-preparation-2026-09-27.json)
-does not qualify language or selected parameter access.
+fit was interrupted at 190 updates by its frozen shared-storage guard. It
+processed 215,193 supervised targets and 778,240 padded positions, but reached
+neither its first scheduled checkpoint nor an export. The sealed curve and
+1,460.259 seconds of execution are retained; there is no alpha/Adam state to
+resume and no learned artifact to evaluate. This is unavailable execution, not
+a model-quality failure. The [interruption record](../evidence/dialogue-code-choice-interruption-2026-09-27.json)
+binds the resource failure and complete cost. Both B8 shard graphs currently run
+concurrently. The next operational correction is sequential full-sequence shards
+with immediate gradient reduction, followed by a focused objective check and
+actual peak-memory normalization before selecting a restart. Any later attempt
+must preserve work earlier and request graceful closeout before the hard storage
+limit. The fixed 512-update question, 161-response development panel and 58-turn
+endpoint remain; no new dose or quality-selection sweep is selected. The
+[preparation evidence](../evidence/dialogue-code-choice-preparation-2026-09-27.json)
+remains a dated preparation record and does not qualify language or selected access.
 
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded

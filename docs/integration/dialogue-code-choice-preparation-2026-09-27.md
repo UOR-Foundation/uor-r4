@@ -4,8 +4,11 @@ The selected FullPrefix child now has an offline alpha-learning path over its
 existing integer grids, a separate learned-code artifact schema, and explicit
 development and native-output observers. Seventeen focused engineering checks
 pass. Eight actual training normalization presentations completed with zero
-optimizer updates. One 512-update fit is selected and running; its language
-outcome is not yet available. This is a preparation record, not model promotion.
+optimizer updates. The selected 512-update fit subsequently stopped at190 updates
+when its frozen shared-storage guard fired, before any alpha checkpoint. Its
+language outcome is unavailable. The [interruption record](../evidence/dialogue-code-choice-interruption-2026-09-27.json)
+preserves all failed cost and the next operational correction. The preparation
+and prospective selection below remain their dated evidence, not model promotion.
 
 The [evidence packet](../evidence/dialogue-code-choice-preparation-2026-09-27.json)
 includes the executed checks and their failed fixture, normalization results,

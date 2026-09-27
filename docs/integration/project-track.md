@@ -149,7 +149,13 @@ That [code-choice path is now implemented and normalized](dialogue-code-choice-p
 Seventeen focused checks pass. Eight training-only normalization batches use
 9,179 supervised targets with zero updates and select coefficient 29.56681391929494;
 the measured peak is 6.920 GB. One prospectively fixed 512-update alpha run is
-underway, with the original child/grid/context/decoder held fixed. Complete
+interrupted at190 updates by shared storage growth, before an alpha checkpoint
+or export. Retain its cost and curve as an execution failure, with final quality
+unavailable. The selected operational correction serializes the same two full
+sequence shards and reduces gradients immediately; actual normalization memory
+and a focused objective comparison must support a newly projected attempt with
+earlier checkpoint preservation. Keep the original child/grid/context/decoder
+and fixed512-update question. Complete
 cost includes both original 161-response QQ endpoints and the unchanged 58-turn
 native observation. Review all actual replies and source-level tradeoffs before
 retaining a candidate. This run neither introduces selected parameter access
