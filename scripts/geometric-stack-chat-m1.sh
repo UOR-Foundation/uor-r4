@@ -31,7 +31,9 @@
 # Knobs: LM_STEPS (2000), BATCH (16), LR_LM (0.004), PATTERN (rrarra), READ (lorentz), ROTATION (true), SEED (1),
 # DIALOGUE_STEPS (1024), DIALOGUE_BATCH (16), LR_DIALOGUE (0.001), POLICY (full_prefix), DATA_SEED (1), DEV_SEED
 # (1) and DEV_PER_SOURCE (32) — pass the study's development seed to score its exact panel — EVAL_EVERY (128),
-# MAX_NEW_TOKENS (96), THREADS (8), FEATURES (cpu-accelerate on macOS, none elsewhere).
+# MAX_NEW_TOKENS (32, the retained study's cap; at most 128, and every request's history must fit 256 positions
+# with each reply at the cap), THREADS (8), FEATURES (cpu-accelerate on macOS, none elsewhere). A request panel
+# that does not fit is refused before any training.
 #
 # Shared machine: check #973 for other labs' active fits before launching, and lower THREADS beside one.
 #
@@ -67,7 +69,7 @@ DATA_SEED=${DATA_SEED:-1}
 DEV_SEED=${DEV_SEED:-1}
 DEV_PER_SOURCE=${DEV_PER_SOURCE:-32}
 EVAL_EVERY=${EVAL_EVERY:-128}
-MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-96}
+MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-32}
 THREADS=${THREADS:-8}
 if [ -z "${FEATURES+x}" ]; then
   if [ "$(uname -s)" = Darwin ]; then FEATURES=cpu-accelerate; else FEATURES=; fi

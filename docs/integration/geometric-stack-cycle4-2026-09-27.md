@@ -319,7 +319,7 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 **Check.**
 - A float stack built from the artifact's own values matches the integer engine within `5 × 10^−4` nats per log-probability. Its values are the dequantized matrices, grid-code scalars, integer biases and unit gains.
 - The test logits span about 16 nats. The check covers Dot and Lorentz reads, with and without rotation, and the patterns `rarr`, `ra` and `aa`. It uses random small stacks (unit test `integer_stack_matches_its_grid_reference`).
-- So the integer arithmetic adds far less error than rounding the weights does, on those small stacks.
+- So the integer arithmetic adds far less error than representing the parameters does, on those small stacks.
 - The trained models' split is measured below.
 
 **Trained models.** Each seed-1 model at 1,000 updates was exported with commit `2a681bb7` and scored on the 512 final-evaluation windows (131,072 targets), with a fresh integer session per window. The float column reproduces each run's final evaluation exactly. The records are in the packet under `integer/`; the artifacts (4.5–5.0 MB each) stay outside with their hashes.
@@ -333,9 +333,9 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 | Transformer control | 2.7680 | 2.7757 | +0.0077 | 93.6% | 958 |
 
 - Integer serving costs the stacks 0.011–0.013 nats and the control 0.008. The full stack's lead over the control is 0.154 nats in integers, against 0.158 in float. The ablations keep their float order.
-- **The gap is weight rounding.** The same grid reference, built from each trained artifact with its own head, was scored on the same 512 windows (commit `feeef7e4`, `lut-evaluate reference=true`):
+- **The gap is in the exported parameters, not the integer arithmetic.** The same grid reference, built from each trained artifact with its own head, was scored on the same 512 windows (commit `feeef7e4`, `lut-evaluate reference=true`). The reference replaces every float parameter with its exported value: the 4-bit matrices, grid-code scalars, integer biases, folded unit gains and the head. It then computes in float:
 
-  | Model | Float | Reference: 4-bit weights, float arithmetic | Integer | Weight rounding | Integer arithmetic |
+  | Model | Float | Reference: exported parameters, float arithmetic | Integer | Parameter representation | Integer arithmetic |
   |---|---:|---:|---:|---:|---:|
   | Full stack | 2.609729 | 2.621839 | 2.621838 | +0.012109 | −0.000000 |
   | `dot` | 2.588881 | 2.599691 | 2.599690 | +0.010810 | −0.000001 |
@@ -344,14 +344,14 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
   | Control | 2.768041 | 2.775585 | 2.775736 | +0.007543 | +0.000152 |
 
   - The integer arithmetic adds at most 0.000152 nats per target: the control's, whose engine keeps an 8-bit key/value cache. It adds none measurable for the stacks, which keep 32-bit keys and values.
-  - All of the rest is the round-to-nearest 4-bit weights.
-- **Calibrated rounding removes 41–54% of the gap.** Commit `6bc7dd6d` gives the stack exporter GPTQ (Frantar et al. 2022, arXiv 2210.17323), which the Llama exporter already had. GPTQ rounds each matrix's columns in order and spreads each rounding error over the columns not yet rounded, so the rounded map reproduces the float map on calibration inputs rather than the float weights.
+  - All of the rest comes from representing the parameters. The 4-bit matrices are the largest part, but not the only one. The split among matrices, scalars, biases and gains was not measured. GPTQ changes only the matrices, and removes 40.5–54.3% of the gap (below).
+- **Calibrated rounding of the matrices removes 40.5–54.3% of the gap.** Commit `6bc7dd6d` gives the stack exporter GPTQ (Frantar et al. 2022, arXiv 2210.17323), which the Llama exporter already had. GPTQ rounds each matrix's columns in order and spreads each rounding error over the columns not yet rounded, so the rounded map reproduces the float map on calibration inputs rather than the float weights.
   - **Calibration.** The float model runs over 64 evenly spaced 256-token windows of its own training split (16,384 positions). A capture in the forward pass collects the input moments of every weight map. Normalized states are taken before their gains, which the export folds into the maps. The embedding, a lookup, still rounds to nearest.
   - **The control** is calibrated by the same capture, with its moments mapped to the Llama exporter's sites. A unit test checks that they equal those of that exporter's own float model within `10^−4` at every site.
   - **Cost.** Collecting the moments takes 9–16 s of float forward passes, and the whole export 19–28 s, on one thread.
   - **Results.** The same 512 windows, with the grid reference (damping 0.01):
 
-  | Model | Float | Integer, round-to-nearest | Integer, GPTQ | Weight rounding, GPTQ | Integer arithmetic, GPTQ | Top-1 agreement, round-to-nearest → GPTQ |
+  | Model | Float | Integer, round-to-nearest | Integer, GPTQ | Parameter representation, GPTQ | Integer arithmetic, GPTQ | Top-1 agreement, round-to-nearest → GPTQ |
   |---|---:|---:|---:|---:|---:|---:|
   | Full stack | 2.609729 | 2.621838 (+0.012109) | 2.616711 (+0.006982) | +0.006982 | −0.000000 | 92.7% → 94.7% |
   | `dot` | 2.588881 | 2.599690 (+0.010810) | 2.595309 (+0.006428) | +0.006428 | −0.000000 | 93.0% → 94.6% |

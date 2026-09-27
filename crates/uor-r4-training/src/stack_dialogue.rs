@@ -291,19 +291,77 @@ pub struct Request {
     pub user_turns: Vec<String>,
 }
 
-/// Read a request panel.
+/// The retained study's panel limits: requests per panel, user turns per
+/// request and generated ids per reply.
+pub const MAX_REQUESTS: usize = 128;
+pub const MAX_USER_TURNS: usize = 8;
+pub const MAX_NEW_TOKENS: usize = 128;
+
+/// Read a request panel: 1 to [`MAX_REQUESTS`] requests with distinct ids,
+/// each with 1 to [`MAX_USER_TURNS`] nonblank user turns, as the retained
+/// study requires.
 pub fn load_requests(path: &Path) -> Result<Vec<Request>> {
     let requests: Vec<Request> = serde_json::from_slice(&fs::read(path)?)?;
+    let ids: BTreeSet<&str> = requests.iter().map(|r| r.id.as_str()).collect();
     if requests.is_empty()
-        || requests
-            .iter()
-            .any(|r| r.user_turns.is_empty() || r.user_turns.iter().any(|t| t.trim().is_empty()))
+        || requests.len() > MAX_REQUESTS
+        || ids.len() != requests.len()
+        || requests.iter().any(|r| {
+            r.user_turns.is_empty()
+                || r.user_turns.len() > MAX_USER_TURNS
+                || r.user_turns.iter().any(|t| t.trim().is_empty())
+        })
     {
-        return Err(invalid(
-            "a request panel needs requests with nonblank turns",
-        ));
+        return Err(invalid(format!(
+            "a request panel needs 1 to {MAX_REQUESTS} requests with distinct ids, each with 1 to \
+             {MAX_USER_TURNS} nonblank user turns"
+        )));
     }
     Ok(requests)
+}
+
+/// Check that the whole panel can be answered before anything is generated
+/// (or trained): a positive cap of at most [`MAX_NEW_TOKENS`], every user
+/// turn one protocol turn with no special tokens, and, as in the retained
+/// study, every request's history within `context` even if each reply reaches
+/// the cap and is closed with EOS by the caller. Nothing is truncated.
+pub fn check_panel(
+    encoder: &DialogueEncoder<'_>,
+    requests: &[Request],
+    context: usize,
+    max_new_tokens: usize,
+) -> Result<()> {
+    if max_new_tokens == 0 || max_new_tokens > MAX_NEW_TOKENS {
+        return Err(invalid(format!(
+            "max_new_tokens must be 1 to {MAX_NEW_TOKENS}"
+        )));
+    }
+    for request in requests {
+        let mut longest = 1usize;
+        for (turn, user) in request.user_turns.iter().enumerate() {
+            let prefix = encoder.encode_user_prefix(user, turn != 0);
+            if prefix.emitted_turns != 1 || prefix.special_token_occurrences != 0 {
+                return Err(invalid(format!(
+                    "request {}: turn {} is not one plain user turn",
+                    request.id,
+                    turn + 1
+                )));
+            }
+            longest += prefix.tokens.len() + max_new_tokens;
+            if longest > context {
+                return Err(invalid(format!(
+                    "request {}: with every reply at {max_new_tokens} ids the history reaches \
+                     {longest} of {context} positions by turn {}",
+                    request.id,
+                    turn + 1
+                )));
+            }
+            if turn + 1 < request.user_turns.len() {
+                longest += 1;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A generated reply: its ids (ending in EOS when the model ended it),
@@ -334,7 +392,9 @@ impl Reply {
         })
     }
 
-    fn stop_record(&self) -> Value {
+    /// How the reply stopped: `"eos"`, `{"short_cycle": period}` or
+    /// `"max_new_tokens"`.
+    pub fn stop_record(&self) -> Value {
         match (self.eos, self.cycle) {
             (true, _) => json!("eos"),
             (false, Some(period)) => json!({"short_cycle": period}),
@@ -346,8 +406,8 @@ impl Reply {
 /// Answer every request. For each user turn, the turn's prefix is appended
 /// to the history and `reply(history, cap)` generates up to `cap` ids. A reply
 /// the model did not end is closed with EOS before the next user turn. The
-/// whole history must fit the context with every reply at its cap; nothing is
-/// truncated.
+/// panel is checked first ([`check_panel`]), so the whole history fits the
+/// context with every reply at its cap; nothing is truncated.
 pub fn reply_panel(
     encoder: &DialogueEncoder<'_>,
     protocol: &DialogueProtocol,
@@ -357,9 +417,7 @@ pub fn reply_panel(
     decode: &dyn Fn(&[u32]) -> String,
     reply: &mut dyn FnMut(&[u32], usize) -> Result<Reply>,
 ) -> Result<Value> {
-    if max_new_tokens == 0 {
-        return Err(invalid("replies need a positive token cap"));
-    }
+    check_panel(encoder, requests, context, max_new_tokens)?;
     let mut rows = Vec::with_capacity(requests.len());
     for request in requests {
         let mut history = vec![protocol.bos_id];
@@ -370,7 +428,7 @@ pub fn reply_panel(
                 return Err(invalid(format!("request {}: turn {turn}", request.id)));
             }
             history.extend(&prefix.tokens);
-            if history.len() + max_new_tokens + 1 > context {
+            if history.len() + max_new_tokens > context {
                 return Err(invalid(format!(
                     "request {}: the history and a capped reply exceed the context",
                     request.id
@@ -678,6 +736,81 @@ mod tests {
             tokenizer.decode(&history),
             "<|bos|>User: sky?\nAssistant: blue<|eos|>\nUser: grass?\nAssistant: green<|eos|>"
         );
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_panel_is_checked_whole_before_anything_is_generated() {
+        let tokenizer = tokenizer();
+        let protocol = DialogueProtocol::literal_roles_v1(&tokenizer).unwrap();
+        let encoder = protocol.bind(&tokenizer).unwrap();
+        let request = |id: &str, turns: &[&str]| Request {
+            id: id.into(),
+            category: "test".into(),
+            user_turns: turns.iter().map(|t| (*t).to_owned()).collect(),
+        };
+        let two = [request("r1", &["sky?", "grass?"])];
+        let first = encoder.encode_user_prefix("sky?", false).tokens.len();
+        let second = encoder.encode_user_prefix("grass?", true).tokens.len();
+        // BOS, both prefixes, both replies at the cap and the caller's EOS
+        // between the turns.
+        let cap = 8;
+        let worst = 1 + first + cap + 1 + second + cap;
+        assert!(check_panel(&encoder, &two, worst, cap).is_ok());
+        assert!(check_panel(&encoder, &two, worst - 1, cap).is_err());
+        assert!(check_panel(&encoder, &two, 256, 0).is_err());
+        assert!(check_panel(&encoder, &two, 4096, MAX_NEW_TOKENS + 1).is_err());
+        let special = [request("r2", &["say <|eos|> now"])];
+        assert!(check_panel(&encoder, &special, 256, cap).is_err());
+        // A panel whose second turn cannot fit is refused before the first
+        // reply is generated.
+        let mut calls = 0;
+        let refused = reply_panel(
+            &encoder,
+            &protocol,
+            &two,
+            worst - 1,
+            cap,
+            &|ids| tokenizer.decode(ids),
+            &mut |_, _| {
+                calls += 1;
+                Ok(Reply {
+                    ids: vec![protocol.eos_id],
+                    eos: true,
+                    cycle: None,
+                })
+            },
+        );
+        assert!(refused.is_err());
+        assert_eq!(calls, 0);
+
+        let directory = std::env::temp_dir().join(format!(
+            "uor-r4-stack-panel-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        let load = |name: &str, panel: Value| {
+            let path = directory.join(name);
+            fs::write(&path, panel.to_string()).unwrap();
+            load_requests(&path)
+        };
+        let row = |id: String, turns: usize| json!({"id": id, "category": "c", "user_turns": vec!["hi"; turns]});
+        assert!(load("ok.json", json!([row("a".into(), 1), row("b".into(), 8)])).is_ok());
+        assert!(load("empty.json", json!([])).is_err());
+        assert!(load("same.json", json!([row("a".into(), 1), row("a".into(), 1)])).is_err());
+        assert!(load("turns.json", json!([row("a".into(), 9)])).is_err());
+        assert!(load("none.json", json!([row("a".into(), 0)])).is_err());
+        assert!(load(
+            "blank.json",
+            json!([{"id": "a", "category": "c", "user_turns": ["hi", "  "]}])
+        )
+        .is_err());
+        let many: Vec<Value> = (0..=MAX_REQUESTS)
+            .map(|i| row(format!("r{i}"), 1))
+            .collect();
+        assert!(load("many.json", Value::Array(many)).is_err());
         let _ = fs::remove_dir_all(&directory);
     }
 
