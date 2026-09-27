@@ -297,6 +297,7 @@ EXACT_GEOMETRY_SYMBOLS = [
     }
     for name in (
         "signed_h4_code_i32",
+        "family_candidates",
         "coefficient_term",
         "score",
         "score_difference_order",

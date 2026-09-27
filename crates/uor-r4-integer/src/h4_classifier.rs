@@ -19,6 +19,23 @@ use crate::math::{checked_mul_unsigned, IntegerMathError, MathResult};
 /// (source d15360527f7c69ac8b83eef0bbd5839b87c26f02).
 pub const H4_ROOT_COEFFICIENTS: [[[i8; 2]; 4]; 120] = historical_root_coefficients();
 
+// Output axis -> base coordinate. Shared by construction and family selection;
+// base coordinates 1, 2, 3 carry the independent signs s1, s2, s3 respectively.
+const EVEN_PERMUTATIONS: [[usize; 4]; 12] = [
+    [0, 1, 2, 3],
+    [0, 2, 3, 1],
+    [0, 3, 1, 2],
+    [1, 0, 3, 2],
+    [1, 2, 0, 3],
+    [1, 3, 2, 0],
+    [2, 0, 1, 3],
+    [2, 1, 3, 0],
+    [2, 3, 0, 1],
+    [3, 0, 2, 1],
+    [3, 1, 0, 2],
+    [3, 2, 1, 0],
+];
+
 const fn historical_root_coefficients() -> [[[i8; 2]; 4]; 120] {
     let mut roots = [[[0i8; 2]; 4]; 120];
     let mut index = 0;
@@ -39,20 +56,6 @@ const fn historical_root_coefficients() -> [[[i8; 2]; 4]; 120] {
         signs += 1;
         index += 1;
     }
-    let even_permutations = [
-        [0, 1, 2, 3],
-        [0, 2, 3, 1],
-        [0, 3, 1, 2],
-        [1, 0, 3, 2],
-        [1, 2, 0, 3],
-        [1, 3, 2, 0],
-        [2, 0, 1, 3],
-        [2, 1, 3, 0],
-        [2, 3, 0, 1],
-        [3, 0, 2, 1],
-        [3, 1, 0, 2],
-        [3, 2, 1, 0],
-    ];
     let mut permutation = 0;
     while permutation < 12 {
         // The donor nests s1, s2, s3, each in [-1, +1]: s3 changes fastest.
@@ -64,7 +67,7 @@ const fn historical_root_coefficients() -> [[[i8; 2]; 4]; 120] {
             let signed = [[0, 0], [s1, 0], [0, s2], [-s3, s3]];
             axis = 0;
             while axis < 4 {
-                roots[index][axis] = signed[even_permutations[permutation][axis]];
+                roots[index][axis] = signed[EVEN_PERMUTATIONS[permutation][axis]];
                 axis += 1;
             }
             index += 1;
@@ -73,6 +76,40 @@ const fn historical_root_coefficients() -> [[[i8; 2]; 4]; 120] {
         permutation += 1;
     }
     roots
+}
+
+// The 120 roots partition into axes, signed halves, and twelve blocks of eight
+// independent signs on positive magnitudes 1, phi, phi-1. Retain each family's
+// lowest-index maximizer; signs on zero coordinates are negative (bit zero).
+// Candidate order follows disjoint historical index blocks, so strict-greater
+// comparison between their winners also preserves the global lowest-index tie.
+fn family_candidates(lane: &[i32; 4]) -> [u8; 14] {
+    let magnitudes = lane.map(|value| i64::from(value).unsigned_abs());
+    let positive = lane.map(|value| u8::from(value > 0));
+    let mut candidates = [0u8; 14];
+    let mut largest_axis = 0;
+    for axis in 1..4 {
+        if magnitudes[axis] > magnitudes[largest_axis] {
+            largest_axis = axis;
+        }
+    }
+    candidates[0] = ((largest_axis as u8) << 1) + positive[largest_axis];
+    candidates[1] = 8;
+    for (axis, bit) in positive.iter().enumerate() {
+        candidates[1] += *bit << axis;
+    }
+    for (block, permutation) in EVEN_PERMUTATIONS.iter().enumerate() {
+        let mut signs = 0u8;
+        for (axis, &base_coordinate) in permutation.iter().enumerate() {
+            if base_coordinate != 0 {
+                // Invert the output-axis -> base-coordinate mapping by placing
+                // each query sign into its base sign bit: s1=4, s2=2, s3=1.
+                signs |= positive[axis] << (3 - base_coordinate);
+            }
+        }
+        candidates[block + 2] = 24 + ((block as u8) << 3) + signs;
+    }
+    candidates
 }
 
 // Total for all i8 coefficients and i32 coordinates: the product magnitude is
@@ -149,6 +186,9 @@ fn score_difference_order([a, b]: [i64; 2]) -> MathResult<Ordering> {
 /// historical index. Antipodes are never folded. Widening precedes negation and
 /// shifts. For a nonzero lane, normalization by a common positive scalar cannot
 /// change this exact argmax; no F32 classifier equivalence is asserted.
+/// Fourteen exact family winners require fourteen root-score evaluations and
+/// thirteen exact comparisons, rather than scanning all 120 roots. This is an
+/// operation-count reduction, not a measured speed claim.
 ///
 /// Errors propagate from checked software arithmetic. The fixed coefficient
 /// bounds make arithmetic overflow unreachable for this declared input domain.
@@ -156,13 +196,14 @@ pub fn signed_h4_code_i32(lane: [i32; 4]) -> MathResult<u8> {
     if lane == [0; 4] {
         return Ok(1);
     }
-    let mut best_index = 0u8;
-    let mut best_score = score(&lane, &H4_ROOT_COEFFICIENTS[0]);
-    for (index, root) in H4_ROOT_COEFFICIENTS.iter().enumerate().skip(1) {
-        let candidate = score(&lane, root);
+    let candidates = family_candidates(&lane);
+    let mut best_index = candidates[0];
+    let mut best_score = score(&lane, &H4_ROOT_COEFFICIENTS[usize::from(best_index)]);
+    for &index in candidates.iter().skip(1) {
+        let candidate = score(&lane, &H4_ROOT_COEFFICIENTS[usize::from(index)]);
         let difference = [candidate[0] - best_score[0], candidate[1] - best_score[1]];
         if score_difference_order(difference)? == Ordering::Greater {
-            best_index = index as u8;
+            best_index = index;
             best_score = candidate;
         }
     }

@@ -31,6 +31,33 @@ A separate offline training-crate test compares all coefficients against the
 existing exact donor. Sorted closure IDs are a different ordering and cannot
 be substituted without the explicit bijection.
 
+## Exact family reduction
+
+The roots partition into eight axis roots, sixteen signed half-roots and twelve
+blocks of eight sign choices for the even permutations of
+`(0, 1, phi, phi-1)/2`. Each nonzero magnitude is positive, so a family's best
+sign matches its assigned query coordinate. A zero coordinate chooses the
+negative sign, preserving the smallest historical ID within that family.
+
+The classifier retains one winner from each family: the earliest axis with
+maximum widened absolute coordinate, the best signed half-root, and one signed
+root for each of the twelve golden permutations. A shared permutation constant
+maps output axis to base coordinate. Candidate selection places each query sign
+into its corresponding base sign bit, rather than mistakenly treating that
+permutation as its inverse. The sign bits are `s1=4, s2=2, s3=1`.
+
+These fourteen IDs occur in ascending historical-family blocks. Comparing only
+their scores with strict-greater updates preserves the global lowest-ID tie.
+The all-zero input still bypasses ordinary argmax and returns identity 1. The
+existing score assembly and exact comparator are unchanged, as is the independent
+offline oracle that scans all 120 roots.
+
+This reduces root-score evaluations from **120 to 14** and exact score comparisons
+from **119 to 13**, with three additional integer magnitude comparisons to choose
+the axis. It uses no candidate approximation or learned selection and retains
+the full signed-i32 domain by widening before taking absolute values. These are
+structural operation counts, not a measured speed, energy or language result.
+
 ## Comparison and bounds
 
 Each dot score is represented as `A + B*phi`, omitting the common half. The
