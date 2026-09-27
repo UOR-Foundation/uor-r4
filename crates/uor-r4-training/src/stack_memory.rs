@@ -173,9 +173,13 @@ fn lorentz_distance(excess: f64) -> f64 {
 
 /// Indices of the `k` largest scores, best first; ties go to the lower index.
 fn top(scores: &[f64], k: usize) -> Vec<usize> {
+    let better = |a: &usize, b: &usize| scores[*b].total_cmp(&scores[*a]).then(a.cmp(b));
     let mut order: Vec<usize> = (0..scores.len()).collect();
-    order.sort_by(|&a, &b| scores[b].total_cmp(&scores[a]).then(a.cmp(&b)));
-    order.truncate(k);
+    if k > 0 && k < order.len() {
+        order.select_nth_unstable_by(k - 1, better);
+        order.truncate(k);
+    }
+    order.sort_by(better);
     order
 }
 
@@ -225,11 +229,15 @@ impl ProductKeyMemory {
                 candidates.push((first_scores[a] + second_scores[b], a, b));
             }
         }
-        candidates.sort_by(|x, y| {
+        let better = |x: &(f64, usize, usize), y: &(f64, usize, usize)| {
             y.0.total_cmp(&x.0)
                 .then((x.1 * self.sub_keys + x.2).cmp(&(y.1 * self.sub_keys + y.2)))
-        });
-        candidates.truncate(self.top_k);
+        };
+        if self.top_k < candidates.len() {
+            candidates.select_nth_unstable_by(self.top_k - 1, better);
+            candidates.truncate(self.top_k);
+        }
+        candidates.sort_by(better);
         let maximum = candidates[0].0;
         let exps: Vec<f64> = candidates.iter().map(|c| (c.0 - maximum).exp()).collect();
         let total: f64 = exps.iter().sum();

@@ -843,6 +843,48 @@ fn decayed(name: &str, rank: usize) -> bool {
     name.ends_with(".weight") && rank == 2 && !name.ends_with("conv.weight")
 }
 
+/// One update's constants, in f32 as Candle's `affine` applies them.
+struct AdamConstants {
+    scale: f32,
+    beta1: f32,
+    rest1: f32,
+    beta2: f32,
+    rest2: f32,
+    correct1: f32,
+    correct2: f32,
+    epsilon: f32,
+    keep: f32,
+    lr: f32,
+}
+
+/// The AdamW step of one variable in one parallel pass. It performs the same
+/// f32 operations, in the same order, as the composition of Candle operations
+/// it replaced (kept in the tests), so updates are bit-identical.
+fn adam_step(
+    parameters: &mut [f32],
+    gradient: &[f32],
+    first_moment: &mut [f32],
+    second_moment: &mut [f32],
+    c: &AdamConstants,
+) {
+    const CHUNK: usize = 1 << 14;
+    parameters
+        .par_chunks_mut(CHUNK)
+        .zip(first_moment.par_chunks_mut(CHUNK))
+        .zip(second_moment.par_chunks_mut(CHUNK))
+        .zip(gradient.par_chunks(CHUNK))
+        .for_each(|(((p, m), v), g)| {
+            for i in 0..p.len() {
+                let grad = g[i] * c.scale + 0.0;
+                m[i] = (m[i] * c.beta1 + 0.0) + (grad * c.rest1 + 0.0);
+                v[i] = (v[i] * c.beta2 + 0.0) + ((grad * grad) * c.rest2 + 0.0);
+                let step = (m[i] * c.correct1 + 0.0)
+                    / (((v[i] * c.correct2 + 0.0).sqrt() * 1.0) + c.epsilon);
+                p[i] = (p[i] * c.keep + 0.0) - (step * c.lr + 0.0);
+            }
+        });
+}
+
 /// AdamW with global gradient-norm clipping and resumable moments.
 pub struct StackAdamW {
     pub beta1: f64,
@@ -910,33 +952,38 @@ impl StackAdamW {
                 .moments
                 .get(name)
                 .ok_or_else(|| invalid(format!("missing moments for {name}")))?;
-            let grad = grad.affine(scale, 0.0)?;
-            let m_next = m
-                .as_tensor()
-                .affine(self.beta1, 0.0)?
-                .add(&grad.affine(1.0 - self.beta1, 0.0)?)?;
-            let v_next = v
-                .as_tensor()
-                .affine(self.beta2, 0.0)?
-                .add(&grad.sqr()?.affine(1.0 - self.beta2, 0.0)?)?;
-            let step = m_next.affine(1.0 / first, 0.0)?.div(
-                &v_next
-                    .affine(1.0 / second, 0.0)?
-                    .sqrt()?
-                    .affine(1.0, self.epsilon)?,
-            )?;
             let keep = if decayed(name, var.rank()) {
                 1.0 - lr * self.weight_decay
             } else {
                 1.0
             };
-            var.set(
-                &var.as_tensor()
-                    .affine(keep, 0.0)?
-                    .sub(&step.affine(lr, 0.0)?)?,
-            )?;
-            m.set(&m_next)?;
-            v.set(&v_next)?;
+            let constants = AdamConstants {
+                scale: scale as f32,
+                beta1: self.beta1 as f32,
+                rest1: (1.0 - self.beta1) as f32,
+                beta2: self.beta2 as f32,
+                rest2: (1.0 - self.beta2) as f32,
+                correct1: (1.0 / first) as f32,
+                correct2: (1.0 / second) as f32,
+                epsilon: self.epsilon as f32,
+                keep: keep as f32,
+                lr: lr as f32,
+            };
+            let mut parameters = var.as_tensor().flatten_all()?.to_vec1::<f32>()?;
+            let gradient = grad.flatten_all()?.to_vec1::<f32>()?;
+            let mut first_moment = m.as_tensor().flatten_all()?.to_vec1::<f32>()?;
+            let mut second_moment = v.as_tensor().flatten_all()?.to_vec1::<f32>()?;
+            adam_step(
+                &mut parameters,
+                &gradient,
+                &mut first_moment,
+                &mut second_moment,
+                &constants,
+            );
+            let (shape, device) = (var.shape().clone(), var.device().clone());
+            var.set(&Tensor::from_vec(parameters, &shape, &device)?)?;
+            m.set(&Tensor::from_vec(first_moment, &shape, &device)?)?;
+            v.set(&Tensor::from_vec(second_moment, &shape, &device)?)?;
         }
         Ok(norm)
     }
@@ -2886,6 +2933,67 @@ mod tests {
             let b = loaded.forward(&ids, 1, 10)?;
             assert_eq!(a.sub(&b)?.abs()?.max_all()?.to_scalar::<f32>()?, 0.0);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn fused_adam_step_is_bit_identical_to_the_candle_composition() -> Result<()> {
+        let device = cpu();
+        let n = 50_000;
+        let mut seed = 3u64;
+        let mut draw = |scale: f32| {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((((seed >> 11) as f64) / ((1u64 << 53) as f64) - 0.5) as f32) * scale
+        };
+        let p: Vec<f32> = (0..n).map(|_| draw(0.2)).collect();
+        let g: Vec<f32> = (0..n).map(|_| draw(0.01)).collect();
+        let m: Vec<f32> = (0..n).map(|_| draw(0.001)).collect();
+        let v: Vec<f32> = (0..n).map(|_| draw(1e-5).abs()).collect();
+        let (beta1, beta2, epsilon, scale, lr, weight_decay) =
+            (0.9f64, 0.95f64, 1e-8f64, 0.73f64, 0.004f64, 0.1f64);
+        let (first, second) = (1.0 - beta1.powi(7), 1.0 - beta2.powi(7));
+        let keep = 1.0 - lr * weight_decay;
+        // The composition of Candle operations the fused step replaced.
+        let t = |x: &Vec<f32>| Tensor::from_vec(x.clone(), n, &device);
+        let grad = t(&g)?.affine(scale, 0.0)?;
+        let m_next = t(&m)?
+            .affine(beta1, 0.0)?
+            .add(&grad.affine(1.0 - beta1, 0.0)?)?;
+        let v_next = t(&v)?
+            .affine(beta2, 0.0)?
+            .add(&grad.sqr()?.affine(1.0 - beta2, 0.0)?)?;
+        let step = m_next.affine(1.0 / first, 0.0)?.div(
+            &v_next
+                .affine(1.0 / second, 0.0)?
+                .sqrt()?
+                .affine(1.0, epsilon)?,
+        )?;
+        let p_next = t(&p)?.affine(keep, 0.0)?.sub(&step.affine(lr, 0.0)?)?;
+        let (mut p2, mut m2, mut v2) = (p.clone(), m.clone(), v.clone());
+        adam_step(
+            &mut p2,
+            &g,
+            &mut m2,
+            &mut v2,
+            &AdamConstants {
+                scale: scale as f32,
+                beta1: beta1 as f32,
+                rest1: (1.0 - beta1) as f32,
+                beta2: beta2 as f32,
+                rest2: (1.0 - beta2) as f32,
+                correct1: (1.0 / first) as f32,
+                correct2: (1.0 / second) as f32,
+                epsilon: epsilon as f32,
+                keep: keep as f32,
+                lr: lr as f32,
+            },
+        );
+        let bits = |x: &[f32]| x.iter().map(|v| v.to_bits()).collect::<Vec<u32>>();
+        assert_eq!(bits(&p2), bits(&p_next.to_vec1::<f32>()?));
+        assert_eq!(bits(&m2), bits(&m_next.to_vec1::<f32>()?));
+        assert_eq!(bits(&v2), bits(&v_next.to_vec1::<f32>()?));
         Ok(())
     }
 
