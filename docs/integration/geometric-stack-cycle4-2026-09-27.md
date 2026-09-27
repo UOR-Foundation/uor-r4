@@ -247,7 +247,7 @@ The main comparison runs after them, unchanged.
 
 ## 8. Integer serving under D10
 
-*Measured*, except where marked *Derived*. Owner decision D10 permits serving without floating point: learned weight maps run without a multiplier, and runtime products may use the hardware multiplier. [`uor_r4_lut::stack`](../../crates/uor-r4-lut/src/stack.rs) serves the geometric stack that way. The control has the shape of a Llama checkpoint, so it is renamed to one and served by the existing Llama engine. [`stack_export`](../../crates/uor-r4-training/src/stack_export.rs) writes both artifacts, and the example's `export`, `lut-evaluate` and `lut-sample` modes run them.
+*Measured*, except where marked *Derived*. Owner decision D10 permits serving without floating point: learned weight maps run without a multiplier, and runtime products may use the hardware multiplier. [`uor_r4_lut::stack`](../../crates/uor-r4-lut/src/stack.rs) serves the geometric stack that way. It uses the hardware multiplier and divider on runtime values, so it does not meet the stricter multiplier-free contract of D0-b, which remains the native model's serving target. The control has the shape of a Llama checkpoint, so it is renamed to one and served by the existing Llama engine. [`stack_export`](../../crates/uor-r4-training/src/stack_export.rs) writes both artifacts, and the example's `export`, `lut-evaluate` and `lut-sample` modes run them.
 
 **How each part is served.**
 
@@ -271,16 +271,17 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 
 **Trained models.** Each seed-1 model at 1,000 updates was exported with commit `2a681bb7` and scored on the 512 final-evaluation windows (131,072 targets), with a fresh integer session per window. The float column reproduces each run's final evaluation exactly. The records are in the packet under `integer/`; the artifacts (4.5–5.0 MB each) stay outside with their hashes.
 
-| Model | Float NLL | Integer NLL | Integer − float | Top-1 agreement | Tokens/s, one thread |
+| Model | Float NLL | Integer NLL | Integer − float | Top-1 agreement | Engine tokens/s, one thread |
 |---|---:|---:|---:|---:|---:|
-| Full stack (Lorentz) | 2.6097 | 2.6218 | +0.0121 | 92.7% | 763 |
-| `dot` | 2.5889 | 2.5997 | +0.0108 | 93.0% | 795 |
-| `norot` | 2.6688 | 2.6802 | +0.0114 | 93.1% | 792 |
-| `readsonly` | 2.5531 | 2.5659 | +0.0128 | 93.3% | 666 |
-| Transformer control | 2.7680 | 2.7757 | +0.0077 | 93.6% | 900 |
+| Full stack (Lorentz) | 2.6097 | 2.6218 | +0.0121 | 92.7% | 801 |
+| `dot` | 2.5889 | 2.5997 | +0.0108 | 93.0% | 822 |
+| `norot` | 2.6688 | 2.6802 | +0.0114 | 93.1% | 862 |
+| `readsonly` | 2.5531 | 2.5659 | +0.0128 | 93.3% | 677 |
+| Transformer control | 2.7680 | 2.7757 | +0.0077 | 93.6% | 958 |
 
 - Integer serving costs the stacks 0.011–0.013 nats and the control 0.008. The full stack's lead over the control is 0.154 nats in integers, against 0.158 in float. The ablations keep their float order.
 - No calibration was used; GPTQ, which the Llama exporter already supports, is the first lever if the gap matters.
+- The engine rates time the engine's steps alone, on 64 of the windows, with commit `cb60c8bd`. The 512-window runs timed each window's whole loop, including scoring every position's 4,096 logits in f64, and ran 2–3% slower.
 - The tokens per second are not an architecture comparison:
   - they were measured on one thread while two training runs shared the 4-core sandbox;
   - the stack engine's reads use scalar loops over 32-bit keys and values, while the Llama engine uses vector kernels over 8-bit ones.

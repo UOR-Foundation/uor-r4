@@ -468,8 +468,8 @@
  "files": [
   {
    "path": "README.md",
-   "bytes": 4685,
-   "sha256": "c4a147041ad231973c88e87f7127f43637813d8fe2f00c856830acc45e1c60b9"
+   "bytes": 4937,
+   "sha256": "259ccd4ba52f6247b70b73e23a893241d31b16a8838f844fa53d981c686d93dd"
   },
   {
    "path": "ablation/dot/attempt.json",
@@ -567,6 +567,21 @@
    "sha256": "5baa20745d6004db506bc663cf22f808d5f04fb361557ddcce52e6217fa5258f"
   },
   {
+   "path": "integer/ablation-dot/steps64/attempt.json",
+   "bytes": 728,
+   "sha256": "8436a861715645a81c715890cd257e4fdf2d5a9e77eafd341fe156d249d09029"
+  },
+  {
+   "path": "integer/ablation-dot/steps64/evaluation.json",
+   "bytes": 7823,
+   "sha256": "8060aad8d0ac3a907fa92fe8ac59a196cb9b9b72045332434101b5a4bda406a8"
+  },
+  {
+   "path": "integer/ablation-dot/steps64/manifest.json",
+   "bytes": 508,
+   "sha256": "5171ed8840618b254205c116bd5ae3a1ec6ac82e5f115394d307f9b7b92eb120"
+  },
+  {
    "path": "integer/ablation-norot/evaluation/attempt.json",
    "bytes": 969,
    "sha256": "55e0611c419e24d75e44aae9ec3e167515034752168e9ec8f4c476609a423fe6"
@@ -595,6 +610,21 @@
    "path": "integer/ablation-norot/export/manifest.json",
    "bytes": 652,
    "sha256": "baa81b0409c58728347c689bc7774b7a31fc37ec1977d82be3ddb9a24199ec6f"
+  },
+  {
+   "path": "integer/ablation-norot/steps64/attempt.json",
+   "bytes": 732,
+   "sha256": "b9c215ac254d4c456b4b98914b5d46acfadbbd8c051fbfa49ba5841c93773371"
+  },
+  {
+   "path": "integer/ablation-norot/steps64/evaluation.json",
+   "bytes": 7832,
+   "sha256": "75f5d5aa53b3da159ebb779bcd48d21cafc9d4ea45137c72c5523fe25486da7f"
+  },
+  {
+   "path": "integer/ablation-norot/steps64/manifest.json",
+   "bytes": 510,
+   "sha256": "c67f3d6ffe75f40a8da3a5d0420c6407ec033470d297525cd471eb68201f3bd3"
   },
   {
    "path": "integer/ablation-readsonly/evaluation/attempt.json",
@@ -627,6 +657,21 @@
    "sha256": "dc6e0fae97dfa49986da05ae5a74a7a9314490f87491110579d39f41c7e2de4e"
   },
   {
+   "path": "integer/ablation-readsonly/steps64/attempt.json",
+   "bytes": 740,
+   "sha256": "88a9bf782f10c09e1a8ae893a96a1fc5ba247adc751f178e23a24510545657c8"
+  },
+  {
+   "path": "integer/ablation-readsonly/steps64/evaluation.json",
+   "bytes": 7845,
+   "sha256": "f1c511b4678e270fc25b39036b799253baa4a8b3a99828ab1d394a807ba8028a"
+  },
+  {
+   "path": "integer/ablation-readsonly/steps64/manifest.json",
+   "bytes": 514,
+   "sha256": "7024a4989af3a03715cb9fdda91c943952aac504a69b2cc149bbeeb3274b4798"
+  },
+  {
    "path": "integer/pilot-geometric_lr0.004/evaluation/attempt.json",
    "bytes": 996,
    "sha256": "38096733cabe9e176dabdeb53a0b21ea2f8873de9bf5a3b0cd85406f9415dbd9"
@@ -655,6 +700,21 @@
    "path": "integer/pilot-geometric_lr0.004/export/manifest.json",
    "bytes": 661,
    "sha256": "50191c2cdcb38d8daaacd6c52cb10f57037d68a1a41e3438c6919753f78cfd5f"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/steps64/attempt.json",
+   "bytes": 750,
+   "sha256": "2230689180f19ee91ab3cbe26f9807473f254e8b294f26996d769d7f30feeafe"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/steps64/evaluation.json",
+   "bytes": 7842,
+   "sha256": "748900b53579795c9a06caf743958847e932712ad0f0cb378f6d2830123dbad8"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/steps64/manifest.json",
+   "bytes": 519,
+   "sha256": "3cfbed6964956e3dc261b10ef70c47cd4aedd237e0c6e3fb45b754509de8ee94"
   },
   {
    "path": "integer/pilot-transformer_lr0.002/evaluation/attempt.json",
@@ -687,9 +747,24 @@
    "sha256": "7bea2a0d65702fed56ee98884887b28129954c8931933363d06d2862dc2c25bd"
   },
   {
+   "path": "integer/pilot-transformer_lr0.002/steps64/attempt.json",
+   "bytes": 754,
+   "sha256": "e1e42109f32532abc4cd4332125e2e52afd758a76a06d28dc7e35b90fe758660"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/steps64/evaluation.json",
+   "bytes": 7836,
+   "sha256": "220261170392394bc7cb563a4cc136d7970f0d884adcced06f14a819803cdbe7"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/steps64/manifest.json",
+   "bytes": 521,
+   "sha256": "cf17aeabc067aa838520ef62255488e002cf729dfd8ae16a47b6804ed340cf5b"
+  },
+  {
    "path": "integer/run.log",
-   "bytes": 367,
-   "sha256": "57d657862eda25aa3ee32a1beb046bc9e09c0fc9fbed82dc7d42244f076d3c5d"
+   "bytes": 531,
+   "sha256": "f14826a893e63f8aed80252b1269208288466bf748b78f3441d40ab578b3633c"
   },
   {
    "path": "pilot/chain.log",
@@ -850,7 +925,8 @@
  "source_commits": {
   "dca1b790": "pilot runs",
   "b87acd63": "ablation runs; relative to dca1b790 only the example's sample decoding, evaluate mode and early-stop checkpoint retention changed, not the model, optimizer or training loop",
-  "2a681bb7": "integer serving: export and lut-evaluate of the pilot pair and seed-1 ablations"
+  "2a681bb7": "integer serving: export and lut-evaluate of the pilot pair and seed-1 ablations",
+  "cb60c8bd": "integer serving: engine step timing on 64 windows, apart from the f64 scoring loop"
  },
  "integer": [
   {
@@ -869,7 +945,9 @@
    "artifact_bytes": 4969796,
    "artifact_retained_outside": "scratchpad/c4/lut/v1/export-pilot-geometric_lr0.004/model.lut",
    "float_model_sha256": "bd4c1aba018a3e4814ef82d98450782ff54f7b80aa94382424015d5e71e14c7b",
-   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
+   "engine_step_tokens_per_second_64_windows": 801.4968613320049,
+   "engine_step_source_commit": "cb60c8bd"
   },
   {
    "model": "pilot-transformer_lr0.002",
@@ -887,7 +965,9 @@
    "artifact_bytes": 4524480,
    "artifact_retained_outside": "scratchpad/c4/lut/v1/export-pilot-transformer_lr0.002/model.lut",
    "float_model_sha256": "c0bc35e2fd3085cdf0c8962a247f58a2fdc5e1b98e6422a3fad88604bd83f9f4",
-   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
+   "engine_step_tokens_per_second_64_windows": 958.2126901676523,
+   "engine_step_source_commit": "cb60c8bd"
   },
   {
    "model": "ablation-dot",
@@ -905,7 +985,9 @@
    "artifact_bytes": 4612676,
    "artifact_retained_outside": "scratchpad/c4/lut/v1/export-ablation-dot/model.lut",
    "float_model_sha256": "edf6306470d7e0a231c8bb5f6896d18546588937d905cf9b14b6af771b942df2",
-   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
+   "engine_step_tokens_per_second_64_windows": 822.0073661235024,
+   "engine_step_source_commit": "cb60c8bd"
   },
   {
    "model": "ablation-norot",
@@ -923,7 +1005,9 @@
    "artifact_bytes": 4965252,
    "artifact_retained_outside": "scratchpad/c4/lut/v1/export-ablation-norot/model.lut",
    "float_model_sha256": "681588f74c819a201bb057bd77a1c52438c2ec5ff6669282c29fef427d1cacac",
-   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
+   "engine_step_tokens_per_second_64_windows": 862.4131466129527,
+   "engine_step_source_commit": "cb60c8bd"
   },
   {
    "model": "ablation-readsonly",
@@ -941,7 +1025,9 @@
    "artifact_bytes": 4935684,
    "artifact_retained_outside": "scratchpad/c4/lut/v1/export-ablation-readsonly/model.lut",
    "float_model_sha256": "1bfb0fbde0968287120404fbbc95348552f45fd7a534446e991d8e621aed649d",
-   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177"
+   "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
+   "engine_step_tokens_per_second_64_windows": 676.8646620332884,
+   "engine_step_source_commit": "cb60c8bd"
   }
  ]
 }
