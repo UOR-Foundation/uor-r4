@@ -6,8 +6,8 @@
 
 use std::sync::Mutex;
 use uor_r4_integer::{
-    score_token_salience, Bundle, ChatSession, ReadMode, RoleToken, SamplePolicy,
-    KEY_DIM, PROBABILITY_TOTAL,
+    score_token_salience, Bundle, ChatSession, ReadMode, RoleToken, SamplePolicy, KEY_DIM,
+    PROBABILITY_TOTAL,
 };
 
 static BENCH_LOCK: Mutex<()> = Mutex::new(());
@@ -43,14 +43,40 @@ fn test_adversarial_m5_salience_scoring_fuzzing_and_ranking_invariants() {
     };
 
     let test_tokens = [
-        0u32, 1, 2, 3, 4, 5, 6, // role/special tokens
-        9, 10, 13, 32,          // whitespace
-        33, 44, 46, 58, 59, 63, // punctuation (!, ,, ., :, ;, ?)
-        b'0' as u32, b'5' as u32, b'9' as u32, // digits
-        b'A' as u32, b'M' as u32, b'Z' as u32, // uppercase
-        b'a' as u32, b'z' as u32,             // lowercase
-        256, 300, 512, 1024, 2048, 4095,      // BPE subwords
-        u32::MAX, 0x8000_0000, 0x7FFF_FFFF,   // extreme tokens
+        0u32,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6, // role/special tokens
+        9,
+        10,
+        13,
+        32, // whitespace
+        33,
+        44,
+        46,
+        58,
+        59,
+        63, // punctuation (!, ,, ., :, ;, ?)
+        b'0' as u32,
+        b'5' as u32,
+        b'9' as u32, // digits
+        b'A' as u32,
+        b'M' as u32,
+        b'Z' as u32, // uppercase
+        b'a' as u32,
+        b'z' as u32, // lowercase
+        256,
+        300,
+        512,
+        1024,
+        2048,
+        4095, // BPE subwords
+        u32::MAX,
+        0x8000_0000,
+        0x7FFF_FFFF, // extreme tokens
     ];
 
     let mut key = [0i32; KEY_DIM];
@@ -104,7 +130,11 @@ fn test_adversarial_m5_salience_scoring_fuzzing_and_ranking_invariants() {
                 // Spiky key (one extreme, rest 0)
                 key.fill(0);
                 let idx = (xorshift() as usize) % KEY_DIM;
-                key[idx] = if xorshift() % 2 == 0 { i32::MAX } else { i32::MIN };
+                key[idx] = if xorshift() % 2 == 0 {
+                    i32::MAX
+                } else {
+                    i32::MIN
+                };
             }
             3 => {
                 // Large negative keys
@@ -198,19 +228,17 @@ fn test_adversarial_m5_deep_long_horizon_rollover_and_causal_noread() {
     let _probe_token = target_tokens[0];
 
     // Session 1: Full Read
-    let mut session_full = ChatSession::new(
-        &bundle,
-        Some("Vault guardian."),
-        88888,
-    )
-    .expect("session created");
+    let mut session_full =
+        ChatSession::new(&bundle, Some("Vault guardian."), 88888).expect("session created");
 
     // Turn 1: Register fact
     let turn1_input = format!(
         "CRITICAL ARCHIVE RECORD: The primary vault security key code is {}. Memorize this key.",
         target_entity
     );
-    session_full.ingest_user_turn(&turn1_input).expect("ingest turn 1");
+    session_full
+        .ingest_user_turn(&turn1_input)
+        .expect("ingest turn 1");
 
     // Turns 2..24: Inundate dialogue ring with 23 turns of heavy distractor content
     // to thoroughly blow past L1 capacity (224 slots) and compress multiple L2 pages.
@@ -229,8 +257,14 @@ fn test_adversarial_m5_deep_long_horizon_rollover_and_causal_noread() {
 
     for i in 0..23 {
         let distractor = distractors[i % distractors.len()];
-        let prompt = format!("Turn {}: {} Provide details on this topic.", i + 2, distractor);
-        session_full.ingest_user_turn(&prompt).expect("ingest distractor turn");
+        let prompt = format!(
+            "Turn {}: {} Provide details on this topic.",
+            i + 2,
+            distractor
+        );
+        session_full
+            .ingest_user_turn(&prompt)
+            .expect("ingest distractor turn");
     }
 
     let tokens_seen = session_full.telemetry().dialogue_tokens_seen;
@@ -252,7 +286,9 @@ fn test_adversarial_m5_deep_long_horizon_rollover_and_causal_noread() {
 
     // Turn 25: Query the fact registered in Turn 1
     let query = "What is the primary vault security key code?";
-    session_full.ingest_user_turn(query).expect("ingest query turn");
+    session_full
+        .ingest_user_turn(query)
+        .expect("ingest query turn");
     let step_full = session_full.last_step().expect("step exists");
 
     // Select the target fact token with highest model likelihood under Full Read
@@ -271,22 +307,28 @@ fn test_adversarial_m5_deep_long_horizon_rollover_and_causal_noread() {
     let ppl_full = nll_full.exp();
 
     // Session 2: Parallel NoRead Ablation
-    let mut session_noread = ChatSession::new(
-        &bundle,
-        Some("Vault guardian."),
-        88888,
-    )
-    .expect("session created");
+    let mut session_noread =
+        ChatSession::new(&bundle, Some("Vault guardian."), 88888).expect("session created");
     session_noread.set_read_mode(ReadMode::NoRead);
 
     // Ingest identical history
-    session_noread.ingest_user_turn(&turn1_input).expect("ingest turn 1");
+    session_noread
+        .ingest_user_turn(&turn1_input)
+        .expect("ingest turn 1");
     for i in 0..23 {
         let distractor = distractors[i % distractors.len()];
-        let prompt = format!("Turn {}: {} Provide details on this topic.", i + 2, distractor);
-        session_noread.ingest_user_turn(&prompt).expect("ingest distractor turn");
+        let prompt = format!(
+            "Turn {}: {} Provide details on this topic.",
+            i + 2,
+            distractor
+        );
+        session_noread
+            .ingest_user_turn(&prompt)
+            .expect("ingest distractor turn");
     }
-    session_noread.ingest_user_turn(query).expect("ingest query turn");
+    session_noread
+        .ingest_user_turn(query)
+        .expect("ingest query turn");
     let step_noread = session_noread.last_step().expect("step exists");
 
     // NoRead Invariants
@@ -300,7 +342,8 @@ fn test_adversarial_m5_deep_long_horizon_rollover_and_causal_noread() {
         "NoRead must allocate PROBABILITY_TOTAL to no_read_mass"
     );
 
-    let prob_noread = step_noread.probabilities[probe_token as usize] as f64 / PROBABILITY_TOTAL as f64;
+    let prob_noread =
+        step_noread.probabilities[probe_token as usize] as f64 / PROBABILITY_TOTAL as f64;
     let nll_noread = -(prob_noread.max(1e-12)).ln();
     let ppl_noread = nll_noread.exp();
 
@@ -346,12 +389,8 @@ fn test_adversarial_m5_pathological_cyclic_resonance_and_holonomy() {
     let _guard = BENCH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let bundle = create_test_bundle();
 
-    let mut session = ChatSession::new(
-        &bundle,
-        Some("Anti-loop assistant."),
-        55555,
-    )
-    .expect("session created");
+    let mut session =
+        ChatSession::new(&bundle, Some("Anti-loop assistant."), 55555).expect("session created");
     session.set_policy(SamplePolicy::Categorical { top_k: 4096 });
 
     let stop_tokens = vec![RoleToken::TurnEnd.id(), RoleToken::EOS_ID];

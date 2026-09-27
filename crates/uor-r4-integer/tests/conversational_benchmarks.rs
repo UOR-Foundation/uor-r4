@@ -1437,12 +1437,15 @@ fn test_m4_f12_adversarial_full_turn_repetition_diversity() {
 fn test_m4_f12_persona_consistency_20_turns_no_drift() {
     let bundle = create_test_bundle_with_byte_vocab();
     let scenarios = load_long_horizon_scenarios();
-    assert!(!scenarios.is_empty(), "Long-horizon scenarios must not be empty");
+    assert!(
+        !scenarios.is_empty(),
+        "Long-horizon scenarios must not be empty"
+    );
 
     let sc = &scenarios[0];
     let persona_text = fit_persona(&sc.persona);
-    let mut session = ChatSession::new(&bundle, Some(persona_text), 42)
-        .expect("Create long-horizon session");
+    let mut session =
+        ChatSession::new(&bundle, Some(persona_text), 42).expect("Create long-horizon session");
     session.set_policy(SamplePolicy::Categorical { top_k: 4096 });
 
     let initial_persistent_tokens = session.state().persistent_tokens.clone();
@@ -1657,10 +1660,7 @@ fn test_m4_f13_long_horizon_factual_recall_k512_to_k1024() {
             sc.scenario_id, total_tokens, p_en, p_nr, delta_nll, ppl_ratio, recall_pass
         );
 
-        let expected_entity_str = turn20
-            .expected_entity
-            .as_deref()
-            .unwrap_or(&fact_reg.value);
+        let expected_entity_str = turn20.expected_entity.as_deref().unwrap_or(&fact_reg.value);
         let scenario_record = serde_json::json!({
             "scenario_id": sc.scenario_id,
             "expected_entity": expected_entity_str,
@@ -1726,8 +1726,7 @@ fn test_m4_f14_causal_no_read_ablation_delta_nll_and_ppl_ratio() {
     let fact_tokens = bundle.tokenizer().encode(fact_value);
 
     // Session 1: Enabled
-    let mut session_en =
-        ChatSession::new(&bundle, Some(fit_persona(&sc.persona)), 777).unwrap();
+    let mut session_en = ChatSession::new(&bundle, Some(fit_persona(&sc.persona)), 777).unwrap();
     for turn in sc.turns.iter().take(20) {
         session_en.ingest_user_turn(&turn.input).unwrap();
     }
@@ -1746,8 +1745,7 @@ fn test_m4_f14_causal_no_read_ablation_delta_nll_and_ppl_ratio() {
     let (p_en, nll_en, ppl_en) = compute_step_likelihood(step_en, target_token);
 
     // Session 2: NoRead
-    let mut session_nr =
-        ChatSession::new(&bundle, Some(fit_persona(&sc.persona)), 777).unwrap();
+    let mut session_nr = ChatSession::new(&bundle, Some(fit_persona(&sc.persona)), 777).unwrap();
     session_nr.set_read_mode(ReadMode::NoRead);
     for turn in sc.turns.iter().take(20) {
         session_nr.ingest_user_turn(&turn.input).unwrap();
@@ -1786,8 +1784,7 @@ fn test_m4_f14_causal_no_read_ablation_delta_nll_and_ppl_ratio() {
 #[test]
 fn test_m4_f15_cyclic_loop_resistance_and_hopf_holonomy() {
     let bundle = create_test_bundle_with_byte_vocab();
-    let mut session =
-        ChatSession::new(&bundle, Some("You are an AI assistant."), 999).unwrap();
+    let mut session = ChatSession::new(&bundle, Some("You are an AI assistant."), 999).unwrap();
     session.set_policy(SamplePolicy::Categorical { top_k: 4096 });
 
     let stop_tokens = vec![RoleToken::TurnEnd.id(), RoleToken::EOS_ID];
@@ -1823,7 +1820,10 @@ fn test_m4_f15_cyclic_loop_resistance_and_hopf_holonomy() {
 
     let eval_window = &response_tokens[..5];
     let (d1, d2) = compute_ngram_diversity(eval_window);
-    println!("N-Gram Diversity (5-turn window): D1 = {:.3}, D2 = {:.3}", d1, d2);
+    println!(
+        "N-Gram Diversity (5-turn window): D1 = {:.3}, D2 = {:.3}",
+        d1, d2
+    );
     assert!(d1 >= 0.20, "D1 diversity {:.3} < 0.20", d1);
     assert!(d2 >= 0.30, "D2 diversity {:.3} < 0.30", d2);
 

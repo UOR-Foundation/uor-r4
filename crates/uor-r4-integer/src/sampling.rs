@@ -142,7 +142,8 @@ impl Sampler {
             self.ranked.truncate(top_k);
         }
         if min_p_threshold > 0 {
-            self.ranked.retain(|&idx| probabilities[idx] >= min_p_threshold);
+            self.ranked
+                .retain(|&idx| probabilities[idx] >= min_p_threshold);
             if self.ranked.is_empty() {
                 self.ranked.push(best);
             }
@@ -432,9 +433,15 @@ mod tests {
         let de_cat: SamplePolicy = serde_json::from_str(&json_cat).unwrap();
         assert_eq!(de_cat, policy);
 
-        let policy_min_p = SamplePolicy::MinP { top_k: 40, min_p_q16: 3276 };
+        let policy_min_p = SamplePolicy::MinP {
+            top_k: 40,
+            min_p_q16: 3276,
+        };
         let json_min_p = serde_json::to_string(&policy_min_p).unwrap();
-        assert_eq!(json_min_p, "{\"kind\":\"min_p\",\"top_k\":40,\"min_p_q16\":3276}");
+        assert_eq!(
+            json_min_p,
+            "{\"kind\":\"min_p\",\"top_k\":40,\"min_p_q16\":3276}"
+        );
         let de_min_p: SamplePolicy = serde_json::from_str(&json_min_p).unwrap();
         assert_eq!(de_min_p, policy_min_p);
     }

@@ -252,9 +252,7 @@ fn print_welcome_banner(bundle: &Bundle, policy: SamplePolicy, read_mode: ReadMo
 
 fn print_help() {
     println!("{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Available Slash Commands:");
-    println!(
-        "  /persona [PROMPT]     Set or inspect persistent system persona (slots 0..31)"
-    );
+    println!("  /persona [PROMPT]     Set or inspect persistent system persona (slots 0..31)");
     println!(
         "  /reset                Clear dialogue slots (32..255) and retain persistent persona"
     );
@@ -369,7 +367,9 @@ fn handle_slash_command<'a>(line: &str, session: &mut ChatSession<'a>, bundle: &
                         );
                     }
                     Err(err) => {
-                        eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Failed to set persona: {err}");
+                        eprintln!(
+                            "{ANSI_RED_BOLD}[error]{ANSI_RESET} Failed to set persona: {err}"
+                        );
                     }
                 }
             }
@@ -506,7 +506,9 @@ fn resolve_bundle_path(path: &Path) -> PathBuf {
         if target_path.exists() {
             return target_path.to_path_buf();
         }
-        let full_target = Path::new("/Users/casey.allard/uor-r4-investigations/integer-serving-20260925").join(target);
+        let full_target =
+            Path::new("/Users/casey.allard/uor-r4-investigations/integer-serving-20260925")
+                .join(target);
         if full_target.exists() {
             return full_target;
         }

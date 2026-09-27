@@ -19,21 +19,27 @@ const TABLES_PATH: &str = "../../docs/evidence/native-lorentz-packet-2026-09-26/
 #[test]
 fn test_m4_multi_hop_logical_deduction_and_holonomy() {
     let bundle = create_test_bundle_with_byte_vocab();
-    let mut session = ChatSession::new(&bundle, Some("Logic engine."), 42)
-        .expect("new session");
+    let mut session = ChatSession::new(&bundle, Some("Logic engine."), 42).expect("new session");
 
     // Ingest 3 premise turns constructing a transitive inference chain (A -> B -> C -> D)
     let premise1 = "Premise 1: All prime indices map to invariant coordinates on Torus T8.";
     let premise2 = "Premise 2: Any coordinate on Torus T8 induces non-zero Hopf fiber rotation.";
-    let premise3 = "Premise 3: Non-zero Hopf fiber rotation guarantees deterministic cycle protection.";
+    let premise3 =
+        "Premise 3: Non-zero Hopf fiber rotation guarantees deterministic cycle protection.";
 
-    let len1 = session.ingest_user_turn(premise1).expect("ingest premise 1");
+    let len1 = session
+        .ingest_user_turn(premise1)
+        .expect("ingest premise 1");
     let holonomy_after_1 = session.telemetry().cumulative_holonomy_q30;
 
-    let len2 = session.ingest_user_turn(premise2).expect("ingest premise 2");
+    let len2 = session
+        .ingest_user_turn(premise2)
+        .expect("ingest premise 2");
     let holonomy_after_2 = session.telemetry().cumulative_holonomy_q30;
 
-    let len3 = session.ingest_user_turn(premise3).expect("ingest premise 3");
+    let len3 = session
+        .ingest_user_turn(premise3)
+        .expect("ingest premise 3");
     let holonomy_after_3 = session.telemetry().cumulative_holonomy_q30;
 
     assert!(len1 > 0 && len2 > 0 && len3 > 0);
@@ -66,8 +72,7 @@ fn test_m4_multi_hop_logical_deduction_and_holonomy() {
 
     // Causal ablation check: NoRead must disable premise recall
     let mut session_noread =
-        ChatSession::new(&bundle, Some("Logic engine."), 42)
-            .expect("new noread session");
+        ChatSession::new(&bundle, Some("Logic engine."), 42).expect("new noread session");
     session_noread.set_read_mode(ReadMode::NoRead);
     session_noread.ingest_user_turn(premise1).unwrap();
     session_noread.ingest_user_turn(premise2).unwrap();
@@ -123,8 +128,7 @@ fn test_m4_exact_algebraic_recurrence_in_z_phi() {
 #[test]
 fn test_m4_structural_code_reasoning_with_causal_necessity() {
     let bundle = create_test_bundle_with_byte_vocab();
-    let mut session = ChatSession::new(&bundle, Some("Code analyzer."), 101)
-        .expect("new session");
+    let mut session = ChatSession::new(&bundle, Some("Code analyzer."), 101).expect("new session");
 
     let code_snippet = "fn process_token(input: u32) -> u32 {\n    let accumulator = input + 10;\n    let result = accumulator * 2;\n    result\n}";
     let distractor1 = "The quick brown fox jumps over the lazy dog repeatedly.";
@@ -140,11 +144,18 @@ fn test_m4_structural_code_reasoning_with_causal_necessity() {
 
     // Verify that memory read actively retrieves the code snippet turn
     let total_mass: u64 = step.read_masses.iter().sum();
-    assert!(total_mass > 0, "Structural code query must attend to code definition in memory");
+    assert!(
+        total_mass > 0,
+        "Structural code query must attend to code definition in memory"
+    );
 
     // Check token identifier 'a' for accumulator
     let target_token = bundle.tokenizer().encode("accumulator")[0];
-    let prob_enabled = step.probabilities.get(target_token as usize).copied().unwrap_or(0);
+    let prob_enabled = step
+        .probabilities
+        .get(target_token as usize)
+        .copied()
+        .unwrap_or(0);
 
     // Run parallel NoRead session
     let mut session_noread = ChatSession::new(&bundle, Some("Code analyzer."), 101).unwrap();
@@ -155,7 +166,11 @@ fn test_m4_structural_code_reasoning_with_causal_necessity() {
     session_noread.ingest_user_turn(query).unwrap();
 
     let step_noread = session_noread.last_step().unwrap();
-    let prob_noread = step_noread.probabilities.get(target_token as usize).copied().unwrap_or(0);
+    let prob_noread = step_noread
+        .probabilities
+        .get(target_token as usize)
+        .copied()
+        .unwrap_or(0);
 
     // Compute NLL delta
     let p_en_f = (prob_enabled.max(1) as f64) / (PROBABILITY_TOTAL as f64);

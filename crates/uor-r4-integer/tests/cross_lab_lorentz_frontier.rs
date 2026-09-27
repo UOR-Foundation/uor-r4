@@ -1,8 +1,10 @@
 use std::path::Path;
 use uor_r4_integer::{IntegerModel, ReadGeometry, ReadMode};
 
-const LORENTZ_MODEL_PATH: &str = "../../docs/evidence/native-lorentz-packet-2026-09-26/packed/qat-lorentzflat_s1";
-const DOT_MODEL_PATH: &str = "../../docs/evidence/native-lorentz-packet-2026-09-26/packed/qat-dot_s1";
+const LORENTZ_MODEL_PATH: &str =
+    "../../docs/evidence/native-lorentz-packet-2026-09-26/packed/qat-lorentzflat_s1";
+const DOT_MODEL_PATH: &str =
+    "../../docs/evidence/native-lorentz-packet-2026-09-26/packed/qat-dot_s1";
 const TABLES_PATH: &str = "../../docs/evidence/native-lorentz-packet-2026-09-26/packed/tables";
 const TOTAL: u64 = 1u64 << 48;
 
@@ -90,9 +92,8 @@ fn test_cross_lab_lorentz_causal_nll_advantage() {
 
     // Sequence of repeated/pattern tokens to give memory read an active causal signal
     let sequence: Vec<u32> = vec![
-        10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
-        10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
-        10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
+        10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 10, 20,
+        30, 40, 50, 60, 70, 80, 90, 100,
     ];
 
     // Compute NLL under ReadMode::Enabled
@@ -101,7 +102,9 @@ fn test_cross_lab_lorentz_causal_nll_advantage() {
     for i in 0..sequence.len() - 1 {
         let current = sequence[i];
         let target = sequence[i + 1] as usize;
-        let step = model.step(&mut session_read, current, ReadMode::Enabled).expect("step read");
+        let step = model
+            .step(&mut session_read, current, ReadMode::Enabled)
+            .expect("step read");
         let prob = (step.probabilities[target] as f64) / (TOTAL as f64);
         let clipped = prob.max(1e-12);
         nll_read -= clipped.ln();
@@ -113,7 +116,9 @@ fn test_cross_lab_lorentz_causal_nll_advantage() {
     for i in 0..sequence.len() - 1 {
         let current = sequence[i];
         let target = sequence[i + 1] as usize;
-        let step = model.step(&mut session_noread, current, ReadMode::NoRead).expect("step noread");
+        let step = model
+            .step(&mut session_noread, current, ReadMode::NoRead)
+            .expect("step noread");
         let prob = (step.probabilities[target] as f64) / (TOTAL as f64);
         let clipped = prob.max(1e-12);
         nll_noread -= clipped.ln();
@@ -128,5 +133,8 @@ fn test_cross_lab_lorentz_causal_nll_advantage() {
     );
 
     // Memory read must improve or at least match prediction on repeated sequence
-    assert!(delta_nll >= 0.0, "Lorentz memory read must provide positive causal predictive benefit");
+    assert!(
+        delta_nll >= 0.0,
+        "Lorentz memory read must provide positive causal predictive benefit"
+    );
 }
