@@ -23,9 +23,10 @@
 #   3. evaluate each trained model on DEV with the block protocol (tune, comparison and full means)
 #   4. write summary.txt: comparison-tail NLL per arm next to #1017's 1.574024, and greedy/sampled continuations
 #
-# Knobs: SEEDS ("1"), STEPS (7324), BATCH (16), THREADS (4), SEQUENTIAL (0), LR_TRANSFORMER and LR_GEOMETRIC (the
-# lab pilot's choices), WARMUP (200), PATTERN (rrarra), READ (lorentz), ROTATION (true), TRAIN_WEIGHTS (unset:
-# proportional), EVAL_EVERY (250), FEATURES (cpu-accelerate on macOS, none elsewhere).
+# Knobs: SEEDS ("1"), STEPS (7324), BATCH (16), THREADS (4), SEQUENTIAL (0), LR_TRANSFORMER (0.002) and
+# LR_GEOMETRIC (0.004), the lab pilot's choices on code (section 5 of the note), WARMUP (200), PATTERN (rrarra),
+# READ (lorentz), ROTATION (true), TRAIN_WEIGHTS (unset: proportional), EVAL_EVERY (250), FEATURES (cpu-accelerate
+# on macOS, none elsewhere).
 #
 # Shared machine: by default both arms run at once with THREADS threads each (8 threads). Before launching, check
 # #973 for other labs' active fits and do not start beside one; SEQUENTIAL=1 runs the arms one after the other,
@@ -46,7 +47,7 @@ STEPS=${STEPS:-7324}
 BATCH=${BATCH:-16}
 THREADS=${THREADS:-4}
 LR_TRANSFORMER=${LR_TRANSFORMER:-0.002}
-LR_GEOMETRIC=${LR_GEOMETRIC:-0.002}
+LR_GEOMETRIC=${LR_GEOMETRIC:-0.004}
 WARMUP=${WARMUP:-200}
 PATTERN=${PATTERN:-rrarra}
 READ=${READ:-lorentz}
