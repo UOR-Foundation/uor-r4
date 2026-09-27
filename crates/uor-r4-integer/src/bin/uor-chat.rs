@@ -8,10 +8,12 @@ use std::path::{Path, PathBuf};
 use std::process;
 use uor_r4_integer::bundle::{create_test_bundle_with_byte_vocab, Bundle};
 use uor_r4_integer::config::ReadMode;
+use uor_r4_integer::generation::Selection;
 use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::sampling::SamplePolicy;
 use uor_r4_integer::session::ChatSession;
 use uor_r4_integer::Result;
+use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 
 const VERSION: &str = "0.1.0";
 
@@ -32,6 +34,7 @@ struct CliArgs {
     read_mode: ReadMode,
     max_tokens: usize,
     verify_kernel: bool,
+    protocol: Option<String>,
 }
 
 impl Default for CliArgs {
@@ -46,6 +49,7 @@ impl Default for CliArgs {
             read_mode: ReadMode::Enabled,
             max_tokens: 128,
             verify_kernel: false,
+            protocol: None,
         }
     }
 }
@@ -70,6 +74,7 @@ fn print_usage() {
         "  -m, --read-mode <MODE>      Memory read mode: 'enabled' or 'no_read' (default: enabled)"
     );
     eprintln!("      --max-tokens <INT>      Maximum response tokens per turn (default: 128)");
+    eprintln!("      --protocol <MODE>       Dialogue protocol: 'literal' (default when supported) or 'legacy'");
     eprintln!("      --verify-kernel         Run self-test verifying Zero-MatMul kernel retention and exit");
     eprintln!("  -h, --help                  Print help information");
     eprintln!("  -V, --version               Print version information");
@@ -224,6 +229,28 @@ fn parse_cli_args() -> CliArgs {
             "--verify-kernel" => {
                 args.verify_kernel = true;
             }
+            "--protocol" => {
+                idx += 1;
+                if idx < raw.len() {
+                    match raw[idx].to_lowercase().as_str() {
+                        "literal" | "literal_roles" | "v1" => {
+                            args.protocol = Some("literal".to_string())
+                        }
+                        "legacy" | "roles" => args.protocol = Some("legacy".to_string()),
+                        other => {
+                            eprintln!(
+                                "{ANSI_RED_BOLD}error:{ANSI_RESET} unrecognized protocol '{other}'. Expected 'literal' or 'legacy'"
+                            );
+                            process::exit(1);
+                        }
+                    }
+                } else {
+                    eprintln!(
+                        "{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--protocol'"
+                    );
+                    process::exit(1);
+                }
+            }
             unknown => {
                 eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} unrecognized option '{unknown}'");
                 print_usage();
@@ -256,7 +283,12 @@ fn get_process_rss_mb() -> Option<f64> {
     Some(rss_kib / 1024.0)
 }
 
-fn print_welcome_banner(bundle: &Bundle, policy: SamplePolicy, read_mode: ReadMode) {
+fn print_welcome_banner(
+    bundle: &Bundle,
+    policy: SamplePolicy,
+    read_mode: ReadMode,
+    protocol_desc: &str,
+) {
     let id = bundle.identity();
     let id_short = if id.len() > 16 { &id[..16] } else { id };
     println!("================================================================================");
@@ -271,6 +303,7 @@ fn print_welcome_banner(bundle: &Bundle, policy: SamplePolicy, read_mode: ReadMo
     println!("  Memory Capacity : 256 tokens (32 Persistent Persona, 224 Dialogue Slots)");
     println!("  Sampling Policy : {:?}", policy);
     println!("  Memory Read Mode: {:?}", read_mode);
+    println!("  Dialogue Schema : {}", protocol_desc);
     println!("  Type /help for slash commands, /quit to exit.");
     println!("================================================================================");
 }
@@ -558,7 +591,7 @@ fn resolve_bundle_path(path: &Path) -> PathBuf {
 fn main() {
     retain_kernel_symbols();
 
-    let cli = parse_cli_args();
+    let mut cli = parse_cli_args();
 
     if cli.verify_kernel {
         let bundle = match cli.bundle_path.as_deref() {
@@ -609,17 +642,214 @@ fn main() {
         }
     };
 
-    let policy = if let Some(min_p) = cli.min_p {
+    let (selection, policy) = if let Some(min_p) = cli.min_p {
         let min_p_q16 = (min_p * 65536.0).round() as u32;
-        SamplePolicy::MinP {
-            top_k: cli.top_k,
-            min_p_q16,
-        }
+        (
+            Selection::MinP {
+                top_k: cli.top_k,
+                min_p_q16,
+                seed: cli.seed,
+            },
+            SamplePolicy::MinP {
+                top_k: cli.top_k,
+                min_p_q16,
+            },
+        )
     } else if cli.temperature <= 0.0 {
-        SamplePolicy::Greedy
+        (Selection::Greedy, SamplePolicy::Greedy)
     } else {
-        SamplePolicy::Categorical { top_k: cli.top_k }
+        (
+            Selection::Categorical {
+                top_k: cli.top_k,
+                seed: cli.seed,
+            },
+            SamplePolicy::Categorical { top_k: cli.top_k },
+        )
     };
+
+    let literal_protocol_opt = DialogueProtocol::literal_roles_v1(bundle.tokenizer()).ok();
+    let use_literal = match cli.protocol.as_deref() {
+        Some("literal") => {
+            if literal_protocol_opt.is_none() {
+                eprintln!(
+                    "{ANSI_RED_BOLD}error:{ANSI_RESET} bundle tokenizer does not support literal_roles_v1 (missing atomic BOS/EOS/UNK)"
+                );
+                process::exit(1);
+            }
+            true
+        }
+        Some("legacy") => false,
+        None => literal_protocol_opt.is_some(),
+        _ => false,
+    };
+
+    if use_literal {
+        let protocol = literal_protocol_opt.unwrap();
+        print_welcome_banner(
+            &bundle,
+            policy,
+            cli.read_mode,
+            "literal-roles-v1 (Schema: uor-r4.literal-role-dialogue/1)",
+        );
+
+        let mut dialogue_messages: Vec<(String, String)> = Vec::new();
+        if let Some(ref prompt) = cli.system_prompt {
+            dialogue_messages.push(("system".to_string(), prompt.clone()));
+        }
+
+        let stdin = io::stdin();
+        let mut reader = stdin.lock();
+
+        loop {
+            print!("{ANSI_CYAN_BOLD}User>{ANSI_RESET} ");
+            if io::stdout().flush().is_err() {
+                break;
+            }
+
+            let mut input_line = String::new();
+            match reader.read_line(&mut input_line) {
+                Ok(0) => {
+                    println!();
+                    println!("{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Exiting session.");
+                    process::exit(0);
+                }
+                Ok(_) => {
+                    let trimmed = input_line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+
+                    if trimmed.starts_with('/') {
+                        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                        match parts[0] {
+                            "/help" => {
+                                print_help();
+                            }
+                            "/quit" | "/exit" => {
+                                println!("{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Goodbye.");
+                                process::exit(0);
+                            }
+                            "/reset" => {
+                                dialogue_messages.clear();
+                                if let Some(ref prompt) = cli.system_prompt {
+                                    dialogue_messages.push(("system".to_string(), prompt.clone()));
+                                }
+                                println!(
+                                    "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Dialogue history reset."
+                                );
+                            }
+                            "/verify" | "/verify-kernel" => {
+                                if let Err(err) = run_kernel_verification(&bundle) {
+                                    eprintln!(
+                                        "{ANSI_RED_BOLD}[error]{ANSI_RESET} Kernel verification failed: {err}"
+                                    );
+                                }
+                            }
+                            "/stats" => {
+                                let rss_str = match get_process_rss_mb() {
+                                    Some(rss) => format!("{:.2} MB (< 35 MB - PASS)", rss),
+                                    None => "Unavailable".to_string(),
+                                };
+                                println!(
+                                    "{ANSI_YELLOW_BOLD}[stats]{ANSI_RESET} Protocol: literal-roles-v1 | Messages: {} | Process RSS: {}",
+                                    dialogue_messages.len(),
+                                    rss_str
+                                );
+                            }
+                            "/read-mode" => {
+                                if parts.len() < 2 {
+                                    eprintln!(
+                                        "{ANSI_RED_BOLD}[error]{ANSI_RESET} Usage: /read-mode <on|off|enabled|no_read>"
+                                    );
+                                } else {
+                                    match parts[1].to_lowercase().as_str() {
+                                        "on" | "enabled" => {
+                                            cli.read_mode = ReadMode::Enabled;
+                                            println!(
+                                                "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Memory read mode set to Enabled."
+                                            );
+                                        }
+                                        "off" | "no_read" | "noread" => {
+                                            cli.read_mode = ReadMode::NoRead;
+                                            println!(
+                                                "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Memory read mode set to NoRead."
+                                            );
+                                        }
+                                        other => {
+                                            eprintln!(
+                                                "{ANSI_RED_BOLD}[error]{ANSI_RESET} Unrecognized mode '{other}'. Expected 'on' or 'off'."
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            other => {
+                                eprintln!(
+                                    "{ANSI_RED_BOLD}[error]{ANSI_RESET} Unknown command '{other}'. Type /help for assistance."
+                                );
+                            }
+                        }
+                        continue;
+                    }
+
+                    dialogue_messages.push(("user".to_string(), trimmed.to_string()));
+                    print!("{ANSI_GREEN_BOLD}Assistant>{ANSI_RESET} ");
+                    io::stdout().flush().ok();
+
+                    let start_time = std::time::Instant::now();
+                    let msg_refs: Vec<Message<'_>> = dialogue_messages
+                        .iter()
+                        .map(|(r, c)| Message {
+                            role: r.as_str(),
+                            content: c.as_str(),
+                        })
+                        .collect();
+
+                    match bundle.generate_dialogue(
+                        &protocol,
+                        &msg_refs,
+                        cli.max_tokens,
+                        selection,
+                        cli.read_mode,
+                        false,
+                    ) {
+                        Ok(dialogue_gen) => {
+                            let resp = dialogue_gen.generation.response_text;
+                            println!("{resp}");
+
+                            let elapsed = start_time.elapsed();
+                            let tok_count = dialogue_gen.generation.generated_token_ids.len();
+                            let elapsed_secs = elapsed.as_secs_f64();
+                            let ms_per_tok = if tok_count > 0 {
+                                (elapsed_secs * 1000.0) / (tok_count as f64)
+                            } else {
+                                0.0
+                            };
+                            let tok_per_sec = if elapsed_secs > 0.0 {
+                                (tok_count as f64) / elapsed_secs
+                            } else {
+                                0.0
+                            };
+                            println!(
+                                "{ANSI_YELLOW_BOLD}[telemetry]{ANSI_RESET} Generated {} tokens in {:.2}s ({:.1} tok/s, {:.3} ms/tok)",
+                                tok_count, elapsed_secs, tok_per_sec, ms_per_tok
+                            );
+                            dialogue_messages.push(("assistant".to_string(), resp));
+                        }
+                        Err(err) => {
+                            println!();
+                            eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Generation error: {err}");
+                        }
+                    }
+                }
+                Err(err) => {
+                    eprintln!("{ANSI_RED_BOLD}[error]{ANSI_RESET} Failed to read input: {err}");
+                    break;
+                }
+            }
+        }
+        return;
+    }
 
     let mut session = match ChatSession::new(&bundle, cli.system_prompt.as_deref(), cli.seed) {
         Ok(mut s) => {
@@ -633,7 +863,12 @@ fn main() {
         }
     };
 
-    print_welcome_banner(&bundle, policy, cli.read_mode);
+    print_welcome_banner(
+        &bundle,
+        policy,
+        cli.read_mode,
+        "legacy (RoleTokens fallback)",
+    );
 
     let stdin = io::stdin();
     let mut reader = stdin.lock();

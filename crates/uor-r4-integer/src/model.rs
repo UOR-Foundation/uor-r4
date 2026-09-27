@@ -796,23 +796,26 @@ pub fn score_token_salience(token: u32, key: &[i32; KEY_DIM]) -> i32 {
         return -1_000_000;
     }
 
-    // ASCII whitespace and common punctuation penalties
-    if token <= 32
-        || (33..=47).contains(&token)
-        || (58..=64).contains(&token)
-        || (91..=96).contains(&token)
-        || (123..=126).contains(&token)
-    {
-        score -= 500_000;
-    } else if (token as u8).is_ascii_digit() {
-        // Numeric tokens (+60k)
-        score += 60_000;
-    } else if (token as u8).is_ascii_uppercase() {
-        // Uppercase / Proper nouns (+50k)
-        score += 50_000;
-    } else if token >= 256 {
+    if token >= 256 {
         // Multi-byte BPE subwords (entity subwords)
         score += 10_000 + (token as i32 & 0x0FFF);
+    } else {
+        let b = token as u8;
+        // ASCII whitespace and common punctuation penalties
+        if b <= 32
+            || (33..=47).contains(&b)
+            || (58..=64).contains(&b)
+            || (91..=96).contains(&b)
+            || (123..=126).contains(&b)
+        {
+            score -= 500_000;
+        } else if b.is_ascii_digit() {
+            // Numeric tokens (+60k)
+            score += 60_000;
+        } else if b.is_ascii_uppercase() {
+            // Uppercase / Proper nouns (+50k)
+            score += 50_000;
+        }
     }
 
     // Geometric Key L1 Energy: sum(|k[d]|) >> 6
@@ -4408,5 +4411,37 @@ mod tests {
                 assert_eq!(fast, expected, "mismatch for x={x}, code={code}");
             }
         }
+    }
+
+    #[test]
+    fn test_score_token_salience_subword_and_byte_boundaries() {
+        let dummy_key = [0i32; KEY_DIM];
+
+        // 1. Delimiter/special tokens (0..=6) must return exactly -1_000_000
+        for tok in 0..=6 {
+            assert_eq!(score_token_salience(tok, &dummy_key), -1_000_000);
+        }
+
+        // 2. Whitespace and punctuation
+        assert!(score_token_salience(32, &dummy_key) <= -400_000);
+        assert!(score_token_salience(b'.' as u32, &dummy_key) <= -400_000);
+        assert!(score_token_salience(b',' as u32, &dummy_key) <= -400_000);
+
+        // 3. Single-byte ASCII digit and uppercase bonuses
+        let digit_score = score_token_salience(b'7' as u32, &dummy_key);
+        let upper_score = score_token_salience(b'A' as u32, &dummy_key);
+        let lower_score = score_token_salience(b'a' as u32, &dummy_key);
+        assert_eq!(digit_score, 60_000);
+        assert_eq!(upper_score, 50_000);
+        assert_eq!(lower_score, 0);
+
+        // 4. Subword tokens (token >= 256) whose lower byte matches ASCII digit or uppercase
+        // Token 304: 304 & 0xFF == 48 (b'0'). Must receive subword bonus, NOT digit bonus.
+        let subword_304 = score_token_salience(304, &dummy_key);
+        assert_eq!(subword_304, 10_000 + (304 & 0x0FFF));
+
+        // Token 321: 321 & 0xFF == 65 (b'A'). Must receive subword bonus, NOT uppercase bonus.
+        let subword_321 = score_token_salience(321, &dummy_key);
+        assert_eq!(subword_321, 10_000 + (321 & 0x0FFF));
     }
 }

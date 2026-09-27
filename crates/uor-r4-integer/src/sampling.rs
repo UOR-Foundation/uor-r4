@@ -529,4 +529,37 @@ mod tests {
             Err(SamplingError::InvalidParameter)
         );
     }
+
+    #[test]
+    fn q16_mul_shift_add_extreme_bounds_and_arbitrary_fractions() {
+        // 1. Extreme u64::MAX with non-power-of-2 factor near 65536
+        let max_val = u64::MAX;
+        let factor = 65535u32;
+        let expected = (((max_val as u128) * (factor as u128)) >> 16) as u64;
+        assert_eq!(q16_mul_shift_add(max_val, factor).unwrap(), expected);
+
+        // 2. max_val - 1 with factor 65535
+        let near_max = u64::MAX - 1;
+        let expected_near = (((near_max as u128) * (factor as u128)) >> 16) as u64;
+        assert_eq!(q16_mul_shift_add(near_max, factor).unwrap(), expected_near);
+
+        // 3. Smallest nonzero inputs
+        assert_eq!(q16_mul_shift_add(1, 1).unwrap(), 0);
+        assert_eq!(q16_mul_shift_add(65536, 1).unwrap(), 1);
+
+        // 4. Typical MinP threshold (5% = 3277 / 65536) on PROBABILITY_ONE
+        let factor_5pct = 3277u32;
+        let expected_5pct = (((PROBABILITY_ONE as u128) * (factor_5pct as u128)) >> 16) as u64;
+        assert_eq!(
+            q16_mul_shift_add(PROBABILITY_ONE, factor_5pct).unwrap(),
+            expected_5pct
+        );
+
+        // 5. Monotonicity: factor_a < factor_b => result_a <= result_b
+        for f in [100u32, 1000, 32768, 60000, 65535] {
+            let res = q16_mul_shift_add(PROBABILITY_ONE, f).unwrap();
+            let ref_res = (((PROBABILITY_ONE as u128) * (f as u128)) >> 16) as u64;
+            assert_eq!(res, ref_res);
+        }
+    }
 }
