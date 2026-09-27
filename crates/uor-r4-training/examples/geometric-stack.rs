@@ -21,7 +21,8 @@
 //! geometric-stack corpus registry=CARGO_REGISTRY_SRC_INDEX out=TEXT [max_file_bytes=200000]
 //! geometric-stack export model=ROOT/model out=NEW_REPORT_ROOT
 //! geometric-stack lut-evaluate artifact=ROOT/model.lut valid=VALID.u16 out=NEW_REPORT_ROOT \
-//!   [model=ROOT/model] [windows=64] [blocks=false] [tune_blocks=64] [threads=1] [lens=LENS.u16]
+//!   [model=ROOT/model] [windows=64] [blocks=false] [tune_blocks=64] [threads=1] [lens=LENS.u16] \
+//!   [reference=false]
 //! geometric-stack lut-sample artifact=ROOT/model.lut out=NEW_REPORT_ROOT (valid=VALID.u16 | prompt=TEXT) \
 //!   [merges=MERGES.txt | tokenizer=TOKENIZER.json] [prompts=3] [prompt_tokens=64] [sample_tokens=128] \
 //!   [temperature=0.8] [top_k=40] [top_p=1] [seed=1] [threads=1]
@@ -73,7 +74,9 @@ use serde_json::{json, Value};
 use uor_r4_core::report_output;
 use uor_r4_training::geometric_stack::{ReadScore, StackAdamW, StackArch, StackConfig, StackModel};
 use uor_r4_training::lut_export::export_llama;
-use uor_r4_training::stack_export::{control_checkpoint, export_stack};
+use uor_r4_training::stack_export::{
+    control_checkpoint, control_grid_reference, export_stack, stack_grid_reference,
+};
 use uor_r4_training::{sha256_file, Result, TrainingError};
 
 fn invalid(message: impl Into<String>) -> TrainingError {
@@ -1306,7 +1309,9 @@ fn score_row(logits: impl Iterator<Item = f64> + Clone, target: usize) -> (f64, 
 /// Integer serving on development windows, beside the float model on the same
 /// windows when `model=` is given: evenly spaced windows (`train`'s rule), or
 /// with `blocks=true` the retained evaluator's consecutive blocks with its
-/// tune/comparison split.
+/// tune/comparison split. With `reference=true` (and `model=`), the artifact's
+/// own values in float arithmetic are scored too, which splits the integer
+/// gap into weight rounding and integer arithmetic.
 fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
     let args = Args::parse(
         arguments,
@@ -1319,6 +1324,7 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
             "tune_blocks",
             "threads",
             "lens",
+            "reference",
             "out",
         ],
     )?;
@@ -1330,10 +1336,15 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
     let blocks: bool = args.number("blocks", false)?;
     let tune_blocks: usize = args.number("tune_blocks", 64)?;
     let threads: usize = args.number("threads", 1)?;
+    let use_reference: bool = args.number("reference", false)?;
+    if use_reference && model_dir.is_none() {
+        return Err(invalid("reference=true needs model="));
+    }
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
     let result = (|| -> Result<()> {
-        let engine = Engine::load(fs::read(&artifact_path)?, threads)?;
+        let bytes = fs::read(&artifact_path)?;
+        let engine = Engine::load(bytes.clone(), threads)?;
         let time = engine.context();
         let valid = read_tokens(&valid_path, engine.vocabulary())?;
         let lens = lens_path
@@ -1349,6 +1360,19 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
                 return Err(invalid("the float model and the artifact differ in shape"));
             }
         }
+        let reference = match (&float, use_reference) {
+            (Some(model), true) => Some(match &engine {
+                Engine::Stack(_) => stack_grid_reference(
+                    model,
+                    &uor_r4_lut::format::StackArtifact::parse(bytes).map_err(lut)?,
+                )?,
+                Engine::Llama(_) => control_grid_reference(
+                    model,
+                    &uor_r4_lut::format::Artifact::parse(bytes).map_err(lut)?,
+                )?,
+            }),
+            _ => None,
+        };
         let starts: Vec<usize> = if blocks {
             let count = (valid.len() - 1) / time;
             if count <= tune_blocks {
@@ -1362,8 +1386,9 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
             let stride = (valid.len() - time - 1) / windows;
             (0..windows).map(|window| window * stride).collect()
         };
-        // Per window: integer NLL, float NLL, target bytes (sums over targets).
-        let mut sums: Vec<(f64, f64, f64)> = Vec::with_capacity(starts.len());
+        // Per window: integer, float and reference NLL, and target bytes (sums
+        // over targets).
+        let mut sums: Vec<(f64, f64, f64, f64)> = Vec::with_capacity(starts.len());
         let (mut agree, mut step_seconds, mut loop_seconds) = (0usize, 0f64, 0f64);
         for &start in &starts {
             let ids = &valid[start..start + time];
@@ -1389,30 +1414,42 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
                     agree += usize::from(top == integer_top[t]);
                 }
             }
+            let mut window_reference = 0f64;
+            if let Some(reference) = &reference {
+                let logits = reference.logits(ids, 1, time)?.to_vec2::<f32>()?;
+                for (t, row) in logits.iter().enumerate() {
+                    window_reference +=
+                        score_row(row.iter().map(|&v| f64::from(v)), next[t] as usize).0;
+                }
+            }
             let bytes = lens.as_ref().map_or(0.0, |lens| {
                 next.iter()
                     .map(|&id| f64::from(lens[id as usize]))
                     .sum::<f64>()
             });
-            sums.push((window_nll, window_float, bytes));
+            sums.push((window_nll, window_float, bytes, window_reference));
         }
         let summary = |range: std::ops::Range<usize>| -> Value {
             let part = &sums[range];
             let targets = (part.len() * time) as f64;
-            let (integer, float_sum, bytes) = part
-                .iter()
-                .fold((0.0, 0.0, 0.0), |a, s| (a.0 + s.0, a.1 + s.1, a.2 + s.2));
+            let (integer, float_sum, bytes, reference_sum) =
+                part.iter().fold((0.0, 0.0, 0.0, 0.0), |a, s| {
+                    (a.0 + s.0, a.1 + s.1, a.2 + s.2, a.3 + s.3)
+                });
             let bits = |nll: f64| lens.as_ref().map(|_| nll / std::f64::consts::LN_2 / bytes);
             json!({
                 "windows": part.len(), "targets": part.len() * time,
                 "integer": {"nll": integer / targets, "bits_per_byte": bits(integer)},
                 "float": float.as_ref().map(|_| json!({"nll": float_sum / targets, "bits_per_byte": bits(float_sum)})),
                 "integer_minus_float_nll": float.as_ref().map(|_| (integer - float_sum) / targets),
+                "reference": reference.as_ref().map(|_| json!({"nll": reference_sum / targets, "bits_per_byte": bits(reference_sum)})),
+                "weight_rounding_nll": reference.as_ref().map(|_| (reference_sum - float_sum) / targets),
+                "integer_arithmetic_nll": reference.as_ref().map(|_| (integer - reference_sum) / targets),
             })
         };
         let targets = starts.len() * time;
         let mut record = json!({
-            "schema": "uor-r4.geometric-stack-lut-evaluation/3",
+            "schema": "uor-r4.geometric-stack-lut-evaluation/4",
             "protocol": if blocks {
                 "consecutive blocks of 256 inputs and 256 shifted targets (the retained evaluator's), one fresh integer session per block, position by position"
             } else {
@@ -1435,9 +1472,11 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
                 "backend": engine.backend(),
             },
             "top1_agreement": float.as_ref().map(|_| agree as f64 / targets as f64),
+            "reference": reference.as_ref().map(|_| "the artifact's dequantized matrices, grid-code scalars and integer biases with unit norm gains and its own head, in f32 (the float model's kernels)"),
             "per_window": starts.iter().zip(&sums).map(|(start, s)| json!({
                 "start": start, "integer_nll": s.0 / time as f64,
                 "float_nll": float.as_ref().map(|_| s.1 / time as f64),
+                "reference_nll": reference.as_ref().map(|_| s.3 / time as f64),
             })).collect::<Vec<_>>(),
         });
         if blocks {
