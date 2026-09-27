@@ -221,7 +221,7 @@ Development NLL on 64 windows at 250, 500, 750 and 1,000 updates:
 | `norot` | 3.7739 | 3.2313 | 2.9008 | 2.7374 |
 | `readsonly` | 3.7351 | 3.2036 | 2.8145 | 2.6302 |
 
-**What seed 1 shows, at this budget.** Each arm is a whole configuration at equal parameter count, so each row compares configurations; none isolates one component with everything else fixed.
+**What seed 1 shows, at this budget.** Each arm is a whole configuration at equal parameter count, so each row compares configurations; none isolates one component with everything else fixed. Every report's greedy and sampled continuations remain repetitive or malformed at 1,000 updates. These are loss comparisons, not a qualitative capability.
 - **Identity transport scored 0.059 nats worse.** That arm also moves the rotation parameters into a wider MLP (814 instead of 749), so the difference belongs to the pair of changes, not to the transport alone.
 - **Dot reads scored 0.021 nats better than Lorentz reads inside the stack.** That is below the 0.03 threshold stated on the card, so a second seed follows before any conclusion. In the retained one-layer learner, cycle 3 measured the opposite sign, 0.05–0.06 nats in favour of Lorentz at context 256.
 - **The reads-only configuration scored best.** Six read layers (MLP 764) scored 0.057 nats below the `rrarra` stack and 0.215 below the RoPE control.
@@ -246,7 +246,7 @@ The main comparison runs after them, unchanged.
 
 Development NLL on 64 windows at 250, 500, 750 and 1,000 updates, seed 2: Lorentz 3.7598, 3.2040, 2.8475, 2.6517; Dot 3.7983, 3.2227, 2.8559, 2.6694.
 
-- The two seeds give paired differences of equal size and opposite sign. So at this budget the score makes no measurable difference inside the stack. The Lorentz arm's own seed spread, 0.040 nats, is twice the difference either seed showed.
+- The two seeds give paired differences of equal size and opposite sign. So at this budget neither score has a consistent advantage inside the stack. Two seeds do not establish equivalence. The Lorentz arm's own seed spread, 0.040 nats, is twice the difference either seed showed.
 - This does not transfer cycle 3's result to the stack or refute it. Cycle 3 measured 0.05–0.06 nats in favour of Lorentz in the retained one-layer learner at context 256. One hypothesis, not tested here, is that a deeper stack with MLPs builds the geometry the Lorentz score supplies to a shallow model.
 - The reads-only pair tests the score where every layer is a read.
 
@@ -309,7 +309,8 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 **Check.**
 - A float stack built from the artifact's own values matches the integer engine within `5 × 10^−4` nats per log-probability. Its values are the dequantized matrices, grid-code scalars, integer biases and unit gains.
 - The test logits span about 16 nats. The check covers Dot and Lorentz reads, with and without rotation, and the patterns `rarr`, `ra` and `aa`. It uses random small stacks (unit test `integer_stack_matches_its_grid_reference`).
-- So the integer arithmetic adds far less error than rounding the weights does.
+- So the integer arithmetic adds far less error than rounding the weights does, on those small stacks.
+- The check has not been run on the trained artifacts. On those, the split of the 0.008–0.013 nat gap between weight rounding and integer arithmetic is not measured.
 
 **Trained models.** Each seed-1 model at 1,000 updates was exported with commit `2a681bb7` and scored on the 512 final-evaluation windows (131,072 targets), with a fresh integer session per window. The float column reproduces each run's final evaluation exactly. The records are in the packet under `integer/`; the artifacts (4.5–5.0 MB each) stay outside with their hashes.
 
@@ -323,6 +324,7 @@ The recurrence state is held at `2^−32` in 64-bit integers. Read keys and valu
 
 - Integer serving costs the stacks 0.011–0.013 nats and the control 0.008. The full stack's lead over the control is 0.154 nats in integers, against 0.158 in float. The ablations keep their float order.
 - No calibration was used; GPTQ, which the Llama exporter already supports, is the first lever if the gap matters.
+- The integer engine's own continuations are in the packet under `integer/<model>/samples/`: three development prompts, greedy and sampled, with commit `cb60c8bd`. Like the float ones, the greedy ones repeat and the sampled ones are locally plausible but malformed.
 - The engine rates time the engine's steps alone, on 64 of the windows, with commit `cb60c8bd`. The 512-window runs timed each window's whole loop, including scoring every position's 4,096 logits in f64, and ran 2–3% slower.
 - The tokens per second are not an architecture comparison:
   - they were measured on one thread while two training runs shared the 4-core sandbox;

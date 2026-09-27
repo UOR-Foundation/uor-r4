@@ -678,8 +678,8 @@
  "files": [
   {
    "path": "README.md",
-   "bytes": 5478,
-   "sha256": "921e2c2ef9e8d6dc79b0fc38be4ba35730f069bc40cc32f56ee616e8c3fba2a7"
+   "bytes": 5696,
+   "sha256": "6836e67a8c43df1d34044cb82b30be48779010b4d3f85593110999821ee054f6"
   },
   {
    "path": "ablation-readsonly/dot_s1/attempt.json",
@@ -862,6 +862,21 @@
    "sha256": "5baa20745d6004db506bc663cf22f808d5f04fb361557ddcce52e6217fa5258f"
   },
   {
+   "path": "integer/ablation-dot/samples/attempt.json",
+   "bytes": 944,
+   "sha256": "1abeb52bb522426400f2e2eeb7cfd3e67d056f559f3b43b200d11840de03d904"
+  },
+  {
+   "path": "integer/ablation-dot/samples/manifest.json",
+   "bytes": 506,
+   "sha256": "98efb746d435fbb6bea0181de0cfa0943db09ffd83b7a0d1082d1187386e3cee"
+  },
+  {
+   "path": "integer/ablation-dot/samples/samples.json",
+   "bytes": 14233,
+   "sha256": "e7ce57db01c1d16313fea206a478e94ff4726ac62e3ef1e7663330c1449acaa2"
+  },
+  {
    "path": "integer/ablation-dot/steps64/attempt.json",
    "bytes": 728,
    "sha256": "8436a861715645a81c715890cd257e4fdf2d5a9e77eafd341fe156d249d09029"
@@ -905,6 +920,21 @@
    "path": "integer/ablation-norot/export/manifest.json",
    "bytes": 652,
    "sha256": "baa81b0409c58728347c689bc7774b7a31fc37ec1977d82be3ddb9a24199ec6f"
+  },
+  {
+   "path": "integer/ablation-norot/samples/attempt.json",
+   "bytes": 948,
+   "sha256": "d3deebdfd0a1d6e23e80727c6a63848c3a0582e3747e44449b6e74ec09d4cca7"
+  },
+  {
+   "path": "integer/ablation-norot/samples/manifest.json",
+   "bytes": 508,
+   "sha256": "8ce75900409683b3cff17f59a09cff582ca7c329649fca2c94e52f61e3dbdad3"
+  },
+  {
+   "path": "integer/ablation-norot/samples/samples.json",
+   "bytes": 13849,
+   "sha256": "e8466313acd8a8c40964d7d9b35115119dd7639ed24caa5738fdf60f60b2b5bf"
   },
   {
    "path": "integer/ablation-norot/steps64/attempt.json",
@@ -952,6 +982,21 @@
    "sha256": "dc6e0fae97dfa49986da05ae5a74a7a9314490f87491110579d39f41c7e2de4e"
   },
   {
+   "path": "integer/ablation-readsonly/samples/attempt.json",
+   "bytes": 956,
+   "sha256": "7b1655ac00209226ee72cc6454c656b22264e1bcc768aad04bfb609f67456c05"
+  },
+  {
+   "path": "integer/ablation-readsonly/samples/manifest.json",
+   "bytes": 512,
+   "sha256": "7086848dd0e4e684c96e773444c71cd52d086e3e96bd7966e6615a600581580a"
+  },
+  {
+   "path": "integer/ablation-readsonly/samples/samples.json",
+   "bytes": 14072,
+   "sha256": "73b5339bfe45dbbef43ad9e83a3e1ffed6a01c71a15b243467b065756231c225"
+  },
+  {
    "path": "integer/ablation-readsonly/steps64/attempt.json",
    "bytes": 740,
    "sha256": "88a9bf782f10c09e1a8ae893a96a1fc5ba247adc751f178e23a24510545657c8"
@@ -995,6 +1040,21 @@
    "path": "integer/pilot-geometric_lr0.004/export/manifest.json",
    "bytes": 661,
    "sha256": "50191c2cdcb38d8daaacd6c52cb10f57037d68a1a41e3438c6919753f78cfd5f"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/samples/attempt.json",
+   "bytes": 966,
+   "sha256": "58924db930c7866822353196885e5d4703947d88072d428262a363cf6218ff35"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/samples/manifest.json",
+   "bytes": 517,
+   "sha256": "ea5130fa26002804e250c1ff6503159cf87f12b76d8b9f125250f5f299069ec0"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/samples/samples.json",
+   "bytes": 14502,
+   "sha256": "367de83f7dc777fcaedb70287d41e39765960c7c5d40ae4e33df47c52e0c4198"
   },
   {
    "path": "integer/pilot-geometric_lr0.004/steps64/attempt.json",
@@ -1042,6 +1102,21 @@
    "sha256": "7bea2a0d65702fed56ee98884887b28129954c8931933363d06d2862dc2c25bd"
   },
   {
+   "path": "integer/pilot-transformer_lr0.002/samples/attempt.json",
+   "bytes": 970,
+   "sha256": "dd5dc46441827b398d6bf7d792c2071ce1422338fee5a6e17d58f90e7216368d"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/samples/manifest.json",
+   "bytes": 519,
+   "sha256": "de448c6f7a7a0dae78d7c0f5b62006a45ca2dd4362773dad500bc7c63087e0d7"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/samples/samples.json",
+   "bytes": 14567,
+   "sha256": "7807e70c415eb92e5bfd44c8fea19e635a83152a007bb880907c5c21e703d268"
+  },
+  {
    "path": "integer/pilot-transformer_lr0.002/steps64/attempt.json",
    "bytes": 754,
    "sha256": "e1e42109f32532abc4cd4332125e2e52afd758a76a06d28dc7e35b90fe758660"
@@ -1058,8 +1133,8 @@
   },
   {
    "path": "integer/run.log",
-   "bytes": 531,
-   "sha256": "f14826a893e63f8aed80252b1269208288466bf748b78f3441d40ab578b3633c"
+   "bytes": 703,
+   "sha256": "2800946d32f7e1f68d9d86b944fb25c5b78fc399427026752f573af6423afd94"
   },
   {
    "path": "pilot/chain.log",
@@ -1247,7 +1322,12 @@
    "float_model_sha256": "bd4c1aba018a3e4814ef82d98450782ff54f7b80aa94382424015d5e71e14c7b",
    "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
    "engine_step_tokens_per_second_64_windows": 801.4968613320049,
-   "engine_step_source_commit": "cb60c8bd"
+   "engine_step_source_commit": "cb60c8bd",
+   "integer_samples": {
+    "path": "integer/pilot-geometric_lr0.004/samples/samples.json",
+    "source_commit": "cb60c8bd",
+    "artifact_sha256": "d02c445df07dca2a83a546a6a8b66aa7914e606419e642d6e8ede738fe350ecf"
+   }
   },
   {
    "model": "pilot-transformer_lr0.002",
@@ -1267,7 +1347,12 @@
    "float_model_sha256": "c0bc35e2fd3085cdf0c8962a247f58a2fdc5e1b98e6422a3fad88604bd83f9f4",
    "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
    "engine_step_tokens_per_second_64_windows": 958.2126901676523,
-   "engine_step_source_commit": "cb60c8bd"
+   "engine_step_source_commit": "cb60c8bd",
+   "integer_samples": {
+    "path": "integer/pilot-transformer_lr0.002/samples/samples.json",
+    "source_commit": "cb60c8bd",
+    "artifact_sha256": "900d6b533ea94448876c04207d0e1f9882e4890637e5ebb791ae4f767c696351"
+   }
   },
   {
    "model": "ablation-dot",
@@ -1287,7 +1372,12 @@
    "float_model_sha256": "edf6306470d7e0a231c8bb5f6896d18546588937d905cf9b14b6af771b942df2",
    "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
    "engine_step_tokens_per_second_64_windows": 822.0073661235024,
-   "engine_step_source_commit": "cb60c8bd"
+   "engine_step_source_commit": "cb60c8bd",
+   "integer_samples": {
+    "path": "integer/ablation-dot/samples/samples.json",
+    "source_commit": "cb60c8bd",
+    "artifact_sha256": "da005784d831a8ac7aa636ff15e04aed6bd08f3bdcc80416c728dc1a7cc4edfd"
+   }
   },
   {
    "model": "ablation-norot",
@@ -1307,7 +1397,12 @@
    "float_model_sha256": "681588f74c819a201bb057bd77a1c52438c2ec5ff6669282c29fef427d1cacac",
    "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
    "engine_step_tokens_per_second_64_windows": 862.4131466129527,
-   "engine_step_source_commit": "cb60c8bd"
+   "engine_step_source_commit": "cb60c8bd",
+   "integer_samples": {
+    "path": "integer/ablation-norot/samples/samples.json",
+    "source_commit": "cb60c8bd",
+    "artifact_sha256": "099290c121aeed88304b97da25dfe9f8a6586d5231ef355f2e6d1d4f951addff"
+   }
   },
   {
    "model": "ablation-readsonly",
@@ -1327,7 +1422,12 @@
    "float_model_sha256": "1bfb0fbde0968287120404fbbc95348552f45fd7a534446e991d8e621aed649d",
    "executable_sha256": "cb0bb647f47b90fc65a9a7bfbb4e522bb7837db5c2f608e9ef18f87076977177",
    "engine_step_tokens_per_second_64_windows": 676.8646620332884,
-   "engine_step_source_commit": "cb60c8bd"
+   "engine_step_source_commit": "cb60c8bd",
+   "integer_samples": {
+    "path": "integer/ablation-readsonly/samples/samples.json",
+    "source_commit": "cb60c8bd",
+    "artifact_sha256": "adb03ffe543c32861254cbc1f8b8c26277e059167105a538c33abe1c660b6160"
+   }
   }
  ]
 }
