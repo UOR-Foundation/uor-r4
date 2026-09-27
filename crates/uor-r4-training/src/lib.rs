@@ -37,6 +37,7 @@ pub mod lut_export;
 pub mod ngram;
 pub mod reference_campaign;
 pub mod reference_eval;
+pub mod stack_dialogue;
 pub mod stack_export;
 
 use std::collections::{BTreeMap, BTreeSet};

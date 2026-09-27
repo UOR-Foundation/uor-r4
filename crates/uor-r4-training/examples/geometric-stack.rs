@@ -27,6 +27,17 @@
 //! geometric-stack lut-sample artifact=ROOT/model.lut out=NEW_REPORT_ROOT (valid=VALID.u16 | prompt=TEXT) \
 //!   [merges=MERGES.txt | tokenizer=TOKENIZER.json] [prompts=3] [prompt_tokens=64] [sample_tokens=128] \
 //!   [temperature=0.8] [top_k=40] [top_p=1] [seed=1] [threads=1]
+//! geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \
+//!   train_tokens=TRAIN.uort train_mask=TRAIN.mask train_manifest=TRAIN/manifest.json \
+//!   dev_tokens=DEV.uort dev_mask=DEV.mask dev_manifest=DEV/manifest.json \
+//!   (init=ROOT/model | arch=geometric|transformer [shape options as train]) \
+//!   [policy=full_prefix|role_only] [data_seed=1] [steps=1024] [batch=16] [lr=0.001] [warmup=50] \
+//!   [min_lr=0.1] [weight_decay=0.1] [clip=1.0] [eval_every=128] [dev_seed=1] [dev_per_source=32] \
+//!   [checkpoint_every=128] [resume=OLD_ROOT/checkpoint] [max_seconds=inf] [requests=REQUESTS.json] \
+//!   [max_new_tokens=96]
+//! geometric-stack lut-chat artifact=ROOT/model.lut tokenizer=TOKENIZER.json out=NEW_REPORT_ROOT \
+//!   [requests=REQUESTS.json] [max_new_tokens=96] [temperature=0] [top_k=40] [top_p=1] [seed=1] \
+//!   [threads=1]
 //! ```
 //!
 //! The shape options describe the transformer control (#1017's by default). A
@@ -66,7 +77,21 @@
 //! agreement and the engine's tokens per second; `blocks=true` uses
 //! `evaluate`'s consecutive blocks and tune/comparison split instead.
 //! `lut-sample` writes greedy and sampled continuations from the integer
-//! engine (the integer sampler of `uor_r4_lut::sampling`).
+//! engine (the integer sampler of `uor_r4_lut::sampling`). Token files may
+//! also be UORT stores, the prepared dialogue corpus's format.
+//!
+//! `dialogue-train` teaches a stack the responses of the prepared
+//! literal-role dialogue corpus (`uor_r4_training::stack_dialogue`) with the
+//! retained dialogue study's episodes: its contract, eligibility,
+//! response-uniform sampler and source-stratified development panel
+//! (`dev_seed`, `dev_per_source`). The loss covers response and EOS targets
+//! only; each batch drops the padding columns after its longest episode. It
+//! starts from a trained stack (`init=`) or a new one, scores the panel every
+//! `eval_every` updates, and with `requests=` (the study's request format)
+//! writes the float model's greedy replies. `lut-chat` talks through either
+//! integer engine under the same protocol: replies to `requests=`, or an
+//! interactive conversation on standard input (`/reset` starts over; a full
+//! 256-position context starts a new conversation).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -76,8 +101,14 @@ use std::time::Instant;
 use candle_core::Device;
 use serde_json::{json, Value};
 use uor_r4_core::report_output;
+use uor_r4_training::dialogue_development;
+use uor_r4_training::dialogue_episodes::{PrefixPolicy, EPISODE_CONTEXT};
 use uor_r4_training::geometric_stack::{ReadScore, StackAdamW, StackArch, StackConfig, StackModel};
 use uor_r4_training::lut_export::export_llama;
+use uor_r4_training::stack_dialogue::{
+    development, episode_contract, greedy_reply, load_requests, reply_panel, trim, DialogueSplit,
+    Reply,
+};
 use uor_r4_training::stack_export::{
     control_checkpoint, control_grid_reference, export_stack, stack_grid_reference,
     StackCalibration,
@@ -152,8 +183,21 @@ impl Rng {
     }
 }
 
+/// A u16 token file: raw little-endian ids, or a UORT store (the prepared
+/// dialogue corpus's format, `uor_r4_core::native_geometric::mmap_corpus`).
 fn read_tokens(path: &Path, vocabulary: usize) -> Result<Vec<u32>> {
     let bytes = fs::read(path)?;
+    if bytes.starts_with(b"UORT") {
+        let reader = uor_r4_core::native_geometric::mmap_corpus::MmapCorpusReader::open(path)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        if reader.vocab_size() as usize > vocabulary {
+            return Err(invalid(format!(
+                "{} declares a larger vocabulary",
+                path.display()
+            )));
+        }
+        return Ok(reader.as_slice().iter().map(|&id| u32::from(id)).collect());
+    }
     if bytes.len() % 2 != 0 {
         return Err(invalid(format!(
             "{} is not a u16 token file",
@@ -517,7 +561,11 @@ impl Settings {
     }
 }
 
-fn train_settings(args: &Args) -> Result<Settings> {
+/// The model shape of `arch=` and the shape options: the control's shape,
+/// #1017's by default, or a geometric stack with its width, heads, depth and
+/// context whose MLP matches its parameter count. `vocab` replaces the
+/// default 4,096-token vocabulary first.
+fn stack_config(args: &Args, vocab: Option<usize>) -> Result<StackConfig> {
     let seed: u64 = args.number("seed", 1)?;
     let read = match args.optional("read").as_deref() {
         None | Some("lorentz") => ReadScore::Lorentz,
@@ -529,9 +577,7 @@ fn train_settings(args: &Args) -> Result<Settings> {
         Some("false") => false,
         Some(other) => return Err(invalid(format!("invalid rotation={other}"))),
     };
-    // The control's shape; #1017's by default. A geometric stack takes its
-    // width, heads, depth and context and matches its parameter count.
-    let control = StackConfig::transformer(
+    let mut control = StackConfig::transformer(
         args.number("width", 288)?,
         args.number("heads", 6)?,
         args.number("layers", 6)?,
@@ -539,7 +585,10 @@ fn train_settings(args: &Args) -> Result<Settings> {
         args.number("context", 256)?,
         seed,
     )?;
-    let config = match args.required("arch")?.as_str() {
+    if let Some(vocab) = vocab {
+        control.vocab_size = vocab;
+    }
+    Ok(match args.required("arch")?.as_str() {
         "transformer" => control,
         "geometric" => {
             let layers = control.layers();
@@ -552,7 +601,11 @@ fn train_settings(args: &Args) -> Result<Settings> {
             )?
         }
         other => return Err(invalid(format!("unknown arch {other}"))),
-    };
+    })
+}
+
+fn train_settings(args: &Args) -> Result<Settings> {
+    let config = stack_config(args, None)?;
     let train: Vec<PathBuf> = args
         .required("train")?
         .split(',')
@@ -614,13 +667,24 @@ fn train_settings(args: &Args) -> Result<Settings> {
 }
 
 fn learning_rate(settings: &Settings, step: usize) -> f64 {
-    if step < settings.warmup {
-        return settings.lr * (step + 1) as f64 / settings.warmup as f64;
+    cosine_rate(
+        settings.lr,
+        settings.warmup,
+        settings.min_lr,
+        settings.steps,
+        step,
+    )
+}
+
+/// Linear warmup to `lr`, then a cosine decay to `min_lr * lr` at `steps`.
+fn cosine_rate(lr: f64, warmup: usize, min_lr: f64, steps: usize, step: usize) -> f64 {
+    if step < warmup {
+        return lr * (step + 1) as f64 / warmup as f64;
     }
-    let span = (settings.steps - settings.warmup).max(1) as f64;
-    let progress = ((step - settings.warmup) as f64 / span).min(1.0);
-    let floor = settings.lr * settings.min_lr;
-    floor + (settings.lr - floor) * 0.5 * (1.0 + (std::f64::consts::PI * progress).cos())
+    let span = (steps - warmup).max(1) as f64;
+    let progress = ((step - warmup) as f64 / span).min(1.0);
+    let floor = lr * min_lr;
+    floor + (lr - floor) * 0.5 * (1.0 + (std::f64::consts::PI * progress).cos())
 }
 
 struct Evaluation {
@@ -779,6 +843,43 @@ fn save_checkpoint(
     Ok(())
 }
 
+/// The model, optimizer and progress a stopped run saved, if its lineage is
+/// `lineage`; with the identity of its state file.
+fn load_checkpoint(
+    checkpoint: &Path,
+    lineage: &Value,
+    device: &Device,
+) -> Result<(StackModel, StackAdamW, Progress, Value)> {
+    let state: Value = serde_json::from_slice(&fs::read(checkpoint.join("state.json"))?)?;
+    if &state["lineage"] != lineage {
+        return Err(invalid(
+            "resume settings or input contents differ from the checkpoint",
+        ));
+    }
+    let model = StackModel::load(&checkpoint.join("model"), device)?;
+    let optimizer = StackAdamW::load(&checkpoint.join("optimizer"), &model)?;
+    let progress = Progress {
+        step: state["step"]
+            .as_u64()
+            .ok_or_else(|| invalid("checkpoint step"))? as usize,
+        rng: Rng(state["rng"]
+            .as_str()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| invalid("checkpoint rng"))?),
+        curve: state["curve"].as_array().cloned().unwrap_or_default(),
+        train_seconds: state["train_seconds"].as_f64().unwrap_or(0.0),
+    };
+    if optimizer.step != progress.step {
+        return Err(invalid("checkpoint optimizer and progress steps differ"));
+    }
+    Ok((
+        model,
+        optimizer,
+        progress,
+        identity(&checkpoint.join("state.json"))?,
+    ))
+}
+
 fn train(settings: &Settings, out: &Path) -> Result<()> {
     let device = Device::Cpu;
     let lineage = settings.lineage(&settings.input_contents()?);
@@ -820,34 +921,9 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
             (model, optimizer, progress, None)
         }
         Some(checkpoint) => {
-            let state: Value = serde_json::from_slice(&fs::read(checkpoint.join("state.json"))?)?;
-            if state["lineage"] != lineage {
-                return Err(invalid(
-                    "resume settings or input contents differ from the checkpoint",
-                ));
-            }
-            let model = StackModel::load(&checkpoint.join("model"), &device)?;
-            let optimizer = StackAdamW::load(&checkpoint.join("optimizer"), &model)?;
-            let progress = Progress {
-                step: state["step"]
-                    .as_u64()
-                    .ok_or_else(|| invalid("checkpoint step"))? as usize,
-                rng: Rng(state["rng"]
-                    .as_str()
-                    .and_then(|s| s.parse().ok())
-                    .ok_or_else(|| invalid("checkpoint rng"))?),
-                curve: state["curve"].as_array().cloned().unwrap_or_default(),
-                train_seconds: state["train_seconds"].as_f64().unwrap_or(0.0),
-            };
-            if optimizer.step != progress.step {
-                return Err(invalid("checkpoint optimizer and progress steps differ"));
-            }
-            (
-                model,
-                optimizer,
-                progress,
-                Some(identity(&checkpoint.join("state.json"))?),
-            )
+            let (model, optimizer, progress, state) =
+                load_checkpoint(checkpoint, &lineage, &device)?;
+            (model, optimizer, progress, Some(state))
         }
     };
     let parameters = model.parameter_count();
@@ -1656,6 +1732,605 @@ fn lut_sample_mode(arguments: &[String]) -> Result<()> {
     finish(&out, result)
 }
 
+/// Settings of `dialogue-train`.
+struct DialogueSettings {
+    tokenizer: PathBuf,
+    /// Token store, response mask and manifest of the training and
+    /// development splits.
+    train: [PathBuf; 3],
+    dev: [PathBuf; 3],
+    init: Option<PathBuf>,
+    policy: PrefixPolicy,
+    data_seed: u64,
+    steps: usize,
+    batch: usize,
+    lr: f64,
+    warmup: usize,
+    min_lr: f64,
+    weight_decay: f64,
+    clip: f64,
+    eval_every: usize,
+    dev_seed: u64,
+    dev_per_source: usize,
+    checkpoint_every: usize,
+    resume: Option<PathBuf>,
+    max_seconds: f64,
+    requests: Option<PathBuf>,
+    max_new_tokens: usize,
+}
+
+impl DialogueSettings {
+    fn record(&self) -> Value {
+        json!({
+            "tokenizer": self.tokenizer, "train": self.train, "dev": self.dev,
+            "init": self.init, "policy": self.policy, "data_seed": self.data_seed,
+            "steps": self.steps, "batch": self.batch, "lr": self.lr, "warmup": self.warmup,
+            "min_lr": self.min_lr, "weight_decay": self.weight_decay, "clip": self.clip,
+            "eval_every": self.eval_every, "dev_seed": self.dev_seed,
+            "dev_per_source": self.dev_per_source, "checkpoint_every": self.checkpoint_every,
+            "requests": self.requests, "max_new_tokens": self.max_new_tokens,
+        })
+    }
+
+    /// Settings and input contents a resumed run must share with its parent.
+    fn lineage(&self, config: &StackConfig) -> Result<Value> {
+        let content = |path: &Path| -> Result<Value> {
+            Ok(json!({"bytes": fs::metadata(path)?.len(), "sha256": sha256_file(path)?}))
+        };
+        let split = |paths: &[PathBuf; 3]| -> Result<Vec<Value>> {
+            paths.iter().map(|p| content(p)).collect()
+        };
+        Ok(json!({
+            "config": config, "policy": self.policy, "data_seed": self.data_seed,
+            "steps": self.steps, "batch": self.batch, "lr": self.lr, "warmup": self.warmup,
+            "min_lr": self.min_lr, "weight_decay": self.weight_decay, "clip": self.clip,
+            "eval_every": self.eval_every, "dev_seed": self.dev_seed,
+            "dev_per_source": self.dev_per_source,
+            "inputs": {
+                "tokenizer": content(&self.tokenizer)?, "train": split(&self.train)?,
+                "dev": split(&self.dev)?,
+                "init": self.init.as_deref().map(|p| content(&p.join("model.safetensors"))).transpose()?,
+            },
+        }))
+    }
+}
+
+/// A model to continue must have learned the same token ids: when the run
+/// that wrote it recorded its tokenizer or lab merges (`ROOT/report.json`
+/// beside `ROOT/model`), they must be this tokenizer.
+fn check_init_tokenizer(model: &Path, tokenizer: &Path) -> Result<()> {
+    let Some(report) = model
+        .parent()
+        .map(|root| root.join("report.json"))
+        .filter(|path| path.exists())
+    else {
+        return Ok(());
+    };
+    let report: Value = serde_json::from_slice(&fs::read(report)?)?;
+    let inputs = &report["inputs"];
+    if !inputs["merges"].is_null() {
+        return Err(invalid(
+            "init= was trained on the lab BPE's ids, not this tokenizer's",
+        ));
+    }
+    match inputs["tokenizer"]["sha256"].as_str() {
+        Some(recorded) if recorded != sha256_file(tokenizer)? => {
+            Err(invalid("init= was trained with a different tokenizer.json"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Response learning on the prepared literal-role dialogue corpus with the
+/// retained study's episodes (`uor_r4_training::stack_dialogue`).
+fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &[
+            "out",
+            "tokenizer",
+            "train_tokens",
+            "train_mask",
+            "train_manifest",
+            "dev_tokens",
+            "dev_mask",
+            "dev_manifest",
+            "init",
+            "arch",
+            "pattern",
+            "read",
+            "rotation",
+            "width",
+            "heads",
+            "layers",
+            "mlp",
+            "seed",
+            "policy",
+            "data_seed",
+            "steps",
+            "batch",
+            "lr",
+            "warmup",
+            "min_lr",
+            "weight_decay",
+            "clip",
+            "eval_every",
+            "dev_seed",
+            "dev_per_source",
+            "checkpoint_every",
+            "resume",
+            "max_seconds",
+            "requests",
+            "max_new_tokens",
+        ],
+    )?;
+    let path = |key: &str| -> Result<PathBuf> { Ok(PathBuf::from(args.required(key)?)) };
+    let settings = DialogueSettings {
+        tokenizer: path("tokenizer")?,
+        train: [
+            path("train_tokens")?,
+            path("train_mask")?,
+            path("train_manifest")?,
+        ],
+        dev: [
+            path("dev_tokens")?,
+            path("dev_mask")?,
+            path("dev_manifest")?,
+        ],
+        init: args.optional("init").map(PathBuf::from),
+        policy: match args.optional("policy").as_deref() {
+            None | Some("full_prefix") => PrefixPolicy::FullPrefix,
+            Some("role_only") => PrefixPolicy::RoleOnly,
+            Some(other) => return Err(invalid(format!("unknown policy {other}"))),
+        },
+        data_seed: args.number("data_seed", 1)?,
+        steps: args.number("steps", 1024)?,
+        batch: args.number("batch", 16)?,
+        lr: args.number("lr", 0.001)?,
+        warmup: args.number("warmup", 50)?,
+        min_lr: args.number("min_lr", 0.1)?,
+        weight_decay: args.number("weight_decay", 0.1)?,
+        clip: args.number("clip", 1.0)?,
+        eval_every: args.number("eval_every", 128)?,
+        dev_seed: args.number("dev_seed", 1)?,
+        dev_per_source: args.number("dev_per_source", 32)?,
+        checkpoint_every: args.number("checkpoint_every", 128)?,
+        resume: args.optional("resume").map(PathBuf::from),
+        max_seconds: args.number("max_seconds", f64::INFINITY)?,
+        requests: args.optional("requests").map(PathBuf::from),
+        max_new_tokens: args.number("max_new_tokens", 96)?,
+    };
+    if settings.steps == 0
+        || !(1..=64).contains(&settings.batch)
+        || settings.eval_every == 0
+        || settings.max_new_tokens == 0
+        || settings.lr.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater)
+        || !(0.0..=1.0).contains(&settings.min_lr)
+    {
+        return Err(invalid(
+            "steps, eval_every, max_new_tokens and lr must be positive, batch 1..64, min_lr in [0, 1]",
+        ));
+    }
+    let out = PathBuf::from(args.required("out")?);
+    report_output::claim(&out)?;
+    let result = dialogue_train(&settings, &args, &out);
+    finish(&out, result)
+}
+
+fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
+    let device = Device::Cpu;
+    let tokenizer =
+        uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(&s.tokenizer)?)
+            .ok_or_else(|| invalid("unreadable tokenizer.json"))?;
+    let train_split = DialogueSplit::load(&s.train[0], &s.train[1], &s.train[2])?;
+    let dev_split = DialogueSplit::load(&s.dev[0], &s.dev[1], &s.dev[2])?;
+    let vocab = train_split.vocab_size();
+    if dev_split.vocab_size() != vocab {
+        return Err(invalid("the splits declare different vocabularies"));
+    }
+    let (protocol, contract) = episode_contract(&tokenizer, vocab)?;
+    let train = train_split.index(contract.clone())?;
+    let dev = dev_split.index(contract)?;
+    let panel = dialogue_development::select(&dev, s.dev_seed, s.dev_per_source)?;
+    let requests = s.requests.as_deref().map(load_requests).transpose()?;
+    let config = match &s.init {
+        Some(directory) => {
+            check_init_tokenizer(directory, &s.tokenizer)?;
+            StackModel::load(directory, &device)?.config
+        }
+        None => stack_config(args, Some(vocab))?,
+    };
+    if config.context != EPISODE_CONTEXT || config.vocab_size != vocab {
+        return Err(invalid(
+            "the model's context must be the episodes' 256 and its vocabulary the corpus's",
+        ));
+    }
+    let lineage = s.lineage(&config)?;
+    let (model, mut optimizer, mut progress, resumed_from) = match &s.resume {
+        None => {
+            let model = match &s.init {
+                Some(directory) => StackModel::load(directory, &device)?,
+                None => StackModel::new(config.clone(), &device)?,
+            };
+            let optimizer = StackAdamW::new(&model, s.weight_decay, s.clip)?;
+            let progress = Progress {
+                step: 0,
+                rng: Rng(0),
+                curve: Vec::new(),
+                train_seconds: 0.0,
+            };
+            (model, optimizer, progress, None)
+        }
+        Some(checkpoint) => {
+            let (model, optimizer, progress, state) =
+                load_checkpoint(checkpoint, &lineage, &device)?;
+            (model, optimizer, progress, Some(state))
+        }
+    };
+    eprintln!(
+        "{:?} pattern {} read {:?}: {} parameters; {} training and {} development responses",
+        model.config.arch,
+        model.config.pattern,
+        model.config.read,
+        model.parameter_count(),
+        train.episodes().len(),
+        panel.len(),
+    );
+    let initial = if progress.step == 0 {
+        Some(development(&model, &dev, &panel, 16)?)
+    } else {
+        None
+    };
+    // Visits of earlier steps follow from the stateless sampler.
+    let mut visits = (0usize, 0usize);
+    for step in 0..progress.step {
+        for id in train.sample_ids(s.data_seed, step as u64, s.batch)? {
+            let episode = &train.episodes()[id];
+            visits.0 += episode.response_end - episode.response_start;
+        }
+    }
+    let (mut window_loss, mut stopped_early) = ((0f64, 0usize), false);
+    let started = Instant::now();
+    while progress.step < s.steps {
+        let lr = cosine_rate(s.lr, s.warmup, s.min_lr, s.steps, progress.step);
+        let clock = Instant::now();
+        let ids = train.sample_ids(s.data_seed, progress.step as u64, s.batch)?;
+        let batch = train.materialize(&ids, s.policy)?;
+        let trimmed = trim(&batch);
+        let loss = model.weighted_loss(
+            &trimmed.inputs,
+            &trimmed.targets,
+            &trimmed.weights,
+            batch.batch,
+            trimmed.time,
+        )?;
+        let value = f64::from(loss.to_scalar::<f32>()?);
+        if !value.is_finite() {
+            return Err(invalid(format!("nonfinite loss at step {}", progress.step)));
+        }
+        let grads = loss.backward()?;
+        let grad_norm = optimizer.update(&model, &grads, lr)?;
+        progress.train_seconds += clock.elapsed().as_secs_f64();
+        progress.step += 1;
+        visits.0 += batch.counts.supervised_target_count;
+        visits.1 += batch.batch * trimmed.time;
+        window_loss.0 += value;
+        window_loss.1 += 1;
+        if progress.step % s.eval_every == 0 || progress.step == s.steps {
+            let dev_report = development(&model, &dev, &panel, 16)?;
+            let point = json!({
+                "step": progress.step, "lr": lr,
+                "train_response_nll": window_loss.0 / window_loss.1.max(1) as f64,
+                "dev_response_nll": dev_report["response_mean_nll"],
+                "dev_first_four_nll": dev_report["first_four_response_targets_mean_nll"],
+                "grad_norm": grad_norm, "supervised_target_visits": visits.0,
+                "train_seconds": progress.train_seconds,
+            });
+            eprintln!("{point}");
+            progress.curve.push(point);
+            window_loss = (0.0, 0);
+        }
+        if s.checkpoint_every > 0
+            && progress.step % s.checkpoint_every == 0
+            && progress.step < s.steps
+        {
+            save_checkpoint(out, &model, &optimizer, &progress, &lineage)?;
+        }
+        if started.elapsed().as_secs_f64() > s.max_seconds {
+            stopped_early = true;
+            save_checkpoint(out, &model, &optimizer, &progress, &lineage)?;
+            break;
+        }
+    }
+    model.save(&out.join("model"))?;
+    if !stopped_early {
+        let _ = fs::remove_dir_all(out.join("checkpoint"));
+    }
+    let final_development = development(&model, &dev, &panel, 16)?;
+    let replies = match &requests {
+        Some(requests) => {
+            let encoder = protocol
+                .bind(&tokenizer)
+                .map_err(|e| invalid(e.to_string()))?;
+            let clock = Instant::now();
+            let mut panel = reply_panel(
+                &encoder,
+                &protocol,
+                requests,
+                model.config.context,
+                s.max_new_tokens,
+                &|ids| tokenizer.decode(ids),
+                &mut |history, cap| greedy_reply(&model, history, cap, protocol.eos_id),
+            )?;
+            panel["seconds"] = json!(clock.elapsed().as_secs_f64());
+            panel["decoding"] = json!("float model, greedy");
+            Some(panel)
+        }
+        None => None,
+    };
+    let report = json!({
+        "schema": "uor-r4.geometric-stack-dialogue-run/1",
+        "settings": s.record(),
+        "config": model.config,
+        "parameters": model.parameter_count(),
+        "protocol": protocol,
+        "sampler": uor_r4_training::dialogue_episodes::SAMPLER_ID,
+        "development_selection": uor_r4_training::dialogue_development::SELECTION_ID,
+        "train_population": train.population(),
+        "completed_steps": progress.step,
+        "stopped_early": stopped_early,
+        "resumed_from": resumed_from,
+        "supervised_target_visits": visits.0,
+        "tensor_positions_this_process": visits.1,
+        "train_seconds": progress.train_seconds,
+        "threads": std::env::var("RAYON_NUM_THREADS").ok(),
+        "curve": progress.curve,
+        "initial_development": initial,
+        "final_development": final_development,
+        "replies": replies,
+        "inputs": {
+            "tokenizer": identity(&s.tokenizer)?,
+            "train": s.train.iter().map(|p| identity(p)).collect::<Result<Vec<_>>>()?,
+            "dev": s.dev.iter().map(|p| identity(p)).collect::<Result<Vec<_>>>()?,
+            "init": s.init.as_ref().map(|p| identity(&p.join("model.safetensors"))).transpose()?,
+            "requests": s.requests.as_ref().map(|p| identity(p)).transpose()?,
+        },
+        "executable": identity(&std::env::current_exe()?)?,
+        "model_sha256": sha256_file(&out.join("model").join("model.safetensors"))?,
+        "scope": "Offline response learning of the geometric stack on the prepared dialogue corpus; development NLL on the fixed source-stratified panel under full original prefixes; replies from the float model. No integer serving or quality qualification.",
+    });
+    fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
+    Ok(())
+}
+
+/// Integer replies of either engine: feed what the session has not yet
+/// consumed of the history (a history that does not extend it restarts the
+/// session), then draw ids until EOS or the cap.
+struct IntegerChat<S> {
+    session: S,
+    fed: Vec<u32>,
+    logits: Vec<i32>,
+}
+
+impl<S: Stepper> IntegerChat<S> {
+    fn reply(
+        &mut self,
+        new_session: &dyn Fn() -> S,
+        history: &[u32],
+        cap: usize,
+        eos: u32,
+        sampler: &mut uor_r4_lut::sampling::Sampler,
+        exp: (&[u32], i32),
+    ) -> Result<Reply> {
+        if !history.starts_with(&self.fed) || history.len() == self.fed.len() {
+            self.session = new_session();
+            self.fed.clear();
+        }
+        for &id in &history[self.fed.len()..] {
+            self.logits = self.session.advance(id)?.to_vec();
+            self.fed.push(id);
+        }
+        let mut seen = history.to_vec();
+        let mut ids = Vec::with_capacity(cap);
+        for step in 0..cap {
+            let next = sampler
+                .sample(&self.logits, &seen, exp.0, exp.1)
+                .map_err(lut)?;
+            ids.push(next);
+            seen.push(next);
+            if next == eos {
+                return Ok(Reply { ids, eos: true });
+            }
+            if step + 1 < cap {
+                self.logits = self.session.advance(next)?.to_vec();
+                self.fed.push(next);
+            }
+        }
+        Ok(Reply { ids, eos: false })
+    }
+}
+
+/// Chat with an integer artifact under the literal-role protocol: replies to
+/// a request panel (`requests=`), or turns read from standard input, one user
+/// message per line (`/reset` starts a new conversation).
+fn lut_chat_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &[
+            "artifact",
+            "tokenizer",
+            "out",
+            "requests",
+            "max_new_tokens",
+            "temperature",
+            "top_k",
+            "top_p",
+            "seed",
+            "threads",
+        ],
+    )?;
+    let artifact_path = PathBuf::from(args.required("artifact")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let requests_path = args.optional("requests").map(PathBuf::from);
+    let out = PathBuf::from(args.required("out")?);
+    let max_new_tokens: usize = args.number("max_new_tokens", 96)?;
+    let temperature: f64 = args.number("temperature", 0.0)?;
+    let top_k: usize = args.number("top_k", 40)?;
+    let top_p: f64 = args.number("top_p", 1.0)?;
+    let seed: u64 = args.number("seed", 1)?;
+    let threads: usize = args.number("threads", 1)?;
+    if max_new_tokens == 0 {
+        return Err(invalid("max_new_tokens must be positive"));
+    }
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        use uor_r4_lut::sampling::{Sampler, SamplingSettings};
+        let engine = Engine::load(fs::read(&artifact_path)?, threads)?;
+        let tokenizer = uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(
+            &tokenizer_path,
+        )?)
+        .ok_or_else(|| invalid("unreadable tokenizer.json"))?;
+        let (protocol, _) = episode_contract(&tokenizer, engine.vocabulary())?;
+        let encoder = protocol
+            .bind(&tokenizer)
+            .map_err(|e| invalid(e.to_string()))?;
+        let settings = if temperature == 0.0 {
+            SamplingSettings::default()
+        } else {
+            SamplingSettings::from_decimal(temperature, top_k, top_p, 0.0).map_err(lut)?
+        };
+        let mut sampler = Sampler::new(settings, seed);
+        let decode = |ids: &[u32]| tokenizer.decode(ids);
+        let clock = Instant::now();
+        let mut positions = 0usize;
+        let record = match &engine {
+            Engine::Stack(model) => chat_with(
+                &|| model.session(),
+                model.exp_table(),
+                engine.context(),
+                &encoder,
+                &protocol,
+                requests_path.as_deref(),
+                max_new_tokens,
+                &decode,
+                &mut sampler,
+                &mut positions,
+            )?,
+            Engine::Llama(model) => chat_with(
+                &|| model.session(),
+                model.exp_table(),
+                engine.context(),
+                &encoder,
+                &protocol,
+                requests_path.as_deref(),
+                max_new_tokens,
+                &decode,
+                &mut sampler,
+                &mut positions,
+            )?,
+        };
+        let seconds = clock.elapsed().as_secs_f64();
+        fs::write(
+            out.join("chat.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-lut-chat/1",
+                "artifact": identity(&artifact_path)?,
+                "artifact_sha256": engine.sha256(),
+                "tokenizer": identity(&tokenizer_path)?,
+                "protocol": protocol,
+                "requests": requests_path.as_ref().map(|p| identity(p)).transpose()?,
+                "settings": {"temperature": temperature, "top_k": top_k, "top_p": top_p,
+                    "seed": seed, "max_new_tokens": max_new_tokens},
+                "engine": {"backend": engine.backend(), "threads": threads,
+                    "generated_positions": positions, "seconds": seconds},
+                "record": record,
+            }))?,
+        )?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn chat_with<S: Stepper>(
+    new_session: &dyn Fn() -> S,
+    exp: (&[u32], i32),
+    context: usize,
+    encoder: &uor_r4_tokenizer::dialogue::DialogueEncoder<'_>,
+    protocol: &uor_r4_tokenizer::dialogue::DialogueProtocol,
+    requests: Option<&Path>,
+    max_new_tokens: usize,
+    decode: &dyn Fn(&[u32]) -> String,
+    sampler: &mut uor_r4_lut::sampling::Sampler,
+    positions: &mut usize,
+) -> Result<Value> {
+    let mut chat = IntegerChat {
+        session: new_session(),
+        fed: Vec::new(),
+        logits: Vec::new(),
+    };
+    let eos = protocol.eos_id;
+    if let Some(path) = requests {
+        let requests = load_requests(path)?;
+        return reply_panel(
+            encoder,
+            protocol,
+            &requests,
+            context,
+            max_new_tokens,
+            decode,
+            &mut |history, cap| {
+                let reply = chat.reply(new_session, history, cap, eos, sampler, exp)?;
+                *positions += reply.ids.len();
+                Ok(reply)
+            },
+        );
+    }
+    use std::io::{BufRead, Write};
+    let mut history = vec![protocol.bos_id];
+    let mut turns = Vec::new();
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    write!(stdout, "you> ")?;
+    stdout.flush()?;
+    for line in stdin.lock().lines() {
+        let line = line?;
+        let text = line.trim();
+        if text == "/reset" {
+            history = vec![protocol.bos_id];
+            writeln!(stdout, "[new conversation]")?;
+        } else if !text.is_empty() {
+            let mut prefix = encoder.encode_user_prefix(text, history.len() > 1);
+            if history.len() + prefix.tokens.len() + max_new_tokens + 1 > context {
+                writeln!(stdout, "[the context is full; starting a new conversation]")?;
+                history = vec![protocol.bos_id];
+                prefix = encoder.encode_user_prefix(text, false);
+            }
+            if prefix.emitted_turns != 1
+                || history.len() + prefix.tokens.len() + max_new_tokens + 1 > context
+            {
+                writeln!(stdout, "[that message is too long for the context]")?;
+            } else {
+                history.extend(&prefix.tokens);
+                let reply = chat.reply(new_session, &history, max_new_tokens, eos, sampler, exp)?;
+                *positions += reply.ids.len();
+                let words: Vec<u32> = reply.ids.iter().copied().filter(|&id| id != eos).collect();
+                writeln!(stdout, "model> {}", decode(&words))?;
+                history.extend(&reply.ids);
+                if !reply.eos {
+                    history.push(eos);
+                }
+                turns.push(json!({"user": text, "reply": decode(&words),
+                    "reply_ids": reply.ids, "model_eos": reply.eos}));
+            }
+        }
+        write!(stdout, "you> ")?;
+        stdout.flush()?;
+    }
+    writeln!(stdout)?;
+    Ok(json!({"interactive_turns": turns}))
+}
+
 fn finish(out: &Path, result: Result<()>) -> Result<()> {
     if let Err(error) = &result {
         fs::write(
@@ -1672,7 +2347,7 @@ fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let Some((mode, rest)) = arguments.split_first() else {
         return Err(invalid(
-            "usage: geometric-stack train|sample|evaluate|encode|corpus|export|lut-evaluate|lut-sample key=value ...",
+            "usage: geometric-stack train|sample|evaluate|encode|corpus|export|lut-evaluate|lut-sample|dialogue-train|lut-chat key=value ...",
         ));
     };
     match mode.as_str() {
@@ -1726,6 +2401,8 @@ fn main() -> Result<()> {
         "export" => export_mode(rest),
         "lut-evaluate" => lut_evaluate_mode(rest),
         "lut-sample" => lut_sample_mode(rest),
+        "dialogue-train" => dialogue_train_mode(rest),
+        "lut-chat" => lut_chat_mode(rest),
         other => Err(invalid(format!("unknown mode {other}"))),
     }
 }

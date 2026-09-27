@@ -711,6 +711,42 @@ impl StackModel {
         let logits = self.forward(ids, batch, time)?;
         Ok(logits.apply_op1(CrossEntropy {
             targets: targets.to_vec(),
+            weights: None,
+        })?)
+    }
+
+    /// Weighted mean next-token negative log-likelihood (nats):
+    /// `sum_i w_i nll_i / sum_i w_i`, for a loss on chosen targets only (a
+    /// dialogue's responses). Weights are finite and nonnegative with a
+    /// positive sum; rows of weight zero cost no loss or gradient work.
+    pub fn weighted_loss(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        if targets.len() != ids.len() || weights.len() != ids.len() {
+            return Err(invalid("one target and one weight per input id"));
+        }
+        if targets
+            .iter()
+            .any(|&id| id as usize >= self.config.vocab_size)
+        {
+            return Err(invalid("target id outside the vocabulary"));
+        }
+        if weights.iter().any(|w| !w.is_finite() || *w < 0.0)
+            || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+        {
+            return Err(invalid(
+                "loss weights must be finite, nonnegative and not all zero",
+            ));
+        }
+        let logits = self.forward(ids, batch, time)?;
+        Ok(logits.apply_op1(CrossEntropy {
+            targets: targets.to_vec(),
+            weights: Some(weights.to_vec()),
         })?)
     }
 
@@ -2149,6 +2185,8 @@ impl CustomOp2 for SwiGlu {
 /// Mean next-token cross-entropy of [rows, vocabulary] logits, parallel over rows.
 struct CrossEntropy {
     targets: Vec<u32>,
+    /// Per-row weights of a weighted mean; `None` weighs every row equally.
+    weights: Option<Vec<f32>>,
 }
 
 fn row_log_sum_exp(row: &[f32]) -> f64 {
@@ -2169,15 +2207,29 @@ impl candle_core::CustomOp1 for CrossEntropy {
     ) -> candle_core::Result<(CpuStorage, Shape)> {
         let (rows, vocabulary) = layout.shape().dims2()?;
         let logits = contiguous(storage, layout)?;
-        let total: f64 = logits
-            .par_chunks(vocabulary)
-            .zip(self.targets.par_iter())
-            .map(|(row, &target)| row_log_sum_exp(row) - f64::from(row[target as usize]))
-            .sum();
-        Ok((
-            CpuStorage::F32(vec![(total / rows as f64) as f32]),
-            Shape::from(()),
-        ))
+        let mean = match &self.weights {
+            None => {
+                let total: f64 = logits
+                    .par_chunks(vocabulary)
+                    .zip(self.targets.par_iter())
+                    .map(|(row, &target)| row_log_sum_exp(row) - f64::from(row[target as usize]))
+                    .sum();
+                total / rows as f64
+            }
+            Some(weights) => {
+                let total: f64 = logits
+                    .par_chunks(vocabulary)
+                    .zip(self.targets.par_iter())
+                    .zip(weights.par_iter())
+                    .filter(|item| *item.1 != 0.0)
+                    .map(|((row, &target), &weight)| {
+                        f64::from(weight) * (row_log_sum_exp(row) - f64::from(row[target as usize]))
+                    })
+                    .sum();
+                total / weights.iter().map(|&w| f64::from(w)).sum::<f64>()
+            }
+        };
+        Ok((CpuStorage::F32(vec![mean as f32]), Shape::from(())))
     }
 
     fn bwd(
@@ -2187,19 +2239,36 @@ impl candle_core::CustomOp1 for CrossEntropy {
         grad: &Tensor,
     ) -> candle_core::Result<Option<Tensor>> {
         let (rows, vocabulary) = logits.dims2()?;
-        let scale = f64::from(grad.to_scalar::<f32>()?) / rows as f64;
         let values = logits.flatten_all()?.to_vec1::<f32>()?;
         let mut out = vec![0f32; values.len()];
-        out.par_chunks_mut(vocabulary)
-            .zip(values.par_chunks(vocabulary))
-            .zip(self.targets.par_iter())
-            .for_each(|((out, row), &target)| {
-                let lse = row_log_sum_exp(row);
-                for (slot, &v) in out.iter_mut().zip(row) {
-                    *slot = ((f64::from(v) - lse).exp() * scale) as f32;
-                }
-                out[target as usize] -= scale as f32;
-            });
+        let grad = f64::from(grad.to_scalar::<f32>()?);
+        let fill = |out: &mut [f32], row: &[f32], target: u32, scale: f64| {
+            let lse = row_log_sum_exp(row);
+            for (slot, &v) in out.iter_mut().zip(row) {
+                *slot = ((f64::from(v) - lse).exp() * scale) as f32;
+            }
+            out[target as usize] -= scale as f32;
+        };
+        match &self.weights {
+            None => {
+                let scale = grad / rows as f64;
+                out.par_chunks_mut(vocabulary)
+                    .zip(values.par_chunks(vocabulary))
+                    .zip(self.targets.par_iter())
+                    .for_each(|((out, row), &target)| fill(out, row, target, scale));
+            }
+            Some(weights) => {
+                let total: f64 = weights.iter().map(|&w| f64::from(w)).sum();
+                out.par_chunks_mut(vocabulary)
+                    .zip(values.par_chunks(vocabulary))
+                    .zip(self.targets.par_iter())
+                    .zip(weights.par_iter())
+                    .filter(|item| *item.1 != 0.0)
+                    .for_each(|(((out, row), &target), &weight)| {
+                        fill(out, row, target, grad * f64::from(weight) / total)
+                    });
+            }
+        }
         Ok(Some(Tensor::from_vec(
             out,
             logits.shape(),
@@ -2703,6 +2772,7 @@ mod tests {
         let targets: Vec<u32> = vec![0, 3, 10, 5, 5, 7];
         let fused = logits.as_tensor().apply_op1(CrossEntropy {
             targets: targets.clone(),
+            weights: None,
         })?;
         let index = Tensor::from_vec(targets.clone(), 6, &cpu())?;
         let reference = candle_nn::loss::cross_entropy(logits.as_tensor(), &index)?;
@@ -2720,6 +2790,42 @@ mod tests {
         let rows = row_nll(logits.as_tensor(), &targets)?;
         let mean = rows.iter().sum::<f64>() / rows.len() as f64;
         assert!((mean - f64::from(reference.to_scalar::<f32>()?)).abs() < 1e-6);
+
+        // Weighted: the weighted mean of the rows, with the Candle
+        // composition's gradient; zero-weight rows get none.
+        let weights = vec![0.0f32, 1.0, 2.5, 0.0, 1.0, 0.5];
+        let fused = logits.as_tensor().apply_op1(CrossEntropy {
+            targets: targets.clone(),
+            weights: Some(weights.clone()),
+        })?;
+        let total: f64 = weights.iter().map(|&w| f64::from(w)).sum();
+        let want: f64 = rows
+            .iter()
+            .zip(&weights)
+            .map(|(nll, &w)| nll * f64::from(w))
+            .sum::<f64>()
+            / total;
+        let gap = (f64::from(fused.to_scalar::<f32>()?) - want).abs();
+        assert!(gap < 1e-6, "weighted loss differs by {gap}");
+        let picked = candle_nn::ops::log_softmax(logits.as_tensor(), 1)?
+            .gather(&index.unsqueeze(1)?, 1)?
+            .squeeze(1)?;
+        let reference = picked
+            .mul(&Tensor::from_vec(weights.clone(), 6, &cpu())?)?
+            .sum_all()?
+            .affine(-1.0 / total, 0.0)?;
+        let (a, b) = (fused.backward()?, reference.backward()?);
+        let ga = a
+            .get(logits.as_tensor())
+            .ok_or_else(|| invalid("fused gradient"))?;
+        let gb = b
+            .get(logits.as_tensor())
+            .ok_or_else(|| invalid("reference gradient"))?;
+        let gap = ga.sub(gb)?.abs()?.max_all()?.to_scalar::<f32>()?;
+        assert!(gap < 1e-6, "weighted gradient differs by {gap}");
+        let zero_rows = ga.get(0)?.abs()?.max_all()?.to_scalar::<f32>()?
+            + ga.get(3)?.abs()?.max_all()?.to_scalar::<f32>()?;
+        assert_eq!(zero_rows, 0.0);
         Ok(())
     }
 
