@@ -981,6 +981,13 @@ impl<'a> ChatSession<'a> {
                     key.len()
                 )));
             }
+            for (d, &coord) in key.iter().enumerate() {
+                if !(-32767..=32767).contains(&coord) {
+                    return Err(invalid(format!(
+                        "corrupted dialogue key coordinate at slot {i}, dim {d}: {coord} outside [-32767, 32767]"
+                    )));
+                }
+            }
         }
         for (i, val) in s_state.dialogue_values.iter().enumerate() {
             if val.len() != VAL_DIM {
@@ -1009,6 +1016,13 @@ impl<'a> ChatSession<'a> {
                     key.len()
                 )));
             }
+            for (d, &coord) in key.iter().enumerate() {
+                if !(-32767..=32767).contains(&coord) {
+                    return Err(invalid(format!(
+                        "corrupted persistent key coordinate at slot {i}, dim {d}: {coord} outside [-32767, 32767]"
+                    )));
+                }
+            }
             let mut arr = [0i32; KEY_DIM];
             arr.copy_from_slice(&key);
             persistent_keys.push(arr);
@@ -1027,6 +1041,33 @@ impl<'a> ChatSession<'a> {
             persistent_values.push(arr);
         }
 
+        if s_state.l2_pages.len() > L2_PAGE_CAPACITY {
+            return Err(invalid(format!(
+                "l2 page count {} exceeds capacity {}",
+                s_state.l2_pages.len(),
+                L2_PAGE_CAPACITY
+            )));
+        }
+        if s_state.l2_cursor >= L2_PAGE_CAPACITY {
+            return Err(invalid(format!(
+                "l2 cursor {} out of bounds [0, {})",
+                s_state.l2_cursor, L2_PAGE_CAPACITY
+            )));
+        }
+        if s_state.l2_len > L2_PAGE_CAPACITY {
+            return Err(invalid(format!(
+                "l2 len {} exceeds capacity {}",
+                s_state.l2_len, L2_PAGE_CAPACITY
+            )));
+        }
+        if s_state.l2_pages.len() < s_state.l2_len {
+            return Err(invalid(format!(
+                "l2 pages count {} is less than l2_len {}",
+                s_state.l2_pages.len(),
+                s_state.l2_len
+            )));
+        }
+
         let mut l2_pages: Box<[L2PrimePage; L2_PAGE_CAPACITY]> =
             vec![L2PrimePage::default(); L2_PAGE_CAPACITY]
                 .into_boxed_slice()
@@ -1034,6 +1075,13 @@ impl<'a> ChatSession<'a> {
                 .map_err(|_| invalid("l2_pages size mismatch"))?;
         for (i, page) in s_state.l2_pages.into_iter().enumerate() {
             if i < L2_PAGE_CAPACITY {
+                for (d, &coord) in page.key.iter().enumerate() {
+                    if !(-32767..=32767).contains(&coord) {
+                        return Err(invalid(format!(
+                            "corrupted L2 page key coordinate at page {i}, dim {d}: {coord} outside [-32767, 32767]"
+                        )));
+                    }
+                }
                 l2_pages[i] = page;
             }
         }
@@ -1089,8 +1137,8 @@ impl<'a> ChatSession<'a> {
             dialogue_seen: s_state.dialogue_seen,
             current_turn_id: s_state.current_turn_id,
             l2_pages,
-            l2_cursor: s_state.l2_cursor % L2_PAGE_CAPACITY,
-            l2_len: s_state.l2_len.min(L2_PAGE_CAPACITY),
+            l2_cursor: s_state.l2_cursor,
+            l2_len: s_state.l2_len,
             l2_seen: s_state.l2_seen,
             last_compressed_turn_id: s_state.last_compressed_turn_id,
             zeta_state: s_state.zeta_state,

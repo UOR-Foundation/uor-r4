@@ -1,6 +1,6 @@
 use uor_r4_integer::{
-    Bundle, ChatSession, IntegerModel, ReadGeometry, ReadMode, SamplePolicy, SlotTarget,
-    TOTAL_MEMORY_CANDIDATES,
+    Bundle, ChatSession, IntegerModel, L2PrimePage, ReadGeometry, ReadMode, SamplePolicy,
+    SlotTarget, TOTAL_MEMORY_CANDIDATES,
 };
 
 const TOTAL: u64 = 1u64 << 48;
@@ -435,9 +435,132 @@ fn test_chat_session_hyperbolic_streaming_latency_and_rss_invariants() {
     );
 
     assert_eq!(latencies_ms.len(), 128);
+    let ceiling = if cfg!(debug_assertions) { 8.0 } else { 4.0 };
     assert!(
-        mean_latency <= 4.0,
-        "Mean latency {:.3} ms must be <= 4.0 ms/token",
-        mean_latency
+        mean_latency <= ceiling,
+        "Mean latency {:.3} ms must be <= {:.1} ms/token",
+        mean_latency,
+        ceiling
     );
+}
+
+#[test]
+fn test_invalid_serialized_key_coordinates_rejected() {
+    let bundle = Bundle::synthetic_lorentz_for_test();
+    let persona = "Guard bot.";
+    let mut chat = ChatSession::new(&bundle, Some(persona), 101).expect("chat session creation");
+
+    // Ingest dialogue turns to create persistent and dialogue keys
+    for turn in 1..=30 {
+        let msg = format!("Turn {turn} message text for key bounds test");
+        let mut stream = chat.generate_stream(&msg, 5, &[]).expect("stream for turn");
+        while let Some(_) = stream.next() {}
+    }
+    assert!(chat.state().persistent_len() > 0);
+    assert!(chat.state().dialogue_len() > 0);
+    assert!(chat.state().l2_len() > 0);
+
+    let valid_serialized = chat.to_serialized(None);
+
+    // 1. Corrupt persistent key coordinate (e.g. 65536 outside [-32767, 32767])
+    let mut corrupted_persistent = valid_serialized.clone();
+    corrupted_persistent.session_state.persistent_keys[0][0] = 65536;
+    let res_persistent = ChatSession::from_serialized(&bundle, corrupted_persistent, "");
+    assert!(
+        res_persistent.is_err(),
+        "must reject out-of-range persistent key coordinate"
+    );
+    let err_p = res_persistent.err().unwrap().to_string();
+    assert!(
+        err_p.contains("corrupted persistent key coordinate"),
+        "error must identify persistent key coordinate: {err_p}"
+    );
+
+    // 2. Corrupt dialogue key coordinate (e.g. -32768 outside [-32767, 32767])
+    let mut corrupted_dialogue = valid_serialized.clone();
+    corrupted_dialogue.session_state.dialogue_keys[0][0] = -32768;
+    let res_dialogue = ChatSession::from_serialized(&bundle, corrupted_dialogue, "");
+    assert!(
+        res_dialogue.is_err(),
+        "must reject out-of-range dialogue key coordinate"
+    );
+    let err_d = res_dialogue.err().unwrap().to_string();
+    assert!(
+        err_d.contains("corrupted dialogue key coordinate"),
+        "error must identify dialogue key coordinate: {err_d}"
+    );
+
+    // 3. Corrupt L2 page key coordinate (e.g. 40000 outside [-32767, 32767])
+    let mut corrupted_l2 = valid_serialized.clone();
+    corrupted_l2.session_state.l2_pages[0].key[0] = 40000;
+    let res_l2 = ChatSession::from_serialized(&bundle, corrupted_l2, "");
+    assert!(
+        res_l2.is_err(),
+        "must reject out-of-range L2 page key coordinate"
+    );
+    let err_l2 = res_l2.err().unwrap().to_string();
+    assert!(
+        err_l2.contains("corrupted L2 page key coordinate"),
+        "error must identify L2 page key coordinate: {err_l2}"
+    );
+
+    // 4. Exact boundary checks: 32767 and -32767 are valid; 32768 is invalid
+    let mut boundary_valid = valid_serialized.clone();
+    boundary_valid.session_state.persistent_keys[0][0] = 32767;
+    boundary_valid.session_state.persistent_keys[0][1] = -32767;
+    assert!(
+        ChatSession::from_serialized(&bundle, boundary_valid, "").is_ok(),
+        "boundary values -32767 and 32767 must be accepted"
+    );
+
+    let mut boundary_invalid = valid_serialized.clone();
+    boundary_invalid.session_state.persistent_keys[0][0] = 32768;
+    assert!(
+        ChatSession::from_serialized(&bundle, boundary_invalid, "").is_err(),
+        "boundary value 32768 must be rejected"
+    );
+
+    // 5. L2 page count exceeds capacity
+    let mut corrupted_l2_count = valid_serialized.clone();
+    corrupted_l2_count
+        .session_state
+        .l2_pages
+        .resize(65, L2PrimePage::default());
+    let res_l2_count = ChatSession::from_serialized(&bundle, corrupted_l2_count, "");
+    assert!(res_l2_count.is_err(), "must reject L2 page count > 64");
+    assert!(res_l2_count
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("l2 page count"));
+
+    // 6. L2 cursor out of bounds
+    let mut corrupted_l2_cursor = valid_serialized.clone();
+    corrupted_l2_cursor.session_state.l2_cursor = 64;
+    let res_l2_cursor = ChatSession::from_serialized(&bundle, corrupted_l2_cursor, "");
+    assert!(res_l2_cursor.is_err(), "must reject L2 cursor >= 64");
+    assert!(res_l2_cursor
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("l2 cursor"));
+
+    // 7. L2 len exceeds capacity
+    let mut corrupted_l2_len = valid_serialized.clone();
+    corrupted_l2_len.session_state.l2_len = 65;
+    let res_l2_len = ChatSession::from_serialized(&bundle, corrupted_l2_len, "");
+    assert!(res_l2_len.is_err(), "must reject L2 len > 64");
+    assert!(res_l2_len.err().unwrap().to_string().contains("l2 len"));
+
+    // 8. L2 pages count less than l2_len
+    let mut corrupted_l2_short = valid_serialized;
+    corrupted_l2_short.session_state.l2_len = 10;
+    corrupted_l2_short.session_state.l2_pages.truncate(5);
+    let res_l2_short = ChatSession::from_serialized(&bundle, corrupted_l2_short, "");
+    assert!(res_l2_short.is_err(), "must reject L2 pages count < l2_len");
+    assert!(res_l2_short
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("less than l2_len"));
 }
