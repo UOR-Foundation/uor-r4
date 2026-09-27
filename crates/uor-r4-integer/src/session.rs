@@ -1234,7 +1234,7 @@ mod tests {
                 force_prediction(&mut expected, selected);
                 let sampled = expected
                     .sampler
-                    .select(&expected.state.last_probabilities, policy)
+                    .select(&expected.state.last_probabilities[..], policy)
                     .map_err(|error| invalid(error.to_string()))?;
                 assert_eq!(sampled, selected as usize);
                 expected.step_token(selected, SlotTarget::Dialogue)?;
