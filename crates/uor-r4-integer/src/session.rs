@@ -520,6 +520,8 @@ pub struct SerializedSessionState {
     pub l2_seen: u64,
     #[serde(default = "default_last_compressed_turn_id")]
     pub last_compressed_turn_id: u32,
+    #[serde(default)]
+    pub allow_hyperbolic_cache: bool,
 }
 
 fn default_last_compressed_turn_id() -> u32 {
@@ -548,7 +550,10 @@ impl<'a> ChatSession<'a> {
     /// Initialize a new chat session with optional system prompt.
     pub fn new(bundle: &'a Bundle, system_prompt: Option<&str>, seed: u64) -> Result<Self> {
         let roles = RoleTokens::from_tokenizer(bundle.tokenizer())?;
-        let state = bundle.model().new_conversational_session();
+        let mut state = bundle.model().new_conversational_session();
+        if bundle.model().is_lorentz() {
+            state.enable_hyperbolic_cache();
+        }
         let mut session = Self {
             bundle,
             state,
@@ -856,6 +861,7 @@ impl<'a> ChatSession<'a> {
                 l2_len: self.state.l2_len,
                 l2_seen: self.state.l2_seen,
                 last_compressed_turn_id: self.state.last_compressed_turn_id,
+                allow_hyperbolic_cache: self.state.allow_hyperbolic_cache,
             },
             sampler_state: SerializedSamplerState {
                 state: self.sampler.state(),
@@ -1032,6 +1038,38 @@ impl<'a> ChatSession<'a> {
             }
         }
 
+        let is_lorentz = bundle.model().is_lorentz();
+        let allow_hyperbolic_cache = s_state.allow_hyperbolic_cache || is_lorentz;
+
+        let mut persistent_key_norms = Vec::with_capacity(persistent_keys.len());
+        if is_lorentz {
+            for key in &persistent_keys {
+                persistent_key_norms.push(crate::lorentz::squared_norm(key)?);
+            }
+        } else {
+            persistent_key_norms.resize(persistent_keys.len(), 0i128);
+        }
+
+        let mut dialogue_key_norms: Box<[i128; DIALOGUE_CAPACITY]> = vec![0i128; DIALOGUE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("dialogue_key_norms size mismatch"));
+        if is_lorentz {
+            for i in 0..DIALOGUE_CAPACITY {
+                dialogue_key_norms[i] = crate::lorentz::squared_norm(&dialogue_keys[i])?;
+            }
+        }
+
+        let mut l2_page_norms: Box<[i128; L2_PAGE_CAPACITY]> = vec![0i128; L2_PAGE_CAPACITY]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| panic!("l2_page_norms size mismatch"));
+        if is_lorentz {
+            for i in 0..L2_PAGE_CAPACITY {
+                l2_page_norms[i] = crate::lorentz::squared_norm(&l2_pages[i].key)?;
+            }
+        }
+
         let state = SessionState {
             identity: s_state.identity,
             state: s_state.state,
@@ -1059,6 +1097,10 @@ impl<'a> ChatSession<'a> {
             hopf_state: s_state.hopf_state,
             cumulative_holonomy_q30: s_state.cumulative_holonomy_q30,
             age_horizon_clamp: s_state.age_horizon_clamp,
+            persistent_key_norms,
+            dialogue_key_norms,
+            l2_page_norms,
+            allow_hyperbolic_cache,
             scratch_products: vec![[0i64; 16]; 512],
             copy_scratch: vec![0u64; 4096],
             last_probabilities: vec![0u64; 4096]
