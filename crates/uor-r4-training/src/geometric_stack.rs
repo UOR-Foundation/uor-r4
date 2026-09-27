@@ -335,6 +335,46 @@ fn matched_mlp_hidden(config: &StackConfig, target: usize) -> Result<usize> {
 }
 
 /// SplitMix64 with Box-Muller normals: a deterministic initializer.
+/// Where a weight map reads its input ([`StackModel::hidden_with_capture`]),
+/// for calibrating the rounding of the integer export.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StackSite {
+    /// The normalized state before its gain, read by a recurrence's input and
+    /// gate maps.
+    Recurrence(usize),
+    /// The recurrence core's output, read by `rec.out`.
+    RecurrenceOut(usize),
+    /// The normalized state before its gain, read by a read layer's query,
+    /// key, value and NoRead maps, or by the control's attention.
+    Read(usize),
+    /// The merged heads, read by `read.out` or the control's `attn.o`.
+    ReadOut(usize),
+    /// The normalized state before its gain, read by the MLP's gate and up maps.
+    Mlp(usize),
+    /// The SwiGLU activation, read by `mlp.down`.
+    Down(usize),
+    /// The final normalized state before its gain, read by the head.
+    Head,
+}
+
+/// The capture of [`StackModel::hidden_with_capture`], if any.
+type Capture<'a> = Option<&'a mut dyn FnMut(StackSite, &Tensor) -> Result<()>>;
+
+/// Present a map's input, as `(rows, columns)`, to the capture. `input` runs
+/// only when there is one, so an uncaptured forward pass does no extra work.
+fn tap(
+    capture: &mut Capture<'_>,
+    site: StackSite,
+    input: impl FnOnce() -> Result<Tensor>,
+) -> Result<()> {
+    if let Some(capture) = capture {
+        let x = input()?.detach();
+        let cols = x.dim(x.rank() - 1)?;
+        capture(site, &x.reshape((x.elem_count() / cols, cols))?)?;
+    }
+    Ok(())
+}
+
 struct Initializer(u64);
 
 impl Initializer {
@@ -496,6 +536,13 @@ impl StackModel {
             .apply_op2(&weight.contiguous()?, RmsNorm)?)
     }
 
+    /// The normalized state before its gain: what a map with the gain folded
+    /// in reads.
+    fn unit_norm(&self, input: &Tensor) -> Result<Tensor> {
+        let ones = Tensor::ones(self.config.width, DType::F32, &self.device)?;
+        self.rms_norm(input, &ones)
+    }
+
     /// `input @ weight^T` over the last dimension, as one matrix product.
     fn linear(input: &Tensor, weight: &Tensor) -> Result<Tensor> {
         let dims = input.dims().to_vec();
@@ -510,7 +557,8 @@ impl StackModel {
         Ok(output.reshape(shape)?)
     }
 
-    fn mlp(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn mlp(&self, layer: usize, x: &Tensor, capture: &mut Capture<'_>) -> Result<Tensor> {
+        tap(capture, StackSite::Mlp(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "mlp_norm.weight")?)?;
         if let Some(memory) = self
             .config
@@ -523,6 +571,7 @@ impl StackModel {
         let gate = Self::linear(&u, self.layer_weight(layer, "mlp.gate.weight")?)?;
         let up = Self::linear(&u, self.layer_weight(layer, "mlp.up.weight")?)?;
         let mixed = gate.contiguous()?.apply_op2(&up.contiguous()?, SwiGlu)?;
+        tap(capture, StackSite::Down(layer), || Ok(mixed.clone()))?;
         Self::linear(&mixed, self.layer_weight(layer, "mlp.down.weight")?)
     }
 
@@ -569,8 +618,9 @@ impl StackModel {
             .reshape((batch, time, self.config.width))?)
     }
 
-    fn attention(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn attention(&self, layer: usize, x: &Tensor, capture: &mut Capture<'_>) -> Result<Tensor> {
         let (batch, time, _) = x.dims3()?;
+        tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "attn_norm.weight")?)?;
         let project = |part: &str| -> Result<Tensor> {
             self.heads(
@@ -594,15 +644,20 @@ impl StackModel {
             false,
             true,
         )?;
-        Self::linear(
-            &self.merge_heads(&read, batch, time)?,
-            self.layer_weight(layer, "attn.o.weight")?,
-        )
+        let merged = self.merge_heads(&read, batch, time)?;
+        tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
+        Self::linear(&merged, self.layer_weight(layer, "attn.o.weight")?)
     }
 
-    fn geometric_read(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn geometric_read(
+        &self,
+        layer: usize,
+        x: &Tensor,
+        capture: &mut Capture<'_>,
+    ) -> Result<Tensor> {
         let (batch, time, _) = x.dims3()?;
         let heads = self.config.heads;
+        tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "read_norm.weight")?)?;
         let project = |part: &str| -> Result<Tensor> {
             self.heads(
@@ -642,14 +697,14 @@ impl StackModel {
             true,
             false,
         )?;
-        Self::linear(
-            &self.merge_heads(&read, batch, time)?,
-            self.layer_weight(layer, "read.out.weight")?,
-        )
+        let merged = self.merge_heads(&read, batch, time)?;
+        tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
+        Self::linear(&merged, self.layer_weight(layer, "read.out.weight")?)
     }
 
-    fn recurrence(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
+    fn recurrence(&self, layer: usize, x: &Tensor, capture: &mut Capture<'_>) -> Result<Tensor> {
         let (batch, time, width) = x.dims3()?;
+        tap(capture, StackSite::Recurrence(layer), || self.unit_norm(x))?;
         let u = self.rms_norm(x, self.layer_weight(layer, "rec_norm.weight")?)?;
         let branches = Self::linear(&u, self.layer_weight(layer, "rec.in.weight")?)?;
         let gates = Self::linear(&u, self.layer_weight(layer, "rec.gate.weight")?)?
@@ -672,6 +727,11 @@ impl StackModel {
                 rotation: self.config.rotation,
             },
         )?;
+        tap(
+            capture,
+            StackSite::RecurrenceOut(layer),
+            || Ok(core.clone()),
+        )?;
         Self::linear(&core, self.layer_weight(layer, "rec.out.weight")?)
     }
 
@@ -685,6 +745,31 @@ impl StackModel {
     /// The final normalized states [batch * time, width], which the tied
     /// embedding maps to logits.
     pub fn hidden(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
+        self.hidden_hooked(ids, batch, time, &mut None)
+    }
+
+    /// [`hidden`](Self::hidden), presenting the input of every weight map to
+    /// `capture` as detached `(batch * time, columns)` tensors (see
+    /// [`StackSite`]). Maps that read a normalized state see it before its gain,
+    /// as the export folds the gains into them. The embedding is a lookup and
+    /// has no site.
+    pub fn hidden_with_capture(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        capture: &mut dyn FnMut(StackSite, &Tensor) -> Result<()>,
+    ) -> Result<Tensor> {
+        self.hidden_hooked(ids, batch, time, &mut Some(capture))
+    }
+
+    fn hidden_hooked(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        capture: &mut Capture<'_>,
+    ) -> Result<Tensor> {
         if ids.len() != batch * time || time == 0 || time > self.config.context {
             return Err(invalid(
                 "stack forward needs batch * time ids within the context",
@@ -700,13 +785,14 @@ impl StackModel {
             .reshape((batch, time, self.config.width))?;
         for layer in 0..self.config.layers() {
             let mixed = match (self.config.arch, self.config.layer_kind(layer)) {
-                (StackArch::Transformer, _) => self.attention(layer, &x)?,
-                (StackArch::Geometric, 'r') => self.recurrence(layer, &x)?,
-                (StackArch::Geometric, _) => self.geometric_read(layer, &x)?,
+                (StackArch::Transformer, _) => self.attention(layer, &x, capture)?,
+                (StackArch::Geometric, 'r') => self.recurrence(layer, &x, capture)?,
+                (StackArch::Geometric, _) => self.geometric_read(layer, &x, capture)?,
             };
             x = x.add(&mixed)?;
-            x = x.add(&self.mlp(layer, &x)?)?;
+            x = x.add(&self.mlp(layer, &x, capture)?)?;
         }
+        tap(capture, StackSite::Head, || self.unit_norm(&x))?;
         let x = self.rms_norm(&x, self.weight("final_norm.weight")?)?;
         Ok(x.reshape((batch * time, self.config.width))?)
     }
@@ -725,6 +811,42 @@ impl StackModel {
         let logits = self.forward(ids, batch, time)?;
         Ok(logits.apply_op1(CrossEntropy {
             targets: targets.to_vec(),
+            weights: None,
+        })?)
+    }
+
+    /// Weighted mean next-token negative log-likelihood (nats):
+    /// `sum_i w_i nll_i / sum_i w_i`, for a loss on chosen targets only (a
+    /// dialogue's responses). Weights are finite and nonnegative with a
+    /// positive sum; rows of weight zero cost no loss or gradient work.
+    pub fn weighted_loss(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        if targets.len() != ids.len() || weights.len() != ids.len() {
+            return Err(invalid("one target and one weight per input id"));
+        }
+        if targets
+            .iter()
+            .any(|&id| id as usize >= self.config.vocab_size)
+        {
+            return Err(invalid("target id outside the vocabulary"));
+        }
+        if weights.iter().any(|w| !w.is_finite() || *w < 0.0)
+            || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+        {
+            return Err(invalid(
+                "loss weights must be finite, nonnegative and not all zero",
+            ));
+        }
+        let logits = self.forward(ids, batch, time)?;
+        Ok(logits.apply_op1(CrossEntropy {
+            targets: targets.to_vec(),
+            weights: Some(weights.to_vec()),
         })?)
     }
 
@@ -1617,10 +1739,199 @@ struct Block<'a> {
     offset: f64,
 }
 
-/// Per-row scratch: scores then probabilities, and Lorentz excesses.
+/// Scratch for a tile of `TILE` rows, each `time` wide: the Lorentz
+/// excesses and distances, and in the backward pass the probability
+/// gradients.
 struct Scratch {
-    row: Vec<f32>,
     excess: Vec<f64>,
+    distance: Vec<f64>,
+    dp: Vec<f32>,
+}
+
+impl Scratch {
+    fn new(time: usize) -> Self {
+        Self {
+            excess: vec![0f64; TILE * time],
+            distance: vec![0f64; TILE * time],
+            dp: vec![0f32; TILE * time],
+        }
+    }
+}
+
+/// Rows of a register tile of the read's products.
+const TILE: usize = 4;
+/// Columns of a register tile.
+const LANES: usize = 16;
+
+/// `out[r * out_stride + j] = sum_i a[r * a_stride + i] b[i * b_stride + j]`
+/// for rows `r < rows` (at most `TILE`), columns `j < columns` and `i <
+/// count`, each sum taken in ascending `i` from zero, exactly as an `axpy`
+/// loop over `i` takes it. Full tiles hold their sums in registers.
+#[allow(clippy::too_many_arguments)]
+fn tile_product(
+    a: &[f32],
+    a_stride: usize,
+    rows: usize,
+    b: &[f32],
+    b_stride: usize,
+    columns: usize,
+    count: usize,
+    out: &mut [f32],
+    out_stride: usize,
+) {
+    let mut j0 = 0;
+    while j0 < columns {
+        let width = LANES.min(columns - j0);
+        if rows == TILE && width == LANES {
+            let mut acc = [[0f32; LANES]; TILE];
+            for i in 0..count {
+                let row = &b[i * b_stride + j0..i * b_stride + j0 + LANES];
+                let x = [
+                    a[i],
+                    a[a_stride + i],
+                    a[2 * a_stride + i],
+                    a[3 * a_stride + i],
+                ];
+                for (c, &y) in row.iter().enumerate() {
+                    acc[0][c] += x[0] * y;
+                    acc[1][c] += x[1] * y;
+                    acc[2][c] += x[2] * y;
+                    acc[3][c] += x[3] * y;
+                }
+            }
+            for (r, acc) in acc.iter().enumerate() {
+                out[r * out_stride + j0..r * out_stride + j0 + LANES].copy_from_slice(acc);
+            }
+        } else {
+            for r in 0..rows {
+                let target = &mut out[r * out_stride + j0..r * out_stride + j0 + width];
+                target.fill(0.0);
+                for i in 0..count {
+                    axpy(
+                        a[r * a_stride + i],
+                        &b[i * b_stride + j0..i * b_stride + j0 + width],
+                        target,
+                    );
+                }
+            }
+        }
+        j0 += width;
+    }
+}
+
+/// The causal product of a tile: row `r` (position `t0 + r`) of `out` gets
+/// `sum_{j <= t0 + r} a[r * a_stride + j] b[j * b_stride + ..width]`, summed in
+/// ascending `j` from zero as `axpy` over `j` does; `out` rows are `width` wide.
+#[allow(clippy::too_many_arguments)]
+fn causal_rows(
+    a: &[f32],
+    a_stride: usize,
+    rows: usize,
+    t0: usize,
+    b: &[f32],
+    b_stride: usize,
+    width: usize,
+    out: &mut [f32],
+) {
+    let shared = t0 + 1;
+    let mut c0 = 0;
+    while c0 < width {
+        let lanes = LANES.min(width - c0);
+        if rows == TILE && lanes == LANES {
+            let mut acc = [[0f32; LANES]; TILE];
+            for j in 0..shared {
+                let row = &b[j * b_stride + c0..j * b_stride + c0 + LANES];
+                let x = [
+                    a[j],
+                    a[a_stride + j],
+                    a[2 * a_stride + j],
+                    a[3 * a_stride + j],
+                ];
+                for (c, &y) in row.iter().enumerate() {
+                    acc[0][c] += x[0] * y;
+                    acc[1][c] += x[1] * y;
+                    acc[2][c] += x[2] * y;
+                    acc[3][c] += x[3] * y;
+                }
+            }
+            for (r, acc) in acc.iter_mut().enumerate() {
+                for j in shared..=t0 + r {
+                    let row = &b[j * b_stride + c0..j * b_stride + c0 + LANES];
+                    let x = a[r * a_stride + j];
+                    for (slot, &y) in acc.iter_mut().zip(row) {
+                        *slot += x * y;
+                    }
+                }
+                out[r * width + c0..r * width + c0 + LANES].copy_from_slice(acc);
+            }
+        } else {
+            for r in 0..rows {
+                let target = &mut out[r * width + c0..r * width + c0 + lanes];
+                target.fill(0.0);
+                for j in 0..=t0 + r {
+                    axpy(
+                        a[r * a_stride + j],
+                        &b[j * b_stride + c0..j * b_stride + c0 + lanes],
+                        target,
+                    );
+                }
+            }
+        }
+        c0 += lanes;
+    }
+}
+
+/// The transposed causal product of a whole block: row `j` of `out` is
+/// `sum_{t >= j} a[t * time + j] x[t * width + ..width]`, summed in ascending
+/// `t` from zero, as successive rows' `axpy` calls add them. Full tiles of
+/// four output rows by sixteen columns hold their sums in registers.
+fn causal_transpose(a: &[f32], x: &[f32], time: usize, width: usize, out: &mut [f32]) {
+    for j0 in (0..time).step_by(TILE) {
+        let rows = TILE.min(time - j0);
+        let mut c0 = 0;
+        while c0 < width {
+            let lanes = LANES.min(width - c0);
+            if rows == TILE && lanes == LANES {
+                let mut acc = [[0f32; LANES]; TILE];
+                // The triangle: position t reaches rows j <= t of the tile.
+                for t in j0..j0 + TILE {
+                    let row = &x[t * width + c0..t * width + c0 + LANES];
+                    for (r, acc) in acc.iter_mut().enumerate().take(t - j0 + 1) {
+                        let g = a[t * time + j0 + r];
+                        for (slot, &y) in acc.iter_mut().zip(row) {
+                            *slot += g * y;
+                        }
+                    }
+                }
+                for t in j0 + TILE..time {
+                    let row = &x[t * width + c0..t * width + c0 + LANES];
+                    let g = &a[t * time + j0..t * time + j0 + TILE];
+                    for (c, &y) in row.iter().enumerate() {
+                        acc[0][c] += g[0] * y;
+                        acc[1][c] += g[1] * y;
+                        acc[2][c] += g[2] * y;
+                        acc[3][c] += g[3] * y;
+                    }
+                }
+                for (r, acc) in acc.iter().enumerate() {
+                    out[(j0 + r) * width + c0..(j0 + r) * width + c0 + LANES].copy_from_slice(acc);
+                }
+            } else {
+                for j in j0..j0 + rows {
+                    let target = &mut out[j * width + c0..j * width + c0 + lanes];
+                    target.fill(0.0);
+                    for t in j..time {
+                        axpy(
+                            a[t * time + j],
+                            &x[t * width + c0..t * width + c0 + lanes],
+                            target,
+                        );
+                    }
+                }
+            }
+            c0 += lanes;
+        }
+    }
 }
 
 impl FusedRead {
@@ -1710,17 +2021,19 @@ impl FusedRead {
         }
     }
 
-    /// Row `t`'s key probabilities in `scratch.row[..=t]`, `z - 1` in
-    /// `scratch.excess[..=t]` for Lorentz, and the NoRead probability.
-    fn row(&self, block: &Block, t: usize, scratch: &mut Scratch) -> f32 {
-        let (key, time) = (self.key, self.time);
-        let row = &mut scratch.row[..=t];
-        row.fill(0.0);
-        let query = &block.query[t * key..(t + 1) * key];
-        for (i, &q) in query.iter().enumerate() {
-            axpy(q, &block.key_columns[i * time..i * time + t + 1], row);
-        }
-        let scale = 1.0 / (key as f32).sqrt();
+    /// Row `t`'s key probabilities, in place of its inner products
+    /// `row[..=t]`; for Lorentz, `z - 1` in `excess[..=t]` and the distances
+    /// in `distance[..=t]`. Returns the NoRead probability.
+    fn transform(
+        &self,
+        block: &Block,
+        t: usize,
+        row: &mut [f32],
+        excess: &mut [f64],
+        distance: &mut [f64],
+    ) -> f32 {
+        let row = &mut row[..=t];
+        let scale = 1.0 / (self.key as f32).sqrt();
         let mut maximum = block.null.map_or(f32::NEG_INFINITY, |null| null[t]);
         for j in 0..=t {
             let age = block.age.map_or(0.0, |age| age[t - j]);
@@ -1728,8 +2041,10 @@ impl FusedRead {
                 ReadScore::Dot => row[j] * scale + age,
                 ReadScore::Lorentz => {
                     let e = block.query_lift[t] * block.key_lift[j] - f64::from(row[j]) - 1.0;
-                    scratch.excess[j] = e;
-                    (-block.beta * (lorentz_distance(e) - block.offset)) as f32 + age
+                    let d = lorentz_distance(e);
+                    excess[j] = e;
+                    distance[j] = d;
+                    (-block.beta * (d - block.offset)) as f32 + age
                 }
             };
             row[j] = score;
@@ -1746,6 +2061,43 @@ impl FusedRead {
             *value *= inverse;
         }
         null_weight * inverse
+    }
+
+    /// Probabilities of the tile of rows `t0..t0 + rows` in `probabilities`
+    /// (rows `time` wide), with the Lorentz excesses and distances in
+    /// `scratch`; returns the NoRead probabilities.
+    fn tile(
+        &self,
+        block: &Block,
+        t0: usize,
+        rows: usize,
+        probabilities: &mut [f32],
+        scratch: &mut Scratch,
+    ) -> [f32; TILE] {
+        let (key, time) = (self.key, self.time);
+        tile_product(
+            &block.query[t0 * key..],
+            key,
+            rows,
+            &block.key_columns,
+            time,
+            t0 + rows,
+            key,
+            probabilities,
+            time,
+        );
+        let mut null = [0f32; TILE];
+        for (r, null) in null.iter_mut().enumerate().take(rows) {
+            let span = r * time..(r + 1) * time;
+            *null = self.transform(
+                block,
+                t0 + r,
+                &mut probabilities[span.clone()],
+                &mut scratch.excess[span.clone()],
+                &mut scratch.distance[span],
+            );
+        }
+        null
     }
 }
 
@@ -1816,16 +2168,21 @@ impl CustomOp3 for FusedRead {
             .enumerate()
             .for_each(|(index, out)| {
                 let block = self.block(query, kv, aux, tables.as_ref(), index);
-                let mut scratch = Scratch {
-                    row: vec![0f32; time],
-                    excess: vec![0f64; time],
-                };
-                for t in 0..time {
-                    self.row(&block, t, &mut scratch);
-                    let target = &mut out[t * value..(t + 1) * value];
-                    for (j, &p) in scratch.row[..=t].iter().enumerate() {
-                        axpy(p, &block.value_rows[j * value..(j + 1) * value], target);
-                    }
+                let mut scratch = Scratch::new(time);
+                let mut probabilities = vec![0f32; TILE * time];
+                for t0 in (0..time).step_by(TILE) {
+                    let rows = TILE.min(time - t0);
+                    self.tile(&block, t0, rows, &mut probabilities, &mut scratch);
+                    causal_rows(
+                        &probabilities,
+                        time,
+                        rows,
+                        t0,
+                        &block.value_rows,
+                        value,
+                        value,
+                        &mut out[t0 * value..],
+                    );
                 }
             });
         Ok((
@@ -1871,72 +2228,106 @@ impl CustomOp3 for FusedRead {
                     dbeta: 0.0,
                     doffset: 0.0,
                 };
-                let mut scratch = Scratch {
-                    row: vec![0f32; time],
-                    excess: vec![0f64; time],
-                };
-                let mut dp = vec![0f32; time];
-                let mut inner_grad = vec![0f32; time];
-                // Keys and values accumulate in row layout; keys are mapped back
-                // through RoPE at the end.
+                let mut scratch = Scratch::new(time);
+                // The whole block's probabilities and inner-product gradients,
+                // for the key and value gradients after the rows.
+                let mut probabilities = vec![0f32; time * time];
+                let mut inner_grads = vec![0f32; time * time];
+                // Keys and values in row layout; keys are mapped back through
+                // RoPE at the end.
                 let mut dk_rows = vec![0f32; time * key];
                 let mut dv_rows = vec![0f32; time * value];
                 // Lorentz: coefficients of each key's own direction, applied once.
                 let mut key_self = vec![0f64; if lorentz { time } else { 0 }];
-                for t in 0..time {
-                    let null_probability = self.row(&block, t, &mut scratch);
-                    let p = &scratch.row[..=t];
-                    let d_row = &d_block[t * value..(t + 1) * value];
-                    let dp = &mut dp[..=t];
-                    dp.fill(0.0);
-                    for (i, &g) in d_row.iter().enumerate() {
-                        axpy(g, &block.value_columns[i * time..i * time + t + 1], dp);
-                    }
-                    let row_dot: f64 = p
-                        .iter()
-                        .zip(dp.iter())
-                        .map(|(&a, &b)| f64::from(a) * f64::from(b))
-                        .sum();
-                    if self.null {
-                        partial.dnull[t] = -f64::from(null_probability) * row_dot;
-                    }
-                    let mut query_self = 0.0;
-                    for j in 0..=t {
-                        let ds = f64::from(p[j]) * (f64::from(dp[j]) - row_dot);
-                        if self.age {
-                            partial.dage[t - j] += ds;
+                for t0 in (0..time).step_by(TILE) {
+                    let rows = TILE.min(time - t0);
+                    let null_probability = self.tile(
+                        &block,
+                        t0,
+                        rows,
+                        &mut probabilities[t0 * time..],
+                        &mut scratch,
+                    );
+                    tile_product(
+                        &d_block[t0 * value..],
+                        value,
+                        rows,
+                        &block.value_columns,
+                        time,
+                        t0 + rows,
+                        value,
+                        &mut scratch.dp,
+                        time,
+                    );
+                    let mut query_self = [0f64; TILE];
+                    for r in 0..rows {
+                        let t = t0 + r;
+                        let span = r * time..r * time + t + 1;
+                        let p = &probabilities[t * time..t * time + t + 1];
+                        let dp = &scratch.dp[span.clone()];
+                        let row_dot: f64 = p
+                            .iter()
+                            .zip(dp.iter())
+                            .map(|(&a, &b)| f64::from(a) * f64::from(b))
+                            .sum();
+                        if self.null {
+                            partial.dnull[t] = -f64::from(null_probability[r]) * row_dot;
                         }
-                        inner_grad[j] = match self.score {
-                            ReadScore::Dot => (ds * scale) as f32,
-                            ReadScore::Lorentz => {
-                                let e = scratch.excess[j];
-                                partial.dbeta -= ds * (lorentz_distance(e) - block.offset);
-                                partial.doffset += ds * block.beta;
-                                if e > LORENTZ_MIN_EXCESS {
-                                    // e = lift_q lift_k - <q, k> - 1 and lift = sqrt(1 + |x|^2).
-                                    let de = -block.beta * ds / (e * (e + 2.0)).sqrt();
-                                    let (lq, lk) = (block.query_lift[t], block.key_lift[j]);
-                                    query_self += de * lk / lq;
-                                    key_self[j] += de * lq / lk;
-                                    -de as f32
-                                } else {
-                                    0.0
-                                }
+                        let (excess, distance) = (
+                            &scratch.excess[span.clone()],
+                            &scratch.distance[span.clone()],
+                        );
+                        let inner_grad = &mut inner_grads[t * time..t * time + t + 1];
+                        for j in 0..=t {
+                            let ds = f64::from(p[j]) * (f64::from(dp[j]) - row_dot);
+                            if self.age {
+                                partial.dage[t - j] += ds;
                             }
-                        };
+                            inner_grad[j] = match self.score {
+                                ReadScore::Dot => (ds * scale) as f32,
+                                ReadScore::Lorentz => {
+                                    let e = excess[j];
+                                    partial.dbeta -= ds * (distance[j] - block.offset);
+                                    partial.doffset += ds * block.beta;
+                                    if e > LORENTZ_MIN_EXCESS {
+                                        // e = lift_q lift_k - <q, k> - 1 and lift = sqrt(1 + |x|^2).
+                                        let de = -block.beta * ds / (e * (e + 2.0)).sqrt();
+                                        let (lq, lk) = (block.query_lift[t], block.key_lift[j]);
+                                        query_self[r] += de * lk / lq;
+                                        key_self[j] += de * lq / lk;
+                                        -de as f32
+                                    } else {
+                                        0.0
+                                    }
+                                }
+                            };
+                        }
                     }
-                    let query_row = &block.query[t * key..(t + 1) * key];
-                    let dq_row = &mut dq[t * key..(t + 1) * key];
-                    for j in 0..=t {
-                        let g = inner_grad[j];
-                        axpy(g, &block.key_rows[j * key..(j + 1) * key], dq_row);
-                        axpy(g, query_row, &mut dk_rows[j * key..(j + 1) * key]);
-                        axpy(p[j], d_row, &mut dv_rows[j * value..(j + 1) * value]);
-                    }
-                    if lorentz && query_self != 0.0 {
-                        axpy(query_self as f32, query_row, dq_row);
+                    causal_rows(
+                        &inner_grads[t0 * time..],
+                        time,
+                        rows,
+                        t0,
+                        &block.key_rows,
+                        key,
+                        key,
+                        &mut dq[t0 * key..],
+                    );
+                    if lorentz {
+                        for (r, &coefficient) in query_self.iter().enumerate().take(rows) {
+                            if coefficient != 0.0 {
+                                let t = t0 + r;
+                                axpy(
+                                    coefficient as f32,
+                                    &block.query[t * key..(t + 1) * key],
+                                    &mut dq[t * key..(t + 1) * key],
+                                );
+                            }
+                        }
                     }
                 }
+                causal_transpose(&inner_grads, &block.query, time, key, &mut dk_rows);
+                causal_transpose(&probabilities, d_block, time, value, &mut dv_rows);
                 for (j, &coefficient) in key_self.iter().enumerate() {
                     if coefficient != 0.0 {
                         let (rows, grads) = (
@@ -2210,6 +2601,8 @@ impl CustomOp2 for SwiGlu {
 /// Mean next-token cross-entropy of [rows, vocabulary] logits, parallel over rows.
 struct CrossEntropy {
     targets: Vec<u32>,
+    /// Per-row weights of a weighted mean; `None` weighs every row equally.
+    weights: Option<Vec<f32>>,
 }
 
 fn row_log_sum_exp(row: &[f32]) -> f64 {
@@ -2230,15 +2623,29 @@ impl candle_core::CustomOp1 for CrossEntropy {
     ) -> candle_core::Result<(CpuStorage, Shape)> {
         let (rows, vocabulary) = layout.shape().dims2()?;
         let logits = contiguous(storage, layout)?;
-        let total: f64 = logits
-            .par_chunks(vocabulary)
-            .zip(self.targets.par_iter())
-            .map(|(row, &target)| row_log_sum_exp(row) - f64::from(row[target as usize]))
-            .sum();
-        Ok((
-            CpuStorage::F32(vec![(total / rows as f64) as f32]),
-            Shape::from(()),
-        ))
+        let mean = match &self.weights {
+            None => {
+                let total: f64 = logits
+                    .par_chunks(vocabulary)
+                    .zip(self.targets.par_iter())
+                    .map(|(row, &target)| row_log_sum_exp(row) - f64::from(row[target as usize]))
+                    .sum();
+                total / rows as f64
+            }
+            Some(weights) => {
+                let total: f64 = logits
+                    .par_chunks(vocabulary)
+                    .zip(self.targets.par_iter())
+                    .zip(weights.par_iter())
+                    .filter(|item| *item.1 != 0.0)
+                    .map(|((row, &target), &weight)| {
+                        f64::from(weight) * (row_log_sum_exp(row) - f64::from(row[target as usize]))
+                    })
+                    .sum();
+                total / weights.iter().map(|&w| f64::from(w)).sum::<f64>()
+            }
+        };
+        Ok((CpuStorage::F32(vec![mean as f32]), Shape::from(())))
     }
 
     fn bwd(
@@ -2248,19 +2655,36 @@ impl candle_core::CustomOp1 for CrossEntropy {
         grad: &Tensor,
     ) -> candle_core::Result<Option<Tensor>> {
         let (rows, vocabulary) = logits.dims2()?;
-        let scale = f64::from(grad.to_scalar::<f32>()?) / rows as f64;
         let values = logits.flatten_all()?.to_vec1::<f32>()?;
         let mut out = vec![0f32; values.len()];
-        out.par_chunks_mut(vocabulary)
-            .zip(values.par_chunks(vocabulary))
-            .zip(self.targets.par_iter())
-            .for_each(|((out, row), &target)| {
-                let lse = row_log_sum_exp(row);
-                for (slot, &v) in out.iter_mut().zip(row) {
-                    *slot = ((f64::from(v) - lse).exp() * scale) as f32;
-                }
-                out[target as usize] -= scale as f32;
-            });
+        let grad = f64::from(grad.to_scalar::<f32>()?);
+        let fill = |out: &mut [f32], row: &[f32], target: u32, scale: f64| {
+            let lse = row_log_sum_exp(row);
+            for (slot, &v) in out.iter_mut().zip(row) {
+                *slot = ((f64::from(v) - lse).exp() * scale) as f32;
+            }
+            out[target as usize] -= scale as f32;
+        };
+        match &self.weights {
+            None => {
+                let scale = grad / rows as f64;
+                out.par_chunks_mut(vocabulary)
+                    .zip(values.par_chunks(vocabulary))
+                    .zip(self.targets.par_iter())
+                    .for_each(|((out, row), &target)| fill(out, row, target, scale));
+            }
+            Some(weights) => {
+                let total: f64 = weights.iter().map(|&w| f64::from(w)).sum();
+                out.par_chunks_mut(vocabulary)
+                    .zip(values.par_chunks(vocabulary))
+                    .zip(self.targets.par_iter())
+                    .zip(weights.par_iter())
+                    .filter(|item| *item.1 != 0.0)
+                    .for_each(|(((out, row), &target), &weight)| {
+                        fill(out, row, target, grad * f64::from(weight) / total)
+                    });
+            }
+        }
         Ok(Some(Tensor::from_vec(
             out,
             logits.shape(),
@@ -2468,15 +2892,91 @@ mod tests {
         Ok(probabilities.matmul(&values)?)
     }
 
+    #[test]
+    fn tiled_read_products_equal_ascending_sums_bitwise() {
+        let mut rng = Initializer(41);
+        let mut values =
+            |n: usize| -> Vec<f32> { (0..n).map(|_| (rng.normal() * 0.7) as f32).collect() };
+        // Inner products: 4 rows (a full tile) and 3 (a short one), with
+        // 37 columns (two full chunks and a remainder) and 23 terms.
+        let (count, stride, columns) = (23, 40, 37);
+        let (a, b) = (values(4 * count), values(count * stride));
+        for rows in [4, 3] {
+            let mut out = vec![0f32; rows * stride];
+            tile_product(
+                &a, count, rows, &b, stride, columns, count, &mut out, stride,
+            );
+            for r in 0..rows {
+                for j in 0..columns {
+                    let mut sum = 0f32;
+                    for i in 0..count {
+                        sum += a[r * count + i] * b[i * stride + j];
+                    }
+                    assert_eq!(
+                        out[r * stride + j].to_bits(),
+                        sum.to_bits(),
+                        "product {r} {j}"
+                    );
+                }
+            }
+        }
+        // Causal products of the tile at t0 = 9 for 33-wide rows.
+        let (time, width, t0) = (16, 33, 9);
+        let (p, v) = (values(4 * time), values(time * width));
+        for rows in [4, 3] {
+            let mut out = vec![0f32; rows * width];
+            causal_rows(&p, time, rows, t0, &v, width, width, &mut out);
+            for r in 0..rows {
+                for c in 0..width {
+                    let mut sum = 0f32;
+                    for j in 0..=t0 + r {
+                        sum += p[r * time + j] * v[j * width + c];
+                    }
+                    assert_eq!(out[r * width + c].to_bits(), sum.to_bits(), "rows {r} {c}");
+                }
+            }
+        }
+        // Transposed causal products of whole blocks: 16 and 18 positions
+        // (full tiles, then a short one) by 33 columns.
+        for time in [16, 18] {
+            let (a, x) = (values(time * time), values(time * width));
+            let mut out = vec![0f32; time * width];
+            causal_transpose(&a, &x, time, width, &mut out);
+            for j in 0..time {
+                for c in 0..width {
+                    let mut sum = 0f32;
+                    for t in j..time {
+                        sum += a[t * time + j] * x[t * width + c];
+                    }
+                    assert_eq!(
+                        out[j * width + c].to_bits(),
+                        sum.to_bits(),
+                        "transpose {j} {c}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Small heads run the kernels' partial tiles only; `time` 11 with key
+    /// width 20 and value width 33 also runs full tiles, the causal triangle
+    /// and a short last tile.
     fn read_case(score: ReadScore) -> Result<()> {
+        for (time, width, value_width) in [(7, 4, 5), (11, 20, 33)] {
+            read_shape(score, time, width, value_width)?;
+        }
+        Ok(())
+    }
+
+    fn read_shape(score: ReadScore, time: usize, width: usize, value_width: usize) -> Result<()> {
         let mut rng = Initializer(match score {
             ReadScore::Dot => 3,
             ReadScore::Lorentz => 5,
         });
-        let (batch, heads, time, width) = (2, 3, 7, 4);
+        let (batch, heads) = (2, 3);
         let q = Var::from_tensor(&random(&mut rng, &[batch, heads, time, width], 0.8))?;
         let k = Var::from_tensor(&random(&mut rng, &[batch, heads, time, width], 0.8))?;
-        let v = Var::from_tensor(&random(&mut rng, &[batch, heads, time, 5], 1.0))?;
+        let v = Var::from_tensor(&random(&mut rng, &[batch, heads, time, value_width], 1.0))?;
         let null = Var::from_tensor(&random(&mut rng, &[batch, heads, time], 1.0))?;
         let age = Var::from_tensor(&random(&mut rng, &[heads, time], 0.5))?;
         let beta = Var::from_tensor(&random(&mut rng, &[heads], 0.3).affine(1.0, 1.0)?)?;
@@ -2517,11 +3017,35 @@ mod tests {
             .max_all()?
             .to_scalar::<f32>()?;
         assert!(gap < 1e-5, "fused read differs from the reference by {gap}");
-        let weights = random(&mut rng, &[batch, heads, time, 5], 1.0);
+        let weights = random(&mut rng, &[batch, heads, time, value_width], 1.0);
         let mut vars = vec![q.clone(), k.clone(), v.clone(), null.clone(), age.clone()];
         if lorentz {
             vars.push(beta.clone());
             vars.push(offset.clone());
+        }
+        // Every coordinate of the gradient against autograd through the
+        // reference composition.
+        let fused_grads = fused.mul(&weights)?.sum_all()?.backward()?;
+        let reference_grads = reference.mul(&weights)?.sum_all()?.backward()?;
+        for var in &vars {
+            let (a, b) = (
+                fused_grads
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("fused gradient"))?,
+                reference_grads
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("reference gradient"))?,
+            );
+            let scale = b.abs()?.max_all()?.to_scalar::<f32>()?.max(1.0);
+            let gap = a.sub(b)?.abs()?.max_all()?.to_scalar::<f32>()?;
+            assert!(
+                gap < 1e-4 * scale,
+                "time {time}: gradient of {:?} differs by {gap} of {scale}",
+                var.dims()
+            );
+        }
+        if time > 7 {
+            return Ok(());
         }
         check_gradient(
             &vars,
@@ -2652,7 +3176,7 @@ mod tests {
                 var.set(&random(&mut Initializer(43), var.dims(), 0.5))?;
             }
             let x = random(&mut Initializer(47), &[2, 9, 16], 1.0);
-            let fused = model.recurrence(0, &x)?;
+            let fused = model.recurrence(0, &x, &mut None)?;
             let composed = model.composed_recurrence(0, &x)?;
             let gap = fused.sub(&composed)?.abs()?.max_all()?.to_scalar::<f32>()?;
             assert!(
@@ -2672,7 +3196,10 @@ mod tests {
                 .iter()
                 .map(|name| model.variables()[*name].clone())
                 .collect();
-            let fused_loss = model.recurrence(0, &x)?.mul(&weights)?.sum_all()?;
+            let fused_loss = model
+                .recurrence(0, &x, &mut None)?
+                .mul(&weights)?
+                .sum_all()?;
             let composed_loss = model.composed_recurrence(0, &x)?.mul(&weights)?.sum_all()?;
             let (a, b) = (fused_loss.backward()?, composed_loss.backward()?);
             for (name, var) in names.iter().zip(&vars) {
@@ -2761,6 +3288,7 @@ mod tests {
         let targets: Vec<u32> = vec![0, 3, 10, 5, 5, 7];
         let fused = logits.as_tensor().apply_op1(CrossEntropy {
             targets: targets.clone(),
+            weights: None,
         })?;
         let index = Tensor::from_vec(targets.clone(), 6, &cpu())?;
         let reference = candle_nn::loss::cross_entropy(logits.as_tensor(), &index)?;
@@ -2778,6 +3306,42 @@ mod tests {
         let rows = row_nll(logits.as_tensor(), &targets)?;
         let mean = rows.iter().sum::<f64>() / rows.len() as f64;
         assert!((mean - f64::from(reference.to_scalar::<f32>()?)).abs() < 1e-6);
+
+        // Weighted: the weighted mean of the rows, with the Candle
+        // composition's gradient; zero-weight rows get none.
+        let weights = vec![0.0f32, 1.0, 2.5, 0.0, 1.0, 0.5];
+        let fused = logits.as_tensor().apply_op1(CrossEntropy {
+            targets: targets.clone(),
+            weights: Some(weights.clone()),
+        })?;
+        let total: f64 = weights.iter().map(|&w| f64::from(w)).sum();
+        let want: f64 = rows
+            .iter()
+            .zip(&weights)
+            .map(|(nll, &w)| nll * f64::from(w))
+            .sum::<f64>()
+            / total;
+        let gap = (f64::from(fused.to_scalar::<f32>()?) - want).abs();
+        assert!(gap < 1e-6, "weighted loss differs by {gap}");
+        let picked = candle_nn::ops::log_softmax(logits.as_tensor(), 1)?
+            .gather(&index.unsqueeze(1)?, 1)?
+            .squeeze(1)?;
+        let reference = picked
+            .mul(&Tensor::from_vec(weights.clone(), 6, &cpu())?)?
+            .sum_all()?
+            .affine(-1.0 / total, 0.0)?;
+        let (a, b) = (fused.backward()?, reference.backward()?);
+        let ga = a
+            .get(logits.as_tensor())
+            .ok_or_else(|| invalid("fused gradient"))?;
+        let gb = b
+            .get(logits.as_tensor())
+            .ok_or_else(|| invalid("reference gradient"))?;
+        let gap = ga.sub(gb)?.abs()?.max_all()?.to_scalar::<f32>()?;
+        assert!(gap < 1e-6, "weighted gradient differs by {gap}");
+        let zero_rows = ga.get(0)?.abs()?.max_all()?.to_scalar::<f32>()?
+            + ga.get(3)?.abs()?.max_all()?.to_scalar::<f32>()?;
+        assert_eq!(zero_rows, 0.0);
         Ok(())
     }
 

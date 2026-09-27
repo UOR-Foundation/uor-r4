@@ -4,8 +4,11 @@
 //! A geometric stack becomes a stack artifact ([`export_stack`], served by
 //! `uor_r4_lut::stack`). Norm gains are folded into the maps that read the
 //! normalized state. Every weight matrix is quantized to 4 bits in groups of
-//! `GROUP` (round to nearest, as [`crate::lut_export::quantize_matrix`]), and
-//! the MLP is padded with zero units to a multiple of the group. Each learned
+//! `GROUP`, and the MLP is padded with zero units to a multiple of the group.
+//! Rounding is to nearest ([`crate::lut_export::quantize_matrix`]) or, given a
+//! [`StackCalibration`] of each map's input moments, GPTQ
+//! ([`crate::lut_export::quantize_matrix_gptq`]); the embedding, a lookup,
+//! always rounds to nearest. Each learned
 //! scalar that multiplies a runtime value (convolution taps, decay rates,
 //! Lorentz scales) becomes a grid code `±(16 + m) 2^(e - 4)`. Biases, age
 //! tables and Lorentz offsets become integers, and the exp, SiLU, GELU and
@@ -23,11 +26,11 @@ use uor_r4_lut::format::{Fixed, StackArtifactBuilder, StackNumerics, StackShape,
 use uor_r4_lut::kernels::grid_encode;
 use uor_r4_lut::GROUP;
 
-use crate::geometric_stack::{ReadScore, StackArch, StackModel};
-use crate::kappa_llama::{Checkpoint, LlamaShape};
+use crate::geometric_stack::{ReadScore, StackArch, StackModel, StackSite};
+use crate::kappa_llama::{Checkpoint, LlamaShape, Site};
 use crate::lut_export::{
-    arcosh_table, grid_nearest, quantize_matrix, EXP_RANGE, EXP_STEP_LOG2, SILU_RANGE_LOG2,
-    SILU_STEP_LOG2,
+    arcosh_table, grid_nearest, quantize_matrix, quantize_matrix_gptq, Calibration, EXP_RANGE,
+    EXP_STEP_LOG2, SILU_RANGE_LOG2, SILU_STEP_LOG2,
 };
 use crate::{invalid, Result};
 
@@ -107,10 +110,113 @@ fn fixed(value: f64, exp: i32) -> Result<i32> {
     Ok(scaled as i32)
 }
 
+/// Second moments `sum_t x_t x_t^T` of every weight map's input over
+/// calibration windows, as the folded export sees them
+/// ([`StackModel::hidden_with_capture`]).
+pub struct StackCalibration {
+    /// Per site: the input width and the row-major moment matrix.
+    moments: BTreeMap<StackSite, (usize, Vec<f64>)>,
+    /// Calibration positions accumulated.
+    pub positions: usize,
+}
+
+impl StackCalibration {
+    /// Run `model` (float) over `windows` windows of `time` tokens spread
+    /// evenly across `tokens` and accumulate the input moments.
+    pub fn collect(
+        model: &StackModel,
+        tokens: &[u32],
+        windows: usize,
+        time: usize,
+    ) -> Result<Self> {
+        if windows == 0 || time == 0 || tokens.len() < time {
+            return Err(invalid("calibration needs windows, time and enough tokens"));
+        }
+        let span = tokens.len() - time;
+        let mut moments: BTreeMap<StackSite, (usize, Vec<f64>)> = BTreeMap::new();
+        for w in 0..windows {
+            let start = if windows == 1 {
+                0
+            } else {
+                w * span / (windows - 1)
+            };
+            let ids = &tokens[start..start + time];
+            model.hidden_with_capture(ids, 1, time, &mut |site, x| {
+                let x = x.contiguous()?;
+                let cols = x.dim(1)?;
+                let gram = x
+                    .t()?
+                    .contiguous()?
+                    .matmul(&x)?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let entry = moments
+                    .entry(site)
+                    .or_insert_with(|| (cols, vec![0.0; cols * cols]));
+                if entry.0 != cols {
+                    return Err(invalid(format!("site {site:?} changed width")));
+                }
+                for (sum, value) in entry.1.iter_mut().zip(&gram) {
+                    *sum += f64::from(*value);
+                }
+                Ok(())
+            })?;
+        }
+        Ok(Self {
+            moments,
+            positions: windows * time,
+        })
+    }
+
+    /// The moment of `site`'s input, padded with zeros to `cols` columns (the
+    /// MLP's padding units are always zero).
+    fn moment(&self, site: StackSite, cols: usize) -> Result<Vec<f64>> {
+        let (width, moment) = match self.moments.get(&site) {
+            Some((width, moment)) if *width <= cols => (*width, moment),
+            _ => {
+                return Err(invalid(format!(
+                    "no calibration moment of width at most {cols} for {site:?}"
+                )))
+            }
+        };
+        let mut padded = vec![0f64; cols * cols];
+        for (r, row) in moment.chunks_exact(width).enumerate() {
+            padded[r * cols..r * cols + width].copy_from_slice(row);
+        }
+        Ok(padded)
+    }
+
+    /// The control's moments at the Llama exporter's sites, for
+    /// [`crate::lut_export::export_llama`].
+    pub fn llama(&self) -> Result<Calibration> {
+        let mut moments = BTreeMap::new();
+        for (site, moment) in &self.moments {
+            let site = match *site {
+                StackSite::Read(l) => Site::Attention(l),
+                StackSite::ReadOut(l) => Site::Output(l),
+                StackSite::Mlp(l) => Site::Mlp(l),
+                StackSite::Down(l) => Site::Down(l),
+                StackSite::Head => Site::Head,
+                StackSite::Recurrence(_) | StackSite::RecurrenceOut(_) => {
+                    return Err(invalid("a recurrence has no Llama site"))
+                }
+            };
+            moments.insert(site, moment.clone());
+        }
+        Ok(Calibration::from_moments(moments, self.positions))
+    }
+}
+
 /// Export a geometric stack; returns the artifact bytes and a report of the
 /// quantization errors (relative RMS per matrix, worst relative error per
-/// table of grid codes).
-pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value)> {
+/// table of grid codes and, with a calibration, each calibrated matrix's
+/// relative output error under GPTQ and under round-to-nearest). A
+/// calibration comes with its damping, relative to the moment's mean diagonal.
+pub fn export_stack(
+    model: &StackModel,
+    source: Value,
+    calibration: Option<(&StackCalibration, f64)>,
+) -> Result<(Vec<u8>, Value)> {
     let c = &model.config;
     if c.arch != StackArch::Geometric {
         return Err(invalid(
@@ -155,13 +261,27 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
     let mut builder =
         StackArtifactBuilder::new(shape, numerics, source).map_err(|e| invalid(e.to_string()))?;
     let mut errors = serde_json::Map::new();
+    let mut output_errors = serde_json::Map::new();
     let mut add = |builder: &mut StackArtifactBuilder,
                    name: &str,
                    values: &[f32],
                    rows: usize,
-                   cols: usize|
+                   cols: usize,
+                   site: Option<StackSite>|
      -> Result<()> {
-        let packed = quantize_matrix(values, rows, cols)?;
+        let packed = match (calibration, site) {
+            (Some((calibration, damp)), Some(site)) => {
+                let moment = calibration.moment(site, cols)?;
+                let (packed, gptq, nearest) =
+                    quantize_matrix_gptq(values, rows, cols, &moment, damp)?;
+                output_errors.insert(
+                    name.to_owned(),
+                    json!({"gptq": gptq, "round_to_nearest": nearest}),
+                );
+                packed
+            }
+            _ => quantize_matrix(values, rows, cols)?,
+        };
         builder
             .add_matrix(
                 name,
@@ -205,7 +325,7 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
         };
 
     let embed = values(model, "embedding.weight")?;
-    add(&mut builder, "embed", &embed, c.vocab_size, d)?;
+    add(&mut builder, "embed", &embed, c.vocab_size, d, None)?;
     for (l, kind) in c.pattern.bytes().enumerate() {
         let tensor = |suffix: &str| values(model, &format!("layers.{l:02}.{suffix}"));
         let name = |part: &str| format!("l{l}.{part}");
@@ -213,16 +333,18 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
             let gain = tensor("rec_norm.weight")?;
             let mut input = tensor("rec.in.weight")?;
             fold_columns(&mut input, d, &gain);
-            add(&mut builder, &name("rec_in"), &input, 2 * d, d)?;
+            let site = Some(StackSite::Recurrence(l));
+            add(&mut builder, &name("rec_in"), &input, 2 * d, d, site)?;
             let mut gates = tensor("rec.gate.weight")?;
             fold_columns(&mut gates, d, &gain);
-            add(&mut builder, &name("rec_gate"), &gates, gate_rows, d)?;
+            add(&mut builder, &name("rec_gate"), &gates, gate_rows, d, site)?;
             add(
                 &mut builder,
                 &name("rec_out"),
                 &tensor("rec.out.weight")?,
                 d,
                 d,
+                Some(StackSite::RecurrenceOut(l)),
             )?;
             let taps: Vec<f64> = tensor("rec.conv.weight")?
                 .iter()
@@ -254,7 +376,14 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
             for (part, rows) in [("query", d), ("key", d), ("value", d), ("null", heads)] {
                 let mut w = tensor(&format!("read.{part}.weight"))?;
                 fold_columns(&mut w, d, &gain);
-                add(&mut builder, &name(part), &w, rows, d)?;
+                add(
+                    &mut builder,
+                    &name(part),
+                    &w,
+                    rows,
+                    d,
+                    Some(StackSite::Read(l)),
+                )?;
             }
             add(
                 &mut builder,
@@ -262,6 +391,7 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
                 &tensor("read.out.weight")?,
                 d,
                 d,
+                Some(StackSite::ReadOut(l)),
             )?;
             integers(
                 &mut builder,
@@ -289,6 +419,7 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
                 &pad(&w, c.mlp_hidden, d, mlp, d),
                 mlp,
                 d,
+                Some(StackSite::Mlp(l)),
             )?;
         }
         let down = tensor("mlp.down.weight")?;
@@ -298,11 +429,19 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
             &pad(&down, d, c.mlp_hidden, d, mlp),
             d,
             mlp,
+            Some(StackSite::Down(l)),
         )?;
     }
     let mut head = embed;
     fold_columns(&mut head, d, &values(model, "final_norm.weight")?);
-    add(&mut builder, "head", &head, c.vocab_size, d)?;
+    add(
+        &mut builder,
+        "head",
+        &head,
+        c.vocab_size,
+        d,
+        Some(StackSite::Head),
+    )?;
 
     let exp: Vec<u32> = (0..EXP_RANGE * (1 << -EXP_STEP_LOG2) + 2)
         .map(|i| (2f64.powi(31) * (-(i as f64) * 2f64.powi(EXP_STEP_LOG2)).exp()).round() as u32)
@@ -328,11 +467,23 @@ pub fn export_stack(model: &StackModel, source: Value) -> Result<(Vec<u8>, Value
         table(&mut builder, "arcosh", TableValues::U32(&arcosh_table()))?;
     }
     let bytes = builder.finish().map_err(|e| invalid(e.to_string()))?;
+    let method = match calibration {
+        Some((calibration, damp)) => json!({
+            "quantizer": "gptq", "damp": damp,
+            "calibration_positions": calibration.positions,
+            "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp,
+        }),
+        None => json!({
+            "quantizer": "round_to_nearest",
+            "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp,
+        }),
+    };
     Ok((
         bytes,
         json!({
-            "method": {"quantizer": "round_to_nearest", "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp},
+            "method": method,
             "relative_rms_error": errors,
+            "relative_output_error": output_errors,
             "grid_code_worst_relative_error": code_errors,
         }),
     ))
@@ -669,7 +820,7 @@ mod tests {
     fn parity(pattern: &str, read: ReadScore, rotation: bool) -> (f64, f64, f64) {
         let model = small(pattern, read, rotation);
         perturb(&model, 3);
-        let (bytes, _) = export_stack(&model, json!({"test": true})).unwrap();
+        let (bytes, _) = export_stack(&model, json!({"test": true}), None).unwrap();
         let artifact = StackArtifact::parse(bytes.clone()).unwrap();
         let reference = stack_grid_reference(&model, &artifact).unwrap();
         let integer = IntegerStack::from_artifact(StackArtifact::parse(bytes).unwrap()).unwrap();
@@ -745,6 +896,231 @@ mod tests {
         assert!(grid_code(f64::NAN).is_err());
     }
 
+    /// Pseudo-random token ids below `vocab`.
+    fn tokens(count: usize, vocab: u32, seed: u64) -> Vec<u32> {
+        let mut state = seed;
+        (0..count)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                ((state >> 33) % u64::from(vocab)) as u32
+            })
+            .collect()
+    }
+
+    /// Mean `KL(float || reference)` per position over windows of `ids`.
+    fn mean_divergence(model: &StackModel, reference: &GridReference, ids: &[u32]) -> f64 {
+        let time = model.config.context;
+        let (mut total, mut count) = (0f64, 0usize);
+        for window in ids.chunks_exact(time) {
+            let want = model
+                .forward(window, 1, time)
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap();
+            let got = reference
+                .logits(window, 1, time)
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap();
+            for (w, g) in want.iter().zip(&got) {
+                let w = log_softmax(&w.iter().map(|&v| f64::from(v)).collect::<Vec<_>>());
+                let g = log_softmax(&g.iter().map(|&v| f64::from(v)).collect::<Vec<_>>());
+                total += w
+                    .iter()
+                    .zip(&g)
+                    .map(|(a, b)| a.exp() * (a - b))
+                    .sum::<f64>();
+                count += 1;
+            }
+        }
+        total / count as f64
+    }
+
+    /// Sum over calibrated matrices of the reported output errors under GPTQ
+    /// and under round-to-nearest, and the number of matrices.
+    fn output_errors(report: &Value) -> (f64, f64, usize) {
+        let errors = report["relative_output_error"].as_object().unwrap();
+        let sum = |key: &str| {
+            errors
+                .values()
+                .map(|v| v[key].as_f64().unwrap())
+                .sum::<f64>()
+        };
+        (sum("gptq"), sum("round_to_nearest"), errors.len())
+    }
+
+    #[test]
+    fn the_capture_sees_each_map_input_and_leaves_the_forward_unchanged() {
+        let model = small("ra", ReadScore::Lorentz, true);
+        perturb(&model, 5);
+        let (d, time) = (model.config.width, model.config.context);
+        let ids = tokens(time, 96, 17);
+        let plain = model.hidden(&ids, 1, time).unwrap();
+        let mut seen = BTreeMap::new();
+        let hooked = model
+            .hidden_with_capture(&ids, 1, time, &mut |site, x| {
+                seen.insert(site, x.clone());
+                Ok(())
+            })
+            .unwrap();
+        let bits = |t: &Tensor| -> Vec<u32> {
+            t.flatten_all()
+                .unwrap()
+                .to_vec1::<f32>()
+                .unwrap()
+                .iter()
+                .map(|v| v.to_bits())
+                .collect()
+        };
+        assert_eq!(bits(&plain), bits(&hooked));
+        let expected = [
+            StackSite::Recurrence(0),
+            StackSite::RecurrenceOut(0),
+            StackSite::Read(1),
+            StackSite::ReadOut(1),
+            StackSite::Mlp(0),
+            StackSite::Mlp(1),
+            StackSite::Down(0),
+            StackSite::Down(1),
+            StackSite::Head,
+        ];
+        let mut expected = expected.to_vec();
+        expected.sort();
+        assert_eq!(seen.keys().copied().collect::<Vec<_>>(), expected);
+        for (site, x) in &seen {
+            let cols = match site {
+                StackSite::Down(_) => model.config.mlp_hidden,
+                _ => d,
+            };
+            assert_eq!(x.dims(), &[time, cols], "{site:?}");
+        }
+        // The head's input is the final state before its gain: through the
+        // head with the gain folded in, it gives the forward pass's logits.
+        let mut head = values(&model, "embedding.weight").unwrap();
+        fold_columns(&mut head, d, &values(&model, "final_norm.weight").unwrap());
+        let head = Tensor::from_vec(head, (96, d), &Device::Cpu).unwrap();
+        let logits = seen[&StackSite::Head].matmul(&head.t().unwrap()).unwrap();
+        let forward = model.forward(&ids, 1, time).unwrap();
+        let gap = logits
+            .sub(&forward)
+            .unwrap()
+            .abs()
+            .unwrap()
+            .max_all()
+            .unwrap()
+            .to_scalar::<f32>()
+            .unwrap();
+        assert!(gap < 1e-4, "folded head differs by {gap}");
+    }
+
+    #[test]
+    fn gptq_brings_the_rounded_stack_closer_to_the_float_stack() {
+        let model = small("rarr", ReadScore::Lorentz, true);
+        perturb(&model, 3);
+        let time = model.config.context;
+        let calibration =
+            StackCalibration::collect(&model, &tokens(64 * time, 96, 11), 32, time).unwrap();
+        assert_eq!(calibration.positions, 32 * time);
+        let (nearest, _) = export_stack(&model, json!({}), None).unwrap();
+        let (gptq, report) = export_stack(&model, json!({}), Some((&calibration, 0.01))).unwrap();
+        assert_eq!(report["method"]["quantizer"], "gptq");
+        // Every matrix but the embedding: 3 recurrence layers of 6 and one
+        // read layer of 8, and the head.
+        let (with, without, count) = output_errors(&report);
+        assert_eq!(count, 3 * 6 + 8 + 1);
+        assert!(
+            with < without,
+            "output error {with} with GPTQ, {without} without"
+        );
+        // On windows the calibration never saw.
+        let held_out = tokens(8 * time, 96, 23);
+        let divergence = |bytes: Vec<u8>| {
+            let artifact = StackArtifact::parse(bytes).unwrap();
+            mean_divergence(
+                &model,
+                &stack_grid_reference(&model, &artifact).unwrap(),
+                &held_out,
+            )
+        };
+        let (with, without) = (divergence(gptq), divergence(nearest));
+        assert!(
+            with < without,
+            "divergence {with} with GPTQ, {without} without"
+        );
+    }
+
+    #[test]
+    fn the_control_calibrates_at_the_llama_sites() {
+        let mut config = StackConfig::transformer_control(9);
+        config.vocab_size = 96;
+        config.width = 64;
+        config.heads = 2;
+        config.mlp_hidden = 64;
+        config.context = 24;
+        config.pattern = "aa".to_owned();
+        let control = StackModel::new(config, &Device::Cpu).unwrap();
+        perturb(&control, 7);
+        let time = control.config.context;
+        let calibration =
+            StackCalibration::collect(&control, &tokens(64 * time, 96, 13), 32, time).unwrap();
+        let checkpoint = control_checkpoint(&control, "none".to_owned()).unwrap();
+        let llama = calibration.llama().unwrap();
+        let export = |calibration: Option<(&Calibration, f64)>| {
+            crate::lut_export::export_llama(&checkpoint, time, json!({}), calibration, None)
+                .unwrap()
+        };
+        // The Llama exporter's own float model, run over the same windows,
+        // sees the same input at every site.
+        let float = crate::kappa_llama::KappaLlama::new(
+            checkpoint.clone(),
+            crate::kappa_llama::ScoreKind::Dot,
+            0.0,
+            crate::kappa_llama::Trainable::Scalars,
+            &Device::Cpu,
+        )
+        .unwrap();
+        let own = Calibration::collect(&float, &tokens(64 * time, 96, 13), 32, time).unwrap();
+        let mut sites = vec![Site::Head];
+        for l in 0..2 {
+            sites.extend([
+                Site::Attention(l),
+                Site::Output(l),
+                Site::Mlp(l),
+                Site::Down(l),
+            ]);
+        }
+        for site in sites {
+            let (a, b) = (
+                llama.moment(site, 64).unwrap(),
+                own.moment(site, 64).unwrap(),
+            );
+            let scale = b.iter().map(|v| v.abs()).fold(0.0, f64::max);
+            let gap = a
+                .iter()
+                .zip(b)
+                .map(|(x, y)| (x - y).abs())
+                .fold(0.0, f64::max);
+            assert!(
+                gap <= 1e-4 * scale,
+                "{site:?}: moments differ by {gap} of {scale}"
+            );
+        }
+        let (_, report) = export(Some((&llama, 0.01)));
+        // Per layer q, k, v, o, gate, up and down, and the head.
+        let (with, without, count) = output_errors(&report);
+        assert_eq!(count, 2 * 7 + 1);
+        assert!(
+            with < without,
+            "output error {with} with GPTQ, {without} without"
+        );
+        let geometric = small("ra", ReadScore::Dot, false);
+        let calibration =
+            StackCalibration::collect(&geometric, &tokens(4 * 24, 96, 3), 2, 24).unwrap();
+        assert!(calibration.llama().is_err());
+    }
+
     #[test]
     fn the_control_renames_to_a_llama_checkpoint() {
         let control = StackModel::new(StackConfig::transformer_control(3), &Device::Cpu).unwrap();
@@ -754,6 +1130,6 @@ mod tests {
         assert!(checkpoint
             .tensors
             .contains_key("model.layers.5.mlp.down_proj.weight"));
-        assert!(export_stack(&control, json!({})).is_err());
+        assert!(export_stack(&control, json!({}), None).is_err());
     }
 }

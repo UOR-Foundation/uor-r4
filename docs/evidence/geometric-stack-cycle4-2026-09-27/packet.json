@@ -1,5 +1,5 @@
 {
- "schema": "uor-r4.geometric-stack-cycle4-packet/3",
+ "schema": "uor-r4.geometric-stack-cycle4-packet/4",
  "label": "Measured, development, one seed per arm",
  "runs": [
   {
@@ -678,8 +678,8 @@
  "files": [
   {
    "path": "README.md",
-   "bytes": 5696,
-   "sha256": "6836e67a8c43df1d34044cb82b30be48779010b4d3f85593110999821ee054f6"
+   "bytes": 6659,
+   "sha256": "f5b38de29c81293c2b536b37b2d5a8dbb6b5dfdc89e867cd7c3196483237c8b4"
   },
   {
    "path": "ablation-readsonly/dot_s1/attempt.json",
@@ -862,6 +862,51 @@
    "sha256": "5baa20745d6004db506bc663cf22f808d5f04fb361557ddcce52e6217fa5258f"
   },
   {
+   "path": "integer/ablation-dot/gptq-evaluation/attempt.json",
+   "bytes": 995,
+   "sha256": "1e19f3c6a00e2fbad8965bb4d4b9d91dad5e130d30d8f21a54cf764cd27d7b74"
+  },
+  {
+   "path": "integer/ablation-dot/gptq-evaluation/evaluation.json",
+   "bytes": 82056,
+   "sha256": "570db1080f69018b28fe39936173e19ce7438111933ee94459ca43a902a03013"
+  },
+  {
+   "path": "integer/ablation-dot/gptq-evaluation/manifest.json",
+   "bytes": 514,
+   "sha256": "6abeb91a4b6c6134184e4839f8a10adfee5ed66efb3c3ddecd1e38ec427b53fb"
+  },
+  {
+   "path": "integer/ablation-dot/gptq-export/attempt.json",
+   "bytes": 728,
+   "sha256": "d8bf072a29cede34d7530fab3baa8f51f5f18f2b21e21da374636fbf8f81a717"
+  },
+  {
+   "path": "integer/ablation-dot/gptq-export/export.json",
+   "bytes": 8560,
+   "sha256": "2d155f1f54b65c2acd43f271365d5465b24814e604d47b57bd152f64b0fde58a"
+  },
+  {
+   "path": "integer/ablation-dot/gptq-export/manifest.json",
+   "bytes": 655,
+   "sha256": "ea9cc6193fbd4b07fac9dcc56950880cd4288078ae59764497d8ea50bfca3030"
+  },
+  {
+   "path": "integer/ablation-dot/reference/attempt.json",
+   "bytes": 990,
+   "sha256": "458592f6ab9622d05c3e59066e3d635926bef01c99ea40472da04e1effdb51ee"
+  },
+  {
+   "path": "integer/ablation-dot/reference/evaluation.json",
+   "bytes": 82075,
+   "sha256": "a5373c95d3d8b40fc4ec5aa48f01407dcd459571be9c34ce65661a93642182fd"
+  },
+  {
+   "path": "integer/ablation-dot/reference/manifest.json",
+   "bytes": 514,
+   "sha256": "0a6f317324b2dec7082991ab5adeb556a2d2984b8f03e4820e9473012f67c12a"
+  },
+  {
    "path": "integer/ablation-dot/samples/attempt.json",
    "bytes": 944,
    "sha256": "1abeb52bb522426400f2e2eeb7cfd3e67d056f559f3b43b200d11840de03d904"
@@ -920,6 +965,51 @@
    "path": "integer/ablation-norot/export/manifest.json",
    "bytes": 652,
    "sha256": "baa81b0409c58728347c689bc7774b7a31fc37ec1977d82be3ddb9a24199ec6f"
+  },
+  {
+   "path": "integer/ablation-norot/gptq-evaluation/attempt.json",
+   "bytes": 1001,
+   "sha256": "f77a65bf322db65b7496e6496c67ff90d87133e70e29f19de0a8b0ecfe035e99"
+  },
+  {
+   "path": "integer/ablation-norot/gptq-evaluation/evaluation.json",
+   "bytes": 82069,
+   "sha256": "7b418c3fe3cf9a1f791d418ffb18d94031b2493eae117f57475dea22a48e87be"
+  },
+  {
+   "path": "integer/ablation-norot/gptq-evaluation/manifest.json",
+   "bytes": 517,
+   "sha256": "735efd9af5072da028c9f01d17914ed4bb69cf4611173834a72c21c4c6c09d9a"
+  },
+  {
+   "path": "integer/ablation-norot/gptq-export/attempt.json",
+   "bytes": 732,
+   "sha256": "e6d66613a251d539412f2fe11ab9e41409fa10655de22328cfb5d3c4b5d5b660"
+  },
+  {
+   "path": "integer/ablation-norot/gptq-export/export.json",
+   "bytes": 8654,
+   "sha256": "e6ad6b098fc9de066dabb0738ebba635e124107d606da870f5533af8cb7bcce6"
+  },
+  {
+   "path": "integer/ablation-norot/gptq-export/manifest.json",
+   "bytes": 657,
+   "sha256": "f90fad4d359fc4602a45a277dcf291b23ba8f6cd9832e1ff7c34ac5ba4396d32"
+  },
+  {
+   "path": "integer/ablation-norot/reference/attempt.json",
+   "bytes": 996,
+   "sha256": "ee72a8842432352bf2707e53e510821b5ceb7f40c27ae752115da314deedac70"
+  },
+  {
+   "path": "integer/ablation-norot/reference/evaluation.json",
+   "bytes": 82037,
+   "sha256": "a400e21fbc88d8cf7dfa185fd602d21fb1c92a11fc88c3176443c23e0e8502ed"
+  },
+  {
+   "path": "integer/ablation-norot/reference/manifest.json",
+   "bytes": 516,
+   "sha256": "5de7ed6c666c8122cb330b0f4a1a2bd9b1629b432a93e4ab280929c5dd0a448b"
   },
   {
    "path": "integer/ablation-norot/samples/attempt.json",
@@ -982,6 +1072,51 @@
    "sha256": "dc6e0fae97dfa49986da05ae5a74a7a9314490f87491110579d39f41c7e2de4e"
   },
   {
+   "path": "integer/ablation-readsonly/gptq-evaluation/attempt.json",
+   "bytes": 1011,
+   "sha256": "5377c587515d1a4730d037a9c9c30fd28030ab16f408c7a57291f0c42175fa23"
+  },
+  {
+   "path": "integer/ablation-readsonly/gptq-evaluation/evaluation.json",
+   "bytes": 82092,
+   "sha256": "19a548fcdc757be626c7ea746a2c8b2480d629ae7242e35ecf9062e49238244b"
+  },
+  {
+   "path": "integer/ablation-readsonly/gptq-evaluation/manifest.json",
+   "bytes": 521,
+   "sha256": "15e39995fdf78a464a92ded819856294084e8093c1d57733612e754560169528"
+  },
+  {
+   "path": "integer/ablation-readsonly/gptq-export/attempt.json",
+   "bytes": 738,
+   "sha256": "72c817e1cdd8d114ae7a3b1d0cd2a8db15cef46567477214e4cea9c2bb43ab78"
+  },
+  {
+   "path": "integer/ablation-readsonly/gptq-export/export.json",
+   "bytes": 9604,
+   "sha256": "faaf6ceb53b087691a0a175117bc87e9de354f74420b4859ec7fb13b19d8cd8a"
+  },
+  {
+   "path": "integer/ablation-readsonly/gptq-export/manifest.json",
+   "bytes": 661,
+   "sha256": "8f7549568a2009b91c68a77694c9633eedc424fc28bffe783277e92dc565b17a"
+  },
+  {
+   "path": "integer/ablation-readsonly/reference/attempt.json",
+   "bytes": 1008,
+   "sha256": "4c24cd90c79824e3a53887fcb5343f4e5874b70299dbd28122163dccd92bce92"
+  },
+  {
+   "path": "integer/ablation-readsonly/reference/evaluation.json",
+   "bytes": 82119,
+   "sha256": "ee8f089afc53345765b210b9b9436cdc3c4f3d222d9920082e977a3a1dc82a2e"
+  },
+  {
+   "path": "integer/ablation-readsonly/reference/manifest.json",
+   "bytes": 521,
+   "sha256": "e5b596477897431975dfa7af23e9845312c911ea017cca0fb60c885ab879e454"
+  },
+  {
    "path": "integer/ablation-readsonly/samples/attempt.json",
    "bytes": 956,
    "sha256": "7b1655ac00209226ee72cc6454c656b22264e1bcc768aad04bfb609f67456c05"
@@ -1040,6 +1175,51 @@
    "path": "integer/pilot-geometric_lr0.004/export/manifest.json",
    "bytes": 661,
    "sha256": "50191c2cdcb38d8daaacd6c52cb10f57037d68a1a41e3438c6919753f78cfd5f"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/gptq-evaluation/attempt.json",
+   "bytes": 1028,
+   "sha256": "f062bce8a8e1f8a7a9ccf02b8f6b1418b908b3a88e09e29c4217e14e18ee87c4"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/gptq-evaluation/evaluation.json",
+   "bytes": 82092,
+   "sha256": "6373dba21aa56c12185978c035f0d2655574daccf9067e4eb71ce028f05b5e32"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/gptq-evaluation/manifest.json",
+   "bytes": 526,
+   "sha256": "fd9e15baa641db759043c7adf4c7b4b1ab9dd1261ddb2f4ab2428d3ca13d1c53"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/gptq-export/attempt.json",
+   "bytes": 750,
+   "sha256": "5595a2f1ae659e7b39f1e2d39089769480bdc8e99c36e594bdda9c74d8df67a7"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/gptq-export/export.json",
+   "bytes": 8666,
+   "sha256": "e4fb25793f36d6c7b9e5ba2f3179a41e982ba693bd4b5abdce85df2deb4f8660"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/gptq-export/manifest.json",
+   "bytes": 666,
+   "sha256": "049e3ba58bc1c4a34c45c731b9a30bc368e3d50ad7f58bf0c6ea71ebc4d0459f"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/reference/attempt.json",
+   "bytes": 1023,
+   "sha256": "bb96123d50bae3f6519c3e16b62def556169212f78d7a722706de0f1eb0712a1"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/reference/evaluation.json",
+   "bytes": 82099,
+   "sha256": "9cb01432c3fdebdc059db4d7e5a9a22d89abe0a68dc6f7c6fd6f4acae40bde89"
+  },
+  {
+   "path": "integer/pilot-geometric_lr0.004/reference/manifest.json",
+   "bytes": 526,
+   "sha256": "3ff08ab94a7a712a75edce6d6c7ab04fe30218c5184f5e775baf21ed1a5303fc"
   },
   {
    "path": "integer/pilot-geometric_lr0.004/samples/attempt.json",
@@ -1102,6 +1282,51 @@
    "sha256": "7bea2a0d65702fed56ee98884887b28129954c8931933363d06d2862dc2c25bd"
   },
   {
+   "path": "integer/pilot-transformer_lr0.002/gptq-evaluation/attempt.json",
+   "bytes": 1034,
+   "sha256": "49e6cf5f206b05999896bc865c605861f983f435fd5e6b670f6289d79241e50a"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/gptq-evaluation/evaluation.json",
+   "bytes": 82073,
+   "sha256": "0d1c11922c72e146ec7bb6d67e5317e64f7c35827e0e0ca907a65a1b9d5a4d1b"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/gptq-evaluation/manifest.json",
+   "bytes": 528,
+   "sha256": "cb7fdc47349d91087be224f845f04b97df2b484205dae2717df5b867a0eaed07"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/gptq-export/attempt.json",
+   "bytes": 754,
+   "sha256": "4df30a1fb2e6aa1409d466bbd7f5490f0747b4e79758ebbdddaa403756a8583f"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/gptq-export/export.json",
+   "bytes": 8225,
+   "sha256": "8fa60ac99e5eb94879d1223516d2e9bd42da10f1e88e9aea8f0326c8c70f5675"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/gptq-export/manifest.json",
+   "bytes": 668,
+   "sha256": "efe9d0745c22de78189525b100c9a50de18b96de88bda87cdc25ed73b8d6a3b9"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/reference/attempt.json",
+   "bytes": 1029,
+   "sha256": "d164182a15cb503b603cf2c2113bce6456f323fe5ac900245a62159d73cdff16"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/reference/evaluation.json",
+   "bytes": 82086,
+   "sha256": "f5d9da1aca051596ac4f53693387d9315e6dfbc7dc088d216b23cb2892969467"
+  },
+  {
+   "path": "integer/pilot-transformer_lr0.002/reference/manifest.json",
+   "bytes": 528,
+   "sha256": "a3831ecf95466a6e9df706ae7e77d31bbc561a1318685951ec31b2e51488ab8a"
+  },
+  {
    "path": "integer/pilot-transformer_lr0.002/samples/attempt.json",
    "bytes": 970,
    "sha256": "dd5dc46441827b398d6bf7d792c2071ce1422338fee5a6e17d58f90e7216368d"
@@ -1133,8 +1358,8 @@
   },
   {
    "path": "integer/run.log",
-   "bytes": 703,
-   "sha256": "2800946d32f7e1f68d9d86b944fb25c5b78fc399427026752f573af6423afd94"
+   "bytes": 1277,
+   "sha256": "7fd26689f3f49455e9af75138dd4f182157e09a9d467a76c488a190c7fd3b8a3"
   },
   {
    "path": "pilot/chain.log",
@@ -1287,6 +1512,11 @@
    "sha256": "763c8aec3bb3607abebdab6fad23be66e425bdafdb29be9f1d033e32b5a6e817"
   },
   {
+   "path": "sources/lut-gptq512.sh",
+   "bytes": 1509,
+   "sha256": "cf41fe71ebd3855b5837cc76ea448f3f4f15397cf4d23cf00f537b9c2b331e37"
+  },
+  {
    "path": "sources/lut-run512.sh",
    "bytes": 1298,
    "sha256": "e8a7d07f5e2afbb2f42f2351329fd0de6290f3a5c1326da2612916aeb97076ef"
@@ -1301,7 +1531,9 @@
   "dca1b790": "pilot runs",
   "b87acd63": "ablation runs; relative to dca1b790 only the example's sample decoding, evaluate mode and early-stop checkpoint retention changed, not the model, optimizer or training loop",
   "2a681bb7": "integer serving: export and lut-evaluate of the pilot pair and seed-1 ablations",
-  "cb60c8bd": "integer serving: engine step timing on 64 windows, apart from the f64 scoring loop"
+  "cb60c8bd": "integer serving: engine step timing on 64 windows, apart from the f64 scoring loop",
+  "feeef7e4": "integer serving: the grid-reference split of the integer gap into weight rounding and integer arithmetic",
+  "6bc7dd6d": "GPTQ calibrated integer export of the pilot pair and seed-1 ablations, scored with the grid reference"
  },
  "integer": [
   {
@@ -1327,6 +1559,58 @@
     "path": "integer/pilot-geometric_lr0.004/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "d02c445df07dca2a83a546a6a8b66aa7914e606419e642d6e8ede738fe350ecf"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.6218385674520417,
+    "weight_rounding_nll": 0.012109488450660066,
+    "integer_arithmetic_nll": -2.592736607631707e-07,
+    "path": "integer/pilot-geometric_lr0.004/reference/evaluation.json"
+   },
+   "gptq": {
+    "source_commit": "6bc7dd6d",
+    "quantizer": {
+     "calibration": {
+      "bytes": 14001984,
+      "path": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/data/code/train.u16",
+      "sha256": "b12707b012e5447f0c613236ea7f8819f2cc123861dafe49f7f8226ccc457137"
+     },
+     "calibration_time": 256,
+     "calibration_windows": 64,
+     "damp": 0.01,
+     "method": "gptq"
+    },
+    "calibration_positions": 16384,
+    "calibration_seconds": 11.493449428,
+    "export_seconds": 21.8006851,
+    "calibrated_matrices": 41,
+    "mean_relative_output_error": {
+     "gptq": 0.035802897683126146,
+     "round_to_nearest": 0.05207922926804371
+    },
+    "float_nll": 2.6097290790013816,
+    "reference_nll": 2.6167110402492404,
+    "integer_nll": 2.6167105905701997,
+    "integer_minus_float_nll": 0.0069815115688180995,
+    "weight_rounding_nll": 0.00698196124785877,
+    "integer_arithmetic_nll": -4.4967904067050313e-07,
+    "top1_agreement": 0.9466934204101562,
+    "integer_bits_per_byte": 1.0521667451027108,
+    "engine": {
+     "backend": "avx2",
+     "loop_seconds": 211.34517769600012,
+     "loop_tokens_per_second": 620.1797525209427,
+     "scope": "step: the engine's steps only; loop: the steps plus scoring each position's logits in f64",
+     "step_seconds": 207.02509053599977,
+     "threads": 1,
+     "tokens_per_second": 633.1213267949654
+    },
+    "artifact_sha256": "70302b035e5bd9b29badd42676b720a9fb9e23560f081ec44335136b0f2bffda",
+    "artifact_bytes": 4970116,
+    "artifact_retained_outside": "scratchpad/c4/lut/v1/gptq-export-pilot-geometric_lr0.004/model.lut",
+    "executable_sha256": "6c1f4721a3167411ec27582702e2575f8564e80cfb24c69a5c97d32cdd9a62ba",
+    "export_path": "integer/pilot-geometric_lr0.004/gptq-export/export.json",
+    "evaluation_path": "integer/pilot-geometric_lr0.004/gptq-evaluation/evaluation.json"
    }
   },
   {
@@ -1352,6 +1636,58 @@
     "path": "integer/pilot-transformer_lr0.002/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "900d6b533ea94448876c04207d0e1f9882e4890637e5ebb791ae4f767c696351"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.775584600360291,
+    "weight_rounding_nll": 0.007543111685598625,
+    "integer_arithmetic_nll": 0.0001518764799350869,
+    "path": "integer/pilot-transformer_lr0.002/reference/evaluation.json"
+   },
+   "gptq": {
+    "source_commit": "6bc7dd6d",
+    "quantizer": {
+     "calibration": {
+      "bytes": 14001984,
+      "path": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/data/code/train.u16",
+      "sha256": "b12707b012e5447f0c613236ea7f8819f2cc123861dafe49f7f8226ccc457137"
+     },
+     "calibration_time": 256,
+     "calibration_windows": 64,
+     "damp": 0.01,
+     "method": "gptq"
+    },
+    "calibration_positions": 16384,
+    "calibration_seconds": 10.941162455,
+    "export_seconds": 20.824550524,
+    "calibrated_matrices": 43,
+    "mean_relative_output_error": {
+     "gptq": 0.029543775360940747,
+     "round_to_nearest": 0.04909882102892944
+    },
+    "float_nll": 2.7680414886746925,
+    "reference_nll": 2.7713725555681354,
+    "integer_nll": 2.771561630031279,
+    "integer_minus_float_nll": 0.0035201413565864037,
+    "weight_rounding_nll": 0.00333106689344298,
+    "integer_arithmetic_nll": 0.0001890744631434238,
+    "top1_agreement": 0.9547653198242188,
+    "integer_bits_per_byte": 1.1144316034147763,
+    "engine": {
+     "backend": "avx2",
+     "loop_seconds": 171.21860047699994,
+     "loop_tokens_per_second": 765.5243042218833,
+     "scope": "step: the engine's steps only; loop: the steps plus scoring each position's logits in f64",
+     "step_seconds": 166.636705981,
+     "threads": 1,
+     "tokens_per_second": 786.5733976699281
+    },
+    "artifact_sha256": "0ceeb3b60081e1e2509a86917c551c35fbf91487b5a2f9412065cdf1a15d1da9",
+    "artifact_bytes": 4524800,
+    "artifact_retained_outside": "scratchpad/c4/lut/v1/gptq-export-pilot-transformer_lr0.002/model.lut",
+    "executable_sha256": "6c1f4721a3167411ec27582702e2575f8564e80cfb24c69a5c97d32cdd9a62ba",
+    "export_path": "integer/pilot-transformer_lr0.002/gptq-export/export.json",
+    "evaluation_path": "integer/pilot-transformer_lr0.002/gptq-evaluation/evaluation.json"
    }
   },
   {
@@ -1377,6 +1713,58 @@
     "path": "integer/ablation-dot/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "da005784d831a8ac7aa636ff15e04aed6bd08f3bdcc80416c728dc1a7cc4edfd"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.5996912657288,
+    "weight_rounding_nll": 0.010810376410568256,
+    "integer_arithmetic_nll": -1.4409703399387297e-06,
+    "path": "integer/ablation-dot/reference/evaluation.json"
+   },
+   "gptq": {
+    "source_commit": "6bc7dd6d",
+    "quantizer": {
+     "calibration": {
+      "bytes": 14001984,
+      "path": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/data/code/train.u16",
+      "sha256": "b12707b012e5447f0c613236ea7f8819f2cc123861dafe49f7f8226ccc457137"
+     },
+     "calibration_time": 256,
+     "calibration_windows": 64,
+     "damp": 0.01,
+     "method": "gptq"
+    },
+    "calibration_positions": 16384,
+    "calibration_seconds": 9.395697608,
+    "export_seconds": 19.200196257,
+    "calibrated_matrices": 41,
+    "mean_relative_output_error": {
+     "gptq": 0.03706031714242905,
+     "round_to_nearest": 0.0540947897009833
+    },
+    "float_nll": 2.5888808893182316,
+    "reference_nll": 2.5953090042291365,
+    "integer_nll": 2.5953087773178414,
+    "integer_minus_float_nll": 0.006427887999609805,
+    "weight_rounding_nll": 0.006428114910904892,
+    "integer_arithmetic_nll": -2.269112950870067e-07,
+    "top1_agreement": 0.9459686279296875,
+    "integer_bits_per_byte": 1.0435611789120214,
+    "engine": {
+     "backend": "avx2",
+     "loop_seconds": 215.05076698699986,
+     "loop_tokens_per_second": 609.493292381159,
+     "scope": "step: the engine's steps only; loop: the steps plus scoring each position's logits in f64",
+     "step_seconds": 210.5095128249999,
+     "threads": 1,
+     "tokens_per_second": 622.6416955748806
+    },
+    "artifact_sha256": "8313a5910cbe21ea48d6bf95906d685c4f646d6d2df3ae0f9c90fd618c0ed2e0",
+    "artifact_bytes": 4612996,
+    "artifact_retained_outside": "scratchpad/c4/lut/v1/gptq-export-ablation-dot/model.lut",
+    "executable_sha256": "6c1f4721a3167411ec27582702e2575f8564e80cfb24c69a5c97d32cdd9a62ba",
+    "export_path": "integer/ablation-dot/gptq-export/export.json",
+    "evaluation_path": "integer/ablation-dot/gptq-evaluation/evaluation.json"
    }
   },
   {
@@ -1402,6 +1790,58 @@
     "path": "integer/ablation-norot/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "099290c121aeed88304b97da25dfe9f8a6586d5231ef355f2e6d1d4f951addff"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.6802054774485726,
+    "weight_rounding_nll": 0.011372208688051,
+    "integer_arithmetic_nll": -1.6954415391623456e-06,
+    "path": "integer/ablation-norot/reference/evaluation.json"
+   },
+   "gptq": {
+    "source_commit": "6bc7dd6d",
+    "quantizer": {
+     "calibration": {
+      "bytes": 14001984,
+      "path": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/data/code/train.u16",
+      "sha256": "b12707b012e5447f0c613236ea7f8819f2cc123861dafe49f7f8226ccc457137"
+     },
+     "calibration_time": 256,
+     "calibration_windows": 64,
+     "damp": 0.01,
+     "method": "gptq"
+    },
+    "calibration_positions": 16384,
+    "calibration_seconds": 13.592219456,
+    "export_seconds": 25.381849097,
+    "calibrated_matrices": 41,
+    "mean_relative_output_error": {
+     "gptq": 0.034861807521602145,
+     "round_to_nearest": 0.052253987190661606
+    },
+    "float_nll": 2.6688332687605216,
+    "reference_nll": 2.674789338073245,
+    "integer_nll": 2.6747885705376455,
+    "integer_minus_float_nll": 0.005955301777123889,
+    "weight_rounding_nll": 0.005956069312723411,
+    "integer_arithmetic_nll": -7.675355995218069e-07,
+    "top1_agreement": 0.9476470947265625,
+    "integer_bits_per_byte": 1.0755196215593967,
+    "engine": {
+     "backend": "avx2",
+     "loop_seconds": 200.83008888400002,
+     "loop_tokens_per_second": 652.6512074378832,
+     "scope": "step: the engine's steps only; loop: the steps plus scoring each position's logits in f64",
+     "step_seconds": 196.47162633600013,
+     "threads": 1,
+     "tokens_per_second": 667.1294091893169
+    },
+    "artifact_sha256": "735bd04491692239cb30384f1dd7fd08cadf10e468d8f2620db12321c92402d8",
+    "artifact_bytes": 4965572,
+    "artifact_retained_outside": "scratchpad/c4/lut/v1/gptq-export-ablation-norot/model.lut",
+    "executable_sha256": "6c1f4721a3167411ec27582702e2575f8564e80cfb24c69a5c97d32cdd9a62ba",
+    "export_path": "integer/ablation-norot/gptq-export/export.json",
+    "evaluation_path": "integer/ablation-norot/gptq-evaluation/evaluation.json"
    }
   },
   {
@@ -1427,6 +1867,58 @@
     "path": "integer/ablation-readsonly/samples/samples.json",
     "source_commit": "cb60c8bd",
     "artifact_sha256": "adb03ffe543c32861254cbc1f8b8c26277e059167105a538c33abe1c660b6160"
+   },
+   "grid_reference": {
+    "source_commit": "feeef7e4",
+    "reference_nll": 2.5658508634417267,
+    "weight_rounding_nll": 0.012755746952878066,
+    "integer_arithmetic_nll": 3.9356370384879824e-07,
+    "path": "integer/ablation-readsonly/reference/evaluation.json"
+   },
+   "gptq": {
+    "source_commit": "6bc7dd6d",
+    "quantizer": {
+     "calibration": {
+      "bytes": 14001984,
+      "path": "/tmp/claude-0/-home-user-uor-r4/e71805df-3dbc-5124-8067-d8a48084429c/scratchpad/c3/data/code/train.u16",
+      "sha256": "b12707b012e5447f0c613236ea7f8819f2cc123861dafe49f7f8226ccc457137"
+     },
+     "calibration_time": 256,
+     "calibration_windows": 64,
+     "damp": 0.01,
+     "method": "gptq"
+    },
+    "calibration_positions": 16384,
+    "calibration_seconds": 16.442933423,
+    "export_seconds": 27.977777249,
+    "calibrated_matrices": 49,
+    "mean_relative_output_error": {
+     "gptq": 0.026465237228082278,
+     "round_to_nearest": 0.044531709270366586
+    },
+    "float_nll": 2.5530951164888487,
+    "reference_nll": 2.560337678570908,
+    "integer_nll": 2.5603378225858595,
+    "integer_minus_float_nll": 0.0072427060970108315,
+    "weight_rounding_nll": 0.007242562082059312,
+    "integer_arithmetic_nll": 1.44014951519722e-07,
+    "top1_agreement": 0.9494247436523438,
+    "integer_bits_per_byte": 1.029499526184325,
+    "engine": {
+     "backend": "avx2",
+     "loop_seconds": 236.3665717310001,
+     "loop_tokens_per_second": 554.5284980025352,
+     "scope": "step: the engine's steps only; loop: the steps plus scoring each position's logits in f64",
+     "step_seconds": 231.96640650100014,
+     "threads": 1,
+     "tokens_per_second": 565.0473358496196
+    },
+    "artifact_sha256": "90e82c54196bf7d7cf81e5f4765b35672e33942e2062b5c727333fc4a5389901",
+    "artifact_bytes": 4936004,
+    "artifact_retained_outside": "scratchpad/c4/lut/v1/gptq-export-ablation-readsonly/model.lut",
+    "executable_sha256": "6c1f4721a3167411ec27582702e2575f8564e80cfb24c69a5c97d32cdd9a62ba",
+    "export_path": "integer/ablation-readsonly/gptq-export/export.json",
+    "evaluation_path": "integer/ablation-readsonly/gptq-evaluation/evaluation.json"
    }
   }
  ]

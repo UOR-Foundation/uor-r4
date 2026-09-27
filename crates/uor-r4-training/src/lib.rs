@@ -11,6 +11,7 @@ pub mod baseline_counts;
 pub mod baseline_protocol;
 pub mod cache_memory;
 pub mod dialogue_artifact;
+pub mod dialogue_development;
 pub mod dialogue_episodes;
 pub mod dialogue_learning;
 pub mod geometric_stack;
@@ -36,6 +37,7 @@ pub mod lut_export;
 pub mod ngram;
 pub mod reference_campaign;
 pub mod reference_eval;
+pub mod stack_dialogue;
 pub mod stack_export;
 pub mod stack_memory;
 
