@@ -7,8 +7,9 @@ eight actual zero-update normalization batches retain exactly the saved batch
 schedule, pooled loss, all 21 recorded parameter gradient norms and coefficient
 `29.56681391929494`. Peak child RSS falls from 6,919,520,256 to 4,722,819,072
 bytes; total normalization rises from 61.107 to 154.612 seconds. This is an
-operational correction, with the fixed 512-update restart selected but not yet
-reported complete. The [evidence](../evidence/dialogue-code-choice-sequential-preparation-2026-09-27.json)
+operational correction. The fixed512 restart subsequently stopped and sealed a
+recovery checkpoint at231 updates under the storage soft guard; the remaining
+281 updates and fixed response endpoints are not yet executed. The [evidence](../evidence/dialogue-code-choice-sequential-preparation-2026-09-27.json)
 binds source, binaries, actual checks, normalization, prior failure and resources.
 
 The original fit stopped at 190 alpha updates before preserving alpha/Adam.
@@ -60,3 +61,28 @@ records the decision. Native, multiplier-free serving remains the goal, with
 unchanged dense parameter access. Useful general chat, geometric advantage,
 selected parameter access and complete-path speed or energy savings remain
 unestablished. References #973 and #820.
+
+## Preserved resource checkpoint
+
+At17:43:21UTC on September27 the supervisor reported `STOPPED_CHECKPOINTED`.
+The process exited0 after5,209.335 seconds; full supervision took5,210.049 seconds.
+It retained231 alpha updates,260,430 supervised targets and946,176 padded
+positions. The stop request came from less than1GiB internal-growth or
+physical-reserve headroom, with312,397,824 bytes above the physical floor at
+request time. Model RSS did not trigger this stop. The sampled group peak is
+4,933,402,624 bytes; the separately reported maximum child RSS is6,082,723,840.
+The [portable record](../evidence/dialogue-code-choice-sequential-checkpoint-2026-09-27.json)
+identifies the sealed result, final checkpoint and complete source-bound costs.
+
+The final checkpoint preserves alpha, all21 named Adam moments/clocks, cumulative
+counts and the executed schedule through data counter1254. Source review finds
+that frozen `b49a2810` already supports continuing from counter1255 without
+resetting optimizer, warmup, beta or data. Keep `rounding.steps=512`; recovery
+means281 additional updates, not a281-step replacement schedule. Only resource
+fields, the new stop-file path and `resume_from` may change. A fresh output root,
+complete ancestry check and cumulative231+281 endpoint join are required.
+
+No partial checkpoint was selected by quality, exported or evaluated. The old
+190-update failure remains separate cumulative cost. Shared machine/storage
+coordination and the narrowly bound continuation supervisor are pending; no
+resume is launched by this record.

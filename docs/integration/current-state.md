@@ -104,13 +104,19 @@ is now executed at source `b49a2810`: the changed-path objective comparison pass
 and three release binaries are frozen. Eight actual normalization batches retain
 exactly the saved schedule, loss, all recorded parameter-gradient norms and
 coefficient; peak RSS falls to 4,722,819,072 bytes while total time rises to
-154.612 seconds. The fresh fixed 512 restart is **RUNNING**, launched at
-16:16:31 UTC on September 27 with the frozen `b49a2810` executable and checkpoints
-at 32/128/256/384 and final 512 on the owner SSD. Its first
-[32-update recovery checkpoint](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5857660452)
-has complete-file verification; it has not yet been reloaded or evaluated.
-Graceful resource closeout remains active. Merging current main into the source
-branch does not change or rebind this running executable.
+154.612 seconds. The fresh fixed 512 restart **STOPPED_CHECKPOINTED at231**
+on September27 at17:43:21UTC. The frozen `b49a2810` process exited0 after
+5,209.335 seconds and260,430 supervised targets; the complete supervisor took
+5,210.049 seconds. Its storage soft guard fired below1GiB headroom. Checkpoints
+at32,128 and the final stop at231 are preserved with complete-file seals, along
+with the result and curve. No512 endpoint, learned-code export or native response
+evaluation has run. This is a resource interruption, not a quality result.
+The [checkpoint and resource record](../evidence/dialogue-code-choice-sequential-checkpoint-2026-09-27.json)
+binds exact lineage. Source review supports281 additional updates from the same
+alpha/Adam state, data counters1255–1535 and unchanged total512 schedule; it does
+not select another fresh fit or reset warmup. Resolve the shared model/storage
+slot and bind continuation/endpoints across both attempts before launch.
+Merging later source does not change or rebind the frozen executable.
 Measured batch costs support a 12,600-second soft fit limit and prospectively
 recorded owned allowance 75,600,000 ms; verified shared 722,400,000 ms is unchanged.
 The fixed 512 question, original 161-response panel and 58-turn endpoint remain;
