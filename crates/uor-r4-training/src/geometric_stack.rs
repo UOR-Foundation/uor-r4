@@ -36,6 +36,7 @@ use candle_core::{CpuStorage, CustomOp2, CustomOp3, DType, Device, Layout, Shape
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::stack_memory::{keys_aux_len, product_key_memory, MemoryConfig, MemoryScore};
 use crate::{invalid, Result};
 
 /// Lower bound on `z - 1` in the Lorentz score. Below it the distance is
@@ -83,6 +84,10 @@ pub struct StackConfig {
     /// leaves a real gated linear recurrence with one decay per lane.
     pub rotation: bool,
     pub seed: u64,
+    /// Product-key memories in place of some layers' MLPs
+    /// ([`crate::stack_memory`]); absent from configurations without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<MemoryConfig>,
 }
 
 impl StackConfig {
@@ -99,6 +104,7 @@ impl StackConfig {
             read: ReadScore::Dot,
             rotation: false,
             seed,
+            memory: None,
         }
     }
 
@@ -133,6 +139,7 @@ impl StackConfig {
             read: ReadScore::Dot,
             rotation: false,
             seed,
+            memory: None,
         };
         config.validate()?;
         Ok(config)
@@ -201,11 +208,21 @@ impl StackConfig {
                 }
             }
         }
+        if let Some(memory) = &self.memory {
+            memory.validate(self.layers())?;
+        }
         Ok(())
     }
 
     fn layer_kind(&self, layer: usize) -> char {
         self.pattern.as_bytes()[layer] as char
+    }
+
+    /// Whether `layer`'s MLP is a product-key memory.
+    pub fn memory_layer(&self, layer: usize) -> bool {
+        self.memory
+            .as_ref()
+            .is_some_and(|memory| memory.layers.contains(&layer))
     }
 
     fn rotation_rows(&self) -> usize {
@@ -227,9 +244,28 @@ impl StackConfig {
         for layer in 0..self.layers() {
             let name = |suffix: &str| format!("layers.{layer:02}.{suffix}");
             shapes.insert(name("mlp_norm.weight"), vec![d]);
-            shapes.insert(name("mlp.gate.weight"), vec![m, d]);
-            shapes.insert(name("mlp.up.weight"), vec![m, d]);
-            shapes.insert(name("mlp.down.weight"), vec![d, m]);
+            match &self.memory {
+                Some(memory) if memory.layers.contains(&layer) => {
+                    let half = memory.key_dim / 2;
+                    shapes.insert(
+                        name("memory.query.weight"),
+                        vec![memory.heads * memory.key_dim, d],
+                    );
+                    shapes.insert(
+                        name("memory.keys"),
+                        vec![memory.heads * 2 * memory.sub_keys, half],
+                    );
+                    shapes.insert(name("memory.values"), vec![memory.slots(), d]);
+                    if memory.score == MemoryScore::Lorentz {
+                        shapes.insert(name("memory.log_beta"), vec![memory.heads]);
+                    }
+                }
+                _ => {
+                    shapes.insert(name("mlp.gate.weight"), vec![m, d]);
+                    shapes.insert(name("mlp.up.weight"), vec![m, d]);
+                    shapes.insert(name("mlp.down.weight"), vec![d, m]);
+                }
+            }
             match (self.arch, self.layer_kind(layer)) {
                 (StackArch::Transformer, _) => {
                     shapes.insert(name("attn_norm.weight"), vec![d]);
@@ -273,6 +309,15 @@ impl StackConfig {
             .values()
             .map(|shape| shape.iter().product::<usize>())
             .sum())
+    }
+
+    /// Parameters a token reads: all of them except memory value rows outside
+    /// its selections.
+    pub fn active_parameter_count(&self) -> Result<usize> {
+        let idle = self.memory.as_ref().map_or(0, |memory| {
+            memory.layers.len() * memory.idle_parameters(self.width)
+        });
+        Ok(self.parameter_count()? - idle)
     }
 }
 
@@ -335,7 +380,16 @@ impl StackModel {
                 "rec.conv.weight" => (0..count)
                     .map(|index| if index < config.width { 1.0 } else { 0.0 })
                     .collect(),
-                "rec.conv.bias" | "read.null.bias" | "read.log_beta" => vec![0.0; count],
+                "rec.conv.bias" | "read.null.bias" | "read.log_beta" | "memory.log_beta" => {
+                    vec![0.0; count]
+                }
+                // Sub-keys near unit norm, so first scores are of order one.
+                "memory.keys" => {
+                    let half = shape[1].max(1) as f64;
+                    (0..count)
+                        .map(|_| (rng.normal() / half.sqrt()) as f32)
+                        .collect()
+                }
                 "read.offset" => vec![INITIAL_LORENTZ_OFFSET as f32; count],
                 "rec.gate.bias" => (0..count)
                     .map(|index| {
@@ -449,10 +503,41 @@ impl StackModel {
 
     fn mlp(&self, layer: usize, x: &Tensor) -> Result<Tensor> {
         let u = self.rms_norm(x, self.layer_weight(layer, "mlp_norm.weight")?)?;
+        if let Some(memory) = self
+            .config
+            .memory
+            .as_ref()
+            .filter(|m| m.layers.contains(&layer))
+        {
+            return self.memory(layer, &u, memory);
+        }
         let gate = Self::linear(&u, self.layer_weight(layer, "mlp.gate.weight")?)?;
         let up = Self::linear(&u, self.layer_weight(layer, "mlp.up.weight")?)?;
         let mixed = gate.contiguous()?.apply_op2(&up.contiguous()?, SwiGlu)?;
         Self::linear(&mixed, self.layer_weight(layer, "mlp.down.weight")?)
+    }
+
+    /// The product-key memory in place of `layer`'s MLP, on the normalized
+    /// input `u` [batch, time, width].
+    fn memory(&self, layer: usize, u: &Tensor, memory: &MemoryConfig) -> Result<Tensor> {
+        let (batch, time, width) = u.dims3()?;
+        let query = Self::linear(u, self.layer_weight(layer, "memory.query.weight")?)?
+            .reshape((batch * time, memory.heads * memory.key_dim))?;
+        let mut aux = vec![self.layer_weight(layer, "memory.keys")?.flatten_all()?];
+        if memory.score == MemoryScore::Lorentz {
+            aux.push(self.layer_weight(layer, "memory.log_beta")?.exp()?);
+        }
+        let aux = Tensor::cat(&aux, 0)?;
+        if aux.elem_count() != keys_aux_len(memory) {
+            return Err(invalid("memory key layout differs from its configuration"));
+        }
+        Ok(product_key_memory(
+            &query,
+            &aux,
+            self.layer_weight(layer, "memory.values")?,
+            memory,
+        )?
+        .reshape((batch, time, width))?)
     }
 
     /// Splits [batch, time, width] into [batch, heads, time, head_width].
@@ -2640,7 +2725,21 @@ mod tests {
             read,
             rotation,
             seed: 5,
+            memory: None,
         }
+    }
+
+    /// `config` with a small product-key memory in place of layer 1's MLP.
+    fn with_memory(mut config: StackConfig, score: MemoryScore) -> StackConfig {
+        config.memory = Some(MemoryConfig {
+            layers: vec![1],
+            sub_keys: 8,
+            top_k: 3,
+            heads: 2,
+            key_dim: 8,
+            score,
+        });
+        config
     }
 
     #[test]
@@ -2649,6 +2748,14 @@ mod tests {
             tiny(StackArch::Transformer, "aa", ReadScore::Dot, false),
             tiny(StackArch::Geometric, "ra", ReadScore::Lorentz, true),
             tiny(StackArch::Geometric, "ar", ReadScore::Dot, false),
+            with_memory(
+                tiny(StackArch::Geometric, "ra", ReadScore::Dot, true),
+                MemoryScore::Dot,
+            ),
+            with_memory(
+                tiny(StackArch::Geometric, "ar", ReadScore::Lorentz, false),
+                MemoryScore::Lorentz,
+            ),
         ] {
             let model = StackModel::new(config.clone(), &cpu())?;
             let time = 10;
@@ -2729,6 +2836,55 @@ mod tests {
                 gap < 1e-3,
                 "{pattern} {read:?} {rotation}: {count} against {control}"
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn memory_layers_replace_the_mlp_train_and_round_trip() -> Result<()> {
+        for score in [MemoryScore::Dot, MemoryScore::Lorentz] {
+            let config = with_memory(
+                tiny(StackArch::Geometric, "ra", ReadScore::Dot, true),
+                score,
+            );
+            let model = StackModel::new(config.clone(), &cpu())?;
+            let names = model.variables();
+            assert!(names.contains_key("layers.01.memory.values"));
+            assert!(!names.contains_key("layers.01.mlp.gate.weight"));
+            assert!(names.contains_key("layers.00.mlp.gate.weight"));
+            assert_eq!(
+                names.contains_key("layers.01.memory.log_beta"),
+                score == MemoryScore::Lorentz
+            );
+            // A token reads 2 heads x 3 of the 64 value rows of width 16.
+            assert_eq!(
+                config.parameter_count()? - config.active_parameter_count()?,
+                (64 - 6) * 16
+            );
+            let ids: Vec<u32> = (0..10u32).map(|i| (i * 5 + 1) % 37).collect();
+            let targets: Vec<u32> = (0..10u32).map(|i| (i * 3 + 2) % 37).collect();
+            let grads = model.loss(&ids, &targets, 1, 10)?.backward()?;
+            for name in [
+                "layers.01.memory.query.weight",
+                "layers.01.memory.keys",
+                "layers.01.memory.values",
+            ] {
+                let grad = grads
+                    .get(names[name].as_tensor())
+                    .ok_or_else(|| invalid(format!("no gradient for {name}")))?;
+                assert!(grad.abs()?.max_all()?.to_scalar::<f32>()? > 0.0, "{name}");
+            }
+            let directory = std::env::temp_dir().join(format!(
+                "geometric-stack-memory-{score:?}-{}",
+                std::process::id()
+            ));
+            model.save(&directory)?;
+            let loaded = StackModel::load(&directory, &cpu())?;
+            fs::remove_dir_all(&directory)?;
+            assert_eq!(loaded.config, config);
+            let a = model.forward(&ids, 1, 10)?;
+            let b = loaded.forward(&ids, 1, 10)?;
+            assert_eq!(a.sub(&b)?.abs()?.max_all()?.to_scalar::<f32>()?, 0.0);
         }
         Ok(())
     }

@@ -37,6 +37,7 @@ pub mod ngram;
 pub mod reference_campaign;
 pub mod reference_eval;
 pub mod stack_export;
+pub mod stack_memory;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
