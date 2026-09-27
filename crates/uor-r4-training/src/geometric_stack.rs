@@ -107,7 +107,42 @@ impl StackConfig {
         rotation: bool,
         seed: u64,
     ) -> Result<Self> {
-        let control = Self::transformer_control(seed);
+        Self::geometric_matched_to(&Self::transformer_control(seed), pattern, read, rotation)
+    }
+
+    /// A transformer control of any shape: `layers` attention layers.
+    pub fn transformer(
+        width: usize,
+        heads: usize,
+        layers: usize,
+        mlp_hidden: usize,
+        context: usize,
+        seed: u64,
+    ) -> Result<Self> {
+        let config = Self {
+            arch: StackArch::Transformer,
+            vocab_size: 4096,
+            width,
+            heads,
+            mlp_hidden,
+            context,
+            pattern: "a".repeat(layers),
+            read: ReadScore::Dot,
+            rotation: false,
+            seed,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// A geometric stack with `control`'s width, heads, depth and context,
+    /// whose MLP width makes its parameter count match `control`'s.
+    pub fn geometric_matched_to(
+        control: &Self,
+        pattern: &str,
+        read: ReadScore,
+        rotation: bool,
+    ) -> Result<Self> {
         let mut config = Self {
             arch: StackArch::Geometric,
             pattern: pattern.into(),

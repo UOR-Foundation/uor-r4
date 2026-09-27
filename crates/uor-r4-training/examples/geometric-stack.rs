@@ -10,14 +10,21 @@
 //!   [seed=1] [steps=7324] [batch=16] [lr=0.002] [warmup=200] [min_lr=0.1] [weight_decay=0.1] \
 //!   [clip=1.0] [eval_every=250] [eval_windows=64] [final_windows=512] [lens=LENS.u16] \
 //!   [merges=MERGES.txt] [checkpoint_every=250] [resume=OLD_ROOT/checkpoint] [max_seconds=inf] \
-//!   [sample_tokens=128]
-//! geometric-stack sample model=ROOT/model valid=VALID.u16 merges=MERGES.txt out=NEW_REPORT_ROOT \
-//!   [prompts=3] [prompt_tokens=64] [sample_tokens=128] [temperature=0.8] [top_k=40] [seed=1]
+//!   [sample_tokens=128] [tokenizer=TOKENIZER.json] [width=288] [heads=6] [layers=6] [mlp=768] \
+//!   [context=256]
+//! geometric-stack sample model=ROOT/model valid=VALID.u16 merges=MERGES.txt|tokenizer=TOKENIZER.json \
+//!   out=NEW_REPORT_ROOT [prompts=3] [prompt_tokens=64] [sample_tokens=128] [temperature=0.8] [top_k=40] \
+//!   [seed=1]
 //! geometric-stack evaluate model=ROOT/model tokens=DEV.u16 out=NEW_REPORT_ROOT [tune_blocks=64] \
 //!   [lens=LENS.u16]
 //! geometric-stack encode merges=MERGES.txt input=TEXT out=TOKENS.u16
 //! geometric-stack corpus registry=CARGO_REGISTRY_SRC_INDEX out=TEXT [max_file_bytes=200000]
 //! ```
+//!
+//! The shape options describe the transformer control (#1017's by default). A
+//! geometric stack takes the same width, heads, depth and context, the
+//! pattern `rra` repeated by default, and the MLP width that matches the
+//! control's parameter count.
 //!
 //! `train` samples windows uniformly from TRAIN with a seeded generator, so two
 //! arms with one seed see identical windows. Evaluation windows are evenly
@@ -462,14 +469,28 @@ fn train_settings(args: &Args) -> Result<Settings> {
         Some("false") => false,
         Some(other) => return Err(invalid(format!("invalid rotation={other}"))),
     };
+    // The control's shape; #1017's by default. A geometric stack takes its
+    // width, heads, depth and context and matches its parameter count.
+    let control = StackConfig::transformer(
+        args.number("width", 288)?,
+        args.number("heads", 6)?,
+        args.number("layers", 6)?,
+        args.number("mlp", 768)?,
+        args.number("context", 256)?,
+        seed,
+    )?;
     let config = match args.required("arch")?.as_str() {
-        "transformer" => StackConfig::transformer_control(seed),
-        "geometric" => StackConfig::geometric_matched(
-            &args.optional("pattern").unwrap_or_else(|| "rrarra".into()),
-            read,
-            rotation,
-            seed,
-        )?,
+        "transformer" => control,
+        "geometric" => {
+            let layers = control.layers();
+            let default_pattern = "rra".repeat(layers / 3) + &"r".repeat(layers % 3);
+            StackConfig::geometric_matched_to(
+                &control,
+                &args.optional("pattern").unwrap_or(default_pattern),
+                read,
+                rotation,
+            )?
+        }
         other => return Err(invalid(format!("unknown arch {other}"))),
     };
     let train: Vec<PathBuf> = args
@@ -1048,6 +1069,11 @@ fn main() -> Result<()> {
                 &[
                     "train",
                     "train_weights",
+                    "width",
+                    "heads",
+                    "layers",
+                    "mlp",
+                    "context",
                     "valid",
                     "out",
                     "arch",
