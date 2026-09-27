@@ -306,6 +306,19 @@ EXACT_GEOMETRY_SYMBOLS = [
     )
 ]
 
+# Loading/hash validation is outside the numerical lookup. New artifacts also
+# expose historical-code inverse, Hamilton composition and directed relation.
+# As above, old artifacts need not contain a component that did not exist yet.
+EXACT_GEOMETRY_SYMBOLS += [
+    {
+        "name": f"HistoricalH4Tables::{name}",
+        "pattern": re.compile(r"HistoricalH4Tables.*" + re.escape(name) + r"\b"),
+        "mangled": re.compile(r"__RNv.*HistoricalH4Tables.*" + str(len(name)) + re.escape(name) + r"\b"),
+        "description": "Immutable historical H4 numerical table lookup",
+    }
+    for name in ("inverse", "compose", "relative")
+]
+
 
 def find_target_artifact(user_arg=None):
     if user_arg:

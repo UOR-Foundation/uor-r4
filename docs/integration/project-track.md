@@ -202,11 +202,18 @@ historical pilot results. The [subsequent precision review through `6bc7dd6d`](h
 verifies 41 added/changed packet identities and the five trained reference joins.
 Integer continuations remain weak; the new grid reference attributes most mean
 loss to packed parameter representation collectively, including scalar/bias/gain
-and head changes, not uniquely four-bit matrix rounding. GPTQ is implemented in
-source with no trained result packet at that reviewed head. Its codec and
-serving arithmetic differ from this native path; local payload intake remains
-unavailable. These results inform repair alternatives without changing
-the native target or the child-specific response-aware decision above.
+and head changes, not uniquely four-bit matrix rounding. The [later trained GPTQ
+packet](geometric-stack-cycle4-2026-09-27.md#8-integer-serving-under-d10), reviewed at `c22a97e6`
+and retained in merged main `72538ffb`, supersedes that source-only status. On the
+same exposed code development, the four geometric configurations reduce their
+integer-minus-float NLL gap by 40.53–47.63%; the transformer control reduces it by
+54.25%. This supports data-aware numerical compensation at that scope. It adds
+no GPTQ-generated reply evidence, and its evolving grouped scales and separate
+embedding/head are not the native fixed-grid tied codec. Its serving arithmetic
+also differs from this native path; local payload intake remains unavailable.
+These results inform repair alternatives without changing the native target or
+the fixed child-specific response-aware study above. See the [source-level
+transfer assessment](finite-h4-learning-and-native-reuse-2026-09-27.md).
 
 ## Active programme — learn the model, then harden its execution
 
