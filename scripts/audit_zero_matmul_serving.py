@@ -277,6 +277,7 @@ PACKED_KERNEL_CALLERS = [
         "project_vocab_with_products_into",
         "project_vocab_with_products",
         "matrix_work_direct_into",
+        "matrix_work_wide_into",
         "matrix_work_direct",
         "affine_direct_into",
         "affine_direct",
