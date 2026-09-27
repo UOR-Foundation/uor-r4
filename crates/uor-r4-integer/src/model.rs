@@ -26,6 +26,7 @@ use crate::lorentz::{self, LorentzRead};
 use crate::math::{self, MathResult};
 use crate::tables::{Tables, TOTAL};
 use crate::{invalid, Result};
+use uor_r4_tokenizer::ByteBpeTokenizer;
 
 pub const PROBABILITY_TOTAL: u64 = TOTAL;
 const WORK_BITS: i32 = 40;
@@ -784,8 +785,54 @@ pub fn compute_turn_prime_signature(
     }
 }
 
-/// Representation-grounded token salience scoring for L2 compression.
-/// Uses geometric Key L1 energy across the 64-dimensional key vector.
+/// Representation-grounded token salience scoring bound to actual tokenizer metadata.
+/// Evaluates true decoded byte length and ASCII properties, strictly 0 float, 0 mul.
+#[inline(always)]
+pub fn score_token_salience_with_tokenizer(
+    token: u32,
+    key: &[i32; KEY_DIM],
+    tokenizer: &ByteBpeTokenizer,
+) -> i32 {
+    let mut score = 0i32;
+
+    // Added/special tokens (<|system|>, <|user|>, <|assistant|>, <|bos|>, <|eos|>, etc.)
+    if tokenizer.is_added_id(token) {
+        return -1_000_000;
+    }
+
+    let bytes = tokenizer.decode_bytes(&[token]);
+    if bytes.is_empty() {
+        return -1_000_000;
+    }
+
+    if bytes.len() > 1 {
+        // Genuine multi-byte subword
+        score += 10_000 + (token as i32 & 0x0FFF);
+    } else {
+        let b = bytes[0];
+        if b <= 32 || b.is_ascii_whitespace() || b.is_ascii_punctuation() {
+            score -= 500_000;
+        } else if b.is_ascii_digit() {
+            score += 60_000;
+        } else if b.is_ascii_uppercase() {
+            score += 50_000;
+        }
+    }
+
+    // Geometric Key L1 Energy: sum(|k[d]|) >> 6
+    let mut l1_norm = 0i32;
+    for &k in key {
+        l1_norm = l1_norm.saturating_add((k.unsigned_abs().min(32767)) as i32);
+    }
+    score.saturating_add(l1_norm >> 6)
+}
+
+/// Standalone / fixture token salience scoring for L2 compression.
+///
+/// Note: In synthetic bundles (e.g. `Bundle::synthetic_for_test()`), tokens 0..=6
+/// represent `<|bos|>`, `<|eos|>`, `<|unk|>`, `<|system|>`, `<|user|>`, `<|assistant|>`, `<|turn_end|>`.
+/// For production models with a loaded tokenizer, prefer `score_token_salience_with_tokenizer`
+/// which binds salience rules directly to tokenizer metadata rather than numeric ID assumptions.
 /// Strictly 0 multipliers, 0 dividers, 0 floats.
 #[inline(always)]
 pub fn score_token_salience(token: u32, key: &[i32; KEY_DIM]) -> i32 {
@@ -894,6 +941,81 @@ pub fn extract_salient_tokens(
     }
 
     // If fewer than 4 candidates had positive/acceptable scores, pad
+    if count == 0 {
+        let first_tok = if slot_indices[0] < dialogue_tokens.len() {
+            dialogue_tokens[slot_indices[0]]
+        } else {
+            0
+        };
+        out_tokens.fill(first_tok);
+    } else {
+        let pad_tok = out_tokens[0];
+        out_tokens[count..4].fill(pad_tok);
+    }
+}
+
+/// Extract up to 4 salient entity tokens from turn tokens using tokenizer metadata.
+#[inline(never)]
+pub fn extract_salient_tokens_with_tokenizer(
+    dialogue_tokens: &[u32],
+    dialogue_keys: &[[i32; KEY_DIM]; DIALOGUE_CAPACITY],
+    slot_indices: &[usize],
+    tokenizer: &ByteBpeTokenizer,
+    out_tokens: &mut [u32; 4],
+) {
+    if slot_indices.is_empty() {
+        out_tokens.fill(0);
+        return;
+    }
+
+    let n = slot_indices.len().min(DIALOGUE_CAPACITY);
+    let mut candidates: [(u32, i32); DIALOGUE_CAPACITY] = [(0, i32::MIN); DIALOGUE_CAPACITY];
+    let mut num_candidates = 0;
+
+    for &slot_idx in &slot_indices[..n] {
+        let tok = if slot_idx < dialogue_tokens.len() {
+            dialogue_tokens[slot_idx]
+        } else {
+            0
+        };
+        let key = &dialogue_keys[slot_idx];
+        let score = score_token_salience_with_tokenizer(tok, key, tokenizer);
+
+        let mut found = false;
+        for c in &mut candidates[..num_candidates] {
+            if c.0 == tok {
+                if score > c.1 {
+                    c.1 = score;
+                }
+                found = true;
+                break;
+            }
+        }
+        if !found && num_candidates < DIALOGUE_CAPACITY {
+            candidates[num_candidates] = (tok, score);
+            num_candidates += 1;
+        }
+    }
+
+    for i in 1..num_candidates {
+        let mut j = i;
+        while j > 0 && candidates[j].1 > candidates[j - 1].1 {
+            candidates.swap(j, j - 1);
+            j -= 1;
+        }
+    }
+
+    let mut count = 0;
+    for c in &candidates[..num_candidates] {
+        if c.1 > -500_000 {
+            out_tokens[count] = c.0;
+            count += 1;
+            if count == 4 {
+                break;
+            }
+        }
+    }
+
     if count == 0 {
         let first_tok = if slot_indices[0] < dialogue_tokens.len() {
             dialogue_tokens[slot_indices[0]]
@@ -4443,5 +4565,74 @@ mod tests {
         // Token 321: 321 & 0xFF == 65 (b'A'). Must receive subword bonus, NOT uppercase bonus.
         let subword_321 = score_token_salience(321, &dummy_key);
         assert_eq!(subword_321, 10_000 + (321 & 0x0FFF));
+    }
+
+    #[test]
+    fn test_score_token_salience_bound_to_tokenizer_metadata() {
+        let dummy_key = [0i32; KEY_DIM];
+
+        // Create a tokenizer where added token is at ID 500 (not in 0..=6)
+        let tok_json = serde_json::json!({
+            "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
+            "model": {
+                "type": "BPE",
+                "vocab": {
+                    "<|bos|>": 0,
+                    "<|eos|>": 1,
+                    "hello": 2,
+                    "world": 3
+                },
+                "merges": []
+            },
+            "added_tokens": [
+                {"id": 0, "content": "<|bos|>"},
+                {"id": 1, "content": "<|eos|>"},
+                {"id": 500, "content": "<|custom_role|>"}
+            ]
+        });
+        let tok_bytes = serde_json::to_vec(&tok_json).unwrap();
+        let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tok_bytes).unwrap();
+
+        // 1. Added token at ID 500 MUST be identified via tokenizer.is_added_id and penalized
+        let score_500 = score_token_salience_with_tokenizer(500, &dummy_key, &tokenizer);
+        assert_eq!(
+            score_500, -1_000_000,
+            "Added token at ID 500 must receive role penalty"
+        );
+
+        // Without tokenizer, ID 500 would mistakenly get subword bonus
+        let score_500_standalone = score_token_salience(500, &dummy_key);
+        assert_eq!(score_500_standalone, 10_000 + (500 & 0x0FFF));
+
+        // 2. Normal vocab token at ID 3 ("world") is NOT an added token and is a subword (5 bytes)
+        let score_3 = score_token_salience_with_tokenizer(3, &dummy_key, &tokenizer);
+        assert_eq!(
+            score_3,
+            10_000 + (3 & 0x0FFF),
+            "Normal token at ID 3 must NOT be penalized as role"
+        );
+
+        // Without tokenizer, ID 3 was mistakenly penalized because 3 <= 6
+        let score_3_standalone = score_token_salience(3, &dummy_key);
+        assert_eq!(score_3_standalone, -1_000_000);
+
+        // 3. Test extraction with tokenizer metadata
+        let dialogue_tokens = vec![500, 3, 2, 0];
+        let dialogue_keys = [[0i32; KEY_DIM]; DIALOGUE_CAPACITY];
+        let slot_indices = [0, 1, 2, 3];
+        let mut salient = [0u32; 4];
+        extract_salient_tokens_with_tokenizer(
+            &dialogue_tokens,
+            &dialogue_keys,
+            &slot_indices,
+            &tokenizer,
+            &mut salient,
+        );
+
+        // Added tokens 500 and 0 must NOT be selected as top salient tokens; 3 and 2 must be chosen
+        assert!(salient.contains(&3));
+        assert!(salient.contains(&2));
+        assert!(!salient.contains(&500));
+        assert!(!salient.contains(&0));
     }
 }

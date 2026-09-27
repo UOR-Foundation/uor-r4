@@ -326,6 +326,11 @@ impl ByteBpeTokenizer {
         self.vocab.len()
     }
 
+    /// True if the token id is an added special/control token.
+    pub fn is_added_id(&self, id: u32) -> bool {
+        self.added_ids.contains(&id)
+    }
+
     /// Number of contiguous ids in `model.vocab`, excluding appended added
     /// tokens. Historical runtime decode tables use exactly this prefix.
     pub fn model_vocab_size(&self) -> usize {

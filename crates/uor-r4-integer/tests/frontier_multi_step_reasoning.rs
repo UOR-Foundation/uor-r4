@@ -1,9 +1,14 @@
-//! Frontier Multi-Step Reasoning & Exact Invariant Algebra Verification.
+//! Scoped Operational Checks: Multi-Step Sequence Holonomy & Exact Invariant Algebra.
+//!
+//! Note on Scope (Casey Allard review, References #820, #973):
+//! Synthetic all-one parameters plus nonzero phase/read mass do not establish semantic
+//! logical deduction or general reasoning. These tests verify operational causal memory
+//! contrast, algebraic recurrence bounds in Z[\phi], and non-stagnant holonomy progression.
 //!
 //! Validates:
-//! 1. Multi-hop logical deduction with monotonic CORDIC Hopf holonomy accumulation (\Delta\psi != 0).
+//! 1. Multi-step sequence progression with non-stagnant CORDIC Hopf holonomy accumulation.
 //! 2. Exact algebraic invariant arithmetic in Z[\phi] (Fibonacci barycenter recurrence).
-//! 3. Structural code dependency reasoning with causal memory necessity (\Delta NLL >= 4.0 nats).
+//! 3. Structural token sequence causal memory necessity (Enabled vs NoRead contrast).
 //! 4. Zero hardware multipliers, dividers, or floats in served execution.
 
 use std::path::Path;
@@ -21,7 +26,7 @@ fn test_m4_multi_hop_logical_deduction_and_holonomy() {
     let bundle = create_test_bundle_with_byte_vocab();
     let mut session = ChatSession::new(&bundle, Some("Logic engine."), 42).expect("new session");
 
-    // Ingest 3 premise turns constructing a transitive inference chain (A -> B -> C -> D)
+    // Scoped operational check: verify multi-turn prompt sequence drives non-zero CORDIC Hopf holonomy accumulation
     let premise1 = "Premise 1: All prime indices map to invariant coordinates on Torus T8.";
     let premise2 = "Premise 2: Any coordinate on Torus T8 induces non-zero Hopf fiber rotation.";
     let premise3 =
