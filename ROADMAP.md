@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model — multi-lab roadmap
 
-**Director:** Claude, Lab 1 window. **Updated:** 2026-09-27 23:46 UTC. This file owns lab
+**Director:** Claude, Lab 1 window. **Updated:** 2026-09-27 23:58 UTC. This file owns lab
 assignments, track status, the dead-path register and the cross-lab protocol. Measured
 results and retained artifacts live in [current state](docs/integration/current-state.md).
 Ordered responsibilities and acceptance live in the [canonical plan](docs/integration/project-track.md).
@@ -119,6 +119,18 @@ three-lab brief does not assign it work.
    - `audit_zero_matmul_serving.py` hard-codes owner-checkout paths;
    - it covers no `lorentz::*` or `sampling::*` symbols, and its `step_conversational\b` pattern cannot match `step_conversational_into`;
    - the integer Min-P sampler has a u128 multiply (`crates/uor-r4-integer/src/sampling.rs:120`), reachable through the library but not the CLI.
+
+10. **Owner decisions, 2026-09-27 23:55 UTC** (put to the owner as prompts, each accepted as recommended):
+    - **D10 is superseded programme-wide.** A D11 decision record (protected PR) makes native, multiplier-free, transformerless serving (R1–R5) the only serving contract for every lab. Converted transformers are comparators or offline teachers only. `lut-chat` is frozen.
+    - **`.uor-models` moves to the SSD.** Lab 1 performs the move:
+      - a SHA-256-verified copy to `/Volumes/UOR-Workspace/uor-r4-models/`;
+      - a symlink at each old path;
+      - deletion of the internal originals after verification;
+      - a record under `.uor-cleanup/2026-09-27/`.
+
+      Directories a running job is using are skipped until it ends.
+    - **The director may remove other labs' idle worktrees.** Eligible worktrees have 0 dirty files, 0 unpushed commits and no process using them. Removal follows a 2-hour notice on #820, and the branch stays on GitHub.
+    - **#1441 merges now.**
 
 ### Engine consolidation map
 
@@ -315,7 +327,7 @@ storage and swap pressure while another lab's fit ran.
 - **SSD:** keep at least 30 GiB free inside `UOR-Workspace`. Ask the owner before resizing the image.
 - `UOR-Workspace` is an APFS sparse image on the X10 Pro SSD. Never point Cargo at the ExFAT volume itself.
 - **Every status report includes both `df` numbers,** internal `/System/Volumes/Data` and SSD `/Volumes/UOR-Workspace`.
-- Never delete another lab's worktree or artifacts, or unique research.
+- Never delete another lab's worktree or artifacts, or unique research. The one exception is the owner-granted director removal of clean, fully pushed, idle worktrees after a 2-hour notice (ruling 10).
 
 **Ledgers.**
 - Report model compute and orchestration separately per work unit.
@@ -406,6 +418,16 @@ savings all remain unqualified.
   - D10's backbone and runtime-multiplier exceptions are out of mission (R2, R4).
   - The reads-only `aaaaaa` stack is a transformer comparator, not a main-line candidate (ruling 8).
 - **The single decisive experiment still missing programme-wide** is D5's addressing contest. It is assigned to Lab 2 as T2.
+
+**2026-09-27 23:55 UTC, owner decisions.**
+- The owner asked to be prompted with every decision, each with a recommendation.
+- Four were put and all accepted:
+  - supersede D10 (a D11 PR follows);
+  - migrate `.uor-models` to the SSD;
+  - allow director removal of idle worktrees after notice;
+  - merge #1441.
+
+  See ruling 10.
 
 **2026-09-27 23:43 UTC, owner direction: GitHub record and storage.**
 - **Lab 1 delivery:** B1 was committed and pushed at `09e537a4`, draft #1442, with a #973 status report.
