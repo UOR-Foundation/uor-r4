@@ -816,5 +816,19 @@
   "projected_with_arm_c_ms": 739300000,
   "predeclared_stop_margin_ms": 735000000,
   "hard_ceiling_ms": 744000000
+ },
+ "delivery": {
+  "delivered_branch": "codex/geometric-read-20260927",
+  "rebased_onto": "72538ffb",
+  "delivered_commits": {
+   "plan": "9c80d2ac",
+   "instrument": "753fe4b0",
+   "cost_optimization": "32944a1c"
+  },
+  "pre_rebase_commits": {
+   "instrument": "ddb36793",
+   "cost_optimization": "b7fd254a"
+  },
+  "note": "The executed binary was built and bound at source b7fd254a (pre-rebase); the executed identities (binary 1dfea84e, source b7fd254a) remain the measured-artifact identities. The rebase onto main 72538ffb preserved this patch byte-identically on all four non-overlapping files (verified by patch diff) and the 13 geometric_read tests re-passed."
  }
 }
