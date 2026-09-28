@@ -15,7 +15,9 @@ S1/QAT follow-ups precede S4's integration into their shared files. The supplied
 Kimi review is source inspection, not executed approval. The current source-only
 assessment preserves raw-float loading plus explicit saved-mode reapplication.
 #1468 still needs its finite repairs, conflict resolution and committed-source
-rerun closeout; #1469 needs its complete frozen result and non-author re-read.
+rerun closeout. #1469's completed frozen result has been independently re-read;
+its [delivery decision](https://github.com/UOR-Foundation/uor-r4/pull/1469#issuecomment-5880287835)
+retains source and negative evidence without promoting it into the dialogue stack.
 Follow the [latest source/log triage](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5880133239),
 not an old assumption that either PR waits only for its process to finish.
 

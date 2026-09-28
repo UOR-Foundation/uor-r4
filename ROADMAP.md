@@ -36,9 +36,11 @@ neither retired by one failed configuration nor qualified by telemetry alone.
 - **#1468, Lab 3:** resolve the existing technical findings and Git conflict;
   acting lead reviews the changed diff and closes out Claude's original
   committed-source rerun. A completed rerun alone is not merge approval.
-- **#1469, Lab 2:** finish or honestly checkpoint the frozen run under its
-  recorded resources, preserve all arms, then publish/re-read the sealed result.
-  A missing control or artifact is unavailable, never an assumed metric.
+- **#1469, Lab 2:** the frozen run is complete and independently re-read;
+  its [source-bound closeout](https://github.com/UOR-Foundation/uor-r4/pull/1469#issuecomment-5880287835)
+  permits protected delivery as unpromoted research evidence, not adoption by
+  the dialogue stack. Diagnose only what its retained failure traces expose;
+  the runner saved reports, not trained weights. No assumed replay or refit.
 - **Next learned consumer:** I1 memory with G in the dialogue stack, and
   trained-in S4 geometry through the declared learning/serving bridge. Further
   compute requires its named causal change, retained weights where needed,
@@ -51,7 +53,10 @@ one write task active. At most one additional read-only specialist on the alread
 configured owner-approved no-charge route may assist a genuinely independent
 question; no recursion or implicit paid-provider fallback. Permissions must be
 available explicitly, not bypassed. The acting lead holds cross-lab decisions,
-non-author acceptance and merge approval; Kimi does not approve its own work.
+non-author acceptance and merge approval. Kimi may execute the existing protected
+merge procedure for an exact head already approved with every class condition
+met, then verify delivery and notify the consumer. Kimi cannot approve its own
+work; a changed head or new blocker requires a fresh review, not a bypass.
 
 **Important review correction:** the current proposed `StackModel::load` returns
 float weights with neither served nor snapped mode enabled. Read saved metadata
