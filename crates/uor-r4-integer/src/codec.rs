@@ -62,11 +62,19 @@ pub fn fwht_slice(data: &mut [i64]) -> Result<()> {
 /// For N = 64 (4^3), shift is 3 bits (sqrt(64) = 8 = 2^3).
 /// For N = 256 (4^4), shift is 4 bits (sqrt(256) = 16 = 2^4).
 pub fn fwht_normalized(data: &mut [i64], shift: u32) -> Result<()> {
+    if shift >= 64 {
+        return Err(invalid(format!(
+            "FWHT normalizer shift must be < 64, got {shift}"
+        )));
+    }
     fwht_slice(data)?;
     if shift > 0 {
         let half = 1i64 << (shift - 1);
         for val in data.iter_mut() {
-            *val = (*val + half) >> shift;
+            let sum = val
+                .checked_add(half)
+                .ok_or_else(|| invalid("FWHT normalizer overflow on rounding add"))?;
+            *val = sum >> shift;
         }
     }
     Ok(())
@@ -105,13 +113,23 @@ pub fn randomized_hadamard_transform(data: &mut [i64], signs: &[i8]) -> Result<(
             data.len()
         )));
     }
+    let data_len = data.len();
+    if signs.len() < data_len {
+        return Err(invalid(format!(
+            "signs length ({}) less than data length ({})",
+            signs.len(),
+            data_len
+        )));
+    }
     for (chunk, sign_chunk) in data
         .chunks_exact_mut(HADAMARD_BLOCK)
-        .zip(signs.chunks_exact(HADAMARD_BLOCK))
+        .zip(signs[..data_len].chunks_exact(HADAMARD_BLOCK))
     {
         for (x, &s) in chunk.iter_mut().zip(sign_chunk) {
             if s < 0 {
-                *x = -*x;
+                *x = x
+                    .checked_neg()
+                    .ok_or_else(|| invalid("overflow on sign negation"))?;
             }
         }
         fwht_normalized(chunk, 3)?;
@@ -128,14 +146,24 @@ pub fn inverse_randomized_hadamard_transform(data: &mut [i64], signs: &[i8]) -> 
     if data.len() % HADAMARD_BLOCK != 0 {
         return Err(invalid("dimension not a multiple of HADAMARD_BLOCK"));
     }
+    let data_len = data.len();
+    if signs.len() < data_len {
+        return Err(invalid(format!(
+            "signs length ({}) less than data length ({})",
+            signs.len(),
+            data_len
+        )));
+    }
     for (chunk, sign_chunk) in data
         .chunks_exact_mut(HADAMARD_BLOCK)
-        .zip(signs.chunks_exact(HADAMARD_BLOCK))
+        .zip(signs[..data_len].chunks_exact(HADAMARD_BLOCK))
     {
         fwht_normalized(chunk, 3)?;
         for (x, &s) in chunk.iter_mut().zip(sign_chunk) {
             if s < 0 {
-                *x = -*x;
+                *x = x
+                    .checked_neg()
+                    .ok_or_else(|| invalid("overflow on sign negation"))?;
             }
         }
     }
@@ -180,6 +208,13 @@ pub fn inverse_block_padded_hadamard_transform(
         return Err(invalid(format!(
             "transformed length ({}) does not match expected padded length ({})",
             transformed.len(),
+            padded_len
+        )));
+    }
+    if signs.len() < padded_len {
+        return Err(invalid(format!(
+            "signs length ({}) less than expected padded length ({})",
+            signs.len(),
             padded_len
         )));
     }
@@ -342,8 +377,378 @@ impl Grouped4BitRow {
 }
 
 // ---------------------------------------------------------------------------
-// Conway-Sloane E8 Lattice Codec
+// Canonical Grouped 4-bit Matrix & Codec (D11 and MapCodec contract)
 // ---------------------------------------------------------------------------
+
+/// Rounding and scale selection mode for discrete 4-bit quantization.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Grouped4BitRounding {
+    /// Standard round-to-nearest with heuristic non-saturating scale selection
+    /// matching canonical D11 export (`lut_export::quantize_matrix`).
+    #[default]
+    Nearest,
+    /// Minimum-MSE grid scale search: for each group, evaluates all 16 valid mantissas
+    /// under the matrix base exponent to find the scale that minimizes squared error.
+    MinimumMseScale,
+}
+
+/// Stored representation of a grouped 4-bit matrix under D11.
+///
+/// Encodes an `R x C` matrix with column grouping `group_size` (default 32):
+/// - 4-bit signed integer codes in `[-8..7]` stored as unsigned nibbles `q + 8`, packed 2 per byte (low nibble first).
+/// - 1 scale byte per group: `(m & 15) | ((e - exp_base) << 4)` with $m \in [0..15]$ and $(e - exp_base) \in [0..15]$.
+/// - Grid scale value: $(16 + m) \cdot 2^{e - 4}$.
+/// - Base exponent `exp_base: i32` stored once per matrix.
+///
+/// Bit budget:
+/// - Nibbles: $R \times C / 2$ bytes = 4.0 bits / weight.
+/// - Scales: $R \times (C / 32)$ bytes = 8 bits / 32 weights = 0.25 bits / weight.
+/// - Base exponent: 4 bytes (`i32`) total overhead for the entire matrix.
+/// - Total effective bits per weight: $\le 4.25$ bits / weight for all valid matrices ($C \ge 32$).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Grouped4BitMatrix {
+    pub rows: usize,
+    pub cols: usize,
+    pub group_size: usize,
+    pub exp_base: i32,
+    pub nibbles: Vec<u8>,
+    pub scales: Vec<u8>,
+}
+
+/// Binary serialization magic: b"UORG4B01".
+pub const GROUPED4BIT_MATRIX_MAGIC: &[u8; 8] = b"UORG4B01";
+
+impl Grouped4BitMatrix {
+    /// Calculate effective parameter bits per weight: 4.0 bits code + (8 / group_size) scale bits = 4.25 bits/weight.
+    pub fn param_bits_per_weight(&self) -> f64 {
+        (self.nibbles.len() + self.scales.len()) as f64 * 8.0 / (self.rows * self.cols) as f64
+    }
+
+    /// Calculate total stored bits per weight including container exp_base.
+    pub fn total_stored_bits_per_weight(&self) -> f64 {
+        let total_bytes = self.nibbles.len() + self.scales.len() + std::mem::size_of::<i32>();
+        (total_bytes as f64 * 8.0) / (self.rows * self.cols) as f64
+    }
+
+    /// Effective bits per weight under D4 specification: exactly 4.25 bits/weight for group size 32.
+    pub fn effective_bits_per_weight(&self) -> f64 {
+        self.param_bits_per_weight()
+    }
+
+    /// Serialize into self-contained binary payload with BLAKE3 checksum.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(32 + self.nibbles.len() + self.scales.len() + 32);
+        buf.extend_from_slice(GROUPED4BIT_MATRIX_MAGIC);
+        buf.extend_from_slice(&(self.rows as u32).to_le_bytes());
+        buf.extend_from_slice(&(self.cols as u32).to_le_bytes());
+        buf.extend_from_slice(&(self.group_size as u32).to_le_bytes());
+        buf.extend_from_slice(&self.exp_base.to_le_bytes());
+        buf.extend_from_slice(&(self.nibbles.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&(self.scales.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&self.nibbles);
+        buf.extend_from_slice(&self.scales);
+        let hash = blake3::hash(&buf);
+        buf.extend_from_slice(hash.as_bytes());
+        buf
+    }
+
+    /// Deserialize and verify BLAKE3 checksum and dimension consistency.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        const HEADER_LEN: usize = 8 + 4 * 6; // 32 bytes
+        if bytes.len() < HEADER_LEN + 32 {
+            return Err(invalid("serialized data too short"));
+        }
+        let (payload, expected_hash) = bytes.split_at(bytes.len() - 32);
+        let actual_hash = blake3::hash(payload);
+        if actual_hash.as_bytes() != expected_hash {
+            return Err(invalid(
+                "BLAKE3 checksum mismatch in Grouped4BitMatrix deserialization",
+            ));
+        }
+        if &payload[0..8] != GROUPED4BIT_MATRIX_MAGIC {
+            return Err(invalid("invalid magic bytes in Grouped4BitMatrix header"));
+        }
+        let rows = u32::from_le_bytes(payload[8..12].try_into().unwrap()) as usize;
+        let cols = u32::from_le_bytes(payload[12..16].try_into().unwrap()) as usize;
+        let group_size = u32::from_le_bytes(payload[16..20].try_into().unwrap()) as usize;
+        let exp_base = i32::from_le_bytes(payload[20..24].try_into().unwrap());
+        let nibbles_len = u32::from_le_bytes(payload[24..28].try_into().unwrap()) as usize;
+        let scales_len = u32::from_le_bytes(payload[28..32].try_into().unwrap()) as usize;
+
+        if group_size == 0 || cols == 0 || rows == 0 {
+            return Err(invalid("zero dimension in header"));
+        }
+        let expected_nibbles = rows * cols.div_ceil(2);
+        let expected_scales = rows * cols.div_ceil(group_size);
+        if nibbles_len != expected_nibbles || scales_len != expected_scales {
+            return Err(invalid("payload length mismatch with declared dimensions"));
+        }
+        if payload.len() != HEADER_LEN + nibbles_len + scales_len {
+            return Err(invalid("total payload length mismatch"));
+        }
+        let nibbles = payload[HEADER_LEN..HEADER_LEN + nibbles_len].to_vec();
+        let scales =
+            payload[HEADER_LEN + nibbles_len..HEADER_LEN + nibbles_len + scales_len].to_vec();
+
+        Ok(Self {
+            rows,
+            cols,
+            group_size,
+            exp_base,
+            nibbles,
+            scales,
+        })
+    }
+}
+
+/// Compute canonical D11 grid scale: `(16 + m) * 2^(e - 4)`.
+#[inline]
+pub fn d11_grid_scale(m: u8, e: i32) -> f64 {
+    (16.0 + f64::from(m & 15)) * 2f64.powi(e - 4)
+}
+
+fn group_error_f32(w: &[f32], s: f64) -> f64 {
+    w.iter()
+        .map(|&v| {
+            let vf = f64::from(v);
+            let q = (vf / s).round().clamp(-8.0, 7.0);
+            (vf - q * s).powi(2)
+        })
+        .sum()
+}
+
+/// The grid scale `(m, e)` with the least squared rounding error for one group
+/// matching canonical D11 export (`lut_export::quantize_matrix`), or `None`
+/// for an all-zero group.
+pub fn d11_best_scale(group: &[f32]) -> Option<(u8, i32)> {
+    let mut a = 0.0f64;
+    for &v in group {
+        let abs = f64::from(v.abs());
+        if abs > a {
+            a = abs;
+        }
+    }
+    if a == 0.0 {
+        return None;
+    }
+    let (lo, hi) = (a / 8.5, a / 5.5);
+    let mut best: Option<(f64, u8, i32)> = None;
+    let e_lo = (lo / 32.0).log2().floor() as i32 + 4;
+    let e_hi = (hi / 16.0).log2().ceil() as i32 + 4;
+    for e in e_lo..=e_hi {
+        for m in 0..16u8 {
+            let s = d11_grid_scale(m, e);
+            if s < lo || s > hi {
+                continue;
+            }
+            let err = group_error_f32(group, s);
+            if best.as_ref().is_none_or(|b| err < b.0) {
+                best = Some((err, m, e));
+            }
+        }
+    }
+    Some(match best {
+        Some((_, m, e)) => (m, e),
+        // Smallest grid scale >= a / 7.
+        None => (0, (a / 7.0 / 16.0).log2().ceil() as i32 + 4),
+    })
+}
+
+/// Discrete 4-bit grouped parameter codec for D11 serving and QAT training.
+///
+/// Implements:
+/// - Grouping: 32 columns per group (matching `uor_r4_lut::GROUP`).
+/// - Scale formula: $s = (16 + m) \cdot 2^{e - 4}$ where $m \in [0..15]$ and $e - \text{exp\_base} \in [0..15]$.
+/// - Code representation: 4-bit signed codes in `[-8..7]` stored as `q + 8`.
+/// - Rounding modes: [`Grouped4BitRounding::Nearest`] and [`Grouped4BitRounding::MinimumMseScale`].
+/// - Effective bits per weight: $\le 4.25$ bits/weight.
+///
+/// ### Straight-Through Estimator (STE) Contract
+/// In offline training (via [`MapCodec`]), the backward pass
+/// through this codec substitutes a Straight-Through Estimator:
+///
+/// $$\frac{\partial L}{\partial w} \approx \frac{\partial L}{\partial q(w)} \cdot \mathbf{1}_{|w| \le w_{\max}}$$
+///
+/// The codec itself implements the mathematical forward discretization arithmetic and stored
+/// representations; the surrogate gradient is maintained by the autodiff graph.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Grouped4BitCodec {
+    pub group_size: usize,
+    pub rounding: Grouped4BitRounding,
+}
+
+impl Default for Grouped4BitCodec {
+    fn default() -> Self {
+        Self {
+            group_size: DEFAULT_GROUP_SIZE,
+            rounding: Grouped4BitRounding::Nearest,
+        }
+    }
+}
+
+impl Grouped4BitCodec {
+    pub fn new(group_size: usize, rounding: Grouped4BitRounding) -> Self {
+        Self {
+            group_size,
+            rounding,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self.rounding {
+            Grouped4BitRounding::Nearest => "native-d11-grouped-4bit-g32-rtn",
+            Grouped4BitRounding::MinimumMseScale => "native-d11-grouped-4bit-g32-min-mse",
+        }
+    }
+
+    /// Quantize a row-major `rows x cols` float matrix into canonical D11 grouped 4-bit format.
+    pub fn quantize(&self, values: &[f32], rows: usize, cols: usize) -> Result<Grouped4BitMatrix> {
+        if values.len() != rows * cols {
+            return Err(invalid(format!(
+                "values length ({}) does not match rows * cols ({rows} * {cols} = {})",
+                values.len(),
+                rows * cols
+            )));
+        }
+        if cols == 0 || rows == 0 || !cols.is_multiple_of(self.group_size) {
+            return Err(invalid(format!(
+                "cols ({cols}) must be non-zero multiple of group_size ({})",
+                self.group_size
+            )));
+        }
+        if values.iter().any(|v| !v.is_finite()) {
+            return Err(invalid("matrix contains non-finite values"));
+        }
+
+        let groups = cols / self.group_size;
+        let mut chosen: Vec<Option<(u8, i32)>> = Vec::with_capacity(rows * groups);
+
+        for group in values.chunks_exact(self.group_size) {
+            chosen.push(d11_best_scale(group));
+        }
+
+        let e_max = chosen.iter().flatten().map(|(_, e)| *e).max().unwrap_or(0);
+        let exp_base = e_max - 15;
+
+        let mut nibbles = vec![0u8; rows * cols / 2];
+        let mut scales = vec![0u8; rows * groups];
+
+        for r in 0..rows {
+            for g in 0..groups {
+                let g_idx = r * groups + g;
+                let group_slice =
+                    &values[r * cols + g * self.group_size..r * cols + (g + 1) * self.group_size];
+
+                let (m, e) = match self.rounding {
+                    Grouped4BitRounding::Nearest => match chosen[g_idx] {
+                        Some((m, e)) if e >= exp_base => (m, e),
+                        _ => (0, exp_base),
+                    },
+                    Grouped4BitRounding::MinimumMseScale => {
+                        let mut best_m = 0u8;
+                        let mut best_e = exp_base;
+                        let mut min_err = f64::INFINITY;
+
+                        let heur_e = chosen[g_idx].map(|(_, e)| e).unwrap_or(exp_base);
+                        let e_low = (heur_e - 1).clamp(exp_base, exp_base + 15);
+                        let e_high = (heur_e + 1).clamp(exp_base, exp_base + 15);
+
+                        for cand_e in e_low..=e_high {
+                            for cand_m in 0..=15u8 {
+                                let s = d11_grid_scale(cand_m, cand_e);
+                                let mut err = 0.0f64;
+                                for &val in group_slice {
+                                    let vf = f64::from(val);
+                                    let q = (vf / s).round().clamp(-8.0, 7.0);
+                                    err += (vf - q * s).powi(2);
+                                }
+                                if err < min_err {
+                                    min_err = err;
+                                    best_m = cand_m;
+                                    best_e = cand_e;
+                                }
+                            }
+                        }
+                        (best_m, best_e)
+                    }
+                };
+
+                let de = (e - exp_base).clamp(0, 15) as u8;
+                let scale_byte = (m & 15) | (de << 4);
+                scales[g_idx] = scale_byte;
+
+                let s = d11_grid_scale(m, e);
+                for (c_rel, &v) in group_slice.iter().enumerate() {
+                    let c = g * self.group_size + c_rel;
+                    let vf = f64::from(v);
+                    let q = (vf / s).round().clamp(-8.0, 7.0);
+                    let nibble = (q as i32 + 8) as u8;
+                    let idx = (r * cols + c) / 2;
+                    if c % 2 == 0 {
+                        nibbles[idx] |= nibble;
+                    } else {
+                        nibbles[idx] |= nibble << 4;
+                    }
+                }
+            }
+        }
+
+        Ok(Grouped4BitMatrix {
+            rows,
+            cols,
+            group_size: self.group_size,
+            exp_base,
+            nibbles,
+            scales,
+        })
+    }
+
+    /// Dequantize a canonical D11 grouped 4-bit matrix back to float representation.
+    pub fn dequantize(&self, matrix: &Grouped4BitMatrix) -> Result<Vec<f32>> {
+        if matrix.cols == 0 || matrix.rows == 0 || matrix.group_size == 0 {
+            return Err(invalid("empty or invalid matrix"));
+        }
+        let groups = matrix.cols / matrix.group_size;
+        let mut out = Vec::with_capacity(matrix.rows * matrix.cols);
+
+        for r in 0..matrix.rows {
+            for g in 0..groups {
+                let s_byte = matrix.scales[r * groups + g];
+                let m = s_byte & 15;
+                let de = s_byte >> 4;
+                let e = matrix.exp_base + i32::from(de);
+                let scale = d11_grid_scale(m, e);
+
+                for c_rel in 0..matrix.group_size {
+                    let c = g * matrix.group_size + c_rel;
+                    let idx = (r * matrix.cols + c) / 2;
+                    let byte = matrix.nibbles[idx];
+                    let nibble = if c % 2 == 0 { byte & 15 } else { byte >> 4 };
+                    let q = f64::from(nibble as i32 - 8);
+                    out.push((q * scale) as f32);
+                }
+            }
+        }
+
+        Ok(out)
+    }
+
+    /// Round-trip a row-major float matrix through quantization and dequantization.
+    pub fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        let m = self.quantize(values, rows, cols)?;
+        self.dequantize(&m)
+    }
+
+    /// Calculate effective bits per weight for a matrix with given shape under this codec.
+    ///
+    /// For group size 32, this is exactly 4.0 bits/weight (nibbles) + 0.25 bits/weight (scales) = 4.25 bits/weight.
+    pub fn effective_bits_per_weight(&self, rows: usize, cols: usize) -> f64 {
+        let nibbles_bytes = rows * cols.div_ceil(2);
+        let scales_bytes = rows * cols.div_ceil(self.group_size);
+        let total_bytes = nibbles_bytes + scales_bytes;
+        (total_bytes as f64 * 8.0) / (rows * cols) as f64
+    }
+}
 
 /// Nearest D8 lattice point (integer coordinates with even sum).
 ///
@@ -901,5 +1306,112 @@ mod tests {
             assert_eq!(deq.len(), rows * cols);
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_hardened_hadamard_edge_cases() -> Result<()> {
+        // Short signs slice rejected
+        let mut data = vec![1i64; 64];
+        let short_signs = vec![1i8; 32];
+        assert!(randomized_hadamard_transform(&mut data, &short_signs).is_err());
+        assert!(inverse_randomized_hadamard_transform(&mut data, &short_signs).is_err());
+
+        // fwht_normalized invalid shift rejected
+        assert!(fwht_normalized(&mut data, 64).is_err());
+        assert!(fwht_normalized(&mut data, 100).is_err());
+
+        // fwht_normalized overflow on rounding add caught
+        let mut overflow_data = vec![i64::MAX; 64];
+        assert!(fwht_normalized(&mut overflow_data, 2).is_err());
+
+        // inverse_block_padded_hadamard_transform rejects short signs
+        let transformed = vec![0i64; 64];
+        assert!(inverse_block_padded_hadamard_transform(&transformed, &short_signs, 50).is_err());
+
+        // i64::MIN sign negation overflow caught cleanly
+        let mut min_data = vec![i64::MIN; 64];
+        let neg_signs = vec![-1i8; 64];
+        assert!(randomized_hadamard_transform(&mut min_data, &neg_signs).is_err());
+        assert!(inverse_randomized_hadamard_transform(&mut min_data, &neg_signs).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_grouped4bit_codec_deterministic_and_effective_bits() -> Result<()> {
+        let codec_rtn = Grouped4BitCodec::default();
+        let codec_opt =
+            Grouped4BitCodec::new(DEFAULT_GROUP_SIZE, Grouped4BitRounding::MinimumMseScale);
+
+        let rows = 64;
+        let cols = 288;
+        let values: Vec<f32> = (0..rows * cols)
+            .map(|i| (((i as f32) * 0.73) % 17.0 - 8.5) * 0.04)
+            .collect();
+
+        // 1. Bit budget: effective bits per weight must be <= 4.25
+        let bpp = codec_rtn.effective_bits_per_weight(rows, cols);
+        assert!(
+            bpp <= 4.2501,
+            "Effective bits per weight must be <= 4.25, got {bpp}"
+        );
+
+        // 2. Deterministic quantization
+        let mat1 = codec_rtn.quantize(&values, rows, cols)?;
+        let mat2 = codec_rtn.quantize(&values, rows, cols)?;
+        assert_eq!(mat1, mat2, "Quantization must be strictly deterministic");
+        assert_eq!(mat1.effective_bits_per_weight(), bpp);
+
+        // 3. Dequantization and round-trip
+        let deq1 = codec_rtn.dequantize(&mat1)?;
+        let deq_rt = codec_rtn.round_trip(&values, rows, cols)?;
+        assert_eq!(deq1, deq_rt);
+        assert_eq!(deq1.len(), rows * cols);
+
+        // 4. Serialization round-trip
+        let bytes = mat1.to_bytes();
+        let mat_deser = Grouped4BitMatrix::from_bytes(&bytes)?;
+        assert_eq!(mat1, mat_deser);
+
+        // Corrupted checksum must be rejected
+        let mut corrupted = bytes.clone();
+        let last_idx = corrupted.len() - 1;
+        corrupted[last_idx] ^= 0xFF;
+        assert!(Grouped4BitMatrix::from_bytes(&corrupted).is_err());
+
+        // 5. Minimum MSE scale search mode
+        let mat_opt = codec_opt.quantize(&values, rows, cols)?;
+        let deq_opt = codec_opt.dequantize(&mat_opt)?;
+        assert_eq!(deq_opt.len(), rows * cols);
+
+        // Compute MSE for both
+        let mse_rtn: f64 = values
+            .iter()
+            .zip(&deq1)
+            .map(|(&v, &d)| (f64::from(v) - f64::from(d)).powi(2))
+            .sum();
+        let mse_opt: f64 = values
+            .iter()
+            .zip(&deq_opt)
+            .map(|(&v, &d)| (f64::from(v) - f64::from(d)).powi(2))
+            .sum();
+        assert!(
+            mse_opt <= mse_rtn + 1e-6,
+            "Optimal scale search must achieve equal or lower MSE: opt {mse_opt} vs rtn {mse_rtn}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_grouped4bit_codec_invalid_inputs() {
+        let codec = Grouped4BitCodec::default();
+        // Size mismatch
+        assert!(codec.quantize(&[1.0; 10], 4, 4).is_err());
+        // Non-multiple of group size
+        assert!(codec.quantize(&[1.0; 48], 1, 48).is_err());
+        // Non-finite values
+        assert!(codec.quantize(&[f32::NAN; 32], 1, 32).is_err());
+        assert!(codec.quantize(&[f32::INFINITY; 32], 1, 32).is_err());
     }
 }

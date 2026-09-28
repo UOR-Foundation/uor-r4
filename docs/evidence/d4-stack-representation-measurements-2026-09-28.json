@@ -114,11 +114,22 @@
     "sha256_match": true,
     "weights_sha256": "3eb1ebbb3c1f65fccf9dfb325283f8f9892cd434e0d689356821acee2c5b1e0a"
   },
+  "comparator_engine": {
+    "engine": "uor_r4_lut::stack::StackModel",
+    "scope": "D10 NEON multithreaded comparator engine (used for representation scoring, not D11 serving qualification)"
+  },
   "schema": "uor-r4.anti-gravity.d4-candidate-evaluation/1",
-  "zero_matmul_serving_audit": {
-    "class_III_floating_point": 0,
-    "class_II_divisions": 0,
+  "sealed_root": {
+    "manifest_sha256": "829103162507764bb08e653fb4c2eb36bce1b1c6fcc783b187ccba5c3b16efeb",
+    "path": "/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-d4/evaluation-1",
+    "sealed_at": "1790619945"
+  },
+  "serving_library_audit": {
     "class_I_multiplications": 0,
-    "compliance": "PASSED (0 mul, 0 div, 0 float in serving paths)"
+    "class_II_divisions": 0,
+    "class_III_floating_point": 0,
+    "compliance": "PASSED (0 mul, 0 div, 0 float in libuor_r4_integer serving paths)",
+    "scope": "Zero-matmul static disassembly audit of D11 serving symbols (does not certify uor_r4_lut)",
+    "target": "libuor_r4_integer.rlib / uor-r4-stack (D11 multiplier-free engine)"
   }
 }

@@ -46,6 +46,7 @@ use std::time::Instant;
 use candle_core::{CpuStorage, CustomOp2, CustomOp3, DType, Device, Layout, Shape, Tensor, Var};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use uor_r4_integer::codec::Grouped4BitCodec;
 use uor_r4_lut::GROUP;
 
 use crate::lut_export::{dequantize_matrix, quantize_matrix};
@@ -1221,6 +1222,16 @@ impl MapCodec for D11Interim {
     fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
         let packed = quantize_matrix(values, rows, cols)?;
         dequantize_matrix(rows, cols, packed.exp_base, &packed.nibbles, &packed.scales)
+    }
+}
+
+impl MapCodec for Grouped4BitCodec {
+    fn name(&self) -> &str {
+        Grouped4BitCodec::name(self)
+    }
+
+    fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        Grouped4BitCodec::round_trip(self, values, rows, cols).map_err(|e| invalid(e.to_string()))
     }
 }
 
@@ -5064,6 +5075,28 @@ mod tests {
         let mut model = StackModel::new(exportable("ra", ReadScore::Dot, true), &cpu())?;
         model.set_served_representation(Some(Arc::new(Short)))?;
         assert!(model.forward(&token_ids(8, 96, 3), 1, 8).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn native_grouped_4bit_codec_plugs_into_map_codec_and_matches_d11_interim() -> Result<()> {
+        let values: Vec<f32> = (0..64 * 32)
+            .map(|i| (((i as f32) * 0.17) % 7.0 - 3.5) * 0.1)
+            .collect();
+        let d11 = D11Interim;
+        let native_rtn = Grouped4BitCodec::default();
+
+        let rt_d11 = d11.round_trip(&values, 64, 32)?;
+        let rt_native = native_rtn.round_trip(&values, 64, 32)?;
+        assert_eq!(
+            rt_d11, rt_native,
+            "Native Grouped4BitCodec must match D11Interim round-trip bit for bit"
+        );
+
+        let dyn_codec: Arc<dyn MapCodec> = Arc::new(native_rtn);
+        assert_eq!(dyn_codec.name(), "native-d11-grouped-4bit-g32-rtn");
+        let rt_dyn = dyn_codec.round_trip(&values, 64, 32)?;
+        assert_eq!(rt_dyn, rt_d11);
         Ok(())
     }
 }

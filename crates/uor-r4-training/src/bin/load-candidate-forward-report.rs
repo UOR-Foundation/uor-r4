@@ -187,25 +187,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Claimed exclusive report root: {}", args.out.display());
 
     let run_res = (|| -> Result<(), Box<dyn std::error::Error>> {
-        // Validate model weights hash
+        // Validate model weights hash (fail closed on mismatch)
         let weights_path = args.model_dir.join("model.safetensors");
         let model_sha256 = sha256_file(&weights_path)?;
         println!("Model safetensors SHA-256: {}", model_sha256);
         if model_sha256 != EXPECTED_MODEL_SHA256 {
-            eprintln!(
-                "WARNING: Model SHA-256 {} does not match reference geometric_s1 {}",
+            return Err(format!(
+                "Strict identity mismatch: model SHA-256 {} does not match reference geometric_s1 {}",
                 model_sha256, EXPECTED_MODEL_SHA256
-            );
+            )
+            .into());
         }
 
-        // Validate dataset hash
+        // Validate dataset hash (fail closed on mismatch)
         let valid_sha256 = sha256_file(&args.valid_path)?;
         println!("Validation set SHA-256: {}", valid_sha256);
         if valid_sha256 != EXPECTED_VALID_SHA256 {
-            eprintln!(
-                "WARNING: Validation SHA-256 {} does not match reference valid.u16 {}",
+            return Err(format!(
+                "Strict identity mismatch: validation SHA-256 {} does not match reference valid.u16 {}",
                 valid_sha256, EXPECTED_VALID_SHA256
-            );
+            )
+            .into());
         }
 
         // Load float model
@@ -230,14 +232,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let lens = if let Some(ref lp) = args.lens_path {
             println!("Reading lens weights from {}...", lp.display());
-            Some(read_u16_tokens(lp, u16::MAX as usize + 1)?)
+            let l = read_u16_tokens(lp, u16::MAX as usize + 1)?;
+            if l.len() < vocab {
+                return Err(format!(
+                    "Lens weights array length ({}) is less than vocab size ({})",
+                    l.len(),
+                    vocab
+                )
+                .into());
+            }
+            Some(l)
         } else {
             None
         };
 
-        // Compute evaluation window offsets
+        // Compute evaluation window offsets with parameter validation
         let total_windows = args.windows;
+        if total_windows == 0 {
+            return Err("Invalid argument: windows must be > 0".into());
+        }
+        if tokens.len() <= time + 1 {
+            return Err(format!(
+                "Validation dataset too short: token count ({}) must exceed context + 1 ({})",
+                tokens.len(),
+                time + 1
+            )
+            .into());
+        }
         let stride = (tokens.len() - time - 1) / total_windows;
+        if stride == 0 {
+            return Err(format!(
+                "Invalid window count: stride is 0 for {total_windows} windows over {} tokens",
+                tokens.len()
+            )
+            .into());
+        }
         let starts: Vec<usize> = (0..total_windows).map(|w| w * stride).collect();
         let total_targets = total_windows * time;
         println!(
@@ -597,11 +626,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "nll": baseline_float_nll,
             },
             "arms": arm_records,
-            "zero_matmul_serving_audit": {
+            "comparator_engine": {
+                "name": "uor_r4_lut::stack::StackModel",
+                "scope": "D10 NEON multithreaded comparator engine (used for representation scoring, not D11 serving qualification)",
+            },
+            "serving_library_audit": {
+                "target": "libuor_r4_integer.rlib / uor-r4-stack (D11 multiplier-free integer engine)",
+                "scope": "Zero-matmul static disassembly audit of D11 serving symbols (does not certify uor_r4_lut)",
                 "class_I_multiplications": 0,
                 "class_II_divisions": 0,
                 "class_III_floating_point": 0,
-                "compliance": "PASSED (0 mul, 0 div, 0 float in serving paths)",
+                "compliance": "PASSED (0 mul, 0 div, 0 float in libuor_r4_integer serving paths)",
             }
         });
 
