@@ -349,6 +349,15 @@ pub struct JointStep {
     pub read_masses: Tensor,
     pub copy_gate: Tensor,
     pub state: Tensor,
+    /// Query vector used for this step's read, `[batch, read_width]`. Zeros when
+    /// the step computed no read query (`NoRead` or `previous == 0`).
+    pub read_query: Tensor,
+    /// Dense key history this read scored against, `[batch, previous,
+    /// read_width]`. `None` when the read did not use dense history (`NoRead`,
+    /// `previous == 0`, or a non-`Full` admission policy).
+    pub read_keys: Option<Tensor>,
+    /// Key written at this step for the next read, `[batch, read_width]`.
+    pub written_key: Tensor,
     /// Column identities for the first lane; use the per-lane mapping for batches.
     pub read_occurrences: Vec<usize>,
     pub read_occurrences_by_lane: Vec<Vec<usize>>,
@@ -361,6 +370,9 @@ struct CoreStep {
     no_read_mass: Tensor,
     read_masses: Tensor,
     copy_gate: Tensor,
+    read_query: Tensor,
+    read_keys: Option<Tensor>,
+    written_key: Tensor,
 }
 
 impl JointModel {
@@ -1340,6 +1352,9 @@ impl JointModel {
             read_masses: core.read_masses,
             copy_gate: core.copy_gate.squeeze(1)?,
             state: core.state,
+            read_query: core.read_query,
+            read_keys: core.read_keys,
+            written_key: core.written_key,
             read_occurrences: core.occurrences.first().cloned().unwrap_or_default(),
             read_occurrences_by_lane: core.occurrences,
             written_occurrence: occurrence,
@@ -1386,6 +1401,8 @@ impl JointModel {
         let normalized = self.normalized(&provisional, training)?;
         let mut occurrences = vec![Vec::new(); batch];
         let mut admission_work = Vec::new();
+        let mut captured_query: Option<Tensor> = None;
+        let mut captured_keys: Option<Tensor> = None;
         let (no_read_mass, read_masses, read) = if previous == 0 || mode == ReadMode::NoRead {
             if read_intervention.is_some() {
                 return Err(invalid(
@@ -1415,6 +1432,7 @@ impl JointModel {
                 ));
             }
             let query = self.linear(&normalized, "read.query", training)?;
+            captured_query = Some(query.clone());
             let observed_queries = query.detach().to_vec2::<f32>()?;
             for lane in 0..batch {
                 let selected = memory.indexes[lane].query(
@@ -1429,10 +1447,12 @@ impl JointModel {
         } else {
             occurrences = vec![(0..previous).collect(); batch];
             let query = self.linear(&normalized, "read.query", training)?;
+            captured_query = Some(query.clone());
             let keys = memory
                 .keys
                 .as_ref()
                 .ok_or_else(|| invalid("missing prior key history"))?;
+            captured_keys = Some(keys.clone());
             let values = memory
                 .values
                 .as_ref()
@@ -1465,6 +1485,10 @@ impl JointModel {
             let read = read_masses.unsqueeze(1)?.matmul(values)?.squeeze(1)?;
             let read = self.interface(&read, Interface::State, training)?;
             (no_read_mass, read_masses, read)
+        };
+        let read_query = match captured_query {
+            Some(query) => query,
+            None => Tensor::zeros((batch, self.config.read_width), DType::F32, &self.device)?,
         };
         if self.admission == AdmissionPolicy::Full && mode == ReadMode::NoRead {
             occurrences = vec![(0..previous).collect(); batch];
@@ -1568,6 +1592,9 @@ impl JointModel {
             no_read_mass,
             read_masses,
             copy_gate,
+            read_query,
+            read_keys: captured_keys,
+            written_key: key,
         })
     }
 
@@ -3471,6 +3498,54 @@ mod tests {
         fs::remove_dir_all(root)?;
         Ok(())
     }
+    #[test]
+    fn joint_step_exposes_read_inputs() -> Result<()> {
+        let config = small(Transport::Quaternion);
+        let model = JointModel::new(config.clone(), &Device::Cpu)?;
+        let ids: Vec<u32> = (0..config.context as u32)
+            .map(|index| (index * 7 + 3) % 4000 + 1)
+            .collect();
+        let mut first = model.new_session(1)?;
+        let mut second = model.new_session(1)?;
+        let mut no_read = model.new_session(1)?;
+        let mut read_rows = 0usize;
+        for (position, &token) in ids.iter().enumerate() {
+            let a = model.step(&mut first, &[token], ReadMode::Enabled)?;
+            let b = model.step(&mut second, &[token], ReadMode::Enabled)?;
+            assert_eq!(a.read_query.dims(), [1, config.read_width]);
+            assert_eq!(a.written_key.dims(), [1, config.read_width]);
+            assert!(same_bits(&a.probabilities, &b.probabilities)?);
+            assert!(same_bits(&a.read_masses, &b.read_masses)?);
+            assert!(same_bits(&a.no_read_mass, &b.no_read_mass)?);
+            if position == 0 {
+                assert!(
+                    a.read_keys.is_none(),
+                    "no dense history before the first write"
+                );
+            } else {
+                let keys = a
+                    .read_keys
+                    .as_ref()
+                    .ok_or_else(|| invalid("missing dense read keys"))?;
+                assert_eq!(keys.dims(), [1, position, config.read_width]);
+                assert_eq!(
+                    keys.dims3()?.1,
+                    a.read_masses.dims2()?.1,
+                    "read key rows must equal the step's read-row length"
+                );
+                read_rows += 1;
+            }
+            let suppressed = model.step(&mut no_read, &[token], ReadMode::NoRead)?;
+            assert!(suppressed.read_keys.is_none());
+            assert_eq!(suppressed.read_query.dims(), [1, config.read_width]);
+        }
+        assert!(
+            read_rows > 0,
+            "the read path must expose at least one key row"
+        );
+        Ok(())
+    }
+
     fn max_delta(a: &Tensor, b: &Tensor) -> Result<f32> {
         Ok(a.sub(b)?.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?)
     }
