@@ -1,10 +1,8 @@
 //! Discrete parameter codecs for native geometric serving under D11.
 //!
-//! Provides two geometry-coded representations:
-//! 1. **Hadamard + Grouped 4-bit (H+G4)**: Randomized Walsh-Hadamard transform
-//!    (incoherence processing) followed by power-of-two grouped 4-bit quantization.
-//! 2. **Hadamard + E8 2-bit (H+E8)**: Randomized Walsh-Hadamard transform followed
-//!    by 8-dimensional Conway-Sloane E8 lattice quantization at 2 bits per weight.
+//! Provides the **Hadamard + Grouped 4-bit (H+G4)** representation: a randomized
+//! Walsh-Hadamard transform (incoherence processing) followed by power-of-two
+//! grouped 4-bit quantization, and the Conway-Sloane E8 lattice rounder.
 //!
 //! All runtime operations (FWHT, codebook lookup, scale shifts, and dot products)
 //! strictly adhere to owner decisions D0-b and D11: zero hardware multipliers,
@@ -283,7 +281,7 @@ impl Grouped4BitRow {
 }
 
 // ---------------------------------------------------------------------------
-// Conway-Sloane E8 Lattice 2-bit Codec
+// Conway-Sloane E8 Lattice Rounder
 // ---------------------------------------------------------------------------
 
 /// Nearest D8 lattice point (integer coordinates with even sum).
@@ -338,206 +336,6 @@ pub fn e8_round(y: &[f64; E8_DIM]) -> [f64; E8_DIM] {
     }
 }
 
-/// Canonical 2-bit E8 codebook table mapping index 0..255 (or 16-bit block)
-/// to 8-dimensional coordinates in {-1, 0, 1, 2}.
-///
-/// At 2 bits per weight, an 8-dimensional block holds 16 bits of information.
-/// We construct the representative 240 minimal vectors (roots of E8, norm 2)
-/// plus zero and low-norm shell points to form a complete 2-bit per component codebook.
-pub struct E8Codebook {
-    /// 240 E8 roots scaled to integral representation (coords in {-1, 0, 1} or half-integers * 2).
-    roots: [[i8; E8_DIM]; 240],
-}
-
-impl E8Codebook {
-    /// Initialize the standard E8 root codebook.
-    pub fn new() -> Self {
-        let mut roots = [[0i8; E8_DIM]; 240];
-        let mut count = 0;
-
-        // Type 1 roots: permutations of (+-1, +-1, 0, 0, 0, 0, 0, 0) -> 4 * (8 choose 2) = 112 roots
-        for i in 0..E8_DIM {
-            for j in (i + 1)..E8_DIM {
-                for &s1 in &[-1i8, 1i8] {
-                    for &s2 in &[-1i8, 1i8] {
-                        if count < 240 {
-                            let mut r = [0i8; E8_DIM];
-                            r[i] = s1;
-                            r[j] = s2;
-                            roots[count] = r;
-                            count += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Type 2 roots: (+-1/2, ..., +-1/2) with even number of minus signs -> 2^7 = 128 roots.
-        // We represent half-integers scaled by 2 (all coords are +-1, sum is even).
-        for code in 0..256u16 {
-            let mut r = [1i8; E8_DIM];
-            let mut minus_count = 0;
-            for b in 0..8 {
-                if (code & (1 << b)) != 0 {
-                    r[b] = -1;
-                    minus_count += 1;
-                }
-            }
-            if minus_count % 2 == 0 && count < 240 {
-                roots[count] = r;
-                count += 1;
-            }
-        }
-
-        Self { roots }
-    }
-
-    /// Find nearest codebook root index for an 8-dimensional float block.
-    pub fn quantize_block(&self, block: &[f64; E8_DIM], scale: f64) -> (u8, [f64; E8_DIM]) {
-        let inv_scale = if scale == 0.0 { 1.0 } else { 1.0 / scale };
-        let mut scaled = [0.0f64; E8_DIM];
-        for i in 0..E8_DIM {
-            scaled[i] = block[i] * inv_scale;
-        }
-        let e8_pt = e8_round(&scaled);
-
-        // Find nearest codebook entry to e8_pt
-        let mut best_idx = 0u8;
-        let mut best_dist = f64::MAX;
-        for (idx, root) in self.roots.iter().enumerate() {
-            let mut d = 0.0f64;
-            for i in 0..E8_DIM {
-                let diff = e8_pt[i] - (root[i] as f64);
-                d += diff * diff;
-            }
-            if d < best_dist {
-                best_dist = d;
-                best_idx = idx as u8;
-            }
-        }
-
-        let mut reconstructed = [0.0f64; E8_DIM];
-        for i in 0..E8_DIM {
-            reconstructed[i] = (self.roots[best_idx as usize][i] as f64) * scale;
-        }
-        (best_idx, reconstructed)
-    }
-
-    /// Multiplier-free decode of root index to integer coordinates.
-    #[inline(always)]
-    pub fn decode_root(&self, idx: u8) -> [i8; E8_DIM] {
-        self.roots[(idx as usize) % 240]
-    }
-}
-
-impl Default for E8Codebook {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// E8 2-bit encoded row representation.
-#[derive(Clone, Debug)]
-pub struct E8EncodedRow {
-    /// Exponent for the row scale (power of two).
-    pub exponent: i16,
-    /// Code indices (1 byte per 8 weights = 1 bit per component on index, 2-bit effective rate).
-    pub codes: Vec<u8>,
-    /// Number of elements.
-    pub elements: usize,
-}
-
-impl E8EncodedRow {
-    /// Encode a slice of float weights using Conway-Sloane E8 lattice quantization.
-    pub fn encode_f32(weights: &[f32], codebook: &E8Codebook) -> Result<Self> {
-        if weights.is_empty() || weights.len() % E8_DIM != 0 {
-            return Err(invalid("weights length must be a multiple of E8_DIM (8)"));
-        }
-        // Compute row scale
-        let mut maxabs = 0.0f64;
-        for &w in weights {
-            let a = (w as f64).abs();
-            if a > maxabs {
-                maxabs = a;
-            }
-        }
-        let exp = if maxabs == 0.0 {
-            0i16
-        } else {
-            let raw_ceil = (maxabs / 2.0).log2().ceil() as i32;
-            raw_ceil.clamp(-24, 16) as i16
-        };
-        let scale = 2.0f64.powi(i32::from(exp));
-
-        let mut codes = Vec::with_capacity(weights.len() / E8_DIM);
-        for chunk in weights.chunks_exact(E8_DIM) {
-            let mut blk = [0.0f64; E8_DIM];
-            for i in 0..E8_DIM {
-                blk[i] = chunk[i] as f64;
-            }
-            let (idx, _) = codebook.quantize_block(&blk, scale);
-            codes.push(idx);
-        }
-
-        Ok(Self {
-            exponent: exp,
-            codes,
-            elements: weights.len(),
-        })
-    }
-
-    /// Dequantize back to float.
-    pub fn dequantize_f32(&self, codebook: &E8Codebook) -> Vec<f32> {
-        let scale = 2.0f32.powi(i32::from(self.exponent));
-        let mut out = Vec::with_capacity(self.elements);
-        for &c in &self.codes {
-            let root = codebook.decode_root(c);
-            for &r in &root {
-                out.push((r as f32) * scale);
-            }
-        }
-        out
-    }
-
-    /// Multiplier-free dot product with activation vector.
-    ///
-    /// Evaluates: 2^exp * Sum_b (Sum_{i=0..7} x_{8b+i} * root_i)
-    /// where root_i in {-1, 0, 1} (pure additions/subtractions).
-    pub fn dot_integer(&self, activations: &[i64], codebook: &E8Codebook) -> Result<i64> {
-        if activations.len() != self.elements {
-            return Err(invalid("activation dimension mismatch"));
-        }
-        let mut raw_sum: i128 = 0;
-        for (b_idx, &c) in self.codes.iter().enumerate() {
-            let root = codebook.decode_root(c);
-            let start = b_idx * E8_DIM;
-            let mut block_sum: i64 = 0;
-            for i in 0..E8_DIM {
-                let x = activations[start + i];
-                match root[i] {
-                    1 => {
-                        block_sum = block_sum
-                            .checked_add(x)
-                            .ok_or_else(|| invalid("overflow"))?
-                    }
-                    -1 => {
-                        block_sum = block_sum
-                            .checked_sub(x)
-                            .ok_or_else(|| invalid("overflow"))?
-                    }
-                    _ => {}
-                }
-            }
-            raw_sum = raw_sum
-                .checked_add(i128::from(block_sum))
-                .ok_or_else(|| invalid("overflow"))?;
-        }
-        let scaled = math::scale_pow2(raw_sum, i32::from(self.exponent))
-            .map_err(|e| invalid(format!("scale_pow2 error: {e}")))?;
-        i64::try_from(scaled).map_err(|_| invalid("result exceeds i64"))
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Hadamard + Codec Pipelines (H+G4 & H+E8)
 // ---------------------------------------------------------------------------
@@ -549,8 +347,6 @@ pub enum CodecArm {
     NearestPerRow,
     /// Arm 1: Randomized Hadamard transform + grouped 4-bit quantization.
     HadamardGrouped4Bit,
-    /// Arm 2: Randomized Hadamard transform + E8 lattice 2-bit quantization.
-    HadamardE8TwoBit,
 }
 
 /// Transform matrix weights using the selected codec arm.
@@ -607,33 +403,6 @@ pub fn apply_codec_arm(
                 let deq_had = grouped.dequantize_f32();
 
                 // 3. Inverse transform back to weight domain for direct evaluation/emission
-                let mut i64_deq: Vec<i64> = deq_had
-                    .iter()
-                    .map(|&w| (w * 1024.0).round() as i64)
-                    .collect();
-                inverse_randomized_hadamard_transform(&mut i64_deq, &signs)?;
-                for v in i64_deq {
-                    out.push((v as f32) / 1024.0);
-                }
-            }
-            Ok(out)
-        }
-        CodecArm::HadamardE8TwoBit => {
-            let signs = deterministic_signs(cols, seed);
-            let codebook = E8Codebook::new();
-            let mut out = Vec::with_capacity(weights.len());
-            for row in weights.chunks_exact(cols) {
-                // 1. Transform row via Hadamard
-                let mut i64_row: Vec<i64> =
-                    row.iter().map(|&w| (w * 1024.0).round() as i64).collect();
-                randomized_hadamard_transform(&mut i64_row, &signs)?;
-                let had_f32: Vec<f32> = i64_row.iter().map(|&v| (v as f32) / 1024.0).collect();
-
-                // 2. Quantize with E8 lattice 2-bit
-                let e8_row = E8EncodedRow::encode_f32(&had_f32, &codebook)?;
-                let deq_had = e8_row.dequantize_f32(&codebook);
-
-                // 3. Inverse transform back to weight domain
                 let mut i64_deq: Vec<i64> = deq_had
                     .iter()
                     .map(|&w| (w * 1024.0).round() as i64)
@@ -717,19 +486,6 @@ mod tests {
             assert!((orig - inv).abs() <= 2, "orig: {orig}, inv: {inv}");
         }
         Ok(())
-    }
-
-    #[test]
-    fn test_e8_round_minimal_vector_norm() {
-        let codebook = E8Codebook::new();
-        // Check that codebook contains 240 valid E8 roots
-        for root in &codebook.roots {
-            let norm_sq: i32 = root.iter().map(|&x| (x as i32) * (x as i32)).sum();
-            assert!(
-                norm_sq == 2 || norm_sq == 8,
-                "E8 root squared norm must be 2 (Type 1) or 8 (Type 2 scaled): got {norm_sq}"
-            );
-        }
     }
 
     #[test]
