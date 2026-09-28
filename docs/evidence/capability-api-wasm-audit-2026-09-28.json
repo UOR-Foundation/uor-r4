@@ -1,63 +1,76 @@
 {
   "schema": "uor-r4.evidence/1",
   "receipt_identity": "capability-api-wasm-audit-2026-09-28",
-  "timestamp": "2026-09-28T01:40:00Z",
+  "timestamp": "2026-09-28T01:40:00-04:00",
+  "timestamp_note": "First recorded as 01:40:00Z; the module file was written at 01:39:55 EDT (05:39:55 UTC), so the original value was local time.",
   "owning_lab": "Lab 3 (Anti-Gravity)",
+  "corrected_by": "Lab 1, 2026-09-28, per the owner's direction (PR #1452 review)",
   "track": "T3 (Mission runtime and measured efficiency)",
   "issues_referenced": [1172, 1173, 963, 964, 820],
+  "status": "Helper-export module, not a serving runtime. Not D11-clean: the model step and the Hopf helpers' callees contain i64.mul.",
   "wasm_artifact": {
     "binary_path": "/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-bins/698bdda481de57c2257b158bb53f7942568a3be7/uor_r4_integer.wasm",
     "sha256": "a41c652795e65821bc59381c77d10339e0c9edd3f4aa068b2c7e79b608f1b3ac",
-    "size_bytes": 1684344,
-    "size_human": "1.61 MiB",
+    "size_bytes": 1664885,
     "target": "wasm32-unknown-unknown",
-    "profile": "release",
-    "compiler_flags": [
-      "-C", "target-feature=+simd128",
-      "-C", "link-arg=-zstack-size=8388608",
-      "-C", "link-arg=--export-all"
+    "build_commit": "UNRECORDED",
+    "build_commit_note": "The folder name 698bdda predates wasm.rs, which was first committed in a8d59d31 (01:41:21 EDT); the module file was written at 01:39:55 EDT from an uncommitted working tree.",
+    "compiler": "rustc 1.97.1 (8bab26f4f 2026-07-14), from the module's producers section",
+    "target_features": ["bulk-memory", "bulk-memory-opt", "call-indirect-overlong", "multivalue", "mutable-globals", "nontrapping-fptoint", "reference-types", "sign-ext"],
+    "compiler_flags": "UNRECORDED. The flags first listed here included +simd128, which the module's target_features section does not list.",
+    "exports": "2,142 function exports through --export-all, including the 13 uor_wasm_* helpers defined in wasm.rs; no load, session or step entry point"
+  },
+  "original_audit": {
+    "tool": "scripts/audit_zero_matmul_wasm.py as first committed in a8d59d31",
+    "reported": "20/20 PASS",
+    "scope": "the bodies of 20 functions (13 exported helpers and 7 internal kernels), without following calls",
+    "withdrawn": true,
+    "defects": [
+      "Calls were not followed: the Hopf helpers' callees UnitS3Q30::hopf_project and UnitS3Q30::from_i32_coords contain i64.mul.",
+      "memory.fill was decoded with two immediate bytes instead of one, which desynchronised uor_wasm_score_token_salience_default_key (131 instructions reported; 129 decoded).",
+      "0xFD (SIMD) and other 0xFC-prefixed instructions were skipped, not reported; the 0xFC 0..7 saturating float truncations were not counted as float.",
+      "SIMD immediates were mis-sized: splats skipped 16 bytes and lane operations read a memory argument.",
+      "The recorded commit was the checked-out HEAD, not the build commit.",
+      "Export indices were used as code-section indices; that is wrong for a module with imported functions (this module has none)."
     ]
   },
-  "static_audit": {
-    "tool": "scripts/audit_zero_matmul_wasm.py",
-    "tap_version": 13,
-    "verdict": "PASS",
-    "total_symbols_audited": 20,
-    "passed_symbols": 20,
-    "failed_symbols": 0,
-    "class_i_multipliers": 0,
-    "class_ii_dividers": 0,
-    "class_iii_floats": 0,
-    "results": [
-      {"name": "uor_wasm_version", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
-      {"name": "uor_wasm_state_dim", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
-      {"name": "uor_wasm_vocab_size", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
-      {"name": "uor_wasm_context_capacity", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
-      {"name": "uor_wasm_exact_min_p_threshold", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 4},
-      {"name": "uor_wasm_hopf_project_x", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 36},
-      {"name": "uor_wasm_hopf_project_y", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 36},
-      {"name": "uor_wasm_hopf_project_z", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 36},
-      {"name": "uor_wasm_step_zeta_phase_scalar", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 52},
-      {"name": "uor_wasm_galois_lfsr_step", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 12},
-      {"name": "uor_wasm_compute_turn_prime_signature", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 30},
-      {"name": "uor_wasm_atan2_q30", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 4},
-      {"name": "uor_wasm_score_token_salience_default_key", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 131},
-      {"name": "IntegerModel::project_vocab", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 88},
-      {"name": "IntegerModel::project_vocab_with_products", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 107},
-      {"name": "low_bit_dot_8_pair_tables", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 182},
-      {"name": "low_bit_dot_4_contiguous_wide_pair_tables", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 106},
-      {"name": "packed_rows::low_bit_dot", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 201},
-      {"name": "sampling::exact_min_p_threshold", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 54},
-      {"name": "math::atan2_q30", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 540}
-    ]
+  "reaudit": {
+    "tool": "scripts/audit_zero_matmul_wasm.py as corrected in PR #1452",
+    "run_by": "Lab 1, 2026-09-28",
+    "build_commit_argument": "UNRECORDED",
+    "symbols": 21,
+    "symbol_note": "The 20 original symbols plus IntegerModel::step_conversational_into, the model step, which no helper reaches.",
+    "root_bodies_only": {
+      "command": "python3 scripts/audit_zero_matmul_wasm.py <module> --tap",
+      "clean": 19,
+      "not_clean": [
+        {"name": "uor_wasm_score_token_salience_default_key", "status": "UNCLASSIFIED", "unclassified": {"0xFC 11 (memory.fill)": 1}},
+        {"name": "IntegerModel::step_conversational_into", "status": "FAIL", "mul": 38, "unclassified": {"0xFC 10 (memory.copy)": 37, "0xFC 11 (memory.fill)": 44}}
+      ]
+    },
+    "call_graph": {
+      "command": "python3 scripts/audit_zero_matmul_wasm.py <module> --tap --call-graph",
+      "scope": "direct calls followed transitively; callees on the native auditor's allowlist (allocation, formatting, panic, I/O, tokenizer, loading), imported callees and indirect call targets not audited",
+      "clean": 14,
+      "not_clean": [
+        {"name": "uor_wasm_hopf_project_x", "status": "FAIL", "mul": 12, "functions": {"UnitS3Q30::hopf_project": 8, "UnitS3Q30::from_i32_coords": 4}},
+        {"name": "uor_wasm_hopf_project_y", "status": "FAIL", "mul": 12, "functions": {"UnitS3Q30::hopf_project": 8, "UnitS3Q30::from_i32_coords": 4}},
+        {"name": "uor_wasm_hopf_project_z", "status": "FAIL", "mul": 12, "functions": {"UnitS3Q30::hopf_project": 8, "UnitS3Q30::from_i32_coords": 4}},
+        {"name": "uor_wasm_score_token_salience_default_key", "status": "UNCLASSIFIED", "unclassified": {"0xFC 11 (memory.fill)": 1}},
+        {"name": "IntegerModel::project_vocab", "status": "FAIL", "mul": 5, "functions": {"low_bit_products": 4, "IntegerModel::project_vocab_with_products_into": 1}, "unclassified": {"0xFC 11 (memory.fill)": 3}},
+        {"name": "IntegerModel::project_vocab_with_products", "status": "FAIL", "mul": 1, "functions": {"IntegerModel::project_vocab_with_products_into": 1}, "unclassified": {"0xFC 11 (memory.fill)": 2}},
+        {"name": "IntegerModel::step_conversational_into", "status": "FAIL", "mul": 56, "functions": {"IntegerModel::step_conversational_into": 38, "UnitS3Q30::hopf_project": 8, "UnitS3Q30::from_i32_coords": 4, "UnitS3Q30::fiber_u1_q30": 4, "IntegerModel::vector_work": 1, "IntegerModel::project_vocab_with_products_into": 1}, "unclassified": {"0xFC 10 (memory.copy)": 39, "0xFC 11 (memory.fill)": 49}}
+      ],
+      "multiplier_operands": "Each i64.mul in UnitS3Q30::hopf_project (8) and UnitS3Q30::from_i32_coords (4) is preceded by i64.const 3: the (u << 1) + u step of mul_i32_radix4 compiled to a multiply by 3."
+    }
   },
   "capability_api": {
     "schema": "uor-r4.integer-capability-api/1",
     "crate": "uor-r4-integer",
     "module": "capability_api",
     "primary_type": "IntegerCapabilityApi",
-    "safety": "forbid(unsafe_code) enforced across 100% of source files",
-    "lifecycle_verified": true,
-    "test_suite": "crates/uor-r4-integer/tests/capability_api_tests.rs"
+    "safety": "crate root declares #![forbid(unsafe_code)]",
+    "numerical_contract": "declared (D11), not certified by the API",
+    "test_suite": "crates/uor-r4-integer/tests/capability_api_tests.rs: three synthetic-bundle tests on every run; two width-576 fixture tests, ignored by default. The fixture lifecycle test passes. The fixture continuation test is a known failure, because uor-r4.integer-session/1 omits the width-576 value stores."
   }
 }
