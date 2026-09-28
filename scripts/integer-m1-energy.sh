@@ -18,6 +18,12 @@
 #
 set -euo pipefail
 
+# Invariant: strictly single-threaded execution across all runtimes
+export RAYON_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+
 DRY_RUN=0
 OUT=""
 SAMPLER="macmon"

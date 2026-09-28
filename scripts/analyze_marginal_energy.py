@@ -101,7 +101,7 @@ def parse_energy_file(filepath):
     }
 
 
-def analyze_directory(dirpath, repeats=3, k_low=4096, k_high=16384):
+def analyze_directory(dirpath, repeats=3, k_low=10240, k_high=32768):
     """Aggregate all runs in the directory and compute marginal metrics."""
     models = {
         "integer_baseline": {
@@ -341,7 +341,7 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze marginal energy measurements (ΔE/ΔN).")
     parser.add_argument("dir", help="Path to output directory containing energy-*.txt logs")
     parser.add_argument("--repeats", type=int, default=3, help="Number of repeats (default: 3)")
-    parser.add_argument("--k-low", type=int, default=8192, help="Low step horizon (default: 8192)")
+    parser.add_argument("--k-low", type=int, default=10240, help="Low step horizon (default: 10240)")
     parser.add_argument("--k-high", type=int, default=32768, help="High step horizon (default: 32768)")
     parser.add_argument("--baseline-bin", help="Path to baseline integer binary for provenance")
     parser.add_argument("--optimized-bin", help="Path to optimized integer binary for provenance")
