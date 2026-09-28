@@ -1,0 +1,65 @@
+[
+  {
+    "test_id": "ADV_01",
+    "name": "CLI_EMPTY_BATCH_REJECTION",
+    "status": "PASS",
+    "message": "invalid integer runtime input: request batch must contain1..256 prompts",
+    "duration_ms": 17.9
+  },
+  {
+    "test_id": "ADV_02",
+    "name": "CLI_BATCH_OVERFLOW_257",
+    "status": "PASS",
+    "message": "invalid integer runtime input: request batch must contain1..256 prompts",
+    "duration_ms": 37.6
+  },
+  {
+    "test_id": "ADV_03",
+    "name": "CLI_EMPTY_PROMPT_REJECTION",
+    "status": "PASS",
+    "message": "completed prompt 1/2\ninvalid integer runtime input: empty prompt",
+    "duration_ms": 75.4
+  },
+  {
+    "test_id": "ADV_04",
+    "name": "CLI_SEQUENCE_BUDGET_OVERFLOW",
+    "status": "PASS",
+    "message": "invalid integer runtime input: request exceeds full256 session budget; shorten the requested continuation explicitly",
+    "duration_ms": 62.1
+  },
+  {
+    "test_id": "ADV_05",
+    "name": "CLI_ZERO_MAX_NEW_TOKENS",
+    "status": "PASS",
+    "message": "invalid integer runtime input: request exceeds full256 session budget; shorten the requested continuation explicitly",
+    "duration_ms": 53.8
+  },
+  {
+    "test_id": "ADV_06",
+    "name": "CLI_REPETITIVE_MASS_CONSERVATION",
+    "status": "PASS",
+    "message": "Stop reason: short_cycle, decisions verified: 10",
+    "duration_ms": 260.5
+  },
+  {
+    "test_id": "ADV_07",
+    "name": "CLI_EXISTING_REPORT_DIR_REJECTION",
+    "status": "PASS",
+    "message": "integer runtime I/O: report directory /tmp/adv_rep_existing_1790383348668 was not created exclusively (File exists (os error 17)); choose a new attempt path instead of reusing or overwriting an existing report",
+    "duration_ms": 10.3
+  },
+  {
+    "test_id": "ADV_08",
+    "name": "CLI_TAMPERED_BUNDLE_REJECTION",
+    "status": "PASS",
+    "message": "invalid integer runtime input: sealed file changed: tables/tables.bin",
+    "duration_ms": 27.4
+  },
+  {
+    "test_id": "ADV_09",
+    "name": "CLI_MALFORMED_JSON_PANIC_FREEDOM",
+    "status": "PASS",
+    "message": "Clean JSON error return (no panic)",
+    "duration_ms": 14.0
+  }
+]

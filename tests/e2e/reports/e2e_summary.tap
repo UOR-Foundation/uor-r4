@@ -1,0 +1,130 @@
+TAP version 13
+1..123
+ok 1 - [T1_F01_TC01] SIGNED4_WEIGHT_BOUNDS
+ok 2 - [T1_F01_TC02] PRECOMPUTED_MULTIPLE_REUSE
+ok 3 - [T1_F01_TC03] POWER_OF_TWO_ROW_SCALING
+ok 4 - [T1_F01_TC04] ZERO_NIBBLE_MAPPING
+ok 5 - [T1_F01_TC05] DISASSEMBLY_MULTIPLY_AUDIT
+ok 6 - [T1_F02_TC01] Q64_VARIANCE_ACCUMULATION
+ok 7 - [T1_F02_TC02] RADIX4_ISQRT_PRECISION
+ok 8 - [T1_F02_TC03] EPSILON_ZERO_STABILITY
+ok 9 - [T1_F02_TC04] Q11_TO_Q10_FIXED_PROJECTION
+ok 10 - [T1_F02_TC05] EXTREME_COORDINATE_CLAMP
+ok 11 - [T1_F03_TC01] TABLE_PAYLOAD_INTEGRITY
+ok 12 - [T1_F03_TC02] SIGMOID_ORIGIN_AND_BOUNDS
+ok 13 - [T1_F03_TC03] TANH_ORIGIN_AND_BOUNDS
+ok 14 - [T1_F03_TC04] EXP_ORIGIN_AND_MONOTONICITY
+ok 15 - [T1_F03_TC05] SOFTMAX_MASS_CONSERVATION
+ok 16 - [T1_F04_TC01] VOCAB_PROBABILITY_TOTAL
+ok 17 - [T1_F04_TC02] ATTENTION_MASS_TOTAL
+ok 18 - [T1_F04_TC03] LARGEST_ELEMENT_RESIDUAL_CORRECTION
+ok 19 - [T1_F04_TC04] RESIDUAL_CORRECTION_BOUND
+ok 20 - [T1_F04_TC05] EMPTY_SLICE_ERROR
+ok 21 - [T1_F05_TC01] BUNDLE_LOAD_INITIALIZATION
+ok 22 - [T1_F05_TC02] SERVING_BINARY_AVAILABILITY
+ok 23 - [T1_F05_TC03] CLI_GENERATE_BATCH
+ok 24 - [T1_F05_TC04] ZERO_ML_DEPENDENCY_AUDIT
+ok 25 - [T1_F05_TC05] BUNDLE_PACK_VALIDATION
+ok 26 - [T1_F06_TC01] CAUSAL_SLOT_EXPOSURE # SKIP [Milestone M2] Feature 6 scheduled for M2 (Full 256-token causal horizon)
+ok 27 - [T1_F06_TC02] HORIZON_CAPACITY_REACH # SKIP [Milestone M2] Feature 6 scheduled for M2
+ok 28 - [T1_F06_TC03] CONTEXT_EXHAUSTION_ERROR # SKIP [Milestone M2] Feature 6 scheduled for M2
+ok 29 - [T1_F06_TC04] DIMENSIONALITY_SEPARATION # SKIP [Milestone M2] Feature 6 scheduled for M2
+ok 30 - [T1_F06_TC05] DIRECT_ACCESS_INTEGRITY # SKIP [Milestone M2] Feature 6 scheduled for M2
+ok 31 - [T1_F07_TC01] PRIME_ATOM_ASSIGNMENT # SKIP [Milestone M2] Feature 7 scheduled for M2 (Prime-addressed route memory)
+ok 32 - [T1_F07_TC02] SEMIPRIME_TRANSITION_EXPERT # SKIP [Milestone M2] Feature 7 scheduled for M2
+ok 33 - [T1_F07_TC03] ORDERED_NLET_MULTISETS # SKIP [Milestone M2] Feature 7 scheduled for M2
+ok 34 - [T1_F07_TC04] NON_METRIC_IDENTITY # SKIP [Milestone M2] Feature 7 scheduled for M2
+ok 35 - [T1_F07_TC05] OUT_OF_VOCABULARY_REJECTION # SKIP [Milestone M2] Feature 7 scheduled for M2
+ok 36 - [T1_F08_TC01] HOPF_BASE_PROJECTION # SKIP [Milestone M2] Feature 8 scheduled for M2 (Hopf fiber & torsion retention)
+ok 37 - [T1_F08_TC02] FIBER_PHASE_RETENTION # SKIP [Milestone M2] Feature 8 scheduled for M2
+ok 38 - [T1_F08_TC03] REVERSIBLE_S3_RECONSTRUCTION # SKIP [Milestone M2] Feature 8 scheduled for M2
+ok 39 - [T1_F08_TC04] FIBER_LOSS_HAZARD_VERIFICATION # SKIP [Milestone M2] Feature 8 scheduled for M2
+ok 40 - [T1_F08_TC05] TORSION_QUANTIZATION # SKIP [Milestone M2] Feature 8 scheduled for M2
+ok 41 - [T1_F09_TC01] ZPHI_INTEGER_RING_EVALUATION # SKIP [Milestone M2] Feature 9 scheduled for M2 (Paired-H4 icosian operators)
+ok 42 - [T1_F09_TC02] FIBONACCI_RECURRENCE_MATRIX # SKIP [Milestone M2] Feature 9 scheduled for M2
+ok 43 - [T1_F09_TC03] INVERSE_FIBONACCI_RECURRENCE # SKIP [Milestone M2] Feature 9 scheduled for M2
+ok 44 - [T1_F09_TC04] E8_COORDINATE_SUM_WITNESS # SKIP [Milestone M2] Feature 9 scheduled for M2
+ok 45 - [T1_F09_TC05] GALOIS_COUPLING_CONSTRAINT # SKIP [Milestone M2] Feature 9 scheduled for M2
+ok 46 - [T1_F10_TC01] COPY_GATE_COMPUTATION # SKIP [Milestone M2] Feature 10 scheduled for M2 (Copy-gate & vocabulary blending)
+ok 47 - [T1_F10_TC02] HISTORICAL_TOKEN_COPY_MASS # SKIP [Milestone M2] Feature 10 scheduled for M2
+ok 48 - [T1_F10_TC03] VOCABULARY_COPY_BLENDING # SKIP [Milestone M2] Feature 10 scheduled for M2
+ok 49 - [T1_F10_TC04] UNIFORM_MIXTURE_INJECTION # SKIP [Milestone M2] Feature 10 scheduled for M2
+ok 50 - [T1_F10_TC05] CAUSAL_WRITE_AFTER_PREDICTION # SKIP [Milestone M2] Feature 10 scheduled for M2
+ok 51 - [T1_F11_TC01] EVALUATOR_MANIFEST_HASH # SKIP [Milestone M3] Feature 11 scheduled for M3 (Reference evaluator v2 tail NLL)
+ok 52 - [T1_F11_TC02] PARTITION_BLOCK_COUNTS # SKIP [Milestone M3] Feature 11 scheduled for M3
+ok 53 - [T1_F11_TC03] REFERENCE_1017_BENCHMARK # SKIP [Milestone M3] Feature 11 scheduled for M3
+ok 54 - [T1_F11_TC04] CAUSAL_CACHE_CEILING # SKIP [Milestone M3] Feature 11 scheduled for M3
+ok 55 - [T1_F11_TC05] DISCRETIZATION_GAP_BOUND # SKIP [Milestone M3] Feature 11 scheduled for M3
+ok 56 - [T1_F12_TC01] MAXIMUM_STATE_DRIFT_BOUND # SKIP [Milestone M3] Feature 12 scheduled for M3 (Numerical drift verification)
+ok 57 - [T1_F12_TC02] MAXIMUM_PROB_DRIFT_BOUND # SKIP [Milestone M3] Feature 12 scheduled for M3
+ok 58 - [T1_F12_TC03] VERIFY_INTEGER_REPLAY # SKIP [Milestone M3] Feature 12 scheduled for M3
+ok 59 - [T1_F12_TC04] TOTAL_VARIATION_BOUND # SKIP [Milestone M3] Feature 12 scheduled for M3
+ok 60 - [T1_F12_TC05] RELOAD_DETERMINISM # SKIP [Milestone M3] Feature 12 scheduled for M3
+ok 61 - [T1_F13_TC01] MATCHED_PARAMETER_CAPACITY # SKIP [Milestone M3] Feature 13 scheduled for M3 (Paired ordinary control comparison)
+ok 62 - [T1_F13_TC02] QUATERNION_HAMILTON_PRODUCT # SKIP [Milestone M3] Feature 13 scheduled for M3
+ok 63 - [T1_F13_TC03] HOUSEHOLDER_REFLECTION # SKIP [Milestone M3] Feature 13 scheduled for M3
+ok 64 - [T1_F13_TC04] ATTRIBUTION_GATE_CHECK # SKIP [Milestone M3] Feature 13 scheduled for M3
+ok 65 - [T1_F13_TC05] NO_READ_PENALTY_VERIFICATION # SKIP [Milestone M3] Feature 13 scheduled for M3
+ok 66 - [T1_F14_TC01] PANEL_VARIANT_COMPLETION # SKIP [Milestone M3] Feature 14 scheduled for M3 (16 frozen source-edit entity tracking)
+ok 67 - [T1_F14_TC02] FIRST_NOUN_SUBSTITUTION # SKIP [Milestone M3] Feature 14 scheduled for M3
+ok 68 - [T1_F14_TC03] COMPLETE_CORRECT_ORACLE # SKIP [Milestone M3] Feature 14 scheduled for M3
+ok 69 - [T1_F14_TC04] FIRST_NOUN_RETENTION_GATE # SKIP [Milestone M3] Feature 14 scheduled for M3
+ok 70 - [T1_F14_TC05] NO_READ_CAUSAL_FAILURE # SKIP [Milestone M3] Feature 14 scheduled for M3
+ok 71 - [T1_F15_TC01] RUBRIC_PROMPT_EXECUTION # SKIP [Milestone M3] Feature 15 scheduled for M3 (4-part qualitative story rubric)
+ok 72 - [T1_F15_TC02] ENTITY_ROLE_CONSISTENCY # SKIP [Milestone M3] Feature 15 scheduled for M3
+ok 73 - [T1_F15_TC03] NARRATIVE_PROGRESSION # SKIP [Milestone M3] Feature 15 scheduled for M3
+ok 74 - [T1_F15_TC04] LITERAL_COMPREHENSION # SKIP [Milestone M3] Feature 15 scheduled for M3
+ok 75 - [T1_F15_TC05] CLAUSE_COMPLETION # SKIP [Milestone M3] Feature 15 scheduled for M3
+ok 76 - [T1_F16_TC01] LEDGER_FORMAT_SCHEMA # SKIP [Milestone M4] Feature 16 scheduled for M4 (Shared compute ledger tracking)
+ok 77 - [T1_F16_TC02] CUMULATIVE_CEILING_ENFORCEMENT # SKIP [Milestone M4] Feature 16 scheduled for M4
+ok 78 - [T1_F16_TC03] ORCHESTRATION_SEPARATION # SKIP [Milestone M4] Feature 16 scheduled for M4
+ok 79 - [T1_F16_TC04] SINGLE_WALL_CLOCK_ACCOUNTING # SKIP [Milestone M4] Feature 16 scheduled for M4
+ok 80 - [T1_F16_TC05] ATOMIC_LOCK_INTEGRITY # SKIP [Milestone M4] Feature 16 scheduled for M4
+ok 81 - [T1_F17_TC01] STORAGE_INVENTORY_EXECUTION # SKIP [Milestone M4] Feature 17 scheduled for M4 (Storage inventory & disk margin guards)
+ok 82 - [T1_F17_TC02] PHYSICAL_RESERVE_VERIFICATION # SKIP [Milestone M4] Feature 17 scheduled for M4
+ok 83 - [T1_F17_TC03] STOP_MARGIN_HEADROOM # SKIP [Milestone M4] Feature 17 scheduled for M4
+ok 84 - [T1_F17_TC04] CHECKPOINT_HEADROOM_MARGIN # SKIP [Milestone M4] Feature 17 scheduled for M4
+ok 85 - [T1_F17_TC05] ZERO_DELETION_INVARIANT # SKIP [Milestone M4] Feature 17 scheduled for M4
+ok 86 - [T1_F18_TC01] BUNDLE_MANIFEST_SEAL # SKIP [Milestone M4] Feature 18 scheduled for M4 (Sealed artifact packaging & receipts)
+ok 87 - [T1_F18_TC02] TOKENIZER_CID_BINDING # SKIP [Milestone M4] Feature 18 scheduled for M4
+ok 88 - [T1_F18_TC03] HARD_PARAMETERS_BINDING # SKIP [Milestone M4] Feature 18 scheduled for M4
+ok 89 - [T1_F18_TC04] CLAIM_AND_SEAL_VERIFICATION # SKIP [Milestone M4] Feature 18 scheduled for M4
+ok 90 - [T1_F18_TC05] WRITE_PROTECTION_ENFORCEMENT # SKIP [Milestone M4] Feature 18 scheduled for M4
+ok 91 - [T2_B01] ZERO_LENGTH_PROMPT
+ok 92 - [T2_B02] SINGLE_TOKEN_PROMPT
+ok 93 - [T2_B03] MAX_CAPACITY_255_PROMPT
+ok 94 - [T2_B04] BUDGET_OVERFLOW_256
+ok 95 - [T2_B05] ZERO_BUDGET_CONTINUATION
+ok 96 - [T2_B06] STATE_DRIFT_THRESHOLD # SKIP [Milestone M3] State drift verification scheduled for M3
+ok 97 - [T2_B07] PROB_DRIFT_THRESHOLD # SKIP [Milestone M3] Probability drift verification scheduled for M3
+ok 98 - [T2_B08] GREEDY_TIE_BREAKING
+ok 99 - [T2_B09] TOPK1_DEGENERATION
+ok 100 - [T2_B10] SHORT_CYCLE_DETECTION
+ok 101 - [T2_B11] FIRST_SENTENCE_STOP
+ok 102 - [T2_B12] TABLE_DOMAIN_CLAMP
+ok 103 - [T2_B13] STORAGE_HEADROOM_GUARD # SKIP [Milestone M4] Storage margin gate scheduled for M4
+ok 104 - [T2_B14] BPE_CHUNK_SPLIT
+ok 105 - [T2_B15] CLAIM_WORDING_GATE # SKIP [Milestone M4] Claim wording gate scheduled for M4
+ok 106 - [T3_X01] READ_AND_COPY_GATE # SKIP [Milestone M2] Memory read & copy gate scheduled for M2
+ok 107 - [T3_X02] QUAT_VS_HOUSEHOLDER_PARITY
+ok 108 - [T3_X03] MULTI_TURN_PERSISTENCE # SKIP [Milestone M2] Multi-turn persistence scheduled for M2
+ok 109 - [T3_X04] LEDGER_UNDER_GENERATION # SKIP [Milestone M4] Ledger tracking under generation scheduled for M4
+ok 110 - [T3_X05] TABLE_CLAMP_RESIDUAL
+ok 111 - [T3_X06] NO_READ_MULTI_TURN_GATE # SKIP [Milestone M2] NoRead multi-turn gate scheduled for M2
+ok 112 - [T3_X07] SEAL_VERIFICATION_TAMPER # SKIP [Milestone M4] Seal verification tamper detection scheduled for M4
+ok 113 - [T3_X08] CONTINUOUS_TO_INTEGER_GAP # SKIP [Milestone M3] Continuous to integer likelihood gap scheduled for M3
+ok 114 - [T4_R01] CANONICAL_STORY_LILY # SKIP [Milestone M3] Canonical story rubric evaluation scheduled for M3
+ok 115 - [T4_R02] CANONICAL_STORY_LION # SKIP [Milestone M3] Canonical story rubric evaluation scheduled for M3
+ok 116 - [T4_R03] CANONICAL_STORY_GOOSE # SKIP [Milestone M3] Canonical story rubric evaluation scheduled for M3
+ok 117 - [T4_R04] CANONICAL_STORY_TIM # SKIP [Milestone M3] Canonical story rubric evaluation scheduled for M3
+ok 118 - [T4_R05] CANONICAL_STORY_TRAIN # SKIP [Milestone M3] Canonical story rubric evaluation scheduled for M3
+ok 119 - [T4_R06] FROZEN_SOURCE_EDIT_APPLE # SKIP [Milestone M3] 16 frozen source-edit entity tracking scheduled for M3
+ok 120 - [T4_R07] FROZEN_SOURCE_EDIT_PEAR # SKIP [Milestone M3] 16 frozen source-edit entity substitution scheduled for M3
+ok 121 - [T4_R08] FROZEN_SOURCE_EDIT_KITE # SKIP [Milestone M3] 16 frozen source-edit entity retrieval scheduled for M3
+ok 122 - [T4_R09] MULTI_TURN_DIALOGUE # SKIP [Milestone M2] Multi-turn conversational dialogue scheduled for M2
+ok 123 - [T4_R10] LONG_HORIZON_RECALL_K250 # SKIP [Milestone M2] Long-horizon context recall scheduled for M2
+# tests 123
+# active 38
+# pass 38
+# fail 0
+# skip 85

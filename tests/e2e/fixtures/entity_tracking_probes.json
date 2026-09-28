@@ -1,0 +1,44 @@
+[
+  {
+    "id": "probe_01_apple",
+    "prompt": "One day, Lily carried her apple into the garden. She put it on the little table beside the door. Then she ran to play with her friend. They laughed and watched the clouds move across the sky. When it was time to go home, Lily went back to the table and picked up the",
+    "expected_noun": "apple",
+    "category": "fruit",
+    "pair_id": "pair_01"
+  },
+  {
+    "id": "probe_01_pear",
+    "prompt": "One day, Lily carried her pear into the garden. She put it on the little table beside the door. Then she ran to play with her friend. They laughed and watched the clouds move across the sky. When it was time to go home, Lily went back to the table and picked up the",
+    "expected_noun": "pear",
+    "category": "fruit",
+    "pair_id": "pair_01"
+  },
+  {
+    "id": "probe_02_ball",
+    "prompt": "Tim wanted to keep his ball safe. He put it under the wooden bench before he went outside. He walked around the pond and waved to the ducks. Soon his mother called him home for lunch. Tim remembered what he had left behind. He looked under the bench and found his",
+    "expected_noun": "ball",
+    "category": "toy",
+    "pair_id": "pair_02"
+  },
+  {
+    "id": "probe_02_kite",
+    "prompt": "Tim wanted to keep his kite safe. He put it under the wooden bench before he went outside. He walked around the pond and waved to the ducks. Soon his mother called him home for lunch. Tim remembered what he had left behind. He looked under the bench and found his",
+    "expected_noun": "kite",
+    "category": "toy",
+    "pair_id": "pair_02"
+  },
+  {
+    "id": "probe_03_book",
+    "prompt": "Anna brought her book to the park. She left it beside a tall tree while she played with her brother. They ran along the path and listened to the birds. The sun began to set, and they were ready to leave. Anna returned to the tree to collect her",
+    "expected_noun": "book",
+    "category": "item",
+    "pair_id": "pair_03"
+  },
+  {
+    "id": "probe_03_toy",
+    "prompt": "Anna brought her toy to the park. She left it beside a tall tree while she played with her brother. They ran along the path and listened to the birds. The sun began to set, and they were ready to leave. Anna returned to the tree to collect her",
+    "expected_noun": "toy",
+    "category": "item",
+    "pair_id": "pair_03"
+  }
+]

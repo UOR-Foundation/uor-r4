@@ -1,0 +1,34 @@
+[
+  {
+    "id": "empty_prompt",
+    "prompt": "",
+    "max_new_tokens": 16,
+    "selection": { "kind": "greedy" },
+    "read_mode": "enabled",
+    "expected_error": "empty prompt"
+  },
+  {
+    "id": "single_token_prompt",
+    "prompt": "Hello",
+    "max_new_tokens": 16,
+    "selection": { "kind": "greedy" },
+    "read_mode": "enabled",
+    "expected_success": true
+  },
+  {
+    "id": "zero_budget_continuation",
+    "prompt": "Once upon a time",
+    "max_new_tokens": 0,
+    "selection": { "kind": "greedy" },
+    "read_mode": "enabled",
+    "expected_error": "request exceeds full256 session budget"
+  },
+  {
+    "id": "budget_overflow_257",
+    "prompt": "One day, Lily carried her apple into the garden. She put it on the little table beside the door. Then she ran to play with her friend. They laughed and watched the clouds move across the sky. When it was time to go home, Lily went back to the table and picked up the",
+    "max_new_tokens": 250,
+    "selection": { "kind": "greedy" },
+    "read_mode": "enabled",
+    "expected_error": "request exceeds full256 session budget"
+  }
+]

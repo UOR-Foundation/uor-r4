@@ -1,0 +1,39 @@
+[
+  {
+    "scenario_id": "name_introduction",
+    "turns": [
+      {
+        "turn": 1,
+        "input": "User: Hello, my name is Alice.\nAssistant: Nice to meet you, Alice!",
+        "type": "context"
+      },
+      {
+        "turn": 2,
+        "input": "User: Can you tell me what my name is?\nAssistant: Your name is",
+        "type": "query",
+        "expected_entity": "Alice"
+      }
+    ]
+  },
+  {
+    "scenario_id": "item_placement",
+    "turns": [
+      {
+        "turn": 1,
+        "input": "User: I am placing the gold key inside the blue box.",
+        "type": "context"
+      },
+      {
+        "turn": 2,
+        "input": "Assistant: Understood, the key is in the box.",
+        "type": "context"
+      },
+      {
+        "turn": 3,
+        "input": "User: Where did I put the gold key?\nAssistant: You placed it inside the",
+        "type": "query",
+        "expected_entity": "box"
+      }
+    ]
+  }
+]

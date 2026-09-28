@@ -1,0 +1,248 @@
+{
+  "suite": "uor-r4-geometric-e2e",
+  "version": "1.0.0",
+  "generated_at": "2026-09-26T00:23:00Z",
+  "tiers": {
+    "1": "Feature Coverage (18 features x >=5 test cases)",
+    "2": "Boundary & Corner Cases (context boundaries, drift, headroom)",
+    "3": "Cross-Feature Interactions (memory read + copy gate, transport, multi-turn)",
+    "4": "Real-World Scenarios (story continuation, QA retrieval, conversation turns)"
+  },
+  "total_tests": 123,
+  "features": [
+    {
+      "id": 1,
+      "name": "Low-bit shift-and-add linear maps",
+      "milestone": "M1",
+      "source": "crates/uor-r4-integer/src/model.rs",
+      "tests": [
+        "T1_F01_TC01_SIGNED4_WEIGHT_BOUNDS",
+        "T1_F01_TC02_PRECOMPUTED_MULTIPLE_REUSE",
+        "T1_F01_TC03_POWER_OF_TWO_ROW_SCALING",
+        "T1_F01_TC04_ZERO_NIBBLE_MAPPING",
+        "T1_F01_TC05_DISASSEMBLY_MULTIPLY_AUDIT"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Integer RMSNorm",
+      "milestone": "M1",
+      "source": "crates/uor-r4-integer/src/model.rs",
+      "tests": [
+        "T1_F02_TC01_Q64_VARIANCE_ACCUMULATION",
+        "T1_F02_TC02_RADIX4_ISQRT_PRECISION",
+        "T1_F02_TC03_EPSILON_ZERO_STABILITY",
+        "T1_F02_TC04_Q11_TO_Q10_FIXED_PROJECTION",
+        "T1_F02_TC05_EXTREME_COORDINATE_CLAMP"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Lookup table activation & softmax",
+      "milestone": "M1",
+      "source": "crates/uor-r4-integer/src/tables.rs",
+      "tests": [
+        "T1_F03_TC01_TABLE_PAYLOAD_INTEGRITY",
+        "T1_F03_TC02_SIGMOID_ORIGIN_AND_BOUNDS",
+        "T1_F03_TC03_TANH_ORIGIN_AND_BOUNDS",
+        "T1_F03_TC04_EXP_ORIGIN_AND_MONOTONICITY",
+        "T1_F03_TC05_SOFTMAX_MASS_CONSERVATION"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Exact 2^48 residual normalization",
+      "milestone": "M1",
+      "source": "crates/uor-r4-integer/src/model.rs",
+      "tests": [
+        "T1_F04_TC01_VOCAB_PROBABILITY_TOTAL",
+        "T1_F04_TC02_ATTENTION_MASS_TOTAL",
+        "T1_F04_TC03_LARGEST_ELEMENT_RESIDUAL_CORRECTION",
+        "T1_F04_TC04_RESIDUAL_CORRECTION_BOUND",
+        "T1_F04_TC05_EMPTY_SLICE_ERROR"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Standalone serving CLI & library session",
+      "milestone": "M1",
+      "source": "PR #1397, commit 413a32fc",
+      "tests": [
+        "T1_F05_TC01_BUNDLE_LOAD_INITIALIZATION",
+        "T1_F05_TC02_TEXT_SESSION_LIFECYCLE",
+        "T1_F05_TC03_CLI_GENERATE_BATCH",
+        "T1_F05_TC04_ZERO_ML_DEPENDENCY_AUDIT",
+        "T1_F05_TC05_BUNDLE_PACK_VALIDATION"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Full 256-token causal horizon",
+      "milestone": "M2",
+      "source": "DECISIONS.md#d9, crates/uor-r4-integer/src/model.rs",
+      "tests": [
+        "T1_F06_TC01_CAUSAL_SLOT_EXPOSURE",
+        "T1_F06_TC02_HORIZON_CAPACITY_REACH",
+        "T1_F06_TC03_CONTEXT_EXHAUSTION_ERROR",
+        "T1_F06_TC04_DIMENSIONALITY_SEPARATION",
+        "T1_F06_TC05_DIRECT_ACCESS_INTEGRITY"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Prime-addressed route memory",
+      "milestone": "M2",
+      "source": "crates/uor-r4-core/src/prime_route_attention.rs",
+      "tests": [
+        "T1_F07_TC01_PRIME_ATOM_ASSIGNMENT",
+        "T1_F07_TC02_SEMIPRIME_TRANSITION_EXPERT",
+        "T1_F07_TC03_ORDERED_NLET_MULTISETS",
+        "T1_F07_TC04_NON_METRIC_IDENTITY",
+        "T1_F07_TC05_OUT_OF_VOCABULARY_REJECTION"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Hopf fiber & torsion retention",
+      "milestone": "M2",
+      "source": "crates/uor-r4-core/src/native_geometric/hopf_metric.rs",
+      "tests": [
+        "T1_F08_TC01_HOPF_BASE_PROJECTION",
+        "T1_F08_TC02_FIBER_PHASE_RETENTION",
+        "T1_F08_TC03_REVERSIBLE_S3_RECONSTRUCTION",
+        "T1_F08_TC04_FIBER_LOSS_HAZARD_VERIFICATION",
+        "T1_F08_TC05_TORSION_QUANTIZATION"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Paired-H4 icosian operators",
+      "milestone": "M2",
+      "source": "formal_vocabulary.md, current-state.md",
+      "tests": [
+        "T1_F09_TC01_ZPHI_INTEGER_RING_EVALUATION",
+        "T1_F09_TC02_FIBONACCI_RECURRENCE_MATRIX",
+        "T1_F09_TC03_INVERSE_FIBONACCI_RECURRENCE",
+        "T1_F09_TC04_E8_COORDINATE_SUM_WITNESS",
+        "T1_F09_TC05_GALOIS_COUPLING_CONSTRAINT"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Copy-gate & vocabulary blending",
+      "milestone": "M2",
+      "source": "crates/uor-r4-integer/src/model.rs",
+      "tests": [
+        "T1_F10_TC01_COPY_GATE_COMPUTATION",
+        "T1_F10_TC02_HISTORICAL_TOKEN_COPY_MASS",
+        "T1_F10_TC03_VOCABULARY_COPY_BLENDING",
+        "T1_F10_TC04_UNIFORM_MIXTURE_INJECTION",
+        "T1_F10_TC05_CAUSAL_WRITE_AFTER_PREDICTION"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Reference evaluator v2 tail NLL",
+      "milestone": "M3",
+      "source": "docs/integration/reference-evaluator-v2.json",
+      "tests": [
+        "T1_F11_TC01_EVALUATOR_MANIFEST_HASH",
+        "T1_F11_TC02_PARTITION_BLOCK_COUNTS",
+        "T1_F11_TC03_REFERENCE_1017_BENCHMARK",
+        "T1_F11_TC04_CAUSAL_CACHE_CEILING",
+        "T1_F11_TC05_DISCRETIZATION_GAP_BOUND"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Numerical drift verification",
+      "milestone": "M3",
+      "source": "verify-integer, PR #1397",
+      "tests": [
+        "T1_F12_TC01_MAXIMUM_STATE_DRIFT_BOUND",
+        "T1_F12_TC02_MAXIMUM_PROB_DRIFT_BOUND",
+        "T1_F12_TC03_VERIFY_INTEGER_REPLAY",
+        "T1_F12_TC04_TOTAL_VARIATION_BOUND",
+        "T1_F12_TC05_RELOAD_DETERMINISM"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Paired ordinary control comparison",
+      "milestone": "M3",
+      "source": "DECISIONS.md#d4, d8, joint-compare",
+      "tests": [
+        "T1_F13_TC01_MATCHED_PARAMETER_CAPACITY",
+        "T1_F13_TC02_QUATERNION_HAMILTON_PRODUCT",
+        "T1_F13_TC03_HOUSEHOLDER_REFLECTION",
+        "T1_F13_TC04_ATTRIBUTION_GATE_CHECK",
+        "T1_F13_TC05_NO_READ_PENALTY_VERIFICATION"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "16 frozen source-edit entity tracking",
+      "milestone": "M3",
+      "source": "crates/uor-r4-training/src/joint_evaluation.rs",
+      "tests": [
+        "T1_F14_TC01_PANEL_VARIANT_COMPLETION",
+        "T1_F14_TC02_FIRST_NOUN_SUBSTITUTION",
+        "T1_F14_TC03_COMPLETE_CORRECT_ORACLE",
+        "T1_F14_TC04_FIRST_NOUN_RETENTION_GATE",
+        "T1_F14_TC05_NO_READ_CAUSAL_FAILURE"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "4-part qualitative story rubric",
+      "milestone": "M3",
+      "source": "language-continuation-plan-2026-09-25.md",
+      "tests": [
+        "T1_F15_TC01_RUBRIC_PROMPT_EXECUTION",
+        "T1_F15_TC02_ENTITY_ROLE_CONSISTENCY",
+        "T1_F15_TC03_NARRATIVE_PROGRESSION",
+        "T1_F15_TC04_LITERAL_COMPREHENSION",
+        "T1_F15_TC05_CLAUSE_COMPLETION"
+      ]
+    },
+    {
+      "id": 16,
+      "name": "Shared compute ledger tracking",
+      "milestone": "M4",
+      "source": "model-time.json, AGENTS.md",
+      "tests": [
+        "T1_F16_TC01_LEDGER_FORMAT_SCHEMA",
+        "T1_F16_TC02_CUMULATIVE_CEILING_ENFORCEMENT",
+        "T1_F16_TC03_ORCHESTRATION_SEPARATION",
+        "T1_F16_TC04_SINGLE_WALL_CLOCK_ACCOUNTING",
+        "T1_F16_TC05_ATOMIC_LOCK_INTEGRITY"
+      ]
+    },
+    {
+      "id": 17,
+      "name": "Storage inventory & disk margin guards",
+      "milestone": "M4",
+      "source": "scripts/project_storage_inventory.py",
+      "tests": [
+        "T1_F17_TC01_STORAGE_INVENTORY_EXECUTION",
+        "T1_F17_TC02_PHYSICAL_RESERVE_VERIFICATION",
+        "T1_F17_TC03_STOP_MARGIN_HEADROOM",
+        "T1_F17_TC04_CHECKPOINT_HEADROOM_MARGIN",
+        "T1_F17_TC05_ZERO_DELETION_INVARIANT"
+      ]
+    },
+    {
+      "id": 18,
+      "name": "Sealed artifact packaging & receipts",
+      "milestone": "M4",
+      "source": "ORIGINAL_REQUEST.md, current-state.md",
+      "tests": [
+        "T1_F18_TC01_BUNDLE_MANIFEST_SEAL",
+        "T1_F18_TC02_TOKENIZER_CID_BINDING",
+        "T1_F18_TC03_HARD_PARAMETERS_BINDING",
+        "T1_F18_TC04_CLAIM_AND_SEAL_VERIFICATION",
+        "T1_F18_TC05_WRITE_PROTECTION_ENFORCEMENT"
+      ]
+    }
+  ]
+}

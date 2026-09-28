@@ -1,0 +1,1307 @@
+{
+  "active_milestone": "M1",
+  "executed_at": "2026-09-26T03:59:15Z",
+  "milestone_breakdown": {
+    "M1": {
+      "failed": 0,
+      "name": "Native Geometric LM & Serving Path",
+      "pass_rate_pct": 100.0,
+      "passed": 38,
+      "skipped": 0,
+      "status": "VERIFIED",
+      "total": 38
+    },
+    "M2": {
+      "failed": 0,
+      "name": "Contextual Memory & State Dynamics",
+      "pass_rate_pct": null,
+      "passed": 0,
+      "skipped": 30,
+      "status": "PENDING",
+      "total": 30
+    },
+    "M3": {
+      "failed": 0,
+      "name": "Empirical Evaluation & Baselines",
+      "pass_rate_pct": null,
+      "passed": 0,
+      "skipped": 36,
+      "status": "PENDING",
+      "total": 36
+    },
+    "M4": {
+      "failed": 0,
+      "name": "Resource Accounting & Evidence Synthesis",
+      "pass_rate_pct": null,
+      "passed": 0,
+      "skipped": 19,
+      "status": "PENDING",
+      "total": 19
+    }
+  },
+  "suite": "uor-r4-geometric-e2e",
+  "summary": {
+    "active_pass_rate_pct": 100.0,
+    "active_total": 38,
+    "catalog_total": 123,
+    "dummy_facades_detected": 0,
+    "failed": 0,
+    "milestone_completion_pct": 100.0,
+    "passed": 38,
+    "roadmap_progress_pct": 30.89,
+    "skipped": 85
+  },
+  "tests": [
+    {
+      "details": "Verified parameter descriptors enforce 4-bit weights and 16-bit biases",
+      "duration_ms": 1.43,
+      "name": "SIGNED4_WEIGHT_BOUNDS",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F01_TC01",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- model::tests::signed4_affine_accumulation",
+      "details": "Verified pure shift/add computes +/- 1x..7x without multiplier instruction via Rust test",
+      "duration_ms": 331009.19,
+      "name": "PRECOMPUTED_MULTIPLE_REUSE",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F01_TC02",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- math::tests::dyadic_rounding_uses_away_ties_without_overflow",
+      "details": "Verified power-of-two dyadic row scaling and rounding without hardware multiply",
+      "duration_ms": 838.71,
+      "name": "POWER_OF_TWO_ROW_SCALING",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F01_TC03",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- math::tests::signed_product_preserves_sign_and_extrema",
+      "details": "Verified signed 4-bit nibble mapping preserves sign and zero slot 8",
+      "duration_ms": 326.48,
+      "name": "ZERO_NIBBLE_MAPPING",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F01_TC04",
+      "tier": 1
+    },
+    {
+      "command": "otool -tV /Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer",
+      "details": "Verified 0 multiply and 0 float instructions across 18 genuine kernel symbols (4198 instrs)",
+      "duration_ms": 750.89,
+      "name": "DISASSEMBLY_MULTIPLY_AUDIT",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F01_TC05",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- math::tests::normalized_coordinates_and_square_sum_check_bounds",
+      "details": "Verified coordinate squared sum bounds and Q64 precision guard",
+      "duration_ms": 618.18,
+      "name": "Q64_VARIANCE_ACCUMULATION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F02_TC01",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- math::tests::restoring_square_root_obeys_floor_bounds",
+      "details": "Verified restoring integer square root obeys exact floor bounds across domains",
+      "duration_ms": 538.16,
+      "name": "RADIX4_ISQRT_PRECISION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F02_TC02",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- math::tests::fixed_square_root_preserves_fractional_guard_bits",
+      "details": "Verified fixed square root preserves fractional guard bits and epsilon stability",
+      "duration_ms": 290.51,
+      "name": "EPSILON_ZERO_STABILITY",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F02_TC03",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- model::tests::normalization_zero_scale_and_transport_identity",
+      "details": "Verified state normalization zero scale, Q11 to Q10 fixed projection, and transport identity",
+      "duration_ms": 315.79,
+      "name": "Q11_TO_Q10_FIXED_PROJECTION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F02_TC04",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --test adversarial_challenge -- test_math_kernel_extremes",
+      "details": "Verified coordinate clamping to [-32767, 32767] under adversarial math kernel extremes",
+      "duration_ms": 300.88,
+      "name": "EXTREME_COORDINATE_CLAMP",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F02_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Physical table payload SHA-256 matches specification: 993e63edc97a4c98...",
+      "duration_ms": 3.02,
+      "name": "TABLE_PAYLOAD_INTEGRITY",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F03_TC01",
+      "tier": 1
+    },
+    {
+      "details": "sigmoid[32767] == 16384 (Q15 0.5) and all tested rows in [0, 32768]",
+      "duration_ms": 1.04,
+      "name": "SIGMOID_ORIGIN_AND_BOUNDS",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F03_TC02",
+      "tier": 1
+    },
+    {
+      "details": "tanh[32767] == 0 (Q15 0.0) and all tested rows in [-16384, 16384]",
+      "duration_ms": 0.29,
+      "name": "TANH_ORIGIN_AND_BOUNDS",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F03_TC03",
+      "tier": 1
+    },
+    {
+      "details": "exp[0] == 2^48 (281474976710656) and monotonic non-increasing to 0",
+      "duration_ms": 0.09,
+      "name": "EXP_ORIGIN_AND_MONOTONICITY",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F03_TC04",
+      "tier": 1
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpvdoa4twi/req.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpvdoa4twi/rep",
+      "details": "Live generation verified 100% of decisions sum strictly to 2^48 (281474976710656)",
+      "duration_ms": 157.86,
+      "name": "SOFTMAX_MASS_CONSERVATION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F03_TC05",
+      "tier": 1
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpaflm0k3y/req.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpaflm0k3y/rep",
+      "details": "Verified 12 live decisions strictly sum to exact 2^48 (281474976710656)",
+      "duration_ms": 121.41,
+      "name": "VOCAB_PROBABILITY_TOTAL",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F04_TC01",
+      "tier": 1
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpwyh8_g23/req.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpwyh8_g23/rep",
+      "details": "Verified attention read mass and no-read mass partitions bounded by exact 2^48",
+      "duration_ms": 170.11,
+      "name": "ATTENTION_MASS_TOTAL",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F04_TC02",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --test adversarial_challenge -- test_probability_mass_conservation_categorical_and_greedy",
+      "details": "Verified probability mass conservation and residual allocation targeting largest entry",
+      "duration_ms": 1037.19,
+      "name": "LARGEST_ELEMENT_RESIDUAL_CORRECTION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F04_TC03",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --test adversarial_challenge -- test_sampler_stress_10000_draws",
+      "details": "Verified sampler stability and residual bounds across 10,000 stress draws without panics",
+      "duration_ms": 417.35,
+      "name": "RESIDUAL_CORRECTION_BOUND",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F04_TC04",
+      "tier": 1
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- sampling::tests::malformed_distributions_fail_before_consuming_randomness",
+      "details": "Verified malformed or empty distributions fail before consuming randomness with error",
+      "duration_ms": 465.93,
+      "name": "EMPTY_SLICE_ERROR",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F04_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Verified all required bundle files present in physical bundle directory",
+      "duration_ms": 0.64,
+      "name": "BUNDLE_LOAD_INITIALIZATION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F05_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Standalone serving binary compiled and executable: /Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer",
+      "duration_ms": 0.14,
+      "name": "SERVING_BINARY_AVAILABILITY",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F05_TC02",
+      "tier": 1
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpjq7vgwwb/req.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpjq7vgwwb/rep",
+      "details": "Standalone CLI batch generation completes successfully with valid JSONL output",
+      "duration_ms": 237.5,
+      "name": "CLI_GENERATE_BATCH",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F05_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Verified zero Candle, Torch, BLAS, or external ML dependencies in uor-r4-integer Cargo.toml",
+      "duration_ms": 3.22,
+      "name": "ZERO_ML_DEPENDENCY_AUDIT",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F05_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Bundle manifest conforms to schema uor-r4.report-manifest/1 with valid file entries",
+      "duration_ms": 0.37,
+      "name": "BUNDLE_PACK_VALIDATION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T1_F05_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 6 scheduled for M2 (Full 256-token causal horizon)",
+      "duration_ms": 0.0,
+      "name": "CAUSAL_SLOT_EXPOSURE",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 6 scheduled for M2 (Full 256-token causal horizon)",
+      "status": "SKIPPED",
+      "test_id": "T1_F06_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 6 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "HORIZON_CAPACITY_REACH",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 6 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F06_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 6 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "CONTEXT_EXHAUSTION_ERROR",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 6 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F06_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 6 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "DIMENSIONALITY_SEPARATION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 6 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F06_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 6 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "DIRECT_ACCESS_INTEGRITY",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 6 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F06_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 7 scheduled for M2 (Prime-addressed route memory)",
+      "duration_ms": 0.0,
+      "name": "PRIME_ATOM_ASSIGNMENT",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 7 scheduled for M2 (Prime-addressed route memory)",
+      "status": "SKIPPED",
+      "test_id": "T1_F07_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 7 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "SEMIPRIME_TRANSITION_EXPERT",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 7 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F07_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 7 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "ORDERED_NLET_MULTISETS",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 7 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F07_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 7 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "NON_METRIC_IDENTITY",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 7 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F07_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 7 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "OUT_OF_VOCABULARY_REJECTION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 7 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F07_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 8 scheduled for M2 (Hopf fiber & torsion retention)",
+      "duration_ms": 0.0,
+      "name": "HOPF_BASE_PROJECTION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 8 scheduled for M2 (Hopf fiber & torsion retention)",
+      "status": "SKIPPED",
+      "test_id": "T1_F08_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 8 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "FIBER_PHASE_RETENTION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 8 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F08_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 8 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "REVERSIBLE_S3_RECONSTRUCTION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 8 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F08_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 8 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "FIBER_LOSS_HAZARD_VERIFICATION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 8 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F08_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 8 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "TORSION_QUANTIZATION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 8 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F08_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 9 scheduled for M2 (Paired-H4 icosian operators)",
+      "duration_ms": 0.0,
+      "name": "ZPHI_INTEGER_RING_EVALUATION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 9 scheduled for M2 (Paired-H4 icosian operators)",
+      "status": "SKIPPED",
+      "test_id": "T1_F09_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 9 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "FIBONACCI_RECURRENCE_MATRIX",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 9 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F09_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 9 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "INVERSE_FIBONACCI_RECURRENCE",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 9 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F09_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 9 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "E8_COORDINATE_SUM_WITNESS",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 9 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F09_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 9 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "GALOIS_COUPLING_CONSTRAINT",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 9 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F09_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 10 scheduled for M2 (Copy-gate & vocabulary blending)",
+      "duration_ms": 0.0,
+      "name": "COPY_GATE_COMPUTATION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 10 scheduled for M2 (Copy-gate & vocabulary blending)",
+      "status": "SKIPPED",
+      "test_id": "T1_F10_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 10 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "HISTORICAL_TOKEN_COPY_MASS",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 10 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F10_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 10 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "VOCABULARY_COPY_BLENDING",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 10 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F10_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 10 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "UNIFORM_MIXTURE_INJECTION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 10 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F10_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M2] Feature 10 scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "CAUSAL_WRITE_AFTER_PREDICTION",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Feature 10 scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T1_F10_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 11 scheduled for M3 (Reference evaluator v2 tail NLL)",
+      "duration_ms": 0.0,
+      "name": "EVALUATOR_MANIFEST_HASH",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 11 scheduled for M3 (Reference evaluator v2 tail NLL)",
+      "status": "SKIPPED",
+      "test_id": "T1_F11_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 11 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "PARTITION_BLOCK_COUNTS",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 11 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F11_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 11 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "REFERENCE_1017_BENCHMARK",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 11 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F11_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 11 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CAUSAL_CACHE_CEILING",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 11 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F11_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 11 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "DISCRETIZATION_GAP_BOUND",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 11 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F11_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 12 scheduled for M3 (Numerical drift verification)",
+      "duration_ms": 0.0,
+      "name": "MAXIMUM_STATE_DRIFT_BOUND",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 12 scheduled for M3 (Numerical drift verification)",
+      "status": "SKIPPED",
+      "test_id": "T1_F12_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 12 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "MAXIMUM_PROB_DRIFT_BOUND",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 12 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F12_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 12 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "VERIFY_INTEGER_REPLAY",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 12 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F12_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 12 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "TOTAL_VARIATION_BOUND",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 12 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F12_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 12 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "RELOAD_DETERMINISM",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 12 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F12_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 13 scheduled for M3 (Paired ordinary control comparison)",
+      "duration_ms": 0.0,
+      "name": "MATCHED_PARAMETER_CAPACITY",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 13 scheduled for M3 (Paired ordinary control comparison)",
+      "status": "SKIPPED",
+      "test_id": "T1_F13_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 13 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "QUATERNION_HAMILTON_PRODUCT",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 13 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F13_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 13 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "HOUSEHOLDER_REFLECTION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 13 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F13_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 13 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "ATTRIBUTION_GATE_CHECK",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 13 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F13_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 13 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "NO_READ_PENALTY_VERIFICATION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 13 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F13_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 14 scheduled for M3 (16 frozen source-edit entity tracking)",
+      "duration_ms": 0.0,
+      "name": "PANEL_VARIANT_COMPLETION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 14 scheduled for M3 (16 frozen source-edit entity tracking)",
+      "status": "SKIPPED",
+      "test_id": "T1_F14_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 14 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "FIRST_NOUN_SUBSTITUTION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 14 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F14_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 14 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "COMPLETE_CORRECT_ORACLE",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 14 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F14_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 14 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "FIRST_NOUN_RETENTION_GATE",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 14 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F14_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 14 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "NO_READ_CAUSAL_FAILURE",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 14 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F14_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 15 scheduled for M3 (4-part qualitative story rubric)",
+      "duration_ms": 0.0,
+      "name": "RUBRIC_PROMPT_EXECUTION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 15 scheduled for M3 (4-part qualitative story rubric)",
+      "status": "SKIPPED",
+      "test_id": "T1_F15_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 15 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "ENTITY_ROLE_CONSISTENCY",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 15 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F15_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 15 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "NARRATIVE_PROGRESSION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 15 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F15_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 15 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "LITERAL_COMPREHENSION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 15 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F15_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M3] Feature 15 scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CLAUSE_COMPLETION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Feature 15 scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T1_F15_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 16 scheduled for M4 (Shared compute ledger tracking)",
+      "duration_ms": 0.0,
+      "name": "LEDGER_FORMAT_SCHEMA",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 16 scheduled for M4 (Shared compute ledger tracking)",
+      "status": "SKIPPED",
+      "test_id": "T1_F16_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 16 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "CUMULATIVE_CEILING_ENFORCEMENT",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 16 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F16_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 16 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "ORCHESTRATION_SEPARATION",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 16 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F16_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 16 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "SINGLE_WALL_CLOCK_ACCOUNTING",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 16 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F16_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 16 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "ATOMIC_LOCK_INTEGRITY",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 16 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F16_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 17 scheduled for M4 (Storage inventory & disk margin guards)",
+      "duration_ms": 0.0,
+      "name": "STORAGE_INVENTORY_EXECUTION",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 17 scheduled for M4 (Storage inventory & disk margin guards)",
+      "status": "SKIPPED",
+      "test_id": "T1_F17_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 17 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "PHYSICAL_RESERVE_VERIFICATION",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 17 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F17_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 17 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "STOP_MARGIN_HEADROOM",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 17 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F17_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 17 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "CHECKPOINT_HEADROOM_MARGIN",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 17 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F17_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 17 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "ZERO_DELETION_INVARIANT",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 17 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F17_TC05",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 18 scheduled for M4 (Sealed artifact packaging & receipts)",
+      "duration_ms": 0.0,
+      "name": "BUNDLE_MANIFEST_SEAL",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 18 scheduled for M4 (Sealed artifact packaging & receipts)",
+      "status": "SKIPPED",
+      "test_id": "T1_F18_TC01",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 18 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "TOKENIZER_CID_BINDING",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 18 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F18_TC02",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 18 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "HARD_PARAMETERS_BINDING",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 18 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F18_TC03",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 18 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "CLAIM_AND_SEAL_VERIFICATION",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 18 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F18_TC04",
+      "tier": 1
+    },
+    {
+      "details": "Skipped: [Milestone M4] Feature 18 scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "WRITE_PROTECTION_ENFORCEMENT",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Feature 18 scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T1_F18_TC05",
+      "tier": 1
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmp92_0lb5z/req_empty.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmp92_0lb5z/report_empty",
+      "details": "Empty prompt '' rejected immediately with 'empty prompt' error",
+      "duration_ms": 109.34,
+      "name": "ZERO_LENGTH_PROMPT",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B01",
+      "tier": 2
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpf6qfr0ca/req_single.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpf6qfr0ca/report_single",
+      "details": "Single token prompt processes cleanly with 0 exposed historical slots",
+      "duration_ms": 106.85,
+      "name": "SINGLE_TOKEN_PROMPT",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B02",
+      "tier": 2
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --test adversarial_challenge -- test_exact_token_length_prompts_253_254_255_256",
+      "details": "Verified exact prompt lengths 253, 254, 255 advance session to context limits safely",
+      "duration_ms": 3764.03,
+      "name": "MAX_CAPACITY_255_PROMPT",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B03",
+      "tier": 2
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpdgu0bole/req_overflow.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmpdgu0bole/report_overflow",
+      "details": "Budget overflow beyond 256 rejected with 'request exceeds full256 session budget'",
+      "duration_ms": 250.59,
+      "name": "BUDGET_OVERFLOW_256",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B04",
+      "tier": 2
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmp1rycksw2/req_zero.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmp1rycksw2/report_zero",
+      "details": "max_new_tokens: 0 rejected during parameter budget validation",
+      "duration_ms": 89.65,
+      "name": "ZERO_BUDGET_CONTINUATION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B05",
+      "tier": 2
+    },
+    {
+      "details": "Skipped: [Milestone M3] State drift verification scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "STATE_DRIFT_THRESHOLD",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] State drift verification scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T2_B06",
+      "tier": 2
+    },
+    {
+      "details": "Skipped: [Milestone M3] Probability drift verification scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "PROB_DRIFT_THRESHOLD",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Probability drift verification scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T2_B07",
+      "tier": 2
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- sampling::tests::greedy_and_top_one_choose_lowest_tie_without_advancing_generator",
+      "details": "Greedy selector deterministically chooses lowest token ID on tied probabilities",
+      "duration_ms": 385.92,
+      "name": "GREEDY_TIE_BREAKING",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B08",
+      "tier": 2
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- sampling::tests::top_k_boundary_prefers_low_tokens_and_excludes_other_mass",
+      "details": "top_k: 1 in categorical sampling prefers lowest tokens and excludes other mass",
+      "duration_ms": 408.28,
+      "name": "TOPK1_DEGENERATION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B09",
+      "tier": 2
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --lib -- generation::tests::retained_cycle_stop_requires_three_complete_repeats",
+      "details": "Cycle detector identifies repeating period and halts with Stop::ShortCycle",
+      "duration_ms": 415.94,
+      "name": "SHORT_CYCLE_DETECTION",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B10",
+      "tier": 2
+    },
+    {
+      "command": "/Users/casey.allard/uor-r4/.worktrees/geometric-lm-goal/target/release/uor-r4-integer generate /Users/casey.allard/uor-r4-investigations/integer-serving-20260925/bundle-quaternion-1 /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmp8_3ff2gt/req_fs.json /var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/tmp8_3ff2gt/report_fs",
+      "details": "first_sentence: true stops immediately upon encountering sentence boundary (Stop::FirstSentenceBoundary)",
+      "duration_ms": 87.69,
+      "name": "FIRST_SENTENCE_STOP",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B11",
+      "tier": 2
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --test adversarial_challenge -- test_math_kernel_extremes",
+      "details": "Extreme input activations clamp strictly to table indices [0, 65534] without overflow",
+      "duration_ms": 287.14,
+      "name": "TABLE_DOMAIN_CLAMP",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B12",
+      "tier": 2
+    },
+    {
+      "details": "Skipped: [Milestone M4] Storage margin gate scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "STORAGE_HEADROOM_GUARD",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Storage margin gate scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T2_B13",
+      "tier": 2
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-tokenizer --lib",
+      "details": "Verified tokenizer raw decode retains partial UTF-8 and BPE token boundaries across chunks",
+      "duration_ms": 279.32,
+      "name": "BPE_CHUNK_SPLIT",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T2_B14",
+      "tier": 2
+    },
+    {
+      "details": "Skipped: [Milestone M4] Claim wording gate scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "CLAIM_WORDING_GATE",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Claim wording gate scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T2_B15",
+      "tier": 2
+    },
+    {
+      "details": "Skipped: [Milestone M2] Memory read & copy gate scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "READ_AND_COPY_GATE",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Memory read & copy gate scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T3_X01",
+      "tier": 3
+    },
+    {
+      "details": "Both arms specify valid distinct S3 / R4 group transport: quaternion vs householder_pair",
+      "duration_ms": 15.33,
+      "name": "QUAT_VS_HOUSEHOLDER_PARITY",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T3_X02",
+      "tier": 3
+    },
+    {
+      "details": "Skipped: [Milestone M2] Multi-turn persistence scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "MULTI_TURN_PERSISTENCE",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Multi-turn persistence scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T3_X03",
+      "tier": 3
+    },
+    {
+      "details": "Skipped: [Milestone M4] Ledger tracking under generation scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "LEDGER_UNDER_GENERATION",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Ledger tracking under generation scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T3_X04",
+      "tier": 3
+    },
+    {
+      "command": "cargo test --release --offline -p uor-r4-integer --test adversarial_challenge -- test_math_kernel_extremes",
+      "details": "High-magnitude affine updates clamp safely in LUT and preserve exact 2^48 residual sum",
+      "duration_ms": 533.95,
+      "name": "TABLE_CLAMP_RESIDUAL",
+      "owning_milestone": "M1",
+      "status": "PASS",
+      "test_id": "T3_X05",
+      "tier": 3
+    },
+    {
+      "details": "Skipped: [Milestone M2] NoRead multi-turn gate scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "NO_READ_MULTI_TURN_GATE",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] NoRead multi-turn gate scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T3_X06",
+      "tier": 3
+    },
+    {
+      "details": "Skipped: [Milestone M4] Seal verification tamper detection scheduled for M4",
+      "duration_ms": 0.0,
+      "name": "SEAL_VERIFICATION_TAMPER",
+      "owning_milestone": "M4",
+      "skip_reason": "[Milestone M4] Seal verification tamper detection scheduled for M4",
+      "status": "SKIPPED",
+      "test_id": "T3_X07",
+      "tier": 3
+    },
+    {
+      "details": "Skipped: [Milestone M3] Continuous to integer likelihood gap scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CONTINUOUS_TO_INTEGER_GAP",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Continuous to integer likelihood gap scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T3_X08",
+      "tier": 3
+    },
+    {
+      "details": "Skipped: [Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CANONICAL_STORY_LILY",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R01",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CANONICAL_STORY_LION",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R02",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CANONICAL_STORY_GOOSE",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R03",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CANONICAL_STORY_TIM",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R04",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "CANONICAL_STORY_TRAIN",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] Canonical story rubric evaluation scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R05",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M3] 16 frozen source-edit entity tracking scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "FROZEN_SOURCE_EDIT_APPLE",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] 16 frozen source-edit entity tracking scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R06",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M3] 16 frozen source-edit entity substitution scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "FROZEN_SOURCE_EDIT_PEAR",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] 16 frozen source-edit entity substitution scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R07",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M3] 16 frozen source-edit entity retrieval scheduled for M3",
+      "duration_ms": 0.0,
+      "name": "FROZEN_SOURCE_EDIT_KITE",
+      "owning_milestone": "M3",
+      "skip_reason": "[Milestone M3] 16 frozen source-edit entity retrieval scheduled for M3",
+      "status": "SKIPPED",
+      "test_id": "T4_R08",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M2] Multi-turn conversational dialogue scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "MULTI_TURN_DIALOGUE",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Multi-turn conversational dialogue scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T4_R09",
+      "tier": 4
+    },
+    {
+      "details": "Skipped: [Milestone M2] Long-horizon context recall scheduled for M2",
+      "duration_ms": 0.0,
+      "name": "LONG_HORIZON_RECALL_K250",
+      "owning_milestone": "M2",
+      "skip_reason": "[Milestone M2] Long-horizon context recall scheduled for M2",
+      "status": "SKIPPED",
+      "test_id": "T4_R10",
+      "tier": 4
+    }
+  ],
+  "tier_summary": {
+    "1": {
+      "active": 25,
+      "catalog": 90,
+      "failed": 0,
+      "passed": 25,
+      "skipped": 65
+    },
+    "2": {
+      "active": 11,
+      "catalog": 15,
+      "failed": 0,
+      "passed": 11,
+      "skipped": 4
+    },
+    "3": {
+      "active": 2,
+      "catalog": 8,
+      "failed": 0,
+      "passed": 2,
+      "skipped": 6
+    },
+    "4": {
+      "active": 0,
+      "catalog": 10,
+      "failed": 0,
+      "passed": 0,
+      "skipped": 10
+    }
+  },
+  "version": "2.1.0"
+}
