@@ -27,6 +27,10 @@ INTERVAL_MS=100
 K_LOW=10240
 K_HIGH=32768
 
+BASELINE_BIN="${BASELINE_BIN:-/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-bins/3b463398c199d6d1b268b8b0e8c0fa3e5a52ff61/same-input-step}"
+OPTIMIZED_BIN="${OPTIMIZED_BIN:-/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-bins/bc69b869fa047961d1bcbfafe58b35053ff25dc6/same-input-step}"
+STEP_BIN="${STEP_BIN:-}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run)
@@ -61,12 +65,30 @@ while [[ $# -gt 0 ]]; do
       K_HIGH="$2"
       shift 2
       ;;
+    --baseline-bin)
+      BASELINE_BIN="$2"
+      shift 2
+      ;;
+    --optimized-bin | --phase-b-bin)
+      OPTIMIZED_BIN="$2"
+      shift 2
+      ;;
+    --step-bin)
+      STEP_BIN="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1" >&2
       exit 1
       ;;
   esac
 done
+
+# If explicit STEP_BIN was provided, use it for both baseline and optimized if not separately specified
+if [[ -n "$STEP_BIN" ]]; then
+  BASELINE_BIN="${BASELINE_BIN:-$STEP_BIN}"
+  OPTIMIZED_BIN="${OPTIMIZED_BIN:-$STEP_BIN}"
+fi
 
 # Enforce non-root execution (EUID 0 refused)
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
@@ -80,7 +102,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Target directory on SSD cache (renamed from anti-gravity-efficiency)
 TARGET_DIR="${CARGO_TARGET_DIR:-/Volumes/UOR-Workspace/BuildCaches/anti-gravity}"
-STEP_BIN="${STEP_BIN:-$TARGET_DIR/release/examples/same-input-step}"
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 if [[ -z "$OUT" ]]; then
@@ -108,8 +129,8 @@ echo "==========================================================================
 echo "Dry Run         : $DRY_RUN"
 echo "Sampler         : $SAMPLER"
 echo "Output Directory: $OUT"
-echo "Target Dir      : $TARGET_DIR"
-echo "Step Runner     : $STEP_BIN"
+echo "Baseline Binary : $BASELINE_BIN"
+echo "Optimized Binary: $OPTIMIZED_BIN"
 echo "Bundle Path     : $BUNDLE_DIR"
 echo "FF Checkpoint   : $FF_CHECKPOINT"
 echo "Tokens File     : $TOKENS_FILE"
@@ -135,15 +156,17 @@ if [[ ! -f "$TOKENS_FILE" ]]; then
   exit 1
 fi
 
-# Build rule: Builds happen ONLY in the dry run
+# Build rule: Builds happen ONLY in the dry run if binaries do not exist
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo ""
-  echo "[DRY RUN: Compiling release binaries in isolated build cache]"
-  CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p uor-r4-training --example same-input-step -j 2
+  if [[ ! -x "$BASELINE_BIN" || ! -x "$OPTIMIZED_BIN" ]]; then
+    echo ""
+    echo "[DRY RUN: Compiling release binaries in isolated build cache]"
+    CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p uor-r4-training --example same-input-step -j 2
+  fi
 fi
 
-if [[ ! -x "$STEP_BIN" ]]; then
-  echo "ERROR: $STEP_BIN not found or not executable." >&2
+if [[ ! -x "$BASELINE_BIN" && ! -x "$OPTIMIZED_BIN" ]]; then
+  echo "ERROR: Neither $BASELINE_BIN nor $OPTIMIZED_BIN found or executable." >&2
   echo "Builds happen only in the dry run. Please run './scripts/integer-m1-energy.sh --dry-run' first." >&2
   exit 1
 fi
@@ -157,28 +180,51 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   
   DRY_FAILURES=0
   for STEPS in "$K_LOW" "$K_HIGH"; do
-    echo "--- Testing Integer Model ($STEPS steps) ---"
-    T_START=$(python3 -c 'import time; print(time.time())')
-    env RAYON_NUM_THREADS=1 "$STEP_BIN" \
-      --model-type integer \
-      --bundle "$BUNDLE_DIR" \
-      --tokens-file "$TOKENS_FILE" \
-      --tokens "$STEPS"
-    T_END=$(python3 -c 'import time; print(time.time())')
-    ELAPSED=$(python3 -c "print(f'{$T_END - $T_START:.2f}')")
-    SAMPLES=$(python3 -c "import math; print(math.floor(float('$ELAPSED') * 1000 / $INTERVAL_MS))")
-    echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} samples at ${INTERVAL_MS}ms)"
-    if (( $(python3 -c "print(1 if $ELAPSED >= 4.0 else 0)") )); then
-      echo "  [PASS] Duration >= 4.0s (${ELAPSED}s, ~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
-    else
-      echo "  [FAIL] Duration < 4.0s (${ELAPSED}s, ~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
-      DRY_FAILURES=$((DRY_FAILURES + 1))
+    if [[ -x "$BASELINE_BIN" ]]; then
+      echo "--- Testing Integer Baseline Model ($STEPS steps, commit 3b463398) ---"
+      T_START=$(python3 -c 'import time; print(time.time())')
+      env RAYON_NUM_THREADS=1 "$BASELINE_BIN" \
+        --model-type integer \
+        --bundle "$BUNDLE_DIR" \
+        --tokens-file "$TOKENS_FILE" \
+        --tokens "$STEPS"
+      T_END=$(python3 -c 'import time; print(time.time())')
+      ELAPSED=$(python3 -c "print(f'{$T_END - $T_START:.2f}')")
+      SAMPLES=$(python3 -c "import math; print(math.floor(float('$ELAPSED') * 1000 / $INTERVAL_MS))")
+      echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} samples at ${INTERVAL_MS}ms)"
+      if (( $(python3 -c "print(1 if $ELAPSED >= 4.0 else 0)") )); then
+        echo "  [PASS] Duration >= 4.0s (${ELAPSED}s, ~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
+      else
+        echo "  [FAIL] Duration < 4.0s (${ELAPSED}s, ~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
+        DRY_FAILURES=$((DRY_FAILURES + 1))
+      fi
+      echo ""
     fi
-    echo ""
+
+    if [[ -x "$OPTIMIZED_BIN" ]]; then
+      echo "--- Testing Integer Phase B Model ($STEPS steps, commit bc69b869) ---"
+      T_START=$(python3 -c 'import time; print(time.time())')
+      env RAYON_NUM_THREADS=1 "$OPTIMIZED_BIN" \
+        --model-type integer \
+        --bundle "$BUNDLE_DIR" \
+        --tokens-file "$TOKENS_FILE" \
+        --tokens "$STEPS"
+      T_END=$(python3 -c 'import time; print(time.time())')
+      ELAPSED=$(python3 -c "print(f'{$T_END - $T_START:.2f}')")
+      SAMPLES=$(python3 -c "import math; print(math.floor(float('$ELAPSED') * 1000 / $INTERVAL_MS))")
+      echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} samples at ${INTERVAL_MS}ms)"
+      if (( $(python3 -c "print(1 if $ELAPSED >= 4.0 else 0)") )); then
+        echo "  [PASS] Duration >= 4.0s (${ELAPSED}s, ~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
+      else
+        echo "  [FAIL] Duration < 4.0s (${ELAPSED}s, ~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
+        DRY_FAILURES=$((DRY_FAILURES + 1))
+      fi
+      echo ""
+    fi
 
     echo "--- Testing Continuous FF Parent ($STEPS steps) ---"
     T_START=$(python3 -c 'import time; print(time.time())')
-    env RAYON_NUM_THREADS=1 "$STEP_BIN" \
+    env RAYON_NUM_THREADS=1 "${OPTIMIZED_BIN:-$BASELINE_BIN}" \
       --model-type continuous-ff \
       --checkpoint "$FF_CHECKPOINT" \
       --tokens-file "$TOKENS_FILE" \
@@ -256,24 +302,63 @@ git rev-parse HEAD > "$OUT/source-revision.txt"
 uname -a > "$OUT/machine.txt"
 sysctl -n machdep.cpu.brand_string >> "$OUT/machine.txt" 2>/dev/null || true
 
+# Record cryptographic provenance for all frozen binaries and model artifacts
+cat <<EOF > "$OUT/provenance.json"
+{
+  "schema": "uor-r4.m1-serving-energy-provenance/1",
+  "baseline_binary": {
+    "path": "$BASELINE_BIN",
+    "commit": "3b463398c199d6d1b268b8b0e8c0fa3e5a52ff61",
+    "sha256": "$(shasum -a 256 "$BASELINE_BIN" 2>/dev/null | awk '{print $1}')"
+  },
+  "optimized_binary": {
+    "path": "$OPTIMIZED_BIN",
+    "commit": "bc69b869fa047961d1bcbfafe58b35053ff25dc6",
+    "sha256": "$(shasum -a 256 "$OPTIMIZED_BIN" 2>/dev/null | awk '{print $1}')"
+  },
+  "bundle_path": "$BUNDLE_DIR",
+  "bundle_manifest_sha256": "$(shasum -a 256 "$BUNDLE_DIR/manifest.json" 2>/dev/null | awk '{print $1}')",
+  "ff_checkpoint": "$FF_CHECKPOINT",
+  "tokens_file": "$TOKENS_FILE"
+}
+EOF
+
 echo ""
 echo "Running Energy Benchmarks with sampler: $SAMPLER..."
 
 for STEPS in "$K_LOW" "$K_HIGH"; do
   for repeat in $(seq 1 "$REPEATS"); do
-    echo "[Integer Model] Steps: $STEPS, Repeat: $repeat"
-    python3 "$SCRIPT_DIR/energy_per_token.py" \
-      --label "integer-w256-k${STEPS}-rep${repeat}" \
-      --sampler "$SAMPLER" \
-      --idle-seconds "$IDLE_SECONDS" \
-      --interval-ms "$INTERVAL_MS" \
-      --tokens "$STEPS" \
-      --raw-out "$OUT/raw-integer-k${STEPS}-rep${repeat}.jsonl" -- \
-      env RAYON_NUM_THREADS=1 "$STEP_BIN" \
-        --model-type integer \
-        --bundle "$BUNDLE_DIR" \
-        --tokens-file "$TOKENS_FILE" \
-        --tokens "$STEPS" 2>&1 | tee "$OUT/energy-integer-k${STEPS}-rep${repeat}.txt"
+    if [[ -x "$BASELINE_BIN" ]]; then
+      echo "[Integer Baseline Model (Commit 3b463398)] Steps: $STEPS, Repeat: $repeat"
+      python3 "$SCRIPT_DIR/energy_per_token.py" \
+        --label "integer-baseline-k${STEPS}-rep${repeat}" \
+        --sampler "$SAMPLER" \
+        --idle-seconds "$IDLE_SECONDS" \
+        --interval-ms "$INTERVAL_MS" \
+        --tokens "$STEPS" \
+        --raw-out "$OUT/raw-integer-baseline-k${STEPS}-rep${repeat}.jsonl" -- \
+        env RAYON_NUM_THREADS=1 "$BASELINE_BIN" \
+          --model-type integer \
+          --bundle "$BUNDLE_DIR" \
+          --tokens-file "$TOKENS_FILE" \
+          --tokens "$STEPS" 2>&1 | tee "$OUT/energy-integer-baseline-k${STEPS}-rep${repeat}.txt"
+    fi
+
+    if [[ -x "$OPTIMIZED_BIN" ]]; then
+      echo "[Integer Phase B Speedup (Commit bc69b869)] Steps: $STEPS, Repeat: $repeat"
+      python3 "$SCRIPT_DIR/energy_per_token.py" \
+        --label "integer-phase-b-k${STEPS}-rep${repeat}" \
+        --sampler "$SAMPLER" \
+        --idle-seconds "$IDLE_SECONDS" \
+        --interval-ms "$INTERVAL_MS" \
+        --tokens "$STEPS" \
+        --raw-out "$OUT/raw-integer-phase-b-k${STEPS}-rep${repeat}.jsonl" -- \
+        env RAYON_NUM_THREADS=1 "$OPTIMIZED_BIN" \
+          --model-type integer \
+          --bundle "$BUNDLE_DIR" \
+          --tokens-file "$TOKENS_FILE" \
+          --tokens "$STEPS" 2>&1 | tee "$OUT/energy-integer-phase-b-k${STEPS}-rep${repeat}.txt"
+    fi
 
     echo "[Continuous FF Parent] Steps: $STEPS, Repeat: $repeat"
     python3 "$SCRIPT_DIR/energy_per_token.py" \
@@ -283,7 +368,7 @@ for STEPS in "$K_LOW" "$K_HIGH"; do
       --interval-ms "$INTERVAL_MS" \
       --tokens "$STEPS" \
       --raw-out "$OUT/raw-continuous-ff-k${STEPS}-rep${repeat}.jsonl" -- \
-      env RAYON_NUM_THREADS=1 "$STEP_BIN" \
+      env RAYON_NUM_THREADS=1 "${OPTIMIZED_BIN:-$BASELINE_BIN}" \
         --model-type continuous-ff \
         --checkpoint "$FF_CHECKPOINT" \
         --tokens-file "$TOKENS_FILE" \
@@ -299,6 +384,8 @@ python3 "$SCRIPT_DIR/analyze_marginal_energy.py" "$OUT" \
   --repeats "$REPEATS" \
   --k-low "$K_LOW" \
   --k-high "$K_HIGH" \
+  --baseline-bin "$BASELINE_BIN" \
+  --optimized-bin "$OPTIMIZED_BIN" \
   --bundle-dir "$BUNDLE_DIR" \
   --checkpoint-dir "$FF_CHECKPOINT" \
   --summary-out "$SUMMARY_JSON"

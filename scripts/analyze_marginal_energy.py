@@ -104,6 +104,14 @@ def parse_energy_file(filepath):
 def analyze_directory(dirpath, repeats=3, k_low=4096, k_high=16384):
     """Aggregate all runs in the directory and compute marginal metrics."""
     models = {
+        "integer_baseline": {
+            "name": "Integer Baseline (3b463398, same-input-step)",
+            "prefix": "energy-integer-baseline",
+        },
+        "integer_phase_b": {
+            "name": "Integer Phase B Speedup (bc69b869, same-input-step)",
+            "prefix": "energy-integer-phase-b",
+        },
         "integer": {
             "name": "Integer Bundle (w256, same-input-step)",
             "prefix": "energy-integer",
@@ -150,7 +158,7 @@ def analyze_directory(dirpath, repeats=3, k_low=4096, k_high=16384):
     return results
 
 
-def format_summary(results, bundle_dir=None, checkpoint_dir=None):
+def format_summary(results, bundle_dir=None, checkpoint_dir=None, baseline_bin=None, optimized_bin=None):
     """Generate text report and structured JSON dictionary from analysis results."""
     lines = []
     lines.append("=" * 80)
@@ -158,7 +166,7 @@ def format_summary(results, bundle_dir=None, checkpoint_dir=None):
     lines.append("=" * 80)
     lines.append("Measurement Paradigm:")
     lines.append("  Same-input stepping through sliding full256 context (zero sampling/stop tokens).")
-    lines.append("  Marginal energy ΔE/ΔN between 4,096 and 16,384 steps cancels startup overhead.")
+    lines.append("  Marginal energy ΔE/ΔN cancels startup overhead.")
     lines.append("Working Set & Cache Statement:")
     lines.append("  Integer active parameters: 847,876 B (~848 KB in hard-parameters.bin).")
     lines.append("  Active table lookups: ~128 KB. Total touched working set: ~0.95-1.0 MB/token.")
@@ -187,6 +195,22 @@ def format_summary(results, bundle_dir=None, checkpoint_dir=None):
             "model_safetensors_sha256": sha256_file(c_model),
             "model_safetensors_bytes": os.path.getsize(c_model) if os.path.exists(c_model) else None,
         }
+    if baseline_bin or optimized_bin:
+        provenance["binaries"] = {}
+        if baseline_bin and os.path.exists(baseline_bin):
+            provenance["binaries"]["baseline"] = {
+                "path": baseline_bin,
+                "commit": "3b463398c199d6d1b268b8b0e8c0fa3e5a52ff61",
+                "sha256": sha256_file(baseline_bin),
+                "bytes": os.path.getsize(baseline_bin),
+            }
+        if optimized_bin and os.path.exists(optimized_bin):
+            provenance["binaries"]["phase_b_optimized"] = {
+                "path": optimized_bin,
+                "commit": "bc69b869fa047961d1bcbfafe58b35053ff25dc6",
+                "sha256": sha256_file(optimized_bin),
+                "bytes": os.path.getsize(optimized_bin),
+            }
 
     model_relation = (
         "Different models: bundle-quaternion-1 was packed from "
@@ -205,8 +229,11 @@ def format_summary(results, bundle_dir=None, checkpoint_dir=None):
         lines.append("=" * 80)
         return "\n".join(lines), {"provenance": provenance, "models": {}}
 
-    lines.append(f"{'Model':<42} | {'E(4096) Net J':<15} | {'E(16384) Net J':<15} | {'Marginal J/tok (ΔE/12288)':<26}")
-    lines.append("-" * 106)
+    first_k_low = next(iter(results.values()))["k_low"] if results else 4096
+    first_k_high = next(iter(results.values()))["k_high"] if results else 16384
+    first_delta_n = first_k_high - first_k_low
+    lines.append(f"{'Model':<48} | {f'E({first_k_low}) Net J':<15} | {f'E({first_k_high}) Net J':<15} | {f'Marginal J/tok (ΔE/{first_delta_n})':<26}")
+    lines.append("-" * 112)
 
     summary_data = {
         "schema": "uor-r4.m1-marginal-energy-summary/1",
@@ -241,7 +268,7 @@ def format_summary(results, bundle_dir=None, checkpoint_dir=None):
         e_low_str = f"{e_low_mean:.4f} (n={len(e_low_vals)})"
         e_high_str = f"{e_high_mean:.4f} (n={len(e_high_vals)})"
 
-        lines.append(f"{data['name']:<42} | {e_low_str:<15} | {e_high_str:<15} | {m_range_str:<26}")
+        lines.append(f"{data['name']:<48} | {e_low_str:<15} | {e_high_str:<15} | {m_range_str:<26}")
 
         idle_means = [r["idle_mean_mw"] for r in (runs_low + runs_high) if r.get("idle_mean_mw") is not None]
         idle_stds = [r["idle_std_mw"] for r in (runs_low + runs_high) if r.get("idle_std_mw") is not None]
@@ -265,11 +292,29 @@ def format_summary(results, bundle_dir=None, checkpoint_dir=None):
             "marginal_j_per_token_repeats": paired_marginals,
         }
 
-    lines.append("=" * 106)
-    lines.append("\nPRE-REGISTERED DECISION EVALUATION:")
-    if "integer" in summary_data["models"] and "continuous_ff" in summary_data["models"]:
-        int_m = summary_data["models"]["integer"]["marginal_j_per_token_mean"]
+    lines.append("=" * 112)
+
+    # Report Phase B speedup and energy delta if both baseline and phase B are present
+    if "integer_baseline" in summary_data["models"] and "integer_phase_b" in summary_data["models"]:
+        base_m = summary_data["models"]["integer_baseline"]["marginal_j_per_token_mean"]
+        opt_m = summary_data["models"]["integer_phase_b"]["marginal_j_per_token_mean"]
+        m_delta_pct = ((opt_m - base_m) / base_m) * 100.0 if base_m > 0 else 0.0
+        lines.append("\nPHASE B SPEEDUP & ENERGY DELTA (bc69b869 vs 3b463398):")
+        lines.append(f"  Baseline Marginal Energy : {base_m:.6f} J/tok")
+        lines.append(f"  Phase B Marginal Energy  : {opt_m:.6f} J/tok ({m_delta_pct:+.2f}%)")
+
+    # Evaluate pre-registered decision rule
+    int_candidate_key = None
+    for cand in ["integer_phase_b", "integer", "integer_baseline"]:
+        if cand in summary_data["models"]:
+            int_candidate_key = cand
+            break
+
+    if int_candidate_key and "continuous_ff" in summary_data["models"]:
+        int_m = summary_data["models"][int_candidate_key]["marginal_j_per_token_mean"]
         ff_m = summary_data["models"]["continuous_ff"]["marginal_j_per_token_mean"]
+        int_name = summary_data["models"][int_candidate_key]["name"]
+        lines.append(f"\nPRE-REGISTERED DECISION EVALUATION ({int_name} vs Continuous FF):")
         lines.append(f"  Integer Marginal J/tok      : {int_m:.6f} J/tok")
         lines.append(f"  Continuous FF Marginal J/tok: {ff_m:.6f} J/tok")
         if int_m >= ff_m:
@@ -282,13 +327,13 @@ def format_summary(results, bundle_dir=None, checkpoint_dir=None):
             lines.append("    -> Integer kernel shift-add/table design achieves energy advantage.")
             lines.append("    -> Current kernels stay.")
     else:
-        lines.append("  Awaiting execution of both integer and continuous FF workloads under sudo.")
+        lines.append("\nPRE-REGISTERED DECISION EVALUATION: Awaiting execution of both integer and continuous FF workloads.")
 
     if "llama_smollm2" in summary_data["models"]:
         llama_m = summary_data["models"]["llama_smollm2"]["marginal_j_per_token_mean"]
         lines.append(f"\n  SmolLM2-135M Q4_0 Reference: {llama_m:.6f} J/tok (Reference point only, not matched quality)")
 
-    lines.append("\n" + "=" * 106)
+    lines.append("\n" + "=" * 112)
     return "\n".join(lines), summary_data
 
 
@@ -298,6 +343,8 @@ def main():
     parser.add_argument("--repeats", type=int, default=3, help="Number of repeats (default: 3)")
     parser.add_argument("--k-low", type=int, default=8192, help="Low step horizon (default: 8192)")
     parser.add_argument("--k-high", type=int, default=32768, help="High step horizon (default: 32768)")
+    parser.add_argument("--baseline-bin", help="Path to baseline integer binary for provenance")
+    parser.add_argument("--optimized-bin", help="Path to optimized integer binary for provenance")
     parser.add_argument("--bundle-dir", help="Path to integer bundle for identity binding")
     parser.add_argument("--checkpoint-dir", help="Path to FF checkpoint for identity binding")
     parser.add_argument("--summary-out", help="Path to write JSON summary (e.g. under docs/evidence/)")
@@ -305,7 +352,13 @@ def main():
     args = parser.parse_args()
 
     results = analyze_directory(args.dir, args.repeats, args.k_low, args.k_high)
-    report_text, summary_data = format_summary(results, args.bundle_dir, args.checkpoint_dir)
+    report_text, summary_data = format_summary(
+        results,
+        args.bundle_dir,
+        args.checkpoint_dir,
+        args.baseline_bin,
+        args.optimized_bin,
+    )
 
     print(report_text)
 
