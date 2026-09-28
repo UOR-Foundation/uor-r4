@@ -22,6 +22,7 @@ use std::collections::BTreeMap;
 
 use candle_core::Tensor;
 use serde_json::{json, Value};
+use uor_r4_integer::codec::{apply_codec_arm, CodecArm};
 use uor_r4_lut::format::{Fixed, StackArtifactBuilder, StackNumerics, StackShape, TableValues};
 use uor_r4_lut::kernels::grid_encode;
 use uor_r4_lut::GROUP;
@@ -29,8 +30,8 @@ use uor_r4_lut::GROUP;
 use crate::geometric_stack::{ReadScore, StackArch, StackModel, StackSite};
 use crate::kappa_llama::{Checkpoint, LlamaShape, Site};
 use crate::lut_export::{
-    arcosh_table, grid_nearest, quantize_matrix, quantize_matrix_gptq, Calibration, EXP_RANGE,
-    EXP_STEP_LOG2, SILU_RANGE_LOG2, SILU_STEP_LOG2,
+    arcosh_table, grid_nearest, quantize_matrix, quantize_matrix_compensated, quantize_matrix_gptq,
+    Calibration, EXP_RANGE, EXP_STEP_LOG2, SILU_RANGE_LOG2, SILU_STEP_LOG2,
 };
 use crate::{invalid, Result};
 
@@ -229,11 +230,12 @@ impl StackCalibration {
 /// quantization errors (relative RMS per matrix, worst relative error per
 /// table of grid codes and, with a calibration, each calibrated matrix's
 /// relative output error under GPTQ and under round-to-nearest). A
-/// calibration comes with its damping, relative to the moment's mean diagonal.
-pub fn export_stack(
+/// Export a geometric stack with an optional discrete codec arm for head weights.
+pub fn export_stack_with_codec(
     model: &StackModel,
     source: Value,
     calibration: Option<(&StackCalibration, f64)>,
+    head_codec: Option<CodecArm>,
 ) -> Result<(Vec<u8>, Value)> {
     let c = &model.config;
     if c.arch != StackArch::Geometric {
@@ -452,14 +454,33 @@ pub fn export_stack(
     }
     let mut head = embed;
     fold_columns(&mut head, d, &values(model, "final_norm.weight")?);
-    add(
-        &mut builder,
-        "head",
-        &head,
-        c.vocab_size,
-        d,
-        Some(StackSite::Head),
-    )?;
+    if head_codec == Some(CodecArm::HeadCompensated) {
+        let packed = quantize_matrix_compensated(&head, c.vocab_size, d)?;
+        builder
+            .add_matrix(
+                "head",
+                c.vocab_size,
+                d,
+                packed.exp_base,
+                &packed.nibbles,
+                &packed.scales,
+            )
+            .map_err(|e| invalid(e.to_string()))?;
+        errors.insert("head".to_owned(), json!(packed.relative_rms_error));
+    } else {
+        let head_values = match head_codec {
+            Some(arm) => apply_codec_arm(&head, c.vocab_size, d, arm, 20260928)?,
+            None => head,
+        };
+        add(
+            &mut builder,
+            "head",
+            &head_values,
+            c.vocab_size,
+            d,
+            Some(StackSite::Head),
+        )?;
+    }
 
     let exp: Vec<u32> = (0..EXP_RANGE * (1 << -EXP_STEP_LOG2) + 2)
         .map(|i| (2f64.powi(31) * (-(i as f64) * 2f64.powi(EXP_STEP_LOG2)).exp()).round() as u32)
@@ -505,6 +526,15 @@ pub fn export_stack(
             "grid_code_worst_relative_error": code_errors,
         }),
     ))
+}
+
+/// Export a geometric stack (backward-compatible wrapper around `export_stack_with_codec`).
+pub fn export_stack(
+    model: &StackModel,
+    source: Value,
+    calibration: Option<(&StackCalibration, f64)>,
+) -> Result<(Vec<u8>, Value)> {
+    export_stack_with_codec(model, source, calibration, None)
 }
 
 /// The transformer control as a Llama checkpoint (RoPE rotate-half with theta

@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod bundle;
+pub mod codec;
 pub mod config;
 pub mod format;
 pub mod generation;

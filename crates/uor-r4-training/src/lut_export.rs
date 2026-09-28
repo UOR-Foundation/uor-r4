@@ -157,6 +157,196 @@ pub fn quantize_matrix(values: &[f32], rows: usize, cols: usize) -> Result<Packe
     })
 }
 
+/// Quantize a row-major `rows x cols` matrix with optimal `exp_base` selection,
+/// clamp-optimal mantissa search, and group-sum error compensation.
+pub fn quantize_matrix_compensated(values: &[f32], rows: usize, cols: usize) -> Result<Packed> {
+    if values.len() != rows * cols
+        || !cols.is_multiple_of(GROUP)
+        || values.iter().any(|v| !v.is_finite())
+    {
+        return Err(invalid(
+            "matrix to quantize has the wrong size or a nonfinite value",
+        ));
+    }
+    let groups = cols / GROUP;
+    // Step 1: Best (m, e) per group unconstrained
+    let mut chosen: Vec<Option<(u8, i32)>> = Vec::with_capacity(rows * groups);
+    let mut group = [0f64; GROUP];
+    for w in values.chunks_exact(GROUP) {
+        for (g, v) in group.iter_mut().zip(w) {
+            *g = f64::from(*v);
+        }
+        chosen.push(best_scale(&group));
+    }
+
+    // Step 2: Optimal exp_base search
+    let e_max = chosen.iter().flatten().map(|(_, e)| *e).max().unwrap_or(0);
+    let e_min = chosen.iter().flatten().map(|(_, e)| *e).min().unwrap_or(0);
+
+    let mut best_base = e_max.saturating_sub(15);
+    let mut min_total_error = f64::INFINITY;
+
+    let base_candidates = if e_max - e_min > 15 {
+        (e_min..=e_max.saturating_sub(15))
+            .rev()
+            .take(8)
+            .collect::<Vec<_>>()
+    } else {
+        vec![e_max.saturating_sub(15)]
+    };
+
+    for &candidate_base in &base_candidates {
+        let mut total_err = 0.0f64;
+        for (g_idx, w) in values.chunks_exact(GROUP).enumerate() {
+            let (m, e) = match chosen[g_idx] {
+                Some((_, e)) if e < candidate_base => {
+                    let mut best_m = 0u8;
+                    let mut best_e_err = f64::INFINITY;
+                    for cand_m in 0..16u8 {
+                        let s = grid_scale(cand_m, candidate_base);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, candidate_base)
+                }
+                Some((_, e)) if e > candidate_base + 15 => {
+                    let top_e = candidate_base + 15;
+                    let mut best_m = 15u8;
+                    let mut best_e_err = f64::INFINITY;
+                    for cand_m in 0..16u8 {
+                        let s = grid_scale(cand_m, top_e);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, top_e)
+                }
+                Some(chosen_scale) => chosen_scale,
+                None => (0, candidate_base),
+            };
+            let s = grid_scale(m, e);
+            let err: f64 = w
+                .iter()
+                .map(|&v| {
+                    let vf = f64::from(v);
+                    let q = (vf / s).round().clamp(-8.0, 7.0);
+                    (vf - q * s).powi(2)
+                })
+                .sum();
+            total_err += err;
+        }
+        if total_err < min_total_error {
+            min_total_error = total_err;
+            best_base = candidate_base;
+        }
+    }
+
+    let exp_base = best_base;
+    let mut nibbles = vec![0u8; rows * cols / 2];
+    let mut scales = vec![0u8; rows * groups];
+    let (mut error, mut energy) = (0f64, 0f64);
+
+    for r in 0..rows {
+        for g in 0..groups {
+            let g_idx = r * groups + g;
+            let (m, e) = match chosen[g_idx] {
+                Some((_, e)) if e < exp_base => {
+                    let mut best_m = 0u8;
+                    let mut best_e_err = f64::INFINITY;
+                    let w = &values[r * cols + g * GROUP..r * cols + (g + 1) * GROUP];
+                    for cand_m in 0..16u8 {
+                        let s = grid_scale(cand_m, exp_base);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, exp_base)
+                }
+                Some((_, e)) if e > exp_base + 15 => {
+                    let top_e = exp_base + 15;
+                    let mut best_m = 15u8;
+                    let mut best_e_err = f64::INFINITY;
+                    let w = &values[r * cols + g * GROUP..r * cols + (g + 1) * GROUP];
+                    for cand_m in 0..16u8 {
+                        let s = grid_scale(cand_m, top_e);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, top_e)
+                }
+                Some(chosen_scale) => chosen_scale,
+                None => (0, exp_base),
+            };
+
+            let s = grid_scale(m, e);
+            scales[g_idx] = m | (((e - exp_base) as u8) << 4);
+
+            for c in g * GROUP..(g + 1) * GROUP {
+                let v = f64::from(values[r * cols + c]);
+                let q = (v / s).round().clamp(-8.0, 7.0);
+                error += (v - q * s).powi(2);
+                energy += v * v;
+                let nibble = (q as i32 + 8) as u8;
+                let index = (r * cols + c) / 2;
+                if c % 2 == 0 {
+                    nibbles[index] |= nibble;
+                } else {
+                    nibbles[index] |= nibble << 4;
+                }
+            }
+        }
+    }
+
+    Ok(Packed {
+        nibbles,
+        scales,
+        exp_base,
+        relative_rms_error: if energy > 0.0 {
+            (error / energy).sqrt()
+        } else {
+            0.0
+        },
+    })
+}
+
 /// Second moments `sum_t x_t x_t^T` of every weight map's input over
 /// calibration text, as seen by the folded export (see
 /// [`KappaLlama::forward_with_capture`]).
