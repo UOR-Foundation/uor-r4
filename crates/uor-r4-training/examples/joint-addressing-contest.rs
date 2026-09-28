@@ -808,7 +808,7 @@ fn run(
                 .collect();
             let oracle_ranking = ranking_by_score(&oracle_scores);
             let geo_rankings: Vec<Vec<usize>> = (0..arms.len())
-                .map(|index| arm_ranking(&arms[index].arm, &code_cache[index], &query))
+                .map(|index| arm_ranking(&arms[index].arm, &code_cache[index][..previous], &query))
                 .collect::<Result<_>>()?;
             arm_seconds += arm_started.elapsed().as_secs_f64();
             for (slot, (arm_ref, s)) in slot_specs.iter().enumerate() {
