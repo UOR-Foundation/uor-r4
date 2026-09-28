@@ -98,7 +98,7 @@ pub struct IntegerSession {
 // and its fixed VAL_DIM storage are independent of this enum.
 enum SessionValues {
     Retained(Vec<[i32; VAL_DIM]>),
-    Dialogue576(Vec<[i32; 576]>),
+    Dialogue576(Vec<DialogueSlotValue576>),
 }
 
 impl SessionValues {
@@ -122,8 +122,8 @@ impl SessionValues {
                     return Err(invalid("dialogue576 value memory shape differs"));
                 }
                 let mut sum_coords = [0i64; 576];
-                for (&mass, value) in masses.iter().zip(values) {
-                    accumulate_slot_value_576(&mut sum_coords, mass, value);
+                for (&mass, slot) in masses.iter().zip(values) {
+                    accumulate_slot_value_576(&mut sum_coords, mass, &slot.value);
                 }
                 for (coordinate, out) in read.iter_mut().enumerate() {
                     *out = quantize(sum_coords[coordinate] as i128, 48 + 14, STATE_BITS)?;
@@ -144,10 +144,13 @@ impl SessionValues {
                 values.push(row);
             }
             Self::Dialogue576(values) => {
-                let row: [i32; 576] = value
+                let coords: [i32; 576] = value
                     .try_into()
                     .map_err(|_| invalid("dialogue576 value write width differs"))?;
-                values.push(row);
+                values.push(DialogueSlotValue576 {
+                    value: coords,
+                    _pad: [0; 1792],
+                });
             }
         }
         Ok(())
@@ -328,6 +331,21 @@ impl Default for DialogueSlotValue576 {
             value: [0i32; 576],
             _pad: [0u8; 1792],
         }
+    }
+}
+
+impl std::ops::Deref for DialogueSlotValue576 {
+    type Target = [i32; 576];
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl std::ops::DerefMut for DialogueSlotValue576 {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 
