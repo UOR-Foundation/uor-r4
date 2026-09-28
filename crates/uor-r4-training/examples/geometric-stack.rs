@@ -2320,8 +2320,14 @@ fn d11_evaluate_mode(arguments: &[String]) -> Result<()> {
             .as_ref()
             .map(|path| read_tokens(path, u16::MAX as usize + 1))
             .transpose()?;
-        if windows == 0 || valid.len() <= time + windows {
+        let available = valid.len().checked_sub(time).and_then(|n| n.checked_sub(1));
+        if windows == 0 || available.is_none_or(|n| windows > n) {
             return Err(invalid("too few development tokens for the windows"));
+        }
+        if lens.as_ref().is_some_and(|values| values.len() < vocab) {
+            return Err(invalid(
+                "the token byte-length table is shorter than the vocabulary",
+            ));
         }
         let stride = (valid.len() - time - 1) / windows;
         let starts: Vec<usize> = (0..windows).map(|window| window * stride).collect();
