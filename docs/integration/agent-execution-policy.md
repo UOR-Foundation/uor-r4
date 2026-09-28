@@ -59,6 +59,14 @@ This section is the **single shared operating policy for every lab**. The labs' 
   - preserve negatives;
   - retry only with a specific causal change.
 
+### Gates promote; they never kill (owner, D12)
+
+- A pre-registered gate decides only **whether a mechanism enters the served or main-line model now**. A miss keeps the mechanism active, with its next diagnosed step recorded.
+- **Parking a mechanism family** needs a written root-cause case and the owner's OK. A near miss on one configuration of a mechanism still under construction is never grounds to retire the family.
+- D9 still applies: every retry needs a real causal change, not an extra seed or dose.
+- Earlier FAIL, DEAD and RETIRED labels on mechanisms read "not yet promoted at that scope". Mechanisms that demonstrated a real geometric capability stay available in the [geometric toolbox](geometric-toolbox-2026-09-28.md).
+- **Recommend by the project's overall goal:** a learned, geometry-first language model on local hardware. Do not recommend by the narrowest gate.
+
 ### Standing merge and review criteria
 
 Every PR names its lab and its class. Once its class's conditions hold, the approved merge path needs no further owner approval:
