@@ -480,6 +480,7 @@ fn product(a: i128, b: i128) -> Result<i128> {
     arithmetic(math::checked_mul(a, b))
 }
 
+#[allow(dead_code)]
 #[inline(always)]
 fn divide(a: i128, b: i128) -> Result<i128> {
     arithmetic(math::div_round(a, b))
@@ -490,8 +491,8 @@ fn quantize(value: i128, input_bits: i32, output_bits: i32) -> Result<i32> {
     Ok(scaled(value, output_bits - input_bits)?.clamp(-32767, 32767) as i32)
 }
 
-#[inline(always)]
-fn mul_shift_add_i64(a: i64, b: i64) -> i64 {
+#[inline(never)]
+pub fn mul_shift_add_i64(a: i64, b: i64) -> i64 {
     if a == 0 || b == 0 {
         return 0;
     }
@@ -676,8 +677,8 @@ fn div_rem_u64(numerator: u64, denominator: u64) -> (u64, u64) {
     (quotient, remainder)
 }
 
-#[inline(always)]
-fn div_round_100m_raw(raw: u64, u_const: u64) -> Result<u64> {
+#[inline(never)]
+pub fn div_round_100m_raw(raw: u64, u_const: u64) -> Result<u64> {
     const DENOM: u64 = 100_000_000;
     if raw <= u_const {
         let diff = u_const - raw;
@@ -1070,8 +1071,8 @@ const MUL99_TABLE: [u64; 16] = [
     1_499_999_985,
 ];
 
-#[inline(always)]
-fn build_fraction_table(fraction: u128) -> [u128; 16] {
+#[inline(never)]
+pub fn build_fraction_table(fraction: u128) -> [u128; 16] {
     let mut table = [0u128; 16];
     for d in 1..16 {
         table[d] = core::hint::black_box(table[d - 1] + fraction);
@@ -1079,8 +1080,8 @@ fn build_fraction_table(fraction: u128) -> [u128; 16] {
     table
 }
 
-#[inline(always)]
-fn mul_fraction_radix16(v: u64, table: &[u128; 16]) -> u128 {
+#[inline(never)]
+pub fn mul_fraction_radix16(v: u64, table: &[u128; 16]) -> u128 {
     let v_u = v as u128;
     let mut acc = table[(v_u & 0xF) as usize]
         + (table[((v_u >> 4) & 0xF) as usize] << 4)
@@ -1134,37 +1135,8 @@ fn mul99_radix16(raw: u64) -> u128 {
         + (m12 << 48)
 }
 
-#[inline(always)]
-fn build_div_table(d: u128) -> [u128; 16] {
-    let d2 = d << 1;
-    let d4 = d << 2;
-    let d8 = d << 3;
-    let d3 = d2 + d;
-    let d5 = d4 + d;
-    let d6 = d4 + d2;
-    let d7 = d8 - d;
-    [
-        0,
-        d,
-        d2,
-        d3,
-        d4,
-        d5,
-        d6,
-        d7,
-        d8,
-        d8 + d,
-        d8 + d2,
-        d8 + d3,
-        d8 + d4,
-        d8 + d5,
-        d8 + d6,
-        (d << 4) - d,
-    ]
-}
-
-#[inline(always)]
-fn fast_div_round_radix16(numerator: u128, t: &[u128; 16], denominator: u128) -> u64 {
+#[inline(never)]
+pub fn fast_div_round_radix16(numerator: u128, t: &[u128; 16], denominator: u128) -> u64 {
     if denominator == 0 {
         return 0;
     }
@@ -1354,7 +1326,7 @@ fn fast_div_round(numerator: u128, denominator: u128) -> u64 {
         let t = build_div_table_u64(denominator as u64);
         fast_div_round_radix16_u64(numerator, &t, denominator as u64)
     } else {
-        let t = build_div_table(denominator);
+        let t = build_fraction_table(denominator);
         fast_div_round_radix16(numerator, &t, denominator)
     }
 }
@@ -1400,6 +1372,100 @@ fn fill_packed_low_bit_products(input: &[u8], out: &mut [[i64; 16]]) {
             ];
         }
     }
+}
+
+/// Precompute 256-entry combined pair lookup tables for width 256.
+/// For coordinate pair (2*i, 2*i + 1), table index is (hi_nibble << 4) | lo_nibble,
+/// giving exact sum p0[lo] + p1[hi] with 0 hardware multipliers and 0 float.
+#[inline(never)]
+pub fn build_pair_tables_256(products: &[[i64; 16]; 256], pair_tables: &mut [[i64; 256]; 128]) {
+    for i in 0..128 {
+        let p0 = &products[i << 1];
+        let p1 = &products[(i << 1) + 1];
+        let pt = &mut pair_tables[i];
+        for hi in 0..16 {
+            let p1_val = p1[hi];
+            let base = hi << 4;
+            for lo in 0..16 {
+                pt[base | lo] = p0[lo] + p1_val;
+            }
+        }
+    }
+}
+
+/// Inner dot product of 8 contiguous width-256 rows using precomputed pair tables.
+/// Halves lookup count from 2048 to 1024, eliminating all nibble shift and mask ops.
+/// Strictly 0 hardware multipliers, 0 hardware dividers, 0 floating point.
+#[inline(never)]
+pub fn low_bit_dot_8_pair_tables(
+    pair_tables: &[[i64; 256]; 128],
+    weights: &[u8; 1024],
+) -> (i64, i64, i64, i64, i64, i64, i64, i64) {
+    let mut acc0 = 0i64;
+    let mut acc1 = 0i64;
+    let mut acc2 = 0i64;
+    let mut acc3 = 0i64;
+    let mut acc4 = 0i64;
+    let mut acc5 = 0i64;
+    let mut acc6 = 0i64;
+    let mut acc7 = 0i64;
+    for i in 0..128 {
+        let pt = &pair_tables[i];
+        acc0 += pt[weights[i] as usize];
+        acc1 += pt[weights[128 + i] as usize];
+        acc2 += pt[weights[256 + i] as usize];
+        acc3 += pt[weights[384 + i] as usize];
+        acc4 += pt[weights[512 + i] as usize];
+        acc5 += pt[weights[640 + i] as usize];
+        acc6 += pt[weights[768 + i] as usize];
+        acc7 += pt[weights[896 + i] as usize];
+    }
+    (acc0, acc1, acc2, acc3, acc4, acc5, acc6, acc7)
+}
+
+/// Precompute 256-entry combined pair lookup tables for width 576 (288 pairs).
+#[inline(never)]
+pub fn build_pair_tables_576(products: &[[i64; 16]; 576], pair_tables: &mut [[i64; 256]; 288]) {
+    for i in 0..288 {
+        let p0 = &products[i << 1];
+        let p1 = &products[(i << 1) + 1];
+        let pt = &mut pair_tables[i];
+        for hi in 0..16 {
+            let p1_val = p1[hi];
+            let base = hi << 4;
+            for lo in 0..16 {
+                pt[base | lo] = p0[lo] + p1_val;
+            }
+        }
+    }
+}
+
+/// Four contiguous wide rows using precomputed pair tables.
+#[inline(never)]
+pub fn low_bit_dot_4_contiguous_wide_pair_tables(
+    pair_tables: &[[i64; 256]; 288],
+    weights: &[u8],
+) -> [i64; 4] {
+    let row_stride = 288;
+    if weights.len() < row_stride * 4 {
+        return [0; 4];
+    }
+    let r0 = &weights[0..row_stride];
+    let r1 = &weights[row_stride..2 * row_stride];
+    let r2 = &weights[2 * row_stride..3 * row_stride];
+    let r3 = &weights[3 * row_stride..4 * row_stride];
+    let mut acc0 = 0i64;
+    let mut acc1 = 0i64;
+    let mut acc2 = 0i64;
+    let mut acc3 = 0i64;
+    for k in 0..row_stride {
+        let pt = &pair_tables[k];
+        acc0 += pt[r0[k] as usize];
+        acc1 += pt[r1[k] as usize];
+        acc2 += pt[r2[k] as usize];
+        acc3 += pt[r3[k] as usize];
+    }
+    [acc0, acc1, acc2, acc3]
 }
 
 /// Four adjacent wide rows share each four-coordinate product-table group.
@@ -2118,18 +2184,20 @@ impl IntegerModel {
             let p_256: &[[i64; 16]; 256] = products[..256]
                 .try_into()
                 .map_err(|_| invalid("products width must be 256"))?;
+            let mut pair_tables = [[0i64; 256]; 128];
+            build_pair_tables_256(p_256, &mut pair_tables);
+
+            let all_bytes = embedding.codes.packed_range(0, vocab_size << 8)?;
             let chunks_8_count = vocab_size / 8;
             for c in 0..chunks_8_count {
                 let r0 = c * 8;
-                let s0 = r0 << 8;
-                let chunk_arr: &[u8; 1024] =
-                    match embedding.codes.packed_range(s0, 2048)?.try_into() {
-                        Ok(arr) => arr,
-                        Err(_) => continue,
-                    };
+                let chunk_start = c * 1024;
+                let chunk_arr: &[u8; 1024] = all_bytes[chunk_start..chunk_start + 1024]
+                    .try_into()
+                    .map_err(|_| invalid("embedding chunk layout"))?;
 
                 let (dot0, dot1, dot2, dot3, dot4, dot5, dot6, dot7) =
-                    low_bit_dot_8_contiguous(p_256, chunk_arr);
+                    low_bit_dot_8_pair_tables(&pair_tables, chunk_arr);
 
                 logits[r0] = scale_and_quantize_logit(dot0, output_shifts[r0], output_bias[r0]);
                 logits[r0 + 1] =
@@ -2151,7 +2219,10 @@ impl IntegerModel {
                 let start = row_idx << 8;
                 let end = start + 256;
                 let row = embedding.codes.packed_range(start, end - start)?;
-                let dot = low_bit_dot(&products[..width], row);
+                let mut dot = 0i64;
+                for (i, &byte) in row.iter().enumerate() {
+                    dot += pair_tables[i][byte as usize];
+                }
                 logits[row_idx] =
                     scale_and_quantize_logit(dot, output_shifts[row_idx], output_bias[row_idx]);
             }
@@ -2168,6 +2239,9 @@ impl IntegerModel {
             let products: &[[i64; 16]; 576] = products[..576]
                 .try_into()
                 .map_err(|_| invalid("products width must be 576"))?;
+            let mut pair_tables = [[0i64; 256]; 288];
+            build_pair_tables_576(products, &mut pair_tables);
+
             let rows = output_bias.len().min(vocab_size);
             if output_shifts.len() < rows || output_bias.len() < rows {
                 return Err(invalid("output_bias or output_shifts too small for vocab"));
@@ -2176,7 +2250,7 @@ impl IntegerModel {
             let mut start = 0;
             for first in (0..blocked_rows).step_by(4) {
                 let chunk = embedding.codes.packed_range(start, 576 << 2)?;
-                let dots = low_bit_dot_4_contiguous_wide(products, chunk);
+                let dots = low_bit_dot_4_contiguous_wide_pair_tables(&pair_tables, chunk);
                 for (offset, dot) in dots.into_iter().enumerate() {
                     let row = first + offset;
                     logits[row] =
@@ -2186,7 +2260,10 @@ impl IntegerModel {
             }
             for row_idx in blocked_rows..rows {
                 let row = embedding.codes.packed_range(start, 576)?;
-                let dot = low_bit_dot(products, row);
+                let mut dot = 0i64;
+                for (i, &byte) in row.iter().enumerate() {
+                    dot += pair_tables[i][byte as usize];
+                }
                 logits[row_idx] =
                     scale_and_quantize_logit(dot, output_shifts[row_idx], output_bias[row_idx]);
                 start += 576;
@@ -2868,8 +2945,9 @@ impl IntegerModel {
         }
         let fraction = i128::from(TOTAL)
             - scaled(product(i128::from(gate), i128::from(TOTAL - no_read))?, -15)?;
-        let zero_uniform = u64::try_from(divide(i128::from(TOTAL >> 12), 100_000_000)?)
-            .map_err(|_| invalid("integer mixture range"))?;
+        let fraction_table = build_fraction_table(fraction as u128);
+        let u_const = TOTAL >> 12;
+        let zero_uniform = div_round_100m_raw(0, u_const)?;
         let mut probabilities = Vec::with_capacity(self.config.vocab_size);
         for (v, c) in vocabulary.into_iter().zip(copy) {
             if v == 0 && c == 0 {
@@ -2877,18 +2955,25 @@ impl IntegerModel {
                 continue;
             }
             let copy_term = if c != 0 {
-                scaled(product(i128::from(c), i128::from(gate))?, -15)?
+                scaled(i128::from(mul_shift_add_i64(c as i64, gate as i64)), -15)?
             } else {
                 0
             };
-            let raw = scaled(product(i128::from(v), fraction)?, -48)? + copy_term;
-            // The retained uniform mixture is exactly 1/100000000 in this bridge.
-            let uniform = divide(
-                product(raw, 99_999_999)? + i128::from(TOTAL >> 12),
-                100_000_000,
-            )?;
-            probabilities
-                .push(u64::try_from(uniform).map_err(|_| invalid("integer mixture range"))?);
+            let raw = if v != 0 {
+                let prod_v = mul_fraction_radix16(v, &fraction_table);
+                let quotient = (prod_v >> 48) as i128;
+                let rem = prod_v & ((1u128 << 48) - 1);
+                let raw_v = if rem >= (1u128 << 47) {
+                    quotient + 1
+                } else {
+                    quotient
+                };
+                raw_v + copy_term
+            } else {
+                copy_term
+            };
+            let uniform = div_round_100m_raw(raw as u64, u_const)?;
+            probabilities.push(uniform);
         }
         normalize_residual(&mut probabilities)?;
         // Commit after the complete prediction succeeds. Current input is

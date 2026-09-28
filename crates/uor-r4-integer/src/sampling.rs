@@ -97,6 +97,7 @@ impl Sampler {
         self.state
     }
 
+    #[inline(never)]
     pub fn select(
         &mut self,
         probabilities: &[u64],
@@ -114,14 +115,7 @@ impl Sampler {
         };
 
         let p_max = probabilities[best];
-        let min_p_threshold = if min_p_q16 > 0 {
-            let high = (p_max >> 16) as u128;
-            let low = (p_max & 0xffff) as u128;
-            let prod = (high * (min_p_q16 as u128)) + ((low * (min_p_q16 as u128)) >> 16);
-            prod as u64
-        } else {
-            0u64
-        };
+        let min_p_threshold = exact_min_p_threshold(p_max, min_p_q16);
 
         if (top_k == 0 || top_k >= probabilities.len()) && min_p_threshold == 0 {
             let draw = self.draw_below(PROBABILITY_ONE)?;
@@ -157,7 +151,8 @@ impl Sampler {
         select_ticket(probabilities, self.ranked.iter().copied(), draw)
     }
 
-    fn draw_below(&mut self, bound: u64) -> Result<u64, SamplingError> {
+    #[inline(never)]
+    pub fn draw_below(&mut self, bound: u64) -> Result<u64, SamplingError> {
         draw_below_with(bound, || self.next_word())
     }
 
@@ -177,7 +172,8 @@ impl Sampler {
     }
 }
 
-fn validate_distribution(probabilities: &[u64]) -> Result<usize, SamplingError> {
+#[inline(never)]
+pub fn validate_distribution(probabilities: &[u64]) -> Result<usize, SamplingError> {
     if probabilities.is_empty() {
         return Err(SamplingError::EmptyDistribution);
     }
@@ -229,7 +225,8 @@ fn draw_below_with(
     Err(SamplingError::RejectionLimit)
 }
 
-fn select_ticket(
+#[inline(never)]
+pub fn select_ticket(
     probabilities: &[u64],
     indices: impl Iterator<Item = usize>,
     mut draw: u64,
@@ -242,6 +239,23 @@ fn select_ticket(
         draw -= mass;
     }
     Err(SamplingError::InvalidDraw)
+}
+
+/// Exact bit-for-bit computation of `floor(p_max * min_p_q16 / 2^16)` using
+/// an exact shift-add over the set bits of `min_p_q16`. Strictly zero multiplier instructions.
+#[inline(never)]
+pub fn exact_min_p_threshold(p_max: u64, min_p_q16: u32) -> u64 {
+    if min_p_q16 == 0 {
+        return 0;
+    }
+    let mut sum: u128 = 0;
+    let mut bits = min_p_q16;
+    while bits != 0 {
+        let shift = bits.trailing_zeros();
+        sum = sum.wrapping_add((p_max as u128) << shift);
+        bits &= bits - 1;
+    }
+    (sum >> 16) as u64
 }
 
 #[cfg(test)]
@@ -474,6 +488,108 @@ mod tests {
         for _ in 0..50 {
             let token = sampler.select(&probabilities, policy_strict).unwrap();
             assert_eq!(token, 0, "Strict MinP must select only dominant token 0");
+        }
+    }
+
+    fn old_min_p_threshold(p_max: u64, min_p_q16: u32) -> u64 {
+        if min_p_q16 > 0 {
+            let high = (p_max >> 16) as u128;
+            let low = (p_max & 0xffff) as u128;
+            let prod = (high * (min_p_q16 as u128)) + ((low * (min_p_q16 as u128)) >> 16);
+            prod as u64
+        } else {
+            0u64
+        }
+    }
+
+    #[test]
+    fn property_test_exact_min_p_threshold_agrees_with_old_formula() {
+        // Edge cases
+        let edge_p_max = [
+            0u64,
+            1,
+            2,
+            0xffff,
+            0x10000,
+            0x1ffff,
+            PROBABILITY_ONE / 100,
+            PROBABILITY_ONE / 2,
+            PROBABILITY_ONE,
+            (1u64 << 48) - 1,
+            1u64 << 60,
+            u64::MAX - 1,
+            u64::MAX,
+        ];
+        let edge_min_p = [
+            0u32,
+            1,
+            2,
+            0x7fff,
+            0x8000,
+            0xffff,
+            0x10000,
+            6553,
+            13107,
+            32768,
+            65535,
+            65536,
+            0x55555555,
+            0xAAAAAAAA,
+            u32::MAX - 1,
+            u32::MAX,
+        ];
+
+        for &p in &edge_p_max {
+            for &m in &edge_min_p {
+                let exact = exact_min_p_threshold(p, m);
+                let old = old_min_p_threshold(p, m);
+                assert_eq!(
+                    exact, old,
+                    "Mismatch on edge case p_max={p}, min_p_q16={m}: exact={exact}, old={old}"
+                );
+            }
+        }
+
+        // Single-bit sweeps (powers of two)
+        for i in 0..64 {
+            let p = 1u64 << i;
+            for j in 0..32 {
+                let m = 1u32 << j;
+                let exact = exact_min_p_threshold(p, m);
+                let old = old_min_p_threshold(p, m);
+                assert_eq!(exact, old, "Mismatch on power of two p=2^{i}, m=2^{j}");
+            }
+        }
+
+        // All-ones bit-prefix sweeps
+        for i in 1..=64 {
+            let p = if i == 64 { u64::MAX } else { (1u64 << i) - 1 };
+            for j in 1..=32 {
+                let m = if j == 32 { u32::MAX } else { (1u32 << j) - 1 };
+                let exact = exact_min_p_threshold(p, m);
+                let old = old_min_p_threshold(p, m);
+                assert_eq!(exact, old, "Mismatch on all-ones p={p:#x}, m={m:#x}");
+            }
+        }
+
+        // PRNG property sweep across 100,000 random values
+        let mut rng = 0x123456789abcdef0u64;
+        let mut next_u64 = || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            rng
+        };
+
+        for _ in 0..100_000 {
+            let p = next_u64();
+            let m = next_u64() as u32;
+            let exact = exact_min_p_threshold(p, m);
+            let old = old_min_p_threshold(p, m);
+            assert_eq!(
+                exact, old,
+                "Mismatch on random p_max={p}, min_p_q16={m}: exact={exact}, old={old}"
+            );
         }
     }
 }
