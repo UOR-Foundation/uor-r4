@@ -84,6 +84,14 @@ Every PR names its lab and its class. Once its class's conditions hold, the appr
   - All labs share one GitHub account and the ruleset enforces no reviews, so this rule is procedural. Keep it anyway.
 - **Never** push directly to `main`, bypass protection, use an admin merge or force-push shared work. A blocked merge names its cause and owner.
 - **A review that lists required fixes is not an approval** until those fixes land.
+- **Every PR is driven to merge** (owner, 2026-09-28: "always make sure PR's are being merged, including your own"):
+  - Lab 1 enables auto-merge as soon as a PR is ready, including its own PRs;
+  - non-author reviews run alongside;
+  - a blocking finding before the merge pauses auto-merge until it is fixed;
+  - a finding after the merge becomes a follow-up PR;
+  - **exception:** a Lab 3 result (class B) merges only after Lab 1's gating re-run.
+
+  No PR sits open without a named cause and owner.
 - **Safe, inactive research and negative evidence** may merge without model promotion.
 
 ### Knowledge and resources
