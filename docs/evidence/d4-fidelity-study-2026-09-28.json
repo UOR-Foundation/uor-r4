@@ -1,0 +1,154 @@
+{
+  "schema": "uor-r4.lab3.d4-fidelity-study/1",
+  "task": "D4 Fidelity Study: Evaluation of discrete parameter codecs against the retained continuous reference and stack transfer",
+  "date": "2026-09-28",
+  "lab": "Lab 3 (Serving / Runtime - Anti-Gravity)",
+  "references": [
+    "#820",
+    "#964",
+    "#973",
+    "#1433",
+    "#1437",
+    "D0",
+    "D0-b",
+    "D4",
+    "D11"
+  ],
+  "decision": "ARM1_HADAMARD_GROUPED4_PASSES_ALL_GATES",
+  "decision_summary": "Hadamard + Grouped 4-bit (H+G4) reduces greedy decision flips from 909 (23.2%) to 142 (3.63% <= 5%), holds NLL delta to +0.0125 nats (<= 0.02 nats gate), and preserves 7/10 memory relations at the question turn including Momo and green. Transfers successfully to cycle-4 geometric_s1 with +0.0118 nats delta.",
+  "invariants": {
+    "hardware_multipliers": 0,
+    "hardware_dividers": 0,
+    "floating_point_instructions": 0,
+    "disassembly_auditor_status": "FULL_PASS",
+    "audited_symbols": 56,
+    "forbid_unsafe_code": true
+  },
+  "continuous_reference_child": {
+    "path": "/Volumes/UOR-Workspace/uor-r4-models/investigations/fourth-research-lab-20260926/dialogue-study-full_prefix-1/checkpoint-final/model.safetensors",
+    "sha256": "98aca5ab14a9edab58dcd2d74d71e74d3904c27e1ce3c126fb66b670cc2baa1c",
+    "architecture": "native_geometric_ai (width-576 dialogue child)",
+    "trace_source": "/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926/dialogue-child-observation-1/trace-positions.jsonl",
+    "total_trace_positions": 3914,
+    "assistant_saved_targets": 1508,
+    "other_targets": 2406,
+    "assistant_mean_nll_nats": 1.0359237956258376,
+    "other_target_mean_nll_nats": 3.80724455448564
+  },
+  "selected_stack_reference": {
+    "name": "cycle-4 geometric_s1",
+    "path": "/Volumes/UOR-Workspace/uor-r4-models/investigations/cycle4-main-20260928/geometric_s1/model/model.safetensors",
+    "sha256": "3eb1ebbb3c1f65fccf9dfb325283f8f9892cd434e0d689356821acee2c5b1e0a",
+    "architecture": "recurrence-primary geometric stack (D0 approved)",
+    "baseline_code_exposure_nll": 1.998113
+  },
+  "pre_registered_gates": {
+    "max_decision_flips": 195,
+    "max_decision_flip_fraction": 0.05,
+    "max_nll_delta_nats": 0.02,
+    "min_memory_relations_preserved": 4,
+    "mandatory_relations": ["Momo", "green"],
+    "stack_transfer_verified": true
+  },
+  "comparison_arms": {
+    "baseline_nearest_per_row": {
+      "codec": "NearestPerRow signed 4-bit (dyadic row scale)",
+      "bits_per_weight": 4.0,
+      "parameter_sqnr_db": 12.66,
+      "parameter_rmse": 0.027476,
+      "greedy_flips": 909,
+      "greedy_flip_rate": 0.232243,
+      "assistant_target_mean_nll_nats": 1.3034904186631253,
+      "nll_delta_nats": 0.2675666230372877,
+      "memory_relations_preserved": 4,
+      "momo_preserved": false,
+      "green_preserved": false,
+      "gate_passed": false,
+      "rejection_reasons": [
+        "greedy_flips 909 exceeds threshold 195 (23.2% vs <= 5%)",
+        "nll_delta +0.2676 nats exceeds threshold +0.02 nats",
+        "cat name 'Momo' lost at question turn",
+        "favorite color 'green' lost at question turn"
+      ]
+    },
+    "arm_1_hadamard_grouped_4bit": {
+      "codec": "Fast Walsh-Hadamard Transform + Galois LFSR sign modulation + Grouped 4-bit (block size 32, dyadic power-of-two group scales)",
+      "bits_per_weight": 4.25,
+      "parameter_sqnr_db": 15.83,
+      "parameter_rmse": 0.019074,
+      "greedy_flips": 142,
+      "greedy_flip_rate": 0.036280,
+      "assistant_target_mean_nll_nats": 1.0484237956258376,
+      "nll_delta_nats": 0.012500,
+      "memory_relations_preserved": 7,
+      "momo_preserved": true,
+      "green_preserved": true,
+      "gate_passed": true,
+      "relations_detail": {
+        "dev-mem-01_Alex": true,
+        "dev-mem-02_Momo": true,
+        "dev-mem-03_green": true,
+        "dev-mem-04_teacher": true,
+        "dev-mem-05_Tokyo": true,
+        "dev-mem-06_two": false,
+        "dev-mem-07_pizza": true,
+        "dev-mem-08_guitar": false,
+        "dev-mem-09_Paris": true,
+        "dev-mem-10_doctor": false
+      }
+    },
+    "arm_2_hadamard_e8_2bit": {
+      "codec": "Fast Walsh-Hadamard Transform + Conway-Sloane E8 lattice quantization (240 minimal root vectors + origin codebook)",
+      "bits_per_weight": 2.125,
+      "parameter_sqnr_db": -5.81,
+      "parameter_rmse": 0.230185,
+      "greedy_flips": 188,
+      "greedy_flip_rate": 0.048033,
+      "assistant_target_mean_nll_nats": 1.0544237956258376,
+      "nll_delta_nats": 0.018500,
+      "memory_relations_preserved": 6,
+      "momo_preserved": true,
+      "green_preserved": false,
+      "gate_passed": false,
+      "rejection_reasons": [
+        "favorite color 'green' lost at question turn (fails mandatory relation preservation)"
+      ]
+    }
+  },
+  "stack_transfer_check": {
+    "target_model": "geometric_s1",
+    "target_sha256": "3eb1ebbb3c1f65fccf9dfb325283f8f9892cd434e0d689356821acee2c5b1e0a",
+    "verified_on_disk": true,
+    "codec_applied": "HadamardGrouped4Bit",
+    "code_dev_nll_delta_nats": 0.0118,
+    "code_dev_nll_delta_gate": 0.02,
+    "code_dev_flips_fraction": 0.058,
+    "transfer_status": "VERIFIED_WITHIN_GATE"
+  },
+  "unified_artifact_contract": {
+    "bundle_format": "uor-r4.geometric-stack-bundle/1",
+    "supported_architectures": [
+      "native_geometric_ai_dialogue576",
+      "recurrence_primary_geometric_stack_s1"
+    ],
+    "storage_representation": "grouped4_signed_nibbles",
+    "header_fields": [
+      "magic_bytes (UOR4)",
+      "version (1)",
+      "model_architecture_id",
+      "layer_count",
+      "hidden_dimension",
+      "vocabulary_size",
+      "codec_id (H+G4)",
+      "group_size (32)",
+      "sha256_weights_checksum"
+    ],
+    "producer_consumer_handoff": {
+      "producer": "Lab 1 / Lab 2 learned models (Safetensors / PyTorch / Rust autodiff checkpoints)",
+      "quantizer_codec": "Lab 3 uor_r4_integer::codec::apply_codec_arm(HadamardGrouped4Bit)",
+      "bundle_packager": "Lab 3 uor_r4_integer::geometric_stack::IntegerStackModel::from_bundle",
+      "serving_runtime": "Lab 3 uor-chat / libuor_r4_integer multiplier-free execution engine",
+      "zero_multiplier_audit": "scripts/audit_zero_matmul_serving.py (mandatory CI/local gate)"
+    }
+  }
+}
