@@ -29,6 +29,20 @@ record the executed scope. No model fit or capability promotion
 follows from the lab setup. Accepted models and the continuation negative below
 remain unchanged. Other labs' active source and model jobs are preserved.
 
+The [four-row blocked product table reuse kernel](native-576-blocked-kernel-2026-09-27.md)
+now groups four adjacent matrix rows during wide integer serving (width 576 and
+1152), reusing product tables loaded into registers and L1 cache across the 4096-row
+vocabulary projection and wide affine layers. Intermediate `i64` sums strictly fit
+within $2^{44} < 2^{63}-1$, introducing zero precision loss or overflow.
+All 157 unit and integration tests in `uor-r4-integer` pass. Static disassembly audit
+confirms strictly zero multipliers, zero dividers, and zero floats (Class I/II/III clean)
+across `libuor_r4_integer.rlib` (31 symbols) and `uor-chat` (30 symbols).
+On Apple Silicon M1, vocabulary projection latency is 1.103 ms/call,
+conversational step is 1.693 ms, and streaming generation is 1.920 ms/token
+(quaternion) and 3.424 ms/token (householder pair), with 18.20 MB peak RSS (< 35 MB ceiling).
+The [evidence record](../evidence/native-576-blocked-kernel-2026-09-27.json) binds
+all executed measurements and benchmarks.
+
 The [shared packed-coefficient candidate](packed-integer-preparation-2026-09-27.md)
 now preserves signed4 arrays in shared packed storage and reads them directly in
 the supported width-128/256 integer kernels. Four focused arithmetic checks and
@@ -125,6 +139,20 @@ no new dose or quality-selection sweep is selected. The original
 remains dated; [sequential evidence](../evidence/dialogue-code-choice-sequential-preparation-2026-09-27.json)
 owns the new execution/resource bindings. No learned candidate or language
 qualification is established by this normalization.
+
+Parallel source preparation adds a standalone
+[exact signed H4 integer classifier](exact-h4-classifier-2026-09-27.md), with an
+immutable historical-order coefficient table and explicit zero/tie behavior.
+At source `43e543fd`, all three focused integer checks and release compilation
+pass. After preserving an initial compiler-lowering failure, the corrected
+frozen library passes strict instruction inspection in 33 emitted ranges,
+including the classifier and both scalar helpers. The separate training-crate
+donor-order check is NOT_RUN; no core/training or model execution occurred.
+[Source, artifact, failed/passing outcomes and complete build breakdown](../evidence/exact-h4-classifier-2026-09-27.json)
+retain their scope. It is not connected to a reader or promoted artifact, and
+does not establish F32 decision parity, language retention or serving speed.
+The [learning and exact-table reuse review](finite-h4-learning-and-native-reuse-2026-09-27.md)
+guides conditional integration and selects no additional fit.
 
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded
@@ -382,12 +410,19 @@ Reference-minus-float NLL is +0.007543 to +0.012756; integer-minus-reference is
 -0.00000170 to +0.00015188. The reference substitutes packed matrices, scalars,
 biases, folded normalization gains and head values, so the localization is to
 the packed representation collectively, not uniquely four-bit matrix rounding.
-New integer continuations remain weak. GPTQ source and synthetic checks are
-present without a trained GPTQ result packet. Grouped scales and a separate
-embedding/head differ from the native tied-readout codec. Hardware multiply/divide
-serving and the empty designated local payload intake remain unresolved for
-this lab's target. These reports do not promote a model or change the completed
-fixed dialogue pair.
+New integer continuations remain weak. The [subsequent trained GPTQ packet](geometric-stack-cycle4-2026-09-27.md#8-integer-serving-under-d10)
+at `c22a97e6`, retained in merged main `72538ffb`, resolves the earlier source-only
+limitation: all five parent/calibration/development joins were reviewed, and the
+2,560 saved window reductions reproduce their reported NLLs. Against each model's
+nearest-rounding export, GPTQ removes 40.53–47.63% of the four geometric stacks'
+integer-minus-float gap and 54.25% of the transformer control's gap. This is
+exposed code-development numerical retention; the packet adds no GPTQ-generated
+reply records. Its grouped scales and separate embedding/head differ from the
+native tied-readout codec, and scales are reselected during compensation rather
+than held on our fixed grid. [Transfer assessment](finite-h4-learning-and-native-reuse-2026-09-27.md).
+Hardware multiply/divide serving and the empty designated local payload intake
+remain unresolved for this lab's target. These reports do not promote a model,
+alter the retained dialogue pair, or change the fixed 512-update child study.
 
 The [next Claude delta at `c22a97e6`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5856353989)
 now supplies trained GPTQ numerical-retention results. All 33 added/changed
@@ -473,8 +508,13 @@ termination-weighted objective experiment is now executed and returns INERT: at
 only 3 unique source rows beyond a dose-matched plain continuation (0 unique
 losses) and leaves sampled prose at0/5, while the plain dose already recovers12
 of20 failing rows; guardrails hold and standard development NLL is slightly
-worse for the treatment. Termination weighting is a weak lever at this dose; the
-next rung is the state/read path. Admission pruning remains deferred.
+worse for the treatment. Termination weighting is a weak lever at this dose. The
+finite geometric read kernel (signed relative-group score) screen is now executed
+and returns **HARM**: against a same-binary, dose-matched baseline it worsens the
+comparison-tail Read NLL by +0.019719 and loses 10 complete source rows with 0
+unique gains, while five-prompt sampled prose stays 0/5; guardrails and hard-path
+usage hold. The next rung remains the state/read path, but not by
+re-parameterising this score. Admission pruning remains deferred.
 The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged.
 
 ## Latest result: completed continuation, useful-language target unmet
@@ -931,6 +971,65 @@ The full256 baseline is finite; terminal D5 parameter sparsity remains open.
 Standalone integer generation is **executed at the scoped numerical boundary**.
 General language quality, complete-path arithmetic compliance and energy remain
 separate obligations. One paired seed remains exploratory for geometry claims.
+
+### Executed: finite geometric read kernel screen (September 27)
+
+- **Executed** from the [predeclared plan](geometric-read-plan-2026-09-27.md) and
+  [result](geometric-read-result-2026-09-27.md): an optional, absent-by-default
+  learned score over the signed relative element of the 120-element binary
+  icosahedral group `2I` (16 unit-coded lanes, exact composition table,
+  straight-through hard-forward/smooth-backward surrogate, per-lane nonlinear
+  4→8→1 score) on the mainline joint learner, plus two full 1,024-update screen
+  arms and cost smokes from the accepted step-15,672 quaternion parent.
+- **Witnessed result:** `HARM`. Versus the same binary with the kernel disabled,
+  comparison-tail Read NLL is 1.984753 → 2.004471 (+0.019719) and complete source
+  answers are 27/32 → 17/32 with ten unique losses and zero unique gains;
+  five-prompt sampled prose stays **0/5** in both arms. The NoRead penalty and the
+  parent-relative bound hold, no short cycles occur, and hard-path usage is
+  non-collapsed (120/120 codes per lane; 99.25% non-identity relations; cumulative over
+  the fit). The predeclared 1.5× cost gate **failed** (1.84× paired same-session) and is
+  carried as a recorded budgeted exception; under the plan heading a guardrail failure is
+  itself a HARM condition.
+- **Instrument checks:** the kernel-off path reproduces the retained parent
+  evaluation token-for-token and replays the historical `plain-16696` learning
+  curve with zero NLL mismatches; arm B reproduces that historical evaluation
+  exactly. The predeclared cost optimization cut kernel per-step cost
+  (15.3/8.7/12.9/10.2 s → 6.1/5.4/6.6/9.8 s); the paired same-session ratio is
+  1.84× and the residual cost is the frozen smooth Hamilton composition. Conditional
+  attribution arm C is **deferred** with the ledger arithmetic recorded
+  (decision-time balance 712,153,247 ms; projected ~739M with C against the
+  predeclared 735M stop margin and the 744M ceiling).
+- **Decision:** park the mechanism at this exact scope; no repair-fit follows
+  automatically and no promotion. The harm is measured for this parameterization
+  including its 784 added per-lane parameters; the capacity/normalization
+  attribution control is unrun. The state/read path remains the next target, not a
+  re-parameterisation of this score.
+- **Stop:** this packet is closed. #973 and #820 remain open at their wider scope.
+
+### Executed: read-side localization (September 27)
+
+- **Executed** read-only on the frozen step-15,672 quaternion parent from the
+  [predeclared plan](read-localization-plan-2026-09-27.md) and
+  [result](read-localization-result-2026-09-27.md): decision-0 read-mass attribution on
+  the 32-row source panel under five declared conditions (baseline; entity-final;
+  matched final control; near-query entity mention; near-query matched control).
+  Baseline parity with the retained parent is `PARITY_EXACT` on all 32 rows, including
+  decision-0 read fields; the full run is 1.29 s and no weight or serving path changed.
+- **Witnessed result:** the predeclared rule returns **MIXED** (the frozen
+  READ_ACCESS_LIMITED thresholds were not met: the entity was present at read rank 2–3
+  with 16–32% share, and the entity-share metric did not separate the entity mention
+  from its matched control). Post-hoc at the same scope, a clean **READ_RANKING**
+  signature: in 5/5 distractor rows the emitted token equals the read top-1 (` clouds`),
+  the near-query entity mention completes 5/5 while the matched non-entity control
+  completes 0/5 and emits the inserted noun (` carrot`) 5/5. The extra-phrase class is
+  not entity-specific (D 3/5 vs control 4/5), consistent with the termination INERT
+  result; the single morphology row emits the correct noun at rank 1 and fails only the
+  completion.
+- **Decision:** the distractor failures are localized to the read's ranking (learned
+  age/recency prior) rather than entity absence or emission. Recommended bounded
+  successor: an oracle read re-rank intervention (clamp decision-0 mass onto the entity
+  occurrence) to confirm the ranking as the sole bottleneck before any mechanism change.
+  No promotion; the instrument is retained.
 
 ## Retained result: paired learned-code retention accepted
 

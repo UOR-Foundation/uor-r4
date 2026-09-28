@@ -72,6 +72,7 @@ fn campaign(evaluator: &Path, geometry: ReadGeometry) -> Campaign {
         read_initialization: Some(ReadInitialization::UnitScale),
         shared_parameter_transfer: None,
         end_weight: None,
+        geometric_read: None,
         trial_scope: "No-update startup witness only; total_steps is unused; four fixed development windows, no training or model-quality decision".into(),
     }
 }
