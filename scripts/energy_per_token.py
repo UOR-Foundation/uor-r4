@@ -89,9 +89,16 @@ def parse_macmon_jsonl(text):
     return readings_mw, "sys_power (macmon whole-system)"
 
 
+def get_powermetrics_cmd(interval_ms, count):
+    base = ["powermetrics", "--samplers", "cpu_power", "-i", str(interval_ms), "-n", str(count)]
+    if os.geteuid() != 0:
+        return ["sudo", "-n"] + base
+    return base
+
+
 def run_powermetrics_idle(seconds, interval_ms):
     count = max(1, math.ceil(seconds * 1000 / interval_ms))
-    cmd = ["powermetrics", "--samplers", "cpu_power", "-i", str(interval_ms), "-n", str(count)]
+    cmd = get_powermetrics_cmd(interval_ms, count)
     out = subprocess.run(cmd, capture_output=True, text=True)
     readings, field = parse_powermetrics_text(out.stdout)
     return readings, field, out.stdout, out.stderr
@@ -171,7 +178,7 @@ def main():
             sys.exit(
                 "powermetrics produced no readings for the idle phase.\n"
                 f"stderr: {err_pm.strip()[:500]}\n"
-                "If this says 'must be run as root', run under sudo."
+                "Run 'sudo -v' beforehand so 'sudo -n powermetrics' succeeds without interactive prompting."
             )
         if idle_pm:
             mean_pm = statistics.mean(idle_pm)
@@ -201,8 +208,9 @@ def main():
 
     if args.sampler in ("powermetrics", "dual"):
         n = max(1, math.ceil(args.max_seconds * 1000 / args.interval_ms))
+        pm_cmd = get_powermetrics_cmd(args.interval_ms, n)
         pm_proc = subprocess.Popen(
-            ["powermetrics", "--samplers", "cpu_power", "-i", str(args.interval_ms), "-n", str(n)],
+            pm_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

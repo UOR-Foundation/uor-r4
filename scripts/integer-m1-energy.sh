@@ -24,7 +24,7 @@ SAMPLER="macmon"
 REPEATS=3
 IDLE_SECONDS=8
 INTERVAL_MS=100
-K_LOW=8192
+K_LOW=10240
 K_HIGH=32768
 
 while [[ $# -gt 0 ]]; do
@@ -216,7 +216,11 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "  4. Model slot lock must be free (the script claims and releases the slot itself)."
   echo ""
   echo "Owner Execution Command:"
-  echo "  cd $REPO_ROOT && sudo -v && ./scripts/integer-m1-energy.sh"
+  if [[ "$SAMPLER" == "powermetrics" || "$SAMPLER" == "dual" ]]; then
+    echo "  cd $REPO_ROOT && sudo -v && ./scripts/integer-m1-energy.sh --sampler $SAMPLER"
+  else
+    echo "  cd $REPO_ROOT && ./scripts/integer-m1-energy.sh"
+  fi
   echo "================================================================================"
   exit 0
 fi
@@ -255,15 +259,10 @@ sysctl -n machdep.cpu.brand_string >> "$OUT/machine.txt" 2>/dev/null || true
 echo ""
 echo "Running Energy Benchmarks with sampler: $SAMPLER..."
 
-SUDO_PREFIX=""
-if [[ "$SAMPLER" == "powermetrics" || "$SAMPLER" == "dual" ]]; then
-  SUDO_PREFIX="sudo "
-fi
-
 for STEPS in "$K_LOW" "$K_HIGH"; do
   for repeat in $(seq 1 "$REPEATS"); do
     echo "[Integer Model] Steps: $STEPS, Repeat: $repeat"
-    ${SUDO_PREFIX}python3 "$SCRIPT_DIR/energy_per_token.py" \
+    python3 "$SCRIPT_DIR/energy_per_token.py" \
       --label "integer-w256-k${STEPS}-rep${repeat}" \
       --sampler "$SAMPLER" \
       --idle-seconds "$IDLE_SECONDS" \
@@ -277,7 +276,7 @@ for STEPS in "$K_LOW" "$K_HIGH"; do
         --tokens "$STEPS" 2>&1 | tee "$OUT/energy-integer-k${STEPS}-rep${repeat}.txt"
 
     echo "[Continuous FF Parent] Steps: $STEPS, Repeat: $repeat"
-    ${SUDO_PREFIX}python3 "$SCRIPT_DIR/energy_per_token.py" \
+    python3 "$SCRIPT_DIR/energy_per_token.py" \
       --label "continuous-ff-k${STEPS}-rep${repeat}" \
       --sampler "$SAMPLER" \
       --idle-seconds "$IDLE_SECONDS" \
