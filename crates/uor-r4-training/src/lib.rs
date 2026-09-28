@@ -15,6 +15,8 @@ pub mod dialogue_child_artifact;
 pub mod dialogue_development;
 pub mod dialogue_episodes;
 pub mod dialogue_learning;
+pub mod dialogue_rounding;
+pub mod dialogue_rounding_artifact;
 pub mod geometric_read;
 pub mod geometric_stack;
 pub mod joint_admission;
@@ -37,11 +39,16 @@ pub mod joint_transfer;
 pub mod kappa_llama;
 pub mod lut_export;
 pub mod ngram;
+pub mod read_localize;
 pub mod reference_campaign;
 pub mod reference_eval;
 pub mod stack_dialogue;
 pub mod stack_export;
 pub mod stack_memory;
+pub mod stack_tracking;
+
+#[cfg(test)]
+mod native_h4_contract;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
