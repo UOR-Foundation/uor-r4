@@ -75,6 +75,7 @@ Every PR names its lab and its class. Once its class's conditions hold, the appr
 - **A non-author review** is a written review, linked from the PR, by another lab or by an independent reviewer pass that did not write the change. The review names who launched it. Lab 1's own class B and C changes get one too.
   - All labs share one GitHub account and the ruleset enforces no reviews, so this rule is procedural. Keep it anyway.
 - **Never** push directly to `main`, bypass protection, use an admin merge or force-push shared work. A blocked merge names its cause and owner.
+- **A review that lists required fixes is not an approval** until those fixes land.
 - **Safe, inactive research and negative evidence** may merge without model promotion.
 
 ### Knowledge and resources

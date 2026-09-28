@@ -1,6 +1,6 @@
 # Three-lab charter (owner, 2026-09-28): verbatim record
 
-**Provenance.** The owner (Casey) gave these standing prompts to Lab 1 (Claude main) in its session on 2026-09-28, as the file `ALL_THREE_AUTONOMOUS_LAB_PROMPTS.md`. They are reproduced below unchanged. The [execution policy](agent-execution-policy.md#three-lab-organization-and-shared-operating-policy-owner-charter-2026-09-28) holds the shared operating rules drawn from them. Where this record and the policy differ, the policy on `main` governs, unless a newer owner instruction says otherwise.
+**Provenance.** The owner (Casey) gave these standing prompts to Lab 1 (Claude main) in its session on 2026-09-28, as the file `ALL_THREE_AUTONOMOUS_LAB_PROMPTS.md`. They are reproduced below unchanged. The [execution policy](agent-execution-policy.md#three-lab-organization-and-shared-operating-policy-owner-charter-2026-09-28) holds the shared operating rules drawn from them. Where this record and the policy differ, the owner's text governs, and Lab 1 corrects the policy by protected PR. A newer explicit owner instruction overrides both. The source file's SHA-256 is `4ef138d1…`.
 
 **The owner's later directive in the same session**, quoted exactly:
 
