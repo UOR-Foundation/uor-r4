@@ -5,7 +5,7 @@ September 28, 2026. References #973 and #820.
 - **Pre-registration:** [#973 comment 5876711862](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5876711862), posted before any fit.
 - **Evidence:** [g1-always-on-read-2026-09-28.json](../evidence/g1-always-on-read-2026-09-28.json), assembled from the sealed roots; supervision receipt `g1.supervision.json` beside them.
 
-**Status.** Complete, three seeds, six runs, all roots sealed with manifests and no error. **The frozen gate FAILS in every seed.** The registered outcome branches apply: the negative is recorded at this scope and no sweep follows.
+**Status.** Complete, three seeds, six runs, all roots sealed with manifests and no error. **The frozen gate FAILS in every seed.** Under [D12](DECISIONS.md#d12--gates-promote-never-kill-reopen-geometric-candidates-port-the-native-engines-mechanisms-keep-a-geometric-toolbox) (gates promote, never kill), this is **not yet promoted at this scope**: the exact store and G stay active, and the diagnosed next step is recorded below. No seed, dose or codebook sweep follows.
 
 ## What was tested
 
@@ -46,9 +46,9 @@ Applied mechanically by `aerm-probe summarize … gates=g1`; the registered gate
 1. **The always-on read removed the measured trigger failure and did not recover held-out accuracy.** Reads fire whenever the model's own tags define an address, yet held-out Updated improves only from 0.000/0.000/0.015 to 0.158/0.073/0.029 — nowhere near 0.90.
 2. **The dominant held-out failure is now `Unavailable`:** the model's own store diverges from the gold store at the query key on held-out episodes. In D2 the dominant failure was a read that never fired (`NotSelected`); with reads always on, the surviving failures are on the **write/key side** — role-tag or address-key formation under unseen names and phrasings, not the read decision. The trace is coarse and does not separate a missed write from a wrong key from an eviction.
 3. **The exact-store arm is more overfit to the training phrasings than the equal-parameter dense control on this world.** In distribution it is perfect where the control is not; held out, the control's recency-like policy answers Updated 0.47–0.81 while the store arm answers 0.03–0.16. Abstention (`Absent`, `PreviousAbsent`) still generalises far better in the memory arm.
-4. **At this scope the registered hypothesis is rejected:** replacing the trigger-gated read with an always-on address-driven read is necessary for reads to fire but **not sufficient** for language-to-address generalisation at 1.4M probe scale.
+4. **The always-on read is not yet promoted at this scope.** It is necessary for reads to fire but **not sufficient** for language-to-address generalisation at 1.4M probe scale. D12 keeps the exact store and G active; the failing seam is recorded as this mechanism's next diagnosed step.
 
-**Next unit (recommendation, for the shared-model blocker).** A bounded diagnostic on the same world and roots that separates the `Unavailable` cause — role-tag/address-key errors by slot and class, missed writes, and eviction — before any new mechanism or fit. If the split is address-key formation, the next intervention targets held-out-name/phrasing tag generalisation; if it is writes, the write path. No store rewrite, no codebook sweep, no dose extension follows from this negative.
+**Next unit (recommendation, for the shared-model blocker).** A bounded diagnostic on the same world and roots that separates the `Unavailable` cause — role-tag/address-key errors by slot and class, missed writes, and eviction. If the split is address-key formation, the next intervention targets held-out-name/phrasing tag generalisation with the same control; if it is writes, the write path. This is the recorded step under D12 item 1 and the D2/G reopening (D12 item 2, "I1's store, with G's learned read aimed at held-out phrasing"), together with the reopened geometric candidates that belong to G: the geometric sparse index with magnitude carried, and 2I/E8 read codes trained in rather than snapped post hoc. No store rewrite follows from this negative.
 
 ## Scope and limits
 
