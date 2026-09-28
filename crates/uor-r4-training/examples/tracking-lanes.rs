@@ -195,7 +195,8 @@ fn a5(args: &Args, out: &Path) -> Result<()> {
             }
             let served = best
                 .as_ref()
-                .map(|automaton| automaton.evaluate(&task, &eval_lengths, eval_words, 77));
+                .map(|automaton| automaton.evaluate(&task, &eval_lengths, eval_words, 77))
+                .transpose()?;
             let at = |rows: &[uor_r4_training::stack_tracking::LengthAccuracy], length: usize| {
                 rows.iter()
                     .find(|row| row.length == length)
@@ -235,6 +236,9 @@ fn a5(args: &Args, out: &Path) -> Result<()> {
                     "minimal_order": b.minimal_order,
                     "max_merge_distance": b.max_merge_distance,
                     "max_trace_deviation": b.max_trace_deviation,
+                    "max_merge_distance": b.max_merge_distance,
+                    "verified_exact": b.verify_exact(&task),
+                    "automaton": b,
                     "eval": served,
                 })),
             });
@@ -454,7 +458,8 @@ fn mixed(args: &Args, out: &Path) -> Result<()> {
             }
             let served = best
                 .as_ref()
-                .map(|automaton| automaton.evaluate(&task, &snap_lengths, a5_words, 77));
+                .map(|automaton| automaton.evaluate(&task, &snap_lengths, a5_words, 77))
+                .transpose()?;
             let at_position = |p: usize| {
                 a5.by_position
                     .iter()
@@ -508,6 +513,9 @@ fn mixed(args: &Args, out: &Path) -> Result<()> {
                     "fit_accuracy": b.fit_accuracy,
                     "minimal_order": b.minimal_order,
                     "max_trace_deviation": b.max_trace_deviation,
+                    "max_merge_distance": b.max_merge_distance,
+                    "verified_exact": b.verify_exact(&task),
+                    "automaton": b,
                     "eval": served,
                 })),
             });

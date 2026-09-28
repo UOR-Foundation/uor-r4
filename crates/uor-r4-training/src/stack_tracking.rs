@@ -69,8 +69,9 @@ impl Rng {
         z ^ (z >> 31)
     }
 
+    /// Uniform in `0..bound`; 0 when `bound` is 0.
     pub fn below(&mut self, bound: usize) -> usize {
-        (self.next_u64() % bound as u64) as usize
+        (self.next_u64() % bound.max(1) as u64) as usize
     }
 
     fn uniform(&mut self) -> f64 {
@@ -911,15 +912,58 @@ impl LaneAutomaton {
     }
 
     /// Serve one word: one table read per token for the state, one for the class.
-    pub fn run(&self, tokens: &[u32]) -> Vec<u8> {
+    pub fn run(&self, tokens: &[u32]) -> Result<Vec<u8>> {
+        let vocab = self.table.len() / self.order.max(1);
         let mut state = self.identity as usize;
         tokens
             .iter()
             .map(|&token| {
+                if token as usize >= vocab {
+                    return Err(invalid("token outside the automaton alphabet"));
+                }
                 state = self.table[token as usize * self.order + state] as usize;
-                self.readout[state]
+                Ok(self.readout[state])
             })
             .collect()
+    }
+
+    /// Exhaustive proof that the automaton classifies every prefix of every
+    /// word exactly, at any length. The initial state must read the
+    /// identity's class. Every transition's read-out must equal the exact A5
+    /// class update of its source state's read-out (`class <- class * root`,
+    /// well defined because -1 is central in 2I, via `group_table`). Induction
+    /// on the word length then gives correctness for all words.
+    pub fn verify_exact(&self, task: &A5Task) -> bool {
+        let table = group_table();
+        let vocab = self.table.len() / self.order.max(1);
+        if vocab != task.vocab() || self.readout.len() != self.order {
+            return false;
+        }
+        let mut representative = vec![usize::MAX; A5_ORDER];
+        for (element, &class) in task.class_of.iter().enumerate() {
+            if representative[class as usize] == usize::MAX {
+                representative[class as usize] = element;
+            }
+        }
+        if self.readout[self.identity as usize] != task.class_of[task.identity as usize] {
+            return false;
+        }
+        for state in 0..self.order {
+            let Some(&element) = representative.get(self.readout[state] as usize) else {
+                return false;
+            };
+            if element == usize::MAX {
+                return false;
+            }
+            for (token, &root) in task.generators.iter().enumerate() {
+                let next = self.table[token * self.order + state] as usize;
+                let exact = table.product[element * ROW_STRIDE + root as usize] as usize;
+                if self.readout[next] != task.class_of[exact] {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     /// Exact automaton accuracy on fresh words of each length.
@@ -929,7 +973,7 @@ impl LaneAutomaton {
         lengths: &[usize],
         words: usize,
         seed: u64,
-    ) -> Vec<LengthAccuracy> {
+    ) -> Result<Vec<LengthAccuracy>> {
         let mut rng = Rng::new(seed);
         lengths
             .iter()
@@ -937,7 +981,7 @@ impl LaneAutomaton {
                 let (mut last, mut all) = (0usize, 0usize);
                 for _ in 0..words {
                     let (tokens, labels) = task.sample(&mut rng, length);
-                    let predicted = self.run(&tokens);
+                    let predicted = self.run(&tokens)?;
                     for (t, (p, l)) in predicted.iter().zip(&labels).enumerate() {
                         if *p as u32 == *l {
                             all += 1;
@@ -947,12 +991,12 @@ impl LaneAutomaton {
                         }
                     }
                 }
-                LengthAccuracy {
+                Ok(LengthAccuracy {
                     length,
                     words,
                     final_position: last as f64 / words.max(1) as f64,
                     all_positions: all as f64 / (words * length).max(1) as f64,
-                }
+                })
             })
             .collect()
     }
@@ -1911,8 +1955,14 @@ mod tests {
         assert_eq!(automaton.minimal_order, A5_ORDER);
         assert!(automaton.max_trace_deviation < 1e-6);
         assert!((automaton.fit_accuracy - 1.0).abs() < 1e-12);
-        let served = automaton.evaluate(&task, &[1000], 8, 11);
+        let served = automaton.evaluate(&task, &[1000], 8, 11)?;
         assert!((served[0].all_positions - 1.0).abs() < 1e-12);
+        assert!(automaton.verify_exact(&task));
+        // Corrupt the read-out one step from the start: the check must fail.
+        let mut corrupted = automaton.clone();
+        let next = corrupted.table[corrupted.identity as usize] as usize;
+        corrupted.readout[next] = (corrupted.readout[next] + 1) % A5_ORDER as u8;
+        assert!(!corrupted.verify_exact(&task));
         Ok(())
     }
 
