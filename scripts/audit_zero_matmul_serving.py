@@ -1113,6 +1113,10 @@ def run_sentinel_tests():
         ("fminnmp v0.4s, v1.4s, v2.4s", False, False, True),
         ("fmaxv s0, v1.4s", False, False, True),
         ("fminv s0, v1.4s", False, False, True),
+        ("fmax.2d v0, v1, v2", False, False, True),
+        ("fmin.4s v0, v1, v2", False, False, True),
+        ("fmaxnm.2d v0, v1, v2", False, False, True),
+        ("fminnm.4s v0, v1, v2", False, False, True),
         ("fmaxnmv s0, v1.4s", False, False, True),
         ("fminnmv s0, v1.4s", False, False, True),
         ("faddp v0.4s, v1.4s, v2.4s", False, False, True),
@@ -1200,6 +1204,9 @@ def run_call_graph_audit(path, disasm_choice="auto"):
         "respond_stream",
         "DialogueConversationStream",
         "Sampler6select",
+        "select_ticket",
+        "exact_min_p_threshold",
+        "validate_distribution",
         "TextSession15step_next_token",
         "step_next_token",
         "TextSession7observe",
@@ -1207,9 +1214,16 @@ def run_call_graph_audit(path, disasm_choice="auto"):
         "affine_wide_into",
         "extract_salient_tokens",
         "heapsort_ranked",
+        "step_zeta_phase_scalar",
     ]
 
-    serving_roots = [fn for fn in functions if any(kw in fn for kw in serving_entry_keywords)]
+    serving_roots = [
+        fn
+        for fn in functions
+        if any(kw in fn for kw in serving_entry_keywords)
+        and "drop_glue" not in fn
+        and "closure" not in fn
+    ]
 
     allow_patterns = [
         r"alloc",
