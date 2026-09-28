@@ -24,8 +24,8 @@ SAMPLER="macmon"
 REPEATS=3
 IDLE_SECONDS=8
 INTERVAL_MS=100
-K_LOW=4096
-K_HIGH=16384
+K_LOW=8192
+K_HIGH=32768
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -200,10 +200,12 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   if [[ "$DRY_FAILURES" -eq 0 ]]; then
     echo "[DRY RUN COMPLETE: PASS]"
     echo "Preflight execution verified cleanly across $K_LOW and $K_HIGH step horizons (all runs >= 4.0s)."
+    echo "Note: Continuous FF checkpoint (fit256-quaternion-3) is the continuous floating-point ancestor"
+    echo "of the served integer bundle (bundle-quaternion-1), not the same model."
   else
-    echo "[DRY RUN COMPLETE: NOTICE] $DRY_FAILURES preflight run(s) lasted < 4.0s."
-    echo "Note: Continuous FF executes at ~2,000 tok/s on CPU BLAS, completing 4,096 steps in ~2.0s."
-    echo "At 100ms interval, ~2.0s collects ~20 samples, safely avoiding sample starvation."
+    echo "[DRY RUN COMPLETE: FAIL] $DRY_FAILURES preflight run(s) lasted < 4.0s."
+    echo "Strict rule requires all benchmark runs to last >= 4.0s for power sample stability."
+    exit 1
   fi
   echo "================================================================================"
   echo ""
