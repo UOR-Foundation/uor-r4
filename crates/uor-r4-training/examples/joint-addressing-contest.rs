@@ -354,9 +354,13 @@ fn arm_codes(arm: &AddressingArm, key: &[f32]) -> Result<Codes> {
     Ok(arm.encode(key)?)
 }
 
-fn arm_score(arm: &AddressingArm, codes: &Codes, query: &[f32]) -> Result<f64> {
+fn arm_ranking(arm: &AddressingArm, codes: &[Codes], query: &[f32]) -> Result<Vec<usize>> {
     let lut = arm.query_lut(query)?;
-    Ok(f64::from(arm.score(codes, &lut)?))
+    let scores: Vec<f64> = codes
+        .iter()
+        .map(|code| Ok(f64::from(arm.score(code, &lut)?)))
+        .collect::<Result<_>>()?;
+    Ok(ranking_by_score(&scores))
 }
 
 fn metric_record(label: &str, family: &str, s: usize, acc: &Acc, spec: &Value) -> Value {
@@ -508,10 +512,14 @@ fn panel_row_report(
     );
     emit("oracle-qk".to_string(), Some(oracle))?;
     for (index, arm) in arms.iter().enumerate() {
-        let scores: Vec<f64> = (0..previous)
-            .map(|i| arm_score(&arm.arm, &capture.codes[index][i], query))
-            .collect::<Result<_>>()?;
-        emit(arm.label.clone(), Some(ranking_by_score(&scores)))?;
+        emit(
+            arm.label.clone(),
+            Some(arm_ranking(
+                &arm.arm,
+                &capture.codes[index][..previous],
+                query,
+            )?),
+        )?;
     }
     Ok(json!({
         "probe": row.probe,
@@ -800,14 +808,7 @@ fn run(
                 .collect();
             let oracle_ranking = ranking_by_score(&oracle_scores);
             let geo_rankings: Vec<Vec<usize>> = (0..arms.len())
-                .map(|index| {
-                    let scores: Vec<f64> = (0..previous)
-                        .map(|candidate| {
-                            arm_score(&arms[index].arm, &code_cache[index][candidate], &query)
-                        })
-                        .collect::<Result<_>>()?;
-                    Ok(ranking_by_score(&scores))
-                })
+                .map(|index| arm_ranking(&arms[index].arm, &code_cache[index], &query))
                 .collect::<Result<_>>()?;
             arm_seconds += arm_started.elapsed().as_secs_f64();
             for (slot, (arm_ref, s)) in slot_specs.iter().enumerate() {
