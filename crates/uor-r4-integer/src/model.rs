@@ -312,6 +312,116 @@ impl<'de> serde::Deserialize<'de> for L2PrimePage {
     }
 }
 
+/// Power-of-two (4096 bytes = 2^12) aligned memory slot for width 576 dialogue value storage.
+///
+/// Guaranteed power-of-two stride eliminates hardware address multiplier (`madd`) instructions during serving.
+#[repr(C, align(64))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DialogueSlotValue576 {
+    pub value: [i32; 576],
+    pub _pad: [u8; 1792],
+}
+
+impl Default for DialogueSlotValue576 {
+    fn default() -> Self {
+        Self {
+            value: [0i32; 576],
+            _pad: [0u8; 1792],
+        }
+    }
+}
+
+/// Compressed L2 Galois prime memory page for evicted dialogue turns at width 576 ($K = 512..1024$).
+///
+/// Power-of-two padded (4096 bytes = 2^12) with 64-byte alignment to guarantee strictly zero multiplier instructions.
+#[repr(C, align(64))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct L2PrimePage576 {
+    pub key: [i32; KEY_DIM],
+    pub value: [i32; 576],
+    pub prime_signature: u64,
+    pub salient_tokens: [u32; 4],
+    pub start_seq: usize,
+    pub end_seq: usize,
+    pub turn_id: u32,
+    pub _pad: [u8; 1492],
+}
+
+impl Default for L2PrimePage576 {
+    fn default() -> Self {
+        Self {
+            key: [0i32; KEY_DIM],
+            value: [0i32; 576],
+            prime_signature: 0,
+            salient_tokens: [0u32; 4],
+            start_seq: 0,
+            end_seq: 0,
+            turn_id: 0,
+            _pad: [0u8; 1492],
+        }
+    }
+}
+
+impl serde::Serialize for L2PrimePage576 {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("L2PrimePage576", 7)?;
+        state.serialize_field("key", &self.key[..])?;
+        state.serialize_field("value", &self.value[..])?;
+        state.serialize_field("prime_signature", &self.prime_signature)?;
+        state.serialize_field("salient_tokens", &self.salient_tokens)?;
+        state.serialize_field("start_seq", &self.start_seq)?;
+        state.serialize_field("end_seq", &self.end_seq)?;
+        state.serialize_field("turn_id", &self.turn_id)?;
+        state.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for L2PrimePage576 {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct L2PrimePage576Helper {
+            key: Vec<i32>,
+            value: Vec<i32>,
+            prime_signature: u64,
+            salient_tokens: [u32; 4],
+            start_seq: usize,
+            end_seq: usize,
+            turn_id: u32,
+        }
+
+        let helper = L2PrimePage576Helper::deserialize(deserializer)?;
+        if helper.key.len() != KEY_DIM {
+            return Err(serde::de::Error::invalid_length(
+                helper.key.len(),
+                &format!("{KEY_DIM} elements").as_str(),
+            ));
+        }
+        if helper.value.len() != 576 {
+            return Err(serde::de::Error::invalid_length(
+                helper.value.len(),
+                &format!("576 elements").as_str(),
+            ));
+        }
+
+        let mut page = L2PrimePage576::default();
+        page.key.copy_from_slice(&helper.key);
+        page.value.copy_from_slice(&helper.value);
+        page.prime_signature = helper.prime_signature;
+        page.salient_tokens = helper.salient_tokens;
+        page.start_seq = helper.start_seq;
+        page.end_seq = helper.end_seq;
+        page.turn_id = helper.turn_id;
+        Ok(page)
+    }
+}
+
 /// Partitioned conversational memory state for zero-matmul serving.
 ///
 /// Power-of-two aligned memory structures (key stride 256 B = 2^8, value stride 1024 B = 2^10,
@@ -319,12 +429,13 @@ impl<'de> serde::Deserialize<'de> for L2PrimePage {
 #[derive(Clone, Debug)]
 pub struct SessionState {
     pub identity: String,
-    /// Recurrent state vector in Q11 format (dimension = 256).
+    /// Recurrent state vector in Q11 format (dimension = 256 or 576).
     pub state: Vec<i32>,
 
     // --- Persistent Session Partition (Slots 0..32) ---
     pub persistent_keys: Vec<[i32; KEY_DIM]>,
     pub persistent_values: Vec<[i32; VAL_DIM]>,
+    pub persistent_values_576: Vec<DialogueSlotValue576>,
     pub persistent_tokens: Vec<u32>,
     pub persistent_capacity: usize,
     pub persistent_sealed: bool,
@@ -332,6 +443,7 @@ pub struct SessionState {
     // --- Rolling Dialogue Partition (Slots 32..256 = 224 slots) ---
     pub dialogue_keys: Box<[[i32; KEY_DIM]; DIALOGUE_CAPACITY]>,
     pub dialogue_values: Box<[[i32; VAL_DIM]; DIALOGUE_CAPACITY]>,
+    pub dialogue_values_576: Option<Box<[DialogueSlotValue576; DIALOGUE_CAPACITY]>>,
     pub dialogue_tokens: Vec<u32>,
     pub dialogue_sequences: Vec<u64>,
     pub dialogue_turn_ids: Vec<u32>,
@@ -343,6 +455,7 @@ pub struct SessionState {
 
     // --- L2 Prime Paging Store (64 pages) ---
     pub l2_pages: Box<[L2PrimePage; L2_PAGE_CAPACITY]>,
+    pub l2_pages_576: Option<Box<[L2PrimePage576; L2_PAGE_CAPACITY]>>,
     pub l2_cursor: usize,
     pub l2_len: usize,
     pub l2_seen: u64,
@@ -2079,17 +2192,52 @@ impl IntegerModel {
             .try_into()
             .unwrap_or_else(|_| panic!("probabilities size mismatch"));
         let last_read_masses = Vec::with_capacity(TOTAL_MEMORY_CANDIDATES);
+
+        let (
+            dialogue_values_576,
+            persistent_values_576,
+            l2_pages_576,
+            scratch_products,
+            age_horizon_clamp,
+        ) = if self.config.width == 576 {
+            let dv576 = vec![DialogueSlotValue576::default(); DIALOGUE_CAPACITY]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap_or_else(|_| panic!("dialogue_values_576 size mismatch"));
+            let l2_576 = vec![L2PrimePage576::default(); L2_PAGE_CAPACITY]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap_or_else(|_| panic!("l2_pages_576 size mismatch"));
+            (
+                Some(dv576),
+                Vec::with_capacity(PERSISTENT_CAPACITY),
+                Some(l2_576),
+                vec![[0i64; 16]; 1152],
+                255,
+            )
+        } else {
+            (
+                None,
+                Vec::new(),
+                None,
+                vec![[0i64; 16]; 512],
+                AGE_HORIZON_CLAMP,
+            )
+        };
+
         SessionState {
             identity: self.identity.clone(),
             state: vec![0; self.config.width],
             persistent_keys: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_values: Vec::with_capacity(PERSISTENT_CAPACITY),
+            persistent_values_576,
             persistent_tokens: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_key_norms: Vec::with_capacity(PERSISTENT_CAPACITY),
             persistent_capacity: PERSISTENT_CAPACITY,
             persistent_sealed: false,
             dialogue_keys,
             dialogue_values,
+            dialogue_values_576,
             dialogue_tokens: vec![0; DIALOGUE_CAPACITY],
             dialogue_sequences: vec![0; DIALOGUE_CAPACITY],
             dialogue_turn_ids: vec![0; DIALOGUE_CAPACITY],
@@ -2100,6 +2248,7 @@ impl IntegerModel {
             dialogue_seen: 0,
             current_turn_id: 0,
             l2_pages,
+            l2_pages_576,
             l2_page_norms,
             l2_cursor: 0,
             l2_len: 0,
@@ -2108,9 +2257,9 @@ impl IntegerModel {
             zeta_state: T8ZetaState::new(),
             hopf_state: HopfFiberPointQ30::default(),
             cumulative_holonomy_q30: 0,
-            age_horizon_clamp: AGE_HORIZON_CLAMP,
+            age_horizon_clamp,
             allow_hyperbolic_cache: false,
-            scratch_products: vec![[0i64; 16]; 512],
+            scratch_products,
             copy_scratch: vec![0u64; 4096],
             last_probabilities,
             last_read_masses,
@@ -3017,9 +3166,9 @@ impl IntegerModel {
         // Partitioned conversational memory stores full-width values and scores
         // keys by the dot read by default; a Lorentz or width-128 model uses `step`
         // unless hyperbolic cache memory is explicitly enabled on the session.
-        if self.config.width != VAL_DIM {
+        if self.config.width != VAL_DIM && self.config.width != 576 {
             return Err(invalid(
-                "conversational sessions serve only the width-256 shape",
+                "conversational sessions serve only the width-256 or width-576 shape",
             ));
         }
         if self.lorentz.is_some() && !session.allow_hyperbolic_cache {
@@ -3044,10 +3193,13 @@ impl IntegerModel {
         }
 
         let width = self.config.width;
-        let mut scratch_products = [[0i64; 16]; 512];
+        if session.scratch_products.len() < 2 * width {
+            session.scratch_products.resize(2 * width, [0i64; 16]);
+        }
 
         let token_index = token as usize;
         let start = match width {
+            576 => (token_index << 9) + (token_index << 6),
             256 => token_index << 8,
             128 => token_index << 7,
             _ => return Err(invalid("unsupported embedding width")),
@@ -3055,28 +3207,35 @@ impl IntegerModel {
         let end = start + width;
         fill_packed_low_bit_products(
             self.p_embedding.codes.packed_range(start, end - start)?,
-            &mut scratch_products[..width],
+            &mut session.scratch_products[..width],
         );
 
-        let mut token_affine = [0i128; 768];
+        let mut token_affine = [0i128; 1728];
         self.matrix_work_direct_into(
-            &scratch_products[..width],
+            &session.scratch_products[..width],
             &self.p_recurrent_input,
             width,
             i32::from(self.p_embedding.spec.row_exponents[token_index]),
             &mut token_affine[..3 * width],
         )?;
 
-        let mut previous_normalized = [0i32; 256];
-        normalize_state_into(&session.state, &mut previous_normalized)?;
+        let mut previous_normalized = [0i32; 576];
+        if width == 576 {
+            normalize_state_576_into(&session.state, &mut previous_normalized)?;
+        } else {
+            normalize_state_into(
+                &session.state,
+                (&mut previous_normalized[..256]).try_into().unwrap(),
+            )?;
+        }
         fill_low_bit_products(
             &previous_normalized[..width],
-            &mut scratch_products[..width],
+            &mut session.scratch_products[..width],
         );
 
-        let mut recurrent = [0i128; 768];
+        let mut recurrent = [0i128; 1728];
         self.matrix_work_direct_into(
-            &scratch_products[..width],
+            &session.scratch_products[..width],
             &self.p_recurrent_state,
             width,
             -10,
@@ -3091,21 +3250,21 @@ impl IntegerModel {
             &fallback_bias
         };
 
-        let mut fused = [0i32; 768];
+        let mut fused = [0i32; 1728];
         for i in 0..3 * width {
             fused[i] = quantize(token_affine[i] + recurrent[i] + bias[i], WORK_BITS, 8)?;
         }
 
-        let mut candidate = [0i32; 256];
+        let mut candidate = [0i32; 576];
         for i in 0..width {
             candidate[i] = self.tables.tanh[(fused[i] + 32767) as usize];
         }
-        let mut z = [0i32; 256];
+        let mut z = [0i32; 576];
         for i in 0..width {
             z[i] = self.tables.sigmoid[(fused[width + i] + 32767) as usize];
         }
 
-        let mut transported = [0i32; 256];
+        let mut transported = [0i32; 576];
         transport_into(
             &session.state,
             &fused[width + width..3 * width],
@@ -3113,7 +3272,7 @@ impl IntegerModel {
             &mut transported[..width],
         )?;
 
-        let mut provisional = [0i32; 256];
+        let mut provisional = [0i32; 576];
         blend_into(
             &transported[..width],
             &candidate[..width],
@@ -3121,8 +3280,15 @@ impl IntegerModel {
             &mut provisional[..width],
         )?;
 
-        let mut normalized = [0i32; 256];
-        normalize_state_into(&provisional[..width], &mut normalized)?;
+        let mut normalized = [0i32; 576];
+        if width == 576 {
+            normalize_state_576_into(&provisional[..576], &mut normalized)?;
+        } else {
+            normalize_state_into(
+                &provisional[..256],
+                (&mut normalized[..256]).try_into().unwrap(),
+            )?;
+        }
 
         let n_sys = session.persistent_keys.len();
         let n_dial = session.dialogue_len;
@@ -3130,15 +3296,15 @@ impl IntegerModel {
         let total_slots = n_sys + n_dial + n_page;
 
         let mut all_masses = [0u64; MAX_SCORES_CAPACITY];
-        let mut read = [0i32; 256];
+        let mut read = [0i32; 576];
         let no_read = if total_slots == 0 || mode == ReadMode::NoRead {
             TOTAL
         } else {
-            fill_low_bit_products(&normalized[..width], &mut scratch_products[..width]);
+            fill_low_bit_products(&normalized[..width], &mut session.scratch_products[..width]);
 
             let mut query = [0i32; KEY_DIM];
             self.affine_direct_into(
-                &scratch_products[..width],
+                &session.scratch_products[..width],
                 &self.p_read_query,
                 &self.read_query_bias,
                 width,
@@ -3148,7 +3314,7 @@ impl IntegerModel {
 
             let mut null_buf = [0i32; 1];
             self.affine_direct_into(
-                &scratch_products[..width],
+                &session.scratch_products[..width],
                 &self.p_read_no_read,
                 &self.read_no_read_bias,
                 width,
@@ -3408,116 +3574,139 @@ impl IntegerModel {
             let m_dial = &all_masses[1 + n_sys..1 + n_sys + n_dial];
             let m_page = &all_masses[1 + n_sys + n_dial..score_count];
 
-            let mut sum_coords = [0i64; VAL_DIM];
-            let n_sys_vchunks = n_sys >> 2;
-            for c in 0..n_sys_vchunks {
-                let base = c << 2;
-                let m_chunk: &[u64; 4] = m_sys[base..base + 4].try_into().unwrap();
-                if (m_chunk[0] | m_chunk[1] | m_chunk[2] | m_chunk[3]) == 0 {
-                    continue;
+            if width == 576 {
+                let mut sum_coords = [0i64; 576];
+                for (&mass, val) in m_sys.iter().zip(&session.persistent_values_576) {
+                    accumulate_slot_value_576(&mut sum_coords, mass, &val.value);
                 }
-                accumulate_slot_values_4x(
-                    &mut sum_coords,
-                    m_chunk,
-                    &session.persistent_values[base],
-                    &session.persistent_values[base + 1],
-                    &session.persistent_values[base + 2],
-                    &session.persistent_values[base + 3],
-                );
-            }
-            let sys_rem_start = n_sys_vchunks << 2;
-            for (&mass, val) in m_sys[sys_rem_start..n_sys]
-                .iter()
-                .zip(&session.persistent_values[sys_rem_start..n_sys])
-            {
-                accumulate_slot_value_1x(&mut sum_coords, mass, val);
-            }
-
-            let n_dial_vchunks = n_dial >> 2;
-            for c in 0..n_dial_vchunks {
-                let base = c << 2;
-                let m_chunk: &[u64; 4] = m_dial[base..base + 4].try_into().unwrap();
-                if (m_chunk[0] | m_chunk[1] | m_chunk[2] | m_chunk[3]) == 0 {
-                    continue;
+                if let Some(ref d_vals_576) = session.dialogue_values_576 {
+                    for (&mass, val) in m_dial.iter().zip(d_vals_576[..n_dial].iter()) {
+                        accumulate_slot_value_576(&mut sum_coords, mass, &val.value);
+                    }
                 }
-                accumulate_slot_values_4x(
-                    &mut sum_coords,
-                    m_chunk,
-                    &session.dialogue_values[base],
-                    &session.dialogue_values[base + 1],
-                    &session.dialogue_values[base + 2],
-                    &session.dialogue_values[base + 3],
-                );
-            }
-            let dial_rem_start = n_dial_vchunks << 2;
-            for (&mass, val) in m_dial[dial_rem_start..n_dial]
-                .iter()
-                .zip(&session.dialogue_values[dial_rem_start..n_dial])
-            {
-                accumulate_slot_value_1x(&mut sum_coords, mass, val);
-            }
-
-            let n_page_vchunks = n_page >> 2;
-            for c in 0..n_page_vchunks {
-                let base = c << 2;
-                let m_chunk: &[u64; 4] = m_page[base..base + 4].try_into().unwrap();
-                if (m_chunk[0] | m_chunk[1] | m_chunk[2] | m_chunk[3]) == 0 {
-                    continue;
+                if let Some(ref l2_576) = session.l2_pages_576 {
+                    for (&mass, page) in m_page.iter().zip(l2_576[..n_page].iter()) {
+                        accumulate_slot_value_576(&mut sum_coords, mass, &page.value);
+                    }
                 }
-                accumulate_slot_values_4x(
-                    &mut sum_coords,
-                    m_chunk,
-                    &session.l2_pages[base].value,
-                    &session.l2_pages[base + 1].value,
-                    &session.l2_pages[base + 2].value,
-                    &session.l2_pages[base + 3].value,
-                );
-            }
-            let page_rem_start = n_page_vchunks << 2;
-            for (&mass, page) in m_page[page_rem_start..n_page]
-                .iter()
-                .zip(&session.l2_pages[page_rem_start..n_page])
-            {
-                accumulate_slot_value_1x(&mut sum_coords, mass, &page.value);
-            }
+                for (out, &acc) in read[..576].iter_mut().zip(&sum_coords) {
+                    *out = quantize(acc as i128, 48 + 14, STATE_BITS)?;
+                }
+            } else {
+                let mut sum_coords = [0i64; VAL_DIM];
+                let n_sys_vchunks = n_sys >> 2;
+                for c in 0..n_sys_vchunks {
+                    let base = c << 2;
+                    let m_chunk: &[u64; 4] = m_sys[base..base + 4].try_into().unwrap();
+                    if (m_chunk[0] | m_chunk[1] | m_chunk[2] | m_chunk[3]) == 0 {
+                        continue;
+                    }
+                    accumulate_slot_values_4x(
+                        &mut sum_coords,
+                        m_chunk,
+                        &session.persistent_values[base],
+                        &session.persistent_values[base + 1],
+                        &session.persistent_values[base + 2],
+                        &session.persistent_values[base + 3],
+                    );
+                }
+                let sys_rem_start = n_sys_vchunks << 2;
+                for (&mass, val) in m_sys[sys_rem_start..n_sys]
+                    .iter()
+                    .zip(&session.persistent_values[sys_rem_start..n_sys])
+                {
+                    accumulate_slot_value_1x(&mut sum_coords, mass, val);
+                }
 
-            for (out, &acc) in read[..width].iter_mut().zip(&sum_coords[..width]) {
-                *out = quantize(acc as i128, 48 + 14, STATE_BITS)?;
+                let n_dial_vchunks = n_dial >> 2;
+                for c in 0..n_dial_vchunks {
+                    let base = c << 2;
+                    let m_chunk: &[u64; 4] = m_dial[base..base + 4].try_into().unwrap();
+                    if (m_chunk[0] | m_chunk[1] | m_chunk[2] | m_chunk[3]) == 0 {
+                        continue;
+                    }
+                    accumulate_slot_values_4x(
+                        &mut sum_coords,
+                        m_chunk,
+                        &session.dialogue_values[base],
+                        &session.dialogue_values[base + 1],
+                        &session.dialogue_values[base + 2],
+                        &session.dialogue_values[base + 3],
+                    );
+                }
+                let dial_rem_start = n_dial_vchunks << 2;
+                for (&mass, val) in m_dial[dial_rem_start..n_dial]
+                    .iter()
+                    .zip(&session.dialogue_values[dial_rem_start..n_dial])
+                {
+                    accumulate_slot_value_1x(&mut sum_coords, mass, val);
+                }
+
+                let n_page_vchunks = n_page >> 2;
+                for c in 0..n_page_vchunks {
+                    let base = c << 2;
+                    let m_chunk: &[u64; 4] = m_page[base..base + 4].try_into().unwrap();
+                    if (m_chunk[0] | m_chunk[1] | m_chunk[2] | m_chunk[3]) == 0 {
+                        continue;
+                    }
+                    accumulate_slot_values_4x(
+                        &mut sum_coords,
+                        m_chunk,
+                        &session.l2_pages[base].value,
+                        &session.l2_pages[base + 1].value,
+                        &session.l2_pages[base + 2].value,
+                        &session.l2_pages[base + 3].value,
+                    );
+                }
+                let page_rem_start = n_page_vchunks << 2;
+                for (&mass, page) in m_page[page_rem_start..n_page]
+                    .iter()
+                    .zip(&session.l2_pages[page_rem_start..n_page])
+                {
+                    accumulate_slot_value_1x(&mut sum_coords, mass, &page.value);
+                }
+
+                for (out, &acc) in read[..width].iter_mut().zip(&sum_coords[..width]) {
+                    *out = quantize(acc as i128, 48 + 14, STATE_BITS)?;
+                }
             }
             no_read
         };
 
-        let mut concat_buf = [0i32; 512];
+        let mut concat_buf = [0i32; 1152];
         concat_buf[..width].copy_from_slice(&provisional[..width]);
-        concat_buf[width..width + width].copy_from_slice(&read[..width]);
-        fill_low_bit_products(&concat_buf, &mut scratch_products[..512]);
+        concat_buf[width..2 * width].copy_from_slice(&read[..width]);
+        fill_low_bit_products(
+            &concat_buf[..2 * width],
+            &mut session.scratch_products[..2 * width],
+        );
 
-        let mut update_raw = [0i32; 256];
+        let mut update_raw = [0i32; 576];
         self.affine_direct_into(
-            &scratch_products[..512],
+            &session.scratch_products[..2 * width],
             &self.p_update,
             &self.update_bias,
-            512,
+            2 * width,
             STATE_BITS,
             &mut update_raw[..width],
         )?;
-        let mut update = [0i32; 256];
+        let mut update = [0i32; 576];
         for i in 0..width {
             update[i] = self.tables.tanh[(update_raw[i] + 32767) as usize];
         }
 
         let mut update_gate_raw = [0i32; 1];
         self.affine_direct_into(
-            &scratch_products[..512],
+            &session.scratch_products[..2 * width],
             &self.p_update_gate,
             &self.update_gate_bias,
-            512,
+            2 * width,
             STATE_BITS,
             &mut update_gate_raw,
         )?;
         let rho = self.tables.sigmoid[(update_gate_raw[0] + 32767) as usize];
 
-        let mut state = [0i32; 256];
+        let mut state = [0i32; 576];
         blend_scalar_into(
             &provisional[..width],
             &update[..width],
@@ -3525,26 +3714,40 @@ impl IntegerModel {
             &mut state[..width],
         )?;
 
-        fill_low_bit_products(&state[..width], &mut scratch_products[..width]);
+        concat_buf[..width].copy_from_slice(&state[..width]);
+        fill_low_bit_products(
+            &concat_buf[..2 * width],
+            &mut session.scratch_products[..2 * width],
+        );
 
         let mut copy_gate_raw = [0i32; 1];
         self.affine_direct_into(
-            &scratch_products[..512],
+            &session.scratch_products[..2 * width],
             &self.p_copy_gate,
             &self.copy_gate_bias,
-            512,
+            2 * width,
             STATE_BITS,
             &mut copy_gate_raw,
         )?;
         let gate = self.tables.sigmoid[(copy_gate_raw[0] + 32767) as usize];
 
-        let mut write_normalized = [0i32; 256];
-        normalize_state_into(&state[..width], &mut write_normalized)?;
-        fill_low_bit_products(&write_normalized[..width], &mut scratch_products[..width]);
+        let mut write_normalized = [0i32; 576];
+        if width == 576 {
+            normalize_state_576_into(&state[..576], &mut write_normalized)?;
+        } else {
+            normalize_state_into(
+                &state[..256],
+                (&mut write_normalized[..256]).try_into().unwrap(),
+            )?;
+        }
+        fill_low_bit_products(
+            &write_normalized[..width],
+            &mut session.scratch_products[..width],
+        );
 
         let mut key = [0i32; KEY_DIM];
         self.affine_direct_into(
-            &scratch_products[..width],
+            &session.scratch_products[..width],
             &self.p_read_key,
             &self.read_key_bias,
             width,
@@ -3552,21 +3755,21 @@ impl IntegerModel {
             &mut key,
         )?;
 
-        let mut value_raw = [0i32; VAL_DIM];
+        let mut value_raw = [0i32; 576];
         self.affine_direct_into(
-            &scratch_products[..width],
+            &session.scratch_products[..width],
             &self.p_read_value,
             &self.read_value_bias,
             width,
             10,
-            &mut value_raw,
+            &mut value_raw[..width],
         )?;
-        let mut value = [0i32; VAL_DIM];
-        for i in 0..VAL_DIM {
+        let mut value = [0i32; 576];
+        for i in 0..width {
             value[i] = self.tables.tanh[(value_raw[i] + 32767) as usize];
         }
 
-        let mut hidden = [0i32; 256];
+        let mut hidden = [0i32; 576];
         let row_exp = i32::from(self.p_output_norm.spec.row_exponents[0]);
         for d in 0..width {
             let x = write_normalized[d] as i64;
@@ -3574,11 +3777,11 @@ impl IntegerModel {
             let val = i128::from(mul_code_i64(x, w));
             hidden[d] = scaled(val, row_exp)?.clamp(-32767, 32767) as i32;
         }
-        fill_low_bit_products(&hidden[..width], &mut scratch_products[..width]);
+        fill_low_bit_products(&hidden[..width], &mut session.scratch_products[..width]);
 
         let mut logits = [0i32; 4096];
         self.project_vocab_with_products_into(
-            &scratch_products[..width],
+            &session.scratch_products[..width],
             &mut logits[..self.config.vocab_size],
         )?;
 
@@ -3670,6 +3873,11 @@ impl IntegerModel {
                     0i128
                 };
 
+                if width == 576 {
+                    let mut val_arr_576 = DialogueSlotValue576::default();
+                    val_arr_576.value.copy_from_slice(&value[..576]);
+                    session.persistent_values_576.push(val_arr_576);
+                }
                 session.persistent_keys.push(key_arr);
                 session.persistent_values.push(val_arr);
                 session.persistent_tokens.push(token);
@@ -3732,6 +3940,23 @@ impl IntegerModel {
                             } else {
                                 0i128
                             };
+
+                            if let (Some(ref d_vals_576), Some(ref mut l2_576)) =
+                                (&session.dialogue_values_576, &mut session.l2_pages_576)
+                            {
+                                let mut page_576 = L2PrimePage576::default();
+                                page_576.key.copy_from_slice(&page.key);
+                                page_576
+                                    .value
+                                    .copy_from_slice(&d_vals_576[terminal_idx].value);
+                                page_576.prime_signature = page.prime_signature;
+                                page_576.salient_tokens = page.salient_tokens;
+                                page_576.start_seq = page.start_seq;
+                                page_576.end_seq = page.end_seq;
+                                page_576.turn_id = page.turn_id;
+                                l2_576[p_idx] = page_576;
+                            }
+
                             session.l2_pages[p_idx] = page;
                             session.l2_page_norms[p_idx] = p_kn;
                             session.l2_cursor = if p_idx + 1 >= L2_PAGE_CAPACITY {
@@ -3754,6 +3979,9 @@ impl IntegerModel {
                 let idx = session.dialogue_cursor;
                 session.dialogue_keys[idx].copy_from_slice(&key[..KEY_DIM]);
                 session.dialogue_values[idx].copy_from_slice(&value[..VAL_DIM]);
+                if let Some(ref mut d_vals_576) = session.dialogue_values_576 {
+                    d_vals_576[idx].value.copy_from_slice(&value[..576]);
+                }
                 session.dialogue_tokens[idx] = token;
                 session.dialogue_sequences[idx] = session.dialogue_seen;
                 session.dialogue_turn_ids[idx] = session.current_turn_id;
@@ -3769,6 +3997,9 @@ impl IntegerModel {
             }
         }
 
+        // --- TELEMETRY-ONLY STATE (does NOT affect model outputs, logits, or probabilities) ---
+        // Zeta T^8 phases, Hopf S3->S2 fiber holonomy, and prime signatures are tracked exclusively
+        // for runtime observation, telemetry inspection (/stats), and geometric metrics.
         session.zeta_state.step(token);
 
         let s3_coords = [state[0], state[1], state[2], state[3]];
@@ -4097,7 +4328,7 @@ fn normalize_state(input: &[i32]) -> Result<Vec<i32>> {
 /// The division by9 floors BEFORE epsilon and square root; rounding it or
 /// first dividing S by576 would define a different numerical contract.
 #[inline(never)]
-fn normalize_state_576(input: &[i32]) -> Result<Vec<i32>> {
+fn normalize_state_576_into(input: &[i32], out: &mut [i32; 576]) -> Result<()> {
     if input.len() != 576 || input.iter().any(|&x| !(-32767..=32767).contains(&x)) {
         return Err(invalid(
             "dialogue576 normalization requires 576 signed16 interface codes",
@@ -4112,16 +4343,24 @@ fn normalize_state_576(input: &[i32]) -> Result<Vec<i32>> {
     let variance = arithmetic(math::div_rem_unsigned(u128::from(sum) << 58, 9))?.0 + EPSILON;
     let denominator = math::isqrt(variance) as u64;
     let table = build_div_table_u64(denominator);
-    let mut out = vec![0i32; 576];
     for (value, &x) in out.iter_mut().zip(input) {
         if x != 0 {
             let q =
                 fast_div_round_radix16_u64(u128::from(x.unsigned_abs()) << 42, &table, denominator);
             let signed = if x < 0 { -(q as i32) } else { q as i32 };
             *value = signed.clamp(-32767, 32767);
+        } else {
+            *value = 0;
         }
     }
-    Ok(out)
+    Ok(())
+}
+
+#[inline(never)]
+fn normalize_state_576(input: &[i32]) -> Result<Vec<i32>> {
+    let mut out = [0i32; 576];
+    normalize_state_576_into(input, &mut out)?;
+    Ok(out.to_vec())
 }
 
 #[inline(always)]
@@ -4743,16 +4982,18 @@ mod tests {
             assert!(model.step(&mut session, 0, mode).is_err());
             assert_eq!(session.state, old_state);
         }
-        // The separate, fixed256 Google API remains outside this profile.
+        // Conversational session serving now supports width 576 (Dot geometry).
         let mut conversational = model.new_conversational_session();
-        assert!(model
-            .step_conversational(
-                &mut conversational,
-                0,
-                SlotTarget::Dialogue,
-                ReadMode::Enabled
-            )
-            .is_err());
+        let conv_step = model.step_conversational(
+            &mut conversational,
+            0,
+            SlotTarget::Dialogue,
+            ReadMode::Enabled,
+        )?;
+        assert_eq!(conv_step.state.len(), 576);
+        assert_eq!(conv_step.probabilities.iter().sum::<u64>(), TOTAL);
+        assert_eq!(conversational.dialogue_len, 1);
+        assert!(conversational.dialogue_values_576.is_some());
         let retained = IntegerModel::synthetic_for_test().new_session();
         assert!(matches!(retained.values, SessionValues::Retained(_)));
         Ok(())

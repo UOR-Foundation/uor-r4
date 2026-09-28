@@ -243,6 +243,10 @@ fn print_welcome_banner(bundle: &Bundle, policy: SamplePolicy, read_mode: ReadMo
         "  Vocabulary Size : {} tokens",
         bundle.model().config().vocab_size
     );
+    println!(
+        "  State Dimension : {} dimensions",
+        bundle.model().config().width
+    );
     println!("  Memory Capacity : 256 tokens (32 Persistent Persona, 224 Dialogue Slots)");
     println!("  Sampling Policy : {:?}", policy);
     println!("  Memory Read Mode: {:?}", read_mode);
@@ -302,7 +306,7 @@ fn print_stats(session: &ChatSession) {
         format!("{:?}", session.policy())
     );
     println!("{ANSI_MAGENTA_BOLD}+----------------------------------------------------------------------------+{ANSI_RESET}");
-    println!("{ANSI_MAGENTA_BOLD}| Geometric State Coordinates:                                               |{ANSI_RESET}");
+    println!("{ANSI_MAGENTA_BOLD}| Telemetry-Only Coordinates (observation, not model computation):           |{ANSI_RESET}");
     println!(
         "| Hopf Holonomy DeltaPsi : {:<50}|",
         format!("Q30: {}, S1 winding != 0", t.cumulative_holonomy_q30)
@@ -484,7 +488,17 @@ fn run_kernel_verification(bundle: &Bundle) -> Result<()> {
     let mut session = model.new_session();
     let step = model.step(&mut session, 0, ReadMode::Enabled)?;
     std::hint::black_box(&step);
-    println!("{ANSI_GREEN_BOLD}[PASS]{ANSI_RESET} Zero-MatMul numerical serving kernel verified (IntegerModel::step retained).");
+
+    let mut conv_session = model.new_conversational_session();
+    let conv_step = model.step_conversational(
+        &mut conv_session,
+        0,
+        uor_r4_integer::model::SlotTarget::Dialogue,
+        ReadMode::Enabled,
+    )?;
+    std::hint::black_box(&conv_step);
+
+    println!("{ANSI_GREEN_BOLD}[PASS]{ANSI_RESET} Zero-MatMul numerical serving kernel verified (IntegerModel::step and step_conversational retained).");
     Ok(())
 }
 
@@ -520,6 +534,7 @@ fn resolve_bundle_path(path: &Path) -> PathBuf {
     let default_bases = [
         "/Users/casey.allard/uor-r4-investigations/integer-serving-20260925",
         "/Users/casey.allard/uor-r4-investigations/language-continuation-20260925",
+        "/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926",
     ];
     for base in &default_bases {
         let candidate = Path::new(base).join(path);
