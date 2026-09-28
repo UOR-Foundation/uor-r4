@@ -424,11 +424,33 @@ pub(crate) fn stack_arcosh1p_q24(code: u128, table: &[u32]) -> u32 {
 // ---------------------------------------------------------------------------
 // Vector kernels.
 
+/// The largest magnitude in `values`. Every element passes through an opaque
+/// barrier, which keeps the reduction scalar: a vectorized maximum would end
+/// in a SIMD-to-general-register transfer (`fmov`), which the R1 audit refuses.
+#[inline(never)]
+pub(crate) fn stack_max_abs_i32(values: &[i32]) -> u32 {
+    let mut max = 0u32;
+    for &v in values {
+        max = max.max(black_box(v).unsigned_abs());
+    }
+    max
+}
+
+/// The largest magnitude in `values`, as [`stack_max_abs_i32`].
+#[inline(never)]
+pub(crate) fn stack_max_abs_i64(values: &[i64]) -> u64 {
+    let mut max = 0u64;
+    for &v in values {
+        max = max.max(black_box(v).unsigned_abs());
+    }
+    max
+}
+
 /// Requantize `values * 2^exp` to 16 bits with the smallest exponent that
 /// fits; returns the new exponent.
 #[inline(never)]
 pub(crate) fn stack_quantize16(values: &[i64], exp: i32, out: &mut [i16]) -> i32 {
-    let max = values.iter().map(|v| v.unsigned_abs()).max().unwrap_or(0);
+    let max = stack_max_abs_i64(values);
     let s = (bit_length(max) - 15).max(0);
     for (o, &v) in out.iter_mut().zip(values) {
         *o = shift(v, s).clamp(-32767, 32767) as i16;
@@ -441,10 +463,10 @@ pub(crate) fn stack_quantize16(values: &[i64], exp: i32, out: &mut [i16]) -> i32
 /// exponent. `scratch` has the length of `x`.
 #[inline(never)]
 pub(crate) fn stack_rms_norm(x: &[i32], eps: Fixed, scratch: &mut [i64], out: &mut [i16]) -> i32 {
-    let max = x.iter().map(|v| v.unsigned_abs()).max().unwrap_or(0);
+    let max = stack_max_abs_i32(x);
     let sh = (bit_length(u64::from(max)) - 24).max(0);
-    // After the shift every value is within 2^24, so each square is below
-    // 2^49 and the sum of at most 2^14 squares is exact.
+    // After the shift every value is within 2^24, so each square is at most
+    // 2^48 and the sum of at most 2^14 squares is exact.
     let mut sum = 0u64;
     for (s, &v) in scratch.iter_mut().zip(x) {
         let y = shift(i64::from(v), sh);

@@ -78,10 +78,14 @@ struct Layer {
 pub struct IntegerStackModel {
     shape: StackShape,
     numerics: StackNumerics,
+    /// Derived at load so that a step never divides: `width / heads`.
+    head_dim: usize,
+    lorentz: bool,
     sha256: String,
     embed: PackedMatrix,
     head: PackedMatrix,
-    layers: Vec<Layer>,
+    /// Boxed so that the per-layer walk steps by a power-of-two stride.
+    layers: Vec<Box<Layer>>,
     exp_table: Vec<u32>,
     silu_table: Vec<i32>,
     gelu_table: Vec<i32>,
@@ -200,12 +204,12 @@ impl IntegerStackModel {
                     },
                 }))
             };
-            layers.push(Layer {
+            layers.push(Box::new(Layer {
                 mixer,
                 gate: matrix(&name("gate"), mlp, d)?,
                 up: matrix(&name("up"), mlp, d)?,
                 down: matrix(&name("down"), d, mlp)?,
-            });
+            }));
         }
         let embed = packed(artifact.matrix("embed", shape.vocab, d)?, "embed")?;
         let head = matrix("head", shape.vocab, d)?;
@@ -251,6 +255,8 @@ impl IntegerStackModel {
             )));
         }
         Ok(Self {
+            head_dim: shape.head_dim(),
+            lorentz: shape.lorentz(),
             shape,
             numerics,
             sha256: artifact.sha256,
@@ -300,7 +306,7 @@ impl IntegerStackModel {
             .pattern
             .bytes()
             .map(|kind| {
-                if kind == b'r' {
+                Box::new(if kind == b'r' {
                     LayerState::Recurrence {
                         state: vec![0; d],
                         history: vec![0; (CONVOLUTION_WIDTH - 1) * d],
@@ -309,13 +315,13 @@ impl IntegerStackModel {
                     LayerState::Read {
                         keys: vec![0; context * d],
                         values: vec![0; context * d],
-                        lifts: if s.lorentz() {
+                        lifts: if self.lorentz {
                             vec![0; context * s.heads]
                         } else {
                             Vec::new()
                         },
                     }
-                }
+                })
             })
             .collect();
         let widest = d.max(s.mlp);
@@ -338,10 +344,10 @@ impl IntegerStackModel {
                 k: vec![0; d],
                 v: vec![0; d],
                 null: vec![0; s.heads],
-                query_tables: vec![[0; 16]; s.head_dim()],
+                query_tables: vec![[0; 16]; self.head_dim],
                 scores: vec![0; context],
                 weights: vec![0; context],
-                mix: vec![0; s.head_dim()],
+                mix: vec![0; self.head_dim],
                 proj: vec![0; d],
                 gate: vec![0; s.mlp],
                 up: vec![0; s.mlp],
@@ -398,7 +404,8 @@ pub struct IntegerStackSession<'m> {
     cache_at: usize,
     /// `position * heads`: where this position's Lorentz key lifts go.
     lift_at: usize,
-    states: Vec<LayerState>,
+    /// Boxed, like the model's layers, for a power-of-two stride.
+    states: Vec<Box<LayerState>>,
     b: Buffers,
 }
 
@@ -413,7 +420,7 @@ impl IntegerStackSession<'_> {
         self.cache_at = 0;
         self.lift_at = 0;
         for state in &mut self.states {
-            match state {
+            match state.as_mut() {
                 LayerState::Recurrence { state, history } => {
                     state.fill(0);
                     history.fill(0);
@@ -457,7 +464,7 @@ impl IntegerStackSession<'_> {
         for (layer, state) in model.layers.iter().zip(self.states.iter_mut()) {
             let norm_exp = stack_rms_norm(&b.x, n.rms_eps, &mut b.scratch[..d], &mut b.norm);
             stack_activation_tables(&b.norm, &mut b.tables[..d]);
-            match (&layer.mixer, state) {
+            match (&layer.mixer, state.as_mut()) {
                 (Mixer::Recurrence(r), LayerState::Recurrence { state, history }) => {
                     stack_recurrence(model, r, state, history, b, norm_exp)
                 }
@@ -649,8 +656,8 @@ fn stack_read(
     norm_exp: i32,
 ) {
     let (s, n) = (&model.shape, &model.numerics);
-    let (d, heads, hd, context) = (s.width, s.heads, s.head_dim(), s.context);
-    let lorentz = s.lorentz();
+    let (d, heads, hd, context) = (s.width, s.heads, model.head_dim, s.context);
+    let lorentz = model.lorentz;
     let Cache {
         keys,
         values,
