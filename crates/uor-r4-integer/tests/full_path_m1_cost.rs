@@ -1,74 +1,95 @@
-//! Comprehensive Full-Path M1 Cost Benchmark for Certified Width-576 Dialogue Bundle.
+//! Full-path cost measurement harness for the width-576 dialogue bundle.
 //!
-//! Measures all 7 alpha-acceptance cost dimensions:
-//! 1. Cold model load latency (disk read, JSON metadata, binary tables, bundle validation)
-//! 2. Tokenizer encode latency (raw text prompt to token IDs)
-//! 3. Prompt ingestion latency (slot projection, prime memory loading, initial state evolution)
-//! 4. Per-token autoregressive step latency (p50, p90, p95, p99, mean, stddev) across 1,433 decisions
-//! 5. Session serialization save & restore latency (state serialization, coordinate validation, roundtrip parity)
-//! 6. Peak process RSS tracking via `getrusage(RUSAGE_SELF).ru_maxrss`
-//! 7. Analytical bytes touched per token (parameter traffic and memory bandwidth)
+//! Fixture-dependent: ignored by default, and fails when run without the local
+//! `dialogue-child-bundle-1` fixture or its recorded replay. Run it explicitly:
+//!
+//! ```text
+//! UOR_R4_M1_COST_REPORT_ROOT=/new/attempt/dir UOR_R4_SOURCE_COMMIT=<sha> \
+//!   cargo test -p uor-r4-integer --release --test full_path_m1_cost -- --ignored --nocapture
+//! ```
+//!
+//! With `UOR_R4_M1_COST_REPORT_ROOT` set, that directory is claimed exclusively
+//! (`report_output::claim`) before the bundle loads, the report is written into
+//! it, and the attempt is sealed and verified. Without the variable nothing is
+//! written. Measures cold load, tokenizer encode, prompt ingestion, per-step
+//! latency over the recorded dialogue replay (exact parity asserted), session
+//! save/restore latency with a restore-continuation comparison, and process RSS
+//! via `ps`. Bytes touched per token is an analytic count, not a measurement.
+//! Latency ceilings are recorded next to the measured values with a computed
+//! `meets` flag; they are not asserted. One run is not a qualification.
 
+use serde_json::{json, Value};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uor_r4_integer::bundle::Bundle;
 use uor_r4_integer::config::ReadMode;
 use uor_r4_integer::model::SlotTarget;
+use uor_r4_integer::report_output;
 use uor_r4_integer::session::ChatSession;
-use uor_r4_integer::Result;
+use uor_r4_integer::{IntegerError, Result};
 
-fn get_process_rss_mb() -> f64 {
-    let pid = std::process::id();
-    if let Ok(output) = Command::new("ps")
-        .args(["-o", "rss=", "-p", &pid.to_string()])
-        .output()
-    {
-        if output.status.success() {
-            if let Ok(text) = std::str::from_utf8(&output.stdout) {
-                if let Ok(rss_kib) = text.trim().parse::<f64>() {
-                    return rss_kib / 1024.0;
-                }
-            }
-        }
-    }
-    0.0
+const BUNDLE_PATH: &str =
+    "/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926/dialogue-child-bundle-1";
+const RESPONSES_PATH: &str =
+    "/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926/dialogue-child-observation-1/responses-integer.json";
+const REPORT_ROOT_ENV: &str = "UOR_R4_M1_COST_REPORT_ROOT";
+const SOURCE_COMMIT_ENV: &str = "UOR_R4_SOURCE_COMMIT";
+const REPORT_FILE: &str = "m1-cost.json";
+
+/// Declared alpha ceilings, recorded against the measurement, not asserted.
+const CEILING_COLD_LOAD_MS: f64 = 250.0;
+const CEILING_STEP_MEAN_MS: f64 = 4.0;
+const CEILING_STEP_P90_MS: f64 = 4.0;
+/// Greedy decisions compared after a save/restore round trip.
+const RESTORE_CONTINUATION_STEPS: usize = 32;
+
+fn invalid(message: impl Into<String>) -> IntegerError {
+    IntegerError::Invalid(message.into())
 }
 
-fn get_live_chatbot_rss_mb(bundle_path: &Path) -> Option<f64> {
-    let bin = Path::new(
-        "/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-bins/698bdda481de57c2257b158bb53f7942568a3be7/uor-chat",
-    );
-    if bin.exists() {
-        let mut child = Command::new(bin)
-            .args(["--bundle", bundle_path.to_str().unwrap()])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .ok()?;
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = std::io::Write::write_all(&mut stdin, b"/stats\n/quit\n");
-        }
-        if let Ok(output) = child.wait_with_output() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                if line.contains("Process RSS") {
-                    if let Some(pos) = line.find(':') {
-                        let rest = &line[pos + 1..];
-                        if let Some(mb_pos) = rest.find("MB") {
-                            let num_str = rest[..mb_pos].trim();
-                            if let Ok(val) = num_str.parse::<f64>() {
-                                return Some(val);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+fn require_fixture(path: &Path) -> Result<()> {
+    if path.exists() {
+        Ok(())
+    } else {
+        Err(invalid(format!(
+            "required fixture {} is missing; this ignored test needs the local dialogue-child-bundle-1 fixture",
+            path.display()
+        )))
     }
-    None
+}
+
+fn process_rss_mb() -> Option<f64> {
+    let output = Command::new("ps")
+        .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let kib: f64 = std::str::from_utf8(&output.stdout)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(kib / 1024.0)
+}
+
+fn sysctl(name: &str) -> Value {
+    Command::new("sysctl")
+        .args(["-n", name])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|text| Value::from(text.trim()))
+        .unwrap_or_else(|| Value::from("UNAVAILABLE"))
+}
+
+fn rss_value(rss: Option<f64>) -> Value {
+    rss.map(Value::from)
+        .unwrap_or_else(|| Value::from("UNAVAILABLE"))
 }
 
 fn greedy_choice(probs: &[u64]) -> u32 {
@@ -83,389 +104,300 @@ fn greedy_choice(probs: &[u64]) -> u32 {
     best_idx
 }
 
+fn field<'a>(value: &'a Value, key: &str) -> Result<&'a Value> {
+    value
+        .get(key)
+        .ok_or_else(|| invalid(format!("replay fixture lacks '{key}'")))
+}
+
+fn array<'a>(value: &'a Value, key: &str) -> Result<&'a Vec<Value>> {
+    field(value, key)?
+        .as_array()
+        .ok_or_else(|| invalid(format!("replay fixture '{key}' is not an array")))
+}
+
+fn token(value: &Value) -> Result<u32> {
+    value
+        .as_u64()
+        .and_then(|id| u32::try_from(id).ok())
+        .ok_or_else(|| invalid("replay fixture token is not a u32"))
+}
+
+fn percentile(sorted: &[f64], percent: usize) -> f64 {
+    sorted[(sorted.len() * percent / 100).min(sorted.len() - 1)]
+}
+
+fn ceiling(ceiling: f64, measured: f64) -> Value {
+    json!({ "ceiling": ceiling, "measured": measured, "meets": measured <= ceiling })
+}
+
 #[test]
+#[ignore = "requires the local dialogue-child-bundle-1 fixture; run with --ignored"]
 fn test_full_path_m1_cost_dialogue576() -> Result<()> {
-    let initial_rss = get_process_rss_mb();
-    println!("=== Full-Path M1 Cost Benchmark (Certified Width-576 Dialogue Bundle) ===");
-    println!("Initial Process RSS: {:.2} MB", initial_rss);
-
-    let bundle_path = Path::new(
-        "/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926/dialogue-child-bundle-1",
-    );
-    if !bundle_path.exists() {
-        eprintln!("Bundle path does not exist: skipping benchmark");
-        return Ok(());
+    let bundle_path = Path::new(BUNDLE_PATH);
+    let responses_path = Path::new(RESPONSES_PATH);
+    require_fixture(bundle_path)?;
+    require_fixture(responses_path)?;
+    let report_root = std::env::var_os(REPORT_ROOT_ENV).map(PathBuf::from);
+    if let Some(root) = &report_root {
+        report_output::claim(root)?;
     }
+    let started_unix_s = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0);
+    let load_average_before = sysctl("vm.loadavg");
+    let initial_rss = process_rss_mb();
 
-    // -------------------------------------------------------------------------
-    // 1. Cold & Warm Model Load Latency
-    // -------------------------------------------------------------------------
+    // 1. Cold bundle load.
     let cold_start = Instant::now();
     let bundle = Bundle::load(bundle_path)?;
     let cold_load_ms = cold_start.elapsed().as_secs_f64() * 1000.0;
-    let post_load_rss = get_process_rss_mb();
-
-    println!("\n[1. Model Load Latency]");
-    println!("  Cold Load Latency : {:.3} ms", cold_load_ms);
-    println!("  Post-Load RSS     : {:.2} MB", post_load_rss);
-
+    let post_load_rss = process_rss_mb();
     let model = bundle.model();
     assert_eq!(model.config().width, 576);
     assert_eq!(model.config().vocab_size, 4096);
 
-    // -------------------------------------------------------------------------
-    // 2. Tokenizer Encode Latency
-    // -------------------------------------------------------------------------
+    // 2. Tokenizer encode.
     let tokenizer = bundle.tokenizer();
-    let test_prompts = [
+    let prompts = [
         "Hello!",
         "What is your name and what can you do?",
         "Please remember that the secret code is alpha-7-delta. What was the code?",
         "In geometric language modeling, we replace soft attention matrices and dense MLPs with prime-addressed exact memory, Riemann zeta-zero phase coordinates on the 8-torus, and discrete Hopf holonomy over S3.",
     ];
-
-    let mut total_tokens_encoded = 0;
-    let mut total_encode_nanos: u128 = 0;
-
-    for prompt in &test_prompts {
-        let t0 = Instant::now();
+    let mut encoded_tokens = 0usize;
+    let mut encode_nanos = 0u128;
+    for prompt in &prompts {
+        let start = Instant::now();
         let tokens = tokenizer.encode(prompt);
-        let elapsed = t0.elapsed().as_nanos();
-        total_tokens_encoded += tokens.len();
-        total_encode_nanos += elapsed;
+        encode_nanos += start.elapsed().as_nanos();
+        encoded_tokens += tokens.len();
     }
+    let encode_us_per_token = encode_nanos as f64 / encoded_tokens as f64 / 1000.0;
 
-    let us_per_token_encode = (total_encode_nanos as f64 / total_tokens_encoded as f64) / 1000.0;
-    println!("\n[2. Tokenizer Encode Latency]");
-    println!("  Total Prompts Evaluated : {}", test_prompts.len());
-    println!("  Total Tokens Encoded    : {}", total_tokens_encoded);
-    println!(
-        "  Average Encode Latency  : {:.3} us/token",
-        us_per_token_encode
-    );
-
-    // -------------------------------------------------------------------------
-    // 3. Prompt Ingestion Latency
-    // -------------------------------------------------------------------------
+    // 3. Prompt ingestion into a fresh session.
     let mut session = model.new_conversational_session();
-    let sample_prompt_tokens = tokenizer.encode(test_prompts[2]);
-    let t_ingest_start = Instant::now();
-    let mut prompt_ingest_step_nanos = Vec::with_capacity(sample_prompt_tokens.len());
-    for &tok in &sample_prompt_tokens {
-        let t0 = Instant::now();
-        let _ = model.step_conversational(
-            &mut session,
-            tok,
-            SlotTarget::Dialogue,
-            ReadMode::Enabled,
-        )?;
-        prompt_ingest_step_nanos.push(t0.elapsed().as_nanos());
+    let ingest_tokens = tokenizer.encode(prompts[2]);
+    let mut ingest_nanos = 0u128;
+    for &tok in &ingest_tokens {
+        let start = Instant::now();
+        model.step_conversational(&mut session, tok, SlotTarget::Dialogue, ReadMode::Enabled)?;
+        ingest_nanos += start.elapsed().as_nanos();
     }
-    let total_ingest_ms = t_ingest_start.elapsed().as_secs_f64() * 1000.0;
-    let mean_ingest_step_ms = (prompt_ingest_step_nanos.iter().sum::<u128>() as f64
-        / prompt_ingest_step_nanos.len() as f64)
-        / 1_000_000.0;
-    let post_ingest_rss = get_process_rss_mb();
+    let ingest_ms_per_token = ingest_nanos as f64 / ingest_tokens.len() as f64 / 1_000_000.0;
 
-    println!("\n[3. Prompt Ingestion Latency]");
-    println!("  Prompt Tokens Ingested  : {}", sample_prompt_tokens.len());
-    println!("  Total Ingestion Time    : {:.3} ms", total_ingest_ms);
-    println!(
-        "  Mean Step During Ingest : {:.3} ms/token",
-        mean_ingest_step_ms
-    );
-    println!("  Post-Ingest RSS         : {:.2} MB", post_ingest_rss);
-
-    // -------------------------------------------------------------------------
-    // 4. Per-Token Autoregressive Step Latency & 58-Turn Parity Verification
-    // -------------------------------------------------------------------------
-    let responses_path = Path::new(
-        "/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926/dialogue-child-observation-1/responses-integer.json",
-    );
-    assert!(responses_path.exists(), "responses-integer.json missing");
-    let data_bytes = fs::read(responses_path)?;
-    let data: serde_json::Value = serde_json::from_slice(&data_bytes)?;
-    let rows = data["rows"].as_array().unwrap();
-
-    let mut step_latencies_us: Vec<f64> = Vec::with_capacity(3000);
-    let mut total_verified_tokens = 0;
-    let mut total_step_calls = 0;
-    let mut max_rss = post_ingest_rss;
-
-    let full_replay_start = Instant::now();
-
+    // 4. Per-step latency over the recorded replay, with exact greedy parity.
+    let data: Value = serde_json::from_slice(&fs::read(responses_path)?)?;
+    let rows = array(&data, "rows")?;
+    let mut step_us: Vec<f64> = Vec::with_capacity(3000);
+    let mut decisions_verified = 0usize;
+    let mut turns_replayed = 0usize;
+    let mut peak_rss = post_load_rss;
+    let replay_start = Instant::now();
     for (row_idx, row) in rows.iter().enumerate() {
-        let req_id = row["id"].as_str().unwrap();
-        let turns = row["turns"].as_array().unwrap();
+        let turns = array(row, "turns")?;
         let mut session = model.new_conversational_session();
-
         for (turn_idx, turn) in turns.iter().enumerate() {
-            let conv_turn = &turn["native_conversation_turn"];
-            let appended_ids: Vec<u32> = conv_turn["appended_token_ids"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|v| v.as_u64().unwrap() as u32)
-                .collect();
-            let decisions = conv_turn["dialogue"]["generation"]["decisions"]
-                .as_array()
-                .unwrap();
-
-            let mut last_step = None;
-            for &token in &appended_ids {
-                let t0 = Instant::now();
-                let step = model.step_conversational(
+            turns_replayed += 1;
+            let conversation = field(turn, "native_conversation_turn")?;
+            let appended = array(conversation, "appended_token_ids")?;
+            let generation = field(field(conversation, "dialogue")?, "generation")?;
+            let decisions = array(generation, "decisions")?;
+            let mut step = None;
+            for id in appended {
+                let start = Instant::now();
+                step = Some(model.step_conversational(
                     &mut session,
-                    token,
+                    token(id)?,
                     SlotTarget::Dialogue,
                     ReadMode::Enabled,
-                )?;
-                let elapsed_us = t0.elapsed().as_nanos() as f64 / 1000.0;
-                step_latencies_us.push(elapsed_us);
-                total_step_calls += 1;
-                last_step = Some(step);
+                )?);
+                step_us.push(start.elapsed().as_nanos() as f64 / 1000.0);
             }
-
-            let mut step = last_step.unwrap();
-
+            let mut step = step.ok_or_else(|| invalid("replay turn appends no tokens"))?;
             for (dec_idx, decision) in decisions.iter().enumerate() {
-                let expected_token = decision["selected_token"].as_u64().unwrap() as u32;
-                let actual_token = greedy_choice(&step.probabilities);
-
-                if actual_token != expected_token {
-                    panic!(
-                        "Parity mismatch at req {} ({}), turn {}, dec {}: expected {}, got {}",
-                        row_idx, req_id, turn_idx, dec_idx, expected_token, actual_token
-                    );
-                }
-
-                total_verified_tokens += 1;
-
+                let expected = token(field(decision, "selected_token")?)?;
+                let actual = greedy_choice(&step.probabilities);
+                assert_eq!(
+                    actual, expected,
+                    "replay departure at request {row_idx}, turn {turn_idx}, decision {dec_idx}"
+                );
+                decisions_verified += 1;
                 if dec_idx + 1 < decisions.len() || turn_idx + 1 < turns.len() {
-                    let t0 = Instant::now();
+                    let start = Instant::now();
                     step = model.step_conversational(
                         &mut session,
-                        actual_token,
+                        actual,
                         SlotTarget::Dialogue,
                         ReadMode::Enabled,
                     )?;
-                    let elapsed_us = t0.elapsed().as_nanos() as f64 / 1000.0;
-                    step_latencies_us.push(elapsed_us);
-                    total_step_calls += 1;
+                    step_us.push(start.elapsed().as_nanos() as f64 / 1000.0);
                 }
             }
-
-            let cur_rss = get_process_rss_mb();
-            if cur_rss > max_rss {
-                max_rss = cur_rss;
+            if let Some(rss) = process_rss_mb() {
+                peak_rss = Some(peak_rss.map_or(rss, |peak: f64| peak.max(rss)));
             }
         }
     }
+    let replay_seconds = replay_start.elapsed().as_secs_f64();
+    assert_eq!(rows.len(), 38);
+    assert_eq!(turns_replayed, 58);
+    assert_eq!(decisions_verified, 1433);
+    assert_eq!(step_us.len(), 2526);
 
-    let full_replay_elapsed_sec = full_replay_start.elapsed().as_secs_f64();
-    assert_eq!(total_verified_tokens, 1433);
-    assert_eq!(total_step_calls, 2526);
-
-    let mut sorted_latencies = step_latencies_us.clone();
-    sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-    let n = sorted_latencies.len();
-    let min_ms = sorted_latencies[0] / 1000.0;
-    let p50_ms = sorted_latencies[n * 50 / 100] / 1000.0;
-    let p90_ms = sorted_latencies[n * 90 / 100] / 1000.0;
-    let p95_ms = sorted_latencies[n * 95 / 100] / 1000.0;
-    let p99_ms = sorted_latencies[n * 99 / 100] / 1000.0;
-    let max_ms = sorted_latencies[n - 1] / 1000.0;
-
-    let mean_us = sorted_latencies.iter().sum::<f64>() / (n as f64);
+    let mut sorted = step_us.clone();
+    sorted.sort_by(f64::total_cmp);
+    let n = sorted.len() as f64;
+    let mean_us = sorted.iter().sum::<f64>() / n;
+    let stddev_us = (sorted.iter().map(|&x| (x - mean_us).powi(2)).sum::<f64>() / n).sqrt();
+    let step_latency = json!({
+        "mean_ms": mean_us / 1000.0,
+        "stddev_ms": stddev_us / 1000.0,
+        "min_ms": sorted[0] / 1000.0,
+        "p50_ms": percentile(&sorted, 50) / 1000.0,
+        "p90_ms": percentile(&sorted, 90) / 1000.0,
+        "p95_ms": percentile(&sorted, 95) / 1000.0,
+        "p99_ms": percentile(&sorted, 99) / 1000.0,
+        "max_ms": sorted[sorted.len() - 1] / 1000.0,
+        "tok_per_sec": n / replay_seconds,
+    });
     let mean_ms = mean_us / 1000.0;
-    let variance_us = sorted_latencies
-        .iter()
-        .map(|&x| (x - mean_us).powi(2))
-        .sum::<f64>()
-        / (n as f64);
-    let stddev_ms = variance_us.sqrt() / 1000.0;
-    let tok_per_sec = (total_step_calls as f64) / full_replay_elapsed_sec;
+    let p90_ms = percentile(&sorted, 90) / 1000.0;
 
-    println!("\n[4. Per-Token Autoregressive Step Latency (1,433 decisions, 2,526 steps)]");
-    println!("  Total Steps Measured    : {}", total_step_calls);
-    println!(
-        "  Decisions Verified      : {} (100% exact bit-for-bit parity)",
-        total_verified_tokens
-    );
-    println!("  Mean Latency            : {:.3} ms/step", mean_ms);
-    println!("  StdDev                  : {:.3} ms", stddev_ms);
-    println!("  Min Latency             : {:.3} ms", min_ms);
-    println!("  p50 (Median) Latency    : {:.3} ms", p50_ms);
-    println!("  p90 Latency             : {:.3} ms", p90_ms);
-    println!("  p95 Latency             : {:.3} ms", p95_ms);
-    println!("  p99 Latency             : {:.3} ms", p99_ms);
-    println!("  Max Latency             : {:.3} ms", max_ms);
-    println!("  Throughput              : {:.1} tokens/sec", tok_per_sec);
-
-    // -------------------------------------------------------------------------
-    // 5. Session Save & Restore Latency
-    // -------------------------------------------------------------------------
-    let mut chat_session = ChatSession::new(&bundle, Some("Persistent system persona."), 12345)?;
+    // 5. Session save/restore latency and restore continuation.
+    let sha = bundle.identity();
+    let mut chat = ChatSession::new(&bundle, Some("Persistent system persona."), 12345)?;
     for i in 0..50 {
-        let _ =
-            chat_session.ingest_user_turn(&format!("User message {i} with facts to remember."))?;
+        chat.ingest_user_turn(&format!("User message {i} with facts to remember."))?;
+    }
+    let save_start = Instant::now();
+    let serialized = chat.to_serialized(Some(sha));
+    let save_ms = save_start.elapsed().as_secs_f64() * 1000.0;
+    let restore_start = Instant::now();
+    let mut restored = ChatSession::from_serialized(&bundle, serialized, sha)?;
+    let restore_ms = restore_start.elapsed().as_secs_f64() * 1000.0;
+    let serialized_round_trip_equal = serde_json::to_value(restored.to_serialized(Some(sha)))?
+        == serde_json::to_value(chat.to_serialized(Some(sha)))?;
+    let probe = "What was the first fact?";
+    chat.ingest_user_turn(probe)?;
+    restored.ingest_user_turn(probe)?;
+    let mut first_divergence = None;
+    for step_idx in 0..RESTORE_CONTINUATION_STEPS {
+        let expected = chat
+            .last_step()
+            .ok_or_else(|| invalid("original session lacks a step"))?;
+        let actual = restored
+            .last_step()
+            .ok_or_else(|| invalid("restored session lacks a step"))?;
+        if expected.probabilities != actual.probabilities {
+            first_divergence = Some(step_idx);
+            break;
+        }
+        let next = greedy_choice(&expected.probabilities);
+        chat.step_token(next, SlotTarget::Dialogue)?;
+        restored.step_token(next, SlotTarget::Dialogue)?;
     }
 
-    let sha = bundle.identity();
-    let t_save = Instant::now();
-    let serialized = chat_session.to_serialized(Some(sha));
-    let save_ms = t_save.elapsed().as_secs_f64() * 1000.0;
-
-    let t_restore = Instant::now();
-    let _restored = ChatSession::from_serialized(&bundle, serialized, sha)?;
-    let restore_ms = t_restore.elapsed().as_secs_f64() * 1000.0;
-
-    println!("\n[5. Session Save & Restore Latency]");
-    println!("  Active Context Length   : {} turns", 50);
-    println!("  Session Save Latency    : {:.3} ms", save_ms);
-    println!("  Session Restore Latency : {:.3} ms", restore_ms);
-    println!("  Roundtrip Parity        : PASS (restored session state intact)");
-
-    // -------------------------------------------------------------------------
-    // 6. Process Memory (RSS)
-    // -------------------------------------------------------------------------
-    let live_chatbot_rss = get_live_chatbot_rss_mb(bundle_path).unwrap_or(22.80);
-    println!("\n[6. Process Memory (RSS)]");
-    println!("  Initial Process RSS     : {:.2} MB", initial_rss);
-    println!("  Post-Load RSS           : {:.2} MB", post_load_rss);
-    println!("  Post-Ingest RSS         : {:.2} MB", post_ingest_rss);
-    println!("  Replay Test Peak RSS    : {:.2} MB", max_rss);
-    println!(
-        "  Live Chatbot Process RSS: {:.2} MB (Ceiling: < 35.0 MB - PASS)",
-        live_chatbot_rss
-    );
-    assert!(
-        live_chatbot_rss < 35.0,
-        "Live chatbot process RSS ({:.2} MB) exceeded 35.0 MB ceiling",
-        live_chatbot_rss
-    );
-    assert!(
-        post_load_rss < 35.0,
-        "Post-load RSS ({:.2} MB) exceeded 35.0 MB ceiling",
-        post_load_rss
-    );
-
-    // -------------------------------------------------------------------------
-    // 7. Analytical Parameter Traffic & Bytes Touched Per Token
-    // -------------------------------------------------------------------------
+    // 6. Analytic bytes touched per token (a count, not a measurement).
     let width = 576usize;
     let read_dim = 64usize;
     let vocab_size = 4096usize;
     let memory_slots = 256usize; // 32 persistent + 224 dialogue
+    let bytes_touched = vocab_size * width / 2 // 4-bit unembedding
+        + read_dim * width / 2 // 4-bit score projection
+        + memory_slots * read_dim * 2 // INT16 memory keys
+        + memory_slots * width * 4 // INT32 memory values
+        + width * 2 // INT16 state
+        + 8 * 4 // zeta phases
+        + 4 * 4; // Hopf coordinates
 
-    let bytes_unembed = vocab_size * width / 2; // 4-bit packed weights = 1,179,648 B
-    let bytes_score_proj = read_dim * width / 2; // 4-bit packed = 18,432 B
-    let bytes_memory_keys = memory_slots * read_dim * 2; // INT16 = 32,768 B
-    let bytes_memory_vals = memory_slots * width * 4; // INT32 = 589,824 B
-    let bytes_state_vec = width * 2; // INT16 = 1,152 B
-    let bytes_zeta_coords = 8 * 4; // 32 B
-    let bytes_hopf_coords = 4 * 4; // 16 B
+    let load_average_after = sysctl("vm.loadavg");
+    let build_profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+    let source_commit =
+        std::env::var(SOURCE_COMMIT_ENV).unwrap_or_else(|_| "UNRECORDED".to_string());
+    println!("full-path cost harness, one run (not a qualification)");
+    println!("  cold load            {cold_load_ms:.3} ms");
+    println!("  tokenizer encode     {encode_us_per_token:.3} us/token ({encoded_tokens} tokens)");
+    println!("  prompt ingestion     {ingest_ms_per_token:.3} ms/token");
+    println!(
+        "  step mean / p90      {mean_ms:.3} / {p90_ms:.3} ms over {} steps",
+        step_us.len()
+    );
+    println!("  replay parity        {decisions_verified} decisions, 0 departures");
+    println!("  save / restore       {save_ms:.3} / {restore_ms:.3} ms");
+    println!("  restore continuation first divergence: {first_divergence:?}");
+    println!("  load average         {load_average_before} -> {load_average_after}");
 
-    let total_bytes_touched = bytes_unembed
-        + bytes_score_proj
-        + bytes_memory_keys
-        + bytes_memory_vals
-        + bytes_state_vec
-        + bytes_zeta_coords
-        + bytes_hopf_coords;
-    let total_mib_touched = (total_bytes_touched as f64) / (1024.0 * 1024.0);
-
-    println!("\n[7. Bytes Touched Per Token (Analytical & Cache Bandwidth)]");
-    println!(
-        "  Vocabulary Projection (4-bit packed) : {:>10} bytes ({:.3} MiB)",
-        bytes_unembed,
-        bytes_unembed as f64 / 1048576.0
-    );
-    println!(
-        "  Score Projection (4-bit packed)      : {:>10} bytes ({:.3} KiB)",
-        bytes_score_proj,
-        bytes_score_proj as f64 / 1024.0
-    );
-    println!(
-        "  Prime Memory Keys (256 slots INT16)  : {:>10} bytes ({:.3} KiB)",
-        bytes_memory_keys,
-        bytes_memory_keys as f64 / 1024.0
-    );
-    println!(
-        "  Prime Memory Values (256 slots INT32): {:>10} bytes ({:.3} KiB)",
-        bytes_memory_vals,
-        bytes_memory_vals as f64 / 1024.0
-    );
-    println!(
-        "  Active State & Coordinates           : {:>10} bytes ({:.3} KiB)",
-        bytes_state_vec + bytes_zeta_coords + bytes_hopf_coords,
-        (bytes_state_vec + bytes_zeta_coords + bytes_hopf_coords) as f64 / 1024.0
-    );
-    println!("  -------------------------------------------------------------");
-    println!(
-        "  Total Bytes Touched Per Token        : {:>10} bytes ({:.3} MiB/token)",
-        total_bytes_touched, total_mib_touched
-    );
-
-    // -------------------------------------------------------------------------
-    // 8. Summary Evidence JSON Serialization
-    // -------------------------------------------------------------------------
-    let summary = serde_json::json!({
-        "schema": "uor-r4.m1-cost-profile/1",
-        "timestamp": format!("{:?}", std::time::SystemTime::now()),
-        "hardware": {
-            "platform": "Apple Silicon (M1-class arm64)",
-            "threads": 1,
-            "rayon_num_threads": 1
+    let report = json!({
+        "schema": "uor-r4.m1-cost-profile/2",
+        "run": {
+            "started_unix_s": started_unix_s,
+            "harness": "crates/uor-r4-integer/tests/full_path_m1_cost.rs",
+            "build_profile": build_profile,
+            "source_commit": source_commit,
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "cpu": sysctl("machdep.cpu.brand_string"),
+            "load_average_before": load_average_before,
+            "load_average_after": load_average_after,
+            "status": "one run; not a qualification",
         },
         "artifact": {
             "bundle": "dialogue-child-bundle-1",
             "path": bundle_path.display().to_string(),
+            "identity": sha,
             "width": width,
             "vocab_size": vocab_size,
             "read_dim": read_dim,
-            "context_capacity": 256
+            "context_capacity": model.config().context,
         },
         "metrics": {
             "cold_load_ms": cold_load_ms,
-            "tokenizer_encode_us_per_tok": us_per_token_encode,
-            "prompt_ingest_ms_per_tok": mean_ingest_step_ms,
-            "step_latency": {
-                "mean_ms": mean_ms,
-                "stddev_ms": stddev_ms,
-                "min_ms": min_ms,
-                "p50_ms": p50_ms,
-                "p90_ms": p90_ms,
-                "p95_ms": p95_ms,
-                "p99_ms": p99_ms,
-                "max_ms": max_ms,
-                "tok_per_sec": tok_per_sec
-            },
+            "tokenizer_encode_us_per_tok": encode_us_per_token,
+            "prompt_ingest_ms_per_tok": ingest_ms_per_token,
+            "step_latency": step_latency,
             "session_save_ms": save_ms,
             "session_restore_ms": restore_ms,
-            "peak_rss_mb": max_rss,
-            "bytes_touched_per_token": total_bytes_touched,
-            "mib_touched_per_token": total_mib_touched,
-            "energy_soc_joules_per_token": "UNAVAILABLE"
+            "initial_rss_mb": rss_value(initial_rss),
+            "post_load_rss_mb": rss_value(post_load_rss),
+            "peak_rss_mb": rss_value(peak_rss),
+            "bytes_touched_per_token": bytes_touched,
+            "bytes_touched_basis": "analytic count in the harness source; not measured",
+            "energy_soc_joules_per_token": "UNAVAILABLE",
+        },
+        "ceilings": {
+            "cold_load_ms": ceiling(CEILING_COLD_LOAD_MS, cold_load_ms),
+            "step_mean_ms": ceiling(CEILING_STEP_MEAN_MS, mean_ms),
+            "step_p90_ms": ceiling(CEILING_STEP_P90_MS, p90_ms),
+        },
+        "restore": {
+            "serialized_round_trip_equal": serialized_round_trip_equal,
+            "continuation_steps_compared": RESTORE_CONTINUATION_STEPS,
+            "continuation_identical": first_divergence.is_none(),
+            "first_divergence_step": first_divergence,
         },
         "parity_gate": {
             "requests": rows.len(),
-            "turns": 58,
-            "verified_decisions": total_verified_tokens,
+            "turns": turns_replayed,
+            "verified_decisions": decisions_verified,
             "departures": 0,
-            "status": "PASS"
-        }
+            "step_calls": step_us.len(),
+        },
     });
 
-    let evidence_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/evidence");
-    if !evidence_dir.exists() {
-        fs::create_dir_all(&evidence_dir)?;
+    match report_root {
+        Some(root) => {
+            fs::write(root.join(REPORT_FILE), serde_json::to_vec_pretty(&report)?)?;
+            report_output::seal(&root)?;
+            report_output::verify(&root)?;
+            println!("  report sealed at {}", root.display());
+        }
+        None => println!("  no report written ({REPORT_ROOT_ENV} is unset)"),
     }
-    let evidence_file = evidence_dir.join("full-path-m1-cost-dialogue576-2026-09-28.json");
-    fs::write(&evidence_file, serde_json::to_string_pretty(&summary)?)?;
-    println!("\nEvidence record written to: {}", evidence_file.display());
-
-    println!("\n=== FULL-PATH M1 COST BENCHMARK COMPLETE: ALL INVARIANTS PASS ===");
     Ok(())
 }
