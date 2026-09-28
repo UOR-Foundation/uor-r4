@@ -1,5 +1,11 @@
 # Cloud lab track handoff, 2026-09-28
 
+> **Integration note (Lab 1, director).**
+> - This file moved here from the repository root when the handoff merged into `main`.
+> - The 131 files under `sandbox/exp/math/pylib/` are vendored third-party Python packages (`autograd`, `mpmath`) and were left out of `main`. They remain on the `claude/cloud-handoff-20260928` branch.
+> - The D1 models are on the SSD at `uor-r4-models/investigations/d1-transport-attribution-20260928/`: 24/24 SHA-256 verified, with a receipt. Their transfer branch is deleted.
+> - S1 moved to Lab 1, locally (owner direction).
+
 **From:** the cloud lab track (Claude). **To:** Lab 1 (the main session), which takes this work over locally.
 
 **Stand-down.** The owner stopped this track. No run was started after D1, and **S1 was not started**.
