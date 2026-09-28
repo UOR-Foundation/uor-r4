@@ -130,15 +130,67 @@ fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
         .get("windows")
         .and_then(|s| s.parse().ok())
         .unwrap_or(512);
+    if windows == 0 {
+        return Err("invalid argument: windows must be > 0".into());
+    }
+
     let threads: usize = map.get("threads").and_then(|s| s.parse().ok()).unwrap_or(2);
+    if threads == 0 {
+        return Err("invalid argument: threads must be > 0".into());
+    }
+
     let codec = map
         .get("codec")
         .cloned()
         .unwrap_or_else(|| "all".to_string());
+    match codec.as_str() {
+        "rtn"
+        | "none"
+        | "hadamard"
+        | "hadamard_grouped4bit"
+        | "head_compensated"
+        | "head"
+        | "all"
+        | "compare" => {}
+        other => {
+            return Err(format!(
+                "unknown codec arm '{other}'. Supported: rtn, hadamard_grouped4bit, head_compensated, all"
+            )
+            .into());
+        }
+    }
+
     let out = PathBuf::from(
         map.get("out")
             .ok_or("missing required argument 'out' (e.g. out=/path/to/report-dir)")?,
     );
+    if out.as_os_str().is_empty() {
+        return Err("invalid argument: 'out' path cannot be empty".into());
+    }
+
+    if !model_dir.exists() {
+        return Err(format!("model directory does not exist: {}", model_dir.display()).into());
+    }
+    let weights_path = model_dir.join("model.safetensors");
+    if !weights_path.exists() {
+        return Err(format!(
+            "model weights file does not exist: {}",
+            weights_path.display()
+        )
+        .into());
+    }
+    if !valid_path.exists() {
+        return Err(format!(
+            "validation dataset does not exist: {}",
+            valid_path.display()
+        )
+        .into());
+    }
+    if let Some(ref lp) = lens_path {
+        if !lp.exists() {
+            return Err(format!("lens file does not exist: {}", lp.display()).into());
+        }
+    }
 
     Ok(ParsedArgs {
         model_dir,

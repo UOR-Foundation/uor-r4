@@ -33,7 +33,7 @@ September 28, 2026. References #973 under #820.
    Applying offline randomized Hadamard transformation to weights followed by grouped 4-bit quantization and inversion back to unrotated parameter space yields +0.063668 nats (+0.0274 nats worse than RTN). This is a scoped negative showing that offline rotation with de-rotation before D11 table quantization incurs double-quantization noise. It is **not** a theorem that all post-training alternatives require online transforms or QAT.
 
 5. **Head-compensated parameter inspection.**
-   Inspection of the packed parameters reveals that `head_compensated` selected identical `exp_base` and scales as RTN because the head's scale dynamic range ($e_{\max} - e_{\min} \le 15$) was within bounds. Consequently, the packed weight tensors were 100% bitwise identical to RTN; the 64-byte difference in `model.lut` was solely due to the metadata string in the container JSON header.
+   Inspection of the packed parameters reveals that `head_compensated` selected identical `exp_base` and scales as RTN because the head's scale dynamic range ($e_{\max} - e_{\min} \le 15$) was within bounds. Consequently, the packed weight tensors were 100% bitwise identical to RTN; the 64-byte difference in `model.lut` was solely due to the 26-byte metadata increase in the container JSON header shifting the 64-byte aligned data payload boundary (`data_start` 8960 -> 9024).
 
 6. **Usable codec component delivered.**
    To advance toward D4 without repeating losing arms, Lab 3 implemented and verified `Grouped4BitCodec` in `uor-r4-integer::codec` with exact quantization, dequantization, BLAKE3-checksummed serialization, $\le 4.25$ bits/weight effective cost, and pluggable `MapCodec` integration for QAT training.

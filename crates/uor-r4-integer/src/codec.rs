@@ -478,13 +478,29 @@ impl Grouped4BitMatrix {
         if group_size == 0 || cols == 0 || rows == 0 {
             return Err(invalid("zero dimension in header"));
         }
-        let expected_nibbles = rows * cols.div_ceil(2);
-        let expected_scales = rows * cols.div_ceil(group_size);
-        if nibbles_len != expected_nibbles || scales_len != expected_scales {
-            return Err(invalid("payload length mismatch with declared dimensions"));
+        if !cols.is_multiple_of(group_size) {
+            return Err(invalid(format!(
+                "cols ({cols}) must be multiple of group_size ({group_size})"
+            )));
         }
-        if payload.len() != HEADER_LEN + nibbles_len + scales_len {
-            return Err(invalid("total payload length mismatch"));
+        let total_weights = rows
+            .checked_mul(cols)
+            .ok_or_else(|| invalid("matrix dimensions overflow"))?;
+        let groups = cols / group_size;
+        let expected_nibbles = total_weights / 2;
+        let expected_scales = rows
+            .checked_mul(groups)
+            .ok_or_else(|| invalid("matrix scales dimension overflow"))?;
+        let expected_payload = HEADER_LEN
+            .checked_add(expected_nibbles)
+            .and_then(|l| l.checked_add(expected_scales))
+            .ok_or_else(|| invalid("payload length calculation overflow"))?;
+
+        if nibbles_len != expected_nibbles
+            || scales_len != expected_scales
+            || payload.len() != expected_payload
+        {
+            return Err(invalid("payload length mismatch with declared dimensions"));
         }
         let nibbles = payload[HEADER_LEN..HEADER_LEN + nibbles_len].to_vec();
         let scales =
@@ -737,6 +753,73 @@ impl Grouped4BitCodec {
     pub fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
         let m = self.quantize(values, rows, cols)?;
         self.dequantize(&m)
+    }
+
+    /// Quantize a row-major matrix with zero-padding when `cols` is not a multiple of `group_size`.
+    ///
+    /// Pads columns up to `cols.div_ceil(self.group_size) * self.group_size` using zero padding
+    /// matching the canonical D11 export convention (`crate::stack_export::pad`).
+    pub fn quantize_padded(
+        &self,
+        values: &[f32],
+        rows: usize,
+        cols: usize,
+    ) -> Result<Grouped4BitMatrix> {
+        if values.len() != rows * cols {
+            return Err(invalid(format!(
+                "values length ({}) does not match rows * cols ({rows} * {cols} = {})",
+                values.len(),
+                rows * cols
+            )));
+        }
+        if cols == 0 || rows == 0 {
+            return Err(invalid("dimensions must be non-zero"));
+        }
+        if cols.is_multiple_of(self.group_size) {
+            return self.quantize(values, rows, cols);
+        }
+        let padded_cols = cols.div_ceil(self.group_size) * self.group_size;
+        let mut padded = vec![0.0f32; rows * padded_cols];
+        for r in 0..rows {
+            let src = &values[r * cols..(r + 1) * cols];
+            let dst = &mut padded[r * padded_cols..r * padded_cols + cols];
+            dst.copy_from_slice(src);
+        }
+        self.quantize(&padded, rows, padded_cols)
+    }
+
+    /// Dequantize a matrix and slice each row back to `original_cols`.
+    pub fn dequantize_unpadded(
+        &self,
+        matrix: &Grouped4BitMatrix,
+        original_cols: usize,
+    ) -> Result<Vec<f32>> {
+        if original_cols == 0 || original_cols > matrix.cols {
+            return Err(invalid(format!(
+                "original_cols ({original_cols}) must be in range 1..={}",
+                matrix.cols
+            )));
+        }
+        let deq = self.dequantize(matrix)?;
+        if original_cols == matrix.cols {
+            return Ok(deq);
+        }
+        let mut out = Vec::with_capacity(matrix.rows * original_cols);
+        for r in 0..matrix.rows {
+            out.extend_from_slice(&deq[r * matrix.cols..r * matrix.cols + original_cols]);
+        }
+        Ok(out)
+    }
+
+    /// Round-trip a row-major float matrix with arbitrary column width through zero-padded
+    /// quantization and dequantization.
+    pub fn round_trip_padded(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        if cols.is_multiple_of(self.group_size) {
+            self.round_trip(values, rows, cols)
+        } else {
+            let m = self.quantize_padded(values, rows, cols)?;
+            self.dequantize_unpadded(&m, cols)
+        }
     }
 
     /// Calculate effective bits per weight for a matrix with given shape under this codec.
@@ -1413,5 +1496,100 @@ mod tests {
         // Non-finite values
         assert!(codec.quantize(&[f32::NAN; 32], 1, 32).is_err());
         assert!(codec.quantize(&[f32::INFINITY; 32], 1, 32).is_err());
+    }
+
+    #[test]
+    fn test_grouped4bit_codec_padding_convention() -> Result<()> {
+        let codec = Grouped4BitCodec::default();
+        let rows = 4;
+        let cols = 749; // Geometric S1 MLP hidden dimension (not a multiple of 32)
+        let values: Vec<f32> = (0..rows * cols)
+            .map(|i| (((i as f32) * 0.31) % 11.0 - 5.5) * 0.05)
+            .collect();
+
+        // 1. Direct quantize without padding must reject non-multiple of 32
+        assert!(codec.quantize(&values, rows, cols).is_err());
+
+        // 2. quantize_padded pads to multiple of 32 (768)
+        let mat = codec.quantize_padded(&values, rows, cols)?;
+        assert_eq!(mat.rows, rows);
+        assert_eq!(mat.cols, 768);
+        assert_eq!(mat.cols % codec.group_size, 0);
+
+        // 3. Serialization of padded matrix succeeds
+        let bytes = mat.to_bytes();
+        let mat_deser = Grouped4BitMatrix::from_bytes(&bytes)?;
+        assert_eq!(mat, mat_deser);
+
+        // 4. dequantize_unpadded slices back to original 749 cols
+        let deq = codec.dequantize_unpadded(&mat, cols)?;
+        assert_eq!(deq.len(), rows * cols);
+
+        // 5. round_trip_padded matches dequantize_unpadded
+        let rt = codec.round_trip_padded(&values, rows, cols)?;
+        assert_eq!(deq, rt);
+
+        // 6. Each value is accurately preserved within quantization error
+        for (&orig, &quant) in values.iter().zip(&rt) {
+            assert!((orig - quant).abs() < 0.2);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_grouped4bit_codec_extreme_outliers_and_zeros() -> Result<()> {
+        let codec = Grouped4BitCodec::default();
+
+        // All zeros
+        let zeros = vec![0.0f32; 64];
+        let mat_zeros = codec.quantize(&zeros, 2, 32)?;
+        let deq_zeros = codec.dequantize(&mat_zeros)?;
+        assert_eq!(deq_zeros, zeros);
+
+        // Extreme outlier (> 100x sigma)
+        let mut outlier_vals = vec![0.05f32; 64];
+        outlier_vals[0] = 50.0f32; // > 1000x normal scale
+        outlier_vals[31] = -50.0f32;
+        let mat_outlier = codec.quantize(&outlier_vals, 2, 32)?;
+        let deq_outlier = codec.dequantize(&mat_outlier)?;
+        assert_eq!(deq_outlier.len(), 64);
+        for &v in &deq_outlier {
+            assert!(v.is_finite());
+        }
+
+        // Test with MinimumMseScale mode
+        let codec_mse =
+            Grouped4BitCodec::new(DEFAULT_GROUP_SIZE, Grouped4BitRounding::MinimumMseScale);
+        let mat_mse = codec_mse.quantize(&outlier_vals, 2, 32)?;
+        let deq_mse = codec_mse.dequantize(&mat_mse)?;
+        assert_eq!(deq_mse.len(), 64);
+        for &v in &deq_mse {
+            assert!(v.is_finite());
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_grouped4bit_matrix_from_bytes_hardening() {
+        let valid_mat = Grouped4BitCodec::default()
+            .quantize(&[0.1f32; 64], 2, 32)
+            .unwrap();
+        let bytes = valid_mat.to_bytes();
+
+        // Mutate cols in header to non-multiple of group size (e.g. 33)
+        let mut bad_cols = bytes.clone();
+        bad_cols[12..16].copy_from_slice(&33u32.to_le_bytes());
+        // Recompute hash so hash check passes
+        let (payload, _) = bad_cols.split_at_mut(bytes.len() - 32);
+        let new_hash = blake3::hash(payload);
+        bad_cols[bytes.len() - 32..].copy_from_slice(new_hash.as_bytes());
+
+        let res = Grouped4BitMatrix::from_bytes(&bad_cols);
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("multiple of group_size"));
     }
 }
