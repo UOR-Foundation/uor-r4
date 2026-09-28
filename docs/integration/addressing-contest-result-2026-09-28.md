@@ -67,6 +67,11 @@ serving; this is a negative for this configuration at T=256 and these bit rates,
 disproof of geometric mechanisms generally. No seeds, dose or new mechanism are added after
 this endpoint.
 
+H4 and E8 decode to unit-norm roots, and k-means to raw centroids, with no gain channel in
+any arm (`addressing_arms.rs` lines 713-725). The geometric-versus-ordinary contrast is
+therefore confounded by magnitude, and D3's decision moves to the gain-controlled
+follow-up (ruling 11).
+
 ## Complete query cost (declared; no postings/multi-probe in this configuration)
 
 The reported `decode_work` covers the query LUT and the admitted-`s` decode. The full scan
@@ -82,9 +87,11 @@ position, max 255):
 
 **Dense work remaining outside the index (unchanged by every arm):** the model's read/state
 projections, value mixing and the 4096-token vocabulary head remain per-token dense; the
-parent has ~1.68 M dense parameters. **Only the event-candidate scan was reduced** (from the
-full causal window to s events); this is **not** D5 completion, and no full-parameter
-sparsity is claimed.
+parent has ~1.68 M dense parameters. Every previous event is scored from its codes (a
+compressed exhaustive scan: 128 candidates on average, 255 at most). Only the number of
+*retained* events whose values are read falls to s. Inspected and retained events are
+reported separately, and this run claims no sparse-index cost. This is **not** D5
+completion, and no full-parameter sparsity is claimed.
 
 ## Consumer interface (I4, per the board)
 
