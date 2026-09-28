@@ -643,6 +643,8 @@ STACK_MANDATORY_SYMBOLS = [
     _stack_kernel("stack_read", "session", "Dot/Lorentz read mixer with NoRead softmax"),
     _stack_kernel("stack_swiglu", "session", "SwiGLU gating products by digit tables"),
     _stack_kernel("stack_gemv", "kernels", "4-bit weight map by activation-table reads and adds"),
+    _stack_kernel("stack_gemv_pairs", "kernels", "4-bit weight map by pair-table reads and adds"),
+    _stack_kernel("stack_pair_tables", "kernels", "Weight-byte pair tables by additions"),
     _stack_kernel("stack_activation_tables", "kernels", "Per-column nibble product tables by shifts and adds"),
     _stack_kernel("stack_dequant_row", "kernels", "Embedding row by shift-add group scales"),
     _stack_kernel("stack_rms_norm", "kernels", "RMSNorm by digit-table squares, long division and isqrt"),
@@ -710,6 +712,7 @@ def run_stack_pattern_tests():
             raise AssertionError(f"Stack pattern test failed: {other} is not a serving root")
     for longer, shorter in [
         ("stack_activation_tables", "stack_activation"),
+        ("stack_gemv_pairs", "stack_gemv"),
         ("stack_div_u128", "stack_div_u64"),
         ("stack_mul_u128", "stack_mul_u64"),
     ]:

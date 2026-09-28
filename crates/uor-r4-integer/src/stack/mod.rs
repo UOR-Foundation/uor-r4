@@ -2,10 +2,15 @@
 //! decision D11 (`docs/integration/DECISIONS.md`, ROADMAP §0 R1–R2).
 //!
 //! The engine executes the `UORLUT01` stack artifact that
-//! `uor-r4-training`'s `stack_export` writes (schema `uor-r4.lut-stack/1`)
-//! and returns the same logits as the frozen D10 comparator
-//! (`uor-r4-lut`'s `stack`), bit for bit. Each layer is a temporal mixer and
-//! then a SwiGLU MLP, both pre-norm residual blocks:
+//! `uor-r4-training`'s `stack_export` writes (schema `uor-r4.lut-stack/1`).
+//! It reproduces every operation of the frozen D10 comparator
+//! (`uor-r4-lut`'s `stack`), including its rounding, truncation and
+//! saturation, so that the logits are the same integers. That equality is an
+//! empirical criterion: `uor-r4-training`'s `stack_d11_oracle` tests check it
+//! position by position on exported random stacks, and
+//! `geometric-stack d11-evaluate` measures it on a trained artifact. Each
+//! layer is a temporal mixer and then a SwiGLU MLP, both pre-norm residual
+//! blocks:
 //!
 //! - **quaternion transport recurrence** (`r`): per lane of four channels,
 //!   `h_t = lambda_t (u_t (x) h_{t-1}) + sqrt(1 - lambda_t^2) c_t` with the
@@ -20,9 +25,11 @@
 //! Arithmetic (R1–R2):
 //!
 //! - there is no floating point anywhere in a step;
-//! - a learned 4-bit weight contributes through a table read and an
-//!   addition (per-activation tables of the sixteen nibble products), and a
-//!   group scale `(16 + m) 2^(e - 4)` through shifts and additions;
+//! - learned 4-bit weights contribute through table reads and additions:
+//!   per-activation tables of the sixteen nibble products, and for the maps
+//!   that read the normalized state, pair tables indexed by a whole weight
+//!   byte (one read per two weights); a group scale `(16 + m) 2^(e - 4)` is
+//!   applied by shifts and additions;
 //! - a product of two runtime values (transport, gating, scores, value
 //!   mixing, normalization) is read from a table of the sixteen multiples of
 //!   one operand at the radix-16 digits of the other; a quotient is exact
@@ -41,6 +48,8 @@
 mod format;
 mod kernels;
 mod session;
+#[cfg(test)]
+mod tests;
 
 use std::fmt;
 

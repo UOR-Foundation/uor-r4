@@ -200,10 +200,11 @@ fn d11_logits_equal_d10_logits_on_random_stacks() {
 
 /// Amplified weights (read maps by 2^14 to 2^15, recurrence maps by 2^9 and
 /// 2^12, the MLP up map by 2^6) move queries, keys, values and gates toward
-/// the `i32` limit: large-magnitude scores, rotations and Lorentz distances
-/// and saturating recurrence outputs. The D11 engine must still agree
-/// exactly. (Which of the D10 engine's internal 64- or 128-bit summation
-/// branches each position takes is not observed here; both are exact.)
+/// the `i32` limit, where scores, rotations and Lorentz distances take
+/// extreme values and the saturating conversions can engage. The D11 engine
+/// must still agree exactly. (Which of the D10 engine's internal 64- or
+/// 128-bit summation branches each position takes is not observed here; both
+/// are exact.)
 #[test]
 fn d11_logits_equal_d10_logits_on_amplified_stacks() {
     let loud = [

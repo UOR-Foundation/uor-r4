@@ -1,7 +1,7 @@
 //! Multiplier-free kernels of the stack engine (owner decision D11).
 //!
-//! Each kernel reproduces one operation of the D10 engine
-//! (`uor-r4-lut`'s `stack` and `kernels`) bit for bit, including its floor,
+//! Each kernel reproduces one operation of the D10 engine (`uor-r4-lut`'s
+//! `stack` and `kernels`) on the same integers, including its floor,
 //! truncation, round-half-up and saturation conventions, with a different
 //! instruction mix:
 //!
@@ -576,6 +576,63 @@ pub(crate) fn stack_gemv(m: &PackedMatrix, tables: &[[i32; 16]], x_exp: i32, out
     }
 }
 
+/// The pair tables of a 16-bit vector, from its activation tables: for
+/// column pair `p`, entry `b` is `T[2p][b & 15] + T[2p + 1][b >> 4]`, the
+/// product of both columns with the weight byte `b` (low nibble: the even
+/// column). Additions only.
+#[inline(never)]
+pub(crate) fn stack_pair_tables(tables: &[[i32; 16]], pairs: &mut [[i32; 256]]) {
+    for (pair, columns) in pairs.iter_mut().zip(tables.chunks_exact(2)) {
+        let (even, odd) = (&columns[0], &columns[1]);
+        for (row, &high) in pair.chunks_exact_mut(16).zip(odd) {
+            for (slot, &low) in row.iter_mut().zip(even) {
+                *slot = low + high;
+            }
+        }
+    }
+}
+
+/// [`stack_gemv`] reading pair tables ([`stack_pair_tables`]): one table
+/// read and one addition per weight byte, that is per two weights. The group
+/// sums, and so the outputs, are the same integers.
+#[inline(never)]
+pub(crate) fn stack_gemv_pairs(
+    m: &PackedMatrix,
+    pairs: &[[i32; 256]],
+    x_exp: i32,
+    out: &mut [i32],
+) {
+    let row_bytes = m.cols >> 1;
+    let groups = m.cols >> 5;
+    let Some(pairs) = pairs.get(..row_bytes) else {
+        return;
+    };
+    let (mut nibble_at, mut scale_at) = (0usize, 0usize);
+    for (slot, &min_de) in out.iter_mut().zip(&m.min_de).take(m.rows) {
+        let (Some(row), Some(scales)) = (
+            m.nibbles.get(nibble_at..nibble_at + row_bytes),
+            m.scales.get(scale_at..scale_at + groups),
+        ) else {
+            return;
+        };
+        let mut acc = 0i64;
+        for ((bytes, tables), &s) in row.chunks_exact(16).zip(pairs.chunks_exact(16)).zip(scales) {
+            let mut a = 0i32;
+            for (&byte, table) in bytes.iter().zip(tables) {
+                a += table[usize::from(byte)];
+            }
+            acc = acc.wrapping_add(scale_16_plus(i64::from(a), s & 15) << ((s >> 4) - min_de));
+        }
+        *slot = to_exp_i32(
+            acc,
+            m.exp_base + i32::from(min_de) - 4 + x_exp,
+            RESIDUAL_EXP,
+        );
+        nibble_at += row_bytes;
+        scale_at += groups;
+    }
+}
+
 /// Row `row` of a packed matrix at the residual exponent (the embedding).
 #[inline(never)]
 pub(crate) fn stack_dequant_row(m: &PackedMatrix, row: usize, out: &mut [i32]) {
@@ -818,6 +875,59 @@ mod tests {
         for (table, &v) in tables.iter().zip(&x) {
             for (u, &entry) in table.iter().enumerate() {
                 assert_eq!(entry, (u as i32 - 8) * i32::from(v));
+            }
+        }
+    }
+
+    #[test]
+    fn both_weight_map_kernels_give_the_exact_group_scaled_sum() {
+        let mut rng = Lcg(21);
+        for (rows, cols, x_exp) in [(1, 32, -14), (17, 64, -9), (40, 96, -20), (9, 288, -14)] {
+            let nibbles: Vec<u8> = (0..rows * cols / 2).map(|_| rng.next() as u8).collect();
+            let scales: Vec<u8> = (0..rows * cols / 32).map(|_| rng.next() as u8).collect();
+            let groups = cols / 32;
+            let min_de: Vec<u8> = scales
+                .chunks_exact(groups)
+                .map(|row| row.iter().map(|s| s >> 4).min().unwrap_or(0))
+                .collect();
+            let m = PackedMatrix {
+                rows,
+                cols,
+                exp_base: -11,
+                nibbles,
+                scales,
+                min_de,
+            };
+            let x: Vec<i16> = (0..cols)
+                .map(|c| match c % 7 {
+                    0 => i16::MIN + 1,
+                    1 => i16::MAX,
+                    _ => rng.next() as i16,
+                })
+                .collect();
+            let mut tables = vec![[0i32; 16]; cols];
+            stack_activation_tables(&x, &mut tables);
+            let mut pairs = vec![[0i32; 256]; cols / 2];
+            stack_pair_tables(&tables, &mut pairs);
+            let (mut nibble_out, mut pair_out) = (vec![0i32; rows], vec![0i32; rows]);
+            stack_gemv(&m, &tables, x_exp, &mut nibble_out);
+            stack_gemv_pairs(&m, &pairs, x_exp, &mut pair_out);
+            assert_eq!(nibble_out, pair_out, "{rows}x{cols}");
+            for r in 0..rows {
+                let mut exact = 0i128;
+                for c in 0..cols {
+                    let byte = m.nibbles[(r * cols + c) / 2];
+                    let q = i128::from(if c % 2 == 0 { byte & 15 } else { byte >> 4 }) - 8;
+                    let s = m.scales[r * groups + c / 32];
+                    exact += (q * (16 + i128::from(s & 15)) * i128::from(x[c]))
+                        << ((s >> 4) - m.min_de[r]);
+                }
+                let want = to_exp_i32(
+                    exact as i64,
+                    m.exp_base + i32::from(m.min_de[r]) - 4 + x_exp,
+                    RESIDUAL_EXP,
+                );
+                assert_eq!(nibble_out[r], want, "{rows}x{cols} row {r}");
             }
         }
     }

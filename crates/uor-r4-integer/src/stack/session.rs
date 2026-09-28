@@ -8,10 +8,10 @@ use std::path::Path;
 use super::format::{Container, Fixed, MatrixView, StackNumerics, StackShape};
 use super::kernels::{
     grid_apply, grid_valid, mul_i128, shift, shift_wide, stack_activation, stack_activation_tables,
-    stack_dequant_row, stack_div_u128, stack_dot, stack_exp_neg, stack_gemv, stack_hamilton,
-    stack_isqrt, stack_lift, stack_lorentz_distance, stack_mix_row, stack_mul_u64,
-    stack_quantize16, stack_query_tables, stack_rms_norm, stack_sigmoid_q31, stack_square,
-    PackedMatrix, ARCOSH_TABLE_LEN, RESIDUAL_EXP,
+    stack_dequant_row, stack_div_u128, stack_dot, stack_exp_neg, stack_gemv, stack_gemv_pairs,
+    stack_hamilton, stack_isqrt, stack_lift, stack_lorentz_distance, stack_mix_row, stack_mul_u64,
+    stack_pair_tables, stack_quantize16, stack_query_tables, stack_rms_norm, stack_sigmoid_q31,
+    stack_square, PackedMatrix, ARCOSH_TABLE_LEN, RESIDUAL_EXP,
 };
 use super::StackError;
 
@@ -336,6 +336,7 @@ impl IntegerStackModel {
                 norm: vec![0; d],
                 act: vec![0; widest],
                 tables: vec![[0; 16]; widest],
+                pairs: vec![[0; 256]; d >> 1],
                 scratch: vec![0; widest],
                 wide: vec![0; d],
                 branches: vec![0; 2 * d],
@@ -378,6 +379,8 @@ struct Buffers {
     norm: Vec<i16>,
     act: Vec<i16>,
     tables: Vec<[i32; 16]>,
+    /// Pair tables of the normalized state, read by every map with it as input.
+    pairs: Vec<[i32; 256]>,
     scratch: Vec<i64>,
     wide: Vec<i64>,
     branches: Vec<i32>,
@@ -444,7 +447,8 @@ impl IntegerStackSession<'_> {
     }
 
     /// Feed one token at the next position; returns the next-token logits
-    /// (value `v` means `v * 2^-16`), bit-identical to the D10 engine's.
+    /// (value `v` means `v * 2^-16`): the D10 engine's integers (see the
+    /// module documentation for how that is tested).
     #[inline(never)]
     pub fn step(&mut self, token: u32) -> Result<&[i32], StackError> {
         let model = self.model;
@@ -464,6 +468,7 @@ impl IntegerStackSession<'_> {
         for (layer, state) in model.layers.iter().zip(self.states.iter_mut()) {
             let norm_exp = stack_rms_norm(&b.x, n.rms_eps, &mut b.scratch[..d], &mut b.norm);
             stack_activation_tables(&b.norm, &mut b.tables[..d]);
+            stack_pair_tables(&b.tables[..d], &mut b.pairs);
             match (&layer.mixer, state.as_mut()) {
                 (Mixer::Recurrence(r), LayerState::Recurrence { state, history }) => {
                     stack_recurrence(model, r, state, history, b, norm_exp)
@@ -497,8 +502,9 @@ impl IntegerStackSession<'_> {
             // MLP block.
             let norm_exp = stack_rms_norm(&b.x, n.rms_eps, &mut b.scratch[..d], &mut b.norm);
             stack_activation_tables(&b.norm, &mut b.tables[..d]);
-            stack_gemv(&layer.gate, &b.tables, norm_exp, &mut b.gate);
-            stack_gemv(&layer.up, &b.tables, norm_exp, &mut b.up);
+            stack_pair_tables(&b.tables[..d], &mut b.pairs);
+            stack_gemv_pairs(&layer.gate, &b.pairs, norm_exp, &mut b.gate);
+            stack_gemv_pairs(&layer.up, &b.pairs, norm_exp, &mut b.up);
             stack_swiglu(model, &b.gate, &b.up, &mut b.scratch[..mlp]);
             let act_exp = stack_quantize16(&b.scratch[..mlp], 2 * RESIDUAL_EXP, &mut b.act[..mlp]);
             stack_activation_tables(&b.act[..mlp], &mut b.tables[..mlp]);
@@ -509,7 +515,8 @@ impl IntegerStackSession<'_> {
         }
         let norm_exp = stack_rms_norm(&b.x, n.rms_eps, &mut b.scratch[..d], &mut b.norm);
         stack_activation_tables(&b.norm, &mut b.tables[..d]);
-        stack_gemv(&model.head, &b.tables, norm_exp, &mut b.logits);
+        stack_pair_tables(&b.tables[..d], &mut b.pairs);
+        stack_gemv_pairs(&model.head, &b.pairs, norm_exp, &mut b.logits);
         self.position += 1;
         self.cache_at += d;
         self.lift_at += heads;
@@ -527,7 +534,8 @@ fn stack_swiglu(model: &IntegerStackModel, gate: &[i32], up: &[i32], out: &mut [
     }
 }
 
-/// One recurrence step from the normalized state (tables built), into `b.proj`.
+/// One recurrence step from the normalized state (pair tables built), into
+/// `b.proj`.
 #[inline(never)]
 fn stack_recurrence(
     model: &IntegerStackModel,
@@ -540,8 +548,8 @@ fn stack_recurrence(
     let (s, n) = (&model.shape, &model.numerics);
     let d = s.width;
     let lanes = s.lanes();
-    stack_gemv(&r.input, &b.tables, norm_exp, &mut b.branches);
-    stack_gemv(&r.gates, &b.tables, norm_exp, &mut b.gate_out);
+    stack_gemv_pairs(&r.input, &b.pairs, norm_exp, &mut b.branches);
+    stack_gemv_pairs(&r.gates, &b.pairs, norm_exp, &mut b.gate_out);
     for (g, bias) in b.gate_out.iter_mut().zip(&r.gate_bias) {
         *g = g.saturating_add(*bias);
     }
@@ -646,7 +654,7 @@ struct Cache<'a> {
     lift_at: usize,
 }
 
-/// One read step from the normalized state (tables built), into `b.proj`.
+/// One read step from the normalized state (pair tables built), into `b.proj`.
 #[inline(never)]
 fn stack_read(
     model: &IntegerStackModel,
@@ -666,10 +674,10 @@ fn stack_read(
         at,
         lift_at,
     } = cache;
-    stack_gemv(&r.query, &b.tables, norm_exp, &mut b.q);
-    stack_gemv(&r.key, &b.tables, norm_exp, &mut b.k);
-    stack_gemv(&r.value, &b.tables, norm_exp, &mut b.v);
-    stack_gemv(&r.null, &b.tables, norm_exp, &mut b.null);
+    stack_gemv_pairs(&r.query, &b.pairs, norm_exp, &mut b.q);
+    stack_gemv_pairs(&r.key, &b.pairs, norm_exp, &mut b.k);
+    stack_gemv_pairs(&r.value, &b.pairs, norm_exp, &mut b.v);
+    stack_gemv_pairs(&r.null, &b.pairs, norm_exp, &mut b.null);
     keys[at..at + d].copy_from_slice(&b.k);
     values[at..at + d].copy_from_slice(&b.v);
     if lorentz {
