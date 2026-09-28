@@ -3,6 +3,7 @@
 September 28, 2026. References #973 and #962 under #820.
 - **Lab:** Lab 1 (Claude).
 - **Status:** frozen before any fit. The code, gates and resource limits below are committed before the runs launch.
+- **Result (attempt 2, 09:00 UTC):** the frozen gate **FAILS on the margin**. The store is perfect in distribution, and the learned read does not generalise to held-out phrasing. See [the result](d2-aerm-probe-result-2026-09-28.md).
 - **Track:** [whole-project synthesis](whole-project-synthesis-2026-09-28.md), §3 M1 and §4 D2 (owner-approved).
 
 ## Question
