@@ -569,6 +569,31 @@ impl<'a> ChatSession<'a> {
         Ok(session)
     }
 
+    /// Construct a ChatSession from constituent parts.
+    pub fn from_parts(
+        bundle: &'a Bundle,
+        state: SessionState,
+        roles: RoleTokens,
+        sampler: Sampler,
+        read_mode: ReadMode,
+        policy: SamplePolicy,
+    ) -> Self {
+        Self {
+            bundle,
+            state,
+            roles,
+            sampler,
+            last_step: None,
+            read_mode,
+            policy,
+        }
+    }
+
+    /// Extract inner session state.
+    pub fn into_state(self) -> SessionState {
+        self.state
+    }
+
     /// Synchronize the optional cached `IntegerStep` in-place without heap reallocations.
     pub fn sync_last_step(&mut self) {
         let vocab_size = self.bundle.model().config().vocab_size;

@@ -1,0 +1,63 @@
+{
+  "schema": "uor-r4.evidence/1",
+  "receipt_identity": "capability-api-wasm-audit-2026-09-28",
+  "timestamp": "2026-09-28T01:40:00Z",
+  "owning_lab": "Lab 3 (Anti-Gravity)",
+  "track": "T3 (Mission runtime and measured efficiency)",
+  "issues_referenced": [1172, 1173, 963, 964, 820],
+  "wasm_artifact": {
+    "binary_path": "/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-bins/698bdda481de57c2257b158bb53f7942568a3be7/uor_r4_integer.wasm",
+    "sha256": "a41c652795e65821bc59381c77d10339e0c9edd3f4aa068b2c7e79b608f1b3ac",
+    "size_bytes": 1684344,
+    "size_human": "1.61 MiB",
+    "target": "wasm32-unknown-unknown",
+    "profile": "release",
+    "compiler_flags": [
+      "-C", "target-feature=+simd128",
+      "-C", "link-arg=-zstack-size=8388608",
+      "-C", "link-arg=--export-all"
+    ]
+  },
+  "static_audit": {
+    "tool": "scripts/audit_zero_matmul_wasm.py",
+    "tap_version": 13,
+    "verdict": "PASS",
+    "total_symbols_audited": 20,
+    "passed_symbols": 20,
+    "failed_symbols": 0,
+    "class_i_multipliers": 0,
+    "class_ii_dividers": 0,
+    "class_iii_floats": 0,
+    "results": [
+      {"name": "uor_wasm_version", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
+      {"name": "uor_wasm_state_dim", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
+      {"name": "uor_wasm_vocab_size", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
+      {"name": "uor_wasm_context_capacity", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 2},
+      {"name": "uor_wasm_exact_min_p_threshold", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 4},
+      {"name": "uor_wasm_hopf_project_x", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 36},
+      {"name": "uor_wasm_hopf_project_y", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 36},
+      {"name": "uor_wasm_hopf_project_z", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 36},
+      {"name": "uor_wasm_step_zeta_phase_scalar", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 52},
+      {"name": "uor_wasm_galois_lfsr_step", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 12},
+      {"name": "uor_wasm_compute_turn_prime_signature", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 30},
+      {"name": "uor_wasm_atan2_q30", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 4},
+      {"name": "uor_wasm_score_token_salience_default_key", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 131},
+      {"name": "IntegerModel::project_vocab", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 88},
+      {"name": "IntegerModel::project_vocab_with_products", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 107},
+      {"name": "low_bit_dot_8_pair_tables", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 182},
+      {"name": "low_bit_dot_4_contiguous_wide_pair_tables", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 106},
+      {"name": "packed_rows::low_bit_dot", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 201},
+      {"name": "sampling::exact_min_p_threshold", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 54},
+      {"name": "math::atan2_q30", "status": "PASS", "mul": 0, "div": 0, "float": 0, "instructions": 540}
+    ]
+  },
+  "capability_api": {
+    "schema": "uor-r4.integer-capability-api/1",
+    "crate": "uor-r4-integer",
+    "module": "capability_api",
+    "primary_type": "IntegerCapabilityApi",
+    "safety": "forbid(unsafe_code) enforced across 100% of source files",
+    "lifecycle_verified": true,
+    "test_suite": "crates/uor-r4-integer/tests/capability_api_tests.rs"
+  }
+}

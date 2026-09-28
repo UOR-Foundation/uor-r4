@@ -1,0 +1,46 @@
+{
+  "artifact": {
+    "bundle": "dialogue-child-bundle-1",
+    "context_capacity": 256,
+    "path": "/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926/dialogue-child-bundle-1",
+    "read_dim": 64,
+    "vocab_size": 4096,
+    "width": 576
+  },
+  "hardware": {
+    "platform": "Apple Silicon (M1-class arm64)",
+    "rayon_num_threads": 1,
+    "threads": 1
+  },
+  "metrics": {
+    "bytes_touched_per_token": 1821872,
+    "cold_load_ms": 1530.487792,
+    "energy_soc_joules_per_token": "UNAVAILABLE",
+    "mib_touched_per_token": 1.7374725341796875,
+    "peak_rss_mb": 22.359375,
+    "prompt_ingest_ms_per_tok": 7.787593666666667,
+    "session_restore_ms": 0.321583,
+    "session_save_ms": 0.165458,
+    "step_latency": {
+      "max_ms": 139.05375,
+      "mean_ms": 7.315214685669045,
+      "min_ms": 2.3955830000000002,
+      "p50_ms": 5.169833,
+      "p90_ms": 13.236709000000001,
+      "p95_ms": 18.482791000000002,
+      "p99_ms": 38.317292,
+      "stddev_ms": 7.272027387750937,
+      "tok_per_sec": 130.6045707424653
+    },
+    "tokenizer_encode_us_per_tok": 43.93077419354839
+  },
+  "parity_gate": {
+    "departures": 0,
+    "requests": 38,
+    "status": "PASS",
+    "turns": 58,
+    "verified_decisions": 1433
+  },
+  "schema": "uor-r4.m1-cost-profile/1",
+  "timestamp": "SystemTime { tv_sec: 1790573905, tv_nsec: 775083000 }"
+}
