@@ -20,7 +20,9 @@ For the live research position, read [current state](docs/integration/current-st
 
 ## Goal and serving contract
 
-The [fourth Codex research lab](.codex-lab/README.md) coordinates with Google,
+> **Historical since 2026-09-28.** The owner's three-lab charter supersedes this section: see the [execution policy](docs/integration/agent-execution-policy.md#three-lab-organization-and-shared-operating-policy-owner-charter-2026-09-28). The Codex lab is not part of the three-lab organization; it is assigned no work and returns only by owner direction.
+
+The [fourth Codex research lab](.codex-lab/README.md) coordinated with Google,
 OpenCode/DeepSeek/Kimi and Claude through shared GitHub issues and isolated
 worktrees. Its expert bench and source-review protocol serve the
 [adaptive roadmap](docs/integration/project-track.md#four-lab-research-programme--owner-direction-september-26):
