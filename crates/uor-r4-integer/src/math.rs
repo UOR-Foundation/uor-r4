@@ -326,7 +326,7 @@ pub fn mul_i32_radix4(left: i32, right: i32) -> i64 {
     }
     let mut acc = 0u64;
     while v != 0 {
-        let chunk = (core::hint::black_box(v) & 3) as u32;
+        let chunk = (v & 3) as u32;
         match chunk {
             1 => acc = acc.wrapping_add(u),
             2 => acc = acc.wrapping_add(u << 1),
