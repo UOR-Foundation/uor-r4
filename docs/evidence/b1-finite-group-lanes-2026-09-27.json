@@ -10,7 +10,7 @@
   "source_commit": "09e537a46695f7e5b5515be16318e8a6d29c0784",
   "binary": {
     "path": "/Volumes/UOR-Workspace/BuildCaches/claude/release/examples/tracking-lanes",
-    "sha256": "c585f9655547b7eb724da8e1e593ef51e1498a6065c6e69e9c09cc08675acccb"
+    "sha256": "cd38d51f059d8f21ead2b6989edf3b43cc1d35457d8553d955e72ac117555a08"
   },
   "machine": {
     "cpu": "Apple M1",
@@ -128,6 +128,7 @@
           "minimal_order": 9,
           "fit_accuracy": 0.0811767578125,
           "max_trace_deviation": 0.130857,
+          "max_merge_distance": 0.105197,
           "final": {
             "32": 0.01953125,
             "64": 0.01953125,
@@ -162,6 +163,7 @@
           "minimal_order": 16,
           "fit_accuracy": 0.0977783203125,
           "max_trace_deviation": 0.141846,
+          "max_merge_distance": 0.302985,
           "final": {
             "32": 0.03515625,
             "64": 0.0234375,
@@ -196,6 +198,7 @@
           "minimal_order": 14,
           "fit_accuracy": 0.09417724609375,
           "max_trace_deviation": 0.148887,
+          "max_merge_distance": 0.235412,
           "final": {
             "32": 0.01171875,
             "64": 0.01171875,
@@ -230,6 +233,7 @@
           "minimal_order": 1,
           "fit_accuracy": 0.03131103515625,
           "max_trace_deviation": 0.0,
+          "max_merge_distance": 0.235761,
           "final": {
             "32": 0.01953125,
             "64": 0.02734375,
@@ -264,6 +268,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.015751,
+          "max_merge_distance": 0.046298,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -298,6 +303,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.002905,
+          "max_merge_distance": 0.018727,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -332,6 +338,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.154499,
+          "max_merge_distance": 0.017204,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -366,6 +373,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.154479,
+          "max_merge_distance": 0.015951,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -400,6 +408,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.154457,
+          "max_merge_distance": 0.040636,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -488,6 +497,7 @@
           "minimal_order": 15,
           "fit_accuracy": 0.0882568359375,
           "max_trace_deviation": 0.134045,
+          "max_merge_distance": 0.118224,
           "final": {
             "32": 0.02734375,
             "64": 0.015625,
@@ -522,6 +532,7 @@
           "minimal_order": 15,
           "fit_accuracy": 0.0888671875,
           "max_trace_deviation": 0.139363,
+          "max_merge_distance": 0.398441,
           "final": {
             "32": 0.03125,
             "64": 0.00390625,
@@ -556,6 +567,7 @@
           "minimal_order": 14,
           "fit_accuracy": 0.0880126953125,
           "max_trace_deviation": 0.149088,
+          "max_merge_distance": 0.465172,
           "final": {
             "32": 0.0234375,
             "64": 0.00390625,
@@ -590,6 +602,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.000102,
+          "max_merge_distance": 0.00049,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -624,6 +637,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.000614,
+          "max_merge_distance": 0.003541,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -658,6 +672,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.002,
+          "max_merge_distance": 0.011787,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -692,6 +707,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.154503,
+          "max_merge_distance": 0.019409,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -726,6 +742,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.154504,
+          "max_merge_distance": 0.017712,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -760,6 +777,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.15426,
+          "max_merge_distance": 0.013904,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -848,6 +866,7 @@
           "minimal_order": 15,
           "fit_accuracy": 0.0882568359375,
           "max_trace_deviation": 0.143132,
+          "max_merge_distance": 0.425528,
           "final": {
             "32": 0.02734375,
             "64": 0.015625,
@@ -882,6 +901,7 @@
           "minimal_order": 8,
           "fit_accuracy": 0.0758056640625,
           "max_trace_deviation": 0.144211,
+          "max_merge_distance": 0.373765,
           "final": {
             "32": 0.01171875,
             "64": 0.0078125,
@@ -916,6 +936,7 @@
           "minimal_order": 14,
           "fit_accuracy": 0.0848388671875,
           "max_trace_deviation": 0.151442,
+          "max_merge_distance": 0.310464,
           "final": {
             "32": 0.015625,
             "64": 0.01171875,
@@ -950,6 +971,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.001559,
+          "max_merge_distance": 0.004571,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -984,6 +1006,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.002167,
+          "max_merge_distance": 0.014289,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -1018,6 +1041,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.004937,
+          "max_merge_distance": 0.016532,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -1052,6 +1076,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.153818,
+          "max_merge_distance": 0.394403,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -1086,6 +1111,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.154435,
+          "max_merge_distance": 0.004518,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -1120,6 +1146,7 @@
           "minimal_order": 60,
           "fit_accuracy": 1.0,
           "max_trace_deviation": 0.154375,
+          "max_merge_distance": 0.020587,
           "final": {
             "32": 1.0,
             "64": 1.0,
@@ -1294,6 +1321,8 @@
         ],
         "a5_all_positions": 0.1646728515625,
         "served": null,
+        "lanes_snapped": 0,
+        "lanes_total": 0,
         "run_sha256": "42d74b34c3574e3b530066b6333a6db0ef912617ecb56e7ce328d83b32da84a8",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-grid"
       },
@@ -1340,6 +1369,8 @@
         ],
         "a5_all_positions": 0.64202880859375,
         "served": null,
+        "lanes_snapped": 0,
+        "lanes_total": 0,
         "run_sha256": "a0f6f69c3ef5a607ed2081ec00a74da51a64cbae655aeea94dd5bf89e6e99485",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-grid"
       },
@@ -1386,6 +1417,8 @@
         ],
         "a5_all_positions": 0.179931640625,
         "served": null,
+        "lanes_snapped": 0,
+        "lanes_total": 0,
         "run_sha256": "f8c840342596f35c500834bffa4631d643a9e2c94aa86fb41a321b7aa4760e17",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-grid"
       },
@@ -1439,8 +1472,11 @@
             "128": 1.0,
             "512": 1.0,
             "4096": 1.0
-          }
+          },
+          "max_merge_distance": 0.06122792702902881
         },
+        "lanes_snapped": 1,
+        "lanes_total": 8,
         "run_sha256": "473d5785b1bf2106ee247a898d0b95fedcedad810923060540538c1752de624b",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-grid"
       },
@@ -1494,8 +1530,11 @@
             "128": 0.0078125,
             "512": 0.01171875,
             "4096": 0.015625
-          }
+          },
+          "max_merge_distance": 0.022207495736640947
         },
+        "lanes_snapped": 5,
+        "lanes_total": 8,
         "run_sha256": "b45b55fd64b3903cddf59daa5a3db56f457ebc7a522b064c3a53dfab878dd074",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-phase"
       },
@@ -1549,8 +1588,11 @@
             "128": 0.01171875,
             "512": 0.01953125,
             "4096": 0.01171875
-          }
+          },
+          "max_merge_distance": 0.2990516475921394
         },
+        "lanes_snapped": 4,
+        "lanes_total": 8,
         "run_sha256": "687c44674cb19487c7cbb9b2a6988760b3359ad8daa23ab8893feec6d6393474",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-phase"
       },
@@ -1604,8 +1646,11 @@
             "128": 0.0078125,
             "512": 0.015625,
             "4096": 0.0234375
-          }
+          },
+          "max_merge_distance": 0.05878643742993957
         },
+        "lanes_snapped": 3,
+        "lanes_total": 8,
         "run_sha256": "be0a9d3597a745aa6e49aebd8dc458da9b28fb4226bf59e974516bfa96a1c9d4",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-phase"
       },
@@ -1659,8 +1704,11 @@
             "128": 1.0,
             "512": 1.0,
             "4096": 1.0
-          }
+          },
+          "max_merge_distance": 0.08081559783176788
         },
+        "lanes_snapped": 4,
+        "lanes_total": 8,
         "run_sha256": "22929fdeede76b4c9059b4019c612c23ccf9f1324d0e442fa90b6747c270ac7d",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-quaternion23"
       },
@@ -1707,6 +1755,8 @@
         ],
         "a5_all_positions": 0.447174072265625,
         "served": null,
+        "lanes_snapped": 0,
+        "lanes_total": 8,
         "run_sha256": "3f16bb4ca9a9507a3095e2b827d752871b0b7e179c367732ea894f21d715447b",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-quaternion23"
       },
@@ -1760,8 +1810,11 @@
             "128": 1.0,
             "512": 1.0,
             "4096": 1.0
-          }
+          },
+          "max_merge_distance": 0.24507360091587543
         },
+        "lanes_snapped": 4,
+        "lanes_total": 8,
         "run_sha256": "6690a0567c33dfc6ed1883fbfedbf9082a917f95ca35db72a66700a8ac527227",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-reflection"
       },
@@ -1815,8 +1868,11 @@
             "128": 1.0,
             "512": 1.0,
             "4096": 1.0
-          }
+          },
+          "max_merge_distance": 0.12442442251222713
         },
+        "lanes_snapped": 3,
+        "lanes_total": 8,
         "run_sha256": "dfbc2f2107ad53bd2725dd3180244740b7bb5f371a3b2ca74f3e406e8495d9c0",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-reflection"
       },
@@ -1870,12 +1926,23 @@
             "128": 1.0,
             "512": 1.0,
             "4096": 1.0
-          }
+          },
+          "max_merge_distance": 0.1275499840069747
         },
+        "lanes_snapped": 3,
+        "lanes_total": 8,
         "run_sha256": "771b5a7e4dbb7dc8de04ee90f7f668e9c12fbbd83fdfc55e5ebf5a4dfa9e1b6b",
         "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927/final-b-reflection"
       }
-    ]
+    ],
+    "pre_registration": {
+      "subject": "quaternion (2I) lanes (ROADMAP 4.1(b))",
+      "subject_verdict": "FAIL (per-seed gates: seed 3 A5 0.039 at position 128, text dNLL +0.121)",
+      "transformer_control": "NOT_RUN",
+      "reflection_pair_arm": "added after Stage A; passes the same gates; exploratory, not a pre-registered pass",
+      "kill_rule": "review 9.3: keep the better ordinary lanes; retire the geometric (2I) claim from the serving path; keep geometry as codebook and addressing infrastructure",
+      "correction": "2026-09-28 independent review of #1442: an earlier record revision called Stage B complete as pre-registered and narrowed the kill rule to quaternion-specific; both withdrawn"
+    }
   },
   "report_roots": {
     "final": [
@@ -2044,15 +2111,15 @@
     [
       "/dev/disk3s1",
       "239362496",
-      "144242000",
-      "60773560",
+      "144256200",
+      "61807984",
       "/System/Volumes/Data"
     ],
     [
       "/dev/disk6s1",
       "209715160",
-      "105316392",
-      "104267492",
+      "105582268",
+      "104001616",
       "/Volumes/UOR-Workspace"
     ]
   ]

@@ -2,7 +2,9 @@
 
 2026-09-27 · Lab 1 (Claude) · [ROADMAP](../../ROADMAP.md) track T1(b) · References #820, #973
 
-**Status.** Stage A and Stage B are both complete, as pre-registered in ROADMAP §4.1(b).
+**Status** (corrected 2026-09-28 after an independent review of #1442):
+- **Stage A:** complete. Its pre-registered gate PASSES.
+- **Stage B:** the pre-registered subject was quaternion (2I) lanes, and it **FAILS** its per-seed gates. The pre-registered transformer control is **NOT_RUN**. The reflection-pair arm was added after Stage A; it passes the same gates, which makes it an exploratory result, not a pre-registered pass. §5 and §6 spell out what the kill rule implies.
 - Every number below comes from source `09e537a4` and binary SHA-256 `c585f965…` (`tracking-lanes`, release).
 - The evidence is in [`docs/evidence/b1-finite-group-lanes-2026-09-27.json`](../evidence/b1-finite-group-lanes-2026-09-27.json): run hashes, report-root manifests and gates.
 - Stage A is a synthetic word problem. Stage B mixes synthetic A5 words into text training. **Neither is a language-capability result**: the text gate measures only that tracking costs no text quality.
@@ -27,16 +29,23 @@ Labels:
    - Its snapped automaton stayed at 1.000.
    - The served automaton is one byte of state and two table reads per token: no multiplier, no float, no weight map.
 
-5. **Stage B PASSES for reflection-pair lanes inside the stack** (*Measured*, §6). The stack is recurrence-primary: `rrar`, width 128, trained on text plus A5 words.
+5. **Stage B: the pre-registered 2I arm fails; the reflection-pair arm passes as an exploratory result** (*Measured*, §6). The stack is recurrence-primary: `rrar`, width 128, trained on text plus A5 words.
    - With reflection-pair lanes, the stack tracks A5 at 1.000 at every in-context position in 3 of 3 seeds.
-   - Each lane compiles to an exact 60-state automaton, perfect at length 4,096.
+   - In each of those seeds, 3–4 of the 8 lanes snap to an exact 60-state automaton that is perfect at length 4,096. The other lanes do not close.
    - Text NLL moves by +0.036, −0.050 and +0.009 nats against the lane-free stack, a mean of −0.002, inside the pre-registered 0.05.
    - Quaternion lanes **fail** on reliability: seed 3 never learned A5 (0.039) and cost +0.121 nats. The other two seeds were exact and within the gate.
    - Phase lanes fail as theory predicts.
    - The lane-free stack reaches only 0.008–0.160 at position 128.
 
-What survives for the programme is the finite-group claim: learned non-abelian lanes compile to an exact
-automaton of the icosahedral group. Diagonal (commutative) recurrences provably cannot represent this
+**The pre-registered kill rule applies to 2I lanes.** It is the review §9.3 rule: "keep the architecture with the better ordinary lanes; retire the geometric claim from the serving path; keep geometry as codebook and addressing infrastructure". 2I lanes have no serving-cost advantage over the ordinary control, and they cost more than 0.05 nats in one seed. So:
+- **the 2I geometric-state serving claim is retired;**
+- **the ordinary reflection-pair lanes are the kept mechanism,** exploratory pending a fresh pre-registered replication;
+- geometry stays as codebook and addressing infrastructure (T2).
+
+An earlier revision narrowed the retirement to "quaternion-specific" without flagging it; that narrowing is withdrawn.
+
+What survives is the finite-group state *mechanism*: learned non-abelian lanes compile to an exact
+automaton of the icosahedral group, whichever parameterisation learns it. Diagonal (commutative) recurrences provably cannot represent this
 state, and constant-depth log-precision transformers are conjectured unable to track it at arbitrary
 length (TC⁰ ≠ NC¹; *Literature*, arXiv 2404.08819). Whether such lanes earn a place in a real language
 model is Stage B's question.
@@ -101,10 +110,12 @@ The table shows final-position accuracy at length 4,096 for the float model and 
 | frozen | all | 0.016 | — | — |
 
 **Training time**, 4,000 updates at 2 threads:
-- quaternion 14.6–17.8 s;
-- reflection pair 67.2–71.0 s;
-- phase about 15 s;
-- frozen about 12.5 s.
+- quaternion 15.6–21.7 s;
+- reflection pair 67.5–83.1 s;
+- phase 18.1–29.7 s;
+- frozen 13.1–20.5 s.
+
+These are from the committed rerun (`final-a-*`), which ran alongside the storage migration.
 
 The reflection pair is slower here because of its two scans and extra products, which is an implementation cost, not an intrinsic one.
 
@@ -120,9 +131,9 @@ The reflection pair is slower here because of its two scans and extra products, 
 - 0.0001–0.0020 at lr 0.01;
 - 0.0016–0.0049 at lr 0.03.
 
-The learned group is 2I up to conjugation. This is forced: every exact A5 representation in SU(2) is conjugate to 2I.
+The learned group is 2I up to conjugation. This is forced: A5 has no faithful representation in SU(2), and every finite subgroup of SU(2) that maps onto A5 is conjugate to 2I.
 
-**Reflection pairs.** Their transports are SO(4) rotations `x ↦ p x r`. The constant deviation of 0.1543–0.1545 is |(1+φ)/4 − φ/2|:
+**Reflection pairs.** Their transports are SO(4) rotations `x ↦ p x r`. The near-constant deviation of 0.1538–0.1545 is |(1+φ)/4 − φ/2|:
 - (1+φ)/4 is trace/4 of a 72° rotation of R³ ⊕ R, namely (1 + 2cos 72° + 1)/4;
 - the other classes give 0 (180°), ¼ (120°) and (2−φ)/4 (144°).
 
@@ -131,7 +142,7 @@ The ordinary control therefore learned the icosahedral rotation group of R³, wi
 ## 5. Reading against the pre-registration
 
 - **Gate:** PASS at every rate (2 of 3, 3 of 3, 3 of 3), with phase and frozen lanes at chance.
-- **Kill rule:** the reflection-pair control matches tracking (9 of 9 against 8 of 9). Its automaton minimises to the same 60 states. **2I lanes have no serving-cost advantage, so the quaternion-specific claim is retired.**
+- **Kill rule:** the reflection-pair control matches tracking (9 of 9 against 8 of 9), and its automaton minimises to the same 60 states. 2I lanes therefore have no serving-cost advantage. Under the pre-registered rule, the geometric (2I) serving claim is retired and the better ordinary lanes are kept (see §0).
 - **Survives:** exact finite-group state, learned by any non-commutative lane and served as a table automaton. Quaternion lanes remain the cheaper parameterisation to train here, and the more robust in float at long length: all 8 learned quaternion runs score 1.000 in float at length 4,096, against 7 of 9 reflection-pair runs. That is an engineering preference, not a claim.
 
 ## 6. Stage B: inside the stack on text
@@ -164,15 +175,22 @@ Pre-registered in ROADMAP §4.1(b): LM gate within 0.05 nats of the lane-free st
 | phase | 3 | 2.7349 | +0.0538 | 0.883 / 0.023 / 0.004 | 6 (meaningless), 0.023 |
 
 **Verdict under the gates as pre-committed.** The evidence assembler encoded them per seed before any Stage B result: every seed's Δ ≤ 0.05 nats, and every seed's A5 accuracy at position 128 ≥ 0.99.
-- **Reflection-pair lanes: PASS** on both gates. The worst Δ is +0.036 and the mean −0.002; A5 is 1.000 in 3 of 3 seeds.
-- **Quaternion lanes: FAIL.** Seed 3's lanes did not learn A5 and that seed cost +0.121 nats. The mean Δ of +0.027 would pass, but the pre-committed rule is per seed.
+- **Quaternion (2I) lanes, the pre-registered subject: FAIL.** Seed 3's lanes did not learn A5, and that seed cost +0.121 nats. The mean Δ of +0.027 would pass, but the pre-committed rule is per seed.
+- **Reflection-pair lanes, added after Stage A: pass on both gates, exploratory.** The worst Δ is +0.036 and the mean −0.002; A5 is 1.000 in 3 of 3 seeds.
+- **Transformer control** (pre-registered: "reported at the same lengths"): **NOT_RUN** in this revision.
 - **Phase lanes: FAIL,** as predicted for commutative lanes.
 - **Lane-free stack:** its body alone tracks A5 only at short prefixes, and inconsistently (0.160 at position 128 at best).
 
 **Observations and scope.**
 - **Failed lanes cost text quality; learned lanes do not.** Wherever lanes failed to learn the group (quaternion seed 3, every phase seed), text NLL rose by 0.05–0.12. The lane-free stack trains on the same A5 data without that cost. Lanes that learned the group cost nothing measurable.
 - **Seed noise.** Seed-to-seed spread of the lane-free stack itself is 0.063 nats, so single-seed differences below that are noise.
-- **Scope.** This shows exact non-abelian state and text modelling coexisting in one small model: a 1,393,604-parameter stack, 1,500 updates, context 128. Side parameters are 7,740 for the A5 read-out alone, and add 143,004 with quaternion lanes and 274,172 with reflection-pair lanes; lane tables are read one row per token. It says nothing about state tracking in natural language, which no probe here tests.
+- **Scope.** This shows exact non-abelian state and text modelling coexisting in one small model: a 1,393,604-parameter stack, 1,500 updates, context 128. Side parameters total 7,740 with the A5 read-out alone, 143,004 with quaternion lanes and 274,172 with reflection-pair lanes; the totals include the read-out. Lane tables are read one row per token. It says nothing about state tracking in natural language, which no probe here tests.
+
+**Snapping limits** (found in the independent review):
+- `snap` rejects only ambiguous merges. It does not verify group structure, so lanes that are not a group can still close into small automata (orders 1–22 here). The table marks those as meaningless, and they score at chance on fresh words.
+- The served Stage A reflection-pair automaton at lr 0.03, seed 1 merged at a Frobenius distance of 0.394, against the 0.5 tolerance. That is safe for its group, whose elements are about 1.66 apart. Every other exact run merged at ≤0.046.
+- No report root saves the automaton tables, so T3 has no artifact to port yet.
+- Stage C will add a permutation-consistency check and an exhaustive check against `group_table`, save the tables, and record merge distances in the evidence.
 
 **Execution note.** The sequential root `final-b-grid` was stopped by the director, with the owner's approval, after 4 complete runs (none ×3, quaternion seed 1), so that the remaining 8 could run as three parallel streams. Those streams are the sealed roots `final-b-quaternion23`, `final-b-reflection` and `final-b-phase`. `final-b-grid` stays unsealed as an interrupted attempt. Its four run records are complete, and each one's SHA-256 is in the evidence. Seeds and data are identical across roots.
 
