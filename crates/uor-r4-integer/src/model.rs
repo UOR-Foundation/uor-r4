@@ -1096,8 +1096,13 @@ pub fn mul_fraction_radix16(v: u64, table: &[u128; 16]) -> u128 {
             acc += (table[((v_u >> 32) & 0xF) as usize] << 32)
                 + (table[((v_u >> 36) & 0xF) as usize] << 36)
                 + (table[((v_u >> 40) & 0xF) as usize] << 40)
-                + (table[((v_u >> 44) & 0xF) as usize] << 44)
-                + (table[((v_u >> 48) & 0xF) as usize] << 48);
+                + (table[((v_u >> 44) & 0xF) as usize] << 44);
+            if v >= (1 << 48) {
+                acc += (table[((v_u >> 48) & 0xF) as usize] << 48)
+                    + (table[((v_u >> 52) & 0xF) as usize] << 52)
+                    + (table[((v_u >> 56) & 0xF) as usize] << 56)
+                    + (table[((v_u >> 60) & 0xF) as usize] << 60);
+            }
         }
     }
     acc
@@ -5021,6 +5026,34 @@ mod tests {
         for &a in &values {
             for &b in &values {
                 assert_eq!(mul_shift_add_i64(a, b), a * b, "mismatch for a={a}, b={b}");
+            }
+        }
+    }
+
+    #[test]
+    fn mul_fraction_radix16_matches_scalar() {
+        let test_fractions = [0u128, 1, 42, 100_000_000, 1u128 << 48, (1u128 << 64) - 1];
+        let test_vs = [
+            0u64,
+            1,
+            15,
+            16,
+            255,
+            65535,
+            65536,
+            1_000_000,
+            TOTAL,
+            TOTAL + 1,
+            1u64 << 50,
+            1u64 << 60,
+            u64::MAX,
+        ];
+        for &frac in &test_fractions {
+            let table = build_fraction_table(frac);
+            for &v in &test_vs {
+                let actual = mul_fraction_radix16(v, &table);
+                let expected = (v as u128) * frac;
+                assert_eq!(actual, expected, "mismatch for frac={frac}, v={v}");
             }
         }
     }
