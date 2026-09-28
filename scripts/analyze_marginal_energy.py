@@ -17,6 +17,10 @@ import re
 import sys
 
 
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
 def sha256_file(filepath):
     if not os.path.exists(filepath):
         return None
