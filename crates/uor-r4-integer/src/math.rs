@@ -760,4 +760,19 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn t8_step_raw_is_the_modular_zeta_step() {
+        // Each phase advances by its Q1.30 frequency and wraps into [-2^30, 2^30).
+        let mut zeta = T8ZetaState::new();
+        let mut reference = [0i64; 8];
+        for _ in 0..10_000 {
+            zeta.step_raw();
+            for (phase, &frequency) in reference.iter_mut().zip(ZETA_FREQUENCIES_Q30.iter()) {
+                *phase =
+                    (*phase + i64::from(frequency) + (1 << 30)).rem_euclid(1 << 31) - (1 << 30);
+            }
+            assert_eq!(zeta.phases.map(i64::from), reference);
+        }
+    }
 }
