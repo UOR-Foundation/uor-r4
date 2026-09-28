@@ -401,10 +401,10 @@ pub enum Grouped4BitRounding {
 /// - Base exponent `exp_base: i32` stored once per matrix.
 ///
 /// Bit budget:
-/// - Nibbles: $R \times C / 2$ bytes = 4.0 bits / weight.
-/// - Scales: $R \times (C / 32)$ bytes = 8 bits / 32 weights = 0.25 bits / weight.
-/// - Base exponent: 4 bytes (`i32`) total overhead for the entire matrix.
-/// - Total effective bits per weight: $\le 4.25$ bits / weight for all valid matrices ($C \ge 32$).
+/// - Nibbles: $(R \times C).div\_ceil(2)$ bytes = 4.0 bits / weight.
+/// - Scales: $R \times C.div\_ceil(group\_size)$ bytes = 8 bits / 32 weights = 0.25 bits / weight (for $G=32$).
+/// - Container framing: 64 bytes total overhead (32-byte header + 32-byte BLAKE3 checksum).
+/// - Total effective bits per weight: $\le 4.251$ bits / weight including container framing for model matrices ($C \ge 32$).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Grouped4BitMatrix {
     pub rows: usize,
@@ -418,26 +418,96 @@ pub struct Grouped4BitMatrix {
 /// Binary serialization magic: b"UORG4B01".
 pub const GROUPED4BIT_MATRIX_MAGIC: &[u8; 8] = b"UORG4B01";
 
+/// Container framing size in bytes: 8 bytes magic + 6 * 4 bytes header fields + 32 bytes BLAKE3 hash = 64 bytes.
+pub const CONTAINER_FRAMING_BYTES: usize = 64;
+
 impl Grouped4BitMatrix {
-    /// Calculate effective parameter bits per weight: 4.0 bits code + (8 / group_size) scale bits = 4.25 bits/weight.
+    /// Container framing size in bytes: 8 bytes magic + 6 * 4 bytes header fields + 32 bytes BLAKE3 hash = 64 bytes.
+    pub const CONTAINER_FRAMING_BYTES: usize = CONTAINER_FRAMING_BYTES;
+
+    /// Validate all structural and numerical invariants:
+    /// - Dimensions are non-zero and multiplication does not overflow.
+    /// - Scales vector length matches `rows * cols.div_ceil(group_size)`.
+    /// - Nibbles vector length matches `(rows * cols).div_ceil(2)`.
+    /// - `exp_base` is within safe float dynamic range `[-200, 120]`.
+    /// - Every scale byte decodes to a finite positive scale within `f32` range.
+    pub fn validate(&self) -> Result<()> {
+        if self.rows == 0 || self.cols == 0 || self.group_size == 0 {
+            return Err(invalid("matrix dimensions and group_size must be non-zero"));
+        }
+        let total_weights = self
+            .rows
+            .checked_mul(self.cols)
+            .ok_or_else(|| invalid("matrix dimensions overflow"))?;
+        let groups = self.cols.div_ceil(self.group_size);
+        let expected_scales = self
+            .rows
+            .checked_mul(groups)
+            .ok_or_else(|| invalid("scales dimension overflow"))?;
+        let expected_nibbles = total_weights.div_ceil(2);
+
+        if self.scales.len() != expected_scales {
+            return Err(invalid(format!(
+                "scales buffer length mismatch: got {}, expected {expected_scales}",
+                self.scales.len()
+            )));
+        }
+        if self.nibbles.len() != expected_nibbles {
+            return Err(invalid(format!(
+                "nibbles buffer length mismatch: got {}, expected {expected_nibbles}",
+                self.nibbles.len()
+            )));
+        }
+        if !(-200..=120).contains(&self.exp_base) {
+            return Err(invalid(format!(
+                "exp_base ({}) out of safe range [-200, 120]",
+                self.exp_base
+            )));
+        }
+
+        // Validate that all scale bytes decode to finite positive scales fitting in f32
+        for &s_byte in &self.scales {
+            let m = s_byte & 15;
+            let de = s_byte >> 4;
+            let e = self
+                .exp_base
+                .checked_add(i32::from(de))
+                .ok_or_else(|| invalid("exponent addition overflow"))?;
+            let scale = d11_grid_scale(m, e);
+            if !scale.is_finite() || scale <= 0.0 {
+                return Err(invalid("decoded scale is non-finite or non-positive"));
+            }
+            let max_val = (7.0 * scale) as f32;
+            if !max_val.is_finite() {
+                return Err(invalid("quantized dynamic range overflows f32"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Calculate raw parameter bits per weight: 4.0 bits code + (8.0 / group_size) scale bits = 4.25 bits/weight (for group_size = 32).
     pub fn param_bits_per_weight(&self) -> f64 {
         (self.nibbles.len() + self.scales.len()) as f64 * 8.0 / (self.rows * self.cols) as f64
     }
 
-    /// Calculate total stored bits per weight including container exp_base.
-    pub fn total_stored_bits_per_weight(&self) -> f64 {
-        let total_bytes = self.nibbles.len() + self.scales.len() + std::mem::size_of::<i32>();
-        (total_bytes as f64 * 8.0) / (self.rows * self.cols) as f64
+    /// Exact total stored byte count of the serialized payload written by `to_bytes()`.
+    pub fn total_stored_bytes(&self) -> usize {
+        CONTAINER_FRAMING_BYTES + self.nibbles.len() + self.scales.len()
     }
 
-    /// Effective bits per weight under D4 specification: exactly 4.25 bits/weight for group size 32.
+    /// Total stored bits per weight including container framing and BLAKE3 checksum (all 64 framing bytes).
+    pub fn total_stored_bits_per_weight(&self) -> f64 {
+        (self.total_stored_bytes() as f64 * 8.0) / (self.rows * self.cols) as f64
+    }
+
+    /// Effective bits per weight under D4 specification: includes container overhead.
     pub fn effective_bits_per_weight(&self) -> f64 {
-        self.param_bits_per_weight()
+        self.total_stored_bits_per_weight()
     }
 
     /// Serialize into self-contained binary payload with BLAKE3 checksum.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(32 + self.nibbles.len() + self.scales.len() + 32);
+        let mut buf = Vec::with_capacity(self.total_stored_bytes());
         buf.extend_from_slice(GROUPED4BIT_MATRIX_MAGIC);
         buf.extend_from_slice(&(self.rows as u32).to_le_bytes());
         buf.extend_from_slice(&(self.cols as u32).to_le_bytes());
@@ -478,16 +548,11 @@ impl Grouped4BitMatrix {
         if group_size == 0 || cols == 0 || rows == 0 {
             return Err(invalid("zero dimension in header"));
         }
-        if !cols.is_multiple_of(group_size) {
-            return Err(invalid(format!(
-                "cols ({cols}) must be multiple of group_size ({group_size})"
-            )));
-        }
         let total_weights = rows
             .checked_mul(cols)
             .ok_or_else(|| invalid("matrix dimensions overflow"))?;
-        let groups = cols / group_size;
-        let expected_nibbles = total_weights / 2;
+        let groups = cols.div_ceil(group_size);
+        let expected_nibbles = total_weights.div_ceil(2);
         let expected_scales = rows
             .checked_mul(groups)
             .ok_or_else(|| invalid("matrix scales dimension overflow"))?;
@@ -506,14 +571,16 @@ impl Grouped4BitMatrix {
         let scales =
             payload[HEADER_LEN + nibbles_len..HEADER_LEN + nibbles_len + scales_len].to_vec();
 
-        Ok(Self {
+        let mat = Self {
             rows,
             cols,
             group_size,
             exp_base,
             nibbles,
             scales,
-        })
+        };
+        mat.validate()?;
+        Ok(mat)
     }
 }
 
@@ -618,6 +685,7 @@ impl Grouped4BitCodec {
     }
 
     /// Quantize a row-major `rows x cols` float matrix into canonical D11 grouped 4-bit format.
+    /// Supports arbitrary dimensions and group sizes (tail groups gracefully span remaining columns).
     pub fn quantize(&self, values: &[f32], rows: usize, cols: usize) -> Result<Grouped4BitMatrix> {
         if values.len() != rows * cols {
             return Err(invalid(format!(
@@ -626,34 +694,45 @@ impl Grouped4BitCodec {
                 rows * cols
             )));
         }
-        if cols == 0 || rows == 0 || !cols.is_multiple_of(self.group_size) {
-            return Err(invalid(format!(
-                "cols ({cols}) must be non-zero multiple of group_size ({})",
-                self.group_size
-            )));
+        if cols == 0 || rows == 0 || self.group_size == 0 {
+            return Err(invalid("dimensions and group_size must be non-zero"));
         }
         if values.iter().any(|v| !v.is_finite()) {
             return Err(invalid("matrix contains non-finite values"));
         }
 
-        let groups = cols / self.group_size;
-        let mut chosen: Vec<Option<(u8, i32)>> = Vec::with_capacity(rows * groups);
+        let total_weights = rows
+            .checked_mul(cols)
+            .ok_or_else(|| invalid("matrix dimensions overflow"))?;
+        let groups = cols.div_ceil(self.group_size);
+        let total_scales = rows
+            .checked_mul(groups)
+            .ok_or_else(|| invalid("scales dimension overflow"))?;
+        let total_nibbles = total_weights.div_ceil(2);
 
-        for group in values.chunks_exact(self.group_size) {
-            chosen.push(d11_best_scale(group));
+        let mut chosen: Vec<Option<(u8, i32)>> = Vec::with_capacity(total_scales);
+
+        for r in 0..rows {
+            for g in 0..groups {
+                let start_col = g * self.group_size;
+                let end_col = (start_col + self.group_size).min(cols);
+                let group = &values[r * cols + start_col..r * cols + end_col];
+                chosen.push(d11_best_scale(group));
+            }
         }
 
         let e_max = chosen.iter().flatten().map(|(_, e)| *e).max().unwrap_or(0);
-        let exp_base = e_max - 15;
+        let exp_base = (e_max - 15).clamp(-200, 120);
 
-        let mut nibbles = vec![0u8; rows * cols / 2];
-        let mut scales = vec![0u8; rows * groups];
+        let mut nibbles = vec![0u8; total_nibbles];
+        let mut scales = vec![0u8; total_scales];
 
         for r in 0..rows {
             for g in 0..groups {
                 let g_idx = r * groups + g;
-                let group_slice =
-                    &values[r * cols + g * self.group_size..r * cols + (g + 1) * self.group_size];
+                let start_col = g * self.group_size;
+                let end_col = (start_col + self.group_size).min(cols);
+                let group_slice = &values[r * cols + start_col..r * cols + end_col];
 
                 let (m, e) = match self.rounding {
                     Grouped4BitRounding::Nearest => match chosen[g_idx] {
@@ -695,12 +774,13 @@ impl Grouped4BitCodec {
 
                 let s = d11_grid_scale(m, e);
                 for (c_rel, &v) in group_slice.iter().enumerate() {
-                    let c = g * self.group_size + c_rel;
+                    let c = start_col + c_rel;
+                    let linear_idx = r * cols + c;
                     let vf = f64::from(v);
                     let q = (vf / s).round().clamp(-8.0, 7.0);
                     let nibble = (q as i32 + 8) as u8;
-                    let idx = (r * cols + c) / 2;
-                    if c % 2 == 0 {
+                    let idx = linear_idx / 2;
+                    if linear_idx % 2 == 0 {
                         nibbles[idx] |= nibble;
                     } else {
                         nibbles[idx] |= nibble << 4;
@@ -709,22 +789,22 @@ impl Grouped4BitCodec {
             }
         }
 
-        Ok(Grouped4BitMatrix {
+        let mat = Grouped4BitMatrix {
             rows,
             cols,
             group_size: self.group_size,
             exp_base,
             nibbles,
             scales,
-        })
+        };
+        mat.validate()?;
+        Ok(mat)
     }
 
     /// Dequantize a canonical D11 grouped 4-bit matrix back to float representation.
     pub fn dequantize(&self, matrix: &Grouped4BitMatrix) -> Result<Vec<f32>> {
-        if matrix.cols == 0 || matrix.rows == 0 || matrix.group_size == 0 {
-            return Err(invalid("empty or invalid matrix"));
-        }
-        let groups = matrix.cols / matrix.group_size;
+        matrix.validate()?;
+        let groups = matrix.cols.div_ceil(matrix.group_size);
         let mut out = Vec::with_capacity(matrix.rows * matrix.cols);
 
         for r in 0..matrix.rows {
@@ -735,13 +815,23 @@ impl Grouped4BitCodec {
                 let e = matrix.exp_base + i32::from(de);
                 let scale = d11_grid_scale(m, e);
 
-                for c_rel in 0..matrix.group_size {
-                    let c = g * matrix.group_size + c_rel;
-                    let idx = (r * matrix.cols + c) / 2;
+                let start_col = g * matrix.group_size;
+                let end_col = (start_col + matrix.group_size).min(matrix.cols);
+                for c in start_col..end_col {
+                    let linear_idx = r * matrix.cols + c;
+                    let idx = linear_idx / 2;
                     let byte = matrix.nibbles[idx];
-                    let nibble = if c % 2 == 0 { byte & 15 } else { byte >> 4 };
+                    let nibble = if linear_idx % 2 == 0 {
+                        byte & 15
+                    } else {
+                        byte >> 4
+                    };
                     let q = f64::from(nibble as i32 - 8);
-                    out.push((q * scale) as f32);
+                    let val = (q * scale) as f32;
+                    if !val.is_finite() {
+                        return Err(invalid("decoded float value is not finite"));
+                    }
+                    out.push(val);
                 }
             }
         }
@@ -822,14 +912,32 @@ impl Grouped4BitCodec {
         }
     }
 
+    /// Calculate raw parameter bits per weight without container framing.
+    pub fn param_bits_per_weight(&self, rows: usize, cols: usize) -> f64 {
+        let total_weights = rows * cols;
+        if total_weights == 0 {
+            return 0.0;
+        }
+        let nibbles_bytes = total_weights.div_ceil(2);
+        let groups = cols.div_ceil(self.group_size);
+        let scales_bytes = rows * groups;
+        let total_bytes = nibbles_bytes + scales_bytes;
+        (total_bytes as f64 * 8.0) / total_weights as f64
+    }
+
     /// Calculate effective bits per weight for a matrix with given shape under this codec.
     ///
-    /// For group size 32, this is exactly 4.0 bits/weight (nibbles) + 0.25 bits/weight (scales) = 4.25 bits/weight.
+    /// Accounts for 4.0 bits code + (8.0 / group_size) scale bits, plus container framing overhead (64 bytes).
     pub fn effective_bits_per_weight(&self, rows: usize, cols: usize) -> f64 {
-        let nibbles_bytes = rows * cols.div_ceil(2);
-        let scales_bytes = rows * cols.div_ceil(self.group_size);
-        let total_bytes = nibbles_bytes + scales_bytes;
-        (total_bytes as f64 * 8.0) / (rows * cols) as f64
+        let total_weights = rows * cols;
+        if total_weights == 0 {
+            return 0.0;
+        }
+        let nibbles_bytes = total_weights.div_ceil(2);
+        let groups = cols.div_ceil(self.group_size);
+        let scales_bytes = rows * groups;
+        let total_bytes = Grouped4BitMatrix::CONTAINER_FRAMING_BYTES + nibbles_bytes + scales_bytes;
+        (total_bytes as f64 * 8.0) / total_weights as f64
     }
 }
 
@@ -1426,32 +1534,44 @@ mod tests {
         let codec_opt =
             Grouped4BitCodec::new(DEFAULT_GROUP_SIZE, Grouped4BitRounding::MinimumMseScale);
 
-        let rows = 64;
+        // Head dimension of geometric_s1: 4096 x 288
+        let rows = 4096;
         let cols = 288;
-        let values: Vec<f32> = (0..rows * cols)
+        let bpp_framed = codec_rtn.effective_bits_per_weight(rows, cols);
+        let bpp_raw = codec_rtn.param_bits_per_weight(rows, cols);
+        assert_eq!(
+            bpp_raw, 4.25,
+            "Raw parameter bits must be exactly 4.25 bits/weight"
+        );
+        assert!(
+            bpp_framed <= 4.251,
+            "Effective bits per weight including container framing must be <= 4.251, got {bpp_framed}"
+        );
+
+        // Test with 64 x 288
+        let rows_test = 64;
+        let values: Vec<f32> = (0..rows_test * cols)
             .map(|i| (((i as f32) * 0.73) % 17.0 - 8.5) * 0.04)
             .collect();
 
-        // 1. Bit budget: effective bits per weight must be <= 4.25
-        let bpp = codec_rtn.effective_bits_per_weight(rows, cols);
-        assert!(
-            bpp <= 4.2501,
-            "Effective bits per weight must be <= 4.25, got {bpp}"
+        // 1. Deterministic quantization
+        let mat1 = codec_rtn.quantize(&values, rows_test, cols)?;
+        let mat2 = codec_rtn.quantize(&values, rows_test, cols)?;
+        assert_eq!(mat1, mat2, "Quantization must be strictly deterministic");
+        assert_eq!(mat1.param_bits_per_weight(), 4.25);
+        assert_eq!(mat1.to_bytes().len(), mat1.total_stored_bytes());
+        assert_eq!(
+            mat1.total_stored_bytes(),
+            CONTAINER_FRAMING_BYTES + mat1.nibbles.len() + mat1.scales.len()
         );
 
-        // 2. Deterministic quantization
-        let mat1 = codec_rtn.quantize(&values, rows, cols)?;
-        let mat2 = codec_rtn.quantize(&values, rows, cols)?;
-        assert_eq!(mat1, mat2, "Quantization must be strictly deterministic");
-        assert_eq!(mat1.effective_bits_per_weight(), bpp);
-
-        // 3. Dequantization and round-trip
+        // 2. Dequantization and round-trip
         let deq1 = codec_rtn.dequantize(&mat1)?;
-        let deq_rt = codec_rtn.round_trip(&values, rows, cols)?;
+        let deq_rt = codec_rtn.round_trip(&values, rows_test, cols)?;
         assert_eq!(deq1, deq_rt);
-        assert_eq!(deq1.len(), rows * cols);
+        assert_eq!(deq1.len(), rows_test * cols);
 
-        // 4. Serialization round-trip
+        // 3. Serialization round-trip
         let bytes = mat1.to_bytes();
         let mat_deser = Grouped4BitMatrix::from_bytes(&bytes)?;
         assert_eq!(mat1, mat_deser);
@@ -1462,10 +1582,10 @@ mod tests {
         corrupted[last_idx] ^= 0xFF;
         assert!(Grouped4BitMatrix::from_bytes(&corrupted).is_err());
 
-        // 5. Minimum MSE scale search mode
-        let mat_opt = codec_opt.quantize(&values, rows, cols)?;
+        // 4. Minimum MSE scale search mode
+        let mat_opt = codec_opt.quantize(&values, rows_test, cols)?;
         let deq_opt = codec_opt.dequantize(&mat_opt)?;
-        assert_eq!(deq_opt.len(), rows * cols);
+        assert_eq!(deq_opt.len(), rows_test * cols);
 
         // Compute MSE for both
         let mse_rtn: f64 = values
@@ -1491,11 +1611,60 @@ mod tests {
         let codec = Grouped4BitCodec::default();
         // Size mismatch
         assert!(codec.quantize(&[1.0; 10], 4, 4).is_err());
-        // Non-multiple of group size
-        assert!(codec.quantize(&[1.0; 48], 1, 48).is_err());
         // Non-finite values
         assert!(codec.quantize(&[f32::NAN; 32], 1, 32).is_err());
         assert!(codec.quantize(&[f32::INFINITY; 32], 1, 32).is_err());
+        // Zero dimensions
+        assert!(codec.quantize(&[], 0, 32).is_err());
+        assert!(codec.quantize(&[], 32, 0).is_err());
+    }
+
+    #[test]
+    fn test_grouped4bit_odd_dimensions_and_custom_group_size() -> Result<()> {
+        // Test odd rows, odd cols, and odd group_size: 3 rows x 5 cols, group_size = 3
+        let codec = Grouped4BitCodec::new(3, Grouped4BitRounding::Nearest);
+        let rows = 3;
+        let cols = 5;
+        let values: Vec<f32> = (0..rows * cols)
+            .map(|i| (((i as f32) * 1.7) % 5.0 - 2.5) * 0.1)
+            .collect();
+
+        let mat = codec.quantize(&values, rows, cols)?;
+        assert_eq!(mat.rows, rows);
+        assert_eq!(mat.cols, cols);
+        assert_eq!(mat.group_size, 3);
+        // 5 cols with group_size 3 => 2 groups per row => 3 * 2 = 6 scales
+        assert_eq!(mat.scales.len(), 6);
+        // 15 weights => div_ceil(2) = 8 nibble bytes
+        assert_eq!(mat.nibbles.len(), 8);
+
+        // Serialization round-trip
+        let bytes = mat.to_bytes();
+        assert_eq!(bytes.len(), 64 + 8 + 6);
+        let deser = Grouped4BitMatrix::from_bytes(&bytes)?;
+        assert_eq!(mat, deser);
+
+        // Dequantize produces exact rows * cols values
+        let deq = codec.dequantize(&mat)?;
+        assert_eq!(deq.len(), rows * cols);
+        for (&orig, &quant) in values.iter().zip(&deq) {
+            assert!((orig - quant).abs() < 0.2);
+        }
+
+        // Test another configuration: 2 rows x 7 cols, group_size = 4
+        let codec4 = Grouped4BitCodec::new(4, Grouped4BitRounding::MinimumMseScale);
+        let rows4 = 2;
+        let cols4 = 7;
+        let values4: Vec<f32> = (0..rows4 * cols4)
+            .map(|i| (((i as f32) * 0.9) % 3.0 - 1.5) * 0.2)
+            .collect();
+        let mat4 = codec4.quantize(&values4, rows4, cols4)?;
+        assert_eq!(mat4.scales.len(), 4); // 2 rows * ceil(7/4 = 2) = 4
+        assert_eq!(mat4.nibbles.len(), 7); // ceil(14/2) = 7
+        let deq4 = codec4.dequantize(&mat4)?;
+        assert_eq!(deq4.len(), rows4 * cols4);
+
+        Ok(())
     }
 
     #[test]
@@ -1507,8 +1676,12 @@ mod tests {
             .map(|i| (((i as f32) * 0.31) % 11.0 - 5.5) * 0.05)
             .collect();
 
-        // 1. Direct quantize without padding must reject non-multiple of 32
-        assert!(codec.quantize(&values, rows, cols).is_err());
+        // 1. Direct quantize handles 749 columns directly
+        let direct_mat = codec.quantize(&values, rows, cols)?;
+        assert_eq!(direct_mat.rows, rows);
+        assert_eq!(direct_mat.cols, 749);
+        let direct_deq = codec.dequantize(&direct_mat)?;
+        assert_eq!(direct_deq.len(), rows * cols);
 
         // 2. quantize_padded pads to multiple of 32 (768)
         let mat = codec.quantize_padded(&values, rows, cols)?;
@@ -1571,25 +1744,50 @@ mod tests {
     }
 
     #[test]
-    fn test_grouped4bit_matrix_from_bytes_hardening() {
-        let valid_mat = Grouped4BitCodec::default()
-            .quantize(&[0.1f32; 64], 2, 32)
-            .unwrap();
+    fn test_grouped4bit_matrix_adversarial_validation() {
+        let codec = Grouped4BitCodec::default();
+        let valid_mat = codec.quantize(&[0.1f32; 64], 2, 32).unwrap();
+
+        // 1. Truncated scales buffer must be rejected without panic
+        let mut bad_scales = valid_mat.clone();
+        bad_scales.scales.pop();
+        assert!(bad_scales.validate().is_err());
+        assert!(codec.dequantize(&bad_scales).is_err());
+
+        // 2. Truncated nibbles buffer must be rejected without panic
+        let mut bad_nibbles = valid_mat.clone();
+        bad_nibbles.nibbles.pop();
+        assert!(bad_nibbles.validate().is_err());
+        assert!(codec.dequantize(&bad_nibbles).is_err());
+
+        // 3. Out-of-bounds exp_base must be rejected
+        let mut bad_exp = valid_mat.clone();
+        bad_exp.exp_base = 2000;
+        assert!(bad_exp.validate().is_err());
+        assert!(codec.dequantize(&bad_exp).is_err());
+
+        bad_exp.exp_base = -500;
+        assert!(bad_exp.validate().is_err());
+        assert!(codec.dequantize(&bad_exp).is_err());
+
+        bad_exp.exp_base = i32::MAX;
+        assert!(bad_exp.validate().is_err());
+        assert!(codec.dequantize(&bad_exp).is_err());
+
+        // 4. Zero dimensions rejected
+        let mut zero_rows = valid_mat.clone();
+        zero_rows.rows = 0;
+        assert!(zero_rows.validate().is_err());
+        assert!(codec.dequantize(&zero_rows).is_err());
+
+        // 5. from_bytes rejecting corrupted framing
         let bytes = valid_mat.to_bytes();
+        let mut bad_magic = bytes.clone();
+        bad_magic[0] ^= 0x55;
+        assert!(Grouped4BitMatrix::from_bytes(&bad_magic).is_err());
 
-        // Mutate cols in header to non-multiple of group size (e.g. 33)
-        let mut bad_cols = bytes.clone();
-        bad_cols[12..16].copy_from_slice(&33u32.to_le_bytes());
-        // Recompute hash so hash check passes
-        let (payload, _) = bad_cols.split_at_mut(bytes.len() - 32);
-        let new_hash = blake3::hash(payload);
-        bad_cols[bytes.len() - 32..].copy_from_slice(new_hash.as_bytes());
-
-        let res = Grouped4BitMatrix::from_bytes(&bad_cols);
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .to_string()
-            .contains("multiple of group_size"));
+        let mut truncated = bytes.clone();
+        truncated.truncate(50);
+        assert!(Grouped4BitMatrix::from_bytes(&truncated).is_err());
     }
 }

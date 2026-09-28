@@ -21,9 +21,13 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uor_r4_core::report_output;
 use uor_r4_integer::codec::CodecArm;
-use uor_r4_lut::format::StackArtifact;
-use uor_r4_training::geometric_stack::StackModel;
-use uor_r4_training::stack_export::{export_stack_with_codec, stack_grid_reference};
+use uor_r4_lut::format::{
+    Fixed, StackArtifact, StackArtifactBuilder, StackNumerics, StackShape, TableValues,
+};
+use uor_r4_lut::GROUP;
+use uor_r4_training::geometric_stack::{ReadScore, StackArch, StackModel};
+use uor_r4_training::lut_export::{arcosh_table, quantize_matrix, Packed};
+use uor_r4_training::stack_export::{decay_rate, export_stack, grid_code, stack_grid_reference};
 
 const EXPECTED_MODEL_SHA256: &str =
     "3eb1ebbb3c1f65fccf9dfb325283f8f9892cd434e0d689356821acee2c5b1e0a";
@@ -201,6 +205,485 @@ fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
         codec,
         out,
     })
+}
+
+const RMS_EPSILON: f64 = 1e-5;
+const EXP_STEP_LOG2: i32 = -8;
+const SILU_STEP_LOG2: i32 = -8;
+const SILU_RANGE_LOG2: i32 = 4;
+const GELU_STEP_LOG2: i32 = -8;
+const GELU_RANGE_LOG2: i32 = 4;
+
+fn model_values(model: &StackModel, name: &str) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+    let var = model
+        .variables()
+        .get(name)
+        .ok_or_else(|| format!("the stack has no tensor {name}"))?;
+    Ok(var.as_tensor().flatten_all()?.to_vec1::<f32>()?)
+}
+
+fn fold_columns(values: &mut [f32], cols: usize, gain: &[f32]) {
+    for row in values.chunks_exact_mut(cols) {
+        for (val, &g) in row.iter_mut().zip(gain) {
+            *val *= g;
+        }
+    }
+}
+
+fn pad(
+    values: &[f32],
+    in_rows: usize,
+    in_cols: usize,
+    out_rows: usize,
+    out_cols: usize,
+) -> Vec<f32> {
+    let mut out = vec![0.0f32; out_rows * out_cols];
+    for r in 0..in_rows {
+        out[r * out_cols..r * out_cols + in_cols]
+            .copy_from_slice(&values[r * in_cols..(r + 1) * in_cols]);
+    }
+    out
+}
+
+fn fixed_point(value: f64, exp: i32) -> Result<i32, Box<dyn std::error::Error>> {
+    let scaled = (value * 2f64.powi(-exp)).round();
+    if scaled < f64::from(i32::MIN) || scaled > f64::from(i32::MAX) {
+        return Err(format!("fixed-point value out of range: {value} at exp {exp}").into());
+    }
+    Ok(scaled as i32)
+}
+
+fn quantize_matrix_compensated(
+    values: &[f32],
+    rows: usize,
+    cols: usize,
+) -> Result<Packed, Box<dyn std::error::Error>> {
+    if values.len() != rows * cols
+        || !cols.is_multiple_of(GROUP)
+        || values.iter().any(|v| !v.is_finite())
+    {
+        return Err("matrix to quantize has the wrong size or a nonfinite value".into());
+    }
+    let groups = cols / GROUP;
+    let mut chosen: Vec<Option<(u8, i32)>> = Vec::with_capacity(rows * groups);
+    for group in values.chunks_exact(GROUP) {
+        chosen.push(uor_r4_integer::codec::d11_best_scale(group));
+    }
+
+    let e_max = chosen.iter().flatten().map(|(_, e)| *e).max().unwrap_or(0);
+    let e_min = chosen.iter().flatten().map(|(_, e)| *e).min().unwrap_or(0);
+
+    let mut best_base = e_max.saturating_sub(15);
+    let mut min_total_error = f64::INFINITY;
+
+    let base_candidates = if e_max - e_min > 15 {
+        (e_min..=e_max.saturating_sub(15))
+            .rev()
+            .take(8)
+            .collect::<Vec<_>>()
+    } else {
+        vec![e_max.saturating_sub(15)]
+    };
+
+    for &candidate_base in &base_candidates {
+        let mut total_err = 0.0f64;
+        for (g_idx, w) in values.chunks_exact(GROUP).enumerate() {
+            let (m, e) = match chosen[g_idx] {
+                Some((_, e)) if e < candidate_base => {
+                    let mut best_m = 0u8;
+                    let mut best_e_err = f64::INFINITY;
+                    for cand_m in 0..16u8 {
+                        let s = uor_r4_integer::codec::d11_grid_scale(cand_m, candidate_base);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, candidate_base)
+                }
+                Some((_, e)) if e > candidate_base + 15 => {
+                    let top_e = candidate_base + 15;
+                    let mut best_m = 15u8;
+                    let mut best_e_err = f64::INFINITY;
+                    for cand_m in 0..16u8 {
+                        let s = uor_r4_integer::codec::d11_grid_scale(cand_m, top_e);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, top_e)
+                }
+                Some(chosen_scale) => chosen_scale,
+                None => (0, candidate_base),
+            };
+            let s = uor_r4_integer::codec::d11_grid_scale(m, e);
+            let err: f64 = w
+                .iter()
+                .map(|&v| {
+                    let vf = f64::from(v);
+                    let q = (vf / s).round().clamp(-8.0, 7.0);
+                    (vf - q * s).powi(2)
+                })
+                .sum();
+            total_err += err;
+        }
+        if total_err < min_total_error {
+            min_total_error = total_err;
+            best_base = candidate_base;
+        }
+    }
+
+    let exp_base = best_base;
+    let mut nibbles = vec![0u8; rows * cols / 2];
+    let mut scales = vec![0u8; rows * groups];
+    let (mut error, mut energy) = (0f64, 0f64);
+
+    for r in 0..rows {
+        for g in 0..groups {
+            let g_idx = r * groups + g;
+            let (m, e) = match chosen[g_idx] {
+                Some((_, e)) if e < exp_base => {
+                    let mut best_m = 0u8;
+                    let mut best_e_err = f64::INFINITY;
+                    let w = &values[r * cols + g * GROUP..r * cols + (g + 1) * GROUP];
+                    for cand_m in 0..16u8 {
+                        let s = uor_r4_integer::codec::d11_grid_scale(cand_m, exp_base);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, exp_base)
+                }
+                Some((_, e)) if e > exp_base + 15 => {
+                    let top_e = exp_base + 15;
+                    let mut best_m = 15u8;
+                    let mut best_e_err = f64::INFINITY;
+                    let w = &values[r * cols + g * GROUP..r * cols + (g + 1) * GROUP];
+                    for cand_m in 0..16u8 {
+                        let s = uor_r4_integer::codec::d11_grid_scale(cand_m, top_e);
+                        let err: f64 = w
+                            .iter()
+                            .map(|&v| {
+                                let vf = f64::from(v);
+                                let q = (vf / s).round().clamp(-8.0, 7.0);
+                                (vf - q * s).powi(2)
+                            })
+                            .sum();
+                        if err < best_e_err {
+                            best_e_err = err;
+                            best_m = cand_m;
+                        }
+                    }
+                    (best_m, top_e)
+                }
+                Some(chosen_scale) => chosen_scale,
+                None => (0, exp_base),
+            };
+
+            let s = uor_r4_integer::codec::d11_grid_scale(m, e);
+            scales[g_idx] = m | (((e - exp_base) as u8) << 4);
+
+            for c in g * GROUP..(g + 1) * GROUP {
+                let v = f64::from(values[r * cols + c]);
+                let q = (v / s).round().clamp(-8.0, 7.0);
+                error += (v - q * s).powi(2);
+                energy += v * v;
+                let nibble = (q as i32 + 8) as u8;
+                let index = (r * cols + c) / 2;
+                if c % 2 == 0 {
+                    nibbles[index] |= nibble;
+                } else {
+                    nibbles[index] |= nibble << 4;
+                }
+            }
+        }
+    }
+
+    Ok(Packed {
+        nibbles,
+        scales,
+        exp_base,
+        relative_rms_error: if energy > 0.0 {
+            (error / energy).sqrt()
+        } else {
+            0.0
+        },
+    })
+}
+
+fn export_stack_candidate(
+    model: &StackModel,
+    source: Value,
+    head_codec: Option<CodecArm>,
+) -> Result<(Vec<u8>, Value), Box<dyn std::error::Error>> {
+    if head_codec.is_none() {
+        let (bytes, rep) = export_stack(model, source, None)?;
+        return Ok((bytes, rep));
+    }
+
+    let c = &model.config;
+    if c.arch != StackArch::Geometric {
+        return Err("export_stack_candidate takes a geometric stack".into());
+    }
+    let (d, heads) = (c.width, c.heads);
+    let mlp = c.mlp_hidden.div_ceil(GROUP) * GROUP;
+    let shape = StackShape {
+        vocab: c.vocab_size,
+        width: d,
+        heads,
+        mlp,
+        pattern: c.pattern.clone(),
+        read: match c.read {
+            ReadScore::Dot => "dot",
+            ReadScore::Lorentz => "lorentz",
+        }
+        .to_owned(),
+        rotation: c.rotation,
+        context: c.context,
+    };
+    let numerics = StackNumerics {
+        rms_eps: Fixed {
+            mantissa: (RMS_EPSILON * 2f64.powi(48)).round() as i64,
+            exp: -48,
+        },
+        score_scale_q30: (2f64.powi(30) / (c.head_width() as f64).sqrt()).round() as i64,
+        exp_step_log2: EXP_STEP_LOG2,
+        silu_step_log2: SILU_STEP_LOG2,
+        silu_range_log2: SILU_RANGE_LOG2,
+        gelu_step_log2: GELU_STEP_LOG2,
+        gelu_range_log2: GELU_RANGE_LOG2,
+    };
+    let lanes = shape.lanes();
+    let gate_rows = shape.gate_rows();
+    let mut builder = StackArtifactBuilder::new(shape, numerics, source)?;
+    let mut errors = serde_json::Map::new();
+
+    let mut add = |builder: &mut StackArtifactBuilder,
+                   name: &str,
+                   values: &[f32],
+                   rows: usize,
+                   cols: usize|
+     -> Result<(), Box<dyn std::error::Error>> {
+        let packed = quantize_matrix(values, rows, cols)?;
+        builder.add_matrix(
+            name,
+            rows,
+            cols,
+            packed.exp_base,
+            &packed.nibbles,
+            &packed.scales,
+        )?;
+        errors.insert(name.to_owned(), json!(packed.relative_rms_error));
+        Ok(())
+    };
+
+    let codes = |builder: &mut StackArtifactBuilder,
+                 name: &str,
+                 scalars: &[f64]|
+     -> Result<(), Box<dyn std::error::Error>> {
+        let codes = scalars
+            .iter()
+            .map(|&v| grid_code(v).map_err(|e| e.to_string()))
+            .collect::<Result<Vec<i16>, String>>()?;
+        builder.add_table(name, TableValues::I16(&codes))?;
+        Ok(())
+    };
+
+    let integers = |builder: &mut StackArtifactBuilder,
+                    name: &str,
+                    values: &[f32],
+                    exp: i32|
+     -> Result<(), Box<dyn std::error::Error>> {
+        let values = values
+            .iter()
+            .map(|&v| fixed_point(f64::from(v), exp))
+            .collect::<Result<Vec<i32>, Box<dyn std::error::Error>>>()?;
+        builder.add_table(name, TableValues::I32(&values))?;
+        Ok(())
+    };
+
+    let embed = model_values(model, "embedding.weight")?;
+    add(&mut builder, "embed", &embed, c.vocab_size, d)?;
+
+    for (l, kind) in c.pattern.bytes().enumerate() {
+        let tensor = |suffix: &str| model_values(model, &format!("layers.{l:02}.{suffix}"));
+        let name = |part: &str| format!("l{l}.{part}");
+        if kind == b'r' {
+            let gain = tensor("rec_norm.weight")?;
+            let mut input = tensor("rec.in.weight")?;
+            fold_columns(&mut input, d, &gain);
+            add(&mut builder, &name("rec_in"), &input, 2 * d, d)?;
+            let mut gates = tensor("rec.gate.weight")?;
+            fold_columns(&mut gates, d, &gain);
+            add(&mut builder, &name("rec_gate"), &gates, gate_rows, d)?;
+            add(
+                &mut builder,
+                &name("rec_out"),
+                &tensor("rec.out.weight")?,
+                d,
+                d,
+            )?;
+            let taps: Vec<f64> = tensor("rec.conv.weight")?
+                .iter()
+                .map(|&v| f64::from(v))
+                .collect();
+            codes(&mut builder, &name("conv_taps"), &taps)?;
+            integers(
+                &mut builder,
+                &name("conv_bias"),
+                &tensor("rec.conv.bias")?,
+                -16,
+            )?;
+            integers(
+                &mut builder,
+                &name("gate_bias"),
+                &tensor("rec.gate.bias")?,
+                -16,
+            )?;
+            let rates: Vec<f64> = tensor("rec.decay")?
+                .iter()
+                .map(|&v| decay_rate(f64::from(v)))
+                .collect();
+            if rates.len() != lanes {
+                return Err("decay count differs from the lane count".into());
+            }
+            codes(&mut builder, &name("decay_rate"), &rates)?;
+        } else {
+            let gain = tensor("read_norm.weight")?;
+            for (part, rows) in [("query", d), ("key", d), ("value", d), ("null", heads)] {
+                let mut w = tensor(&format!("read.{part}.weight"))?;
+                fold_columns(&mut w, d, &gain);
+                add(&mut builder, &name(part), &w, rows, d)?;
+            }
+            add(
+                &mut builder,
+                &name("out"),
+                &tensor("read.out.weight")?,
+                d,
+                d,
+            )?;
+            integers(
+                &mut builder,
+                &name("null_bias"),
+                &tensor("read.null.bias")?,
+                -16,
+            )?;
+            integers(&mut builder, &name("age"), &tensor("read.age")?, -16)?;
+            if c.read == ReadScore::Lorentz {
+                let beta: Vec<f64> = tensor("read.log_beta")?
+                    .iter()
+                    .map(|&v| f64::from(v).exp())
+                    .collect();
+                codes(&mut builder, &name("beta"), &beta)?;
+                integers(&mut builder, &name("offset"), &tensor("read.offset")?, -24)?;
+            }
+        }
+        let gain = tensor("mlp_norm.weight")?;
+        for part in ["gate", "up"] {
+            let mut w = tensor(&format!("mlp.{part}.weight"))?;
+            fold_columns(&mut w, d, &gain);
+            add(
+                &mut builder,
+                &name(part),
+                &pad(&w, c.mlp_hidden, d, mlp, d),
+                mlp,
+                d,
+            )?;
+        }
+        let down = tensor("mlp.down.weight")?;
+        add(
+            &mut builder,
+            &name("down"),
+            &pad(&down, d, c.mlp_hidden, d, mlp),
+            d,
+            mlp,
+        )?;
+    }
+
+    let mut head = embed;
+    fold_columns(&mut head, d, &model_values(model, "final_norm.weight")?);
+    if head_codec == Some(CodecArm::HeadCompensated) {
+        let packed = quantize_matrix_compensated(&head, c.vocab_size, d)?;
+        builder.add_matrix(
+            "head",
+            c.vocab_size,
+            d,
+            packed.exp_base,
+            &packed.nibbles,
+            &packed.scales,
+        )?;
+        errors.insert("head".to_owned(), json!(packed.relative_rms_error));
+    } else {
+        let head_values = match head_codec {
+            Some(arm) => {
+                uor_r4_integer::codec::apply_codec_arm(&head, c.vocab_size, d, arm, 20260928)
+                    .map_err(|e| e.to_string())?
+            }
+            None => head,
+        };
+        add(&mut builder, "head", &head_values, c.vocab_size, d)?;
+    }
+
+    let exp: Vec<u32> = (0..12 * (1 << -EXP_STEP_LOG2) + 2)
+        .map(|i| (2f64.powi(31) * (-(i as f64) * 2f64.powi(EXP_STEP_LOG2)).exp()).round() as u32)
+        .collect();
+    let activation = |step_log2: i32, range_log2: i32, f: &dyn Fn(f64) -> f64| -> Vec<i32> {
+        let half = 1i64 << (range_log2 - step_log2);
+        (0..=2 * half)
+            .map(|i| (2f64.powi(16) * f((i - half) as f64 * 2f64.powi(step_log2))).round() as i32)
+            .collect()
+    };
+    let silu = activation(SILU_STEP_LOG2, SILU_RANGE_LOG2, &|x| x / (1.0 + (-x).exp()));
+    let gelu = activation(GELU_STEP_LOG2, GELU_RANGE_LOG2, &|x| {
+        let k = (2.0 / std::f64::consts::PI).sqrt();
+        0.5 * x * (1.0 + (k * (x + 0.044_715 * x * x * x)).tanh())
+    });
+
+    builder.add_table("exp", TableValues::U32(&exp))?;
+    builder.add_table("silu", TableValues::I32(&silu))?;
+    builder.add_table("gelu", TableValues::I32(&gelu))?;
+    if c.read == ReadScore::Lorentz {
+        builder.add_table("arcosh", TableValues::U32(&arcosh_table()))?;
+    }
+    let bytes = builder.finish()?;
+    Ok((
+        bytes,
+        json!({
+            "method": {
+                "quantizer": "round_to_nearest_codec",
+                "head_codec": format!("{:?}", head_codec),
+                "mlp_padded_from": c.mlp_hidden,
+                "mlp_padded_to": mlp,
+            },
+            "relative_rms_error": errors,
+        }),
+    ))
 }
 
 struct ArmResult {
@@ -421,7 +904,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("Exporting stack artifact with codec {:?}...", arm_codec);
             let (artifact_bytes, quant_report) =
-                export_stack_with_codec(&model, source_meta, None, arm_codec)
+                export_stack_candidate(&model, source_meta, arm_codec)
                     .map_err(|e| format!("Export error for {}: {e}", arm_slug))?;
             let export_duration = export_clock.elapsed().as_secs_f64();
 
