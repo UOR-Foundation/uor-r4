@@ -272,6 +272,19 @@ fn run_summary(run: &Value) -> Value {
     })
 }
 
+/// The matched attention control: the template's width, heads, MLP, context
+/// and depth, with a RoPE softmax attention layer in every position and no
+/// lanes. Its parameter count is within about 2% of the recurrence-primary
+/// stack's at the default shape; both counts are reported per run.
+fn transformer_control(template: &StackConfig, seed: u64) -> StackConfig {
+    StackConfig {
+        arch: StackArch::Transformer,
+        pattern: "a".repeat(template.layers()),
+        seed,
+        ..template.clone()
+    }
+}
+
 /// `count` little-endian u16 ids starting at token `start` of `path`.
 fn read_u16_range(path: &Path, start: u64, count: usize) -> Result<Vec<u16>> {
     let mut file = fs::File::open(path)?;
@@ -306,15 +319,15 @@ fn mixed(args: &Args, out: &Path) -> Result<()> {
     {
         return Err(invalid("train_tokens + dev_tokens exceed the token file"));
     }
-    let arms: Vec<Option<LaneKind>> = args
-        .0
-        .get("arms")
-        .map(String::as_str)
-        .unwrap_or("none,quaternion,reflection_pair,phase")
-        .split(',')
-        .map(|name| match name.trim() {
-            "none" => Ok(None),
-            other => LaneKind::parse(other).map(Some),
+    // Arms: `none` (lane-free stack), `transformer` (the matched attention
+    // control, no lanes) or a lane kind.
+    let arm_names: Vec<String> = args.list("arms", "none,quaternion,reflection_pair,phase")?;
+    let arms: Vec<(Option<LaneKind>, bool)> = arm_names
+        .iter()
+        .map(|name| match name.as_str() {
+            "none" => Ok((None, false)),
+            "transformer" => Ok((None, true)),
+            other => LaneKind::parse(other).map(|k| (Some(k), false)),
         })
         .collect::<Result<_>>()?;
     let seeds: Vec<u64> = args.list("seeds", "1,2,3")?;
@@ -386,11 +399,15 @@ fn mixed(args: &Args, out: &Path) -> Result<()> {
         "snap@4096"
     );
     let mut summary = Vec::new();
-    for &arm in &arms {
+    for &(arm, transformer) in &arms {
         for &seed in &seeds {
-            let config = StackConfig {
-                seed,
-                ..stack_template.clone()
+            let config = if transformer {
+                transformer_control(&stack_template, seed)
+            } else {
+                StackConfig {
+                    seed,
+                    ..stack_template.clone()
+                }
             };
             let model = TrackedStack::new(
                 config.clone(),
@@ -450,7 +467,11 @@ fn mixed(args: &Args, out: &Path) -> Result<()> {
                     .and_then(|rows| rows.iter().find(|r| r.length == length))
                     .map_or_else(|| "-".to_owned(), |r| format!("{:.3}", r.final_position))
             };
-            let arm_name = arm.map_or_else(|| "none".to_owned(), |k| format!("{k:?}"));
+            let arm_name = match (arm, transformer) {
+                (_, true) => "transformer".to_owned(),
+                (None, false) => "none".to_owned(),
+                (Some(k), false) => format!("{k:?}"),
+            };
             println!(
                 "{:<16} {:>4} {:>8.1} {:>9.4} {:>8} {:>8} {:>8} {:>6} {:>9} {:>9}",
                 arm_name,
@@ -602,6 +623,7 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
     for arm in &arms {
         let (source, kind) = match arm.split_once(':') {
             None if arm == "none" => ("none", None),
+            None if arm == "transformer" => ("transformer", None),
             Some((source @ ("token" | "context"), kind)) => (source, Some(LaneKind::parse(kind)?)),
             _ => {
                 return Err(invalid(format!(
@@ -610,9 +632,13 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
             }
         };
         for &seed in &seeds {
-            let config = StackConfig {
-                seed,
-                ..stack_template.clone()
+            let config = if source == "transformer" {
+                transformer_control(&stack_template, seed)
+            } else {
+                StackConfig {
+                    seed,
+                    ..stack_template.clone()
+                }
             };
             let token_lanes = if source == "token" {
                 kind.map(|k| (k, lanes))
