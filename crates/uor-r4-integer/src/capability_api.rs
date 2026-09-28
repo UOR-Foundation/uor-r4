@@ -1,15 +1,20 @@
-//! Unified Capability API for Native UOR-R4 Integer Serving.
+//! Capability API for native UOR-R4 integer serving.
 //!
-//! Provides a standardized, thread-safe interface for host applications,
-//! background services, and WebAssembly browser environments (Pages Studio).
-//! Absorbs interface obligations from #962, #1172, and #963.
-//! Strictly 100% safe Rust (`#![forbid(unsafe_code)]`).
+//! A lifetime-free session container over one loaded [`Bundle`] for host
+//! applications: bundle metadata, a scoped capability status matrix, session
+//! creation with an optional persistent system prompt, user-turn ingestion,
+//! token generation and session save/restore. Safe Rust under the crate's
+//! `#![forbid(unsafe_code)]`.
+//!
+//! The metadata declares the numerical serving contract; it does not certify
+//! it. Qualification belongs to the instruction audit of the delivered release
+//! binary and to measured, sealed reports, never to constants in this module.
 
 use crate::bundle::Bundle;
 use crate::config::ReadMode;
 use crate::model::{SessionState, SlotTarget, PERSISTENT_CAPACITY};
 use crate::sampling::{SamplePolicy, Sampler};
-use crate::session::{RoleTokens, SerializedChatSession};
+use crate::session::{ChatSession, RoleTokens, SerializedChatSession};
 use crate::{invalid, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -18,8 +23,16 @@ use std::sync::Mutex;
 
 pub const CAPABILITY_API_SCHEMA: &str = "uor-r4.integer-capability-api/1";
 
-/// Truthful record of model capability statuses distinguishing
-/// verified milestones from unproven claims.
+/// Numerical serving contract the integer runtime is written to (owner decision D11).
+pub const DECLARED_NUMERICAL_CONTRACT: &str = "D11";
+
+/// What a declaration of [`DECLARED_NUMERICAL_CONTRACT`] does and does not establish.
+pub const CONTRACT_QUALIFICATION_NOTE: &str = "Declared, not certified by this API. \
+Qualification requires the ARM64 instruction audit of the delivered release binary \
+(scripts/audit_zero_matmul_serving.py) and a measured, sealed report.";
+
+/// Capability status statements, each scoped to what is implemented or
+/// established; unestablished capabilities are marked UNQUALIFIED.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityTruthMatrix {
     pub language_prose: String,
@@ -35,19 +48,19 @@ pub struct CapabilityTruthMatrix {
 impl Default for CapabilityTruthMatrix {
     fn default() -> Self {
         Self {
-            language_prose: "Pre-alpha: grounded multi-turn dialogue and prompt response verified on fixed 58-turn panel; general open-domain prose unproven.".into(),
-            causal_attention: "Verified: exact prime-addressed memory and discrete circular ring buffer; zero soft-attention matrices.".into(),
-            multi_step_reasoning: "UNQUALIFIED: generalized reasoning not established.".into(),
-            executable_coding: "UNQUALIFIED: general coding not established.".into(),
-            durable_memory: "Verified: 256-slot prime memory hierarchy (persistent system persona + active dialogue ring).".into(),
-            serving_guarantees: "D11 Certified: strictly 0 transformers, 0 hardware integer multipliers, 0 hardware dividers, 0 floats in serving.".into(),
-            m1_performance_profile: "M1 Qualified: mean step latency 3.16 ms/tok, peak RSS < 30 MB, 1.737 MiB/tok analytical traffic.".into(),
-            general_ai_disavowal: "Pre-alpha: general prose, general reasoning, and frontier capability remain unproven.".into(),
+            language_prose: "UNQUALIFIED: general prose is not established. Replay parity with a recorded dialogue panel is a runtime check, not a language-quality result.".into(),
+            causal_attention: "Implemented: causal integer-softmax reads over bounded addressed memory (persistent slots, dialogue ring, L2 pages). A structural description, not a measured capability.".into(),
+            multi_step_reasoning: "UNQUALIFIED: general reasoning is not established.".into(),
+            executable_coding: "UNQUALIFIED: general coding is not established.".into(),
+            durable_memory: "Implemented: bounded session memory with save and restore through uor-r4.integer-session/1. That schema omits the width-576 value stores, so a restored width-576 session does not continue identically. Durable-memory capability is not established.".into(),
+            serving_guarantees: format!("Declared contract {DECLARED_NUMERICAL_CONTRACT}: no floating point and no multiply or divide instruction in served kernels. {CONTRACT_QUALIFICATION_NOTE}"),
+            m1_performance_profile: "UNQUALIFIED: no sealed M1 cost report is bound to this API.".into(),
+            general_ai_disavowal: "Pre-alpha: general prose, general reasoning and frontier capability remain unproven.".into(),
         }
     }
 }
 
-/// Metadata describing the loaded native integer model and its architectural invariants.
+/// Metadata describing the loaded native integer model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelCapabilityMetadata {
     pub api_schema_version: String,
@@ -56,10 +69,10 @@ pub struct ModelCapabilityMetadata {
     pub vocab_size: usize,
     pub context_capacity: usize,
     pub read_geometry: String,
-    pub zero_transformers: bool,
-    pub zero_hardware_multipliers: bool,
-    pub zero_hardware_dividers: bool,
-    pub zero_floats_in_serving: bool,
+    /// The contract the runtime is written to; see `contract_qualification`.
+    pub declared_numerical_contract: String,
+    /// What the declaration does not establish on its own.
+    pub contract_qualification: String,
     pub truth_matrix: CapabilityTruthMatrix,
 }
 
@@ -94,16 +107,16 @@ pub struct SessionTelemetry {
     pub prng_state: u64,
 }
 
-/// Owned conversational session state managed by the API without unsafe lifetimes.
-pub struct ManagedSession {
-    pub state: SessionState,
-    pub roles: RoleTokens,
-    pub sampler: Sampler,
-    pub read_mode: ReadMode,
-    pub policy: SamplePolicy,
+/// Owned conversational session state managed by the API.
+struct ManagedSession {
+    state: SessionState,
+    roles: RoleTokens,
+    sampler: Sampler,
+    read_mode: ReadMode,
+    policy: SamplePolicy,
 }
 
-/// Unified capability API container managing bundle lifetime and session state.
+/// Capability API container managing bundle lifetime and session state.
 pub struct IntegerCapabilityApi {
     bundle: Bundle,
     sessions: Mutex<HashMap<u32, ManagedSession>>,
@@ -120,7 +133,7 @@ impl IntegerCapabilityApi {
         }
     }
 
-    /// Access the underlying bundle identity and configuration metadata.
+    /// Bundle identity, configuration and the declared (uncertified) contract.
     pub fn metadata(&self) -> ModelCapabilityMetadata {
         let config = self.bundle.model().config();
         ModelCapabilityMetadata {
@@ -129,11 +142,9 @@ impl IntegerCapabilityApi {
             width: config.width,
             vocab_size: config.vocab_size,
             context_capacity: config.context,
-            read_geometry: format!("{:?}", self.bundle.model().config().read_geometry),
-            zero_transformers: true,
-            zero_hardware_multipliers: true,
-            zero_hardware_dividers: true,
-            zero_floats_in_serving: true,
+            read_geometry: format!("{:?}", config.read_geometry),
+            declared_numerical_contract: DECLARED_NUMERICAL_CONTRACT.into(),
+            contract_qualification: CONTRACT_QUALIFICATION_NOTE.into(),
             truth_matrix: CapabilityTruthMatrix::default(),
         }
     }
@@ -190,8 +201,12 @@ impl IntegerCapabilityApi {
         Ok(session_id)
     }
 
-    /// Ingest a user prompt into the specified session.
+    /// Ingest a user prompt into the specified session. An empty prompt is
+    /// rejected before any session state changes.
     pub fn ingest_user_turn(&self, session_id: u32, prompt: &str) -> Result<usize> {
+        if prompt.trim().is_empty() {
+            return Err(invalid("empty user turn prompt"));
+        }
         let mut lock = self
             .sessions
             .lock()
@@ -200,10 +215,6 @@ impl IntegerCapabilityApi {
             .get_mut(&session_id)
             .ok_or_else(|| invalid(format!("session {session_id} not found")))?;
 
-        session.state.start_turn();
-        if prompt.trim().is_empty() {
-            return Err(invalid("empty user turn prompt"));
-        }
         let user_tokens = self.bundle.tokenizer().encode(prompt);
         let mut tokens = Vec::with_capacity(user_tokens.len() + 3);
         tokens.push(session.roles.user_id);
@@ -211,6 +222,7 @@ impl IntegerCapabilityApi {
         tokens.push(session.roles.turn_end_id);
         tokens.push(session.roles.assistant_id);
 
+        session.state.start_turn();
         for &token in &tokens {
             self.bundle.model().step_conversational_into(
                 &mut session.state,
@@ -248,7 +260,9 @@ impl IntegerCapabilityApi {
         Ok(selected as u32)
     }
 
-    /// Generate an assistant response turn up to `max_tokens`.
+    /// Generate an assistant response turn up to `max_tokens`. A selected
+    /// turn-end or EOS token is committed to the session before returning; a
+    /// failed commit is returned as an error.
     pub fn generate_text(&self, session_id: u32, max_tokens: usize) -> Result<String> {
         let mut lock = self
             .sessions
@@ -271,29 +285,22 @@ impl IntegerCapabilityApi {
                 .map_err(|e| invalid(format!("sampling error: {e}")))?
                 as u32;
 
-            if next_tok == turn_end_id || next_tok == eos_id {
-                let _ = self.bundle.model().step_conversational_into(
-                    &mut session.state,
-                    next_tok,
-                    SlotTarget::Dialogue,
-                    session.read_mode,
-                );
-                break;
-            }
-
-            generated_tokens.push(next_tok);
             self.bundle.model().step_conversational_into(
                 &mut session.state,
                 next_tok,
                 SlotTarget::Dialogue,
                 session.read_mode,
             )?;
+            if next_tok == turn_end_id || next_tok == eos_id {
+                break;
+            }
+            generated_tokens.push(next_tok);
         }
 
         Ok(self.bundle.tokenizer().decode(&generated_tokens))
     }
 
-    /// Save session state for durable memory persistence.
+    /// Save session state, sampler state, sampling policy and read mode.
     pub fn save_session(&self, session_id: u32) -> Result<SerializedChatSession> {
         let lock = self
             .sessions
@@ -303,7 +310,7 @@ impl IntegerCapabilityApi {
             .get(&session_id)
             .ok_or_else(|| invalid(format!("session {session_id} not found")))?;
 
-        let temp_session = crate::session::ChatSession::from_parts(
+        let temp_session = ChatSession::from_parts(
             &self.bundle,
             session.state.clone(),
             session.roles,
@@ -314,27 +321,30 @@ impl IntegerCapabilityApi {
         Ok(temp_session.to_serialized(Some(self.bundle.identity())))
     }
 
-    /// Restore session state from serialized DTO.
+    /// Restore a saved session as a new session, keeping its saved sampler
+    /// state, sampling policy and read mode. `uor-r4.integer-session/1` does
+    /// not carry the width-576 value stores, so a restored width-576 session
+    /// reads empty values and does not continue identically.
     pub fn restore_session(&self, serialized: SerializedChatSession) -> Result<u32> {
-        let session_id = self.next_session_id.fetch_add(1, Ordering::SeqCst);
-        let restored = crate::session::ChatSession::from_serialized(
-            &self.bundle,
-            serialized,
-            self.bundle.identity(),
-        )?;
-
+        let restored =
+            ChatSession::from_serialized(&self.bundle, serialized, self.bundle.identity())?;
+        let roles = restored.roles();
+        let sampler = restored.sampler().clone();
+        let read_mode = restored.read_mode();
+        let policy = restored.policy();
         let managed = ManagedSession {
             state: restored.into_state(),
-            roles: RoleTokens::from_tokenizer(self.bundle.tokenizer())?,
-            sampler: Sampler::new(0),
-            read_mode: ReadMode::Enabled,
-            policy: SamplePolicy::Greedy,
+            roles,
+            sampler,
+            read_mode,
+            policy,
         };
 
         let mut lock = self
             .sessions
             .lock()
             .map_err(|_| invalid("session lock poisoned"))?;
+        let session_id = self.next_session_id.fetch_add(1, Ordering::SeqCst);
         lock.insert(session_id, managed);
         Ok(session_id)
     }
@@ -365,5 +375,38 @@ impl IntegerCapabilityApi {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bundle::create_test_bundle_with_byte_vocab;
+
+    #[test]
+    fn generate_text_returns_a_failed_turn_end_commit() -> Result<()> {
+        let api = IntegerCapabilityApi::new(create_test_bundle_with_byte_vocab());
+        let id = api.create_session(SessionConfig::default())?;
+        api.ingest_user_turn(id, "hello")?;
+        {
+            let mut lock = api
+                .sessions
+                .lock()
+                .map_err(|_| invalid("session lock poisoned"))?;
+            let session = lock
+                .get_mut(&id)
+                .ok_or_else(|| invalid("session missing"))?;
+            // Force EOS as the only candidate and make its commit step fail.
+            let eos = session.roles.eos_id as usize;
+            session.state.last_probabilities.fill(0);
+            session.state.last_probabilities[eos] = crate::PROBABILITY_TOTAL;
+            session.state.identity = "injected identity mismatch".into();
+        }
+        let error = match api.generate_text(id, 4) {
+            Ok(text) => return Err(invalid(format!("expected an error, got {text:?}"))),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("identity"), "{error}");
+        Ok(())
     }
 }

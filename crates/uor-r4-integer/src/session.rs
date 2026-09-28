@@ -569,8 +569,10 @@ impl<'a> ChatSession<'a> {
         Ok(session)
     }
 
-    /// Construct a ChatSession from constituent parts.
-    pub fn from_parts(
+    /// Construct a ChatSession from parts already held by a validated session.
+    /// Crate-internal: it performs none of the checks of `from_serialized`, so
+    /// external state enters only through `new` or `from_serialized`.
+    pub(crate) fn from_parts(
         bundle: &'a Bundle,
         state: SessionState,
         roles: RoleTokens,
@@ -589,8 +591,8 @@ impl<'a> ChatSession<'a> {
         }
     }
 
-    /// Extract inner session state.
-    pub fn into_state(self) -> SessionState {
+    /// Extract inner session state (crate-internal counterpart of `from_parts`).
+    pub(crate) fn into_state(self) -> SessionState {
         self.state
     }
 
