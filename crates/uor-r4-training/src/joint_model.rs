@@ -624,8 +624,6 @@ impl JointModel {
             .map(|arm| (arm, self.addressed_budget))
     }
 
-    }
-
     /// New offline optimizer starts from the actual packed code values. Parent
     /// clock/scales remain immutable; campaign lineage records all new updates.
     pub(crate) fn packed_training_start(&self) -> Result<Self> {
