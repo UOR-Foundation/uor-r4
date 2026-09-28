@@ -21,10 +21,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::joint_admission::{AdmissionIndex, AdmissionPolicy, AdmissionWork};
+use crate::joint_admission::{AdmissionIndex, AdmissionPolicy, AdmissionWork, CONTEST_BUDGET};
 use crate::joint_quantization::{self, QuantizationSpec};
 use crate::{invalid, Result};
 
+use crate::addressing_arms::AddressingArm;
 use crate::geometric_read::{GeometricReadConfig, GeometricReadState};
 pub use uor_r4_integer::config::{ReadGeometry, LORENTZ_LOG_BETA, LORENTZ_OFFSET};
 
@@ -173,6 +174,11 @@ pub struct JointModel {
     interface_audit: Option<Arc<Mutex<BTreeMap<String, InterfaceAudit>>>>,
     admission: AdmissionPolicy,
     admission_audit: Option<Arc<Mutex<Value>>>,
+    // Optional in-memory PQ-ADC codebook for `AdmissionPolicy::Addressed`. It is
+    // an evaluation-only intervention and never a checkpoint or default field;
+    // `None` with the retained policies preserves every existing path exactly.
+    addressed_codebook: Option<Arc<AddressingArm>>,
+    addressed_budget: usize,
     // Optional finite geometric read kernel. `None` preserves every existing
     // parameter set, graph path and numerical contract exactly.
     geometric_read: Option<GeometricReadState>,
@@ -555,6 +561,8 @@ impl JointModel {
             interface_audit: None,
             admission: AdmissionPolicy::Full,
             admission_audit: None,
+            addressed_codebook: None,
+            addressed_budget: 0,
             geometric_read: None,
         })
     }
@@ -569,6 +577,11 @@ impl JointModel {
         }
         if self.prepared_parameters.is_some() {
             return Err(invalid("admission cannot change inside a prepared graph"));
+        }
+        if policy == AdmissionPolicy::Addressed && self.addressed_codebook.is_none() {
+            return Err(invalid(
+                "Addressed admission requires a configured in-memory codebook",
+            ));
         }
         self.admission = policy;
         Ok(())
@@ -586,6 +599,31 @@ impl JointModel {
 
     pub fn read_intervention(&self) -> Option<ReadMassIntervention> {
         self.read_intervention
+    }
+
+    /// Configure the in-memory PQ-ADC codebook for `AdmissionPolicy::Addressed`.
+    ///
+    /// This is an evaluation-only intervention: it changes the admitted set, not
+    /// any parameter, and no serving default reads it.
+    pub fn set_addressed_codebook(&mut self, arm: Arc<AddressingArm>, budget: usize) -> Result<()> {
+        if self.prepared_parameters.is_some() {
+            return Err(invalid("admission cannot change inside a prepared graph"));
+        }
+        if budget == 0 || budget > crate::joint_admission::MAX_CANDIDATES {
+            return Err(invalid("addressed budget must be 1..=64"));
+        }
+        self.addressed_codebook = Some(arm);
+        self.addressed_budget = budget;
+        Ok(())
+    }
+
+    /// The configured in-memory codebook and its budget, for reporting.
+    pub fn addressed_codebook(&self) -> Option<(Arc<AddressingArm>, usize)> {
+        self.addressed_codebook
+            .clone()
+            .map(|arm| (arm, self.addressed_budget))
+    }
+
     }
 
     /// New offline optimizer starts from the actual packed code values. Parent
@@ -970,6 +1008,8 @@ impl JointModel {
         model.interface_audit = self.interface_audit.clone();
         model.admission = self.admission;
         model.admission_audit = self.admission_audit.clone();
+        model.addressed_codebook = self.addressed_codebook.clone();
+        model.addressed_budget = self.addressed_budget;
         model.geometric_read = self.geometric_read.clone();
         Ok(model)
     }
@@ -1148,18 +1188,57 @@ impl JointModel {
         if batch == 0 || batch > 64 {
             return Err(invalid("joint batch must be 1..64"));
         }
+        let mut indexes = Vec::with_capacity(batch);
+        for _ in 0..batch {
+            indexes.push(self.configured_admission_index()?);
+        }
         Ok(RecurrentState {
             state: Tensor::zeros((batch, self.config.width), DType::F32, &self.device)?,
             keys: None,
             values: None,
             events: Vec::new(),
-            indexes: (0..batch).map(|_| AdmissionIndex::new()).collect(),
+            indexes,
             key_events: Vec::new(),
             value_events: Vec::new(),
             dense_batch_history: false,
             kernel_key_codes: None,
             kernel_key_coords: None,
         })
+    }
+
+    /// Build one lane's admission index for the active policy. Every retained
+    /// policy returns a default index, so its storage and query path are
+    /// unchanged; only a contest codebook/oracle policy adds side storage.
+    fn configured_admission_index(&self) -> Result<AdmissionIndex> {
+        let mut index = AdmissionIndex::new();
+        match self.admission {
+            AdmissionPolicy::H4Cells16 => {
+                index.configure_codebook(Arc::new(AddressingArm::contest_h4()), CONTEST_BUDGET)?
+            }
+            AdmissionPolicy::H4Cells16Rht => index
+                .configure_codebook(Arc::new(AddressingArm::contest_h4_rht()), CONTEST_BUDGET)?,
+            AdmissionPolicy::E8Roots16Rht => index
+                .configure_codebook(Arc::new(AddressingArm::contest_e8_rht()), CONTEST_BUDGET)?,
+            AdmissionPolicy::Sign4Rht => index
+                .configure_codebook(Arc::new(AddressingArm::contest_sign4_rht()), CONTEST_BUDGET)?,
+            AdmissionPolicy::Sign8Rht => index
+                .configure_codebook(Arc::new(AddressingArm::contest_sign8_rht()), CONTEST_BUDGET)?,
+            AdmissionPolicy::Addressed => {
+                let arm = self
+                    .addressed_codebook
+                    .clone()
+                    .ok_or_else(|| invalid("Addressed admission has no configured codebook"))?;
+                index.configure_codebook(arm, self.addressed_budget)?;
+            }
+            AdmissionPolicy::Oracle16 => index.configure_oracle(CONTEST_BUDGET)?,
+            AdmissionPolicy::Full
+            | AdmissionPolicy::Recent64
+            | AdmissionPolicy::Recent32
+            | AdmissionPolicy::Orthant64
+            | AdmissionPolicy::ExactCache64
+            | AdmissionPolicy::Recent16 => {}
+        }
+        Ok(index)
     }
 
     /// Batch-major observed input IDs. No target or source-label input exists.

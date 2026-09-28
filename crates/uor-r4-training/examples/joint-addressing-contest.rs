@@ -32,9 +32,6 @@ const S_BUDGETS: [usize; 4] = [4, 8, 16, 32];
 const RECENT_SHARE: usize = 8;
 const NO_READ_CHOICE_THRESHOLD: f64 = 0.5;
 const LONG_RANGE_AGE: usize = 32;
-const SIGN_SEED_4D: u64 = 0x51D5_0004_0000_0004;
-const SIGN_SEED_8D: u64 = 0x51D5_0008_0000_0008;
-const RHT_SEED: u64 = 0x51D5_11A7_0000_0001;
 
 const CONDITION_A_ROWS: [PanelRow; 5] = [
     PanelRow {
@@ -228,30 +225,14 @@ fn load_parent(
 
 fn build_geometric_arms(tune_keys: &[[f32; KEY_WIDTH]]) -> Result<Vec<GeometricArm>> {
     let fixed: [(&str, &'static str, AddressingArm); 8] = [
-        ("h4", "h4", AddressingArm::h4()),
-        (
-            "h4-rht",
-            "h4",
-            AddressingArm::h4().with_pre_rotation(RHT_SEED),
-        ),
-        ("e8", "e8", AddressingArm::e8()),
-        (
-            "e8-rht",
-            "e8",
-            AddressingArm::e8().with_pre_rotation(RHT_SEED),
-        ),
-        ("sign4", "sign", AddressingArm::sign_codes_4d(SIGN_SEED_4D)),
-        (
-            "sign4-rht",
-            "sign",
-            AddressingArm::sign_codes_4d(SIGN_SEED_4D).with_pre_rotation(RHT_SEED),
-        ),
-        ("sign8", "sign", AddressingArm::sign_codes_8d(SIGN_SEED_8D)),
-        (
-            "sign8-rht",
-            "sign",
-            AddressingArm::sign_codes_8d(SIGN_SEED_8D).with_pre_rotation(RHT_SEED),
-        ),
+        ("h4", "h4", AddressingArm::contest_h4()),
+        ("h4-rht", "h4", AddressingArm::contest_h4_rht()),
+        ("e8", "e8", AddressingArm::contest_e8()),
+        ("e8-rht", "e8", AddressingArm::contest_e8_rht()),
+        ("sign4", "sign", AddressingArm::contest_sign4()),
+        ("sign4-rht", "sign", AddressingArm::contest_sign4_rht()),
+        ("sign8", "sign", AddressingArm::contest_sign8()),
+        ("sign8-rht", "sign", AddressingArm::contest_sign8_rht()),
     ];
     let mut arms: Vec<GeometricArm> = fixed
         .into_iter()
@@ -465,6 +446,7 @@ fn capture_panel_row(
 }
 
 fn panel_row_report(
+    row_id: usize,
     row: &PanelRow,
     arms: &[GeometricArm],
     capture: &PanelCapture,
@@ -481,24 +463,6 @@ fn panel_row_report(
     let dense_rank = 1 + dense.iter().position(|&index| index == entity).unwrap_or(0);
     let dense_mass = masses[entity];
     let query = &capture.query;
-    let mut arm_rows = Vec::new();
-    let mut emit = |label: String, ranking: Option<Vec<usize>>| -> Result<()> {
-        let ranking = ranking.unwrap_or_else(|| (0..previous).rev().collect());
-        let arm_rank = 1 + ranking
-            .iter()
-            .position(|&index| index == entity)
-            .unwrap_or(0);
-        arm_rows.push(json!({
-            "arm": label,
-            "dense_rank": dense_rank,
-            "dense_mass": dense_mass,
-            "arm_rank": arm_rank,
-            "admitted_top16": ranking[..16.min(previous)].contains(&entity),
-            "admitted_top32": ranking[..32.min(previous)].contains(&entity)
-        }));
-        Ok(())
-    };
-    emit("recent-s".to_string(), None)?;
     let oracle = ranking_by_score(
         &(0..previous)
             .map(|i| {
@@ -510,10 +474,42 @@ fn panel_row_report(
             })
             .collect::<Vec<_>>(),
     );
-    emit("oracle-qk".to_string(), Some(oracle))?;
+    let dense_qk_rank = 1 + oracle
+        .iter()
+        .position(|&index| index == entity)
+        .unwrap_or(0);
+    let mut arm_rows = Vec::new();
+    let mut admitted_top16 = 0usize;
+    let mut admitted_top32 = 0usize;
+    let mut emit =
+        |label: String, family: &'static str, ranking: Option<Vec<usize>>| -> Result<()> {
+            let ranking = ranking.unwrap_or_else(|| (0..previous).rev().collect());
+            let arm_rank = 1 + ranking
+                .iter()
+                .position(|&index| index == entity)
+                .unwrap_or(0);
+            let top16 = ranking[..16.min(previous)].contains(&entity);
+            let top32 = ranking[..32.min(previous)].contains(&entity);
+            admitted_top16 += usize::from(top16);
+            admitted_top32 += usize::from(top32);
+            arm_rows.push(json!({
+                "arm": label,
+                "family": family,
+                "dense_rank": dense_rank,
+                "dense_mass": dense_mass,
+                "dense_qk_rank": dense_qk_rank,
+                "arm_rank": arm_rank,
+                "admitted_top16": top16,
+                "admitted_top32": top32
+            }));
+            Ok(())
+        };
+    emit("recent-s".to_string(), "recent", None)?;
+    emit("oracle-qk".to_string(), "oracle", Some(oracle))?;
     for (index, arm) in arms.iter().enumerate() {
         emit(
             arm.label.clone(),
+            arm.family,
             Some(arm_ranking(
                 &arm.arm,
                 &capture.codes[index][..previous],
@@ -522,6 +518,7 @@ fn panel_row_report(
         )?;
     }
     Ok(json!({
+        "row_id": row_id,
         "probe": row.probe,
         "item": row.item,
         "entity_occurrence": entity,
@@ -529,6 +526,10 @@ fn panel_row_report(
         "no_read_mass": capture.no_read,
         "dense_rank": dense_rank,
         "dense_mass": dense_mass,
+        "dense_qk_rank": dense_qk_rank,
+        "admitted_top16_count": admitted_top16,
+        "admitted_top32_count": admitted_top32,
+        "base_arm_count": arm_rows.len(),
         "arms": arm_rows
     }))
 }
@@ -687,6 +688,26 @@ fn run(
             "fit_seed":arm.arm.fit_seed()
         }))
         .collect::<Vec<_>>());
+
+    let codebook_dir = out.join("codebooks");
+    std::fs::create_dir(&codebook_dir)?;
+    let mut codebook_records = Vec::with_capacity(arms.len());
+    for arm in &arms {
+        let file = codebook_dir.join(format!("{}.json", arm.label));
+        arm.arm.save(&file)?;
+        codebook_records.push(json!({
+            "label":arm.label,
+            "family":arm.family,
+            "file":file.file_name().and_then(|name| name.to_str()).unwrap_or_default(),
+            "bytes":std::fs::metadata(&file)?.len(),
+            "sha256":sha256_file(&file)?
+        }));
+    }
+    report["codebooks"] = json!({
+        "directory":"codebooks",
+        "records":codebook_records,
+        "scope":"The exact fitted serde arms scored above, written for the restricted-read evaluation. Fixed root/sign arms carry no fitted file; the k-means arms carry their centroids."
+    });
 
     let slot_refs: Vec<ArmRef> = std::iter::once(ArmRef::Recent)
         .chain(std::iter::once(ArmRef::Oracle))
@@ -924,14 +945,14 @@ fn run(
 
     let panel_started = Instant::now();
     let mut panel_rows = Vec::new();
-    for row in &CONDITION_A_ROWS {
+    for (row_id, row) in CONDITION_A_ROWS.iter().enumerate() {
         let capture = capture_panel_row(&model, &arms, row.prompt)?;
-        panel_rows.push(panel_row_report(row, &arms, &capture)?);
+        panel_rows.push(panel_row_report(row_id, row, &arms, &capture)?);
     }
     report["condition_a"] = json!({
         "rows":panel_rows,
         "source":"Five condition-A distractor rows transcribed verbatim (prompt token ids, entity occurrence, item) from the retained read-localization oracle-rerank report. The contest re-feeds each prompt through its own session and reports admission only; it does not re-derive the fixture.",
-        "admission":"entity occurrence membership in the arm's top-16 and top-32 decision-0 admitted set, with the entity's dense rank and dense mass"
+        "admission":"Per base arm: entity-occurrence membership in the arm's top-16 and top-32 decision-0 admitted set, with the entity's dense read-mass rank, dense q.k rank, dense read mass and arm rank. Recent-s is the recency control; oracle-qk is the dense q.k ceiling; the rest are the fitted or fixed codebook arms."
     });
     report["condition_a_seconds"] = json!(panel_started.elapsed().as_secs_f64());
     let kmeans_fit_seconds = report["kmeans_fit_seconds"].clone();

@@ -73,6 +73,16 @@ pub const KMEANS_MAX_ITERS: usize = 32;
 /// Lloyd convergence tolerance on the largest centroid shift (L2).
 pub const KMEANS_TOLERANCE: f64 = 1e-7;
 
+/// The contest randomized-Hadamard pre-rotation seed.
+///
+/// Shared by the contest harness and the restricted-read admission policy so
+/// both decode exactly the same arm. Changing it changes every `*-rht` arm.
+pub const CONTEST_RHT_SEED: u64 = 0x51D5_11A7_0000_0001;
+/// The contest 4-D sign-code seed.
+pub const CONTEST_SIGN4_SEED: u64 = 0x51D5_0004_0000_0004;
+/// The contest 8-D sign-code seed.
+pub const CONTEST_SIGN8_SEED: u64 = 0x51D5_0008_0000_0008;
+
 /// Codebook family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CodebookFamily {
@@ -375,6 +385,46 @@ impl AddressingArm {
     /// Random-projection sign codes on the E8 layout (256 codes, 8 bits/block).
     pub fn sign_codes_8d(seed: u64) -> Self {
         Self::sign(8, 8, ceil_log2(E8_ROOT_COUNT), seed)
+    }
+
+    /// The contest `h4` arm: 120 canonical H4 roots, no pre-rotation.
+    pub fn contest_h4() -> Self {
+        Self::h4()
+    }
+
+    /// The contest `h4-rht` arm.
+    pub fn contest_h4_rht() -> Self {
+        Self::h4().with_pre_rotation(CONTEST_RHT_SEED)
+    }
+
+    /// The contest `e8` arm: 240 normalized E8 roots, no pre-rotation.
+    pub fn contest_e8() -> Self {
+        Self::e8()
+    }
+
+    /// The contest `e8-rht` arm.
+    pub fn contest_e8_rht() -> Self {
+        Self::e8().with_pre_rotation(CONTEST_RHT_SEED)
+    }
+
+    /// The contest `sign4` arm (4-D sign codes at 7 bits/block).
+    pub fn contest_sign4() -> Self {
+        Self::sign_codes_4d(CONTEST_SIGN4_SEED)
+    }
+
+    /// The contest `sign4-rht` arm.
+    pub fn contest_sign4_rht() -> Self {
+        Self::sign_codes_4d(CONTEST_SIGN4_SEED).with_pre_rotation(CONTEST_RHT_SEED)
+    }
+
+    /// The contest `sign8` arm (8-D sign codes at 8 bits/block).
+    pub fn contest_sign8() -> Self {
+        Self::sign_codes_8d(CONTEST_SIGN8_SEED)
+    }
+
+    /// The contest `sign8-rht` arm.
+    pub fn contest_sign8_rht() -> Self {
+        Self::sign_codes_8d(CONTEST_SIGN8_SEED).with_pre_rotation(CONTEST_RHT_SEED)
     }
 
     fn sign(blocks: usize, block_dim: usize, sign_bits: u32, seed: u64) -> Self {
@@ -1430,5 +1480,37 @@ mod tests {
             .score(&codes, &arm.query_lut(&synthetic_key(78)).expect("lut"))
             .expect("score");
         assert!(score.is_finite());
+    }
+
+    #[test]
+    fn contest_arms_reproduce_their_declared_seeds() {
+        assert_eq!(CONTEST_RHT_SEED, 0x51D5_11A7_0000_0001);
+        assert_eq!(CONTEST_SIGN4_SEED, 0x51D5_0004_0000_0004);
+        assert_eq!(CONTEST_SIGN8_SEED, 0x51D5_0008_0000_0008);
+
+        for arm in [
+            AddressingArm::contest_h4(),
+            AddressingArm::contest_e8(),
+            AddressingArm::contest_sign4(),
+            AddressingArm::contest_sign8(),
+        ] {
+            assert!(!arm.pre_rotation_enabled(), "{:?}", arm.family());
+        }
+        for arm in [
+            AddressingArm::contest_h4_rht(),
+            AddressingArm::contest_e8_rht(),
+            AddressingArm::contest_sign4_rht(),
+            AddressingArm::contest_sign8_rht(),
+        ] {
+            assert!(arm.pre_rotation_enabled(), "{:?}", arm.family());
+        }
+        assert_eq!(
+            AddressingArm::contest_sign4().fit_seed(),
+            CONTEST_SIGN4_SEED
+        );
+        assert_eq!(
+            AddressingArm::contest_sign8().fit_seed(),
+            CONTEST_SIGN8_SEED
+        );
     }
 }
