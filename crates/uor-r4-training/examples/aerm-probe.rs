@@ -204,6 +204,7 @@ fn run(args: &Args, out: &Path) -> Result<()> {
         read: ReadScore::Dot,
         rotation: true,
         seed: 0,
+        memory: None,
     };
     template.validate()?;
     let train_template = AermConfig {

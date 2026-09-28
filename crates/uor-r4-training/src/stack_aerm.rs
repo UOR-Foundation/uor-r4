@@ -63,6 +63,8 @@ pub const STATUS_EVICTED: u32 = 3;
 
 /// Store slots: a power of two, addressed by masking.
 pub const STORE_SLOTS: usize = 64;
+/// Overflow entries searched when both of a key's slots are taken.
+pub const STORE_STASH: usize = 8;
 
 // ---------------------------------------------------------------------------
 // The exact store.
@@ -78,9 +80,12 @@ pub struct Record {
     written: u64,
 }
 
-/// A fixed-capacity exact relation store with two-choice placement.
+/// A fixed-capacity exact relation store: two-choice placement with a small
+/// overflow stash, so a record is evicted only when its two slots and the
+/// stash are all taken.
 #[derive(Clone, Debug)]
 pub struct RelationStore {
+    /// `STORE_SLOTS` addressed slots followed by `STORE_STASH` stash entries.
     slots: Vec<Option<Record>>,
     evicted: Vec<(u32, u32)>,
     clock: u64,
@@ -95,31 +100,35 @@ impl Default for RelationStore {
 impl RelationStore {
     pub fn new() -> Self {
         Self {
-            slots: vec![None; STORE_SLOTS],
+            slots: vec![None; STORE_SLOTS + STORE_STASH],
             evicted: Vec::new(),
             clock: 0,
         }
     }
 
-    /// Two candidate slots from xor-shift mixes of the exact key (no multiply).
-    fn candidates(entity: u32, relation: u32) -> [usize; 2] {
-        let key = (u64::from(entity) << 32) | u64::from(relation);
-        let mut a = key ^ (key >> 29) ^ 0x9E37_79B9_7F4A_7C15;
-        a ^= a << 13;
-        a ^= a >> 7;
-        a ^= a << 17;
-        let mut b = key.rotate_left(17) ^ 0xD1B5_4A32_D192_ED03;
-        b ^= b >> 11;
-        b ^= b << 5;
-        b ^= b >> 23;
+    /// Two candidate slots of an exact key: both ids are spread over the
+    /// whole word, mixed by three xor-shift rounds (no multiply), and the two
+    /// choices come from different halves of the result.
+    pub fn candidates(entity: u32, relation: u32) -> [usize; 2] {
+        let (e, r) = (u64::from(entity), u64::from(relation));
+        let mut x = e ^ (r << 32) ^ (r << 11) ^ (e << 43) ^ 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..3 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+        }
         let mask = (STORE_SLOTS - 1) as u64;
-        [(a & mask) as usize, (b & mask) as usize]
+        [(x & mask) as usize, ((x >> 32) & mask) as usize]
     }
 
     fn find(&self, entity: u32, relation: u32) -> Option<usize> {
-        Self::candidates(entity, relation).into_iter().find(|&slot| {
-            matches!(self.slots[slot], Some(r) if r.entity == entity && r.relation == relation)
-        })
+        let [a, b] = Self::candidates(entity, relation);
+        [a, b]
+            .into_iter()
+            .chain(STORE_SLOTS..STORE_SLOTS + STORE_STASH)
+            .find(|&slot| {
+                matches!(self.slots[slot], Some(r) if r.entity == entity && r.relation == relation)
+            })
     }
 
     /// The record of an exact key, if stored.
@@ -129,8 +138,9 @@ impl RelationStore {
     }
 
     /// Writes `value`: overwrite on a hit (keeping the previous distinct value
-    /// and incrementing the version), otherwise insert, evicting the older of
-    /// the two candidate records when both are taken.
+    /// and incrementing the version), otherwise insert into a free candidate
+    /// slot or stash entry, evicting the older of the two candidate records
+    /// only when all are taken.
     pub fn write(&mut self, entity: u32, relation: u32, value: u32) {
         self.clock += 1;
         if let Some(slot) = self.find(entity, relation) {
@@ -145,10 +155,13 @@ impl RelationStore {
             return;
         }
         let [a, b] = Self::candidates(entity, relation);
-        let slot = match (self.slots[a], self.slots[b]) {
-            (None, _) => a,
-            (_, None) => b,
-            (Some(x), Some(y)) => {
+        let free_stash =
+            (STORE_SLOTS..STORE_SLOTS + STORE_STASH).find(|&i| self.slots[i].is_none());
+        let slot = match (self.slots[a], self.slots[b], free_stash) {
+            (None, _, _) => a,
+            (_, None, _) => b,
+            (_, _, Some(stash)) => stash,
+            (Some(x), Some(y), None) => {
                 if x.written <= y.written {
                     a
                 } else {
@@ -2097,7 +2110,27 @@ mod tests {
                 other => panic!("unexpected read {other:?}"),
             }
         }
-        assert!(evicted >= 3 * STORE_SLOTS);
+        assert!(evicted >= 4 * STORE_SLOTS - STORE_SLOTS - STORE_STASH);
+    }
+
+    #[test]
+    fn placement_spreads_keys_and_rarely_repeats_a_choice() {
+        let mut load = vec![0usize; STORE_SLOTS];
+        let (mut keys, mut same) = (0usize, 0usize);
+        for entity in (3..4096).step_by(7) {
+            for relation in [448u32, 931, 1412, 1541, 1760, 3915] {
+                let [a, b] = RelationStore::candidates(entity, relation);
+                load[a] += 1;
+                keys += 1;
+                same += usize::from(a == b);
+            }
+        }
+        let mean = keys / STORE_SLOTS;
+        assert!(
+            load.iter().all(|&l| l <= 2 * mean && l * 2 >= mean),
+            "{load:?}"
+        );
+        assert!(same * 16 < keys, "{same} of {keys} keys repeat a choice");
     }
 
     #[test]
@@ -2163,6 +2196,20 @@ mod tests {
     }
 
     #[test]
+    fn many_episodes_never_evict_their_facts() -> Result<()> {
+        // D2's first attempt stopped after about 3,000 training episodes when
+        // two-choice placement evicted one of an episode's few facts.
+        let world = world()?;
+        let mut rng = Rng::new(20_260_928);
+        for index in 0..30_000 {
+            let episode = world.episode(&mut rng, index % 4 == 0, 257)?;
+            let gold = simulate(&episode.tokens, &episode.tags, &episode.triggers, 1)?;
+            assert!(gold.reads.iter().all(|read| read.status != STATUS_EVICTED));
+        }
+        Ok(())
+    }
+
+    #[test]
     fn the_memory_branch_starts_silent_and_the_split_matches_the_stack() -> Result<()> {
         let device = Device::Cpu;
         let config = StackConfig {
@@ -2176,6 +2223,7 @@ mod tests {
             read: ReadScore::Dot,
             rotation: true,
             seed: 3,
+            memory: None,
         };
         let model = AermModel::new(config, 2, true, 3, &device)?;
         let ids: Vec<u32> = (0..32).map(|i| (i * 7 % 400) as u32).collect();
@@ -2207,6 +2255,7 @@ mod tests {
             read: ReadScore::Dot,
             rotation: true,
             seed: 5,
+            memory: None,
         };
         let model = AermModel::new(config, 2, true, 5, &device)?;
         let mut rng = Rng::new(3);

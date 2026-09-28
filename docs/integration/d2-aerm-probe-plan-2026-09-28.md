@@ -144,3 +144,28 @@ The synthesis's gate applies to **every seed**:
 - **Projected wall time:** 75–90 minutes for both arms of every seed.
 - **Hard caps:** 3 GiB RSS per process and 150 minutes of wall time.
 - **Storage:** SSD roots under `/Volumes/UOR-Workspace/uor-r4-lab/claude-d2-aerm/`, projected below 10 MB. No internal-drive writes beyond the shared build cache.
+
+## Attempt 1 (`d2-1`, 07:10 UTC): void, instrument failure
+
+**What happened.** All three seeds stopped after about 3.5 minutes (roughly 3,000 generated episodes) with the generator's own consistency check: "query class disagrees with the gold store". No arm finished, and nothing was evaluated.
+
+**Cause.** The store's second placement mix left its low bits nearly independent of small token ids. Every key's second choice fell in almost the same slot, so two-choice placement degenerated into one choice. An episode's few facts could then evict each other, and the gold answer became Evicted while the generator's bookkeeping still held the fact.
+
+**Fix:**
+- one xor-shift mixer (three rounds, no multiply) that spreads both ids over the word, with the two choices drawn from different halves;
+- an 8-entry overflow stash, so a record is evicted only when its two slots and the stash are all taken.
+
+**New tests:**
+- the placement spreads keys, and fewer than 1 in 16 keys repeat a choice;
+- 30,000 episodes produce no eviction. This test failed before the fix and passes after it.
+
+**What did not change.** The semantics are unchanged: exact keys, version order, typed statuses. So are the generator's random stream and the intended data. The gates, seeds and conditions above are unchanged.
+
+**Other changes:**
+- The branch merged `main` (#1437, #1454). `StackConfig` gained `memory: None` in D2's literals, which does not change behaviour.
+- The zsh launcher failed to record PIDs, released the slot for about a minute and sealed a premature summary root; this is disclosed on #973. The retry uses a bash launcher.
+- Attempt 1's roots (`d2-1-s1`–`s3`, `d2-1-summary`, `d2-1-summary-2`) are preserved and sealed. Their "FAIL" summary reflects incomplete runs, not a model result.
+
+**Observed peak RSS:** 1.6–2.0 GB per process, within the 3 GiB cap.
+
+**Retry:** attempt 2 (`d2-2-*`), with fresh roots.
