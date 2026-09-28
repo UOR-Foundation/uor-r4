@@ -21,7 +21,7 @@ use uor_r4_core::transformerless::hf_bpe::HfBpeTokenizer;
 use crate::joint_evaluation::{
     token_components, validate_generation_tokens, JointGenerationStop, TokenComponents,
 };
-use crate::joint_model::{JointModel, JointSession, JointStep, ReadMode};
+use crate::joint_model::{JointModel, JointSession, JointStep, ReadMassIntervention, ReadMode};
 use crate::reference_eval::short_cycle_period;
 use crate::{invalid, Result};
 
@@ -432,19 +432,129 @@ pub fn canonical_greedy(
         .iter()
         .position(|&token| token == 1)
         .unwrap_or(generated.len());
-    let raw_bytes = tokenizer.decode_bytes(&generated);
     let response_bytes = tokenizer.decode_bytes(&generated[..end]);
+    let raw_bytes = tokenizer.decode_bytes(&generated);
+    assemble_run(
+        prompt_token_ids,
+        generated,
+        &raw_bytes,
+        &response_bytes,
+        stop,
+        decision_zero,
+    )
+}
+
+/// Assemble the canonical report from a completed greedy pass. Shared by the
+/// baseline and intervened loops so their decoding, UTF-8 and verdict fields
+/// are identical.
+fn assemble_run(
+    prompt_token_ids: &[u32],
+    generated: Vec<u32>,
+    raw_bytes: &[u8],
+    response_bytes: &[u8],
+    stop: JointGenerationStop,
+    decision_zero: Option<DecisionZeroCapture>,
+) -> Result<CanonicalRun> {
     Ok(CanonicalRun {
         prompt_token_ids: prompt_token_ids.to_vec(),
         generated_token_ids: generated,
-        raw_decoded: String::from_utf8_lossy(&raw_bytes).into_owned(),
-        response_text: String::from_utf8_lossy(&response_bytes).trim().to_owned(),
-        utf8_decodable: std::str::from_utf8(&raw_bytes).is_ok()
-            && std::str::from_utf8(&response_bytes).is_ok(),
+        raw_decoded: String::from_utf8_lossy(raw_bytes).into_owned(),
+        response_text: String::from_utf8_lossy(response_bytes).trim().to_owned(),
+        utf8_decodable: std::str::from_utf8(raw_bytes).is_ok()
+            && std::str::from_utf8(response_bytes).is_ok(),
         stop,
         decision_zero: decision_zero
             .ok_or_else(|| invalid("canonical generation produced no decision-0 capture"))?,
     })
+}
+
+/// Deterministic greedy continuation with an optional read-mass intervention
+/// applied to exactly the decision-0 step (the step consuming the final prompt
+/// token) and cleared immediately after it. `None` reproduces
+/// [`canonical_greedy`]; `Some` requires the dense Full-admission batch-1 model
+/// that [`ReadMassIntervention`] declares, and any other step errors.
+pub fn canonical_greedy_intervened(
+    model: &mut JointModel,
+    tokenizer: &HfBpeTokenizer,
+    prompt_token_ids: &[u32],
+    max_new_tokens: usize,
+    probe_token: Option<u32>,
+    intervention: Option<ReadMassIntervention>,
+) -> Result<CanonicalRun> {
+    validate_generation_tokens(
+        &model.config,
+        tokenizer.vocab_size(),
+        prompt_token_ids,
+        max_new_tokens,
+    )?;
+    if prompt_token_ids.is_empty() {
+        return Err(invalid("canonical prompt is empty"));
+    }
+    let mut session = model.new_session(1)?;
+    let last = prompt_token_ids.len() - 1;
+    let mut current: Option<JointStep> = None;
+    for (index, &token) in prompt_token_ids.iter().enumerate() {
+        if index == last {
+            model.set_read_intervention(intervention);
+        }
+        current = Some(model.step(&mut session, &[token], ReadMode::Enabled)?);
+        if index == last {
+            model.set_read_intervention(None);
+        }
+    }
+    let mut current = Some(current.ok_or_else(|| invalid("canonical prompt is empty"))?);
+    let mut generated: Vec<u32> = Vec::with_capacity(max_new_tokens);
+    let mut decision_zero = None;
+    let mut stop = JointGenerationStop::MaximumNewTokens;
+    for decision in 0..max_new_tokens {
+        let step = current
+            .take()
+            .ok_or_else(|| invalid("canonical generation has no current prediction"))?;
+        let row = step.probabilities.flatten_all()?.to_vec1::<f32>()?;
+        let selected = argmax_strict(&row)?;
+        if decision == 0 {
+            decision_zero = Some(decision_zero_capture(
+                model,
+                tokenizer,
+                &step,
+                &session,
+                prompt_token_ids.len(),
+                &row,
+                selected,
+                probe_token,
+            )?);
+        }
+        generated.push(selected);
+        if selected == 1 {
+            stop = JointGenerationStop::Eos;
+            break;
+        }
+        if tokenizer.decode_bytes(&generated).contains(&b'.') {
+            stop = JointGenerationStop::FirstSentenceBoundary;
+            break;
+        }
+        if let Some(period) = short_cycle_period(&generated) {
+            stop = JointGenerationStop::ShortCycle { period };
+            break;
+        }
+        if decision + 1 < max_new_tokens {
+            current = Some(model.step(&mut session, &[selected], ReadMode::Enabled)?);
+        }
+    }
+    let end = generated
+        .iter()
+        .position(|&token| token == 1)
+        .unwrap_or(generated.len());
+    let raw_bytes = tokenizer.decode_bytes(&generated);
+    let response_bytes = tokenizer.decode_bytes(&generated[..end]);
+    assemble_run(
+        prompt_token_ids,
+        generated,
+        &raw_bytes,
+        &response_bytes,
+        stop,
+        decision_zero,
+    )
 }
 
 #[cfg(test)]
