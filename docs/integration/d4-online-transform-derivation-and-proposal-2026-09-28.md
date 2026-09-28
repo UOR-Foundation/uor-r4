@@ -85,7 +85,7 @@ Because $H$ is orthogonal:
 $$\|\tilde{x}\|_2 = \|x H^T\|_2 = \|x\|_2$$
 The rotation preserves the exact Euclidean norm of the activations while dispersing channel-specific outliers across all $d$ coordinates. By Khintchine's inequality, the maximum coordinate magnitude of $W_H$ is bounded by:
 $$\max_{i,j} |(W_H)_{i,j}| \le O\left(\sqrt{\frac{\log d}{d}}\right) \|W_{i,:}\|_2$$
-This suppresses activation and weight spikes, preventing 4-bit mantissa saturation and reducing grid clipping error by $30\text{–}45\%$ on heavy-tailed layers like the output head.
+This is hypothesized to suppress activation and weight spikes; theoretical bounds suggest potential clipping error reduction, but this remains an unvalidated projection subject to empirical measurement on retained models.
 
 ---
 
@@ -104,7 +104,7 @@ For block size $K = 32$:
 - Each block requires $\log_2(32) = 5$ butterfly stages.
 - Each stage performs 16 paired additions and subtractions.
 - Total operations per 32-element group: $5 \times 32 = 160$ additions/subtractions.
-- Normalization factor: $\frac{1}{\sqrt{32}} = \frac{1}{4\sqrt{2}} \approx \frac{181}{1024}$ in Q10, or exact power-of-two dyadic scaling $\frac{1}{32}$ with scale folded into the group exponent $de$.
+- Normalization: For an unnormalized 32-point Walsh matrix $A$ satisfying $A A^T = 32 I$, preserving the linear map requires the exact Gram condition $32 \cdot c_x \cdot c_w = 1$. Valid dyadic scaling choices include asymmetric $c_x = 1/4, c_w = 1/8$ (or unnormalized activations with weights scaled by $1/32$ folded into group scale exponents).
 
 ```text
 Stage 1 (stride 1):  u' = u + v,  v' = u - v
@@ -119,11 +119,9 @@ Stage 5 (stride 16): u' = u + v,  v' = u - v
 Across the entire $d = 288$ activation vector:
 $$\text{Total operations} = 9 \text{ groups} \times 160 = 1,440 \text{ integer add/sub operations}$$
 
-On Apple Silicon (M1/M2/M3), ARM64 NEON vector registers execute 4 parallel 32-bit additions per cycle per vector execution pipeline (with 4 execution pipes on Firestorm cores).
-- $1,440$ operations take $\approx 90$ CPU cycles.
-- At $3.2\text{ GHz}$, this requires **$0.028\ \mu\text{s}$ ($28\text{ nanoseconds}$)**.
-- Relative to the serving latency of $\approx 2.0\text{ ms/token}$, the online transform accounts for **$0.0014\%$ of token step time**.
-- **Hardware Invariants:** 0 multipliers, 0 dividers, 0 floats.
+Instruction-count estimate:
+- 1,440 operations is an analytic instruction-count estimate, not a measured kernel or whole-token latency.
+- Hardware Invariants: 0 multipliers, 0 dividers, 0 floats in the served integer kernel.
 
 ---
 

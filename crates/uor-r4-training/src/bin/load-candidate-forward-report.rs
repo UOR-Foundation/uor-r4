@@ -1168,10 +1168,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "serving_library_audit": {
                 "target": "libuor_r4_integer.rlib / uor-r4-stack (D11 multiplier-free integer engine)",
                 "scope": "Zero-matmul static disassembly audit of D11 serving symbols (does not certify uor_r4_lut)",
-                "class_I_multiplications": 0,
-                "class_II_divisions": 0,
-                "class_III_floating_point": 0,
-                "compliance": "PASSED (0 mul, 0 div, 0 float in libuor_r4_integer serving paths)",
+                "status": "NOT_RUN",
+                "reason": "Evaluator measures float/quantized representations; zero-matmul audit of D11 serving binary must be run and verified separately via scripts/audit_zero_matmul_serving.py",
             }
         });
 

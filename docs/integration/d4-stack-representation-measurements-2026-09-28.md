@@ -36,7 +36,7 @@ September 28, 2026. References #973 under #820.
    Inspection of the packed parameters reveals that `head_compensated` selected identical `exp_base` and scales as RTN because the head's scale dynamic range ($e_{\max} - e_{\min} \le 15$) was within bounds. Consequently, the packed weight tensors were 100% bitwise identical to RTN; the 64-byte difference in `model.lut` was solely due to the 26-byte metadata increase in the container JSON header shifting the 64-byte aligned data payload boundary (`data_start` 8960 -> 9024).
 
 6. **Usable codec component delivered.**
-   To advance toward D4 without repeating losing arms, Lab 3 implemented and verified `Grouped4BitCodec` in `uor-r4-integer::codec` with exact quantization, dequantization, BLAKE3-checksummed serialization, $\le 4.25$ bits/weight effective cost, and pluggable `MapCodec` integration for QAT training.
+   To advance toward D4 without repeating losing arms, Lab 3 implemented and verified `Grouped4BitCodec` in `uor-r4-integer::codec` with exact quantization, dequantization, BLAKE3-checksummed serialization, 4.25 raw parameter bits/weight ($4.0$ code + $0.25$ scale for $G=32$, with container-framed bits/weight honestly reported per matrix shape, e.g. $4.2504$ for $4096 \times 288$ and $4.2587$ for $288 \times 749$, per the exact storage formula $8 \cdot (\lceil RC/2 \rceil + R \lceil C/32 \rceil + 64) / (RC)$), and pluggable `MapCodec` integration for QAT training. Under D12 this result is **not yet promoted at this scope**.
 
 ---
 

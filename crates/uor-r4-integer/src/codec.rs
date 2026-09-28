@@ -6,9 +6,9 @@
 //!    Supports arbitrary vector/row dimensions (e.g. 288, 749).
 //! 2. **Hadamard + E8 (H+E8)**: Block-padded randomized Walsh-Hadamard transform followed
 //!    by 8-dimensional Conway-Sloane E8 lattice quantization with zero codeword and equal-norm roots.
-//! 3. **Head-Compensated 4-bit**: Grouped 4-bit with activation-moment error compensation.
+//! 3. **Head-Compensated 4-bit**: Grouped 4-bit with output-layer weight-error scale search.
 //!
-//! All runtime operations (FWHT, codebook lookup, scale shifts, and dot products)
+//! D11 served runtime operations (FWHT, codebook lookup, scale shifts, and dot products)
 //! strictly adhere to owner decisions D0-b and D11: zero hardware multipliers,
 //! zero hardware dividers, and zero floating-point operations in served code.
 
@@ -478,7 +478,8 @@ impl Grouped4BitMatrix {
                 return Err(invalid("decoded scale is non-finite or non-positive"));
             }
             let max_val = (7.0 * scale) as f32;
-            if !max_val.is_finite() {
+            let min_val = (-8.0 * scale) as f32;
+            if !max_val.is_finite() || !min_val.is_finite() {
                 return Err(invalid("quantized dynamic range overflows f32"));
             }
         }
@@ -687,23 +688,21 @@ impl Grouped4BitCodec {
     /// Quantize a row-major `rows x cols` float matrix into canonical D11 grouped 4-bit format.
     /// Supports arbitrary dimensions and group sizes (tail groups gracefully span remaining columns).
     pub fn quantize(&self, values: &[f32], rows: usize, cols: usize) -> Result<Grouped4BitMatrix> {
-        if values.len() != rows * cols {
-            return Err(invalid(format!(
-                "values length ({}) does not match rows * cols ({rows} * {cols} = {})",
-                values.len(),
-                rows * cols
-            )));
-        }
         if cols == 0 || rows == 0 || self.group_size == 0 {
             return Err(invalid("dimensions and group_size must be non-zero"));
+        }
+        let total_weights = rows
+            .checked_mul(cols)
+            .ok_or_else(|| invalid("matrix dimensions overflow"))?;
+        if values.len() != total_weights {
+            return Err(invalid(format!(
+                "values length ({}) does not match rows * cols ({rows} * {cols} = {total_weights})",
+                values.len(),
+            )));
         }
         if values.iter().any(|v| !v.is_finite()) {
             return Err(invalid("matrix contains non-finite values"));
         }
-
-        let total_weights = rows
-            .checked_mul(cols)
-            .ok_or_else(|| invalid("matrix dimensions overflow"))?;
         let groups = cols.div_ceil(self.group_size);
         let total_scales = rows
             .checked_mul(groups)
@@ -855,21 +854,29 @@ impl Grouped4BitCodec {
         rows: usize,
         cols: usize,
     ) -> Result<Grouped4BitMatrix> {
-        if values.len() != rows * cols {
-            return Err(invalid(format!(
-                "values length ({}) does not match rows * cols ({rows} * {cols} = {})",
-                values.len(),
-                rows * cols
-            )));
+        if cols == 0 || rows == 0 || self.group_size == 0 {
+            return Err(invalid("dimensions and group_size must be non-zero"));
         }
-        if cols == 0 || rows == 0 {
-            return Err(invalid("dimensions must be non-zero"));
+        let total_weights = rows
+            .checked_mul(cols)
+            .ok_or_else(|| invalid("matrix dimensions overflow"))?;
+        if values.len() != total_weights {
+            return Err(invalid(format!(
+                "values length ({}) does not match rows * cols ({rows} * {cols} = {total_weights})",
+                values.len(),
+            )));
         }
         if cols.is_multiple_of(self.group_size) {
             return self.quantize(values, rows, cols);
         }
-        let padded_cols = cols.div_ceil(self.group_size) * self.group_size;
-        let mut padded = vec![0.0f32; rows * padded_cols];
+        let padded_cols = cols
+            .checked_add(self.group_size - 1)
+            .map(|c| (c / self.group_size) * self.group_size)
+            .ok_or_else(|| invalid("padded cols overflow"))?;
+        let padded_weights = rows
+            .checked_mul(padded_cols)
+            .ok_or_else(|| invalid("padded weights overflow"))?;
+        let mut padded = vec![0.0f32; padded_weights];
         for r in 0..rows {
             let src = &values[r * cols..(r + 1) * cols];
             let dst = &mut padded[r * padded_cols..r * padded_cols + cols];
@@ -904,6 +911,9 @@ impl Grouped4BitCodec {
     /// Round-trip a row-major float matrix with arbitrary column width through zero-padded
     /// quantization and dequantization.
     pub fn round_trip_padded(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        if cols == 0 || rows == 0 || self.group_size == 0 {
+            return Err(invalid("dimensions and group_size must be non-zero"));
+        }
         if cols.is_multiple_of(self.group_size) {
             self.round_trip(values, rows, cols)
         } else {
@@ -1789,5 +1799,32 @@ mod tests {
         let mut truncated = bytes.clone();
         truncated.truncate(50);
         assert!(Grouped4BitMatrix::from_bytes(&truncated).is_err());
+
+        // 6. Zero group_size and zero dimensions on quantize and padded round-trip must return Err, not panic
+        let zero_group_codec = Grouped4BitCodec::new(0, Grouped4BitRounding::Nearest);
+        assert!(zero_group_codec.quantize(&[0.1f32; 64], 2, 32).is_err());
+        assert!(zero_group_codec
+            .quantize_padded(&[0.1f32; 64], 2, 32)
+            .is_err());
+        assert!(zero_group_codec
+            .round_trip_padded(&[0.1f32; 64], 2, 32)
+            .is_err());
+
+        assert!(codec.quantize(&[], 0, 32).is_err());
+        assert!(codec.quantize(&[], 2, 0).is_err());
+        assert!(codec.quantize_padded(&[], 0, 32).is_err());
+        assert!(codec.quantize_padded(&[], 2, 0).is_err());
+        assert!(codec.round_trip_padded(&[], 0, 32).is_err());
+        assert!(codec.round_trip_padded(&[], 2, 0).is_err());
+
+        // 7. Scale where -8 * scale overflows f32 must fail validation
+        let mut overflow_mat = valid_mat.clone();
+        overflow_mat.exp_base = 120; // 2^120 * 31 * -8 overflows f32 (max ~3.4e38)
+        assert!(overflow_mat.validate().is_err());
+
+        // 8. Normalization algebraic condition for G32: 32 * c_x * c_w == 1
+        let c_x = 0.25f64;
+        let c_w = 0.125f64;
+        assert!((32.0 * c_x * c_w - 1.0).abs() < 1e-15);
     }
 }
