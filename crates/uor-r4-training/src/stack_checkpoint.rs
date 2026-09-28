@@ -333,6 +333,11 @@ pub enum StackCheckpointError {
     },
     /// The store differs from its recorded identity.
     Memory(String),
+    /// The model is in served (QAT) mode. Its forward reads the export's
+    /// values, which an inference checkpoint does not store, so a reload
+    /// would silently run the float weights. Save with served mode off, or
+    /// export the model instead.
+    ServedMode,
 }
 
 impl fmt::Display for StackCheckpointError {
@@ -360,6 +365,11 @@ impl fmt::Display for StackCheckpointError {
                 "stack checkpoint {file} has SHA-256 {actual}; {recorded} is recorded"
             ),
             Self::Memory(message) => write!(f, "stack checkpoint memory record: {message}"),
+            Self::ServedMode => write!(
+                f,
+                "stack checkpoint: the model is in served (QAT) mode; its forward reads exported \
+                 values that an inference checkpoint does not store"
+            ),
         }
     }
 }
@@ -415,6 +425,9 @@ pub fn save_checkpoint(
     identity: &CheckpointIdentity,
     memory: Option<&StackStore>,
 ) -> Result<CheckpointRecord, StackCheckpointError> {
+    if model.served_codec().is_some() {
+        return Err(StackCheckpointError::ServedMode);
+    }
     identity.validate()?;
     check_against_model(identity, &model.config)?;
     let protocol_identity = identity.protocol.identity()?;
@@ -1059,6 +1072,36 @@ mod tests {
             })
         ));
         fs::remove_dir_all(&base).expect("clean");
+    }
+
+    #[test]
+    fn a_model_in_served_mode_is_refused_before_claiming() {
+        let (base, identity) = fixture("served");
+        let config = StackConfig {
+            arch: StackArch::Geometric,
+            vocab_size: VOCAB,
+            width: 32,
+            heads: 2,
+            mlp_hidden: 24,
+            context: 12,
+            pattern: "rar".into(),
+            read: ReadScore::Lorentz,
+            rotation: true,
+            seed: 7,
+            memory: None,
+        };
+        let mut model = StackModel::new(config, &Device::Cpu).expect("stack");
+        model
+            .set_served_representation(Some(std::sync::Arc::new(
+                crate::geometric_stack::D11Interim,
+            )))
+            .expect("served mode");
+        let root = base.join("served-checkpoint");
+        match save_checkpoint(&root, &model, &identity, None) {
+            Err(StackCheckpointError::ServedMode) => {}
+            other => panic!("{other:?}"),
+        }
+        assert!(!root.exists(), "no root is claimed for a served-mode model");
     }
 
     #[test]
