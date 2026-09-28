@@ -94,7 +94,7 @@ fn artifact(seed: u64) -> Vec<u8> {
     let taps: Vec<i16> = (0..4 * WIDTH)
         .map(|i| {
             let c = code(rng.next(), -2 - (i % 3) as i16);
-            if rng.next() % 2 == 0 {
+            if rng.next().is_multiple_of(2) {
                 c
             } else {
                 -c

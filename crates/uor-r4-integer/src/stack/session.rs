@@ -84,7 +84,9 @@ pub struct IntegerStackModel {
     sha256: String,
     embed: PackedMatrix,
     head: PackedMatrix,
-    /// Boxed so that the per-layer walk steps by a power-of-two stride.
+    /// Boxed so that the per-layer walk steps by a power-of-two stride: an
+    /// unboxed walk indexes 304-byte elements with a multiply (`madd`).
+    #[allow(clippy::vec_box)]
     layers: Vec<Box<Layer>>,
     exp_table: Vec<u32>,
     silu_table: Vec<i32>,
@@ -408,6 +410,7 @@ pub struct IntegerStackSession<'m> {
     /// `position * heads`: where this position's Lorentz key lifts go.
     lift_at: usize,
     /// Boxed, like the model's layers, for a power-of-two stride.
+    #[allow(clippy::vec_box)]
     states: Vec<Box<LayerState>>,
     b: Buffers,
 }

@@ -880,6 +880,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn both_weight_map_kernels_give_the_exact_group_scaled_sum() {
         let mut rng = Lcg(21);
         for (rows, cols, x_exp) in [(1, 32, -14), (17, 64, -9), (40, 96, -20), (9, 288, -14)] {
