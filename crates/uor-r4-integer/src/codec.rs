@@ -215,6 +215,9 @@ impl Grouped4BitRow {
                 "weights length must be non-zero and group_size > 0",
             ));
         }
+        if weights.iter().any(|w| !w.is_finite()) {
+            return Err(invalid("weights contains non-finite values"));
+        }
         let num_groups = weights.len().div_ceil(group_size);
         let mut group_exponents = Vec::with_capacity(num_groups);
         let mut raw_codes = Vec::with_capacity(weights.len());
@@ -294,6 +297,9 @@ impl Grouped4BitRow {
             }
             start += self.group_size;
         }
+        if out.len() != self.elements {
+            return Err(invalid("group_exponents did not cover all elements"));
+        }
         Ok(out)
     }
 
@@ -306,9 +312,11 @@ impl Grouped4BitRow {
             return Err(invalid("activation dimension mismatch"));
         }
         let mut total_sum: i128 = 0;
+        let mut covered = 0usize;
         for (g_idx, &exp) in self.group_exponents.iter().enumerate() {
             let start = g_idx * self.group_size;
             let end = (start + self.group_size).min(self.elements);
+            covered = end;
             let mut group_dot: i64 = 0;
             for i in start..end {
                 let byte = self.packed_codes[i >> 1];
@@ -325,6 +333,9 @@ impl Grouped4BitRow {
             total_sum = total_sum
                 .checked_add(scaled)
                 .ok_or_else(|| invalid("total dot overflow"))?;
+        }
+        if covered != self.elements {
+            return Err(invalid("group_exponents did not cover all elements"));
         }
         i64::try_from(total_sum).map_err(|_| invalid("result exceeds i64"))
     }
@@ -562,28 +573,42 @@ impl E8EncodedRow {
 /// Uses additions, subtractions, and bit shifts only (0 hardware multiplier instructions).
 #[inline(never)]
 pub fn mul_small_code_i64(val: i64, code: i64) -> Result<i64> {
+    if !(-7..=7).contains(&code) {
+        return Err(invalid("code exceeds [-7..7] range"));
+    }
     let neg = code < 0;
     let abs_c = code.unsigned_abs();
+    let shl_checked = |x: i64, k: u32| -> Result<i64> {
+        let s = x.wrapping_shl(k);
+        if (s >> k) != x {
+            return Err(invalid("overflow on shift"));
+        }
+        Ok(s)
+    };
     let mag = match abs_c {
         0 => 0i64,
         1 => val,
-        2 => val.checked_shl(1).ok_or_else(|| invalid("overflow"))?,
-        3 => (val.checked_shl(1).ok_or_else(|| invalid("overflow"))?)
+        2 => shl_checked(val, 1)?,
+        3 => shl_checked(val, 1)?
             .checked_add(val)
             .ok_or_else(|| invalid("overflow"))?,
-        4 => val.checked_shl(2).ok_or_else(|| invalid("overflow"))?,
-        5 => (val.checked_shl(2).ok_or_else(|| invalid("overflow"))?)
+        4 => shl_checked(val, 2)?,
+        5 => shl_checked(val, 2)?
             .checked_add(val)
             .ok_or_else(|| invalid("overflow"))?,
-        6 => (val.checked_shl(2).ok_or_else(|| invalid("overflow"))?)
-            .checked_add(val.checked_shl(1).ok_or_else(|| invalid("overflow"))?)
+        6 => shl_checked(val, 2)?
+            .checked_add(shl_checked(val, 1)?)
             .ok_or_else(|| invalid("overflow"))?,
-        7 => (val.checked_shl(3).ok_or_else(|| invalid("overflow"))?)
+        7 => shl_checked(val, 3)?
             .checked_sub(val)
             .ok_or_else(|| invalid("overflow"))?,
-        _ => return Err(invalid("code exceeds [-7..7] range")),
+        _ => unreachable!(),
     };
-    Ok(if neg { -mag } else { mag })
+    if neg {
+        mag.checked_neg().ok_or_else(|| invalid("overflow"))
+    } else {
+        Ok(mag)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -838,7 +863,24 @@ mod tests {
         }
         assert!(mul_small_code_i64(10, 8).is_err());
         assert!(mul_small_code_i64(10, -8).is_err());
+
+        // Extreme overflow and boundary tests
+        assert!(mul_small_code_i64(1i64 << 62, 4).is_err()); // Shift-add overflow
+        assert!(mul_small_code_i64(i64::MIN, -1).is_err()); // Negation overflow
+        assert!(mul_small_code_i64(i64::MAX, 2).is_err()); // Positive overflow
+        assert!(mul_small_code_i64(i64::MIN / 2 - 1, 2).is_err()); // Negative overflow
+        assert_eq!(mul_small_code_i64(i64::MIN, 1)?, i64::MIN);
+        assert_eq!(mul_small_code_i64(i64::MAX, 1)?, i64::MAX);
+        assert_eq!(mul_small_code_i64(i64::MIN, 0)?, 0);
+        assert_eq!(mul_small_code_i64(i64::MAX, 0)?, 0);
         Ok(())
+    }
+
+    #[test]
+    fn test_grouped4bit_nonfinite_rejected() {
+        assert!(Grouped4BitRow::encode_f32(&[f32::NAN, 1.0], 32).is_err());
+        assert!(Grouped4BitRow::encode_f32(&[f32::INFINITY, 1.0], 32).is_err());
+        assert!(Grouped4BitRow::encode_f32(&[f32::NEG_INFINITY, 1.0], 32).is_err());
     }
 
     #[test]
