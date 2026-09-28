@@ -13,7 +13,7 @@ floats and matmul.
 
 | Track | Goal | Current hypothesis | Owning lab | Status | Next decision point |
 |---|---|---|---|---|---|
-| Mainline joint learner — source-answer failures (read side) | Close the retained joint learner's measured source-answer failures toward useful prose | The distractor-class failures (`clouds.`) are a read-ranking/recency effect — the correct entity is present in the read at rank 2–3 but is outranked by a later noun — not entity absence or an emission defect | OpenCode (Lab 2) | Read-side localization executed (PR parity exact; predeclared rule MIXED; post-hoc READ_RANKING signature). Read-only, no weight or serving change | Oracle read re-rank intervention (clamp decision-0 read mass onto the entity occurrence) to confirm the ranking bottleneck before any mechanism change — director approval to proceed |
+| Mainline joint learner — source-answer failures (read side) | Close the retained joint learner's measured source-answer failures toward useful prose | The distractor-class failures are a **read-ranking** effect: the correct entity is present at rank 2–3 but is outranked by a later noun | OpenCode (Lab 2) | **Decisive oracle re-rank executed: S 5/5, C 0/5, O 5/5, baseline 0/5 → RANKING SUFFICIENT** for this class (reported to T1). Read-only; PR #1440 | Ranking/age-prior change on the read (owned by T1's stack if it becomes main line), not another read-score family |
 
 Parked on this track (do not restart without new causal evidence): termination-weighted
 objective (**INERT**), radial Lorentz/affine readers (**worse than Dot**), signed-2I

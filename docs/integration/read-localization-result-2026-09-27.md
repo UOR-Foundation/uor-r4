@@ -117,3 +117,37 @@ Instrument implementation, focused checks, smoke and full run are charged once w
 milestone at delivery; the run itself is 1.29 s of model time. A prospective ledger
 extension (+12,000,000 ms; limit 756,000,000 ms) was recorded before compute under the
 standing owner authorization.
+
+## Addendum: oracle read re-rank (director's Step 1, executed)
+
+Read-only, decision-0-only intervention on the same parent, greedy, the five condition-A
+distractor rows. Implemented as an opt-in, in-memory, never-serialized read-mass
+intervention (`Swap` / `Focus`) in `joint_model.rs` — default `None` is byte-identical;
+dense Full admission, reads enabled, batch 1 only, else the step errors — plus
+`examples/joint-oracle-rerank.rs`. Baseline parity with the retained panel is exact on the
+five rows; the run is 0.50 s.
+
+Arms: **S** = swap the entity occurrence's read mass with the top-1 distractor's;
+**C** = swap the top-1 distractor's mass with a matched non-entity occurrence
+(`n` minimises `|rank(n)-rank(e)| + |age(n)-age(e)|`, ties to the lower occurrence);
+**O** = put all non-NoRead read mass on the entity.
+
+| Arm | Complete |
+|---|---|
+| baseline | 0/5 |
+| **S** (entity <-> top-1 distractor) | **5/5** |
+| C (matched non-entity control) | 0/5 (`garden.`) |
+| O (entity only, upper bound) | 5/5 |
+
+The per-row before/after masses prove each intervention applied to exactly the intended
+columns (`intervention_applied_exactly` true). Example, row `12|edited`: under S the
+entity `bag` goes 0.1496 -> 0.3924 and `clouds` 0.3924 -> 0.1496, and the model emits
+`bag.`; under C the top mass moves to `garden` (0.0187) and the model emits `garden.`.
+
+**Frozen reading (director), applied: S >= 4/5 and C <= 1/5 -> the read ranking is
+sufficient for this class.** The bottleneck is *which* event the read ranks first — not
+entity absence and not emission. **Reported to T1** (learned age prior vs content): the
+learned age/recency prior outranks a correct, content-relevant occurrence 38-54 tokens
+back, so a ranking/age-prior change is the mechanism to test; another read-score family
+is not indicated (Lorentz/affine and the signed-2I score are dead/parked). Scope: five
+authored distractor rows, one parent, greedy, decision 0 only. No follow-up panel.

@@ -917,5 +917,34 @@
    "identities": "module/example/retained shas verified by the lead; executed example binary preserved"
   },
   "most_likely_wrong": "The D/D-prime flip may reflect local recency/bigram copy (the entity becomes the most recent and repeated noun) rather than proving the long-range read ranking is the bottleneck; the instrument cannot separate \"recency prior over the whole read\" from \"continue the local clause\". The predeclared MIXED outcome and the labeled post-hoc signature stand at this scope."
+ },
+ "oracle_rerank": {
+  "spec_source": "Director work unit (Step 1), ROADMAP.md \u00a74.2",
+  "instrument": "opt-in in-memory read-mass intervention (Swap/Focus) in joint_model.rs + examples/joint-oracle-rerank.rs; default None byte-identical; dense Full admission, reads enabled, batch 1 only",
+  "report_root": "/Volumes/UOR-Workspace/uor-r4-lab/opencode-read-localization/oracle-rerank-1",
+  "rows": [
+   "story-source-edit-04|original",
+   "story-source-edit-04|edited",
+   "story-source-edit-08|original",
+   "story-source-edit-12|original",
+   "story-source-edit-12|edited"
+  ],
+  "counts": {
+   "baseline_complete": 0,
+   "S_complete": 5,
+   "C_complete": 0,
+   "O_complete": 5
+  },
+  "frozen_reading": "S >= 4/5 AND C <= 1/5 -> ranking sufficient for this class; S <= 1/5 -> read not the bottleneck; else inconclusive",
+  "outcome": "RANKING_SUFFICIENT",
+  "reported_to": "T1 (Lab 1 Claude) - learned age prior vs content",
+  "guardrails": {
+   "baseline_parity": "PARITY_EXACT on the 5 rows",
+   "intervention_applied_exactly_all": true,
+   "no_read_mass_unchanged": true,
+   "normalization_ok_all": true
+  },
+  "elapsed_seconds": 0.498244709,
+  "limits": "Five authored distractor rows, one parent, greedy, decision 0 only; no follow-up panel per the director."
  }
 }
