@@ -12,7 +12,7 @@
   - Setup: 7,324 updates (29,999,104 target visits), 7.15M against 7.16M parameters, the same windows.
   - The stack is 0.0130 nats lower (0.0052 bits per byte). That is within the seed spread seen at 1,000 updates, so it reads as parity, not an advantage.
   - Both train at the same speed: 789 and 788 tokens/s.
-  - By the card's rule, fixed before the pilots, the stack is **viable**. Under the programme's ROADMAP (§2) it becomes the main-line candidate. Its next step is export to the native, multiplier-free serving contract (D11, R1–R5); integer serving under D10 is now a frozen comparator.
+  - By the card's rule, fixed before the pilots, the stack is **viable**. Under the programme's ROADMAP (§2) it becomes the main-line candidate, and the director's D0 decision ([#820](https://github.com/UOR-Foundation/uor-r4/issues/820), 2026-09-28) adopted it as the main-line core. Its next step is export to the native, multiplier-free serving contract (D11, R1–R5); integer serving under D10 is now a frozen comparator.
 - **At 1,000 updates the stack led the control at every learning rate piloted** (§5): by 0.158 nats at each arm's selected rate (4e-3 for the stack, 2e-3 for the control). The lead narrowed as training continued and had closed by about 2,750 updates (§6).
 - **Configuration matters more than the read's score** (§7).
   - Reads-only Lorentz is the best 1,000-update configuration measured: 2.5531 and 2.5382 over two seeds.

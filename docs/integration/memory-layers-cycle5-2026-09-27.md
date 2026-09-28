@@ -2,7 +2,7 @@
 
 2026-09-27 · Claude lab track · References #820, #973 · Follows [cycle 4](geometric-stack-cycle4-2026-09-27.md)
 
-**Status.** A plan and implementation note from the lab track, not a decision record. The implementation exists and is tested. The experiment in §4 is **NOT_RUN**; it starts when the cycle-4 main comparison frees the sandbox. Labels: **Measured**, **Derived**, **Literature**, **Hypothesis**.
+**Status.** A plan and implementation note from the lab track, not a decision record. The implementation exists and is tested. The experiment in §4 is **NOT_RUN** and **held**: under the director plan no new learner starts until the base decision ([ROADMAP](../../ROADMAP.md) §9, 2026-09-28). Since then the cycle-4 main comparison has been read ([cycle 4 §6](geometric-stack-cycle4-2026-09-27.md#6-main-comparison)), and the director's D0 decision ([#820](https://github.com/UOR-Foundation/uor-r4/issues/820), 2026-09-28) made the `rrarra` stack the main-line core. So the reads-only base of §4 is superseded. If this experiment runs, its base is the `rrarra` stack as settled by D0 and the transport attribution D1, and §4 is amended before any arm runs. Arms on the reads-only base count only as transformer-comparator index evidence (ruling 8). Labels: **Measured**, **Derived**, **Literature**, **Hypothesis**.
 
 ## 0. Why
 

@@ -582,8 +582,8 @@ track does not change the work card below.
   - Continuations still repeat or are malformed.
   - At full exposure (29,999,104 target visits per arm) it matches the control:
     1.9981 against 2.0111 nats, at one seed and equal speed. By the card's rule
-    the stack is viable, and under the ROADMAP it becomes the main-line candidate;
-    its next step is the native D11 export. The 0.013 difference is within seed
+    the stack is viable, and the director's D0 decision (#820) adopted it as the
+    main-line core; its next step is the native D11 export. The 0.013 difference is within seed
     spread, so this is parity, not an advantage.
   - A dialogue path (`dialogue-train`, `lut-chat`) follows the retained study's
     episodes, stop rules and panel limits. It is checked on synthetic data only.
