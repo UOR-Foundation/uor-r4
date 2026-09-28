@@ -21,6 +21,7 @@ mod packed_rows;
 pub mod report_output;
 pub mod sampling;
 pub mod session;
+pub mod stack;
 pub mod tables;
 pub mod wasm;
 
