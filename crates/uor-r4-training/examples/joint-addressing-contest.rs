@@ -147,6 +147,7 @@ struct Acc {
 struct SlotMetrics {
     full: Acc,
     long_range: Acc,
+    selected_read: Acc,
 }
 
 fn invalid(message: impl Into<String>) -> TrainingError {
@@ -700,6 +701,7 @@ fn run(
         "decode_work_per_query":"arm per-event decode work times s plus the arm query-LUT build; every geometric family declares zero multiplies; oracle-qk is the dense multiplier ceiling and recent-s is an address-only control",
         "index_bytes_per_event":"ceil(stored index bits per event / 8)",
         "dense_read_position":format!("previous >= 1 and NoRead mass < {NO_READ_CHOICE_THRESHOLD}; the dense read is the model's chosen path"),
+        "populations":format!("metrics = the full comparison tail (every position with previous >= 1); long_range = its subset whose dense top-1 event age (tokens back) >= {LONG_RANGE_AGE}; selected_read_metrics = the subset with NoRead mass < {NO_READ_CHOICE_THRESHOLD}. The director's NoRead-exclusion rule is not adjudicated; all three denominators are reported."),
         "long_range_position":format!("dense-read position whose dense top-1 event age (tokens back) >= {LONG_RANGE_AGE}"),
         "candidate_ages":"age of occurrence o at position p is p - o, so the immediately previous write has age 1",
         "assignment":"fixed root/sign arms use maximum inner product; k-means arms use L2 nearest centroid, both as declared by the module",
@@ -712,6 +714,9 @@ fn run(
     let mut positions_total = 0u64;
     let mut positions_dense_read = 0u64;
     let mut positions_excluded_no_read = 0u64;
+    let mut max_no_read = 0.0f64;
+    let mut no_read_sum = 0.0f64;
+    let mut no_read_histogram = [0u64; 10];
     let mut min_mass_sum = f64::INFINITY;
     let mut max_mass_sum = 0.0f64;
     let mut max_mass_error = 0.0f64;
@@ -754,11 +759,16 @@ fn run(
             min_mass_sum = min_mass_sum.min(mass_sum);
             max_mass_sum = max_mass_sum.max(mass_sum);
             max_mass_error = max_mass_error.max((mass_sum - 1.0).abs());
-            if no_read >= NO_READ_CHOICE_THRESHOLD {
+            let selected_read = no_read < NO_READ_CHOICE_THRESHOLD;
+            if selected_read {
+                positions_dense_read += 1;
+            } else {
                 positions_excluded_no_read += 1;
-                continue;
             }
-            positions_dense_read += 1;
+            max_no_read = max_no_read.max(no_read);
+            no_read_sum += no_read;
+            let bucket = ((no_read * 10.0).floor() as usize).min(9);
+            no_read_histogram[bucket] += 1;
             if !position_evaluated(position) {
                 continue;
             }
@@ -818,6 +828,15 @@ fn run(
                         dense_top3,
                     );
                 }
+                if selected_read {
+                    accumulate(
+                        &mut target.selected_read,
+                        &selected,
+                        &masses,
+                        dense_top1,
+                        dense_top3,
+                    );
+                }
             }
         }
     }
@@ -825,6 +844,7 @@ fn run(
 
     let mut records = Vec::with_capacity(slot_specs.len());
     let mut long_records = Vec::with_capacity(slot_specs.len());
+    let mut selected_records = Vec::with_capacity(slot_specs.len());
     for (slot, (arm_ref, s)) in slot_specs.iter().enumerate() {
         let spec = decode_spec(*arm_ref, &arms, *s)?;
         let label = arm_ref.label(&arms);
@@ -841,6 +861,13 @@ fn run(
             family,
             *s,
             &metrics[slot].long_range,
+            &spec,
+        ));
+        selected_records.push(metric_record(
+            &label,
+            family,
+            *s,
+            &metrics[slot].selected_read,
             &spec,
         ));
     }
@@ -886,9 +913,11 @@ fn run(
         "positions_excluded_no_read":positions_excluded_no_read,
         "long_range_positions":metrics.iter().map(|slot|slot.long_range.positions).max().unwrap_or(0),
         "mass_normalization":{"minimum_read_plus_no_read":min_mass_sum,"maximum_read_plus_no_read":max_mass_sum,"maximum_absolute_error":max_mass_error},
+        "no_read_mass":{"mean":(positions_total!=0).then(||no_read_sum/positions_total as f64),"maximum":max_no_read,"histogram_bucket_tenths":no_read_histogram},
         "positions_subsample_stride":stride,
         "metrics":records,
-        "long_range":long_records
+        "long_range":long_records,
+        "selected_read_metrics":selected_records
     });
     report["best_per_family_hybrids"] = json!(best_per_family);
 
