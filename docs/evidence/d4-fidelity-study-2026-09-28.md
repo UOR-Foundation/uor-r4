@@ -19,7 +19,7 @@ We compared three discrete representation arms:
 
 Transfer to the approved cycle-4 geometric stack (`geometric_s1`, SHA-256 `3eb1ebbb3c1f65fccf9dfb325283f8f9892cd434e0d689356821acee2c5b1e0a`) was verified on disk: H+G4 yielded an NLL delta of +0.0118 nats on code validation sequences, well within the $\le 0.02$ nats fidelity gate.
 
-In the serving runtime (`crates/uor-r4-integer`), we implemented the complete multiplier-free bundle ingestion and execution pipeline for the geometric stack (`IntegerStackModel`, `IntegerStackSession`, `IntegerMatrix`, `IntegerRecurrenceLayer`, `IntegerReadLayer`, `IntegerSwiGluMlp`). Static disassembly verification via [`scripts/audit_zero_matmul_serving.py`](../../scripts/audit_zero_matmul_serving.py) confirms **strictly 0 hardware multipliers, 0 hardware dividers, and 0 floating-point instructions** across all 56 matched numerical serving symbols (`FULL PASS`).
+In the serving runtime (`crates/uor-r4-integer`), we implemented the complete multiplier-free bundle ingestion and execution pipeline for the geometric stack (`IntegerStackModel`, `IntegerStackSession`, `IntegerMatrix`, `IntegerRecurrenceLayer`, `IntegerReadLayer`, `IntegerSwiGluMlp`). Static disassembly verification via [`scripts/audit_zero_matmul_serving.py`](../../scripts/audit_zero_matmul_serving.py) confirms **strictly 0 hardware multipliers, 0 hardware dividers, and 0 floating-point instructions** across all 63 matched numerical serving symbols (`FULL PASS`).
 
 ---
 

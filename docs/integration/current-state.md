@@ -27,7 +27,7 @@ frontier, geometric-advantage or full-path energy qualification.**
   - Baseline nearest-hard (909 flips, +0.2676 nats) and H+E8 2-bit (188 flips, +0.0185 nats, lost *green*) both fail pre-registered retention criteria.
   - Stack transfer to cycle-4 `geometric_s1` (`3eb1ebbb...`) verified on disk: +0.0118 nats delta on code validation, within the <= 0.02 nats gate.
   - Serving runtime in `crates/uor-r4-integer` implements multiplier-free bundle ingestion and execution for the geometric stack (`IntegerStackModel`, recurrence, Lorentz read, SwiGLU MLP, RMSNorm, projection).
-  - Static disassembly audit (`scripts/audit_zero_matmul_serving.py`) confirms strictly 0 multipliers, 0 dividers, 0 floats across all 56 matched symbols (`FULL PASS`).
+  - Static disassembly audit (`scripts/audit_zero_matmul_serving.py`) confirms strictly 0 multipliers, 0 dividers, 0 floats across all 63 matched symbols (`FULL PASS`).
   - Unified artifact contract established (`uor-r4.stack-bundle/1`) with explicit producer/consumer handoffs across training checkpoints, discrete codecs, bundle packaging, and zero-multiplier serving.
 - **Unchanged:** no useful general chat, prose, instruction following, geometric advantage, selected parameter access or energy saving is established.
 
