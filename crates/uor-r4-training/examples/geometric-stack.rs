@@ -11,8 +11,8 @@
 //!   [clip=1.0] [eval_every=250] [eval_windows=64] [final_windows=512] [lens=LENS.u16] \
 //!   [merges=MERGES.txt] [checkpoint_every=250] [resume=OLD_ROOT/checkpoint] [max_seconds=inf] \
 //!   [sample_tokens=128] [tokenizer=TOKENIZER.json] [width=288] [heads=6] [layers=6] [mlp=768] \
-//!   [context=256] [memory_layers=L1,L2 [memory_sub_keys=256] [memory_top_k=32] [memory_heads=4] \
-//!   [memory_key_dim=128] [memory_score=dot|lorentz] [memory_codebook=h4|e8]]
+//!   [stack_mlp=MATCHED] [context=256] [memory_layers=L1,L2 [memory_sub_keys=256] [memory_top_k=32] \
+//!   [memory_heads=4] [memory_key_dim=128] [memory_score=dot|lorentz] [memory_codebook=h4|e8]]
 //! geometric-stack sample model=ROOT/model valid=VALID.u16 merges=MERGES.txt|tokenizer=TOKENIZER.json \
 //!   out=NEW_REPORT_ROOT [prompts=3] [prompt_tokens=64] [sample_tokens=128] [temperature=0.8] [top_k=40] \
 //!   [seed=1]
@@ -574,8 +574,10 @@ impl Settings {
 
 /// The model shape of `arch=` and the shape options: the control's shape,
 /// #1017's by default, or a geometric stack with its width, heads, depth and
-/// context whose MLP matches its parameter count. `vocab` replaces the
-/// default 4,096-token vocabulary first.
+/// context whose MLP matches its parameter count. `stack_mlp` instead pins
+/// the stack's MLP width, so two stacks can differ in one component at equal
+/// width (and unequal parameter counts). `vocab` replaces the default
+/// 4,096-token vocabulary first.
 fn stack_config(args: &Args, vocab: Option<usize>) -> Result<StackConfig> {
     let seed: u64 = args.number("seed", 1)?;
     let read = match args.optional("read").as_deref() {
@@ -599,17 +601,34 @@ fn stack_config(args: &Args, vocab: Option<usize>) -> Result<StackConfig> {
     if let Some(vocab) = vocab {
         control.vocab_size = vocab;
     }
+    let stack_mlp = args
+        .optional("stack_mlp")
+        .map(|text| {
+            text.parse::<usize>()
+                .map_err(|_| invalid(format!("invalid stack_mlp={text}")))
+        })
+        .transpose()?;
     let mut config = match args.required("arch")?.as_str() {
+        "transformer" if stack_mlp.is_some() => {
+            return Err(invalid(
+                "stack_mlp= sets a geometric stack's MLP; the control's is mlp=",
+            ))
+        }
         "transformer" => control,
         "geometric" => {
             let layers = control.layers();
             let default_pattern = "rra".repeat(layers / 3) + &"r".repeat(layers % 3);
-            StackConfig::geometric_matched_to(
+            let mut config = StackConfig::geometric_matched_to(
                 &control,
                 &args.optional("pattern").unwrap_or(default_pattern),
                 read,
                 rotation,
-            )?
+            )?;
+            if let Some(hidden) = stack_mlp {
+                config.mlp_hidden = hidden;
+                config.validate()?;
+            }
+            config
         }
         other => return Err(invalid(format!("unknown arch {other}"))),
     };
@@ -1915,6 +1934,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "heads",
             "layers",
             "mlp",
+            "stack_mlp",
             "seed",
             "policy",
             "data_seed",
@@ -2461,6 +2481,7 @@ fn main() -> Result<()> {
                     "heads",
                     "layers",
                     "mlp",
+                    "stack_mlp",
                     "context",
                     "valid",
                     "out",
