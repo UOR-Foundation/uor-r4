@@ -42,12 +42,16 @@
 | Target features | bulk-memory, bulk-memory-opt, call-indirect-overlong, multivalue, mutable-globals, nontrapping-fptoint, reference-types, sign-ext. There is no `simd128`, although the earlier record listed `+simd128` among the flags. |
 | Exports | 2,142 function exports through `--export-all`, including the 13 helpers |
 
-The helpers are not `#[no_mangle]`, because the crate forbids unsafe code, so a module exposes them only through `--export-all`. The crate no longer declares a `cdylib` crate type. A module build must request one explicitly, for example:
+The helpers are not `#[no_mangle]`, because the crate forbids unsafe code, so a module exposes them only through `--export-all`. The crate no longer declares a `cdylib` crate type, so a module build requests the crate types on the command line:
 
 ```bash
 cargo rustc -p uor-r4-integer --lib --release --target wasm32-unknown-unknown \
-  --crate-type cdylib -- -C link-arg=--export-all
+  --crate-type rlib,cdylib -- -C link-arg=--export-all
 ```
+
+- **Why `rlib` as well.** With `cdylib` alone, rustc drops the unreferenced helpers before linking, so the module exports none of them. Adding `rlib` keeps every `pub` item.
+- **Lab 1 check at `c7c77a09`.** The command above produced a module in which all 21 audited symbols are present. That module was not retained.
+- **Differences from the frozen module.** This workspace's `.cargo/config.toml` adds `+simd128` and a stack size to wasm32 builds. Such a build therefore differs from the frozen module, and it contains SIMD instructions, which the auditor reports as unclassified.
 
 ## 4. Instruction re-audit of the frozen module
 

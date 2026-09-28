@@ -5,7 +5,9 @@
 //! turn prime signature, Q30 arctangent, token salience). There is no load,
 //! session or step export, so a module built from this crate is not a serving
 //! runtime. The functions are not `#[no_mangle]` (the crate forbids unsafe
-//! code), so a module exposes them only when linked with `--export-all`.
+//! code), so a module exposes them only when it is built with the `rlib` and
+//! `cdylib` crate types together and linked with `--export-all`; with `cdylib`
+//! alone the unreferenced helpers are dropped before linking.
 //!
 //! The source is written to the declared D11 contract; that does not make a
 //! compiled module D11-clean. A WebAssembly build can contain `i64.mul` where
