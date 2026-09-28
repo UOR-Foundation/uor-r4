@@ -61,6 +61,26 @@ def parse_energy_file(filepath):
     if m_rate:
         tok_per_sec = float(m_rate.group(1))
 
+    idle_mean_mw = None
+    idle_std_mw = None
+    m_idle = re.search(r"idle power \(not the model\):\s*([0-9.]+)\s*mW", content)
+    if m_idle:
+        idle_mean_mw = float(m_idle.group(1))
+
+    m_std = re.search(r"idle spread \(std / range\)\s*:\s*±([0-9.]+)\s*mW", content)
+    if m_std:
+        idle_std_mw = float(m_std.group(1))
+
+    sampler = None
+    m_samp = re.search(r"sampler\s*:\s*(\w+)", content)
+    if m_samp:
+        sampler = m_samp.group(1)
+
+    power_field = None
+    m_field = re.search(r"power field used\s*:\s*(.+)", content)
+    if m_field:
+        power_field = m_field.group(1).strip()
+
     if net_j is None or tokens is None:
         return None
 
@@ -70,6 +90,10 @@ def parse_energy_file(filepath):
         "gross_j": gross_j,
         "wall_time": wall_time,
         "tok_per_sec": tok_per_sec,
+        "idle_mean_mw": idle_mean_mw,
+        "idle_std_mw": idle_std_mw,
+        "sampler": sampler,
+        "power_field": power_field,
     }
 
 
@@ -215,11 +239,20 @@ def format_summary(results, bundle_dir=None, checkpoint_dir=None):
 
         lines.append(f"{data['name']:<42} | {e_low_str:<15} | {e_high_str:<15} | {m_range_str:<26}")
 
+        idle_means = [r["idle_mean_mw"] for r in (runs_low + runs_high) if r.get("idle_mean_mw") is not None]
+        idle_stds = [r["idle_std_mw"] for r in (runs_low + runs_high) if r.get("idle_std_mw") is not None]
+        samplers = list(set([r["sampler"] for r in (runs_low + runs_high) if r.get("sampler")]))
+        power_fields = list(set([r["power_field"] for r in (runs_low + runs_high) if r.get("power_field")]))
+
         summary_data["models"][m_key] = {
             "name": data["name"],
+            "sampler": samplers[0] if len(samplers) == 1 else samplers,
+            "power_field": power_fields[0] if len(power_fields) == 1 else power_fields,
             "k_low": k_low,
             "k_high": k_high,
             "delta_n": delta_n,
+            "idle_mean_mw": sum(idle_means) / len(idle_means) if idle_means else None,
+            "idle_std_mw": sum(idle_stds) / len(idle_stds) if idle_stds else None,
             "e_low_mean_net_j": e_low_mean,
             "e_low_net_j_repeats": e_low_vals,
             "e_high_mean_net_j": e_high_mean,

@@ -4,26 +4,23 @@
 # Modeled on stage 8 of scripts/lut-m1-chat.sh and D0-b / D8 / D10 contracts.
 #
 # Usage:
-#   ./scripts/integer-m1-energy.sh [--dry-run] [--out <DIR>] [--interval-ms <INT>]
+#   ./scripts/integer-m1-energy.sh [--dry-run] [--sampler <macmon|powermetrics|dual>] [--out <DIR>] [--interval-ms <INT>]
+#
+# Samplers:
+#   macmon (default): Non-root sampling via /opt/homebrew/bin/macmon measuring sys_power (whole-system Watts).
+#   powermetrics    : Requires root/sudo. Samples SoC internal power.
+#   dual            : Requires root/sudo. Samples both simultaneously for cross-validation.
 #
 # Requirements:
-#   - Must NOT be run as root (EUID 0 refused). Run as normal user after 'sudo -v'.
 #   - Single-threaded evaluation: RAYON_NUM_THREADS=1.
 #   - Dedicated model slot lock automatically claimed and released.
 #   - Same-input stepping across sliding full256 context (no sampling/stop tokens).
 #
 set -euo pipefail
 
-# 1. Enforce non-root execution
-if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-  echo "ERROR: integer-m1-energy.sh must NOT be run as root (EUID 0)." >&2
-  echo "Run as normal user: only the inner powermetrics invocations inside energy_per_token.py use sudo." >&2
-  echo "Before running, validate your credentials with: sudo -v" >&2
-  exit 1
-fi
-
 DRY_RUN=0
 OUT=""
+SAMPLER="macmon"
 REPEATS=3
 IDLE_SECONDS=8
 INTERVAL_MS=100
@@ -35,6 +32,10 @@ while [[ $# -gt 0 ]]; do
     --dry-run)
       DRY_RUN=1
       shift
+      ;;
+    --sampler)
+      SAMPLER="$2"
+      shift 2
       ;;
     --out)
       OUT="$2"
@@ -67,6 +68,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Enforce non-root execution (EUID 0 refused)
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  echo "ERROR: integer-m1-energy.sh must NOT be run as root (EUID 0)." >&2
+  echo "Run as normal user: macmon requires no sudo. Sudo is only used internally if powermetrics is selected." >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -98,6 +106,7 @@ echo "==========================================================================
 echo "Track T3: M1 Serving Energy Evaluation (J/token via Same-Input Stepping)"
 echo "================================================================================"
 echo "Dry Run         : $DRY_RUN"
+echo "Sampler         : $SAMPLER"
 echo "Output Directory: $OUT"
 echo "Target Dir      : $TARGET_DIR"
 echo "Step Runner     : $STEP_BIN"
@@ -143,7 +152,7 @@ fi
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo ""
   echo "================================================================================"
-  echo "[DRY RUN: Testing Functional Execution on $K_LOW and $K_HIGH Steps (No Powermetrics)]"
+  echo "[DRY RUN: Testing Functional Execution on $K_LOW and $K_HIGH Steps (No Power Sampler)]"
   echo "================================================================================"
   
   DRY_FAILURES=0
@@ -158,7 +167,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     T_END=$(python3 -c 'import time; print(time.time())')
     ELAPSED=$(python3 -c "print(f'{$T_END - $T_START:.2f}')")
     SAMPLES=$(python3 -c "import math; print(math.floor(float('$ELAPSED') * 1000 / $INTERVAL_MS))")
-    echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} powermetrics samples at ${INTERVAL_MS}ms)"
+    echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} samples at ${INTERVAL_MS}ms)"
     if (( $(python3 -c "print(1 if $ELAPSED >= 4.0 or $SAMPLES >= 15 else 0)") )); then
       echo "  [PASS] Sampling window verified sufficient (~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
     else
@@ -177,7 +186,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     T_END=$(python3 -c 'import time; print(time.time())')
     ELAPSED=$(python3 -c "print(f'{$T_END - $T_START:.2f}')")
     SAMPLES=$(python3 -c "import math; print(math.floor(float('$ELAPSED') * 1000 / $INTERVAL_MS))")
-    echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} powermetrics samples at ${INTERVAL_MS}ms)"
+    echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} samples at ${INTERVAL_MS}ms)"
     if (( $(python3 -c "print(1 if $ELAPSED >= 4.0 or $SAMPLES >= 15 else 0)") )); then
       echo "  [PASS] Sampling window verified sufficient (~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
     else
@@ -200,21 +209,25 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "  1. AC power connected (battery discharge power is invalid for benchmarking)."
   echo "  2. Display lid open."
   echo "  3. Machine idle (no other background builds, browsers, or heavy tasks)."
-  echo "  4. Run 'sudo -v' to validate sudo credentials for powermetrics before launching."
+  echo "  4. Model slot lock must be free (check /Volumes/UOR-Workspace/locks/model-slot.json)."
   echo ""
-  echo "Owner Command (claims and releases model slot lock automatically):"
-  echo "  cd $REPO_ROOT && ./scripts/integer-m1-energy.sh"
+  echo "Execution Commands:"
+  echo "  - Standard Measurement (macmon sys_power, no sudo needed):"
+  echo "      ./scripts/integer-m1-energy.sh"
+  echo "  - Owner Cross-Validation (dual powermetrics + macmon, sudo needed):"
+  echo "      sudo -v && ./scripts/integer-m1-energy.sh --sampler dual"
   echo "================================================================================"
   exit 0
 fi
 
 # Acquire model-slot lock automatically (refuse if already claimed)
 if [[ -f "$LOCK_FILE" ]]; then
-  echo "ERROR: Model slot lock file exists at $LOCK_FILE." >&2
-  echo "Locked by:" >&2
+  echo "NOTICE: Model slot lock file exists at $LOCK_FILE." >&2
+  echo "Current slot holder:" >&2
   cat "$LOCK_FILE" >&2
   echo "" >&2
-  echo "Cannot run heavy model measurement while another job holds the slot." >&2
+  echo "ERROR: Model slot is actively held by another job. Cannot run energy benchmarks concurrently." >&2
+  echo "Wait until active job completes before running energy measurements." >&2
   exit 1
 fi
 
@@ -227,7 +240,8 @@ cat <<EOF > "$LOCK_FILE"
   "started_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "expected_end_utc": "$(date -u -v+60M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)",
   "threads": 1,
-  "rss_cap_gb": 1.5
+  "rss_cap_gb": 1.5,
+  "job": "T3 marginal serving energy measurement"
 }
 EOF
 trap 'rm -f "$LOCK_FILE"' EXIT INT TERM
@@ -238,16 +252,23 @@ uname -a > "$OUT/machine.txt"
 sysctl -n machdep.cpu.brand_string >> "$OUT/machine.txt" 2>/dev/null || true
 
 echo ""
-echo "Running Energy Benchmarks..."
+echo "Running Energy Benchmarks with sampler: $SAMPLER..."
+
+SUDO_PREFIX=""
+if [[ "$SAMPLER" in "powermetrics" || "$SAMPLER" in "dual" ]]; then
+  SUDO_PREFIX="sudo "
+fi
 
 for STEPS in "$K_LOW" "$K_HIGH"; do
   for repeat in $(seq 1 "$REPEATS"); do
     echo "[Integer Model] Steps: $STEPS, Repeat: $repeat"
-    sudo python3 "$SCRIPT_DIR/energy_per_token.py" \
+    ${SUDO_PREFIX}python3 "$SCRIPT_DIR/energy_per_token.py" \
       --label "integer-w256-k${STEPS}-rep${repeat}" \
+      --sampler "$SAMPLER" \
       --idle-seconds "$IDLE_SECONDS" \
       --interval-ms "$INTERVAL_MS" \
-      --tokens "$STEPS" -- \
+      --tokens "$STEPS" \
+      --raw-out "$OUT/raw-integer-k${STEPS}-rep${repeat}.jsonl" -- \
       env RAYON_NUM_THREADS=1 "$STEP_BIN" \
         --model-type integer \
         --bundle "$BUNDLE_DIR" \
@@ -255,11 +276,13 @@ for STEPS in "$K_LOW" "$K_HIGH"; do
         --tokens "$STEPS" 2>&1 | tee "$OUT/energy-integer-k${STEPS}-rep${repeat}.txt"
 
     echo "[Continuous FF Parent] Steps: $STEPS, Repeat: $repeat"
-    sudo python3 "$SCRIPT_DIR/energy_per_token.py" \
+    ${SUDO_PREFIX}python3 "$SCRIPT_DIR/energy_per_token.py" \
       --label "continuous-ff-k${STEPS}-rep${repeat}" \
+      --sampler "$SAMPLER" \
       --idle-seconds "$IDLE_SECONDS" \
       --interval-ms "$INTERVAL_MS" \
-      --tokens "$STEPS" -- \
+      --tokens "$STEPS" \
+      --raw-out "$OUT/raw-continuous-ff-k${STEPS}-rep${repeat}.jsonl" -- \
       env RAYON_NUM_THREADS=1 "$STEP_BIN" \
         --model-type continuous-ff \
         --checkpoint "$FF_CHECKPOINT" \
@@ -280,7 +303,12 @@ python3 "$SCRIPT_DIR/analyze_marginal_energy.py" "$OUT" \
   --checkpoint-dir "$FF_CHECKPOINT" \
   --summary-out "$SUMMARY_JSON"
 
+(cd "$OUT" && shasum -a 256 * > sha256sums.txt 2>/dev/null || true)
+
 echo "Energy measurements complete."
 echo "Raw files saved in: $OUT"
 echo "Summary JSON saved in: $SUMMARY_JSON"
+echo ""
+echo "Filesystem Space:"
+df -h / /Volumes/UOR-Workspace
 echo "================================================================================"
