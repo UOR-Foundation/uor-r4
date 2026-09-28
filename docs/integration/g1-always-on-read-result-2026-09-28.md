@@ -37,9 +37,9 @@ Applied mechanically by `aerm-probe summarize … gates=g1`; the registered gate
 | Absent | 257/378, 263/378, 330/378 | 3/378, 107/378, 90/378 |
 | Updated recency trap | 7/24, 3/24, 1/24 | 7/24, 13/24, 10/24 |
 
-**In-distribution, fresh dialogues:** the memory arm is **perfect on every non-abstaining class** (138/138 First, 343/343 Updated, 26/26 Reasserted, 159/159 Previous, 168/168 PreviousAbsent) and free-running exact **32/32** in every seed. The control is 71/138, 308/343, 19/26, 88/159, 67/168 and free-running 21/14/24.
+**In-distribution, fresh dialogues:** the memory arm is **perfect on every non-abstaining class** (138/138 First, 343/343 Updated, 26/26 Reasserted, 159/159 Previous, 168/168 PreviousAbsent) and free-running exact **32/32** in every seed. The control's seed-1 figures are 71/138, 308/343, 19/26, 88/159, 67/168 with free-running 21/14/24 (seeds 2–3: 307/343, 97/159 and 308/343, 95/159).
 
-**Read diagnostics.** `read_events` 2,294 / 2,574 / 2,706 — the always-on read **does fire** (D2's trigger fired ~0). Failure trace: `Unavailable` 460 / 484 / 519, `NotSelected` 175 / 172 / 59, `WrongValue` 0 / 0 / 0, `Emission` 1 / 15 / 20. Tag accuracy 0.975 / 0.974 / 0.977.
+**Read diagnostics.** `read_events` 2,294 / 2,574 / 2,706 — the always-on read **does fire** (D2's trigger fired ~0). Failure trace: `Unavailable` 460 / 484 / 519, `NotSelected` 175 / 172 / 59, `Emission` 1 / 15 / 20, `WrongValue` absent (no key). Tag accuracy 0.975 / 0.974 / 0.977.
 
 ## Reading
 
