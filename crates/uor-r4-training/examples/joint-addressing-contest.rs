@@ -451,7 +451,7 @@ fn capture_panel_row(
                     .into_iter()
                     .map(f64::from)
                     .collect(),
-                no_read: f64::from(step.no_read_mass.to_scalar::<f32>()?),
+                no_read: f64::from(step.no_read_mass.to_vec1::<f32>()?[0]),
                 codes: std::mem::take(&mut codes),
             });
         }
@@ -737,7 +737,7 @@ fn run(
             }
             positions_total += 1;
             let previous = position;
-            let no_read = f64::from(step.no_read_mass.to_scalar::<f32>()?);
+            let no_read = f64::from(step.no_read_mass.to_vec1::<f32>()?[0]);
             let masses: Vec<f64> = step
                 .read_masses
                 .flatten_all()?
