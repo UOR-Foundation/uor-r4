@@ -87,6 +87,7 @@ TOKEN_PATTERNS = [
     re.compile(r"eval count:\s*(\d+)"),  # ollama --verbose
     re.compile(r"\beval_count[\"'\s:]+(\d+)"),  # ollama API JSON
     re.compile(r"Generated\s+(\d+)\s+tokens"),  # uor-chat
+    re.compile(r"Stepped\s+(\d+)\s+tokens"),  # same-input-step
 ]
 
 

@@ -1,22 +1,34 @@
 #!/usr/bin/env bash
 # scripts/integer-m1-energy.sh
 # Measure Joules per token on Apple Silicon M1 (Track T3).
-# Modeled on stage 8 of scripts/lut-m1-chat.sh.
+# Modeled on stage 8 of scripts/lut-m1-chat.sh and D0-b / D8 / D10 contracts.
 #
 # Usage:
-#   ./scripts/integer-m1-energy.sh [--dry-run] [--out <DIR>]
+#   ./scripts/integer-m1-energy.sh [--dry-run] [--out <DIR>] [--interval-ms <INT>]
 #
 # Requirements:
-#   - RAYON_NUM_THREADS=1 for single-threaded evaluation
-#   - model-slot lock at /Volumes/UOR-Workspace/locks/model-slot.json
-#   - powermetrics requires sudo (exact command printed; run outside if unprivileged)
+#   - Must NOT be run as root (EUID 0 refused). Run as normal user after 'sudo -v'.
+#   - Single-threaded evaluation: RAYON_NUM_THREADS=1.
+#   - Dedicated model slot lock automatically claimed and released.
+#   - Same-input stepping across sliding full256 context (no sampling/stop tokens).
 #
 set -euo pipefail
+
+# 1. Enforce non-root execution
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  echo "ERROR: integer-m1-energy.sh must NOT be run as root (EUID 0)." >&2
+  echo "Run as normal user: only the inner powermetrics invocations inside energy_per_token.py use sudo." >&2
+  echo "Before running, validate your credentials with: sudo -v" >&2
+  exit 1
+fi
 
 DRY_RUN=0
 OUT=""
 REPEATS=3
 IDLE_SECONDS=8
+INTERVAL_MS=100
+K_LOW=4096
+K_HIGH=16384
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +48,18 @@ while [[ $# -gt 0 ]]; do
       IDLE_SECONDS="$2"
       shift 2
       ;;
+    --interval-ms)
+      INTERVAL_MS="$2"
+      shift 2
+      ;;
+    --k-low)
+      K_LOW="$2"
+      shift 2
+      ;;
+    --k-high)
+      K_HIGH="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1" >&2
       exit 1
@@ -46,14 +70,15 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if [[ -z "$OUT" ]]; then
-  OUT="$REPO_ROOT/docs/evidence/energy-measurement-$(date +%Y%m%d-%H%M%S)"
-fi
+# Target directory on SSD cache (renamed from anti-gravity-efficiency)
+TARGET_DIR="${CARGO_TARGET_DIR:-/Volumes/UOR-Workspace/BuildCaches/anti-gravity}"
+STEP_BIN="${STEP_BIN:-$TARGET_DIR/release/examples/same-input-step}"
 
-TARGET_DIR="${CARGO_TARGET_DIR:-/Volumes/UOR-Workspace/BuildCaches/anti-gravity-efficiency}"
-INTEGER_CHAT="${INTEGER_CHAT:-$TARGET_DIR/release/uor-chat}"
-FF_GENERATE="${FF_GENERATE:-$TARGET_DIR/release/examples/continuous-ff-generate}"
-PROMPT="Once upon a time there was a little girl who"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+if [[ -z "$OUT" ]]; then
+  OUT="/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-energy-${TIMESTAMP}"
+fi
+SUMMARY_JSON="$REPO_ROOT/docs/evidence/energy-summary-${TIMESTAMP}.json"
 
 BUNDLE_DIR="${BUNDLE_DIR:-/Users/casey.allard/uor-r4/.uor-models/investigations/integer-serving-20260925/bundle-quaternion-1}"
 if [[ ! -d "$BUNDLE_DIR" ]]; then
@@ -61,36 +86,31 @@ if [[ ! -d "$BUNDLE_DIR" ]]; then
 fi
 
 FF_CHECKPOINT="${FF_CHECKPOINT:-/Users/casey.allard/uor-r4-investigations/joint-recurrent-20260924/fit256-quaternion-3/checkpoint-final}"
-FF_TOKENIZER="${FF_TOKENIZER:-$BUNDLE_DIR/tokenizer.json}"
+
+TOKENS_FILE="${TOKENS_FILE:-/Users/casey.allard/uor-r4/.uor-models/research/issue-1017/tokens/dev.u16}"
+if [[ ! -f "$TOKENS_FILE" ]]; then
+  TOKENS_FILE="/Volumes/UOR-Workspace/Backups/language-continuation-20260926-1/canonical/.uor-models/research/issue-1017/tokens/dev.u16"
+fi
 
 LOCK_FILE="/Volumes/UOR-Workspace/locks/model-slot.json"
 
 echo "================================================================================"
-echo "Track T3: M1 Serving Energy Evaluation (J/token)"
+echo "Track T3: M1 Serving Energy Evaluation (J/token via Same-Input Stepping)"
 echo "================================================================================"
 echo "Dry Run         : $DRY_RUN"
 echo "Output Directory: $OUT"
 echo "Target Dir      : $TARGET_DIR"
-echo "Integer Chat    : $INTEGER_CHAT"
-echo "FF Generate     : $FF_GENERATE"
+echo "Step Runner     : $STEP_BIN"
 echo "Bundle Path     : $BUNDLE_DIR"
 echo "FF Checkpoint   : $FF_CHECKPOINT"
+echo "Tokens File     : $TOKENS_FILE"
 echo "Repeats         : $REPEATS"
-echo "Token Horizons  : 128 and 512"
-echo "Rayon Threads   : 1"
+echo "Sampling Rate   : $INTERVAL_MS ms"
+echo "Step Horizons   : $K_LOW and $K_HIGH (ΔN = $((K_HIGH - K_LOW)))"
+echo "Rayon Threads   : 1 (single-threaded benchmark)"
 echo "================================================================================"
 
-# Verify prerequisites
-if [[ ! -x "$INTEGER_CHAT" ]]; then
-  echo "WARNING: $INTEGER_CHAT not found or not executable. Building..." >&2
-  CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p uor-r4-integer --bin uor-chat -j 2
-fi
-
-if [[ ! -x "$FF_GENERATE" ]]; then
-  echo "WARNING: $FF_GENERATE not found or not executable. Building..." >&2
-  CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p uor-r4-training --example continuous-ff-generate -j 2
-fi
-
+# Verify data files exist
 if [[ ! -d "$BUNDLE_DIR" ]]; then
   echo "ERROR: Bundle directory $BUNDLE_DIR does not exist." >&2
   exit 1
@@ -101,55 +121,94 @@ if [[ ! -d "$FF_CHECKPOINT" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$TOKENS_FILE" ]]; then
+  echo "ERROR: Token file $TOKENS_FILE does not exist." >&2
+  exit 1
+fi
+
+# Build rule: Builds happen ONLY in the dry run
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo ""
+  echo "[DRY RUN: Compiling release binaries in isolated build cache]"
+  CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p uor-r4-training --example same-input-step -j 2
+fi
+
+if [[ ! -x "$STEP_BIN" ]]; then
+  echo "ERROR: $STEP_BIN not found or not executable." >&2
+  echo "Builds happen only in the dry run. Please run './scripts/integer-m1-energy.sh --dry-run' first." >&2
+  exit 1
+fi
+
 # Dry-run execution test
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo ""
   echo "================================================================================"
-  echo "[DRY RUN: Testing Functional Execution on 128 and 512 Tokens Without Powermetrics]"
+  echo "[DRY RUN: Testing Functional Execution on $K_LOW and $K_HIGH Steps (No Powermetrics)]"
   echo "================================================================================"
-  for TOKENS in 128 512; do
-    echo "--- Testing Integer Model ($TOKENS tokens) ---"
-    env RAYON_NUM_THREADS=1 "$INTEGER_CHAT" \
+  
+  DRY_FAILURES=0
+  for STEPS in "$K_LOW" "$K_HIGH"; do
+    echo "--- Testing Integer Model ($STEPS steps) ---"
+    T_START=$(python3 -c 'import time; print(time.time())')
+    env RAYON_NUM_THREADS=1 "$STEP_BIN" \
+      --model-type integer \
       --bundle "$BUNDLE_DIR" \
-      --temperature 0.0 \
-      --max-tokens "$TOKENS" \
-      --prompt "$PROMPT"
-    echo ""
-    echo "--- Testing Continuous FF Parent ($TOKENS tokens) ---"
-    env RAYON_NUM_THREADS=1 "$FF_GENERATE" \
-      --checkpoint "$FF_CHECKPOINT" \
-      --tokenizer "$FF_TOKENIZER" \
-      --prompt "$PROMPT" \
-      --tokens "$TOKENS"
-    echo ""
-    if [[ -n "${LLAMA_CLI:-}" ]] && [[ -n "${GGUF:-}" ]]; then
-      echo "--- Testing llama.cpp SmolLM2 ($TOKENS tokens) ---"
-      "$LLAMA_CLI" -m "$GGUF" -p "$PROMPT" -n "$TOKENS" -t 1 --temp 0 -no-cnv
-      echo ""
+      --tokens-file "$TOKENS_FILE" \
+      --tokens "$STEPS"
+    T_END=$(python3 -c 'import time; print(time.time())')
+    ELAPSED=$(python3 -c "print(f'{$T_END - $T_START:.2f}')")
+    SAMPLES=$(python3 -c "import math; print(math.floor(float('$ELAPSED') * 1000 / $INTERVAL_MS))")
+    echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} powermetrics samples at ${INTERVAL_MS}ms)"
+    if (( $(python3 -c "print(1 if $ELAPSED >= 4.0 or $SAMPLES >= 15 else 0)") )); then
+      echo "  [PASS] Sampling window verified sufficient (~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
+    else
+      echo "  [FAIL] Insufficient sampling window: ${ELAPSED}s (< 15 samples)"
+      DRY_FAILURES=$((DRY_FAILURES + 1))
     fi
+    echo ""
+
+    echo "--- Testing Continuous FF Parent ($STEPS steps) ---"
+    T_START=$(python3 -c 'import time; print(time.time())')
+    env RAYON_NUM_THREADS=1 "$STEP_BIN" \
+      --model-type continuous-ff \
+      --checkpoint "$FF_CHECKPOINT" \
+      --tokens-file "$TOKENS_FILE" \
+      --tokens "$STEPS"
+    T_END=$(python3 -c 'import time; print(time.time())')
+    ELAPSED=$(python3 -c "print(f'{$T_END - $T_START:.2f}')")
+    SAMPLES=$(python3 -c "import math; print(math.floor(float('$ELAPSED') * 1000 / $INTERVAL_MS))")
+    echo "  Elapsed: ${ELAPSED}s (~${SAMPLES} powermetrics samples at ${INTERVAL_MS}ms)"
+    if (( $(python3 -c "print(1 if $ELAPSED >= 4.0 or $SAMPLES >= 15 else 0)") )); then
+      echo "  [PASS] Sampling window verified sufficient (~${SAMPLES} samples at ${INTERVAL_MS}ms interval)"
+    else
+      echo "  [FAIL] Insufficient sampling window: ${ELAPSED}s (< 15 samples)"
+      DRY_FAILURES=$((DRY_FAILURES + 1))
+    fi
+    echo ""
   done
+
   echo "================================================================================"
-  echo "[DRY RUN COMPLETE]"
-  echo "Preflight execution verified cleanly across 128 and 512 token horizons."
+  if [[ "$DRY_FAILURES" -eq 0 ]]; then
+    echo "[DRY RUN COMPLETE: PASS]"
+    echo "Preflight execution verified cleanly across $K_LOW and $K_HIGH step horizons (all runs >= 4.0s)."
+  else
+    echo "[DRY RUN COMPLETE: WARNING] $DRY_FAILURES run(s) finished in < 4.0s."
+  fi
+  echo "================================================================================"
   echo ""
-  echo "To execute actual powermetrics energy measurement, run under sudo with the"
-  echo "model slot lock claimed:"
+  echo "Preconditions for energy measurement:"
+  echo "  1. AC power connected (battery discharge power is invalid for benchmarking)."
+  echo "  2. Display lid open."
+  echo "  3. Machine idle (no other background builds, browsers, or heavy tasks)."
+  echo "  4. Run 'sudo -v' to validate sudo credentials for powermetrics before launching."
   echo ""
-  echo "  # Step 1: Claim model slot lock"
-  echo "  cat <<EOF > $LOCK_FILE"
-  echo "  {\"lab\": \"Anti-Gravity\", \"branch\": \"lab/anti-gravity/runtime-efficiency-t3\", \"pid\": \$\$, \"started_utc\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"expected_end_utc\": \"$(date -u -v+30M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)\", \"threads\": 1, \"rss_cap_gb\": 1.5}"
-  echo "  EOF"
-  echo ""
-  echo "  # Step 2: Run integer energy measurement script"
-  echo "  sudo ./scripts/integer-m1-energy.sh --out $OUT"
-  echo ""
-  echo "  # Step 3: Release model slot lock"
-  echo "  rm -f $LOCK_FILE"
+  echo "Owner Command (claims and releases model slot lock automatically):"
+  echo "  cd $REPO_ROOT && ./scripts/integer-m1-energy.sh"
   echo "================================================================================"
   exit 0
 fi
 
-# Acquire model-slot lock
+# Acquire model-slot lock automatically (refuse if already claimed)
 if [[ -f "$LOCK_FILE" ]]; then
   echo "ERROR: Model slot lock file exists at $LOCK_FILE." >&2
   echo "Locked by:" >&2
@@ -166,7 +225,7 @@ cat <<EOF > "$LOCK_FILE"
   "branch": "lab/anti-gravity/runtime-efficiency-t3",
   "pid": $$,
   "started_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "expected_end_utc": "$(date -u -v+30M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "expected_end_utc": "$(date -u -v+60M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)",
   "threads": 1,
   "rss_cap_gb": 1.5
 }
@@ -181,37 +240,31 @@ sysctl -n machdep.cpu.brand_string >> "$OUT/machine.txt" 2>/dev/null || true
 echo ""
 echo "Running Energy Benchmarks..."
 
-for TOKENS in 128 512; do
+for STEPS in "$K_LOW" "$K_HIGH"; do
   for repeat in $(seq 1 "$REPEATS"); do
-    echo "[Integer Model] Tokens: $TOKENS, Repeat: $repeat"
+    echo "[Integer Model] Steps: $STEPS, Repeat: $repeat"
     sudo python3 "$SCRIPT_DIR/energy_per_token.py" \
-      --label "integer-w256-k${TOKENS}-rep${repeat}" \
-      --idle-seconds "$IDLE_SECONDS" -- \
-      env RAYON_NUM_THREADS=1 "$INTEGER_CHAT" \
+      --label "integer-w256-k${STEPS}-rep${repeat}" \
+      --idle-seconds "$IDLE_SECONDS" \
+      --interval-ms "$INTERVAL_MS" \
+      --tokens "$STEPS" -- \
+      env RAYON_NUM_THREADS=1 "$STEP_BIN" \
+        --model-type integer \
         --bundle "$BUNDLE_DIR" \
-        --temperature 0.0 \
-        --max-tokens "$TOKENS" \
-        --prompt "$PROMPT" 2>&1 | tee "$OUT/energy-integer-k${TOKENS}-rep${repeat}.txt"
+        --tokens-file "$TOKENS_FILE" \
+        --tokens "$STEPS" 2>&1 | tee "$OUT/energy-integer-k${STEPS}-rep${repeat}.txt"
 
-    echo "[Continuous FF Parent] Tokens: $TOKENS, Repeat: $repeat"
+    echo "[Continuous FF Parent] Steps: $STEPS, Repeat: $repeat"
     sudo python3 "$SCRIPT_DIR/energy_per_token.py" \
-      --label "continuous-ff-k${TOKENS}-rep${repeat}" \
-      --idle-seconds "$IDLE_SECONDS" -- \
-      env RAYON_NUM_THREADS=1 "$FF_GENERATE" \
+      --label "continuous-ff-k${STEPS}-rep${repeat}" \
+      --idle-seconds "$IDLE_SECONDS" \
+      --interval-ms "$INTERVAL_MS" \
+      --tokens "$STEPS" -- \
+      env RAYON_NUM_THREADS=1 "$STEP_BIN" \
+        --model-type continuous-ff \
         --checkpoint "$FF_CHECKPOINT" \
-        --tokenizer "$FF_TOKENIZER" \
-        --prompt "$PROMPT" \
-        --tokens "$TOKENS" 2>&1 | tee "$OUT/energy-continuous-ff-k${TOKENS}-rep${repeat}.txt"
-
-    if [[ -n "${LLAMA_CLI:-}" ]] && [[ -n "${GGUF:-}" ]]; then
-      echo "[llama.cpp SmolLM2] Tokens: $TOKENS, Repeat: $repeat"
-      sudo python3 "$SCRIPT_DIR/energy_per_token.py" \
-        --label "llama-smollm2-k${TOKENS}-rep${repeat}" \
-        --idle-seconds "$IDLE_SECONDS" \
-        --tokens "$TOKENS" -- \
-        "$LLAMA_CLI" -m "$GGUF" -p "$PROMPT" -n "$TOKENS" -t 1 --temp 0 -no-cnv 2>&1 | \
-        tee "$OUT/energy-llama-smollm2-k${TOKENS}-rep${repeat}.txt"
-    fi
+        --tokens-file "$TOKENS_FILE" \
+        --tokens "$STEPS" 2>&1 | tee "$OUT/energy-continuous-ff-k${STEPS}-rep${repeat}.txt"
   done
 done
 
@@ -219,6 +272,15 @@ echo ""
 echo "================================================================================"
 echo "Computing Marginal Energy per Token (ΔE/ΔN) and Evaluating Decision Rules..."
 echo "================================================================================"
-python3 "$SCRIPT_DIR/analyze_marginal_energy.py" "$OUT" --repeats "$REPEATS"
-echo "Energy measurements complete. Files and summary saved in $OUT"
+python3 "$SCRIPT_DIR/analyze_marginal_energy.py" "$OUT" \
+  --repeats "$REPEATS" \
+  --k-low "$K_LOW" \
+  --k-high "$K_HIGH" \
+  --bundle-dir "$BUNDLE_DIR" \
+  --checkpoint-dir "$FF_CHECKPOINT" \
+  --summary-out "$SUMMARY_JSON"
+
+echo "Energy measurements complete."
+echo "Raw files saved in: $OUT"
+echo "Summary JSON saved in: $SUMMARY_JSON"
 echo "================================================================================"
