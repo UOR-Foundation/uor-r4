@@ -18,7 +18,15 @@
 //!   [width=128] [heads=4] [pattern=rrar] [mlp=384] [context=128] [steps=1500] [batch=16] \
 //!   [lr=0.003] [warmup=100] [weight_decay=0.1] [a5_weight=1] [a5_start=8] [lane_lr=0.03] [dev_windows=256] \
 //!   [a5_words=256] [snap_lengths=128,512,4096]
+//! tracking-lanes stories out=NEW_REPORT_ROOT text=TRAIN.u16 dev=DEV.u16 tokenizer=TOKENIZER.json \
+//!   [arms=none,token:reflection_pair,context:reflection_pair] [seeds=1,2,3] [lanes=8] [layer=2] \
+//!   [context=256] [steps=1500] [lr=0.003] [lane_lr=0.03] [story_weight=1] [max_events=16] \
+//!   [people=4] [eval_events=4,8,16,24,32] [eval_stories=256] [dev_windows=256]
 //! ```
+//!
+//! Stage C (`stories`): the stack learns swap stories ("Mia and Leo swapped.")
+//! beside text, with context-conditioned lanes whose transport is an affine map
+//! of the hidden state after `layer` layers.
 //!
 //! Every arm with one seed sees the same training data, and every arm is
 //! evaluated on the same fresh words and development windows. `mixed` trains on
@@ -39,8 +47,9 @@ use serde_json::{json, Value};
 use uor_r4_core::report_output;
 use uor_r4_training::geometric_stack::{ReadScore, StackArch, StackConfig};
 use uor_r4_training::stack_tracking::{
-    a5_stack_accuracy, evaluate, text_nll, train, train_mixed, A5Task, LaneAutomaton, LaneConfig,
-    LaneKind, LaneModel, MixedConfig, TrackedStack, TrainConfig, A5_ORDER, TEXT_VOCAB,
+    a5_stack_accuracy, context_transport_witness, evaluate, story_accuracy, text_nll, train,
+    train_mixed, train_stories, A5Task, LaneAutomaton, LaneConfig, LaneKind, LaneModel,
+    MixedConfig, StoryConfig, SwapStories, TrackedStack, TrainConfig, A5_ORDER, TEXT_VOCAB,
 };
 use uor_r4_training::{sha256_file, Result, TrainingError};
 
@@ -518,11 +527,190 @@ fn mixed(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Stage C: context-conditioned lanes on swap stories.
+fn stories(args: &Args, out: &Path) -> Result<()> {
+    let text_path = PathBuf::from(args.required("text")?);
+    let dev_path = PathBuf::from(args.required("dev")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let train_tokens: usize = args.number("train_tokens", 16_777_216)?;
+    let dev_tokens: usize = args.number("dev_tokens", 249_000)?;
+    let arms: Vec<String> =
+        args.list("arms", "none,token:reflection_pair,context:reflection_pair")?;
+    let seeds: Vec<u64> = args.list("seeds", "1,2,3")?;
+    let lanes: usize = args.number("lanes", 8)?;
+    let layer: usize = args.number("layer", 2)?;
+    let context: usize = args.number("context", 256)?;
+    let eval_events: Vec<usize> = args.list("eval_events", "4,8,16,24,32")?;
+    let eval_stories: usize = args.number("eval_stories", 256)?;
+    let dev_windows: usize = args.number("dev_windows", 256)?;
+    let task = A5Task::standard()?;
+    let tokenizer =
+        uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(&tokenizer_path)?)
+            .ok_or_else(|| invalid("tokenizer JSON is not a supported byte-level BPE"))?;
+    let story_task = SwapStories::new(&tokenizer, args.number("people", 4)?)?;
+    let stack_template = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: TEXT_VOCAB + task.vocab(),
+        width: args.number("width", 128)?,
+        heads: args.number("heads", 4)?,
+        mlp_hidden: args.number("mlp", 384)?,
+        context,
+        pattern: args
+            .0
+            .get("pattern")
+            .cloned()
+            .unwrap_or_else(|| "rrar".into()),
+        read: ReadScore::Dot,
+        rotation: true,
+        seed: 0,
+    };
+    stack_template.validate()?;
+    let story_template = StoryConfig {
+        steps: args.number("steps", 1500)?,
+        batch: args.number("batch", 16)?,
+        context,
+        learning_rate: args.number("lr", 0.003)?,
+        lane_learning_rate: args.number("lane_lr", 0.03)?,
+        warmup: args.number("warmup", 100)?,
+        weight_decay: args.number("weight_decay", 0.1)?,
+        story_weight: args.number("story_weight", 1.0)?,
+        max_events: args.number("max_events", 16)?,
+        data_seed: 0,
+    };
+    let started = Instant::now();
+    let text_sha256 = sha256_file(&text_path)?;
+    let dev_sha256 = sha256_file(&dev_path)?;
+    let tokenizer_sha256 = sha256_file(&tokenizer_path)?;
+    let train = read_u16_range(&text_path, 0, train_tokens)?;
+    let dev = read_u16_range(&dev_path, 0, dev_tokens)?;
+    if train.iter().chain(&dev).any(|&t| t as usize >= TEXT_VOCAB) {
+        return Err(invalid("token files have ids at or above 4096"));
+    }
+    let data_seconds = started.elapsed().as_secs_f64();
+    let device = Device::Cpu;
+    fs::create_dir(out.join("runs"))?;
+    let header: Vec<String> = eval_events.iter().map(|e| format!("E{e}")).collect();
+    println!(
+        "{:<24} {:>4} {:>8} {:>9} {}",
+        "arm",
+        "seed",
+        "train_s",
+        "text_nll",
+        header.join("  ")
+    );
+    let mut summary = Vec::new();
+    for arm in &arms {
+        let (source, kind) = match arm.split_once(':') {
+            None if arm == "none" => ("none", None),
+            Some((source @ ("token" | "context"), kind)) => (source, Some(LaneKind::parse(kind)?)),
+            _ => {
+                return Err(invalid(format!(
+                    "arm is none, token:KIND or context:KIND, got {arm}"
+                )))
+            }
+        };
+        for &seed in &seeds {
+            let config = StackConfig {
+                seed,
+                ..stack_template.clone()
+            };
+            let token_lanes = if source == "token" {
+                kind.map(|k| (k, lanes))
+            } else {
+                None
+            };
+            let mut model = TrackedStack::new(config.clone(), token_lanes, &task, seed, &device)?;
+            if source == "context" {
+                if let Some(kind) = kind {
+                    model = model.with_context_lanes(kind, lanes, layer, seed)?;
+                }
+            }
+            let run_config = StoryConfig {
+                data_seed: 3_000 + seed,
+                ..story_template.clone()
+            };
+            let (records, train_seconds) = train_stories(&model, &story_task, &train, &run_config)?;
+            let eval_started = Instant::now();
+            let nll = text_nll(&model, &dev, context, dev_windows, 16)?;
+            let accuracy =
+                story_accuracy(&model, &story_task, &eval_events, eval_stories, 16, 4_242)?;
+            let witness = if source == "context" {
+                Some(context_transport_witness(
+                    &model,
+                    &story_task,
+                    16,
+                    32,
+                    4_343,
+                )?)
+            } else {
+                None
+            };
+            let eval_seconds = eval_started.elapsed().as_secs_f64();
+            let cells: Vec<String> = accuracy
+                .iter()
+                .map(|a| format!("{:.3}/{:.3}", a.first_answer, a.all_answers))
+                .collect();
+            println!(
+                "{:<24} {:>4} {:>8.1} {:>9.4} {}",
+                arm,
+                seed,
+                train_seconds,
+                nll,
+                cells.join("  ")
+            );
+            let (stack_parameters, side_parameters) = model.parameter_counts();
+            let run = json!({
+                "arm": arm,
+                "seed": seed,
+                "stack": config,
+                "train": run_config,
+                "lanes": lanes,
+                "layer": layer,
+                "stack_parameters": stack_parameters,
+                "side_parameters": side_parameters,
+                "train_seconds": train_seconds,
+                "eval_seconds": eval_seconds,
+                "records": records,
+                "dev_text_nll": nll,
+                "story_accuracy": accuracy,
+                "transport_witness": witness,
+            });
+            fs::write(
+                out.join("runs")
+                    .join(format!("{}-seed{seed}.json", arm.replace(':', "-"))),
+                serde_json::to_vec_pretty(&run)?,
+            )?;
+            summary.push(json!({
+                "arm": arm,
+                "seed": seed,
+                "dev_text_nll": nll,
+                "story_accuracy": run["story_accuracy"],
+                "transport_witness": run["transport_witness"],
+                "train_seconds": train_seconds,
+            }));
+        }
+    }
+    fs::write(
+        out.join("summary.json"),
+        serde_json::to_vec_pretty(&json!({
+            "text": {"path": text_path.display().to_string(), "sha256": text_sha256, "train_tokens": train_tokens},
+            "dev": {"path": dev_path.display().to_string(), "sha256": dev_sha256, "tokens": dev_tokens},
+            "tokenizer": {"path": tokenizer_path.display().to_string(), "sha256": tokenizer_sha256},
+            "stories": {"people": story_task.people, "names": uor_r4_training::stack_tracking::STORY_NAMES, "objects": uor_r4_training::stack_tracking::STORY_OBJECTS},
+            "eval_events": eval_events,
+            "eval_stories": eval_stories,
+            "data_seconds": data_seconds,
+            "runs": summary,
+        }))?,
+    )?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let Some((mode, rest)) = arguments.split_first() else {
         return Err(invalid(
-            "usage: tracking-lanes a5|mixed out=NEW_REPORT_ROOT key=value ...",
+            "usage: tracking-lanes a5|mixed|stories out=NEW_REPORT_ROOT key=value ...",
         ));
     };
     match mode.as_str() {
@@ -582,6 +770,44 @@ fn main() -> Result<()> {
             let out = PathBuf::from(args.required("out")?);
             report_output::claim(&out)?;
             let result = mixed(&args, &out);
+            finish(&out, result)
+        }
+        "stories" => {
+            let args = Args::parse(
+                rest,
+                &[
+                    "out",
+                    "text",
+                    "dev",
+                    "tokenizer",
+                    "train_tokens",
+                    "dev_tokens",
+                    "arms",
+                    "seeds",
+                    "lanes",
+                    "layer",
+                    "width",
+                    "heads",
+                    "pattern",
+                    "mlp",
+                    "context",
+                    "steps",
+                    "batch",
+                    "lr",
+                    "lane_lr",
+                    "warmup",
+                    "weight_decay",
+                    "story_weight",
+                    "max_events",
+                    "people",
+                    "eval_events",
+                    "eval_stories",
+                    "dev_windows",
+                ],
+            )?;
+            let out = PathBuf::from(args.required("out")?);
+            report_output::claim(&out)?;
+            let result = stories(&args, &out);
             finish(&out, result)
         }
         other => Err(invalid(format!("unknown mode {other}"))),
