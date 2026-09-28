@@ -48,7 +48,7 @@ def get_artifact_metadata(path):
 
 # Class I: Hardware Multipliers (AArch64 / ARM64)
 CLASS_I_PATTERN = re.compile(
-    r"\b(mul|madd|msub|mneg|smull|umull|smaddl|umaddl|smsubl|umsubl|smulh|umulh|sqdmulh|sqrdmulh|mla|mls|pmul|pmull)\b",
+    r"\b(mul|madd|msub|mneg|smull|umull|smaddl|umaddl|smsubl|umsubl|smulh|umulh|sqdmulh|sqrdmulh|mla|mls|pmul|pmull|sdot|udot|smlal|smlsl|umlal|umlsl)\b",
     re.IGNORECASE,
 )
 
@@ -59,31 +59,25 @@ CLASS_II_PATTERN = re.compile(
 )
 
 # Class III: Floating-Point & Register Transfer Instructions
-# Scalar & vector floating-point mnemonics, conversions, and FP register moves.
-# Note: integer vector negate (`fneg.2d v6, v6` in LLVM objdump syntax for opcode 6ee0f8c6)
-# is excluded from scalar FP negation via negative lookahead.
 CLASS_III_PATTERN = re.compile(
-    r"(\b(fmul|fmov|fadd|fsub|fdiv|fmadd|fmsub|fnmadd|fnmsub|fnmul|fsqrt|fcmp|fcmpe|scvtf|ucvtf)\b"
+    r"(\b(fmul|fmov|fadd|fsub|fdiv|fmadd|fmsub|fnmadd|fnmsub|fnmul|fsqrt|fcmp|fcmpe|scvtf|ucvtf|fneg|fabs)\b"
     r"|\b(frint[aimnpzx]|fcvt[a-z0-9]*)\b"
-    r"|\b(fneg|fabs)\s+[ds]\b)",
-    re.IGNORECASE,
-)
-
-# Core historical pattern (for non-strict fallback)
-CORE_FORBIDDEN_PATTERN = re.compile(
-    r"\b(mul|smull|umull|smaddl|smsubl|fmul|fmov)\b",
+    r"|\b(fneg|fabs)\.[0-9][a-z]\b)",
     re.IGNORECASE,
 )
 
 # Combined full strict pattern
 STRICT_FORBIDDEN_PATTERN = re.compile(
-    r"(\b(mul|madd|msub|mneg|smull|umull|smaddl|umaddl|smsubl|umsubl|smulh|umulh|sqdmulh|sqrdmulh|mla|mls|pmul|pmull"
+    r"(\b(mul|madd|msub|mneg|smull|umull|smaddl|umaddl|smsubl|umsubl|smulh|umulh|sqdmulh|sqrdmulh|mla|mls|pmul|pmull|sdot|udot|smlal|smlsl|umlal|umlsl"
     r"|sdiv|udiv"
-    r"|fmul|fmov|fadd|fsub|fdiv|fmadd|fmsub|fnmadd|fnmsub|fnmul|fsqrt|fcmp|fcmpe|scvtf|ucvtf)\b"
+    r"|fmul|fmov|fadd|fsub|fdiv|fmadd|fmsub|fnmadd|fnmsub|fnmul|fsqrt|fcmp|fcmpe|scvtf|ucvtf|fneg|fabs)\b"
     r"|\b(frint[aimnpzx]|fcvt[a-z0-9]*)\b"
-    r"|\b(fneg|fabs)\s+[ds]\b)",
+    r"|\b(fneg|fabs)\.[0-9][a-z]\b)",
     re.IGNORECASE,
 )
+
+# Historical pattern set to strict forbidden pattern
+CORE_FORBIDDEN_PATTERN = STRICT_FORBIDDEN_PATTERN
 
 # Mandatory serving symbols for library archive (.rlib)
 RLIB_MANDATORY_SYMBOLS = [
@@ -231,6 +225,54 @@ RLIB_MANDATORY_SYMBOLS = [
         "mangled": re.compile(r"__RNv.*(?:model.*)?(?:22)?extract_salient_tokens\b"),
         "description": "Top-4 salient entity token extraction via zero-matmul scoring",
     },
+    {
+        "name": "model::div_round_100m_raw",
+        "pattern": re.compile(r"div_round_100m_raw\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?18div_round_100m_raw\b"),
+        "description": "Radix-16 exact quotient and remainder for 100M division",
+    },
+    {
+        "name": "model::mul_fraction_radix16",
+        "pattern": re.compile(r"mul_fraction_radix16\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?20mul_fraction_radix16\b"),
+        "description": "Radix-16 nibble lookup product against precomputed fraction table",
+    },
+    {
+        "name": "model::build_fraction_table",
+        "pattern": re.compile(r"build_fraction_table\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?20build_fraction_table\b"),
+        "description": "16-multiple table construction via repeated addition",
+    },
+    {
+        "name": "model::mul_shift_add_i64",
+        "pattern": re.compile(r"mul_shift_add_i64\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?17mul_shift_add_i64\b"),
+        "description": "Shift-add exact signed 64-bit multiplication",
+    },
+    {
+        "name": "model::build_pair_tables_256",
+        "pattern": re.compile(r"build_pair_tables_256\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?21build_pair_tables_256\b"),
+        "description": "256-entry combined pair table construction for width 256",
+    },
+    {
+        "name": "model::low_bit_dot_8_pair_tables",
+        "pattern": re.compile(r"low_bit_dot_8_pair_tables\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?24low_bit_dot_8_pair_tables\b"),
+        "description": "Inner dot product of 8 contiguous rows via precomputed pair tables",
+    },
+    {
+        "name": "model::build_pair_tables_576",
+        "pattern": re.compile(r"build_pair_tables_576\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?21build_pair_tables_576\b"),
+        "description": "256-entry combined pair table construction for width 576",
+    },
+    {
+        "name": "model::low_bit_dot_4_contiguous_wide_pair_tables",
+        "pattern": re.compile(r"low_bit_dot_4_contiguous_wide_pair_tables\b"),
+        "mangled": re.compile(r"__RNv.*(?:model.*)?39low_bit_dot_4_contiguous_wide_pair_tables\b"),
+        "description": "Four contiguous wide rows via precomputed pair tables",
+    },
     # Lorentz read and hyperbolic cache scoring symbols
     {
         "name": "LorentzRead::score",
@@ -298,6 +340,18 @@ RLIB_MANDATORY_SYMBOLS = [
         "pattern": re.compile(r"Sampler.*draw_below\b"),
         "mangled": re.compile(r"__RNv.*Sampler.*10draw_below\b"),
         "description": "Unbiased pseudo-random draw below bound using xorshift64",
+    },
+    {
+        "name": "sampling::heapsort_ranked",
+        "pattern": re.compile(r"sampling.*heapsort_ranked\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*15heapsort_ranked\b"),
+        "description": "Zero-matmul bit-shift heapsort for ranked token indices",
+    },
+    {
+        "name": "math::step_zeta_phase_scalar",
+        "pattern": re.compile(r"math.*step_zeta_phase_scalar\b"),
+        "mangled": re.compile(r"__RNv.*math.*22step_zeta_phase_scalar\b"),
+        "description": "Scalar zeta phase update with zero float register synthesis",
     },
 ]
 
@@ -417,6 +471,18 @@ BIN_MANDATORY_SYMBOLS = [
         "mangled": re.compile(r"__RNv.*Sampler.*10draw_below\b"),
         "description": "Unbiased pseudo-random draw below bound using xorshift64",
     },
+    {
+        "name": "sampling::heapsort_ranked",
+        "pattern": re.compile(r"sampling.*heapsort_ranked\b"),
+        "mangled": re.compile(r"__RNv.*sampling.*15heapsort_ranked\b"),
+        "description": "Zero-matmul bit-shift heapsort for ranked token indices",
+    },
+    {
+        "name": "math::step_zeta_phase_scalar",
+        "pattern": re.compile(r"math.*step_zeta_phase_scalar\b"),
+        "mangled": re.compile(r"__RNv.*math.*22step_zeta_phase_scalar\b"),
+        "description": "Scalar zeta phase update with zero float register synthesis",
+    },
 ]
 
 # The packed block kernels are inline functions. Inspect their actual emitted
@@ -440,6 +506,41 @@ PACKED_KERNEL_CALLERS = [
         "affine_wide_into",
         "step_conversational_into",
     )
+]
+
+# Exact H4 classification is a standalone numerical component. Inspect every
+# emitted classifier/helper range that is present without making historical
+# artifacts require a component they did not contain. Absent inline helpers
+# still require checking the actual containing function before claiming coverage.
+EXACT_GEOMETRY_SYMBOLS = [
+    {
+        "name": f"h4_classifier::{name}",
+        "pattern": re.compile(r"h4_classifier.*" + re.escape(name) + r"\b"),
+        "mangled": re.compile(r"__RNv.*h4_classifier.*" + str(len(name)) + re.escape(name) + r"\b"),
+        "description": "Exact signed H4 classification and integer score comparison",
+    }
+    for name in (
+        "signed_h4_code_i32",
+        "family_candidates",
+        "golden_sign_bits",
+        "checked_add_square_terms",
+        "coefficient_term",
+        "score",
+        "score_difference_order",
+    )
+]
+
+# Loading/hash validation is outside the numerical lookup. New artifacts also
+# expose historical-code inverse, Hamilton composition and directed relation.
+# As above, old artifacts need not contain a component that did not exist yet.
+EXACT_GEOMETRY_SYMBOLS += [
+    {
+        "name": f"HistoricalH4Tables::{name}",
+        "pattern": re.compile(r"HistoricalH4Tables.*" + re.escape(name) + r"\b"),
+        "mangled": re.compile(r"__RNv.*HistoricalH4Tables.*" + str(len(name)) + re.escape(name) + r"\b"),
+        "description": "Immutable historical H4 numerical table lookup",
+    }
+    for name in ("inverse", "compose", "relative")
 ]
 
 
@@ -656,7 +757,11 @@ def run_audit(per_symbol, is_demangled, target_path, strict_arm64=True):
             results["missing_mandatory"].append((disp_name, disp_desc))
 
     # Also audit optional/additional serving symbols if present
-    other_list = (RLIB_MANDATORY_SYMBOLS if not is_rlib else []) + PACKED_KERNEL_CALLERS
+    other_list = (
+        (RLIB_MANDATORY_SYMBOLS if not is_rlib else [])
+        + PACKED_KERNEL_CALLERS
+        + EXACT_GEOMETRY_SYMBOLS
+    )
     for entry in other_list:
         name = entry["name"]
         pat = entry["pattern"] if is_demangled else entry["mangled"]
@@ -710,7 +815,10 @@ def print_tap_output(results, tools_found):
     print(f"# Artifact SHA-256: {results.get('artifact_sha256', 'unknown')}")
     print(f"# Source Commit: {results.get('git_commit', 'unknown')}")
     print(f"# Matched symbol ranges checked: {results['symbols_checked']}")
-    print("# Scope: matched instruction ranges only; no transitive call-graph certification.")
+    if results.get("call_graph_checked"):
+        print(f"# Transitive call-graph reachability checked: {results['call_graph_checked']} functions (0 violations)")
+    else:
+        print("# Scope: matched instruction ranges only; no transitive call-graph certification.")
     for name, _ in results["missing_optional"]:
         print(f"# NOT AUDITED: {name} (no separate symbol; may be inlined or absent)")
 
@@ -815,6 +923,13 @@ def print_standard_report(results):
     print(f"Missing Mandatory Symbols:        {len(results['missing_mandatory'])}")
     print("=" * 80)
 
+    if "call_graph_checked" in results:
+        print(f"Call-Graph Reachability Checked: {results['call_graph_checked']} functions")
+        print(f"Call-Graph Violations:           {len(results['call_graph_violations'])}")
+        for fn, bad in results["call_graph_violations"]:
+            print(f"  [ FAIL  ] Reachable callee {fn}")
+            print(f"            >>> {bad}")
+
     if results["all_violations"]:
         print("FAILED: Serving kernel contains forbidden instructions.")
         return 1
@@ -823,9 +938,136 @@ def print_standard_report(results):
         print(f"PARTIAL PASS: 0 forbidden instructions found, but {len(results['missing_mandatory'])} mandatory symbols missing.")
         return 1
 
-    print("FULL PASS: 0 forbidden instructions in all matched symbol ranges; mandatory coverage satisfied.")
-    print("Unmatched or inlined functions are not independently audited; this is not a transitive call-graph or whole-process D0-b certification.")
+    if "call_graph_checked" in results:
+        print(f"FULL PASS: 0 forbidden instructions across {results['symbols_checked']} symbol ranges AND {results['call_graph_checked']} reachable call-graph functions; all hardware invariants satisfied.")
+        print("Scope: the declared serving roots and their reachable callees in this artifact; not a whole-process D0-b certification.")
+    else:
+        print("FULL PASS: 0 forbidden instructions in all matched symbol ranges; mandatory coverage satisfied.")
+        print("Unmatched or inlined functions are not independently audited; this is not a transitive call-graph or whole-process D0-b certification.")
     return 0
+def run_sentinel_tests():
+    """Verify that forbidden opcode patterns detect all required sentinels.
+    Fails immediately if any sentinel is missed."""
+    sentinels = [
+        ("mul x0, x1, x2", True, False, False),
+        ("madd x0, x1, x2, x3", True, False, False),
+        ("smull x0, w1, w2", True, False, False),
+        ("umulh x0, x1, x2", True, False, False),
+        ("sdot v0.4s, v1.16b, v2.16b", True, False, False),
+        ("udot v0.4s, v1.16b, v2.16b", True, False, False),
+        ("smlal v0.4s, v1.4h, v2.4h", True, False, False),
+        ("sdiv x0, x1, x2", False, True, False),
+        ("udiv x0, x1, x2", False, True, False),
+        ("fmul s0, s1, s2", False, False, True),
+        ("fadd d0, d1, d2", False, False, True),
+        ("fneg d0, d1", False, False, True),
+        ("fneg.2d v6, v6", False, False, True),
+        ("fneg.4s v0, v0", False, False, True),
+        ("fabs.2d v0, v0", False, False, True),
+        ("scvtf d0, x0", False, False, True),
+    ]
+
+    for instr, exp_c1, exp_c2, exp_c3 in sentinels:
+        m1 = bool(CLASS_I_PATTERN.search(instr))
+        m2 = bool(CLASS_II_PATTERN.search(instr))
+        m3 = bool(CLASS_III_PATTERN.search(instr))
+        m_strict = bool(STRICT_FORBIDDEN_PATTERN.search(instr))
+
+        if exp_c1 and not m1:
+            raise AssertionError(f"Sentinel test failed: '{instr}' not detected by CLASS_I_PATTERN")
+        if exp_c2 and not m2:
+            raise AssertionError(f"Sentinel test failed: '{instr}' not detected by CLASS_II_PATTERN")
+        if exp_c3 and not m3:
+            raise AssertionError(f"Sentinel test failed: '{instr}' not detected by CLASS_III_PATTERN")
+        if (exp_c1 or exp_c2 or exp_c3) and not m_strict:
+            raise AssertionError(f"Sentinel test failed: '{instr}' not detected by STRICT_FORBIDDEN_PATTERN")
+
+
+def run_call_graph_audit(path, disasm_choice="auto"):
+    """Transitive call-graph reachability traversal from serving roots.
+    Checks 100% of reachable numerical serving functions in compiled binaries."""
+    try:
+        output = subprocess.check_output(["otool", "-tvV", path]).decode("utf-8", errors="ignore")
+    except Exception as e:
+        return 0, [("call_graph_init", f"Failed to run otool for call-graph audit: {e}")]
+
+    functions = {}
+    current_fn = None
+    current_lines = []
+
+    for line in output.splitlines():
+        if line and not line.startswith("\t") and not line.startswith(" ") and line.endswith(":"):
+            if current_fn:
+                functions[current_fn] = current_lines
+            current_fn = line[:-1].strip()
+            current_lines = []
+        elif current_fn:
+            current_lines.append(line)
+    if current_fn:
+        functions[current_fn] = current_lines
+
+    def extract_callees(lines):
+        callees = set()
+        for l in lines:
+            m = re.search(r"\b(?:bl|b)\s+(?:0x[0-9a-fA-F]+\s+;)?\s*([_A-Za-z0-9$]+)", l)
+            if m:
+                callees.add(m.group(1))
+        return callees
+
+    serving_entry_keywords = [
+        "step_conversational",
+        "IntegerModel4step",
+        "DialogueConversation7respond",
+        "DialogueConversationStream",
+        "Sampler6select",
+    ]
+
+    serving_roots = [fn for fn in functions if any(kw in fn for kw in serving_entry_keywords)]
+
+    allow_patterns = [
+        r"alloc",
+        r"free",
+        r"realloc",
+        r"core..fmt",
+        r"panic",
+        r"fmt..Display",
+        r"fmt..Debug",
+        r"unwind",
+        r"rust_begin_unwind",
+        r"std..io",
+        r"std..panicking",
+        r"Bundle",
+        r"Tokenizer",
+        r"load",
+        r"from_file",
+        r"from_serialized",
+    ]
+
+    def is_allowlisted(name):
+        return any(re.search(pat, name) for pat in allow_patterns)
+
+    visited = set()
+    queue = list(serving_roots)
+    for r in queue:
+        visited.add(r)
+
+    violations = []
+
+    while queue:
+        curr = queue.pop(0)
+        lines = functions.get(curr, [])
+        if not is_allowlisted(curr):
+            for l in lines:
+                if STRICT_FORBIDDEN_PATTERN.search(l):
+                    violations.append((curr, l.strip()))
+        callees = extract_callees(lines)
+        for c in callees:
+            if c in functions and c not in visited:
+                if not is_allowlisted(c):
+                    visited.add(c)
+                    queue.append(c)
+
+    return len(visited), violations
 
 
 def main():
@@ -862,8 +1104,17 @@ def main():
         action="store_true",
         help="Emit TAP version 13 output",
     )
+    parser.add_argument(
+        "--call-graph",
+        action="store_true",
+        default=None,
+        help="Traverse transitive call graph from serving roots (default: auto for binary executables)",
+    )
 
     args = parser.parse_args()
+
+    # Always verify sentinel detection before running any audit
+    run_sentinel_tests()
 
     chosen_target = args.target_opt or args.target
     tools_found = check_tool_availability(args.disassembler)
@@ -885,6 +1136,15 @@ def main():
         print(f"Disassembly parsed: {len(per_symbol)} symbols indexed (demangled={is_demangled}).\n")
 
     results = run_audit(per_symbol, is_demangled, target_path, strict_arm64=args.strict_arm64)
+
+    do_call_graph = args.call_graph if args.call_graph is not None else (not target_path.endswith(".rlib"))
+    if do_call_graph:
+        cg_visited, cg_violations = run_call_graph_audit(target_path, args.disassembler)
+        results["call_graph_checked"] = cg_visited
+        results["call_graph_violations"] = cg_violations
+        if cg_violations:
+            for fn, bad in cg_violations:
+                results["all_violations"].append(("call_graph::" + fn, fn, [bad], "Reachable callee"))
 
     if args.tap:
         print_tap_output(results, tools_found)

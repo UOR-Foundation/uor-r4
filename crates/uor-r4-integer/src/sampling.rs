@@ -127,11 +127,7 @@ impl Sampler {
             .try_reserve(probabilities.len())
             .map_err(|_| SamplingError::AllocationFailed)?;
         self.ranked.extend(0..probabilities.len());
-        self.ranked.sort_unstable_by(|&left, &right| {
-            probabilities[right]
-                .cmp(&probabilities[left])
-                .then_with(|| left.cmp(&right))
-        });
+        heapsort_ranked(&mut self.ranked, probabilities);
         if top_k > 0 && top_k < self.ranked.len() {
             self.ranked.truncate(top_k);
         }
@@ -256,6 +252,60 @@ pub fn exact_min_p_threshold(p_max: u64, min_p_q16: u32) -> u64 {
         bits &= bits - 1;
     }
     (sum >> 16) as u64
+}
+
+/// Sort candidate indices in descending priority (highest probability first, smaller index on tie).
+/// Strictly zero hardware multiplier instructions, zero dividers, zero floats.
+#[inline(never)]
+pub fn heapsort_ranked(slice: &mut [usize], probabilities: &[u64]) {
+    let len = slice.len();
+    if len <= 1 {
+        return;
+    }
+
+    let is_less = |a: usize, b: usize| -> bool {
+        let pa = probabilities[a];
+        let pb = probabilities[b];
+        if pa != pb {
+            pa < pb
+        } else {
+            a > b
+        }
+    };
+
+    let sift_down = |slice: &mut [usize], mut root: usize, n: usize| loop {
+        let left = (root << 1) + 1;
+        if left >= n {
+            break;
+        }
+        let right = left + 1;
+        let mut smallest = root;
+
+        if is_less(slice[left], slice[smallest]) {
+            smallest = left;
+        }
+        if right < n && is_less(slice[right], slice[smallest]) {
+            smallest = right;
+        }
+        if smallest == root {
+            break;
+        }
+        slice.swap(root, smallest);
+        root = smallest;
+    };
+
+    let mut i = len >> 1;
+    while i > 0 {
+        i -= 1;
+        sift_down(slice, i, len);
+    }
+
+    let mut end = len;
+    while end > 1 {
+        end -= 1;
+        slice.swap(0, end);
+        sift_down(slice, 0, end);
+    }
 }
 
 #[cfg(test)]
@@ -590,6 +640,66 @@ mod tests {
                 exact, old,
                 "Mismatch on random p_max={p}, min_p_q16={m}: exact={exact}, old={old}"
             );
+        }
+    }
+
+    #[test]
+    fn test_heapsort_ranked_matches_std_sort() {
+        // Test edge cases: empty, single element, identical probabilities, reversed
+        let test_cases: Vec<Vec<u64>> = vec![
+            vec![],
+            vec![100],
+            vec![100, 200],
+            vec![200, 100],
+            vec![50, 50, 50, 50],
+            vec![10, 30, 20, 50, 40],
+            vec![1, 1000, 1, 1000, 500, 250, 750],
+        ];
+
+        for probs in test_cases {
+            let mut expected: Vec<usize> = (0..probs.len()).collect();
+            expected.sort_unstable_by(|&left, &right| {
+                probs[right]
+                    .cmp(&probs[left])
+                    .then_with(|| left.cmp(&right))
+            });
+
+            let mut actual: Vec<usize> = (0..probs.len()).collect();
+            heapsort_ranked(&mut actual, &probs);
+
+            assert_eq!(
+                actual, expected,
+                "Failed on deterministic test case: {probs:?}"
+            );
+        }
+
+        // PRNG fuzz test with duplicate probabilities across random distributions
+        let mut rng = 0x9876543210fedcbau64;
+        let mut next_u64 = || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            rng
+        };
+
+        for size in [8, 16, 64, 256, 512, 1024] {
+            for _ in 0..50 {
+                let probs: Vec<u64> = (0..size).map(|_| next_u64() % 100).collect();
+                let mut expected: Vec<usize> = (0..size).collect();
+                expected.sort_unstable_by(|&left, &right| {
+                    probs[right]
+                        .cmp(&probs[left])
+                        .then_with(|| left.cmp(&right))
+                });
+
+                let mut actual: Vec<usize> = (0..size).collect();
+                heapsort_ranked(&mut actual, &probs);
+
+                assert_eq!(
+                    actual, expected,
+                    "Mismatch on random distribution of size {size}"
+                );
+            }
         }
     }
 }

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use candle_core::Device;
+use sha2::{Digest, Sha256};
 use uor_r4_integer::bundle::Bundle;
 use uor_r4_integer::ReadMode as IntReadMode;
 use uor_r4_training::joint_model::{JointModel, ReadMode as JointReadMode};
@@ -153,6 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start_time = Instant::now();
     let mut stepped = 0usize;
+    let mut trace_hasher = Sha256::new();
 
     match kind {
         ModelKind::Integer => {
@@ -172,6 +174,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for _ in 0..block_tokens {
                     let token = tokens[stepped % tokens.len()] as u32;
                     let step = model.step(&mut session, token, int_mode)?;
+                    trace_hasher.update(&token.to_le_bytes());
+                    for p in &step.probabilities {
+                        trace_hasher.update(&p.to_le_bytes());
+                    }
+                    for s in &step.state {
+                        trace_hasher.update(&s.to_le_bytes());
+                    }
+                    trace_hasher.update(&step.no_read_mass.to_le_bytes());
+                    for r in &step.read_masses {
+                        trace_hasher.update(&r.to_le_bytes());
+                    }
                     std::hint::black_box(&step);
                     stepped += 1;
                 }
@@ -211,6 +224,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         0.0
     };
+
+    if kind == ModelKind::Integer {
+        let trace_digest = hex::encode(trace_hasher.finalize());
+        println!("[trace-sha256] {trace_digest}");
+    }
 
     println!(
         "[telemetry] Stepped {} tokens in {:.2}s ({:.1} tok/s, {:.3} ms/tok)",
