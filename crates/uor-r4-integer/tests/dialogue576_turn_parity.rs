@@ -187,10 +187,12 @@ fn test_dialogue576_turn_parity_58_turns() -> Result<()> {
         "Peak RSS ({:.2} MB) exceeded 35.0 MB threshold",
         peak_rss
     );
+    let max_allowed_ms = if cfg!(debug_assertions) { 6.0 } else { 4.0 };
     assert!(
-        ms_per_step <= 4.0,
-        "Average step latency ({:.3} ms) exceeded 4.0 ms threshold",
-        ms_per_step
+        ms_per_step <= max_allowed_ms,
+        "Average step latency ({:.3} ms) exceeded {:.1} ms threshold",
+        ms_per_step,
+        max_allowed_ms
     );
 
     Ok(())

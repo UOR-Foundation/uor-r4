@@ -1059,7 +1059,8 @@ pub fn extract_salient_tokens(
 
     // Collect up to 224 candidate tokens and scores on stack (< 2 KB stack space)
     let n = slot_indices.len().min(DIALOGUE_CAPACITY);
-    let mut candidates: [(u32, i32); DIALOGUE_CAPACITY] = [(0, i32::MIN); DIALOGUE_CAPACITY];
+    let mut candidate_tokens = [0u32; DIALOGUE_CAPACITY];
+    let mut candidate_scores = [0i32; DIALOGUE_CAPACITY];
     let mut num_candidates = 0;
 
     for &slot_idx in &slot_indices[..n] {
@@ -1073,17 +1074,18 @@ pub fn extract_salient_tokens(
 
         // Deduplicate: if token already in candidates, update score with max
         let mut found = false;
-        for c in &mut candidates[..num_candidates] {
-            if c.0 == tok {
-                if score > c.1 {
-                    c.1 = score;
+        for idx in 0..num_candidates {
+            if candidate_tokens[idx] == tok {
+                if score > candidate_scores[idx] {
+                    candidate_scores[idx] = score;
                 }
                 found = true;
                 break;
             }
         }
         if !found && num_candidates < DIALOGUE_CAPACITY {
-            candidates[num_candidates] = (tok, score);
+            candidate_tokens[num_candidates] = tok;
+            candidate_scores[num_candidates] = score;
             num_candidates += 1;
         }
     }
@@ -1091,17 +1093,20 @@ pub fn extract_salient_tokens(
     // Sort descending by score using insertion sort (0 heap allocations)
     for i in 1..num_candidates {
         let mut j = i;
-        while j > 0 && candidates[j].1 > candidates[j - 1].1 {
-            candidates.swap(j, j - 1);
+        while j > 0 && candidate_scores[j] > candidate_scores[j - 1] {
+            candidate_tokens.swap(j, j - 1);
+            candidate_scores.swap(j, j - 1);
             j -= 1;
         }
     }
 
     // Populate top 4 salient tokens
     let mut count = 0;
-    for c in &candidates[..num_candidates] {
-        if c.1 > -500_000 {
-            out_tokens[count] = c.0;
+    for i in 0..num_candidates {
+        let tok = candidate_tokens[i];
+        let score = candidate_scores[i];
+        if score > -500_000 {
+            out_tokens[count] = tok;
             count += 1;
             if count == 4 {
                 break;

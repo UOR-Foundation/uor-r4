@@ -454,7 +454,7 @@ impl<'s, 'a> DialogueConversationStream<'s, 'a> {
             .map_or((0, 0), |s| (s.calls, s.model_ns));
         let incremental_step_calls = calls_after - self.calls_before;
         let model_step_nanoseconds = ns_after - self.ns_before;
-        let whole_generation_nanoseconds = self.clock.elapsed().as_nanos();
+        let whole_generation_nanoseconds = super::duration_nanos_exact(self.clock.elapsed());
 
         let selection = self.starting_selection;
 
@@ -533,12 +533,14 @@ impl<'s, 'a> Iterator for DialogueConversationStream<'s, 'a> {
             let chunk = self.decoder.push_bytes(&token_bytes);
 
             if self.first_sentence
-                && self
-                    .conversation
-                    .bundle
-                    .tokenizer()
-                    .decode_bytes(&self.generated_tokens)
-                    .contains(&b'.')
+                && super::bytes_contain_byte(
+                    &self
+                        .conversation
+                        .bundle
+                        .tokenizer()
+                        .decode_bytes(&self.generated_tokens),
+                    b'.',
+                )
             {
                 self.finish_turn(Stop::FirstSentenceBoundary);
                 let flushed = self.decoder.flush();

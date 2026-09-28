@@ -15,6 +15,32 @@ use sha2::{Digest, Sha256};
 use std::{fmt, time::Instant};
 use uor_r4_tokenizer::dialogue::{DialogueError, DialogueProtocol, Message};
 
+#[inline(always)]
+pub(crate) fn duration_nanos_exact(d: std::time::Duration) -> u128 {
+    let secs = d.as_secs();
+    if secs == 0 {
+        return d.subsec_nanos() as u128;
+    }
+    let mut sec_nanos: u128 = 0;
+    let mut bits = 1_000_000_000u64;
+    while bits != 0 {
+        let shift = std::hint::black_box(bits.trailing_zeros());
+        sec_nanos = sec_nanos.wrapping_add((std::hint::black_box(secs) as u128) << shift);
+        bits &= bits - 1;
+    }
+    sec_nanos + d.subsec_nanos() as u128
+}
+
+#[inline(always)]
+pub(crate) fn bytes_contain_byte(bytes: &[u8], target: u8) -> bool {
+    for &b in bytes {
+        if b == target {
+            return true;
+        }
+    }
+    false
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Selection {
@@ -194,7 +220,7 @@ impl Bundle {
         result.prompt = request.prompt.clone();
         result.incremental_step_calls = session.calls;
         result.model_step_nanoseconds = session.model_ns;
-        result.whole_generation_nanoseconds = clock.elapsed().as_nanos();
+        result.whole_generation_nanoseconds = duration_nanos_exact(clock.elapsed());
         Ok(result)
     }
 
@@ -231,7 +257,7 @@ impl Bundle {
         let mut generation = session.generate(max_new_tokens, selection, first_sentence)?;
         generation.incremental_step_calls = session.calls;
         generation.model_step_nanoseconds = session.model_ns;
-        generation.whole_generation_nanoseconds = clock.elapsed().as_nanos();
+        generation.whole_generation_nanoseconds = duration_nanos_exact(clock.elapsed());
         Ok(DialogueGeneration {
             protocol: protocol.clone(),
             protocol_identity,
@@ -281,7 +307,7 @@ impl<'a> TextSession<'a> {
             .bundle
             .model()
             .step(&mut self.state, token, self.mode)?;
-        self.model_ns += clock.elapsed().as_nanos();
+        self.model_ns += duration_nanos_exact(clock.elapsed());
         let total = step
             .probabilities
             .iter()
@@ -415,11 +441,7 @@ impl<'a> TextSession<'a> {
                 break;
             }
             if first_sentence
-                && self
-                    .bundle
-                    .tokenizer()
-                    .decode_bytes(&generated)
-                    .contains(&b'.')
+                && bytes_contain_byte(&self.bundle.tokenizer().decode_bytes(&generated), b'.')
             {
                 stop = Stop::FirstSentenceBoundary;
                 break;
@@ -453,7 +475,7 @@ impl<'a> TextSession<'a> {
             session_tokens_including_pending: self.len(),
             incremental_step_calls: self.calls - calls_at_entry,
             model_step_nanoseconds: self.model_ns - model_ns_at_entry,
-            whole_generation_nanoseconds: clock.elapsed().as_nanos(),
+            whole_generation_nanoseconds: duration_nanos_exact(clock.elapsed()),
             bundle_sha256: self.bundle.identity().to_owned(),
             tokenizer_cid: self.bundle.tokenizer().address(),
             sampler_state_after: sampler.state(),
