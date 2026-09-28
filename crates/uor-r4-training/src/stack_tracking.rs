@@ -1017,6 +1017,9 @@ pub struct TrackedStack {
     projection: Option<Var>,
     /// Context-conditioned lanes (Stage C), injected between layers.
     pub context: Option<ContextLanes>,
+    /// Per-token who-holds-what head (Stage C dense supervision):
+    /// weight `[people * people, width]`, bias, people.
+    state_head: Option<(Var, Var, usize)>,
     aux_weight: Var,
     aux_bias: Var,
 }
@@ -1086,9 +1089,47 @@ impl TrackedStack {
             lanes,
             projection,
             context: None,
+            state_head: None,
             aux_weight,
             aux_bias,
         })
+    }
+
+    /// Adds a per-token head predicting which object (in introduction order)
+    /// each of `people` people holds: dense supervision for swap stories.
+    pub fn with_state_head(mut self, people: usize, seed: u64) -> Result<Self> {
+        if people < 2 {
+            return Err(invalid("a state head needs at least two people"));
+        }
+        let device = self.stack.device().clone();
+        let width = self.stack.config.width;
+        let mut rng = Rng::new(seed ^ 0x7374_6174_6521);
+        let weight = normal_var(&mut rng, &[people * people, width], 0.02, &device)?;
+        let bias = Var::from_tensor(&Tensor::zeros(people * people, DType::F32, &device)?)?;
+        self.state_head = Some((weight, bias, people));
+        Ok(self)
+    }
+
+    /// Next-token logits `[batch * time, vocabulary]` and, with a state head,
+    /// state logits `[batch * time * people, people]`, from one trunk pass.
+    pub fn story_forward(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let hidden = self.trunk(ids, batch, time)?;
+        let text = self.stack.head(&hidden)?;
+        let state = match &self.state_head {
+            None => None,
+            Some((weight, bias, people)) => Some(
+                hidden
+                    .matmul(&weight.as_tensor().t()?)?
+                    .broadcast_add(bias.as_tensor())?
+                    .reshape((batch * time * people, *people))?,
+            ),
+        };
+        Ok((text, state))
     }
 
     /// Adds context-conditioned lanes read from, and written back to, the
@@ -1168,6 +1209,10 @@ impl TrackedStack {
             + self.context.as_ref().map_or(0, |c| {
                 c.weight.elem_count() + c.bias.elem_count() + c.projection.elem_count()
             })
+            + self
+                .state_head
+                .as_ref()
+                .map_or(0, |(w, b, _)| w.elem_count() + b.elem_count())
             + self.aux_weight.elem_count()
             + self.aux_bias.elem_count();
         (self.stack.parameter_count(), side)
@@ -1192,6 +1237,10 @@ impl TrackedStack {
             decayed.push(context.projection.clone());
             lanes.push(context.weight.clone());
             lanes.push(context.bias.clone());
+        }
+        if let Some((weight, bias, _)) = &self.state_head {
+            decayed.push(weight.clone());
+            plain.push(bias.clone());
         }
         (decayed, plain, lanes)
     }
@@ -1515,12 +1564,21 @@ pub struct SwapStories {
     now: Vec<u32>,
     has_the: Vec<u32>,
     pub people: usize,
+    /// When true every story uses the first `people` names holding the first
+    /// `people` objects in canonical order, so the answer depends only on the
+    /// swap history (no per-story binding of names to objects).
+    pub fixed_cast: bool,
 }
 
 /// One story: its tokens, and each answer's position with its token id.
 pub struct Story {
     pub tokens: Vec<u32>,
     pub answers: Vec<(usize, u32)>,
+    /// Who holds what after each token, flat `[tokens, people]`: entry
+    /// `t * people + p` is the index (in introduction order) of the object
+    /// person `p` holds once token `t` has been read. A swap takes effect at
+    /// its sentence's period.
+    pub states: Vec<u8>,
 }
 
 /// `count` distinct indices below `pool` (partial Fisher-Yates).
@@ -1584,6 +1642,7 @@ impl SwapStories {
             now,
             has_the,
             people,
+            fixed_cast: false,
         })
     }
 
@@ -1596,16 +1655,30 @@ impl SwapStories {
     }
 
     pub fn sample(&self, rng: &mut Rng, events: usize) -> Story {
-        let who = distinct(rng, self.names.len(), self.people);
-        let what = distinct(rng, self.objects.len(), self.people);
+        let (who, what) = if self.fixed_cast {
+            ((0..self.people).collect(), (0..self.people).collect())
+        } else {
+            (
+                distinct(rng, self.names.len(), self.people),
+                distinct(rng, self.objects.len(), self.people),
+            )
+        };
         // holds[person] indexes `what`.
         let mut holds: Vec<usize> = (0..self.people).collect();
         let mut tokens = Vec::with_capacity(self.story_len(events));
+        let mut states = Vec::with_capacity(self.story_len(events) * self.people);
+        let push = |tokens: &mut Vec<u32>, states: &mut Vec<u8>, holds: &[usize], ids: &[u32]| {
+            for &id in ids {
+                tokens.push(id);
+                states.extend(holds.iter().map(|&h| h as u8));
+            }
+        };
         for person in 0..self.people {
-            tokens.push(self.names[who[person]]);
-            tokens.extend(&self.has_a);
-            tokens.push(self.objects[what[holds[person]]]);
-            tokens.extend(&self.period);
+            let object = self.objects[what[holds[person]]];
+            push(&mut tokens, &mut states, &holds, &[self.names[who[person]]]);
+            push(&mut tokens, &mut states, &holds, &self.has_a);
+            push(&mut tokens, &mut states, &holds, &[object]);
+            push(&mut tokens, &mut states, &holds, &self.period);
         }
         for _ in 0..events {
             let a = rng.below(self.people);
@@ -1613,50 +1686,69 @@ impl SwapStories {
             if b >= a {
                 b += 1;
             }
-            tokens.push(self.names[who[a]]);
-            tokens.extend(&self.and);
-            tokens.push(self.names[who[b]]);
-            tokens.extend(&self.swapped);
-            tokens.extend(&self.period);
+            push(&mut tokens, &mut states, &holds, &[self.names[who[a]]]);
+            push(&mut tokens, &mut states, &holds, &self.and);
+            push(&mut tokens, &mut states, &holds, &[self.names[who[b]]]);
+            push(&mut tokens, &mut states, &holds, &self.swapped);
             holds.swap(a, b);
+            push(&mut tokens, &mut states, &holds, &self.period);
         }
         let order = distinct(rng, self.people, self.people);
         let mut answers = Vec::with_capacity(self.people);
         for &person in &order {
-            tokens.extend(&self.now);
-            tokens.push(self.names[who[person]]);
-            tokens.extend(&self.has_the);
+            push(&mut tokens, &mut states, &holds, &self.now);
+            push(&mut tokens, &mut states, &holds, &[self.names[who[person]]]);
+            push(&mut tokens, &mut states, &holds, &self.has_the);
             let object = self.objects[what[holds[person]]];
             answers.push((tokens.len(), object));
-            tokens.push(object);
-            tokens.extend(&self.period);
+            push(&mut tokens, &mut states, &holds, &[object]);
+            push(&mut tokens, &mut states, &holds, &self.period);
         }
-        Story { tokens, answers }
+        Story {
+            tokens,
+            answers,
+            states,
+        }
     }
 
     /// A batch of `batch` stories with `events` events: inputs (each story
     /// minus its last token), the logit rows that predict each answer, the
     /// answers, and whether each answer is its story's first.
-    fn batch(
-        &self,
-        rng: &mut Rng,
-        batch: usize,
-        events: usize,
-    ) -> (Vec<u32>, Vec<u32>, Vec<u32>, Vec<bool>, usize) {
+    fn batch(&self, rng: &mut Rng, batch: usize, events: usize) -> StoryBatch {
         let time = self.story_len(events) - 1;
-        let (mut ids, mut rows, mut answers, mut first) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let mut out = StoryBatch {
+            time,
+            ..StoryBatch::default()
+        };
         for story_index in 0..batch {
             let story = self.sample(rng, events);
-            ids.extend(&story.tokens[..time]);
+            out.ids.extend(&story.tokens[..time]);
+            out.states.extend(
+                story.states[..time * self.people]
+                    .iter()
+                    .map(|&h| u32::from(h)),
+            );
             for (k, (position, answer)) in story.answers.iter().enumerate() {
-                rows.push((story_index * time + position - 1) as u32);
-                answers.push(*answer);
-                first.push(k == 0);
+                out.rows.push((story_index * time + position - 1) as u32);
+                out.answers.push(*answer);
+                out.first.push(k == 0);
             }
         }
-        (ids, rows, answers, first, time)
+        out
     }
+}
+
+/// A batch of equal-length stories: inputs, the logit rows that predict each
+/// answer, the answers, whether each answer is its story's first, and the
+/// who-holds-what state after each input token, flat `[batch, time, people]`.
+#[derive(Default)]
+struct StoryBatch {
+    ids: Vec<u32>,
+    rows: Vec<u32>,
+    answers: Vec<u32>,
+    first: Vec<bool>,
+    states: Vec<u32>,
+    time: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1670,6 +1762,8 @@ pub struct StoryConfig {
     pub weight_decay: f64,
     /// Weight of the answer loss beside the text loss.
     pub story_weight: f64,
+    /// Weight of the per-token who-holds-what loss (needs a state head).
+    pub state_weight: f64,
     /// Longest training story, in events; the cap ramps from 2 to it over the
     /// first 60% of updates and each batch draws uniformly below the cap.
     pub max_events: usize,
@@ -1681,6 +1775,7 @@ pub struct StoryRecord {
     pub step: usize,
     pub text_loss: f64,
     pub story_loss: f64,
+    pub state_loss: Option<f64>,
     pub events: usize,
     pub answer_accuracy: f64,
     pub seconds: f64,
@@ -1696,7 +1791,9 @@ fn story_schedule(step: usize, config: &StoryConfig) -> f64 {
 }
 
 /// One text batch and one story batch per update; the loss is the text
-/// cross-entropy plus `story_weight` times the cross-entropy at answer tokens.
+/// cross-entropy plus `story_weight` times the cross-entropy at answer tokens,
+/// plus `state_weight` times the per-token who-holds-what cross-entropy when
+/// the model has a state head.
 pub fn train_stories(
     model: &TrackedStack,
     stories: &SwapStories,
@@ -1737,14 +1834,28 @@ pub fn train_stories(
         let ramp = (config.steps as f64 * 0.6).max(1.0);
         let cap = (2.0 + (step as f64 / ramp).min(1.0) * config.max_events.saturating_sub(2) as f64)
             .round() as usize;
-        let events = 1 + rng.below(cap.clamp(1, config.max_events.max(1)));
-        let (story_ids, rows, answers, _, time) = stories.batch(&mut rng, config.batch, events);
-        let logits = model.text_logits(&story_ids, config.batch, time)?;
-        let rows = Tensor::from_vec(rows, answers.len(), &device)?;
+        // Zero-event stories teach the query format; the cap then ramps.
+        let events = rng.below(cap.clamp(1, config.max_events.max(1)) + 1);
+        let story_batch = stories.batch(&mut rng, config.batch, events);
+        let answers = story_batch.answers.clone();
+        let (logits, state_logits) =
+            model.story_forward(&story_batch.ids, config.batch, story_batch.time)?;
+        let rows = Tensor::from_vec(story_batch.rows, answers.len(), &device)?;
         let picked = logits.index_select(&rows, 0)?;
         let answer_targets = Tensor::from_vec(answers.clone(), answers.len(), &device)?;
         let story_loss = candle_nn::loss::cross_entropy(&picked, &answer_targets)?;
-        let loss = (&text_loss + (&story_loss * config.story_weight)?)?;
+        let mut loss = (&text_loss + (&story_loss * config.story_weight)?)?;
+        let mut state_loss_value = None;
+        if let (Some(state_logits), true) = (&state_logits, config.state_weight > 0.0) {
+            let targets = Tensor::from_vec(
+                story_batch.states.clone(),
+                story_batch.states.len(),
+                &device,
+            )?;
+            let state_loss = candle_nn::loss::cross_entropy(state_logits, &targets)?;
+            state_loss_value = Some(state_loss.to_scalar::<f32>()? as f64);
+            loss = (&loss + (&state_loss * config.state_weight)?)?;
+        }
         let grads = loss.backward()?;
         decayed_optimizer.step(&grads)?;
         plain_optimizer.step(&grads)?;
@@ -1760,6 +1871,7 @@ pub fn train_stories(
                 step,
                 text_loss: text_loss.to_scalar::<f32>()? as f64,
                 story_loss: story_loss.to_scalar::<f32>()? as f64,
+                state_loss: state_loss_value,
                 events,
                 answer_accuracy: correct as f64 / answers.len().max(1) as f64,
                 seconds: started.elapsed().as_secs_f64(),
@@ -1777,6 +1889,12 @@ pub struct StoryAccuracy {
     pub all_answers: f64,
     /// Accuracy on each story's first answer, which elimination cannot help.
     pub first_answer: f64,
+    /// With a state head: per-person accuracy of who holds what at the last
+    /// input position, after every event.
+    pub final_state_person: Option<f64>,
+    /// With a state head: fraction of stories whose whole final assignment
+    /// is right.
+    pub final_state_exact: Option<f64>,
 }
 
 /// Greedy answer accuracy on fresh stories of each length.
@@ -1799,13 +1917,37 @@ pub fn story_accuracy(
             )));
         }
         let (mut all, mut all_n, mut first, mut first_n) = (0usize, 0usize, 0usize, 0usize);
+        let (mut person_ok, mut person_n, mut exact_ok, mut exact_n) =
+            (0usize, 0usize, 0usize, 0usize);
+        let people = stories.people;
         let mut remaining = count;
         while remaining > 0 {
             let rows_now = batch.min(remaining);
-            let (ids, rows, answers, is_first, time) = stories.batch(&mut rng, rows_now, events);
-            let logits = model.text_logits(&ids, rows_now, time)?.detach();
-            let rows = Tensor::from_vec(rows, answers.len(), &device)?;
+            let story_batch = stories.batch(&mut rng, rows_now, events);
+            let (answers, is_first, time) = (
+                story_batch.answers.clone(),
+                story_batch.first.clone(),
+                story_batch.time,
+            );
+            let (logits, state_logits) = model.story_forward(&story_batch.ids, rows_now, time)?;
+            if let Some(state_logits) = state_logits {
+                let guess = state_logits.detach().argmax(D::Minus1)?.to_vec1::<u32>()?;
+                for story in 0..rows_now {
+                    let base = (story * time + time - 1) * people;
+                    let right = (0..people)
+                        .filter(|&p| guess[base + p] == story_batch.states[base + p])
+                        .count();
+                    person_ok += right;
+                    person_n += people;
+                    exact_n += 1;
+                    if right == people {
+                        exact_ok += 1;
+                    }
+                }
+            }
+            let rows = Tensor::from_vec(story_batch.rows, answers.len(), &device)?;
             let predicted = logits
+                .detach()
                 .index_select(&rows, 0)?
                 .argmax(D::Minus1)?
                 .to_vec1::<u32>()?;
@@ -1828,6 +1970,8 @@ pub fn story_accuracy(
             stories: count,
             all_answers: all as f64 / all_n.max(1) as f64,
             first_answer: first as f64 / first_n.max(1) as f64,
+            final_state_person: (person_n > 0).then(|| person_ok as f64 / person_n as f64),
+            final_state_exact: (exact_n > 0).then(|| exact_ok as f64 / exact_n as f64),
         });
     }
     Ok(out)
@@ -1858,8 +2002,9 @@ pub fn context_transport_witness(
         .as_ref()
         .ok_or_else(|| invalid("this stack has no context lanes"))?;
     let mut rng = Rng::new(seed);
-    let (ids, _, _, _, time) = stories.batch(&mut rng, count, events);
-    let raw = model.context_transports(&ids, count, time)?;
+    let story_batch = stories.batch(&mut rng, count, events);
+    let time = story_batch.time;
+    let raw = model.context_transports(&story_batch.ids, count, time)?;
     let per = context.kind.width();
     let values = raw.flatten_all()?.to_dtype(DType::F64)?.to_vec1::<f64>()?;
     let mut out = Vec::with_capacity(context.lanes);
@@ -2043,6 +2188,14 @@ mod tests {
                 holds.insert(a, held_b);
                 holds.insert(b, held_a);
             }
+            // The state targets after the last token match the replay:
+            // person p (introduction order) holds the object introduced in
+            // sentence states[p].
+            let last = &story.states[(tokens.len() - 1) * 4..tokens.len() * 4];
+            for p in 0..4 {
+                assert_eq!(holds[&tokens[p * 5]], tokens[last[p] as usize * 5 + 3]);
+            }
+            assert_eq!(story.states.len(), tokens.len() * 4);
             // Queries: 16, name, 17, 18, answer, 15.
             assert_eq!(story.answers.len(), 4);
             for &(position, answer) in &story.answers {

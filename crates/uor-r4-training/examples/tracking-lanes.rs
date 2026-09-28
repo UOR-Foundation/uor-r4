@@ -576,7 +576,12 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
     let tokenizer =
         uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(&tokenizer_path)?)
             .ok_or_else(|| invalid("tokenizer JSON is not a supported byte-level BPE"))?;
-    let story_task = SwapStories::new(&tokenizer, args.number("people", 4)?)?;
+    let mut story_task = SwapStories::new(&tokenizer, args.number("people", 4)?)?;
+    story_task.fixed_cast = match args.0.get("cast").map(String::as_str).unwrap_or("fixed") {
+        "fixed" => true,
+        "random" => false,
+        other => return Err(invalid(format!("cast is fixed or random, got {other}"))),
+    };
     let stack_template = StackConfig {
         arch: StackArch::Geometric,
         vocab_size: TEXT_VOCAB + task.vocab(),
@@ -603,6 +608,7 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
         warmup: args.number("warmup", 100)?,
         weight_decay: args.number("weight_decay", 0.1)?,
         story_weight: args.number("story_weight", 1.0)?,
+        state_weight: args.number("state_weight", 1.0)?,
         max_events: args.number("max_events", 16)?,
         data_seed: 0,
     };
@@ -653,7 +659,8 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
             } else {
                 None
             };
-            let mut model = TrackedStack::new(config.clone(), token_lanes, &task, seed, &device)?;
+            let mut model = TrackedStack::new(config.clone(), token_lanes, &task, seed, &device)?
+                .with_state_head(story_task.people, seed)?;
             if source == "context" {
                 if let Some(kind) = kind {
                     model = model.with_context_lanes(kind, lanes, layer, seed)?;
@@ -682,7 +689,15 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
             let eval_seconds = eval_started.elapsed().as_secs_f64();
             let cells: Vec<String> = accuracy
                 .iter()
-                .map(|a| format!("{:.3}/{:.3}", a.first_answer, a.all_answers))
+                .map(|a| {
+                    format!(
+                        "{:.3}/{:.3}/{}",
+                        a.first_answer,
+                        a.all_answers,
+                        a.final_state_exact
+                            .map_or("-".to_owned(), |v| format!("{v:.2}"))
+                    )
+                })
                 .collect();
             println!(
                 "{:<24} {:>4} {:>8.1} {:>9.4} {}",
@@ -730,7 +745,7 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
             "text": {"path": text_path.display().to_string(), "sha256": text_sha256, "train_tokens": train_tokens},
             "dev": {"path": dev_path.display().to_string(), "sha256": dev_sha256, "tokens": dev_tokens},
             "tokenizer": {"path": tokenizer_path.display().to_string(), "sha256": tokenizer_sha256},
-            "stories": {"people": story_task.people, "names": uor_r4_training::stack_tracking::STORY_NAMES, "objects": uor_r4_training::stack_tracking::STORY_OBJECTS},
+            "stories": {"people": story_task.people, "fixed_cast": story_task.fixed_cast, "names": uor_r4_training::stack_tracking::STORY_NAMES, "objects": uor_r4_training::stack_tracking::STORY_OBJECTS},
             "eval_events": eval_events,
             "eval_stories": eval_stories,
             "data_seconds": data_seconds,
@@ -832,8 +847,10 @@ fn main() -> Result<()> {
                     "warmup",
                     "weight_decay",
                     "story_weight",
+                    "state_weight",
                     "max_events",
                     "people",
+                    "cast",
                     "eval_events",
                     "eval_stories",
                     "dev_windows",
