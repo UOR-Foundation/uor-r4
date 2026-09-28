@@ -67,11 +67,18 @@ The memory arm reads 4.8% fewer parameters per token than the dense arm and hold
 
 ## 3. Serving plan
 
-Nothing in this section is implemented; the D10 integer engine does not yet serve memories. The rules D10 sets for the dense stack ([cycle-4 §8](geometric-stack-cycle4-2026-09-27.md)) carry over:
-- **Sub-key scores.** Learned sub-keys are a learned map of the query, so they would be served as a 4-bit table GEMV. Fixed codebook keys are non-learned constants and may use runtime products.
+Nothing in this section is implemented. Serving follows the programme's native rules ([ROADMAP](../../ROADMAP.md) §0, R1–R5):
+- no floating point;
+- no multiplier instruction in served kernels;
+- dense per-token access only as a labelled interim.
+
+D10's runtime-multiplier exception does not apply (ROADMAP ruling 10). The memory would serve as follows:
+- **Sub-key scores.** Learned sub-keys are a learned map of the query, served as a ≤4-bit table GEMV of adds, shifts and table reads. Fixed codebooks need no learned map:
+  - The H4 index can use the exact integer H4 classifier of #1435.
+  - Unscaled, the E8 roots have coordinates 0, ±1/2 and ±1, so their inner products are signed sums with one halving. The unit-norm scale is common to all roots and folds into the exp table.
 - **Top-k.** Integer comparisons.
 - **Softmax.** The exp table.
-- **Value mixing.** Runtime weights times learned 4-bit values, served multiplier-free through tables of each selected weight's multiples and shift-add group scales.
+- **Value mixing.** Runtime weights times learned 4-bit values, through tables of each selected weight's multiples and shift-add group scales, as R2 requires for products of runtime values.
 
 The dense per-token work would then be the reads and the remaining MLPs, and the memory's share of access becomes sparse.
 

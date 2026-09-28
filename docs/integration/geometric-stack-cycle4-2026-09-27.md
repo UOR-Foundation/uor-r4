@@ -218,10 +218,10 @@ The final scores and the reading follow in a separate change. The card fixed the
 
 Interim development points are not a result and are not reported here.
 
-**Queued: the reads-only Lorentz stack at the same exposure.** At 1,000 updates the reads-only Lorentz stack is the best configuration measured (§7). A third arm trains it (pattern `aaaaaa`, no rotation, learning rate 4e-3) with the main pair's executable, data, seed and settings, after the cycle-5 arms and the reads-only Dot seed (`c5/pipeline4.sh` in the lab sandbox). It reuses the main pair's control. Its reading, fixed before it runs:
-- at least 0.03 nats below the `rrarra` stack → the owner M1 scripts' default pattern becomes `aaaaaa`;
-- within 0.03 nats, or worse → `rrarra` stays the default, since its recurrences hold a fixed state and read less cache per token at long context;
-- its distance from the control is reported either way.
+**Queued: the reads-only Lorentz stack at the same exposure.** At 1,000 updates the reads-only Lorentz stack is the best configuration measured (§7). A third arm trains it (pattern `aaaaaa`, no rotation, learning rate 4e-3) with the main pair's executable, data, seed and settings, after the cycle-5 arms and the reads-only Dot seed (`c5/pipeline4.sh` in the lab sandbox). It reuses the main pair's control. Its reading, fixed before it runs and amended before it runs (2026-09-28):
+- Under [ROADMAP](../../ROADMAP.md) ruling 8 (R4), a stack whose token mixing is all dense all-pairs reads is a transformer comparator.
+- Its score is therefore recorded as a comparator reading, and the owner M1 scripts keep `rrarra` whatever it scores. This replaces the earlier rule that would have made `aaaaaa` the default at 0.03 nats below `rrarra`.
+- Its distances from the `rrarra` stack and from the control are reported either way.
 
 ## 7. Ablations
 
