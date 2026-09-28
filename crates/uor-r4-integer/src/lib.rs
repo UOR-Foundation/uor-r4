@@ -12,6 +12,8 @@ pub mod capability_api;
 pub mod config;
 pub mod format;
 pub mod generation;
+pub mod h4_classifier;
+pub mod h4_tables;
 pub mod lorentz;
 pub mod math;
 pub mod model;

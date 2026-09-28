@@ -36,6 +36,18 @@ retain old criteria/results. Geometry remains an architectural priority and its
 predictive/efficiency contribution remains a measured question. A failed
 parameterization does not retire a whole geometric family.
 
+Parallel preparation for native attention now includes an
+[exact signed H4 classifier](exact-h4-classifier-2026-09-27.md) over common-scale
+quantized vectors. OpenCode retains the learned reader and its language study.
+The standalone classifier preserves exact root identity and ordering without
+choosing reader weights, a quantization recipe or another fit. Focused arithmetic,
+release compilation and scoped instruction inspection now pass at `43e543fd`;
+the training-crate donor check remains pending. Integration depends on the
+learned reader's actual behavior and a separately observed numerical bridge.
+The [source/literature synthesis](finite-h4-learning-and-native-reuse-2026-09-27.md)
+guides the outcome-dependent choice between native integration and a learning
+intervention; it selects no new fit.
+
 The first fourth-lab implementation is the shared Rust dialogue-protocol seam:
 current training uses literal role prefixes, while the chatbot branch can fall
 back to BOS/UNK role IDs. Exact protocol identity and shared encoding remove
@@ -45,12 +57,13 @@ Broader source/evidence findings are in the [integration review](fourth-lab-inte
 Current status remains in [current state](current-state.md), and #820/#973 retain
 their programme/model responsibilities.
 
-**Adaptive next action:** [review of concurrent Claude PR#1401](fourth-lab-native-read-review-2026-09-26.md)
-identified an existing native Lorentz read/configuration/export interface.
-Review and reuse that seam before adding a competing finite-group reader;
-retain radius/initialization controls and the reported numerical limitations.
-Its separate D10 backbone/arithmetic exceptions are not adopted by this lab under
-the owner clarification above.
+**Historical radial investigation — completed:** [review of Claude PR#1401](fourth-lab-native-read-review-2026-09-26.md)
+identified the native Lorentz read/configuration/export interface reused in the
+comparison below. Radius/initialization controls and numerical limitations were
+retained. The [completed matched result](radial-adaptation-result-2026-09-27.md)
+parks these transferred radial configurations and retains Dot. Its separate D10
+backbone/arithmetic exceptions are not adopted by this lab under the owner
+clarification above.
 The [offline radial comparison](radial-read-control-2026-09-26.md) is implemented:
 it adds an affine tangent score to the continuous Lorentz reader with the same
 lifted radial information and learned scalar count. This distinguishes nonlinear
@@ -65,22 +78,23 @@ observation completed with connected finite gradients and unchanged parameters;
 no calibration correction is indicated. The explicit same-geometry Dot reset
 control now preserves the actual parent's arrays, predictions and generated
 decisions while beginning a fresh optimizer lineage. The
-[fixed adaptation screen](radial-adaptation-study-2026-09-27.md) selects 1,024
+[fixed adaptation screen](radial-adaptation-study-2026-09-27.md) selected 1,024
 updates per arm with one descriptive midpoint. Its complete local resource
-projection is recorded and its Rust analysis preserves matched transfer,
+projection was recorded and its Rust analysis preserves matched transfer,
 execution, data and output identities. Lorentz versus affine
 isolates the nonlinear score within this representation;
 a fitted practical improvement claim also needs that Dot control with the same
 reset, objective, stream and exposure.
-The future language comparison must report calibration differences and useful generated behavior;
-implementation checks do not trigger a training sweep or serving promotion.
-Keep the independently owned termination objective separate. Exact-token
-dialogue adoption can advance through the retained integer session while these
-learning conditions are resolved. The [persistent conversation adapter](dialogue-continuity-2026-09-27.md)
+The comparison required calibration differences and useful generated behavior;
+its [completed result](radial-adaptation-result-2026-09-27.md) parks both radial
+configurations. These historical preparation steps do not trigger a new training
+sweep or serving promotion.
+The independently owned termination-objective result remains separate evidence.
+The subsequent [persistent conversation adapter](dialogue-continuity-2026-09-27.md)
 now preserves exact generated history, explicit turn closure and continued
 sampler state; focused checks and a short actual two-turn transport witness pass.
 Google retains CLI adoption. This is an integration result, not learned-chat
-qualification or a reason to change the frozen reader study.
+qualification or a revision of the completed reader result.
 
 The separate [R1d artifact replay](dialogue-artifact-replay-2026-09-27.md) now
 closes its retained response learner's fit→reload→output gap. Actual replies
@@ -155,6 +169,24 @@ whole-response recovery and retained relations govern the decision, with prior
 width-256 numerical improvements and source-answer losses preserved. Deeper
 geometric state/read and general prose remain independent programme obligations.
 
+That [code-choice path is now implemented and normalized](dialogue-code-choice-preparation-2026-09-27.md).
+Seventeen focused checks pass. Eight training-only normalization batches use
+9,179 supervised targets with zero updates and select coefficient 29.56681391929494;
+the measured peak is 6.920 GB. One prospectively fixed 512-update alpha run is
+interrupted at190 updates by shared storage growth, before an alpha checkpoint
+or export. Retain its cost and curve as an execution failure, with final quality
+unavailable. The [sequential correction](dialogue-code-choice-sequential-preparation-2026-09-27.md)
+now passes the focused objective comparison and repeats the same normalization
+statistics at 4.723 GB peak RSS instead of 6.920 GB. Its slower measured batch cost
+is prospectively included in one fresh fixed 512 attempt with earlier checkpoints
+32/128/256/384 and final 512. Keep the original child/grid/context/decoder and
+coefficient. Complete
+cost includes both original 161-response QQ endpoints and the unchanged 58-turn
+native observation. Review all actual replies and source-level tradeoffs before
+retaining a candidate. This run neither introduces selected parameter access
+nor establishes a language or geometric-advantage result; no subsequent dose
+sweep is selected.
+
 The [completed termination-objective review](termination-objective-review-2026-09-27.md)
 parks the implemented weighting condition as INERT. Its three improvements on
 the original 20 failed source rows fall below the declared four, and actual
@@ -198,11 +230,26 @@ historical pilot results. The [subsequent precision review through `6bc7dd6d`](h
 verifies 41 added/changed packet identities and the five trained reference joins.
 Integer continuations remain weak; the new grid reference attributes most mean
 loss to packed parameter representation collectively, including scalar/bias/gain
-and head changes, not uniquely four-bit matrix rounding. GPTQ is implemented in
-source with no trained result packet at that reviewed head. Its codec and
-serving arithmetic differ from this native path; local payload intake remains
-unavailable. These results inform repair alternatives without changing
-the native target or the child-specific response-aware decision above.
+and head changes, not uniquely four-bit matrix rounding. The [later trained GPTQ
+packet](geometric-stack-cycle4-2026-09-27.md#8-integer-serving-under-d10), reviewed at `c22a97e6`
+and retained in merged main `72538ffb`, supersedes that source-only status. On the
+same exposed code development, the four geometric configurations reduce their
+integer-minus-float NLL gap by 40.53–47.63%; the transformer control reduces it by
+54.25%. This supports data-aware numerical compensation at that scope. It adds
+no GPTQ-generated reply evidence, and its evolving grouped scales and separate
+embedding/head are not the native fixed-grid tied codec. Its serving arithmetic
+also differs from this native path; local payload intake remains unavailable.
+These results inform repair alternatives without changing the native target or
+the fixed child-specific response-aware study above. See the [source-level
+transfer assessment](finite-h4-learning-and-native-reuse-2026-09-27.md).
+
+The [trained GPTQ delta at `c22a97e6`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5856353989)
+subsequently reduces those five integer NLL gaps by 40.5–54.3%. Packet and
+parent/data joins are verified, but generated GPTQ replies and local raw
+payloads remain unavailable. Use this as a data-aware conversion alternative,
+with its grouped grids, separate head and D10 arithmetic explicit. It does not
+supersede the native child's observed response losses or justify an additional
+automatic experimental arm.
 
 ## Active programme — learn the model, then harden its execution
 

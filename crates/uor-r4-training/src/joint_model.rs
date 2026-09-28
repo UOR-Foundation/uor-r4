@@ -25,6 +25,7 @@ use crate::joint_admission::{AdmissionIndex, AdmissionPolicy, AdmissionWork};
 use crate::joint_quantization::{self, QuantizationSpec};
 use crate::{invalid, Result};
 
+use crate::geometric_read::{GeometricReadConfig, GeometricReadState};
 pub use uor_r4_integer::config::{ReadGeometry, LORENTZ_LOG_BETA, LORENTZ_OFFSET};
 
 pub const UNIFORM_MIXTURE: f64 = 1e-8;
@@ -84,6 +85,73 @@ impl PrecisionMode {
     }
 }
 
+/// Opt-in, in-memory evaluation intervention on the dense Full-admission read
+/// masses. It is applied after the read masses are computed and before the
+/// value mixing and state update, only when reads are enabled, the prior
+/// history is nonempty, admission is `Full` and `batch == 1`; any other step
+/// with an intervention set returns an error. The NoRead mass is never changed
+/// and the non-NoRead total is preserved. Following the [`PrecisionMode`]
+/// precedent this is a diagnostic field, never serialized into a checkpoint,
+/// and its default `None` preserves byte-identical behavior.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ReadMassIntervention {
+    /// Exchange the read masses of occurrence columns `a` and `b`.
+    Swap { a: usize, b: usize },
+    /// Move the entire non-NoRead read mass onto occurrence column `target`.
+    Focus { target: usize },
+}
+
+impl ReadMassIntervention {
+    /// Stable report label for this intervention.
+    pub fn name(self) -> String {
+        match self {
+            Self::Swap { a, b } => format!("Swap{{a:{a},b:{b}}}"),
+            Self::Focus { target } => format!("Focus{{target:{target}}}"),
+        }
+    }
+
+    /// Pure application to one lane's non-NoRead read-mass row. Indices are
+    /// occurrence columns; the row sum is preserved and NoRead is not part of
+    /// this row, so neither intervention changes it.
+    fn apply_values(self, masses: &mut [f32]) -> Result<()> {
+        let len = masses.len();
+        match self {
+            Self::Swap { a, b } => {
+                if a >= len || b >= len {
+                    return Err(invalid("read-mass swap index outside the read row"));
+                }
+                masses.swap(a, b);
+            }
+            Self::Focus { target } => {
+                if target >= len {
+                    return Err(invalid("read-mass focus index outside the read row"));
+                }
+                let total: f32 = masses.iter().sum();
+                masses.fill(0.0);
+                masses[target] = total;
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply to a `[batch, previous]` read-mass tensor. Only the dense
+    /// Full-admission batch-1 path is supported.
+    fn apply_tensor(self, masses: &Tensor, batch: usize) -> Result<Tensor> {
+        if batch != 1 {
+            return Err(invalid(
+                "read-mass intervention requires the dense Full-admission read path at batch 1",
+            ));
+        }
+        let mut values = masses.flatten_all()?.to_vec1::<f32>()?;
+        self.apply_values(&mut values)?;
+        Ok(Tensor::from_vec(
+            values,
+            (batch, masses.dim(1)?),
+            masses.device(),
+        )?)
+    }
+}
+
 pub struct JointModel {
     pub config: JointConfig,
     variables: BTreeMap<String, Var>,
@@ -93,6 +161,9 @@ pub struct JointModel {
     // An in-memory evaluation intervention, never a checkpoint field. None
     // preserves the original continuous/QAT/packed behavior without changes.
     precision_mode: Option<PrecisionMode>,
+    // An in-memory read-mass intervention, never a checkpoint field. None
+    // preserves the original read behavior without changes.
+    read_intervention: Option<ReadMassIntervention>,
     // Prepared once per full-window forward (or incremental session). The STE
     // tensors retain the original Var IDs, and never survive an optimizer step.
     prepared_parameters: Option<BTreeMap<String, Tensor>>,
@@ -102,6 +173,9 @@ pub struct JointModel {
     interface_audit: Option<Arc<Mutex<BTreeMap<String, InterfaceAudit>>>>,
     admission: AdmissionPolicy,
     admission_audit: Option<Arc<Mutex<Value>>>,
+    // Optional finite geometric read kernel. `None` preserves every existing
+    // parameter set, graph path and numerical contract exactly.
+    geometric_read: Option<GeometricReadState>,
 }
 
 /// Scales are calibrated once from the sealed parent and retained on resume.
@@ -243,6 +317,11 @@ struct RecurrentState {
     key_events: Vec<Tensor>,
     value_events: Vec<Tensor>,
     dense_batch_history: bool,
+    // Detached geometric-read hard-path caches, appended with the key writes.
+    // They exist only while the optional kernel is enabled; the default-off
+    // path never allocates them.
+    kernel_key_codes: Option<Tensor>,
+    kernel_key_coords: Option<Tensor>,
 }
 
 /// Detached incremental state; the context bound is enforced without eviction.
@@ -286,7 +365,26 @@ struct CoreStep {
 
 impl JointModel {
     pub fn new(config: JointConfig, device: &Device) -> Result<Self> {
+        Self::new_with_geometric_read(config, None, device)
+    }
+
+    /// Construct a model with the optional finite geometric read kernel. `None`
+    /// is identical to [`Self::new`]; an enabled kernel draws its own tensors
+    /// from a domain-separated stream so base parameter values are unchanged.
+    pub fn new_with_geometric_read(
+        config: JointConfig,
+        kernel: Option<GeometricReadConfig>,
+        device: &Device,
+    ) -> Result<Self> {
         config.validate()?;
+        if let Some(kernel) = &kernel {
+            kernel.validate()?;
+            if config.read_geometry != ReadGeometry::Dot {
+                return Err(invalid(
+                    "geometric read kernel requires the Dot read geometry",
+                ));
+            }
+        }
         let mut rng = Initializer(config.seed);
         let mut variables = BTreeMap::new();
         // Stable lexical parameter order and one seed give identical initial
@@ -331,7 +429,16 @@ impl JointModel {
             }
             variables.insert(name, Var::from_vec(values, shape.as_slice(), device)?);
         }
-        Self::from_variables(config, variables, device)
+        if let Some(kernel) = &kernel {
+            variables.extend(crate::geometric_read::initialize_kernel_variables(
+                kernel, &config, device,
+            )?);
+        }
+        let mut model = Self::from_variables(config, variables, device)?;
+        model.geometric_read = kernel
+            .map(|kernel| GeometricReadState::new(kernel, device))
+            .transpose()?;
+        Ok(model)
     }
 
     /// Import only the retained R1d continuous dialogue cell. This does not
@@ -429,12 +536,14 @@ impl JointModel {
             age_order,
             quantization: None,
             precision_mode: None,
+            read_intervention: None,
             prepared_parameters: None,
             hard_only: false,
             rounding_learning: false,
             interface_audit: None,
             admission: AdmissionPolicy::Full,
             admission_audit: None,
+            geometric_read: None,
         })
     }
 
@@ -443,11 +552,28 @@ impl JointModel {
     }
 
     pub fn set_admission_policy(&mut self, policy: AdmissionPolicy) -> Result<()> {
+        if self.geometric_read.is_some() && policy != AdmissionPolicy::Full {
+            return Err(invalid("geometric read kernel requires Full admission"));
+        }
         if self.prepared_parameters.is_some() {
             return Err(invalid("admission cannot change inside a prepared graph"));
         }
         self.admission = policy;
         Ok(())
+    }
+
+    /// Select an in-memory read-mass intervention for this model instance. No
+    /// parameter, clock or checkpoint field is touched, and `None` restores the
+    /// untouched behavior. See [`ReadMassIntervention`] for the exact scope: it
+    /// applies only to a dense Full-admission read with enabled reads over a
+    /// nonempty prior history at `batch == 1`; any other step with an
+    /// intervention set returns an error.
+    pub fn set_read_intervention(&mut self, value: Option<ReadMassIntervention>) {
+        self.read_intervention = value;
+    }
+
+    pub fn read_intervention(&self) -> Option<ReadMassIntervention> {
+        self.read_intervention
     }
 
     /// New offline optimizer starts from the actual packed code values. Parent
@@ -536,6 +662,11 @@ impl JointModel {
     /// The caller binds the sealed source checkpoint in its diagnostic report.
     pub fn precision_view(&self, mode: PrecisionMode) -> Result<Self> {
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "precision views are unavailable with the geometric read kernel",
+            ));
+        }
         if self.hard_only || self.prepared_parameters.is_some() || self.precision_mode.is_some() {
             return Err(invalid(
                 "precision views require an unprepared floating checkpoint, not a packed or diagnostic view",
@@ -663,6 +794,11 @@ impl JointModel {
 
     fn validate_rounding_parent(&self) -> Result<()> {
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "rounding is unavailable with the geometric read kernel",
+            ));
+        }
         if self.hard_only
             || self.prepared_parameters.is_some()
             || self.precision_mode.is_some()
@@ -709,6 +845,11 @@ impl JointModel {
 
     pub fn configure_quantization(&mut self, start_step: usize, ramp_steps: usize) -> Result<()> {
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "quantization is unavailable with the geometric read kernel",
+            ));
+        }
         if self.quantization.is_some()
             || self.hard_only
             || self.precision_mode.is_some()
@@ -737,6 +878,35 @@ impl JointModel {
             .as_mut()
             .ok_or_else(|| invalid("missing fresh quantization state"))?;
         state.preparation = Some(QuantizationPreparation::CalibratedForRounding);
+        Ok(())
+    }
+
+    /// Attach an already exported child's exact grids to independent continuous
+    /// arrays. This deliberately performs no scale calibration or model update.
+    pub(crate) fn configure_frozen_dialogue_rounding(
+        &mut self,
+        frozen: &QuantizedTrainingState,
+        step: usize,
+    ) -> Result<()> {
+        self.config
+            .validate_for_profile(ServingProfile::Dialogue576)?;
+        if self.quantization.is_some()
+            || self.hard_only
+            || self.precision_mode.is_some()
+            || self.prepared_parameters.is_some()
+            || self.rounding_learning
+            || self.admission != AdmissionPolicy::Full
+            || frozen.preparation != Some(QuantizationPreparation::CalibratedForExport)
+            || frozen.start_step != step
+            || frozen.completed_step != step
+            || frozen.ramp_steps != 1
+        {
+            return Err(invalid("frozen dialogue rounding parent/state mismatch"));
+        }
+        frozen.spec.validate(&self.variables)?;
+        let mut state = frozen.clone();
+        state.preparation = Some(QuantizationPreparation::CalibratedForRounding);
+        self.quantization = Some(state);
         Ok(())
     }
 
@@ -782,11 +952,13 @@ impl JointModel {
             Self::from_variables(self.config.clone(), self.variables.clone(), &self.device)?;
         model.quantization = self.quantization.clone();
         model.precision_mode = self.precision_mode;
+        model.read_intervention = self.read_intervention;
         model.hard_only = self.hard_only;
         model.rounding_learning = self.rounding_learning;
         model.interface_audit = self.interface_audit.clone();
         model.admission = self.admission;
         model.admission_audit = self.admission_audit.clone();
+        model.geometric_read = self.geometric_read.clone();
         Ok(model)
     }
 
@@ -973,6 +1145,8 @@ impl JointModel {
             key_events: Vec::new(),
             value_events: Vec::new(),
             dense_batch_history: false,
+            kernel_key_codes: None,
+            kernel_key_coords: None,
         })
     }
 
@@ -1035,7 +1209,14 @@ impl JointModel {
                 .narrow(1, position, 1)?
                 .squeeze(1)?
                 .contiguous()?;
-            let step = self.core_step(&mut memory, &input, &affine, mode, training)?;
+            let step = self.core_step(
+                &mut memory,
+                &input,
+                &affine,
+                mode,
+                training,
+                self.read_intervention,
+            )?;
             states.push(step.state);
             no_reads.push(step.no_read_mass.squeeze(1)?);
             gates.push(step.copy_gate.squeeze(1)?);
@@ -1124,7 +1305,14 @@ impl JointModel {
             .weight("embedding.weight", false)?
             .index_select(&index, 0)?
             .matmul(&model.weight("recurrent.input.weight", false)?.t()?)?;
-        let core = model.core_step(&mut session.memory, input_tokens, &affine, mode, false)?;
+        let core = model.core_step(
+            &mut session.memory,
+            input_tokens,
+            &affine,
+            mode,
+            false,
+            self.read_intervention,
+        )?;
         let copy = if self.admission == AdmissionPolicy::Full {
             self.incremental_copy(
                 &core.read_masses,
@@ -1165,6 +1353,7 @@ impl JointModel {
         token_affine: &Tensor,
         mode: ReadMode,
         training: bool,
+        read_intervention: Option<ReadMassIntervention>,
     ) -> Result<CoreStep> {
         let batch = input.len();
         let d = self.config.width;
@@ -1198,6 +1387,11 @@ impl JointModel {
         let mut occurrences = vec![Vec::new(); batch];
         let mut admission_work = Vec::new();
         let (no_read_mass, read_masses, read) = if previous == 0 || mode == ReadMode::NoRead {
+            if read_intervention.is_some() {
+                return Err(invalid(
+                    "read-mass intervention requires enabled reads over a nonempty prior history",
+                ));
+            }
             (
                 Tensor::ones((batch, 1), DType::F32, &self.device)?,
                 Tensor::zeros(
@@ -1215,6 +1409,11 @@ impl JointModel {
                 Tensor::zeros((batch, d), DType::F32, &self.device)?,
             )
         } else if self.admission != AdmissionPolicy::Full {
+            if read_intervention.is_some() {
+                return Err(invalid(
+                    "read-mass intervention requires dense Full admission",
+                ));
+            }
             let query = self.linear(&normalized, "read.query", training)?;
             let observed_queries = query.detach().to_vec2::<f32>()?;
             for lane in 0..batch {
@@ -1238,7 +1437,14 @@ impl JointModel {
                 .values
                 .as_ref()
                 .ok_or_else(|| invalid("missing prior value history"))?;
-            let scores = self.read_scores(&query, keys, training)?;
+            let caches = match (&memory.kernel_key_codes, &memory.kernel_key_coords) {
+                (Some(codes), Some(coords)) => Some(crate::geometric_read::GeometricReadKeyCache {
+                    codes: codes.clone(),
+                    hard_coords: coords.clone(),
+                }),
+                _ => None,
+            };
+            let scores = self.read_scores_with_cache(&query, keys, caches.as_ref(), training)?;
             let age_indices =
                 self.age_order
                     .narrow(0, self.config.context - 1 - previous, previous)?;
@@ -1252,6 +1458,10 @@ impl JointModel {
             let mass = candle_nn::ops::softmax(&Tensor::cat(&[&null, &scores], 1)?, 1)?;
             let no_read_mass = mass.narrow(1, 0, 1)?;
             let read_masses = mass.narrow(1, 1, previous)?.contiguous()?;
+            let read_masses = match read_intervention {
+                Some(intervention) => intervention.apply_tensor(&read_masses, batch)?,
+                None => read_masses,
+            };
             let read = read_masses.unsqueeze(1)?.matmul(values)?.squeeze(1)?;
             let read = self.interface(&read, Interface::State, training)?;
             (no_read_mass, read_masses, read)
@@ -1294,6 +1504,19 @@ impl JointModel {
         if self.admission == AdmissionPolicy::Full || memory.dense_batch_history {
             memory.keys = Some(append_history(memory.keys.as_ref(), &key, training)?);
             memory.values = Some(append_history(memory.values.as_ref(), &value, training)?);
+        }
+        if let Some(kernel) = &self.geometric_read {
+            if self.admission == AdmissionPolicy::Full {
+                let (codes, coords) = kernel.encode_keys(&key)?;
+                memory.kernel_key_codes = Some(match memory.kernel_key_codes.as_ref() {
+                    Some(previous) => Tensor::cat(&[previous, &codes], 1)?,
+                    None => codes,
+                });
+                memory.kernel_key_coords = Some(match memory.kernel_key_coords.as_ref() {
+                    Some(previous) => Tensor::cat(&[previous, &coords], 1)?,
+                    None => coords,
+                });
+            }
         }
         if self.admission != AdmissionPolicy::Full {
             let key_rows = key.detach().to_vec2::<f32>()?;
@@ -1353,6 +1576,33 @@ impl JointModel {
     /// operations and order; `Lorentz` is
     /// exp(read.lorentz_log_beta)*(read.lorentz_offset - arcosh(z)).
     fn read_scores(&self, query: &Tensor, keys: &Tensor, training: bool) -> Result<Tensor> {
+        self.read_scores_with_cache(query, keys, None, training)
+    }
+
+    fn read_scores_with_cache(
+        &self,
+        query: &Tensor,
+        keys: &Tensor,
+        caches: Option<&crate::geometric_read::GeometricReadKeyCache>,
+        training: bool,
+    ) -> Result<Tensor> {
+        if let Some(kernel) = &self.geometric_read {
+            if self.config.read_geometry != ReadGeometry::Dot {
+                return Err(invalid(
+                    "geometric read kernel requires the Dot read geometry",
+                ));
+            }
+            if self.admission != AdmissionPolicy::Full {
+                return Err(invalid("geometric read kernel requires Full admission"));
+            }
+            let weights = crate::geometric_read::KernelWeights {
+                weight1: self.weight(crate::geometric_read::RELATION_WEIGHT1, training)?,
+                bias1: self.weight(crate::geometric_read::RELATION_BIAS1, training)?,
+                weight2: self.weight(crate::geometric_read::RELATION_WEIGHT2, training)?,
+                bias2: self.weight(crate::geometric_read::RELATION_BIAS2, training)?,
+            };
+            return kernel.score(query, keys, caches, &weights);
+        }
         match self.config.read_geometry {
             ReadGeometry::Dot => Ok(query
                 .unsqueeze(1)?
@@ -1690,6 +1940,10 @@ impl JointModel {
             numerical_contract: self.numerical_contract(),
             quantization: self.quantization.clone(),
             admission: self.admission,
+            geometric_read: self
+                .geometric_read
+                .as_ref()
+                .map(|state| state.config().clone()),
         };
         let mut weights = File::create_new(directory.join("model.safetensors"))?;
         weights.write_all(&bytes)?;
@@ -1705,7 +1959,22 @@ impl JointModel {
         let config: CheckpointConfig =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
         config.model.validate()?;
-        Self::load_checkpoint_parameters(directory, config, device)
+        Self::load_checkpoint_parameters(directory, config, device, KernelSelection::Checkpoint)
+    }
+
+    /// Load a checkpoint with an explicit target kernel. `Some(None)` disables
+    /// the kernel and rejects a checkpoint that already carries one; `Some(Some)`
+    /// admits a checkpoint without a kernel, initializing kernel parameters
+    /// fresh while every base parameter still loads from the parent.
+    pub(crate) fn load_with_geometric_read(
+        directory: &Path,
+        device: &Device,
+        target: Option<&GeometricReadConfig>,
+    ) -> Result<Self> {
+        let config: CheckpointConfig =
+            serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
+        config.model.validate()?;
+        Self::load_checkpoint_parameters(directory, config, device, KernelSelection::Target(target))
     }
 
     /// Reload a sealed checkpoint from an explicitly declared offline dialogue
@@ -1725,12 +1994,15 @@ impl JointModel {
         let config: CheckpointConfig =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
         crate::dialogue_artifact::validate_model_config(&config.model)?;
-        if config.quantization.is_some() || config.admission != AdmissionPolicy::Full {
+        if config.quantization.is_some()
+            || config.admission != AdmissionPolicy::Full
+            || config.geometric_read.is_some()
+        {
             return Err(invalid(
-                "offline dialogue checkpoint requires continuous Full admission",
+                "offline dialogue checkpoint requires continuous Full admission without a geometric read kernel",
             ));
         }
-        Self::load_checkpoint_parameters(directory, config, device)
+        Self::load_checkpoint_parameters(directory, config, device, KernelSelection::Checkpoint)
     }
 
     /// Shared hash, numerical-contract and complete named-tensor validation.
@@ -1739,7 +2011,28 @@ impl JointModel {
         directory: &Path,
         config: CheckpointConfig,
         device: &Device,
+        selection: KernelSelection<'_>,
     ) -> Result<Self> {
+        let checkpoint_kernel = config.geometric_read.clone();
+        let effective_kernel = match selection {
+            KernelSelection::Checkpoint => checkpoint_kernel.clone(),
+            KernelSelection::Target(target) => {
+                if let Some(checkpoint) = &checkpoint_kernel {
+                    if target != Some(checkpoint) {
+                        return Err(invalid("geometric read kernel differs from the checkpoint"));
+                    }
+                }
+                target.cloned()
+            }
+        };
+        if let Some(kernel) = &effective_kernel {
+            kernel.validate()?;
+            if config.model.read_geometry != ReadGeometry::Dot || config.quantization.is_some() {
+                return Err(invalid(
+                    "geometric read kernel requires continuous Dot geometry",
+                ));
+            }
+        }
         if config.quantization.is_some() {
             require_quantized_read(config.model.read_geometry)?;
         }
@@ -1748,10 +2041,16 @@ impl JointModel {
         } else {
             numerical_contract()
         };
-        let expected_contract = admission_contract(
-            read_geometry_contract(expected_contract, config.model.read_geometry),
-            config.admission,
+        let expected_contract =
+            read_geometry_contract(expected_contract, config.model.read_geometry);
+        // The saved contract describes what the checkpoint itself contains, so a
+        // fresh kernel admitted into a kernel-free parent is validated against
+        // the checkpoint kernel rather than the newly declared target.
+        let expected_contract = crate::geometric_read::with_geometric_read_contract(
+            expected_contract,
+            checkpoint_kernel.as_ref(),
         );
+        let expected_contract = admission_contract(expected_contract, config.admission);
         if config.schema != CHECKPOINT_SCHEMA || config.numerical_contract != expected_contract {
             return Err(invalid(
                 "joint checkpoint schema or numerical contract mismatch",
@@ -1762,7 +2061,8 @@ impl JointModel {
             return Err(invalid("joint checkpoint weights hash mismatch"));
         }
         let tensors = SafeTensors::deserialize(&bytes)?;
-        let shapes = config.model.shapes();
+        let shapes =
+            crate::geometric_read::parameter_shapes(&config.model, checkpoint_kernel.as_ref());
         let observed: BTreeSet<_> = tensors.names().into_iter().collect();
         let expected: BTreeSet<_> = shapes.keys().map(String::as_str).collect();
         if observed != expected {
@@ -1784,7 +2084,19 @@ impl JointModel {
             }
             variables.insert(name, Var::from_vec(values, shape.as_slice(), device)?);
         }
+        if checkpoint_kernel.is_none() {
+            if let Some(kernel) = &effective_kernel {
+                variables.extend(crate::geometric_read::initialize_kernel_variables(
+                    kernel,
+                    &config.model,
+                    device,
+                )?);
+            }
+        }
         let mut model = Self::from_variables(config.model, variables, device)?;
+        model.geometric_read = effective_kernel
+            .map(|kernel| GeometricReadState::new(kernel, device))
+            .transpose()?;
         if let Some(state) = &config.quantization {
             state.spec.validate(model.variables())?;
             if !valid_quantization_clock(
@@ -1831,9 +2143,25 @@ impl JointModel {
             }
         }
         admission_contract(
-            read_geometry_contract(contract, self.config.read_geometry),
+            crate::geometric_read::with_geometric_read_contract(
+                read_geometry_contract(contract, self.config.read_geometry),
+                self.geometric_read.as_ref().map(GeometricReadState::config),
+            ),
             self.admission,
         )
+    }
+
+    /// The bound kernel configuration, or `None` when the kernel is disabled.
+    pub fn geometric_read_config(&self) -> Option<&GeometricReadConfig> {
+        self.geometric_read.as_ref().map(GeometricReadState::config)
+    }
+
+    /// Integer hard-path usage counters, or JSON null when the kernel is off.
+    pub fn geometric_read_usage(&self) -> Result<Value> {
+        match &self.geometric_read {
+            Some(state) => state.usage_snapshot(),
+            None => Ok(Value::Null),
+        }
     }
 
     /// Packed parameter export for the shared quantized F32 evaluator. This is
@@ -1985,7 +2313,7 @@ impl JointModel {
         self.save_hard_profile(directory, ServingProfile::Dialogue576, Some(&provenance))
     }
 
-    fn save_hard_profile(
+    pub(crate) fn save_hard_profile(
         &self,
         directory: &Path,
         profile: ServingProfile,
@@ -1996,6 +2324,11 @@ impl JointModel {
             return Err(invalid("dialogue576 packed export requires Full admission"));
         }
         require_quantized_read(self.config.read_geometry)?;
+        if self.geometric_read.is_some() {
+            return Err(invalid(
+                "packed export is unavailable with the geometric read kernel",
+            ));
+        }
         if self.prepared_parameters.is_some() || self.rounding_learning {
             return Err(invalid("materialize hard codes before export"));
         }
@@ -2040,6 +2373,13 @@ impl JointModel {
         }
         if let Some(provenance) = conversion_provenance {
             manifest["conversion_provenance"] = provenance.clone();
+            if provenance["schema"] == crate::dialogue_rounding_artifact::LEARNED_SCHEMA {
+                // Bind actual codec output, never caller-asserted code hashes.
+                manifest["conversion_provenance"]["hard_payload_sha256"] =
+                    manifest["parameter_manifest"]["payload_sha256"].clone();
+                manifest["conversion_provenance"]["hard_parameter_manifest_sha256"] =
+                    manifest["parameter_manifest_sha256"].clone();
+            }
         }
         let mut file = File::create_new(directory.join("hard-model.json"))?;
         serde_json::to_writer_pretty(&mut file, &manifest)?;
@@ -2148,6 +2488,14 @@ struct CheckpointConfig {
     quantization: Option<QuantizedTrainingState>,
     #[serde(default, skip_serializing_if = "admission_is_full")]
     admission: AdmissionPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    geometric_read: Option<GeometricReadConfig>,
+}
+
+/// Whether a load reproduces the checkpoint kernel or targets a declared one.
+enum KernelSelection<'a> {
+    Checkpoint,
+    Target(Option<&'a GeometricReadConfig>),
 }
 
 fn require_quantized_read(geometry: ReadGeometry) -> Result<()> {
@@ -2430,9 +2778,9 @@ fn transport_lanes_with_unit(
     Ok(result.reshape((batch, width))?)
 }
 
-struct Initializer(u64);
+pub(crate) struct Initializer(pub(crate) u64);
 impl Initializer {
-    fn symmetric(&mut self) -> f32 {
+    pub(crate) fn symmetric(&mut self) -> f32 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut value = self.0;
         value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -2841,6 +3189,155 @@ mod tests {
             seed: 7,
             ..JointConfig::default()
         }
+    }
+
+    fn run_session(
+        model: &JointModel,
+        ids: &[u32],
+        intervention: Option<ReadMassIntervention>,
+    ) -> Result<JointStep> {
+        let mut view = model.detached_view()?;
+        let mut session = view.new_session(1)?;
+        let last = ids.len() - 1;
+        let mut current = None;
+        for (index, &token) in ids.iter().enumerate() {
+            if index == last {
+                view.set_read_intervention(intervention);
+            }
+            current = Some(view.step(&mut session, &[token], ReadMode::Enabled)?);
+            if index == last {
+                view.set_read_intervention(None);
+            }
+        }
+        current.ok_or_else(|| invalid("read intervention test produced no step"))
+    }
+
+    #[test]
+    fn read_intervention_default_off_is_unchanged() -> Result<()> {
+        let config = small(Transport::Quaternion);
+        let ids: Vec<u32> = vec![3, 17, 4, 9, 2, 10];
+        let untouched = JointModel::new(config.clone(), &Device::Cpu)?;
+        let mut toggled = JointModel::new(config, &Device::Cpu)?;
+        toggled.set_read_intervention(None);
+        toggled.set_read_intervention(Some(ReadMassIntervention::Focus { target: 2 }));
+        toggled.set_read_intervention(None);
+        let mut left = untouched.new_session(1)?;
+        let mut right = toggled.new_session(1)?;
+        for &token in &ids {
+            let a = untouched.step(&mut left, &[token], ReadMode::Enabled)?;
+            let b = toggled.step(&mut right, &[token], ReadMode::Enabled)?;
+            assert!(same_bits(&a.probabilities, &b.probabilities)?);
+            assert!(same_bits(&a.read_masses, &b.read_masses)?);
+            assert!(same_bits(&a.no_read_mass, &b.no_read_mass)?);
+        }
+        assert_eq!(untouched.read_intervention(), None);
+        assert_eq!(toggled.read_intervention(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn read_intervention_swap_and_focus_apply() -> Result<()> {
+        let before = [0.1f32, 0.5, 0.2, 0.05, 0.15];
+        let total: f32 = before.iter().sum();
+        let mut swapped = before;
+        ReadMassIntervention::Swap { a: 1, b: 4 }.apply_values(&mut swapped)?;
+        let mut expected = before;
+        expected.swap(1, 4);
+        assert_eq!(swapped, expected);
+        assert!((swapped.iter().sum::<f32>() - total).abs() < 1e-6);
+        let mut focused = before;
+        ReadMassIntervention::Focus { target: 2 }.apply_values(&mut focused)?;
+        assert_eq!(focused[2], total);
+        assert!(focused
+            .iter()
+            .enumerate()
+            .all(|(index, &value)| index == 2 || value == 0.0));
+        assert!((focused.iter().sum::<f32>() - total).abs() < 1e-6);
+        assert!(ReadMassIntervention::Swap { a: 0, b: 5 }
+            .apply_values(&mut swapped)
+            .is_err());
+        assert!(ReadMassIntervention::Focus { target: 5 }
+            .apply_values(&mut focused)
+            .is_err());
+        let two_lane = Tensor::from_vec(vec![0.2f32, 0.8], (2, 1), &Device::Cpu)?;
+        assert!(ReadMassIntervention::Focus { target: 0 }
+            .apply_tensor(&two_lane, 2)
+            .is_err());
+
+        let config = small(Transport::Quaternion);
+        let ids: Vec<u32> = vec![3, 17, 4, 9, 2, 10];
+        let baseline = run_session(&JointModel::new(config.clone(), &Device::Cpu)?, &ids, None)?;
+        let baseline_masses = baseline.read_masses.flatten_all()?.to_vec1::<f32>()?;
+        let baseline_no_read = baseline.no_read_mass.flatten_all()?.to_vec1::<f32>()?;
+
+        let swap_model = JointModel::new(config.clone(), &Device::Cpu)?;
+        let mut swap_view = swap_model.detached_view()?;
+        let mut session = swap_view.new_session(1)?;
+        let mut swapped_step = None;
+        for (index, &token) in ids.iter().enumerate() {
+            if index == ids.len() - 1 {
+                swap_view.set_read_intervention(Some(ReadMassIntervention::Swap { a: 1, b: 4 }));
+            }
+            swapped_step = Some(swap_view.step(&mut session, &[token], ReadMode::Enabled)?);
+            if index == ids.len() - 1 {
+                swap_view.set_read_intervention(None);
+            }
+        }
+        let swapped_step = swapped_step.ok_or_else(|| invalid("swap step"))?;
+        let mut expected_swap = baseline_masses.clone();
+        expected_swap.swap(1, 4);
+        assert_eq!(
+            swapped_step.read_masses.flatten_all()?.to_vec1::<f32>()?,
+            expected_swap
+        );
+        assert_eq!(
+            swapped_step.no_read_mass.flatten_all()?.to_vec1::<f32>()?,
+            baseline_no_read
+        );
+
+        let focus_model = JointModel::new(config, &Device::Cpu)?;
+        let mut focus_view = focus_model.detached_view()?;
+        let mut session = focus_view.new_session(1)?;
+        let mut focus_step = None;
+        for (index, &token) in ids.iter().enumerate() {
+            if index == ids.len() - 1 {
+                focus_view.set_read_intervention(Some(ReadMassIntervention::Focus { target: 1 }));
+            }
+            focus_step = Some(focus_view.step(&mut session, &[token], ReadMode::Enabled)?);
+            if index == ids.len() - 1 {
+                focus_view.set_read_intervention(None);
+            }
+        }
+        let focus_step = focus_step.ok_or_else(|| invalid("focus step"))?;
+        let focused = focus_step.read_masses.flatten_all()?.to_vec1::<f32>()?;
+        assert_eq!(focused[1], total_mass(&baseline_masses));
+        assert!(focused
+            .iter()
+            .enumerate()
+            .all(|(index, &value)| index == 1 || value == 0.0));
+        assert_eq!(
+            focus_step.no_read_mass.flatten_all()?.to_vec1::<f32>()?,
+            baseline_no_read
+        );
+
+        let mut bounded = JointModel::new(small(Transport::Quaternion), &Device::Cpu)?;
+        bounded.set_admission_policy(AdmissionPolicy::Recent64)?;
+        let mut session = bounded.new_session(1)?;
+        bounded.step(&mut session, &[3], ReadMode::Enabled)?;
+        bounded.set_read_intervention(Some(ReadMassIntervention::Focus { target: 0 }));
+        assert!(bounded
+            .step(&mut session, &[17], ReadMode::Enabled)
+            .is_err());
+        let mut no_read = JointModel::new(small(Transport::Quaternion), &Device::Cpu)?;
+        let mut session = no_read.new_session(1)?;
+        no_read.step(&mut session, &[3], ReadMode::Enabled)?;
+        no_read.set_read_intervention(Some(ReadMassIntervention::Focus { target: 0 }));
+        assert!(no_read.step(&mut session, &[17], ReadMode::NoRead).is_err());
+        Ok(())
+    }
+
+    fn total_mass(values: &[f32]) -> f32 {
+        values.iter().sum()
     }
 
     #[test]

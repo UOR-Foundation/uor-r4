@@ -1,7 +1,28 @@
 # Current UOR-R4 research state
 
-Updated September 27, 2026. **Pre-alpha; no useful general-language, coding,
+Updated September 28, 2026. **Pre-alpha; no useful general-language, coding,
 frontier, geometric-advantage or full-path energy qualification.**
+
+## September 28: base decided, track approved, #1433 result
+
+- **Base model (D0).** The recurrence-primary geometric stack is the main line.
+  - It scored 1.998113 against its transformer control's 2.011149 at full exposure (#1437; one seed per arm; code BPE).
+  - The 1.68M native model is the retained baseline.
+  - Both final models are on the owner SSD, SHA-256 verified.
+  - D0 selects an architecture; it does not qualify dialogue.
+- **Track.** Approved by the owner: [synthesis](whole-project-synthesis-2026-09-28.md) §2–§4 and ROADMAP §2a.
+  - The core is the stack.
+  - Architectural exact relational memory (AERM, D2) is next for Lab 1.
+  - D6 is an evaluation-only audit of what the 2I read representation discards (Lab 2).
+  - D4 is geometry-coded QAT with a fidelity objective (Lab 3).
+- **External audit.** Codex's geometric-attention review was verified line by line and imported with a claim ledger ([evidence](../evidence/external-codex-audit-2026-09-28/README.md); synthesis §7; ROADMAP ruling 11).
+  - T2 as coded is a compression-fidelity screen, and its geometric arms are confounded by magnitude.
+  - #1438's cause is unresolved.
+- **#1433 (response-aware legal codes, width-576 dialogue child): FAILS its retention rule** ([result](dialogue-code-choice-result-2026-09-28.md)).
+  - Development-panel NLL is 2.796064 against nearest's 2.849148.
+  - Question-turn relation answers fall to 2 of 10 (nearest 4, continuous child 9), with 962 greedy flips against the parent's 909.
+  - Nearest-hard remains the same-child baseline. The learned artifact is preserved at `/Volumes/UOR-Workspace/uor-r4-lab/claude-t4-1433-resume/`.
+- **Unchanged:** no useful general chat, prose, instruction following, geometric advantage, selected parameter access or energy saving is established.
 
 ## Fourth lab: shared research and integration
 
@@ -93,11 +114,66 @@ This is a materially lossy development artifact, not an accepted model. The
 record 56.245 seconds of conversion/packaging/observation and 205,946,880 bytes
 peak child RSS. Same-input integer stepping takes 12.593 seconds versus FF
 2.823 in this instrumented pass; no speed or energy advantage is established.
-The next causal implementation is one response-aware choice of legal codes on
-the fixed child grids and complete-prefix population, with dose/resources still
-to be selected before fitting. Actual relation recovery and all-output retention
-govern that decision; the old width-256 rounding result warns that lower
-numerical loss alone does not preserve complete answers. No new alpha fit ran.
+That observation motivates response-aware choice of legal codes on the fixed
+child grids and complete-prefix population; the subsequent implementation and
+fixed fitting decision are recorded below. Actual relation recovery and
+all-output retention govern that decision; the old width-256 rounding result warns that lower
+numerical loss alone does not preserve complete answers. That observation
+introduced no new alpha updates.
+
+The [response-aware code-choice implementation](dialogue-code-choice-preparation-2026-09-27.md)
+is now validated at source `34964512`: seventeen focused checks pass and all
+three release binaries are frozen. One no-op negative-fixture mutation was
+corrected without changing production validation. Eight actual training-only
+normalization batches process 9,179 supervised targets with no optimizer updates,
+selecting coefficient 29.56681391929494; complete execution takes 61.107 seconds
+and peak child RSS is 6,919,520,256 bytes. The separately frozen 512-update alpha
+fit was interrupted at 190 updates by its frozen shared-storage guard. It
+processed 215,193 supervised targets and 778,240 padded positions, but reached
+neither its first scheduled checkpoint nor an export. The sealed curve and
+1,460.259 seconds of execution are retained; there is no alpha/Adam state to
+resume and no learned artifact to evaluate. This is unavailable execution, not
+a model-quality failure. The [interruption record](../evidence/dialogue-code-choice-interruption-2026-09-27.json)
+binds the resource failure and complete cost. The [sequential correction](dialogue-code-choice-sequential-preparation-2026-09-27.md)
+is now executed at source `b49a2810`: the changed-path objective comparison passes
+and three release binaries are frozen. Eight actual normalization batches retain
+exactly the saved schedule, loss, all recorded parameter-gradient norms and
+coefficient; peak RSS falls to 4,722,819,072 bytes while total time rises to
+154.612 seconds. The fresh fixed 512 restart **STOPPED_CHECKPOINTED at231**
+on September27 at17:43:21UTC. The frozen `b49a2810` process exited0 after
+5,209.335 seconds and260,430 supervised targets; the complete supervisor took
+5,210.049 seconds. Its storage soft guard fired below1GiB headroom. Checkpoints
+at32,128 and the final stop at231 are preserved with complete-file seals, along
+with the result and curve. No512 endpoint, learned-code export or native response
+evaluation has run. This is a resource interruption, not a quality result.
+The [checkpoint and resource record](../evidence/dialogue-code-choice-sequential-checkpoint-2026-09-27.json)
+binds exact lineage. Source review supports281 additional updates from the same
+alpha/Adam state, data counters1255–1535 and unchanged total512 schedule; it does
+not select another fresh fit or reset warmup. Resolve the shared model/storage
+slot and bind continuation/endpoints across both attempts before launch.
+Merging later source does not change or rebind the frozen executable.
+Measured batch costs support a 12,600-second soft fit limit and prospectively
+recorded owned allowance 75,600,000 ms; verified shared 722,400,000 ms is unchanged.
+The fixed 512 question, original 161-response panel and 58-turn endpoint remain;
+no new dose or quality-selection sweep is selected. The original
+[preparation evidence](../evidence/dialogue-code-choice-preparation-2026-09-27.json)
+remains dated; [sequential evidence](../evidence/dialogue-code-choice-sequential-preparation-2026-09-27.json)
+owns the new execution/resource bindings. No learned candidate or language
+qualification is established by this normalization.
+
+Parallel source preparation adds a standalone
+[exact signed H4 integer classifier](exact-h4-classifier-2026-09-27.md), with an
+immutable historical-order coefficient table and explicit zero/tie behavior.
+At source `43e543fd`, all three focused integer checks and release compilation
+pass. After preserving an initial compiler-lowering failure, the corrected
+frozen library passes strict instruction inspection in 33 emitted ranges,
+including the classifier and both scalar helpers. The separate training-crate
+donor-order check is NOT_RUN; no core/training or model execution occurred.
+[Source, artifact, failed/passing outcomes and complete build breakdown](../evidence/exact-h4-classifier-2026-09-27.json)
+retain their scope. It is not connected to a reader or promoted artifact, and
+does not establish F32 decision parity, language retention or serving speed.
+The [learning and exact-table reuse review](finite-h4-learning-and-native-reuse-2026-09-27.md)
+guides conditional integration and selects no additional fit.
 
 The retained integer `TextSession` now has an opt-in exact-ID dialogue adapter
 and consistent optional stop-token handling. Six focused checks pass. A loaded
@@ -355,12 +431,32 @@ Reference-minus-float NLL is +0.007543 to +0.012756; integer-minus-reference is
 -0.00000170 to +0.00015188. The reference substitutes packed matrices, scalars,
 biases, folded normalization gains and head values, so the localization is to
 the packed representation collectively, not uniquely four-bit matrix rounding.
-New integer continuations remain weak. GPTQ source and synthetic checks are
-present without a trained GPTQ result packet. Grouped scales and a separate
-embedding/head differ from the native tied-readout codec. Hardware multiply/divide
-serving and the empty designated local payload intake remain unresolved for
-this lab's target. These reports do not promote a model or change the completed
-fixed dialogue pair.
+New integer continuations remain weak. The [subsequent trained GPTQ packet](geometric-stack-cycle4-2026-09-27.md#8-integer-serving-under-d10)
+at `c22a97e6`, retained in merged main `72538ffb`, resolves the earlier source-only
+limitation: all five parent/calibration/development joins were reviewed, and the
+2,560 saved window reductions reproduce their reported NLLs. Against each model's
+nearest-rounding export, GPTQ removes 40.53–47.63% of the four geometric stacks'
+integer-minus-float gap and 54.25% of the transformer control's gap. This is
+exposed code-development numerical retention; the packet adds no GPTQ-generated
+reply records. Its grouped scales and separate embedding/head differ from the
+native tied-readout codec, and scales are reselected during compensation rather
+than held on our fixed grid. [Transfer assessment](finite-h4-learning-and-native-reuse-2026-09-27.md).
+Hardware multiply/divide serving and the empty designated local payload intake
+remain unresolved for this lab's target. These reports do not promote a model,
+alter the retained dialogue pair, or change the fixed 512-update child study.
+
+The [next Claude delta at `c22a97e6`](https://github.com/UOR-Foundation/uor-r4/pull/1414#issuecomment-5856353989)
+now supplies trained GPTQ numerical-retention results. All 33 added/changed
+packet identities and five export/evaluation/parent/data joins match. Integer
+NLL gaps fall 40.5–54.3% relative to nearest, with 115.185 seconds of exports
+including 61.865 seconds of calibration across five models; the complete
+export/reference-evaluation stage spans 31 minutes. These are distinct nested
+costs. No new generated output binds the GPTQ artifacts; existing continuations
+still use nearest. New stack-dialogue source has no trained dialogue packet and
+its EOS/cap controller differs from the native study's short-cycle rule. The
+grouped codec, separate head, D10 arithmetic and unavailable local payloads
+remain distinct. Retain this useful alternative without changing the selected
+child's fixed-grid response-aware integration or choosing a dose from NLL alone.
 
 The separately owned termination-objective study has a
 [source-verified weighted-shard normalization/reporting defect](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5852801075)
@@ -433,8 +529,13 @@ termination-weighted objective experiment is now executed and returns INERT: at
 only 3 unique source rows beyond a dose-matched plain continuation (0 unique
 losses) and leaves sampled prose at0/5, while the plain dose already recovers12
 of20 failing rows; guardrails hold and standard development NLL is slightly
-worse for the treatment. Termination weighting is a weak lever at this dose; the
-next rung is the state/read path. Admission pruning remains deferred.
+worse for the treatment. Termination weighting is a weak lever at this dose. The
+finite geometric read kernel (signed relative-group score) screen is now executed
+and returns **HARM**: against a same-binary, dose-matched baseline it worsens the
+comparison-tail Read NLL by +0.019719 and loses 10 complete source rows with 0
+unique gains, while five-prompt sampled prose stays 0/5; guardrails and hard-path
+usage hold. The next rung remains the state/read path, but not by
+re-parameterising this score. Admission pruning remains deferred.
 The transformerless integer/table serving goal and D0-b/D4–D6 remain unchanged.
 
 ## Latest result: completed continuation, useful-language target unmet
@@ -451,7 +552,7 @@ also fail; quaternion has source regressions against the accepted parent and an
 actual integer short-cycle. No candidate is promoted. The [next single work card](#next-single-work-card--failure-localization)
 localizes these failures from existing records; it authorizes no fit or sweep.
 
-## Parallel lab track: integer chat vehicle and hyperbolic reads, September26
+## Parallel lab track: integer chat vehicle, hyperbolic reads and a geometric stack, September26–27
 
 A separate lab on branch `claude/blissful-wozniak-girwwq` followed the owner's
 decisions of 2026-09-26 ([D10](DECISIONS.md)). An open instruct model, converted
@@ -488,12 +589,34 @@ track does not change the work card below.
     nats of equal float fine-tunes and keeps the Lorentz advantage (−0.062 and
     −0.059 nats)
     ([§11](hyperbolic-cycle3-2026-09-26.md#11-addendum-the-integer-lorentz-read)).
+- **A capacity-matched geometric stack** ([cycle 4](geometric-stack-cycle4-2026-09-27.md),
+  September 27–28). It combines quaternion-transport recurrences, multi-head
+  Lorentz reads and MLPs, at 7.15M parameters, against a 7.16M-parameter
+  transformer control on Rust code.
+  - At 1,000 updates it leads by 0.158 nats at each arm's selected rate.
+  - Reads-only Lorentz is the best configuration measured (2.5531 and 2.5382 over
+    two seeds). Inside the default `rrarra`, Dot and Lorentz trade places across
+    two seeds.
+  - Under D10 (now a frozen comparator), integer serving costs 0.011–0.013 nats, or 0.006–0.007 with GPTQ.
+    The cost is in the exported parameters, not the integer arithmetic. The engine
+    uses the hardware multiplier on runtime values, so it does not meet D0-b.
+  - Continuations still repeat or are malformed.
+  - At full exposure (29,999,104 target visits per arm) it matches the control:
+    1.9981 against 2.0111 nats, at one seed and equal speed. By the card's rule
+    the stack is viable, and the director's D0 decision (#820) adopted it as the
+    main-line core; its next step is the native D11 export. The 0.013 difference is within seed
+    spread, so this is parity, not an advantage.
+  - A dialogue path (`dialogue-train`, `lut-chat`) follows the retained study's
+    episodes, stop rules and panel limits. It is checked on synthetic data only.
 - **Owner-runnable M1 scripts.**
   - `scripts/lut-m1-chat.sh`: integer SmolLM2 chat, with an optional cache stage
     and joules per token.
   - `scripts/kappa-m1-pilot.sh`: the curvature drive test on real SmolLM2 heads.
   - `scripts/native-lorentz-m1.sh`: the full-scale native Dot/Lorentz comparison
     through integer serving.
+  - `scripts/geometric-stack-m1.sh` and `scripts/geometric-stack-chat-m1.sh`: the
+    cycle-4 stack's training and integer serving, and its dialogue learning and
+    chat.
 - **Scope.** Development measurements on stand-ins and at reduced scale. No
   chat-quality, M1-energy or general-language qualification.
 
@@ -872,6 +995,65 @@ The full256 baseline is finite; terminal D5 parameter sparsity remains open.
 Standalone integer generation is **executed at the scoped numerical boundary**.
 General language quality, complete-path arithmetic compliance and energy remain
 separate obligations. One paired seed remains exploratory for geometry claims.
+
+### Executed: finite geometric read kernel screen (September 27)
+
+- **Executed** from the [predeclared plan](geometric-read-plan-2026-09-27.md) and
+  [result](geometric-read-result-2026-09-27.md): an optional, absent-by-default
+  learned score over the signed relative element of the 120-element binary
+  icosahedral group `2I` (16 unit-coded lanes, exact composition table,
+  straight-through hard-forward/smooth-backward surrogate, per-lane nonlinear
+  4→8→1 score) on the mainline joint learner, plus two full 1,024-update screen
+  arms and cost smokes from the accepted step-15,672 quaternion parent.
+- **Witnessed result:** `HARM`. Versus the same binary with the kernel disabled,
+  comparison-tail Read NLL is 1.984753 → 2.004471 (+0.019719) and complete source
+  answers are 27/32 → 17/32 with ten unique losses and zero unique gains;
+  five-prompt sampled prose stays **0/5** in both arms. The NoRead penalty and the
+  parent-relative bound hold, no short cycles occur, and hard-path usage is
+  non-collapsed (120/120 codes per lane; 99.25% non-identity relations; cumulative over
+  the fit). The predeclared 1.5× cost gate **failed** (1.84× paired same-session) and is
+  carried as a recorded budgeted exception; under the plan heading a guardrail failure is
+  itself a HARM condition.
+- **Instrument checks:** the kernel-off path reproduces the retained parent
+  evaluation token-for-token and replays the historical `plain-16696` learning
+  curve with zero NLL mismatches; arm B reproduces that historical evaluation
+  exactly. The predeclared cost optimization cut kernel per-step cost
+  (15.3/8.7/12.9/10.2 s → 6.1/5.4/6.6/9.8 s); the paired same-session ratio is
+  1.84× and the residual cost is the frozen smooth Hamilton composition. Conditional
+  attribution arm C is **deferred** with the ledger arithmetic recorded
+  (decision-time balance 712,153,247 ms; projected ~739M with C against the
+  predeclared 735M stop margin and the 744M ceiling).
+- **Decision:** park the mechanism at this exact scope; no repair-fit follows
+  automatically and no promotion. The harm is measured for this parameterization
+  including its 784 added per-lane parameters; the capacity/normalization
+  attribution control is unrun. The state/read path remains the next target, not a
+  re-parameterisation of this score.
+- **Stop:** this packet is closed. #973 and #820 remain open at their wider scope.
+
+### Executed: read-side localization (September 27)
+
+- **Executed** read-only on the frozen step-15,672 quaternion parent from the
+  [predeclared plan](read-localization-plan-2026-09-27.md) and
+  [result](read-localization-result-2026-09-27.md): decision-0 read-mass attribution on
+  the 32-row source panel under five declared conditions (baseline; entity-final;
+  matched final control; near-query entity mention; near-query matched control).
+  Baseline parity with the retained parent is `PARITY_EXACT` on all 32 rows, including
+  decision-0 read fields; the full run is 1.29 s and no weight or serving path changed.
+- **Witnessed result:** the predeclared rule returns **MIXED** (the frozen
+  READ_ACCESS_LIMITED thresholds were not met: the entity was present at read rank 2–3
+  with 16–32% share, and the entity-share metric did not separate the entity mention
+  from its matched control). Post-hoc at the same scope, a clean **READ_RANKING**
+  signature: in 5/5 distractor rows the emitted token equals the read top-1 (` clouds`),
+  the near-query entity mention completes 5/5 while the matched non-entity control
+  completes 0/5 and emits the inserted noun (` carrot`) 5/5. The extra-phrase class is
+  not entity-specific (D 3/5 vs control 4/5), consistent with the termination INERT
+  result; the single morphology row emits the correct noun at rank 1 and fails only the
+  completion.
+- **Decision:** the distractor failures are localized to the read's ranking (learned
+  age/recency prior) rather than entity absence or emission. Recommended bounded
+  successor: an oracle read re-rank intervention (clamp decision-0 mass onto the entity
+  occurrence) to confirm the ranking as the sole bottleneck before any mechanism change.
+  No promotion; the instrument is retained.
 
 ## Retained result: paired learned-code retention accepted
 
