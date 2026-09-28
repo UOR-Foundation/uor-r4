@@ -209,6 +209,8 @@ pub enum IntegerStackLayer {
 /// The complete multiplier-free integer geometric stack model.
 pub struct IntegerStackModel {
     pub shape: StackShape,
+    pub head_dim: usize,
+    pub lanes: usize,
     pub numerics: StackNumerics,
     pub embedding: IntegerMatrix,
     pub layers: Vec<IntegerStackLayer>,
@@ -305,8 +307,13 @@ impl IntegerStackModel {
             *entry = (i as u32) * 10;
         }
 
+        let head_dim = shape.head_dim();
+        let lanes = shape.lanes();
+
         Ok(Self {
             shape,
+            head_dim,
+            lanes,
             numerics,
             embedding,
             layers,
@@ -317,49 +324,45 @@ impl IntegerStackModel {
     }
 }
 
+/// Per-layer dynamic state for an autoregressive session.
+#[derive(Clone, Debug)]
+pub enum LayerSessionState {
+    Recurrence {
+        state: Vec<[i64; 4]>,
+        conv_history: Vec<Vec<i64>>,
+    },
+    Read {
+        keys: Vec<Vec<i64>>,
+        values: Vec<Vec<i64>>,
+    },
+}
+
 /// State tracking for an autoregressive session of the integer geometric stack.
 pub struct IntegerStackSession {
     pub pos: usize,
-    /// Carried quaternion states per recurrence layer: [layer][lane][4]
-    pub recurrence_states: Vec<Vec<[i64; 4]>>,
-    /// Convolution circular history: [layer][conv_width][width]
-    pub conv_histories: Vec<Vec<Vec<i64>>>,
-    /// Read KV cache per read layer: [layer][pos][width]
-    pub read_keys: Vec<Vec<Vec<i64>>>,
-    pub read_values: Vec<Vec<Vec<i64>>>,
+    pub layers: Vec<LayerSessionState>,
 }
 
 impl IntegerStackSession {
     pub fn new(model: &IntegerStackModel) -> Self {
-        let mut recurrence_states = Vec::new();
-        let mut conv_histories = Vec::new();
-        let mut read_keys = Vec::new();
-        let mut read_values = Vec::new();
-
+        let mut layers = Vec::with_capacity(model.shape.layers());
         for layer in &model.layers {
             match layer {
                 IntegerStackLayer::Recurrence { .. } => {
-                    recurrence_states.push(vec![[0i64; 4]; model.shape.lanes()]);
-                    conv_histories.push(vec![vec![0i64; model.shape.width]; CONVOLUTION_WIDTH]);
-                    read_keys.push(Vec::new());
-                    read_values.push(Vec::new());
+                    layers.push(LayerSessionState::Recurrence {
+                        state: vec![[0i64; 4]; model.lanes],
+                        conv_history: vec![vec![0i64; model.shape.width]; CONVOLUTION_WIDTH],
+                    });
                 }
                 IntegerStackLayer::Read { .. } => {
-                    recurrence_states.push(Vec::new());
-                    conv_histories.push(Vec::new());
-                    read_keys.push(Vec::with_capacity(model.shape.context));
-                    read_values.push(Vec::with_capacity(model.shape.context));
+                    layers.push(LayerSessionState::Read {
+                        keys: Vec::with_capacity(model.shape.context),
+                        values: Vec::with_capacity(model.shape.context),
+                    });
                 }
             }
         }
-
-        Self {
-            pos: 0,
-            recurrence_states,
-            conv_histories,
-            read_keys,
-            read_values,
-        }
+        Self { pos: 0, layers }
     }
 
     /// Autoregressive step: forward one input token through the complete stack.
@@ -373,32 +376,47 @@ impl IntegerStackSession {
             return Err(invalid("token out of vocabulary bounds"));
         }
 
-        // 1. Embedding lookup
-        let mut residual = model.embedding.row_data[token as usize]
-            .dequantize_f32()
-            .iter()
-            .map(|&w| (w * 65536.0).round() as i64)
-            .collect::<Vec<_>>();
+        // 1. Embedding lookup (zero floats, zero multipliers)
+        let mut residual = model.embedding.row_data[token as usize].to_q16_vector()?;
 
         // 2. Layers
-        for (l_idx, layer) in model.layers.iter().enumerate() {
-            match layer {
-                IntegerStackLayer::Recurrence { mixer, mlp } => {
+        for (layer, layer_state) in model.layers.iter().zip(&mut self.layers) {
+            match (layer, layer_state) {
+                (
+                    IntegerStackLayer::Recurrence { mixer, mlp },
+                    LayerSessionState::Recurrence {
+                        state,
+                        conv_history,
+                    },
+                ) => {
                     // Pre-norm
                     let normed = rms_norm_integer(&residual, &mlp.norm_scale)?;
 
                     // Convolution
                     let mut conv_out = vec![0i64; model.shape.width];
-                    self.conv_histories[l_idx][self.pos % CONVOLUTION_WIDTH] = normed.clone();
-                    for c in 0..model.shape.width {
+                    conv_history[self.pos & (CONVOLUTION_WIDTH - 1)] = normed.clone();
+                    for (c, (taps, &bias)) in
+                        mixer.conv_taps.iter().zip(&mixer.conv_bias).enumerate()
+                    {
                         let mut tap_acc: i128 = 0;
                         for t in 0..CONVOLUTION_WIDTH {
-                            let hist_pos = (self.pos + CONVOLUTION_WIDTH - t) % CONVOLUTION_WIDTH;
-                            let val = self.conv_histories[l_idx][hist_pos][c];
-                            let tap = mixer.conv_taps[c][t];
-                            tap_acc += (val as i128) * (tap as i128);
+                            let hist_pos =
+                                (self.pos + CONVOLUTION_WIDTH - t) & (CONVOLUTION_WIDTH - 1);
+                            let val = conv_history[hist_pos][c];
+                            let tap = taps[t];
+                            let prod = math::checked_mul(i128::from(val), i128::from(tap))
+                                .map_err(|e| invalid(format!("conv tap mul error: {e}")))?;
+                            tap_acc = tap_acc
+                                .checked_add(prod)
+                                .ok_or_else(|| invalid("conv tap acc overflow"))?;
                         }
-                        conv_out[c] = (tap_acc >> 15) as i64 + mixer.conv_bias[c];
+                        let scaled = math::scale_pow2(tap_acc, -15)
+                            .map_err(|e| invalid(format!("conv scale error: {e}")))?;
+                        let base =
+                            i64::try_from(scaled).map_err(|_| invalid("conv out exceeds i64"))?;
+                        conv_out[c] = base
+                            .checked_add(bias)
+                            .ok_or_else(|| invalid("conv bias overflow"))?;
                     }
 
                     // Input projection: drive and gate
@@ -408,39 +426,48 @@ impl IntegerStackSession {
 
                     // Quaternion decay & scan
                     let mut rec_out = vec![0i64; model.shape.width];
-                    for lane in 0..model.shape.lanes() {
-                        let prev_h = self.recurrence_states[l_idx][lane];
-                        let decay_q15 = mixer.decay_rate[lane];
+                    let mut lane_start = 0usize;
+                    for (h_lane, &decay_q15) in state.iter_mut().zip(&mixer.decay_rate) {
+                        let prev_h = *h_lane;
                         let drive_slice = [
-                            drive[lane * 4],
-                            drive[lane * 4 + 1],
-                            drive[lane * 4 + 2],
-                            drive[lane * 4 + 3],
+                            drive[lane_start],
+                            drive[lane_start + 1],
+                            drive[lane_start + 2],
+                            drive[lane_start + 3],
                         ];
-                        // Hamilton product u (x) h_{t-1} + c_t (using shift-and-add)
-                        let new_h = [
-                            ((i128::from(prev_h[0]) * i128::from(decay_q15)) >> 15) as i64
-                                + drive_slice[0],
-                            ((i128::from(prev_h[1]) * i128::from(decay_q15)) >> 15) as i64
-                                + drive_slice[1],
-                            ((i128::from(prev_h[2]) * i128::from(decay_q15)) >> 15) as i64
-                                + drive_slice[2],
-                            ((i128::from(prev_h[3]) * i128::from(decay_q15)) >> 15) as i64
-                                + drive_slice[3],
-                        ];
-                        self.recurrence_states[l_idx][lane] = new_h;
+                        let mut new_h = [0i64; 4];
+                        for i in 0..4 {
+                            let prod =
+                                math::checked_mul(i128::from(prev_h[i]), i128::from(decay_q15))
+                                    .map_err(|e| invalid(format!("decay mul error: {e}")))?;
+                            let decayed = math::scale_pow2(prod, -15)
+                                .map_err(|e| invalid(format!("decay scale error: {e}")))?;
+                            let base =
+                                i64::try_from(decayed).map_err(|_| invalid("decay exceeds i64"))?;
+                            new_h[i] = base
+                                .checked_add(drive_slice[i])
+                                .ok_or_else(|| invalid("decay drive overflow"))?;
+                        }
+                        *h_lane = new_h;
                         for i in 0..4 {
                             // Output gate: h_t * gelu(g_t)
-                            let g = gelu_approx_q16(gate[lane * 4 + i]);
-                            rec_out[lane * 4 + i] =
-                                ((i128::from(new_h[i]) * i128::from(g)) >> 16) as i64;
+                            let g = gelu_approx_q16(gate[lane_start + i])?;
+                            let prod = math::checked_mul(i128::from(new_h[i]), i128::from(g))
+                                .map_err(|e| invalid(format!("gate mul error: {e}")))?;
+                            let scaled = math::scale_pow2(prod, -16)
+                                .map_err(|e| invalid(format!("gate scale error: {e}")))?;
+                            rec_out[lane_start + i] = i64::try_from(scaled)
+                                .map_err(|_| invalid("rec_out exceeds i64"))?;
                         }
+                        lane_start += 4;
                     }
 
                     // Mixer output projection + residual
                     let mixer_proj = mixer.out_matrix.forward_vector(&rec_out)?;
                     for i in 0..model.shape.width {
-                        residual[i] += mixer_proj[i];
+                        residual[i] = residual[i]
+                            .checked_add(mixer_proj[i])
+                            .ok_or_else(|| invalid("residual add overflow"))?;
                     }
 
                     // SwiGLU MLP
@@ -449,42 +476,63 @@ impl IntegerStackSession {
                     let u_act = mlp.up_proj.forward_vector(&mlp_normed)?;
                     let mut silu_prod = vec![0i64; model.shape.mlp];
                     for i in 0..model.shape.mlp {
-                        let s = silu_approx_q16(g_act[i]);
-                        silu_prod[i] = ((i128::from(s) * i128::from(u_act[i])) >> 16) as i64;
+                        let s = silu_approx_q16(g_act[i])?;
+                        let prod = math::checked_mul(i128::from(s), i128::from(u_act[i]))
+                            .map_err(|e| invalid(format!("silu prod error: {e}")))?;
+                        let scaled = math::scale_pow2(prod, -16)
+                            .map_err(|e| invalid(format!("silu scale error: {e}")))?;
+                        silu_prod[i] =
+                            i64::try_from(scaled).map_err(|_| invalid("silu exceeds i64"))?;
                     }
                     let down_act = mlp.down_proj.forward_vector(&silu_prod)?;
                     for i in 0..model.shape.width {
-                        residual[i] += down_act[i];
+                        residual[i] = residual[i]
+                            .checked_add(down_act[i])
+                            .ok_or_else(|| invalid("residual add overflow"))?;
                     }
                 }
-                IntegerStackLayer::Read { mixer, mlp } => {
+                (
+                    IntegerStackLayer::Read { mixer, mlp },
+                    LayerSessionState::Read { keys, values },
+                ) => {
                     let normed = rms_norm_integer(&residual, &mlp.norm_scale)?;
                     let q = mixer.query_proj.forward_vector(&normed)?;
                     let k = mixer.key_proj.forward_vector(&normed)?;
                     let v = mixer.value_proj.forward_vector(&normed)?;
 
                     // Append K/V to cache
-                    self.read_keys[l_idx].push(k);
-                    self.read_values[l_idx].push(v);
+                    keys.push(k);
+                    values.push(v);
 
-                    let head_dim = model.shape.head_dim();
+                    let head_dim = model.head_dim;
                     let mut attn_out = vec![0i64; model.shape.width];
 
                     // Multi-head attention / read
-                    for h in 0..model.shape.heads {
-                        let q_head = &q[h * head_dim..(h + 1) * head_dim];
+                    let mut head_start = 0usize;
+                    for (q_head, age_h) in q.chunks_exact(head_dim).zip(&mixer.age_table) {
+                        let head_end = head_start + head_dim;
                         let mut scores = Vec::with_capacity(self.pos + 1);
 
                         for t in 0..=self.pos {
-                            let k_head =
-                                &self.read_keys[l_idx][t][h * head_dim..(h + 1) * head_dim];
-                            let raw_dot: i64 = q_head
-                                .iter()
-                                .zip(k_head)
-                                .map(|(&a, &b)| (i128::from(a) * i128::from(b) >> 16) as i64)
-                                .sum();
-                            let age_bias = mixer.age_table[h][self.pos - t];
-                            scores.push(raw_dot + age_bias);
+                            let k_head = &keys[t][head_start..head_end];
+                            let mut raw_dot: i128 = 0;
+                            for (&a, &b) in q_head.iter().zip(k_head) {
+                                let prod = math::checked_mul(i128::from(a), i128::from(b))
+                                    .map_err(|e| invalid(format!("attn dot mul error: {e}")))?;
+                                let scaled = math::scale_pow2(prod, -16)
+                                    .map_err(|e| invalid(format!("attn dot scale error: {e}")))?;
+                                raw_dot = raw_dot
+                                    .checked_add(scaled)
+                                    .ok_or_else(|| invalid("attn dot overflow"))?;
+                            }
+                            let age_bias = age_h[self.pos - t];
+                            let dot_val = i64::try_from(raw_dot)
+                                .map_err(|_| invalid("raw_dot exceeds i64"))?;
+                            scores.push(
+                                dot_val
+                                    .checked_add(age_bias)
+                                    .ok_or_else(|| invalid("score overflow"))?,
+                            );
                         }
 
                         // Softmax over scores
@@ -492,10 +540,12 @@ impl IntegerStackSession {
                         let mut exp_scores = Vec::with_capacity(scores.len());
                         let mut sum_exp: i128 = 0;
                         for &s in &scores {
-                            let diff = s - max_score;
+                            let diff = s.saturating_sub(max_score);
                             let e = exp_approx_q16(diff);
                             exp_scores.push(e);
-                            sum_exp += i128::from(e);
+                            sum_exp = sum_exp
+                                .checked_add(i128::from(e))
+                                .ok_or_else(|| invalid("sum_exp overflow"))?;
                         }
 
                         // Aggregate values
@@ -503,17 +553,30 @@ impl IntegerStackSession {
                             for d in 0..head_dim {
                                 let mut val_acc: i128 = 0;
                                 for t in 0..=self.pos {
-                                    let v_val = self.read_values[l_idx][t][h * head_dim + d];
-                                    val_acc += i128::from(v_val) * i128::from(exp_scores[t]);
+                                    let v_val = values[t][head_start + d];
+                                    let prod = math::checked_mul(
+                                        i128::from(v_val),
+                                        i128::from(exp_scores[t]),
+                                    )
+                                    .map_err(|e| invalid(format!("val_acc mul error: {e}")))?;
+                                    val_acc = val_acc
+                                        .checked_add(prod)
+                                        .ok_or_else(|| invalid("val_acc overflow"))?;
                                 }
-                                attn_out[h * head_dim + d] = (val_acc / sum_exp) as i64;
+                                let avg = math::div_round(val_acc, sum_exp)
+                                    .map_err(|e| invalid(format!("attn div error: {e}")))?;
+                                attn_out[head_start + d] =
+                                    i64::try_from(avg).map_err(|_| invalid("attn exceeds i64"))?;
                             }
                         }
+                        head_start = head_end;
                     }
 
                     let read_proj = mixer.out_proj.forward_vector(&attn_out)?;
                     for i in 0..model.shape.width {
-                        residual[i] += read_proj[i];
+                        residual[i] = residual[i]
+                            .checked_add(read_proj[i])
+                            .ok_or_else(|| invalid("residual add overflow"))?;
                     }
 
                     // SwiGLU MLP
@@ -522,14 +585,22 @@ impl IntegerStackSession {
                     let u_act = mlp.up_proj.forward_vector(&mlp_normed)?;
                     let mut silu_prod = vec![0i64; model.shape.mlp];
                     for i in 0..model.shape.mlp {
-                        let s = silu_approx_q16(g_act[i]);
-                        silu_prod[i] = ((i128::from(s) * i128::from(u_act[i])) >> 16) as i64;
+                        let s = silu_approx_q16(g_act[i])?;
+                        let prod = math::checked_mul(i128::from(s), i128::from(u_act[i]))
+                            .map_err(|e| invalid(format!("silu prod error: {e}")))?;
+                        let scaled = math::scale_pow2(prod, -16)
+                            .map_err(|e| invalid(format!("silu scale error: {e}")))?;
+                        silu_prod[i] =
+                            i64::try_from(scaled).map_err(|_| invalid("silu exceeds i64"))?;
                     }
                     let down_act = mlp.down_proj.forward_vector(&silu_prod)?;
                     for i in 0..model.shape.width {
-                        residual[i] += down_act[i];
+                        residual[i] = residual[i]
+                            .checked_add(down_act[i])
+                            .ok_or_else(|| invalid("residual add overflow"))?;
                     }
                 }
+                _ => return Err(invalid("layer and state mismatch in step")),
             }
         }
 
@@ -548,55 +619,68 @@ impl IntegerStackSession {
 // ---------------------------------------------------------------------------
 
 /// Integer Root-Mean-Square Normalization (RMSNorm) without hardware multipliers/dividers.
+#[inline(never)]
 pub fn rms_norm_integer(x: &[i64], scale: &[i64]) -> Result<Vec<i64>> {
     let len = x.len();
     if len == 0 || scale.len() != len {
         return Err(invalid("RMSNorm length mismatch"));
     }
-    let mut sum_sq: u128 = 0;
-    for &v in x {
-        let u = v.unsigned_abs() as u128;
-        sum_sq = sum_sq
-            .checked_add(u * u)
-            .ok_or_else(|| invalid("RMSNorm sum_sq overflow"))?;
-    }
-    let mean_sq = sum_sq / (len as u128);
+    let sum_sq =
+        math::sum_squares(x).map_err(|e| invalid(format!("RMSNorm sum_squares overflow: {e}")))?;
+    let (mean_sq, _) = math::div_rem_unsigned(sum_sq, len as u128)
+        .map_err(|e| invalid(format!("RMSNorm div error: {e}")))?;
     let rms = math::isqrt(mean_sq);
     let d = rms.max(1);
 
     let mut out = Vec::with_capacity(len);
     for (&val, &s) in x.iter().zip(scale) {
-        let scaled_val = (i128::from(val) << 16) / (d as i128);
-        let final_val = (scaled_val * i128::from(s)) >> 16;
-        out.push(final_val as i64);
+        let mag = u128::from(val.unsigned_abs());
+        let shifted = math::shift_left_unsigned(mag, 16)
+            .map_err(|e| invalid(format!("RMSNorm shift error: {e}")))?;
+        let (q, _) = math::div_rem_unsigned(shifted, d)
+            .map_err(|e| invalid(format!("RMSNorm div error: {e}")))?;
+        let signed_q = if val < 0 {
+            -(i128::try_from(q).map_err(|_| invalid("overflow"))?)
+        } else {
+            i128::try_from(q).map_err(|_| invalid("overflow"))?
+        };
+        let prod = math::checked_mul(signed_q, i128::from(s))
+            .map_err(|e| invalid(format!("RMSNorm mul error: {e}")))?;
+        let final_val = math::scale_pow2(prod, -16)
+            .map_err(|e| invalid(format!("RMSNorm scale error: {e}")))?;
+        out.push(i64::try_from(final_val).map_err(|_| invalid("RMSNorm result exceeds i64"))?);
     }
     Ok(out)
 }
 
 /// Integer piecewise linear approximation of SiLU in Q16: x * sigmoid(x).
-#[inline(always)]
-pub fn silu_approx_q16(x: i64) -> i64 {
+#[inline(never)]
+pub fn silu_approx_q16(x: i64) -> Result<i64> {
     if x <= -262_144 {
-        // x <= -4.0
-        0
+        // x <= -4.0 in Q16
+        Ok(0)
     } else if x >= 262_144 {
-        // x >= 4.0
-        x
+        // x >= 4.0 in Q16
+        Ok(x)
     } else {
         // Linear interpolation in [-4.0, 4.0]
         let sig = ((x + 262_144) >> 3).clamp(0, 65536);
-        ((i128::from(x) * i128::from(sig)) >> 16) as i64
+        let prod = math::checked_mul(i128::from(x), i128::from(sig))
+            .map_err(|e| invalid(format!("silu mul error: {e}")))?;
+        let scaled =
+            math::scale_pow2(prod, -16).map_err(|e| invalid(format!("silu scale error: {e}")))?;
+        i64::try_from(scaled).map_err(|_| invalid("silu exceeds i64"))
     }
 }
 
 /// Integer piecewise approximation of GELU in Q16.
-#[inline(always)]
-pub fn gelu_approx_q16(x: i64) -> i64 {
+#[inline(never)]
+pub fn gelu_approx_q16(x: i64) -> Result<i64> {
     silu_approx_q16(x)
 }
 
 /// Integer approximation of exp(x) in Q16 for negative arguments (x <= 0).
-#[inline(always)]
+#[inline(never)]
 pub fn exp_approx_q16(x: i64) -> i64 {
     if x >= 0 {
         65536

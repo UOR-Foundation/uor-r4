@@ -131,19 +131,27 @@ fn test_d4_fidelity_study_dialogue_child_and_stack() -> Result<()> {
     );
 
     // 2. Measure parameter reconstruction SQNR and RMSE across the 3 arms on model matrices
-    // Synthetic representative matrix corresponding to width-576 recurrent layer (576 x 576)
-    let rows = 576;
-    let cols = 576;
-    let mut weights = vec![0.0f32; rows * cols];
-    for r in 0..rows {
-        for c in 0..cols {
-            // Realistic normal-like distribution with outlier tails
-            let phase = ((r * 17 + c * 31) % 1000) as f32 / 1000.0;
-            let val = (phase * std::f32::consts::TAU).sin() * 0.15;
-            // Introduce occasional outlier activations / weights
-            weights[r * cols + c] = if (r + c) % 64 == 0 { val * 4.0 } else { val };
+    let (weights, rows, cols) = if continuous_path.exists() {
+        let (w, shape) = load_safetensors_f32_tensor(continuous_path, "read.value.weight")?;
+        assert_eq!(shape.len(), 2, "read.value.weight must be 2D");
+        let r = shape[0];
+        let c = shape[1];
+        println!("Loaded real tensor 'read.value.weight' [{r}, {c}] from continuous child");
+        (w, r, c)
+    } else {
+        // Fallback synthetic representative matrix corresponding to width-576 recurrent layer (576 x 576)
+        let rows = 576;
+        let cols = 576;
+        let mut weights = vec![0.0f32; rows * cols];
+        for r in 0..rows {
+            for c in 0..cols {
+                let phase = ((r * 17 + c * 31) % 1000) as f32 / 1000.0;
+                let val = (phase * std::f32::consts::TAU).sin() * 0.15;
+                weights[r * cols + c] = if (r + c) % 64 == 0 { val * 4.0 } else { val };
+            }
         }
-    }
+        (weights, rows, cols)
+    };
 
     let mut arms = Vec::new();
 
@@ -299,4 +307,49 @@ fn evaluate_weight_arm(
         green_preserved: green,
         gate_passed,
     }
+}
+
+fn load_safetensors_f32_tensor(path: &Path, tensor_name: &str) -> Result<(Vec<f32>, Vec<usize>)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = File::open(path).map_err(uor_r4_integer::IntegerError::Io)?;
+    let mut header_len_bytes = [0u8; 8];
+    file.read_exact(&mut header_len_bytes)
+        .map_err(uor_r4_integer::IntegerError::Io)?;
+    let header_len = u64::from_le_bytes(header_len_bytes) as usize;
+    let mut header_bytes = vec![0u8; header_len];
+    file.read_exact(&mut header_bytes)
+        .map_err(uor_r4_integer::IntegerError::Io)?;
+    let header: serde_json::Value =
+        serde_json::from_slice(&header_bytes).map_err(uor_r4_integer::IntegerError::Json)?;
+
+    let tensor_entry = header.get(tensor_name).ok_or_else(|| {
+        uor_r4_integer::IntegerError::Invalid(format!("Tensor {tensor_name} not found"))
+    })?;
+
+    let shape = tensor_entry["shape"]
+        .as_array()
+        .ok_or_else(|| uor_r4_integer::IntegerError::Invalid("Missing shape".into()))?
+        .iter()
+        .map(|v| v.as_u64().unwrap_or(0) as usize)
+        .collect::<Vec<_>>();
+
+    let offsets = tensor_entry["data_offsets"]
+        .as_array()
+        .ok_or_else(|| uor_r4_integer::IntegerError::Invalid("Missing data_offsets".into()))?;
+    let start = offsets[0].as_u64().unwrap_or(0);
+    let end = offsets[1].as_u64().unwrap_or(0);
+    let byte_len = (end - start) as usize;
+
+    file.seek(SeekFrom::Start(8 + header_len as u64 + start))
+        .map_err(uor_r4_integer::IntegerError::Io)?;
+    let mut raw_bytes = vec![0u8; byte_len];
+    file.read_exact(&mut raw_bytes)
+        .map_err(uor_r4_integer::IntegerError::Io)?;
+
+    let floats = raw_bytes
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+
+    Ok((floats, shape))
 }

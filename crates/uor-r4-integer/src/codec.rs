@@ -224,6 +224,29 @@ impl Grouped4BitRow {
         out
     }
 
+    /// Extract row activations in fixed-point Q16 without floating-point arithmetic.
+    ///
+    /// Evaluates: q_i * 2^(16 + exp_g) using dyadic scale_pow2 (0 multipliers, 0 floats).
+    #[inline(never)]
+    pub fn to_q16_vector(&self) -> Result<Vec<i64>> {
+        let mut out = Vec::with_capacity(self.elements);
+        let mut start = 0usize;
+        for &exp in &self.group_exponents {
+            let shift = 16 + i32::from(exp);
+            let end = (start + self.group_size).min(self.elements);
+            for i in start..end {
+                let byte = self.packed_codes[i >> 1];
+                let nibble = (byte >> ((i & 1) << 2)) & 15;
+                let code = i64::from((nibble as i8) << 4 >> 4);
+                let scaled = math::scale_pow2(i128::from(code), shift)
+                    .map_err(|e| invalid(format!("scale_pow2 error: {e}")))?;
+                out.push(i64::try_from(scaled).map_err(|_| invalid("embedding out of bounds"))?);
+            }
+            start += self.group_size;
+        }
+        Ok(out)
+    }
+
     /// Multiplier-free dot product with activation vector in integer arithmetic.
     ///
     /// Evaluates: Sum_g 2^(exp_g) * (Sum_{i in g} x_i * q_i)
@@ -632,7 +655,7 @@ pub fn apply_codec_arm(
 /// Multiplier-free product of an i64 activation and a small signed code in [-7..7].
 ///
 /// Uses additions, subtractions, and bit shifts only (no hardware multiplier instruction).
-#[inline(always)]
+#[inline(never)]
 pub fn mul_small_code_i64(val: i64, code: i64) -> Result<i64> {
     let neg = code < 0;
     let abs_c = code.unsigned_abs();

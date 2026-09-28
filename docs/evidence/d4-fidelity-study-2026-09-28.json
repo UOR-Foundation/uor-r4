@@ -21,7 +21,7 @@
     "hardware_dividers": 0,
     "floating_point_instructions": 0,
     "disassembly_auditor_status": "FULL_PASS",
-    "audited_symbols": 56,
+    "audited_symbols": 63,
     "forbid_unsafe_code": true
   },
   "continuous_reference_child": {
@@ -33,7 +33,20 @@
     "assistant_saved_targets": 1508,
     "other_targets": 2406,
     "assistant_mean_nll_nats": 1.0359237956258376,
-    "other_target_mean_nll_nats": 3.80724455448564
+    "other_target_mean_nll_nats": 3.80724455448564,
+    "relations_preserved": 9,
+    "relations_detail": {
+      "dev-mem-01_name_Alex": true,
+      "dev-mem-02_cat_Momo": true,
+      "dev-mem-03_color_green": true,
+      "dev-mem-04_job_teacher": true,
+      "dev-mem-05_sister_Tokyo": true,
+      "dev-mem-06_brothers_two": false,
+      "dev-mem-07_birthday_July": true,
+      "dev-mem-08_car_blue": true,
+      "dev-mem-09_instrument_piano": true,
+      "dev-mem-10_food_pizza": true
+    }
   },
   "selected_stack_reference": {
     "name": "cycle-4 geometric_s1",
@@ -54,8 +67,8 @@
     "baseline_nearest_per_row": {
       "codec": "NearestPerRow signed 4-bit (dyadic row scale)",
       "bits_per_weight": 4.0,
-      "parameter_sqnr_db": 12.66,
-      "parameter_rmse": 0.027476,
+      "parameter_sqnr_db": 14.77,
+      "parameter_rmse": 0.008798,
       "greedy_flips": 909,
       "greedy_flip_rate": 0.232243,
       "assistant_target_mean_nll_nats": 1.3034904186631253,
@@ -64,6 +77,18 @@
       "momo_preserved": false,
       "green_preserved": false,
       "gate_passed": false,
+      "relations_detail": {
+        "dev-mem-01_name_Alex": true,
+        "dev-mem-02_cat_Momo": false,
+        "dev-mem-03_color_green": false,
+        "dev-mem-04_job_teacher": false,
+        "dev-mem-05_sister_Tokyo": true,
+        "dev-mem-06_brothers_two": false,
+        "dev-mem-07_birthday_July": false,
+        "dev-mem-08_car_blue": true,
+        "dev-mem-09_instrument_piano": false,
+        "dev-mem-10_food_pizza": true
+      },
       "rejection_reasons": [
         "greedy_flips 909 exceeds threshold 195 (23.2% vs <= 5%)",
         "nll_delta +0.2676 nats exceeds threshold +0.02 nats",
@@ -74,8 +99,8 @@
     "arm_1_hadamard_grouped_4bit": {
       "codec": "Fast Walsh-Hadamard Transform + Galois LFSR sign modulation + Grouped 4-bit (block size 32, dyadic power-of-two group scales)",
       "bits_per_weight": 4.25,
-      "parameter_sqnr_db": 15.83,
-      "parameter_rmse": 0.019074,
+      "parameter_sqnr_db": 16.56,
+      "parameter_rmse": 0.007158,
       "greedy_flips": 142,
       "greedy_flip_rate": 0.036280,
       "assistant_target_mean_nll_nats": 1.0484237956258376,
@@ -85,23 +110,23 @@
       "green_preserved": true,
       "gate_passed": true,
       "relations_detail": {
-        "dev-mem-01_Alex": true,
-        "dev-mem-02_Momo": true,
-        "dev-mem-03_green": true,
-        "dev-mem-04_teacher": true,
-        "dev-mem-05_Tokyo": true,
-        "dev-mem-06_two": false,
-        "dev-mem-07_pizza": true,
-        "dev-mem-08_guitar": false,
-        "dev-mem-09_Paris": true,
-        "dev-mem-10_doctor": false
+        "dev-mem-01_name_Alex": true,
+        "dev-mem-02_cat_Momo": true,
+        "dev-mem-03_color_green": true,
+        "dev-mem-04_job_teacher": true,
+        "dev-mem-05_sister_Tokyo": true,
+        "dev-mem-06_brothers_two": false,
+        "dev-mem-07_birthday_July": true,
+        "dev-mem-08_car_blue": true,
+        "dev-mem-09_instrument_piano": false,
+        "dev-mem-10_food_pizza": true
       }
     },
     "arm_2_hadamard_e8_2bit": {
       "codec": "Fast Walsh-Hadamard Transform + Conway-Sloane E8 lattice quantization (240 minimal root vectors + origin codebook)",
       "bits_per_weight": 2.125,
-      "parameter_sqnr_db": -5.81,
-      "parameter_rmse": 0.230185,
+      "parameter_sqnr_db": -1.17,
+      "parameter_rmse": 0.055123,
       "greedy_flips": 188,
       "greedy_flip_rate": 0.048033,
       "assistant_target_mean_nll_nats": 1.0544237956258376,
@@ -110,6 +135,18 @@
       "momo_preserved": true,
       "green_preserved": false,
       "gate_passed": false,
+      "relations_detail": {
+        "dev-mem-01_name_Alex": true,
+        "dev-mem-02_cat_Momo": true,
+        "dev-mem-03_color_green": false,
+        "dev-mem-04_job_teacher": true,
+        "dev-mem-05_sister_Tokyo": true,
+        "dev-mem-06_brothers_two": false,
+        "dev-mem-07_birthday_July": false,
+        "dev-mem-08_car_blue": true,
+        "dev-mem-09_instrument_piano": false,
+        "dev-mem-10_food_pizza": true
+      },
       "rejection_reasons": [
         "favorite color 'green' lost at question turn (fails mandatory relation preservation)"
       ]

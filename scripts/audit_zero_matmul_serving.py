@@ -372,6 +372,49 @@ RLIB_MANDATORY_SYMBOLS = [
         "mangled": re.compile(r"__RNv.*math.*22step_zeta_phase_scalar\b"),
         "description": "Scalar zeta phase update with zero float register synthesis",
     },
+    # Discrete Codec & Geometric Stack serving symbols
+    {
+        "name": "geometric_stack::rms_norm_integer",
+        "pattern": re.compile(r"geometric_stack.*rms_norm_integer\b"),
+        "mangled": re.compile(r"__RNv.*geometric_stack.*16rms_norm_integer\b"),
+        "description": "Integer RMS normalization with zero hardware multipliers",
+    },
+    {
+        "name": "geometric_stack::silu_approx_q16",
+        "pattern": re.compile(r"geometric_stack.*silu_approx_q16\b"),
+        "mangled": re.compile(r"__RNv.*geometric_stack.*15silu_approx_q16\b"),
+        "description": "Piecewise linear SiLU in Q16 with zero hardware multipliers",
+    },
+    {
+        "name": "geometric_stack::gelu_approx_q16",
+        "pattern": re.compile(r"geometric_stack.*gelu_approx_q16\b"),
+        "mangled": re.compile(r"__RNv.*geometric_stack.*15gelu_approx_q16\b"),
+        "description": "Piecewise linear GELU in Q16 with zero hardware multipliers",
+    },
+    {
+        "name": "geometric_stack::exp_approx_q16",
+        "pattern": re.compile(r"geometric_stack.*exp_approx_q16\b"),
+        "mangled": re.compile(r"__RNv.*geometric_stack.*14exp_approx_q16\b"),
+        "description": "Integer exp approximation in Q16 with zero hardware multipliers",
+    },
+    {
+        "name": "codec::mul_small_code_i64",
+        "pattern": re.compile(r"codec.*mul_small_code_i64\b"),
+        "mangled": re.compile(r"__RNv.*codec.*18mul_small_code_i64\b"),
+        "description": "Shift-add multiplication by small signed code in [-7..7]",
+    },
+    {
+        "name": "codec::fwht_slice",
+        "pattern": re.compile(r"codec.*fwht_slice\b"),
+        "mangled": re.compile(r"__RNv.*codec.*10fwht_slice\b"),
+        "description": "In-place Fast Walsh-Hadamard Transform on power-of-two slice",
+    },
+    {
+        "name": "codec::Grouped4BitRow::to_q16_vector",
+        "pattern": re.compile(r"(?:codec.*)?(?:Grouped4BitRow.*)?to_q16_vector\b"),
+        "mangled": re.compile(r"__RNv.*Grouped4BitRow.*13to_q16_vector\b"),
+        "description": "Multiplier-free fixed-point Q16 dequantization for embedding lookup",
+    },
 ]
 
 # Mandatory serving symbols for compiled executable binary (e.g. uor-r4-integer, uor-chat)

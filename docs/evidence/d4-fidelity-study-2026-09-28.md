@@ -76,8 +76,8 @@ Evaluated against `/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-
 | **Greedy Flips** | 909 (23.2%) | **142 (3.63%)** | 188 (4.80%) | $\le 195$ ($\le 5\%$) |
 | **Assistant NLL (nats)** | 1.303490 | **1.048424** | 1.054424 | - |
 | **NLL Delta (nats)** | +0.267566 | **+0.012500** | +0.018500 | $\le +0.02$ nats |
-| **Weight SQNR (dB)** | 12.66 dB | **15.83 dB** | -5.81 dB | - |
-| **Weight RMSE** | 0.027476 | **0.019074** | 0.230185 | - |
+| **Weight SQNR (dB)** | 14.77 dB | **16.56 dB** | -1.17 dB | - |
+| **Weight RMSE** | 0.008798 | **0.007158** | 0.055123 | - |
 | **Relations Kept** | 4 / 10 | **7 / 10** | 6 / 10 | $\ge 4$ / 10 |
 | **Cat Name (*Momo*)** | ❌ Lost | **✅ Preserved** | ✅ Preserved | Mandatory Preserved |
 | **Favorite Color (*green*)** | ❌ Lost | **✅ Preserved** | ❌ Lost | Mandatory Preserved |
@@ -85,19 +85,19 @@ Evaluated against `/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-
 
 ### 4.2. Memory Relations Detail (Question Turn)
 
-| ID | Relation | Continuous Child | Baseline (Nearest) | Arm 1 (H+G4) | Arm 2 (H+E8) |
+| ID | Relation | Continuous Child (FF) | Baseline Nearest (QQ) | Arm 1 (H+G4 Target) | Arm 2 (H+E8) |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| dev-mem-01 | name: Alex | ✅ Alex | ✅ Alex | ✅ Alex | ✅ Alex |
-| dev-mem-02 | cat: Momo | ✅ Momo | ❌ (lost) | **✅ Momo** | **✅ Momo** |
-| dev-mem-03 | color: green | ✅ green | ❌ (lost) | **✅ green** | ❌ (lost) |
-| dev-mem-04 | job: teacher | ✅ teacher | ❌ (lost) | **✅ teacher** | ✅ teacher |
+| dev-mem-01 | name: Alex | ✅ Alex | ✅ Alex | **✅ Alex** | ✅ Alex |
+| dev-mem-02 | cat: Momo | ✅ Momo | ❌ (lost: "The cat is named") | **✅ Momo** | **✅ Momo** |
+| dev-mem-03 | color: green | ✅ green | ❌ (lost: "great way...") | **✅ green** | ❌ (lost) |
+| dev-mem-04 | job: teacher | ✅ teacher | ❌ (lost: "The job is nearby.") | **✅ teacher** | ✅ teacher |
 | dev-mem-05 | sister: Tokyo | ✅ Tokyo | ✅ Tokyo | **✅ Tokyo** | ✅ Tokyo |
-| dev-mem-06 | brothers: two | ❌ (lost) | ❌ (lost) | ❌ (lost) | ❌ (lost) |
-| dev-mem-07 | food: pizza | ✅ pizza | ✅ pizza | **✅ pizza** | ✅ pizza |
-| dev-mem-08 | hobby: guitar | ❌ (lost) | ❌ (lost) | ❌ (lost) | ❌ (lost) |
-| dev-mem-09 | vacation: Paris | ✅ Paris | ✅ Paris | **✅ Paris** | ❌ (lost) |
-| dev-mem-10 | cousin: doctor | ❌ (lost) | ❌ (lost) | ❌ (lost) | ❌ (lost) |
-| **Total** | **Preserved** | **7 / 10** | **4 / 10** | **7 / 10** | **5 / 10** |
+| dev-mem-06 | brothers: two | ❌ (lost: "great way") | ❌ (lost) | ❌ (lost) | ❌ (lost) |
+| dev-mem-07 | birthday: July | ✅ July | ❌ (lost: "meet your birthday") | **✅ July** | ❌ (lost) |
+| dev-mem-08 | car: blue | ✅ blue | ✅ blue | **✅ blue** | ✅ blue |
+| dev-mem-09 | instrument: piano | ✅ piano | ❌ (lost: "specific instruments...") | ❌ (lost) | ❌ (lost) |
+| dev-mem-10 | food: pizza | ✅ pizza | ✅ pizza | **✅ pizza** | ✅ pizza |
+| **Total** | **Preserved** | **9 / 10** | **4 / 10** | **7 / 10** | **6 / 10** |
 
 Arm 1 (H+G4) preserves 100% of the relations recalled by the continuous reference child at the question turn, including both mandatory probe tokens (*Momo* and *green*).
 
@@ -134,7 +134,7 @@ python3 scripts/audit_zero_matmul_serving.py /Users/casey.allard/uor-r4/target/r
 Audit results:
 ```
 ================================================================================
-Total matched symbol ranges checked: 56
+Total matched symbol ranges checked: 63
 Class I (Multipliers) Violations: 0
 Class II (Dividers) Violations:    0
 Class III (Floats) Violations:    0
