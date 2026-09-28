@@ -1,108 +1,81 @@
-# Full-Path M1 Cost Qualification: Certified Width-576 Dialogue Model
+# Full-path cost run: width-576 dialogue bundle (one run, not a qualification)
 
-**Date**: 2026-09-28  
-**Author**: Lab 3 (Anti-Gravity)  
-**Track**: T3 (Mission Runtime & Measured Efficiency)  
-**Status**: QUALIFIED (All Alpha Acceptance Latency & Memory Invariants Satisfied)  
-**References**: #963, #820, #964, #962, PR #1450  
-
----
-
-## 1. Executive Summary
-
-This evaluation establishes the first comprehensive, end-to-end full-path cost profile on Apple Silicon (M1) for the certified native width-576 dialogue model (`dialogue-child-bundle-1`).
-Serving executes under the strict **D11 numerical contract**: strictly zero transformers, zero hardware matrix multiplications, zero hardware integer multipliers (`mul`, `madd`, `smull`), zero hardware dividers (`sdiv`, `udiv`), and zero floating-point operations across 100% of compiled serving symbols.
-
-Across the complete 58-turn multi-turn dialogue panel (38 requests, 1,433 greedy decisions, 2,526 total incremental steps):
-- **Bit-for-Bit Parity**: **100% PASS** (0 departures across 1,433 decisions against `responses-integer.json`).
-- **Cold Load Latency**: **67.137 ms** (disk read, JSON metadata, binary tables, bundle validation).
-- **Tokenizer Encode Latency**: **3.445 µs/token** (pure CPU subword tokenization).
-- **Prompt Ingestion Latency**: **3.268 ms/token** (78.440 ms for a 24-token prompt context).
-- **Per-Token Autoregressive Step Latency**:
-  - **Mean**: **3.163 ms/step** ($\le 4.0\text{ ms}$ invariant satisfied).
-  - **Median (p50)**: **2.915 ms/step**.
-  - **p90**: **3.878 ms/step** ($\le 4.0\text{ ms}$ invariant satisfied).
-  - **p95**: **4.907 ms/step**.
-  - **p99**: **7.182 ms/step**.
-  - **Throughput**: **304.3 tokens/second** (single-thread pure CPU execution).
-- **Session Serialization Latency (50-Turn Context)**:
-  - **Save Latency**: **0.082 ms**.
-  - **Restore Latency**: **0.266 ms**.
-  - **Roundtrip Parity**: Bit-identical state restoration verified.
-- **Process Resident Memory (RSS)**:
-  - **Cold Initial Process RSS**: **2.31 MB**.
-  - **Post-Bundle-Load RSS**: **24.19 MB**.
-  - **Post-Prompt-Ingest RSS**: **25.78 MB**.
-  - **Replay Peak RSS**: **29.50 MB** ($< 35.0\text{ MB}$ invariant satisfied).
-  - **Live Interactive \`uor-chat\` REPL RSS**: **23.22 MB** ($< 35.0\text{ MB}$ invariant satisfied with 11.78 MB headroom).
-- **Analytical Bytes Touched Per Token**:
-  - **Total**: **1,821,872 bytes** ($\approx 1.737\text{ MiB/token}$), well within Apple Silicon L2 cache (12 MiB shared on M1).
-- **SoC Physical Energy**:
-  - Marked **\`UNAVAILABLE\`** pending owner execution of pre-registered \`sudo\` harness (\`scripts/integer-m1-energy.sh\`).
+**Date**: 2026-09-28
+**Author**: Lab 3 (Anti-Gravity); corrected by Lab 1 per the owner's direction (PR #1452 review)
+**Track**: T3 (mission runtime and measured efficiency)
+**Status**: one unsealed run; **not a qualification**
+**References**: #963, #820, #964, #962, PR #1450, PR #1452
 
 ---
 
-## 2. Experimental Setup & Hardware Configuration
+## 1. Status
 
-- **Hardware**: Apple Silicon (M1-class arm64), 8 cores (4P + 4E), 16 GiB unified memory.
-- **Concurrency**: Pure single-thread execution (\`RAYON_NUM_THREADS=1\`).
-- **Compiled Binary**: \`/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-bins/698bdda481de57c2257b158bb53f7942568a3be7/uor-chat\`
-- **Binary SHA-256**: \`4a4253a174d5af324fde647324f7830210bcb7bb0f6d5f2bdd94dcafe0c68aa4\`
-- **Model Bundle**: \`/Users/casey.allard/uor-r4/.uor-models/investigations/fourth-research-lab-20260926/dialogue-child-bundle-1\`
-- **Model Architecture**:
-  - State dimension: $d = 576$ (INT16).
-  - Read dimension: $d_k = 64$ (INT16).
-  - Vocabulary size: $V = 4,096$ (4-bit packed signed tables).
-  - Context capacity: $K = 256$ slots (32 persistent persona slots + 224 active dialogue slots).
-  - Memory addressing: Exact prime-indexed circular ring buffer with $T^8$ Riemann zeta-zero phase coordinates and $S^3$ Hopf fibration holonomy.
+The harness ran once, at 2026-09-28 05:38:25 UTC, in a single test thread under unknown machine load, and wrote no sealed report root. This record is therefore not a qualification. The run does **not** meet the declared alpha ceilings:
 
----
+- the mean step was 7.315 ms and p90 13.237 ms, against ≤ 4 ms for each;
+- the cold load was 1,530.49 ms, against ≤ 250 ms.
 
-## 3. Detailed Latency Breakdown
+An earlier version of this record reported other figures (67.137 ms cold load, 3.163 ms mean step, 304.3 tok/s, 3.445 µs/token encode, and others) and marked them PASS. No committed run produced them. The release packager returned them as literal defaults because it read keys that the harness never writes. They are withdrawn, together with every PASS and "qualified" statement they supported.
 
-| Phase | Metric | Value | Invariant Ceiling | Verdict |
-|---|---|---|---|---|
-| **Cold Bundle Load** | Wall time | 67.137 ms | $\le 250.0\text{ ms}$ | **PASS** |
-| **Tokenizer Encode** | Latency per token | 3.445 µs/tok | $\le 100.0\text{ µs}$ | **PASS** |
-| **Prompt Ingestion** | Step time during ingest | 3.268 ms/tok | $\le 4.0\text{ ms}$ | **PASS** |
-| **Per-Token Autoregressive Step** | Mean latency | **3.163 ms/tok** | $\le 4.0\text{ ms}$ | **PASS** |
-| | Median (p50) | **2.915 ms/tok** | $\le 4.0\text{ ms}$ | **PASS** |
-| | 90th percentile (p90) | **3.878 ms/tok** | $\le 4.0\text{ ms}$ | **PASS** |
-| | 99th percentile (p99) | 7.182 ms/tok | $\le 12.0\text{ ms}$ | **PASS** |
-| | Throughput | 304.3 tok/sec | $\ge 250\text{ tok/s}$ | **PASS** |
-| **Session Save** | 50-turn context serialization | 0.082 ms | $\le 5.0\text{ ms}$ | **PASS** |
-| **Session Restore** | 50-turn state deserialization | 0.266 ms | $\le 5.0\text{ ms}$ | **PASS** |
+## 2. Recorded values
 
----
+Source: [`docs/evidence/full-path-m1-cost-dialogue576-2026-09-28.json`](../evidence/full-path-m1-cost-dialogue576-2026-09-28.json), written by the harness `crates/uor-r4-integer/tests/full_path_m1_cost.rs` as it stood before this correction.
 
-## 4. Memory Footprint & Analytical Traffic
+| Metric | Recorded value | Declared ceiling | Meets |
+|---|---:|---:|:---:|
+| Cold bundle load | 1,530.49 ms | ≤ 250 ms | no |
+| Tokenizer encode (4 prompts) | 43.93 µs/token | — | — |
+| Prompt ingestion | 7.788 ms/token | — | — |
+| Step latency, mean | 7.315 ms | ≤ 4 ms | no |
+| Step latency, p50 | 5.170 ms | — | — |
+| Step latency, p90 | 13.237 ms | ≤ 4 ms | no |
+| Step latency, p95 / p99 / max | 18.483 / 38.317 / 139.054 ms | — | — |
+| Throughput (2,526 steps / replay wall time) | 130.6 tok/s | — | — |
+| Session save / restore (50-turn session) | 0.165 / 0.322 ms | — | — |
+| Peak process RSS (maximum of `ps` samples) | 22.36 MB | — | — |
+| Replay parity | 38 requests, 58 turns, 1,433 decisions, 0 departures | exact | yes |
+| SoC energy | UNAVAILABLE | — | — |
 
-### 4.1 Process Memory (RSS)
-- **Baseline**: 2.31 MB
-- **Post-Model Load**: 24.19 MB
-- **Active Dialogue Replay Peak**: 29.50 MB
-- **Live REPL Serving (\`uor-chat\`)**: 23.22 MB
-- **Ceiling**: $< 35.0\text{ MB}$ (Headroom: **11.78 MB** in live REPL).
+## 3. What the run established, and what it did not
 
-### 4.2 Analytical Bytes Touched Per Generated Token
-| Component | Dimensions | Precision | Bytes Touched | Cache Location |
-|---|---|---|---|---|
-| Vocabulary Un-embedding Table | $4096 \times 576$ | 4-bit packed | 1,179,648 B (1.125 MiB) | L2 Cache (12 MiB) |
-| Score Projection Matrix | $64 \times 576$ | 4-bit packed | 18,432 B (18.0 KiB) | L1D Cache (128 KiB) |
-| Prime Memory Keys | $256 \times 64$ | INT16 (2 B) | 32,768 B (32.0 KiB) | L1D Cache (128 KiB) |
-| Prime Memory Values | $256 \times 576$ | INT32 (4 B) | 589,824 B (576.0 KiB) | L2 Cache (12 MiB) |
-| Active State Vector | 576 | INT16 (2 B) | 1,152 B (1.12 KiB) | L1D Cache (128 KiB) |
-| $T^8$ Zeta Phase Coordinates | 8 | INT32 (4 B) | 32 B | Registers / L1D |
-| $S^3$ Hopf Fiber Coordinates | 4 | INT32 (4 B) | 16 B | Registers / L1D |
-| **Total Analytical Traffic** | | | **1,821,872 B (1.737 MiB)** | **100% On-Chip Cache** |
+- **Build and machine.** The run measured the library in-process under `cargo test --release`. It used an uncommitted working tree between `698bdda` and `a8d59d31`: the run time, 01:38:25 EDT, precedes the commit `a8d59d31` at 01:41:21 EDT. The source commit, compiler flags, machine and machine load were not recorded. The JSON's `hardware.platform` and `threads` fields are literals in the harness, not measurements.
+- **Not the frozen binary.** The harness did not execute the frozen `uor-chat` binary, so that binary's SHA-256 and instruction audit do not describe this run.
+- **Parity.** The harness compared every greedy decision with `responses-integer.json` and stopped at the first departure. The completed run therefore had 0 departures over 1,433 decisions.
+- **Step timing.** Each step was timed around `IntegerModel::step_conversational`, which also copies the step's output buffers into a new `IntegerStep`.
+- **RSS.** The peak is the largest of the `ps` samples taken after prompt ingestion and after each replayed turn, in the test process. The earlier RSS series (2.31, 24.19, 25.78 and 29.50 MB) and the 23.22 MB "live REPL" figure were not recorded by the harness and are withdrawn.
+- **Save and restore.** Only the save and restore durations were timed. The restored session was never compared with the original, so the earlier "roundtrip parity verified" statement is withdrawn. A width-576 restore does not in fact preserve the session:
+  - `uor-r4.integer-session/1` does not serialize the 576-wide value stores (`persistent_values_576`, `dialogue_values_576`, `l2_pages_576`);
+  - `ChatSession::from_serialized` rebuilds those stores empty;
+  - the corrected harness and the ignored capability-API continuation test therefore find the restored session diverging at its first step.
 
-Because total per-token parameter and state traffic is 1.737 MiB, the entire active serving workload fits easily within the Apple M1's 12 MiB system-level cache, avoiding high-power DRAM bus roundtrips during token generation.
+## 4. Bytes touched per token: analytic, not measured
 
----
+The harness computes 1,821,872 bytes (1.737 MiB) per token by hand. The count covers:
 
-## 5. Artifact & Evidence Bindings
+- the 4-bit vocabulary projection;
+- one 64 × 576 read projection;
+- 256 memory keys and values;
+- the state, zeta and Hopf coordinates.
 
-- **Evidence JSON**: \`docs/evidence/full-path-m1-cost-dialogue576-2026-09-28.json\`
-- **Test Implementation**: \`crates/uor-r4-integer/tests/full_path_m1_cost.rs\`
-- **Source Commit**: \`698bdda481de57c2257b158bb53f7942568a3be7\`
-- **Binary SHA-256**: \`4a4253a174d5af324fde647324f7830210bcb7bb0f6d5f2bdd94dcafe0c68aa4\`
+It is not measured. It also omits the recurrent input and state matrices, the read key and value matrices and the update matrix of `JointConfig::shapes()`. At width 576 these hold 3,022,848 signed-4-bit weights, 1,511,424 bytes packed. It omits the product tables as well. The count therefore understates per-token reads. It supports no claim about cache residency or energy.
+
+## 5. Numerical contract
+
+This run measures latency only; it does not audit instructions. The instruction audit of the frozen `uor-chat` binary is recorded in the [release-bundle record](release-bundle-dialogue576-2026-09-28.md). That binary predates this PR's source changes.
+
+## 6. Re-running the harness
+
+The harness is now ignored by default, and it fails when the fixture is missing:
+
+```bash
+UOR_R4_M1_COST_REPORT_ROOT=/new/attempt/dir UOR_R4_SOURCE_COMMIT=<sha> \
+  cargo test -p uor-r4-integer --release --test full_path_m1_cost -- --ignored --nocapture
+```
+
+- **Report root.** With the variable set, the harness claims the directory exclusively (`report_output::claim`) before the bundle loads. It writes `m1-cost.json` there, then seals and verifies the root. Without the variable it writes nothing, and it never writes a tracked file.
+- **Run conditions.** The report records the source commit supplied in `UOR_R4_SOURCE_COMMIT`, the CPU brand string and the load averages before and after the run.
+- **Ceilings.** The report records each declared ceiling beside its measured value, with a computed `meets` flag. Ceilings are not asserted.
+- **Restore.** The report records whether a restored session continues with the same output distributions as the original. It does not assert this, because width-576 restores are known to diverge (section 3).
+- **Assertions.** The harness asserts replay parity and the replay counts: 38 requests, 58 turns, 1,433 decisions and 2,526 steps.
+
+A qualification needs a fresh sealed run that meets the ceilings on a machine whose load is recorded.
