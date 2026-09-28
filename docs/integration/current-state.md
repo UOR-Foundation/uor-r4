@@ -11,10 +11,15 @@ frontier, geometric-advantage or full-path energy qualification.**
   - Both final models are on the owner SSD, SHA-256 verified.
   - D0 selects an architecture; it does not qualify dialogue.
 - **Track.** Approved by the owner: [synthesis](whole-project-synthesis-2026-09-28.md) §2–§4 and ROADMAP §2a.
-  - The core is the stack.
-  - Architectural exact relational memory (AERM, D2) is next for Lab 1.
-  - D6 is an evaluation-only audit of what the 2I read representation discards (Lab 2).
+  - The core is the stack, keeping its quaternion transport (D1, #1460).
+  - D2 (architectural exact relational memory) ran: **frozen FAIL on the margin**. The store is perfect in distribution; the learned read does not generalise ([result](d2-aerm-probe-result-2026-09-28.md)).
+  - D6 is an evaluation-only audit of what the 2I read representation discards (Lab 2). It is evidence, not a veto; the geometric read/address operator G is on the main path (owner, 15:27 UTC).
   - D4 is geometry-coded QAT with a fidelity objective (Lab 3).
+- **S1, the stack's D11 serving port (Lab 1): measured, not yet qualified** ([record](s1-stack-serving-measurements-2026-09-28.md)).
+  - The 4-bit export misses the 0.02-nat fidelity gate: +0.0362 nats (round to nearest), +0.0257 (GPTQ). The integer arithmetic costs ≤ 10⁻⁶ nats.
+  - The head is about half of the gap.
+  - Snapping the transport to the 120 icosians costs +0.026 at evaluation; not adopted.
+  - **Owner, 17:00 UTC:** Lab 1 adds QAT, and D4 targets the same gap. The D11 port, bundle and audit continue.
 - **External audit.** Codex's geometric-attention review was verified line by line and imported with a claim ledger ([evidence](../evidence/external-codex-audit-2026-09-28/README.md); synthesis §7; ROADMAP ruling 11).
   - T2 as coded is a compression-fidelity screen, and its geometric arms are confounded by magnitude.
   - #1438's cause is unresolved.
@@ -613,6 +618,13 @@ track does not change the work card below.
     the stack is viable, and the director's D0 decision (#820) adopted it as the
     main-line core; its next step is the native D11 export. The 0.013 difference is within seed
     spread, so this is parity, not an advantage.
+  - **D1, transport attribution** ([note](transport-attribution-d1-2026-09-28.md),
+    September 28). At matched MLP width (749), 1,000 updates and two seeds, the
+    quaternion transport beats identity transport by 0.0711 and 0.0774 nats
+    (512-window development NLL). By the pre-registered rule (at least 0.02 in both
+    seeds) the main-line core **keeps** its quaternion transport. The transport
+    costs 332,928 parameters and 8–10% of training throughput, and its D11 export
+    needs table-served quaternion products.
   - A dialogue path (`dialogue-train`, `lut-chat`) follows the retained study's
     episodes, stop rules and panel limits. It is checked on synthetic data only.
 - **Owner-runnable M1 scripts.**
@@ -1370,3 +1382,5 @@ The complete previous 4,324-line state record is preserved in the
 relative evidence links. Read scoped history as needed. Start routine work from
 this page, the [plan](project-track.md), [decisions](DECISIONS.md), and the exact
 source/artifacts for the active rung; do not restart a whole-project survey.
+
+**Shared ledger reconciliation (Lab 2, September 28):** the single cumulative ledger is `.uor-models/native-joint-learning-2026-09-04/model-time.json` — current `738711698 / 756000000` ms; the +12,000,000 ms read-localization extension (`extension-2026-09-27-read-localization.json`) supersedes the Codex-lab cursor's `744,000,000` limit / `722,400,000` verified allowance, which both Lab 2 and Lab 4 charge.

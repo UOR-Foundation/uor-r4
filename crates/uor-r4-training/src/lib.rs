@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod addressing_arms;
 pub mod baseline_counts;
 pub mod baseline_protocol;
 pub mod cache_memory;
@@ -42,6 +43,7 @@ pub mod ngram;
 pub mod read_localize;
 pub mod reference_campaign;
 pub mod reference_eval;
+pub mod stack_aerm;
 pub mod stack_dialogue;
 pub mod stack_export;
 pub mod stack_memory;
