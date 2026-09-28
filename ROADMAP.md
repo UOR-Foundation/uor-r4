@@ -242,6 +242,10 @@ This is the single integration target. Unknown fields are marked, never filled f
     - **D6 is evidence, not a veto** (owner). Its outcomes describe the representation tested. The next reader experiment must target the failure D6 shows.
     - **G is on the main path** (owner). It is designed after D6, built behind I4 with the dense read as fallback, and promoted only if it wins at equal cost.
     - **Results need measurements** (added 15:45, after #1458). A result merges only with its sealed report roots on disk, and the director re-reads or reproduces its headline numbers from those roots before merging. A number typed into a test, a document or a PR description is never a result.
+    - **Lab 3 results are re-run by the director** (owner, 17:11 UTC, after #1452's figures proved to be packager fallback defaults). Lab 3 keeps D4 and its salvage work.
+      - A Lab 3 number is accepted only after the director re-runs its gating measurement from Lab 3's committed code, into a fresh sealed root.
+      - Every reader of a result file must fail on a missing key. Defaults are never used.
+      - Tests must fail, not pass, when their fixture is missing.
 
 ### Engine consolidation map
 
@@ -599,7 +603,7 @@ This reporting adds no threshold. Thresholds change only with the owner, before 
 
 ## 9. Director log
 
-**2026-09-28 17:00 UTC, S1.0 measured; the owner chooses QAT plus a D4 target for S1's fidelity.**
+**2026-09-28 17:00 UTC, S1.0 measured; the owner chooses QAT plus a D4 target for S1's fidelity; #1452 not accepted.**
 - **S1.0 (Lab 1, evaluation only; [record](docs/integration/s1-stack-serving-measurements-2026-09-28.md)).** The cycle-4 `geometric_s1` exported to the D11 interim format (4-bit maps in groups of 32) misses S1.2's 0.02-nat fidelity gate:
   - **+0.0362** nats with round to nearest;
   - **+0.0257** with GPTQ (top-1 agreement 0.918);
@@ -614,6 +618,8 @@ This reporting adds no threshold. Thresholds change only with the owner, before 
   - D4 (Lab 3) gets the same measured gap as its codec target at 4.25 bits per weight.
   - The milestone fit uses whichever reaches ≤ 0.02 first.
   - S1.1–S1.3 (the D11 port, the bundle and the audit) continue meanwhile.
+- **#1452 not accepted.** Its M1 figures (3.16 ms per step, 304 tok/s, 67 ms cold load) were packager fallback defaults. Its own committed harness run shows 7.3 ms, 130.6 tok/s and 1,530 ms. It is back in draft with a [review](https://github.com/UOR-Foundation/uor-r4/pull/1452#issuecomment-5874859825).
+  - **Owner, 17:11 UTC:** Lab 3 keeps D4, and the director re-runs every Lab 3 gating measurement before acceptance (ruling 12).
 - **Cloud data transfer:** copied and verified (14/14), with the branch deleted.
   - Its README corrects an earlier one: `lens.u16` holds per-token byte lengths, not document lengths.
   - The erratum is recorded in the cycle-4 and D1 receipts on the SSD.
