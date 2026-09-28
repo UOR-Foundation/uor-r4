@@ -1,9 +1,11 @@
-# B1: finite-group tracking lanes — Stage A on the A5 word problem
+# B1: finite-group tracking lanes — Stage A (A5 word problem) and Stage B (inside the stack)
 
 2026-09-27 · Lab 1 (Claude) · [ROADMAP](../../ROADMAP.md) track T1(b) · References #820, #973
 
-**Status.** This is the implementation gate pre-registered in ROADMAP §4.1(b), and a synthetic
-word-problem result, **not a language result**. Stage B (inside the stack, on text) is in §6.
+**Status.** Stage A and Stage B are both complete, as pre-registered in ROADMAP §4.1(b).
+- Every number below comes from source `09e537a4` and binary SHA-256 `c585f965…` (`tracking-lanes`, release).
+- The evidence is in [`docs/evidence/b1-finite-group-lanes-2026-09-27.json`](../evidence/b1-finite-group-lanes-2026-09-27.json): run hashes, report-root manifests and gates.
+- Stage A is a synthetic word problem. Stage B mixes synthetic A5 words into text training. **Neither is a language-capability result**: the text gate measures only that tracking costs no text quality.
 
 Labels:
 - **Measured:** Rust runs on the owner's M1 at 2 threads.
@@ -24,6 +26,14 @@ Labels:
    - A float reflection-pair model fell to 0.039 accuracy at length 4,096 (lr 0.03, seed 1).
    - Its snapped automaton stayed at 1.000.
    - The served automaton is one byte of state and two table reads per token: no multiplier, no float, no weight map.
+
+5. **Stage B PASSES for reflection-pair lanes inside the stack** (*Measured*, §6). The stack is recurrence-primary: `rrar`, width 128, trained on text plus A5 words.
+   - With reflection-pair lanes, the stack tracks A5 at 1.000 at every in-context position in 3 of 3 seeds.
+   - Each lane compiles to an exact 60-state automaton, perfect at length 4,096.
+   - Text NLL moves by +0.036, −0.050 and +0.009 nats against the lane-free stack, a mean of −0.002, inside the pre-registered 0.05.
+   - Quaternion lanes **fail** on reliability: seed 3 never learned A5 (0.039) and cost +0.121 nats. The other two seeds were exact and within the gate.
+   - Phase lanes fail as theory predicts.
+   - The lane-free stack reaches only 0.008–0.160 at position 128.
 
 What survives for the programme is the finite-group claim: learned non-abelian lanes compile to an exact
 automaton of the icosahedral group. Diagonal (commutative) recurrences provably cannot represent this
@@ -100,7 +110,8 @@ The reflection pair is slower here because of its two scans and extra products, 
 
 **Minimal automata.**
 - The exact-generator test shows that 2I read out by A5 class minimises to 60 states: `s` and `−s` share outputs.
-- The grid records predate the minimisation field; the §5 rerun records it for every run.
+- The final rerun on committed `09e537a4` (`final-a-lr*`) records the minimal order for every run: **60 for every exact run**, quaternion and reflection pair alike.
+- It reproduces the pre-commit grid exactly. Every accuracy is identical, including the lr 0.03 seed 1 reflection-pair float drift (0.840 at 512, 0.039 at 4,096).
 
 ## 4. Geometry the training found (*Measured*/*Derived*)
 
@@ -135,12 +146,48 @@ Pre-registered in ROADMAP §4.1(b): LM gate within 0.05 nats of the lane-free st
 - Arms: none, quaternion, reflection_pair and phase, 3 seeds each.
 - Data: the #1017 reference's token store (`issue-1017/tokens/train.u16`, 120M tokens, ids < 4,096) and its `dev.u16`.
 
-*Results pending; recorded in the next revision of this note.*
+**Results** (*Measured*). 1,500 updates, 16 text and 16 A5 windows per update, lane learning rate 0.03. Development NLL is measured on 512 evenly spaced windows of `dev.u16` (65,536 targets). A5 accuracy is the stack's auxiliary read-out on 256 fresh words of length 128.
+
+| Arm | Seed | Dev text NLL | Δ against none, same seed | A5 at position 8 / 64 / 128 | Snapped lane (order → minimal) @4,096 |
+|---|---:|---:|---:|---|---|
+| none | 1 | 2.6660 | — | 0.973 / 0.031 / 0.016 | — |
+| none | 2 | 2.7290 | — | 1.000 / 0.684 / 0.160 | — |
+| none | 3 | 2.6811 | — | 0.992 / 0.004 / 0.008 | — |
+| quaternion | 1 | 2.6780 | +0.0120 | 1.000 / 1.000 / 1.000 | 120 → 60, 1.000 |
+| quaternion | 2 | 2.6769 | −0.0522 | 1.000 / 1.000 / 1.000 | 120 → 60, 1.000 |
+| quaternion | 3 | 2.8022 | **+0.1211** | 1.000 / 0.320 / 0.039 | no lane closed |
+| reflection pair | 1 | 2.7017 | +0.0357 | 1.000 / 1.000 / 1.000 | 120 → 60, 1.000 |
+| reflection pair | 2 | 2.6788 | −0.0502 | 1.000 / 1.000 / 1.000 | 60 → 60, 1.000 |
+| reflection pair | 3 | 2.6904 | +0.0093 | 1.000 / 1.000 / 1.000 | 60 → 60, 1.000 |
+| phase | 1 | 2.7548 | +0.0888 | 0.984 / 0.016 / 0.016 | 6 (meaningless), 0.016 |
+| phase | 2 | 2.8235 | +0.0944 | 1.000 / 0.844 / 0.348 | 7 (meaningless), 0.012 |
+| phase | 3 | 2.7349 | +0.0538 | 0.883 / 0.023 / 0.004 | 6 (meaningless), 0.023 |
+
+**Verdict under the gates as pre-committed.** The evidence assembler encoded them per seed before any Stage B result: every seed's Δ ≤ 0.05 nats, and every seed's A5 accuracy at position 128 ≥ 0.99.
+- **Reflection-pair lanes: PASS** on both gates. The worst Δ is +0.036 and the mean −0.002; A5 is 1.000 in 3 of 3 seeds.
+- **Quaternion lanes: FAIL.** Seed 3's lanes did not learn A5 and that seed cost +0.121 nats. The mean Δ of +0.027 would pass, but the pre-committed rule is per seed.
+- **Phase lanes: FAIL,** as predicted for commutative lanes.
+- **Lane-free stack:** its body alone tracks A5 only at short prefixes, and inconsistently (0.160 at position 128 at best).
+
+**Observations and scope.**
+- **Failed lanes cost text quality; learned lanes do not.** Wherever lanes failed to learn the group (quaternion seed 3, every phase seed), text NLL rose by 0.05–0.12. The lane-free stack trains on the same A5 data without that cost. Lanes that learned the group cost nothing measurable.
+- **Seed noise.** Seed-to-seed spread of the lane-free stack itself is 0.063 nats, so single-seed differences below that are noise.
+- **Scope.** This shows exact non-abelian state and text modelling coexisting in one small model: a 1,393,604-parameter stack, 1,500 updates, context 128. Side parameters are 7,740 for the A5 read-out alone, and add 143,004 with quaternion lanes and 274,172 with reflection-pair lanes; lane tables are read one row per token. It says nothing about state tracking in natural language, which no probe here tests.
+
+**Execution note.** The sequential root `final-b-grid` was stopped by the director, with the owner's approval, after 4 complete runs (none ×3, quaternion seed 1), so that the remaining 8 could run as three parallel streams. Those streams are the sealed roots `final-b-quaternion23`, `final-b-reflection` and `final-b-phase`. `final-b-grid` stays unsealed as an interrupted attempt. Its four run records are complete, and each one's SHA-256 is in the evidence. Seeds and data are identical across roots.
 
 ## 7. Resources
 
-- **Build:** about 3 minutes on a cloned warm cache (`/Volumes/UOR-Workspace/BuildCaches/claude-b1-20260927`, an APFS copy-on-write clone). Incremental rebuilds take 30–40 s.
-- **Tests:** 31 s.
-- **Stage A grid:** 36 runs, about 12 minutes of wall time at 2 threads, peak RSS 1.08 GB.
-- **Storage:** reports are 584 KB in `/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927`.
-- No model slot was needed; these were light jobs under ROADMAP §6.
+- **Build:** about 3 minutes on a cloned warm cache, now the per-lab cache `/Volumes/UOR-Workspace/BuildCaches/claude` (APFS copy-on-write). Incremental rebuilds take 30–40 s; the final clean build of `09e537a4` took 34 s.
+- **Tests:** 5 focused tests, about 31 s.
+- **Stage A:**
+  - pre-commit grid: 36 runs, about 12 minutes at 2 threads;
+  - final rerun: 36 runs, 22 minutes at 2 threads (23:47–00:09 UTC), concurrent with the storage migration;
+  - peak RSS 1.08 GB.
+- **Stage B:**
+  - pilots: about 11 minutes;
+  - sequential grid: 4 runs, 41 minutes at 2 threads;
+  - parallel streams: 8 runs, 50.5 minutes wall at 6 threads (00:50–01:41 UTC);
+  - RSS about 0.8 GB per stream.
+- **Model slot:** held 23:47–00:50 and 00:50–01:41 UTC.
+- **Storage:** all reports are under `/Volumes/UOR-Workspace/uor-r4-lab/claude-b1-20260927`; nothing was written to the internal drive beyond source.
