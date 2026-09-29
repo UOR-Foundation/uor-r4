@@ -249,22 +249,36 @@ impl TurnMarks {
 
 /// The written expert a sieve read selects: the first pair of distinct key
 /// atoms, latest atom first, whose semiprime the store has written.
-fn sieve_expert(
+fn sieve_pair(
     keys: &[u32],
     registry: &PrimeRegistry,
     store: &ExpertStore,
-) -> Result<Option<u64>> {
+) -> Result<Option<(u32, u32)>> {
     for (i, &a) in keys.iter().enumerate().rev() {
         for &b in keys[..i].iter().rev() {
-            if a != b {
-                let expert = registry.semiprime(a, b)?;
-                if store.contains(expert) {
-                    return Ok(Some(expert));
-                }
+            if a != b && store.contains(registry.semiprime(a, b)?) {
+                return Ok(Some((a, b)));
             }
         }
     }
     Ok(None)
+}
+
+/// One read by the prime-route store: the position, the two atoms of the
+/// expert it read (latest first) and whether that expert had been written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RouteRead {
+    pub position: usize,
+    pub pair: (u32, u32),
+    pub stored: bool,
+}
+
+/// One sequence's registers, its reads, and which positions were key atoms.
+#[derive(Clone, Debug, Default)]
+pub struct PrimeRouteRun {
+    pub registers: Registers,
+    pub reads: Vec<RouteRead>,
+    pub key_atom: Vec<bool>,
 }
 
 /// Registers over one sequence from its per-token tags and triggers, keyed
@@ -280,6 +294,21 @@ pub fn simulate_prime_route(
     write: WritePolicy,
     read: ReadPolicy,
 ) -> Result<Registers> {
+    Ok(trace_prime_route(tokens, tags, triggers, marks, eos, registry, write, read)?.registers)
+}
+
+/// [`simulate_prime_route`] with its reads and key-atom positions.
+#[allow(clippy::too_many_arguments)]
+pub fn trace_prime_route(
+    tokens: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    marks: &TurnMarks,
+    eos: u32,
+    registry: &PrimeRegistry,
+    write: WritePolicy,
+    read: ReadPolicy,
+) -> Result<PrimeRouteRun> {
     let n = tokens.len();
     if tags.len() != n || triggers.len() != n || marks.turn_end.len() != n || marks.reply.len() != n
     {
@@ -298,6 +327,8 @@ pub fn simulate_prime_route(
         value_previous: Vec::with_capacity(n),
         read_events: 0,
     };
+    let mut reads = Vec::new();
+    let mut key_atoms = Vec::with_capacity(n);
     for position in 0..n {
         let (token, tag, trigger) = (tokens[position], tags[position], triggers[position]);
         if trigger as usize >= TRIGGERS {
@@ -314,19 +345,26 @@ pub fn simulate_prime_route(
             }
             _ => return Err(invalid("tag outside the tag set")),
         };
+        key_atoms.push(key_atom);
         if key_atom {
             keys.push(token);
-            let expert = match read {
-                ReadPolicy::Tagged => registry.expert(&keys)?,
-                ReadPolicy::Sieve => match sieve_expert(&keys, registry, &store)? {
-                    Some(expert) => Some(expert),
-                    None => registry.expert(&keys)?,
+            let pair = match read {
+                ReadPolicy::Tagged => last_two_distinct(&keys),
+                ReadPolicy::Sieve => match sieve_pair(&keys, registry, &store)? {
+                    Some(pair) => Some(pair),
+                    None => last_two_distinct(&keys),
                 },
             };
-            if let Some(expert) = expert {
+            if let Some(pair) = pair {
+                let expert = registry.semiprime(pair.0, pair.1)?;
                 register = store.read(expert, false);
                 previous = store.read(expert, true);
                 out.read_events += 2;
+                reads.push(RouteRead {
+                    position,
+                    pair,
+                    stored: store.contains(expert),
+                });
             }
         }
         let mut close = token == eos;
@@ -351,7 +389,11 @@ pub fn simulate_prime_route(
         out.status_previous.push(previous.0);
         out.value_previous.push(previous.1);
     }
-    Ok(out)
+    Ok(PrimeRouteRun {
+        registers: out,
+        reads,
+        key_atom: key_atoms,
+    })
 }
 
 /// Prime-route registers for every row of a padded batch, from `tags` and
@@ -366,30 +408,99 @@ pub fn prime_route_registers(
     write: WritePolicy,
     read: ReadPolicy,
 ) -> Result<Registers> {
+    let runs = prime_route_runs(data, tags, triggers, eos, registry, write, read)?;
+    Ok(concat_registers(&runs))
+}
+
+/// The rows' registers, concatenated row-major.
+fn concat_registers(runs: &[PrimeRouteRun]) -> Registers {
+    let mut out = Registers::default();
+    for run in runs {
+        let row = &run.registers;
+        out.read_events += row.read_events;
+        out.status.extend_from_slice(&row.status);
+        out.value.extend_from_slice(&row.value);
+        out.status_previous.extend_from_slice(&row.status_previous);
+        out.value_previous.extend_from_slice(&row.value_previous);
+    }
+    out
+}
+
+/// [`trace_prime_route`] for every row of a padded batch.
+#[allow(clippy::too_many_arguments)]
+pub fn prime_route_runs(
+    data: &DialogueBatch,
+    tags: &[u32],
+    triggers: &[u32],
+    eos: u32,
+    registry: &PrimeRegistry,
+    write: WritePolicy,
+    read: ReadPolicy,
+) -> Result<Vec<PrimeRouteRun>> {
     let (batch, time) = (data.batch, data.time);
     if tags.len() != batch * time || triggers.len() != batch * time {
         return Err(invalid("one tag and trigger per batch position"));
     }
-    let mut out = Registers::default();
-    for (b, episode) in data.episodes.iter().enumerate() {
-        let range = b * time..(b + 1) * time;
-        let row = simulate_prime_route(
-            &data.ids[range.clone()],
-            &tags[range.clone()],
-            &triggers[range],
-            &TurnMarks::from_response_mask(&episode.response_mask, time),
-            eos,
-            registry,
-            write,
-            read,
-        )?;
-        out.read_events += row.read_events;
-        out.status.extend(row.status);
-        out.value.extend(row.value);
-        out.status_previous.extend(row.status_previous);
-        out.value_previous.extend(row.value_previous);
+    data.episodes
+        .iter()
+        .enumerate()
+        .map(|(b, episode)| {
+            let range = b * time..(b + 1) * time;
+            trace_prime_route(
+                &data.ids[range.clone()],
+                &tags[range.clone()],
+                &triggers[range],
+                &TurnMarks::from_response_mask(&episode.response_mask, time),
+                eos,
+                registry,
+                write,
+                read,
+            )
+        })
+        .collect()
+}
+
+/// Why a query's sieve registers differ from gold, or that they agree.
+fn sieve_cause(
+    run: &PrimeRouteRun,
+    ids: &[u32],
+    query: &crate::stack_aerm::Query,
+    check: usize,
+    equal: bool,
+    eos: u32,
+) -> String {
+    if equal {
+        return "RegistersMatch".into();
     }
-    Ok(out)
+    let turn_start = ids[..query.answer_start]
+        .iter()
+        .rposition(|&t| t == eos)
+        .map_or(1, |p| p + 1);
+    let (entity, relation) = query.key;
+    match run
+        .reads
+        .iter()
+        .rev()
+        .find(|r| r.position >= turn_start && r.position <= check)
+    {
+        None => {
+            let atom =
+                |token: u32| (turn_start..=check).any(|p| ids[p] == token && run.key_atom[p]);
+            format!(
+                "NoRead/entity_atom={},relation_atom={}",
+                atom(entity),
+                atom(relation)
+            )
+        }
+        Some(read) => {
+            let (a, b) = read.pair;
+            if (a, b) == (entity, relation) || (b, a) == (entity, relation) {
+                "RightPairWrongRecord".into()
+            } else {
+                format!("WrongPair/stored={}", read.stored)
+            }
+        }
+    }
 }
 
 /// The register sources compared on the same episodes and the same model.
@@ -449,6 +560,11 @@ pub struct PrimeRouteEvaluation {
     /// The model's tag accuracy on real positions.
     pub tag_accuracy: f64,
     pub arms: BTreeMap<String, ArmEvaluation>,
+    /// `ExpertSieve` failures by class and cause (`RegistersMatch` means the
+    /// registers equal gold, so the failure is emission).
+    pub sieve_failure_causes: BTreeMap<String, BTreeMap<String, usize>>,
+    /// Queries `GV1` answered and `ExpertSieve` did not, by class and cause.
+    pub sieve_regression_causes: BTreeMap<String, BTreeMap<String, usize>>,
 }
 
 fn argmax_rows(logits: &Tensor) -> Result<Vec<u32>> {
@@ -495,6 +611,8 @@ pub fn evaluate_prime_route(
                 tags_right += usize::from(tags[row] == data.tags[row]);
             }
         }
+        let mut gv1_correct: Vec<bool> = Vec::new();
+        let mut sieve_runs: Vec<PrimeRouteRun> = Vec::new();
         for arm in RegisterArm::ALL {
             let registers = match arm {
                 RegisterArm::GV1 => {
@@ -518,15 +636,18 @@ pub fn evaluate_prime_route(
                     WritePolicy::TurnEnd,
                     ReadPolicy::Tagged,
                 )?,
-                RegisterArm::ExpertSieve => prime_route_registers(
-                    &data,
-                    &tags,
-                    &triggers,
-                    world.eos,
-                    registry,
-                    WritePolicy::Trigger,
-                    ReadPolicy::Sieve,
-                )?,
+                RegisterArm::ExpertSieve => {
+                    sieve_runs = prime_route_runs(
+                        &data,
+                        &tags,
+                        &triggers,
+                        world.eos,
+                        registry,
+                        WritePolicy::Trigger,
+                        ReadPolicy::Sieve,
+                    )?;
+                    concat_registers(&sieve_runs)
+                }
                 RegisterArm::Gold => Registers {
                     status: data.status.clone(),
                     value: data.value.clone(),
@@ -544,6 +665,7 @@ pub fn evaluate_prime_route(
             )?)?;
             let evaluation = result.arms.entry(format!("{arm:?}")).or_default();
             evaluation.read_events += registers.read_events;
+            let mut query_index = 0usize;
             for (b, episode) in data.episodes.iter().enumerate() {
                 let base = b * context;
                 for query in &episode.queries {
@@ -567,6 +689,36 @@ pub fn evaluate_prime_route(
                     score.queries += 1;
                     score.correct += usize::from(correct);
                     score.registers_equal_gold += usize::from(equal);
+                    match arm {
+                        RegisterArm::GV1 => gv1_correct.push(correct),
+                        RegisterArm::ExpertSieve if !correct => {
+                            let cause = sieve_cause(
+                                &sieve_runs[b],
+                                &data.ids[base..base + context],
+                                query,
+                                check - base,
+                                equal,
+                                world.eos,
+                            );
+                            let class = format!("{:?}", query.class);
+                            *result
+                                .sieve_failure_causes
+                                .entry(class.clone())
+                                .or_default()
+                                .entry(cause.clone())
+                                .or_default() += 1;
+                            if gv1_correct.get(query_index).copied().unwrap_or(false) {
+                                *result
+                                    .sieve_regression_causes
+                                    .entry(class)
+                                    .or_default()
+                                    .entry(cause)
+                                    .or_default() += 1;
+                            }
+                        }
+                        _ => {}
+                    }
+                    query_index += 1;
                 }
             }
         }
@@ -969,6 +1121,68 @@ mod tests {
         };
         let sieve = run(ReadPolicy::Sieve, &replying)?;
         assert_ne!((sieve.status[6], sieve.value[6]), (STATUS_HIT, blue));
+        Ok(())
+    }
+
+    /// The trace names why a query's registers differ from gold.
+    #[test]
+    fn the_sieve_cause_names_a_missing_atom_and_a_right_pair() -> Result<()> {
+        let registry = PrimeRegistry::new(64)?;
+        let (momo, color, blue, which, eos) = (10u32, 11u32, 12u32, 13u32, 2u32);
+        let ids = [momo, color, blue, eos, which, color, momo, eos];
+        let tags = [
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_OTHER,
+            TAG_RELATION,
+            TAG_OTHER,
+            TAG_OTHER,
+        ];
+        let mut triggers = [TRIGGER_NONE; 8];
+        triggers[2] = TRIGGER_WRITE;
+        let marks = TurnMarks {
+            turn_end: vec![false; 8],
+            reply: vec![false; 8],
+        };
+        let query = crate::stack_aerm::Query {
+            class: QueryClass::First,
+            recency_trap: false,
+            key: (momo, color),
+            answer_start: 7,
+            answer_end: 7,
+            value_position: None,
+            value: Some(blue),
+        };
+        let trace = |read| {
+            trace_prime_route(
+                &ids,
+                &tags,
+                &triggers,
+                &marks,
+                eos,
+                &registry,
+                WritePolicy::Trigger,
+                read,
+            )
+        };
+        // Tagged reads: Momo is not an atom in the query turn, so nothing reads.
+        let tagged = trace(ReadPolicy::Tagged)?;
+        assert_eq!(
+            sieve_cause(&tagged, &ids, &query, 6, false, eos),
+            "NoRead/entity_atom=false,relation_atom=true"
+        );
+        // Sieve reads: the right pair is read.
+        let sieve = trace(ReadPolicy::Sieve)?;
+        assert_eq!(
+            sieve_cause(&sieve, &ids, &query, 6, false, eos),
+            "RightPairWrongRecord"
+        );
+        assert_eq!(
+            sieve_cause(&sieve, &ids, &query, 6, true, eos),
+            "RegistersMatch"
+        );
         Ok(())
     }
 }

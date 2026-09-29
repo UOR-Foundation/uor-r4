@@ -113,6 +113,18 @@ fn summary(label: &str, evaluation: &uor_r4_training::stack_prime_route::PrimeRo
             .collect();
         println!("  {:<14} {}", format!("{arm:?}"), cells.join("  "));
     }
+    for (label, causes) in [
+        ("ExpertSieve failures", &evaluation.sieve_failure_causes),
+        (
+            "GV1-right, ExpertSieve-wrong",
+            &evaluation.sieve_regression_causes,
+        ),
+    ] {
+        for (class, counts) in causes {
+            let cells: Vec<String> = counts.iter().map(|(c, n)| format!("{c} {n}")).collect();
+            println!("  {label} [{class}]: {}", cells.join(", "));
+        }
+    }
 }
 
 fn run(args: &Args, out: &Path) -> Result<()> {
