@@ -1,0 +1,158 @@
+{
+  "arms": [
+    {
+      "arm_id": 0,
+      "codec_roundtrip_gate_passed": true,
+      "delta_nll": 0.0,
+      "mean_kl": 0.0,
+      "mean_nll": 9.454779267311096,
+      "name": "float",
+      "payload_bpw": 32.0,
+      "quantized_weights_count": 235929600,
+      "target_bpw": 32.0,
+      "title": "Float Reference Baseline (SmolLM2-360M unquantized)",
+      "top1_agreement_pct": 100.0,
+      "total_serialized_bytes": 943718400,
+      "window_nlls": [
+        9.198974609375,
+        9.727237701416016,
+        9.315070152282715,
+        9.783332824707031,
+        9.866641998291016,
+        9.11185073852539,
+        9.505502700805664,
+        9.129623413085938
+      ]
+    },
+    {
+      "arm_id": 1,
+      "codec_roundtrip_gate_passed": true,
+      "delta_nll": 0.08087623119354248,
+      "mean_kl": 0.15699525363743305,
+      "mean_nll": 9.535655498504639,
+      "name": "rtn_4bit",
+      "payload_bpw": 4.276414930555555,
+      "quantized_weights_count": 235929600,
+      "target_bpw": 4.25,
+      "title": "Round-to-Nearest 4-bit (Group size 32, ~4.25 bpw)",
+      "top1_agreement_pct": 61.5234375,
+      "total_serialized_bytes": 126116608,
+      "window_nlls": [
+        9.270727157592773,
+        9.69370174407959,
+        9.386566162109375,
+        9.910813331604004,
+        9.963140487670898,
+        9.149675369262695,
+        9.647506713867188,
+        9.263113021850586
+      ]
+    },
+    {
+      "arm_id": 2,
+      "codec_roundtrip_gate_passed": true,
+      "delta_nll": 5.9559714794158936,
+      "mean_kl": 8.062934160232544,
+      "mean_nll": 15.41075074672699,
+      "name": "e8_2bit",
+      "payload_bpw": 2.0000390625,
+      "quantized_weights_count": 235929600,
+      "target_bpw": 2.0,
+      "title": "E8 Lattice 2-bit (1-stage, 2.0 bpw)",
+      "top1_agreement_pct": 3.271484375,
+      "total_serialized_bytes": 58983552,
+      "window_nlls": [
+        15.379159927368164,
+        16.031837463378906,
+        14.635951042175293,
+        15.27633285522461,
+        16.335994720458984,
+        15.536578178405762,
+        14.517586708068848,
+        15.572565078735352
+      ]
+    },
+    {
+      "arm_id": 3,
+      "codec_roundtrip_gate_passed": true,
+      "delta_nll": 1.0832407474517822,
+      "mean_kl": 2.1752663999795914,
+      "mean_nll": 10.538020014762878,
+      "name": "e8_3bit",
+      "payload_bpw": 3.0000390625,
+      "quantized_weights_count": 235929600,
+      "target_bpw": 3.0,
+      "title": "E8 Lattice 3-bit (2-stage residual, 3.0 bpw)",
+      "top1_agreement_pct": 13.623046875,
+      "total_serialized_bytes": 88474752,
+      "window_nlls": [
+        10.375147819519043,
+        10.435225486755371,
+        10.12801456451416,
+        10.585027694702148,
+        10.714624404907227,
+        10.28780746459961,
+        10.77116584777832,
+        11.007146835327148
+      ]
+    },
+    {
+      "arm_id": 4,
+      "codec_roundtrip_gate_passed": true,
+      "delta_nll": 0.5659574270248413,
+      "mean_kl": 1.548931896686554,
+      "mean_nll": 10.020736694335938,
+      "name": "e8_4bit",
+      "payload_bpw": 4.000052083333333,
+      "quantized_weights_count": 235929600,
+      "target_bpw": 4.0,
+      "title": "E8 Lattice 4-bit (2-stage residual, 4.0 bpw)",
+      "top1_agreement_pct": 20.556640625,
+      "total_serialized_bytes": 117966336,
+      "window_nlls": [
+        9.79855728149414,
+        10.274030685424805,
+        9.908079147338867,
+        10.249492645263672,
+        10.314386367797852,
+        9.777376174926758,
+        10.176094055175781,
+        9.667877197265625
+      ]
+    }
+  ],
+  "evaluation": {
+    "batch": 1,
+    "time": 256,
+    "tokens_path": "/Users/casey.allard/uor-r4/.uor-models/research/issue-1017/tokens/dev.u16",
+    "total_tokens": 2048,
+    "windows": 8
+  },
+  "kill_criterion": {
+    "definition": "Delta NLL(E8 3-bit) - Delta NLL(RTN 4-bit) > 0.05 nats",
+    "excess_vs_rtn_nats": 1.0023645162582397,
+    "threshold_nats": 0.05,
+    "triggered": true,
+    "verdict": "KILL (negative preserved)"
+  },
+  "model": {
+    "architecture": "LlamaForCausalLM",
+    "hidden_size": 960,
+    "intermediate_size": 2560,
+    "layers": 32,
+    "path": "/Volumes/UOR-Workspace/uor-r4-models/sources/smollm2-360m-instruct",
+    "vocab_size": 49152,
+    "weights_sha256": "e6bffe7435d7ddc10fd3b9a9efd429dafbacb1cb17015fb5562664e7532bf86e"
+  },
+  "quantization_scope": {
+    "matrices_per_layer": [
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ],
+    "target": "mlp_layers",
+    "total_matrices_quantized": 96,
+    "total_weights_quantized": 235929600
+  },
+  "schema": "uor-r4.b3-e8-smollm2-mlp/1"
+}
