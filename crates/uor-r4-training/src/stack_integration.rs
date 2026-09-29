@@ -9,8 +9,21 @@
 //! histories carry only tokens, so the flags are recovered here from the
 //! protocol's marker sequences.
 
+use std::time::Instant;
+
+use candle_core::{backprop::GradStore, Tensor, Var, D};
+use candle_nn::{AdamW, Optimizer, ParamsAdamW};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
+use crate::dialogue_episodes::{EpisodeIndex, PrefixPolicy};
+use crate::geometric_stack::logits_cross_entropy;
+use crate::stack_aerm::{
+    model_registers, AermModel, Bottom, Registers, RelationWorld, TAG_OTHER, TRIGGER_NONE,
+};
+use crate::stack_dialogue::{trim, Reply};
+use crate::stack_tracking::Rng;
 use crate::{invalid, Result};
 
 /// The literal-role protocol's marker token sequences, as its encoder emits
@@ -140,11 +153,446 @@ impl TurnMarkers {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The memory port on dialogue text: on-policy registers under the gate.
+
+fn argmax_rows(logits: &Tensor) -> Result<Vec<u32>> {
+    Ok(logits.detach().argmax(D::Minus1)?.to_vec1::<u32>()?)
+}
+
+/// The registers each position of `ids` (`batch` rows of `time`) sees when
+/// the model runs on its own: the heads' argmax tags and triggers, with every
+/// position outside a user turn forced to Other and None so it neither reads
+/// nor writes (the gate of #1502, applied to the heads' outputs), then the
+/// probe's store (`model_registers`). The heads are G v1's; G v2 replaces this
+/// function's body, not its callers.
+pub fn gated_registers(
+    bottom: &Bottom,
+    ids: &[u32],
+    batch: usize,
+    time: usize,
+    markers: &TurnMarkers,
+    eos: u32,
+) -> Result<Registers> {
+    let mut tags = argmax_rows(&bottom.tags)?;
+    let mut triggers = argmax_rows(&bottom.triggers)?;
+    gate_heads(ids, &mut tags, &mut triggers, batch, time, markers)?;
+    model_registers(ids, &tags, &triggers, batch, time, eos)
+}
+
+/// Force every position outside a user turn to Other and None.
+pub fn gate_heads(
+    ids: &[u32],
+    tags: &mut [u32],
+    triggers: &mut [u32],
+    batch: usize,
+    time: usize,
+    markers: &TurnMarkers,
+) -> Result<()> {
+    if ids.len() != batch * time || tags.len() != ids.len() || triggers.len() != ids.len() {
+        return Err(invalid("one id, tag and trigger per position"));
+    }
+    for row in 0..batch {
+        let start = row * time;
+        for (offset, flag) in markers
+            .user_turn_flags(&ids[start..start + time])
+            .into_iter()
+            .enumerate()
+        {
+            if flag == 0 {
+                tags[start + offset] = TAG_OTHER;
+                triggers[start + offset] = TRIGGER_NONE;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Next-token logits with on-policy, gated registers.
+pub fn dialogue_logits(
+    model: &AermModel,
+    ids: &[u32],
+    batch: usize,
+    time: usize,
+    markers: &TurnMarkers,
+    eos: u32,
+) -> Result<Tensor> {
+    let bottom = model.bottom(ids, batch, time)?;
+    let registers = gated_registers(&bottom, ids, batch, time, markers, eos)?;
+    model.top(
+        &bottom.hidden,
+        &registers.status,
+        &registers.value,
+        &registers.status_previous,
+        &registers.value_previous,
+    )
+}
+
+/// Each target's negative log-likelihood under `logits` (rows × vocabulary).
+fn target_nll(logits: &Tensor, targets: &[u32]) -> Result<Vec<f64>> {
+    let log_probs = candle_nn::ops::log_softmax(&logits.detach(), D::Minus1)?;
+    let index = Tensor::from_vec(targets.to_vec(), (targets.len(), 1), logits.device())?;
+    Ok(log_probs
+        .gather(&index, D::Minus1)?
+        .squeeze(D::Minus1)?
+        .to_vec1::<f32>()?
+        .into_iter()
+        .map(|value| -f64::from(value))
+        .collect())
+}
+
+#[derive(Clone, Copy, Default)]
+struct Totals {
+    responses: usize,
+    targets: usize,
+    nll: f64,
+    first_targets: usize,
+    first_nll: f64,
+}
+
+impl Totals {
+    fn report(&self) -> Value {
+        json!({
+            "responses": self.responses,
+            "targets": self.targets,
+            "response_mean_nll": (self.targets != 0).then(|| self.nll / self.targets as f64),
+            "first_four_targets": self.first_targets,
+            "first_four_response_targets_mean_nll":
+                (self.first_targets != 0).then(|| self.first_nll / self.first_targets as f64),
+        })
+    }
+}
+
+/// `stack_dialogue::development` for a model with the memory port: the same
+/// responses under their full prefixes and the same token means, with the
+/// registers each position sees in use (on-policy, gated).
+pub fn development(
+    model: &AermModel,
+    index: &EpisodeIndex<'_>,
+    ids: &[usize],
+    batch: usize,
+    markers: &TurnMarkers,
+    eos: u32,
+) -> Result<Value> {
+    if !(1..=64).contains(&batch) || ids.is_empty() {
+        return Err(invalid("development needs responses and a batch of 1..64"));
+    }
+    let mut totals = vec![Totals::default(); index.sources().len()];
+    for chunk in ids.chunks(batch) {
+        let episodes = index.materialize(chunk, PrefixPolicy::FullPrefix)?;
+        let trimmed = trim(&episodes);
+        let time = trimmed.time;
+        let logits = dialogue_logits(model, &trimmed.inputs, episodes.batch, time, markers, eos)?;
+        let nll = target_nll(&logits, &trimmed.targets)?;
+        for (lane, row) in episodes.rows.iter().enumerate() {
+            let total = &mut totals[row.source_index];
+            total.responses += 1;
+            let start = lane * time;
+            let mut first = 0usize;
+            for (weight, value) in trimmed.weights[start..start + time]
+                .iter()
+                .zip(&nll[start..start + time])
+            {
+                if *weight == 1.0 {
+                    total.targets += 1;
+                    total.nll += value;
+                    if first < 4 {
+                        total.first_targets += 1;
+                        total.first_nll += value;
+                        first += 1;
+                    }
+                }
+            }
+        }
+    }
+    let mut pooled = Totals::default();
+    let mut sources = Vec::with_capacity(totals.len());
+    for (source_index, total) in totals.iter().enumerate() {
+        pooled.responses += total.responses;
+        pooled.targets += total.targets;
+        pooled.nll += total.nll;
+        pooled.first_targets += total.first_targets;
+        pooled.first_nll += total.first_nll;
+        let mut report = total.report();
+        report["label"] = json!(index.sources()[source_index].label);
+        sources.push(report);
+    }
+    let mut report = pooled.report();
+    report["schema"] = json!("uor-r4.integration-development/1");
+    report["registers"] = json!("on-policy, gated to user turns");
+    report["per_source"] = json!(sources);
+    Ok(report)
+}
+
+/// A greedy reply with the store in the loop: every step reruns the heads
+/// and the gated store over the whole window, as serving will.
+pub fn greedy_reply(
+    model: &AermModel,
+    history: &[u32],
+    cap: usize,
+    markers: &TurnMarkers,
+    eos: u32,
+) -> Result<Reply> {
+    let mut window = history.to_vec();
+    let mut ids = Vec::with_capacity(cap);
+    for _ in 0..cap {
+        let time = window.len();
+        if time == 0 || time > model.stack.config.context {
+            return Err(invalid("the reply outgrew the context"));
+        }
+        let logits = dialogue_logits(model, &window, 1, time, markers, eos)?.detach();
+        let last = logits.get(time - 1)?.to_vec1::<f32>()?;
+        let mut best = 0usize;
+        for (i, value) in last.iter().enumerate() {
+            if *value > last[best] {
+                best = i;
+            }
+        }
+        let next = best as u32;
+        ids.push(next);
+        window.push(next);
+        if let Some(reply) = Reply::stop(&ids, eos) {
+            return Ok(reply);
+        }
+    }
+    Ok(Reply {
+        ids,
+        eos: false,
+        cycle: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Training.
+
+/// The integration fit's settings.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct IntegrationConfig {
+    pub steps: usize,
+    /// Dialogue responses per update (1..64), sampled like `dialogue-train`.
+    pub dialogue_batch: usize,
+    /// Relation-world episodes per update.
+    pub world_batch: usize,
+    pub learning_rate: f64,
+    pub warmup: usize,
+    /// The cosine schedule's floor, as a fraction of `learning_rate`.
+    pub min_lr: f64,
+    pub weight_decay: f64,
+    /// Global gradient-norm clip.
+    pub clip: f64,
+    pub tag_weight: f64,
+    pub trigger_weight: f64,
+    /// Loss weight of a trigger-positive position relative to a negative one.
+    pub trigger_positive_weight: f32,
+    pub data_seed: u64,
+}
+
+/// One logged update.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct IntegrationRecord {
+    pub step: usize,
+    pub learning_rate: f64,
+    pub dialogue_loss: f64,
+    pub world_loss: f64,
+    pub tag_loss: f64,
+    pub trigger_loss: f64,
+    pub gradient_norm: f64,
+    pub seconds: f64,
+}
+
+fn schedule(step: usize, config: &IntegrationConfig) -> f64 {
+    if step < config.warmup {
+        return (step + 1) as f64 / config.warmup as f64;
+    }
+    let span = config.steps.saturating_sub(config.warmup).max(1);
+    let progress = ((step - config.warmup) as f64 / span as f64).min(1.0);
+    config.min_lr + (1.0 - config.min_lr) * 0.5 * (1.0 + (std::f64::consts::PI * progress).cos())
+}
+
+fn clip_gradients(grads: &mut GradStore, vars: &[Var], max_norm: f64) -> Result<f64> {
+    let mut total = 0f64;
+    for var in vars {
+        if let Some(grad) = grads.get(var.as_tensor()) {
+            total += f64::from(grad.sqr()?.sum_all()?.to_scalar::<f32>()?);
+        }
+    }
+    let norm = total.sqrt();
+    if norm.is_finite() && norm > max_norm {
+        let scale = max_norm / (norm + 1e-6);
+        for var in vars {
+            if let Some(grad) = grads.get(var.as_tensor()) {
+                let scaled = (grad * scale)?;
+                grads.insert(var.as_tensor(), scaled);
+            }
+        }
+    }
+    Ok(norm)
+}
+
+/// One integration fit. Each update takes:
+/// - a dialogue batch (chat-v0 and M-world responses under full prefixes)
+///   whose registers are on-policy and gated, trained on the response loss
+///   only: unlabeled text gets no head loss (arm A's supervision);
+/// - a relation-world batch with gold registers (teacher forcing), trained on
+///   its response loss and the heads' tag and trigger losses.
+///
+/// `on_record` sees every 50th update and the last.
+pub fn train_integration(
+    model: &AermModel,
+    dialogues: &EpisodeIndex<'_>,
+    world: &RelationWorld,
+    markers: &TurnMarkers,
+    eos: u32,
+    config: &IntegrationConfig,
+    mut on_record: impl FnMut(&IntegrationRecord),
+) -> Result<Vec<IntegrationRecord>> {
+    if config.steps == 0
+        || !(1..=64).contains(&config.dialogue_batch)
+        || config.world_batch == 0
+        || !(config.learning_rate > 0.0)
+        || !(0.0..=1.0).contains(&config.min_lr)
+    {
+        return Err(invalid(
+            "an integration fit needs steps, a dialogue batch of 1..64, a world batch, a positive \
+             learning rate and a floor in [0, 1]",
+        ));
+    }
+    let context = model.stack.config.context;
+    let started = Instant::now();
+    let (decayed, plain) = model.optimizer_groups();
+    let all: Vec<Var> = decayed.iter().chain(&plain).cloned().collect();
+    let params = |weight_decay| ParamsAdamW {
+        lr: config.learning_rate,
+        beta1: 0.9,
+        beta2: 0.95,
+        eps: 1e-8,
+        weight_decay,
+    };
+    let mut decayed_optimizer = AdamW::new(decayed, params(config.weight_decay))?;
+    let mut plain_optimizer = AdamW::new(plain, params(0.0))?;
+    let mut rng = Rng::new(config.data_seed ^ 0x776f_726c_6421);
+    let mut records = Vec::new();
+    for step in 0..config.steps {
+        let learning_rate = config.learning_rate * schedule(step, config);
+        decayed_optimizer.set_learning_rate(learning_rate);
+        plain_optimizer.set_learning_rate(learning_rate);
+        // Dialogue: on-policy gated registers, response loss only.
+        let ids = dialogues.sample_ids(config.data_seed, step as u64, config.dialogue_batch)?;
+        let episodes = dialogues.materialize(&ids, PrefixPolicy::FullPrefix)?;
+        let trimmed = trim(&episodes);
+        let logits = dialogue_logits(
+            model,
+            &trimmed.inputs,
+            episodes.batch,
+            trimmed.time,
+            markers,
+            eos,
+        )?;
+        let dialogue_loss =
+            logits_cross_entropy(&logits, &trimmed.targets, Some(&trimmed.weights))?;
+        // World: gold registers, response and head losses.
+        let batch = world.batch(&mut rng, config.world_batch, context, false)?;
+        let bottom = model.bottom(&batch.ids, batch.batch, batch.time)?;
+        let world_logits = model.top(
+            &bottom.hidden,
+            &batch.status,
+            &batch.value,
+            &batch.status_previous,
+            &batch.value_previous,
+        )?;
+        let world_loss =
+            logits_cross_entropy(&world_logits, &batch.targets, Some(&batch.response))?;
+        let tag_loss = logits_cross_entropy(&bottom.tags, &batch.tags, Some(&batch.real))?;
+        let trigger_weights: Vec<f32> = batch
+            .triggers
+            .iter()
+            .zip(&batch.real)
+            .map(|(&t, &r)| {
+                if t == TRIGGER_NONE {
+                    r
+                } else {
+                    r * config.trigger_positive_weight
+                }
+            })
+            .collect();
+        let trigger_loss =
+            logits_cross_entropy(&bottom.triggers, &batch.triggers, Some(&trigger_weights))?;
+        let loss = (((&dialogue_loss + &world_loss)? + (&tag_loss * (0.5 * config.tag_weight))?)?
+            + (&trigger_loss * (0.5 * config.trigger_weight))?)?;
+        let mut grads = loss.backward()?;
+        let norm = clip_gradients(&mut grads, &all, config.clip)?;
+        decayed_optimizer.step(&grads)?;
+        plain_optimizer.step(&grads)?;
+        if step % 50 == 0 || step + 1 == config.steps {
+            let record = IntegrationRecord {
+                step,
+                learning_rate,
+                dialogue_loss: f64::from(dialogue_loss.to_scalar::<f32>()?),
+                world_loss: f64::from(world_loss.to_scalar::<f32>()?),
+                tag_loss: f64::from(tag_loss.to_scalar::<f32>()?),
+                trigger_loss: f64::from(trigger_loss.to_scalar::<f32>()?),
+                gradient_norm: norm,
+                seconds: started.elapsed().as_secs_f64(),
+            };
+            if !(record.dialogue_loss.is_finite() && record.world_loss.is_finite()) {
+                return Err(invalid(format!("non-finite loss at update {step}")));
+            }
+            on_record(&record);
+            records.push(record);
+        }
+    }
+    Ok(records)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use crate::stack_aerm::{TAG_ENTITY, TAG_RELATION, TAG_VALUE, TRIGGER_WRITE};
     use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
+
+    #[test]
+    fn the_gate_leaves_no_operation_outside_user_turns() {
+        let tokenizer = tokenizer();
+        let protocol = DialogueProtocol::literal_roles_v1(&tokenizer).unwrap();
+        let encoder = protocol.bind(&tokenizer).unwrap();
+        let markers = TurnMarkers::new(&tokenizer, protocol.bos_id, protocol.eos_id).unwrap();
+        let document = encoder.encode_document(&[
+            Message {
+                role: "user",
+                content: "My job is cook.",
+            },
+            Message {
+                role: "assistant",
+                content: "Your job is cook.",
+            },
+        ]);
+        let ids = document.tokens;
+        let time = ids.len();
+        // Heads that tag and trigger everywhere, as an untrained model might.
+        let cycle = [TAG_ENTITY, TAG_RELATION, TAG_VALUE];
+        let mut tags: Vec<u32> = (0..time).map(|t| cycle[t % 3]).collect();
+        // Each entity, relation and value triple closes with a write.
+        let mut triggers: Vec<u32> = (0..time)
+            .map(|t| {
+                if t % 3 == 2 {
+                    TRIGGER_WRITE
+                } else {
+                    TRIGGER_NONE
+                }
+            })
+            .collect();
+        let ungated = model_registers(&ids, &tags, &triggers, 1, time, protocol.eos_id).unwrap();
+        gate_heads(&ids, &mut tags, &mut triggers, 1, time, &markers).unwrap();
+        let gated = model_registers(&ids, &tags, &triggers, 1, time, protocol.eos_id).unwrap();
+        let flags = markers.user_turn_flags(&ids);
+        for t in 0..time {
+            if flags[t] == 0 {
+                assert_eq!((tags[t], triggers[t]), (TAG_OTHER, TRIGGER_NONE));
+            }
+        }
+        // Operations remain inside the user turn, and fewer than ungated.
+        assert!(gated.read_events > 0 && gated.read_events < ungated.read_events);
+    }
 
     /// GPT-2's byte-to-character alphabet.
     fn alphabet() -> Vec<char> {
