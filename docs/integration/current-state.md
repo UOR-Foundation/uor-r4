@@ -21,7 +21,14 @@ margin, compile the changed path and complete the unchanged parity smoke in a
 new root before B2 fitting or the 360M ladder. The [shared differentiable
 attention interface](track-b-shared-attention-2026-09-29.md), harmonic features
 and bounded seeded generation are now source-implemented in draft PR #1518;
-their compilation and new tests remain NOT_RUN pending that bounded execution.
+their first compilation attempt exited 101 after 22.97 seconds during the
+owner's workspace-image restoration. A follow-up isolated macOS rejecting a
+cached procedural-macro dylib under the restored mount's `quarantine` policy;
+the dylib's code signature verifies on disk. New tests and checkpoint parity
+remain NOT_RUN. Model hashes and charge receipts survived; two missing B2
+drafts were recovered and pushed. See the [restoration record](../evidence/track-b-restoration-2026-09-29/README.md).
+Next: coordinate the shared mount with Lab 1, verify compiler access, then run
+the same focused checks and parity gate without clearing the cache.
 
 ## Current leadership, September 29
 

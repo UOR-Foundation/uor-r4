@@ -1,6 +1,6 @@
 # Shared Track B attention interface
 
-Status on 2026-09-29: **source implemented; compilation, new tests and checkpoint parity NOT_RUN**.
+Status on 2026-09-29: **source implemented; compilation unavailable after workspace restoration; new tests and checkpoint parity NOT_RUN**.
 The earlier stock
 wrapper's executed checks are scoped to its [recorded revisions](track-b-conversion-result-2026-09-29.md),
 not to this newly added implementation. [Draft PR #1518](https://github.com/UOR-Foundation/uor-r4/pull/1518)
@@ -11,6 +11,15 @@ whereas our earlier card mistakenly treated that allocation as an untouchable
 free-space floor. The new conservative lab guard is 24 GiB plus the owner's
 128 MiB stop margin, with 256 MiB additional build and 96 MiB report allocation.
 Earlier stopped attempts keep their original conditions and remain unqualified.
+
+The owner's restored workspace image now has ample free space, but the first
+shared-interface build exited 101 after 22.97 seconds with E0463 errors. A narrow
+follow-up isolated macOS rejecting the cached `serde_derive` procedural macro
+with `library load disallowed by system policy`. Its code signature verifies
+on disk; the restored volume is mounted with `quarantine`. This is an execution
+blocker, not a numerical result. The [restoration record](../evidence/track-b-restoration-2026-09-29/README.md)
+preserves the failed build and recovered drafts. Lab 1 has the diagnostic for
+coordinating the shared mount; no broad cache deletion is indicated.
 
 Lab 1's [shared-model ruling](https://github.com/UOR-Foundation/uor-r4/issues/1515#issuecomment-5898192281)
 assigns one Candle model to Codex. DeepSeek supplies flock at the attention seam;

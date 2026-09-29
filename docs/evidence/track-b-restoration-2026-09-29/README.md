@@ -10,6 +10,16 @@ exited 101 with E0463 dependency errors after **22.97 seconds** (24 seconds in
 the shell receipt). **No tests ran.** The error coincided with mount changes;
 source correctness and restored-cache usability remain unverified.
 
+A follow-up standalone core-verifier compile exposed the specific loader
+failure: macOS rejected `libserde_derive-916883dc6a4602e7.dylib` with
+`library load disallowed by system policy`. `codesign --verify --verbose=2`
+reports that this dylib is valid on disk and satisfies its designated
+requirement. The current APFS mount includes `quarantine`; neither the image
+bundle nor this dylib has a `com.apple.quarantine` extended attribute. Ten
+contemporary direct rlib/rmeta pairs are readable with matching embedded
+metadata. The [diagnostic was sent to Lab 1](https://github.com/UOR-Foundation/uor-r4/issues/1515#issuecomment-5899377775).
+No mount, code-signature or security-attribute changes were made by Codex.
+
 The log's trailing `BUILD_WALL_BOUND` is **not a real timeout**. The original
 wrapper's cleanup killed a watchdog sleep, whose shell then continued to its
 next statement. The closed `/usr/bin/time` record and exit receipt establish
@@ -21,8 +31,21 @@ The restored model weights, config, tokenizer and tokenizer-config SHA-256
 identities match the pinned values in the conversion result. The shared ledger
 retains all three Codex receipts and cumulative 785,486,862 / 1,130,000,000 ms.
 No later Codex charge had been written before restoration. Both parity roots'
-manifest identities, exact regular-file sets and listed sizes match; complete
-content verification is still pending at this checkpoint.
+manifest identities, exact regular-file sets, all twelve BLAKE3 content hashes
+and listed sizes match. Independent verification checked schema, root, duplicate
+paths and the absence of extra files, symlinks or subdirectories. A 0.47-second
+standalone std-plus-BLAKE3 reader was built internally from the existing pinned
+library without procedural macros; it only reads and hashes files. This is
+equivalent content/inventory verification, not a claimed rerun of the core
+`report_output::verify` function, whose helper compilation was policy-blocked.
+No root was changed or resealed.
+
+After validating that ledger state, checkpoint 4 charged the complete elapsed
+interval from epoch-ms 1790715650681 through 1790717645392: **1,994,711 ms**.
+The fresh locked ledger became **787,481,573 / 1,130,000,000 ms**. This includes
+recovery, static review, the failed 22.97-second build and delivery; model
+inference and training during this interval are zero. Component times are not
+added again.
 
 The new source-data and transfer drafts were absent externally. They were
 recovered from recorded tool patches into the internal worktree; provenance and

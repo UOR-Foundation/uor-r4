@@ -1,0 +1,26 @@
+{
+  "schema": "uor-r4.track-b-symbolic-audit/1",
+  "source_revision": "0881b302",
+  "source": "crates/uor-r4-training/src/track_b/harmonics.rs",
+  "reviewer": "independent conversion_adversary subagent",
+  "tool": "Wolfram context followed by Wolfram Language evaluator",
+  "arithmetic": "exact rational symbolic arithmetic",
+  "normalized_gegenbauer": ["1", "t", "(d*t^2-1)/(d-1)", "((d+2)*t^3-3*t)/(d-1)"],
+  "kernel": "delta + ((1+t)/2)^L",
+  "assumptions": "d > 2, delta > 0; -1 <= t <= 1 for the lower bound",
+  "expansion_residuals": [0, 0, 0],
+  "trace_removal_scaling_residuals": [0, 0],
+  "coefficient_positivity": [true, true, true],
+  "kernel_floor_bounds": [true, true, true],
+  "arms": [
+    {"d":16,"L":1,"coefficients":["delta+1/2","1/2"],"width":17},
+    {"d":16,"L":2,"coefficients":["delta+17/64","1/2","15/64"],"width":152},
+    {"d":16,"L":3,"coefficients":["delta+19/128","19/48","45/128","5/48"],"width":952},
+    {"d":32,"L":1,"coefficients":["delta+1/2","1/2"],"width":33},
+    {"d":32,"L":2,"coefficients":["delta+33/128","1/2","31/128"],"width":560},
+    {"d":32,"L":3,"coefficients":["delta+35/256","105/272","93/256","31/272"],"width":6512}
+  ],
+  "band_dimensions": {"16":[1,16,135,800],"32":[1,32,527,5952]},
+  "result": "NO_BLOCKING_MATHEMATICAL_DEFECT_FOUND",
+  "limitations": "Auditor-transcribed symbolic tool results; no saved evaluator-result URL was supplied. No F32 denominator-floor guarantee, compiled Rust test, autodiff/Metal test, model evaluation, fitted operator or capability result. Runtime denominator rejection and actual parity remain mandatory."
+}
