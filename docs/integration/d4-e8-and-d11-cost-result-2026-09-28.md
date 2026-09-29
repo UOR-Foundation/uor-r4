@@ -19,20 +19,20 @@ September 28, 2026. References #973 under #820.
 
 ### 2. Measured 5-Arm Summary Table
 
-| Arm | Mean NLL | ΔNLL vs Float (nats) | Top-1 Agreement | Bits / Weight | D4 Gate (≤ +0.0200 nats) |
+| Arm | Mean NLL | ΔNLL vs Float (nats) | Top-1 Agreement | Bits / Weight | D4 Gate (≤ +0.0200 nats, ≤ 4.25 bpw) |
 |:---|---:|---:|---:|---:|:---:|
 | **Float Baseline** | 1.998113 | 0.000000 | 100.00% | 32.0000 | REF |
-| **(i) RTN Baseline** | 2.034342 | +0.036230 | 90.65% | 4.2504 | FAIL |
-| **(ii) Online Hadamard + Grouped 4-bit (H+G4)** | 2.025120 | +0.027007 | 91.28% | 4.2725 | FAIL |
-| **(iii) Online Hadamard + E8 Lattice (H+E8)** | 4.421591 | +2.423478 | 31.18% | 2.0143 | FAIL |
-| **(iv) Online Hadamard + E8 (Finer Head Scale)** | 4.419581 | +2.421468 | 31.22% | 2.1795 | FAIL |
+| **(i) RTN Baseline** | 2.034342 | +0.036230 | 90.65% | 4.2504 | FAIL (ΔNLL > +0.02 nats) |
+| **(ii) Online Hadamard + Grouped 4-bit (H+G4)** | 2.025120 | +0.027007 | 91.28% | 4.2725 | FAIL (Over budget: 4.2725 > 4.25 bpw; ΔNLL > +0.02 nats) |
+| **(iii) Online Hadamard + E8 Lattice (single-shell, ~2 bpw)** | 4.421591 | +2.423478 | 31.18% | 2.0143 | Single-shell ~2 bpw; matched-bit E8: NOT TESTED |
+| **(iv) Online Hadamard + E8 (Finer Head Scale, ~2.2 bpw)** | 4.419581 | +2.421468 | 31.22% | 2.1795 | Single-shell ~2 bpw; matched-bit E8: NOT TESTED |
 | **(v) Negative Control (Scrambled Scales)** | 24.173992 | +22.175879 | 0.10% | 4.2500 | FAIL (Damage Detected) |
 
 ### 3. Analysis & D12 Disposition
 1. **RTN Reproduction:** RTN evaluated to exactly 2.034342 nats (+0.036230 nats), reproducing Lab 1's baseline to 6 decimal places.
-2. **Hadamard Grouped 4-bit (H+G4):** Online randomized Walsh-Hadamard transform with grouped 4-bit quantization achieves 2.025120 nats (+0.027007 nats), outperforming RTN by ~0.0092 nats and coming within 0.0013 nats of GPTQ (+0.0257 nats).
-3. **E8 Lattice Quantization (H+E8):** E8 root codebook (240 roots + zero vector) encodes 8 dimensions with 1 byte index and 1 byte scale = 2.0143 bits/weight. At this extreme compression ratio (half the 4-bit budget), uncalibrated post-training vector quantization exhibits severe degradation (+2.42 nats).
-4. **D12 Disposition & Exact Negative Scope:** Under owner decision D12, gates promote, never kill. Neither candidate meets the ≤ +0.0200 nats gate at this scope; both remain **not yet promoted at this scope** (H+G4 at +0.0270 nats, H+E8 at +2.4235 nats). In accordance with the pre-registered stopping rule and owner guidance, these negative results are retained at their exact technical scope. No additional fitting or codebook parameter sweeps are conducted at this scope to alter reporting or measurement defects.
+2. **Hadamard Grouped 4-bit (H+G4):** Online randomized Walsh-Hadamard transform with grouped 4-bit quantization achieves 2.025120 nats (+0.027007 nats). It is over the bit budget at 4.2725 bits per weight (the gate is 4.25 bpw), as well as above +0.0200 nats.
+3. **E8 Lattice Quantization (Single-Shell):** The evaluated E8 arms are single-shell (240 roots + zero vector) at about 2 bits per weight (2.0143 bpw and 2.1795 bpw). They test uncalibrated ~2 bpw compression; **matched-bit E8: NOT TESTED** in this sealed evaluation. (Two-stage residual matched-bit E8 at ~4.0 bpw is now implemented in `crates/` for the next D4 task).
+4. **D12 Disposition & Exact Negative Scope:** Under owner decision D12, gates promote, never kill. H+G4 is over the bit budget at 4.2725 bits per weight and above 0.02 nats; the evaluated E8 arms are single-shell at about 2 bits per weight (matched-bit E8: NOT TESTED). Neither candidate is promoted at this scope. In accordance with the pre-registered stopping rule, these negative results are retained at their exact technical scope.
 
 ---
 
@@ -53,11 +53,11 @@ September 28, 2026. References #973 under #820.
 |:---|---:|---:|---:|---:|:---:|:---:|:---|
 | **D10 Reference (NEON)** | 2.956329 | 1.110 | 900.92 | — | 0 | (Excluded: contains NEON/floats) | `s2-d11-release-optimized-1` |
 | **D11 Baseline** | 2.956329 | 6.061 | 164.99 | 1.00x | 0 | FULL PASS | `s2-d11-release-baseline-1` |
-| **D11 Audited ILP Speedup** | 2.956329 | 5.448 | 183.55 | **+11.2%** | **0** | **FULL PASS** | `s2-d11-release-optimized-1` |
+| **D11 Audited ILP Speedup** | 2.956329 | 5.448 | 183.55 | **+11.2% (not established)** | **0** | **FULL PASS** | `s2-d11-release-optimized-1` |
 
 - **Execution Context:** Single-threaded execution (1 thread).
 - **Host Load Conditions:** Load average was 13.21 before and 11.65 after the runs.
-- **Run-to-Run Load Attribution Caveat:** In the single baseline vs. optimized run pair, the reference D10 NEON engine also exhibited a +13.3% throughput difference (795.13 tok/s in `s2-d11-release-baseline-1` vs. 900.92 tok/s in `s2-d11-release-optimized-1`). Consequently, this single run pair does not isolate the kernel unrolling speedup from background host load variations; the observed +11.2% delta is a point-in-time measurement under active machine conditions.
+- **Run-to-Run Load Attribution Caveat:** In the single baseline vs. optimized run pair, the reference D10 NEON engine also exhibited a +13.3% throughput difference (795.13 tok/s in `s2-d11-release-baseline-1` vs. 900.92 tok/s in `s2-d11-release-optimized-1`). Consequently, the ILP kernel speedup is **not established** until Lab 1's quiet-machine A/B.
 - **Numerical Parity Gate:** Fully verified across all 2,048 evaluation positions: `max_abs_logit_difference == 0`, `top1_agreement == 1.000000`, `positions_with_a_difference == 0`.
 - **Weights Traversed Per Token (Analytical Count):** 7,238,304 weights/token.
 - **Cold Load Time:** 20.6 ms.
