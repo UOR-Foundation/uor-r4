@@ -208,3 +208,83 @@ fn qat_end_to_end_gradient_step_export_and_integer_serving_chain() -> Result<()>
     let _ = std::fs::remove_dir_all(&tmp_root);
     Ok(())
 }
+
+#[test]
+fn head_quantization_mse_comparison() -> Result<()> {
+    let checkpoint_dir = std::path::Path::new(
+        "/Volumes/UOR-Workspace/uor-r4-models/investigations/cycle4-main-20260928/geometric_s1/model",
+    );
+    let (rows, cols, head_weights) = if checkpoint_dir.exists() {
+        let model = StackModel::load(checkpoint_dir, &Device::Cpu)?;
+        let mut embed = model
+            .variables()
+            .get("embedding.weight")
+            .unwrap()
+            .as_tensor()
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let norm_gain = model
+            .variables()
+            .get("final_norm.weight")
+            .unwrap()
+            .as_tensor()
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for row in embed.chunks_exact_mut(model.config.width) {
+            for (v, &g) in row.iter_mut().zip(&norm_gain) {
+                *v *= g;
+            }
+        }
+        (model.config.vocab_size, model.config.width, embed)
+    } else {
+        let r = 256;
+        let c = 64;
+        let synthetic: Vec<f32> = (0..r * c)
+            .map(|i| (((i as f32) * 0.037) % 5.0 - 2.5) * 0.05)
+            .collect();
+        (r, c, synthetic)
+    };
+
+    let codec_rtn = D4Grouped4BitAdapter::rtn();
+    let codec_mse = D4Grouped4BitAdapter::min_mse();
+    let codec_comp = HeadCompensatedMapCodec::head_only_for(rows, cols);
+
+    let deq_rtn = codec_rtn.round_trip(&head_weights, rows, cols)?;
+    let deq_mse = codec_mse.round_trip(&head_weights, rows, cols)?;
+    let deq_comp = codec_comp.round_trip(&head_weights, rows, cols)?;
+
+    let mse_rtn: f64 = head_weights
+        .iter()
+        .zip(&deq_rtn)
+        .map(|(&w, &q)| (f64::from(w) - f64::from(q)).powi(2))
+        .sum::<f64>()
+        / (rows * cols) as f64;
+    let mse_min: f64 = head_weights
+        .iter()
+        .zip(&deq_mse)
+        .map(|(&w, &q)| (f64::from(w) - f64::from(q)).powi(2))
+        .sum::<f64>()
+        / (rows * cols) as f64;
+    let mse_comp: f64 = head_weights
+        .iter()
+        .zip(&deq_comp)
+        .map(|(&w, &q)| (f64::from(w) - f64::from(q)).powi(2))
+        .sum::<f64>()
+        / (rows * cols) as f64;
+
+    eprintln!(
+        "head_weights ({} x {}): MSE(RTN) = {:.8}, MSE(min_mse) = {:.8}, MSE(head_compensated) = {:.8}",
+        rows, cols, mse_rtn, mse_min, mse_comp
+    );
+
+    assert!(mse_rtn > 0.0 && mse_rtn.is_finite());
+    assert!(mse_min > 0.0 && mse_min.is_finite());
+    assert!(mse_comp > 0.0 && mse_comp.is_finite());
+    // Minimum-MSE scale search is guaranteed to achieve <= MSE than RTN:
+    assert!(
+        mse_min <= mse_rtn + 1e-9,
+        "Minimum-MSE scale search must achieve <= MSE than RTN: min_mse={mse_min:.8}, rtn={mse_rtn:.8}"
+    );
+
+    Ok(())
+}
