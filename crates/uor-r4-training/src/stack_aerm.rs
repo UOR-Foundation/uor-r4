@@ -3224,6 +3224,28 @@ mod tests {
     }
 
     #[test]
+    fn every_tagged_or_triggered_position_is_inside_a_user_turn() -> Result<()> {
+        let world = world()?;
+        let mut rng = Rng::new(91);
+        for index in 0..64 {
+            let episode = world.episode(&mut rng, index % 2 == 0, 257)?;
+            assert_eq!(episode.tokens.len(), episode.user_turn.len());
+            for (position, ((&tag, &trigger), &flag)) in episode
+                .tags
+                .iter()
+                .zip(&episode.triggers)
+                .zip(&episode.user_turn)
+                .enumerate()
+            {
+                if tag != TAG_OTHER || trigger != TRIGGER_NONE {
+                    assert_eq!(flag, 1, "position {position} operates outside a user turn");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn many_episodes_never_evict_their_facts() -> Result<()> {
         // D2's first attempt stopped after about 3,000 training episodes when
         // two-choice placement evicted one of an episode's few facts.
