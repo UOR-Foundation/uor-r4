@@ -165,6 +165,9 @@ impl MapCodec for E8MatchedBitMapCodec {
 /// Using Minimum-MSE scale search on recurrence output maps increases matching greedy
 /// turns from 14/58 to 16/58 without increasing the 4.2500 bpw budget or requiring
 /// format/kernel modifications.
+///
+/// Note: The 16/58 turns result (+2 turns over baseline 14/58) is not promoted: inside the
+/// arms' spread (-3 to +2 turns). Preserved as an explicit non-default export option.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RecurrenceOutMinMseMapCodec {
     /// Target shape for recurrence output projections (e.g. `(width, width)`).
