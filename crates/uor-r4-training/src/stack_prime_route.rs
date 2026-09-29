@@ -15,9 +15,20 @@
 //! names keeps its direction: "Alex's friend is Sam" does not answer "Sam's
 //! friend".
 //!
-//! The read policy is G v1's: whenever a key tag completes an expert, both
-//! registers (current and previous distinct value) read, and reads never
-//! close the clause. Two write policies:
+//! Two read policies:
+//! - [`ReadPolicy::Tagged`] is G v1's: whenever a key tag completes an
+//!   expert, both registers (current and previous distinct value) read, and
+//!   reads never close the clause;
+//! - [`ReadPolicy::Sieve`] also counts, inside a user turn, a token the head
+//!   tagged other as a key atom when it is already a registered atom of the
+//!   session: a key atom of an expert the store has written (from the model's
+//!   own write-time tags, never gold). A read then prefers a written expert
+//!   whose two primes both divide the clause's product of key atoms, the
+//!   latest atom first. This is the prime router's factor sieve: a query
+//!   finds its record by the atoms the two share, however the query phrases
+//!   them.
+//!
+//! Two write policies:
 //! - [`WritePolicy::Trigger`]: the model's learned write trigger, as G v1;
 //! - [`WritePolicy::TurnEnd`]: a write where the user's turn ends, if the
 //!   clause then has an expert and a value atom. A question carries no value
@@ -31,7 +42,7 @@
 //! Evaluation only: nothing here trains or serves, and the store has no
 //! capacity bound (D2's episodes never evict).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use candle_core::{Tensor, D};
 use serde::{Deserialize, Serialize};
@@ -101,21 +112,28 @@ impl PrimeRegistry {
         self.primes.is_empty()
     }
 
+    /// The semiprime expert `p_a p_b` of two atoms.
+    pub fn semiprime(&self, a: u32, b: u32) -> Result<u64> {
+        self.prime(a)?
+            .checked_mul(self.prime(b)?)
+            .ok_or_else(|| invalid("a semiprime expert overflowed u64"))
+    }
+
     /// The semiprime expert of the last two distinct atoms of `keys`, or
     /// `None` when there are fewer than two.
     pub fn expert(&self, keys: &[u32]) -> Result<Option<u64>> {
-        let mut atoms = keys.iter().rev();
-        let Some(&last) = atoms.next() else {
-            return Ok(None);
-        };
-        let Some(&other) = atoms.find(|&&atom| atom != last) else {
-            return Ok(None);
-        };
-        self.prime(last)?
-            .checked_mul(self.prime(other)?)
-            .map(Some)
-            .ok_or_else(|| invalid("a semiprime expert overflowed u64"))
+        last_two_distinct(keys)
+            .map(|(a, b)| self.semiprime(a, b))
+            .transpose()
     }
+}
+
+/// The last two distinct atoms of `keys`, latest first.
+fn last_two_distinct(keys: &[u32]) -> Option<(u32, u32)> {
+    let mut atoms = keys.iter().rev();
+    let &last = atoms.next()?;
+    let &other = atoms.find(|&&atom| atom != last)?;
+    Some((last, other))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -165,6 +183,11 @@ impl ExpertStore {
         }
     }
 
+    /// Whether `expert` has been written.
+    pub fn contains(&self, expert: u64) -> bool {
+        self.records.contains_key(&expert)
+    }
+
     pub fn len(&self) -> usize {
         self.records.len()
     }
@@ -172,6 +195,17 @@ impl ExpertStore {
     pub fn is_empty(&self) -> bool {
         self.records.is_empty()
     }
+}
+
+/// Which tokens a read counts as key atoms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadPolicy {
+    /// Only tokens the head tagged entity or relation (G v1).
+    Tagged,
+    /// Also, inside a user turn, other-tagged tokens that are registered key
+    /// atoms of a written expert; reads prefer a written expert.
+    Sieve,
 }
 
 /// When the prime-route store writes.
@@ -184,23 +218,75 @@ pub enum WritePolicy {
     TurnEnd,
 }
 
+/// Per-position turn marks of one sequence: `turn_end[t]` is the last
+/// position before an assistant reply starts, and `reply[t]` lies inside an
+/// assistant reply.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TurnMarks {
+    pub turn_end: Vec<bool>,
+    pub reply: Vec<bool>,
+}
+
+impl TurnMarks {
+    /// Marks for one padded row from its episode's response mask. Padding is
+    /// neither a turn end nor a reply.
+    pub fn from_response_mask(response_mask: &[u8], time: usize) -> Self {
+        let inputs = response_mask.len().saturating_sub(1);
+        Self {
+            turn_end: (0..time)
+                .map(|t| {
+                    t + 1 < response_mask.len()
+                        && response_mask[t] == 0
+                        && response_mask[t + 1] == 1
+                })
+                .collect(),
+            reply: (0..time)
+                .map(|t| t < inputs && response_mask[t] == 1)
+                .collect(),
+        }
+    }
+}
+
+/// The written expert a sieve read selects: the first pair of distinct key
+/// atoms, latest atom first, whose semiprime the store has written.
+fn sieve_expert(
+    keys: &[u32],
+    registry: &PrimeRegistry,
+    store: &ExpertStore,
+) -> Result<Option<u64>> {
+    for (i, &a) in keys.iter().enumerate().rev() {
+        for &b in keys[..i].iter().rev() {
+            if a != b {
+                let expert = registry.semiprime(a, b)?;
+                if store.contains(expert) {
+                    return Ok(Some(expert));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
 /// Registers over one sequence from its per-token tags and triggers, keyed
-/// by semiprime experts. `turn_end[t]` marks the last position before an
-/// assistant reply starts; `eos` also closes the open clause.
+/// by semiprime experts. `eos` also closes the open clause.
+#[allow(clippy::too_many_arguments)]
 pub fn simulate_prime_route(
     tokens: &[u32],
     tags: &[u32],
     triggers: &[u32],
-    turn_end: &[bool],
+    marks: &TurnMarks,
     eos: u32,
     registry: &PrimeRegistry,
-    policy: WritePolicy,
+    write: WritePolicy,
+    read: ReadPolicy,
 ) -> Result<Registers> {
     let n = tokens.len();
-    if tags.len() != n || triggers.len() != n || turn_end.len() != n {
+    if tags.len() != n || triggers.len() != n || marks.turn_end.len() != n || marks.reply.len() != n
+    {
         return Err(invalid("one tag, trigger and turn mark per token"));
     }
     let mut store = ExpertStore::default();
+    let mut atoms: BTreeSet<u32> = BTreeSet::new();
     let mut keys: Vec<u32> = Vec::new();
     let mut value: Option<u32> = None;
     let mut register = (STATUS_NONE, 0u32);
@@ -217,27 +303,42 @@ pub fn simulate_prime_route(
         if trigger as usize >= TRIGGERS {
             return Err(invalid("trigger outside the trigger set"));
         }
-        match tag {
-            TAG_OTHER => {}
-            TAG_ENTITY | TAG_RELATION => keys.push(token),
-            TAG_VALUE => value = Some(token),
+        let key_atom = match tag {
+            TAG_OTHER => {
+                read == ReadPolicy::Sieve && !marks.reply[position] && atoms.contains(&token)
+            }
+            TAG_ENTITY | TAG_RELATION => true,
+            TAG_VALUE => {
+                value = Some(token);
+                false
+            }
             _ => return Err(invalid("tag outside the tag set")),
-        }
-        if matches!(tag, TAG_ENTITY | TAG_RELATION) {
-            if let Some(expert) = registry.expert(&keys)? {
+        };
+        if key_atom {
+            keys.push(token);
+            let expert = match read {
+                ReadPolicy::Tagged => registry.expert(&keys)?,
+                ReadPolicy::Sieve => match sieve_expert(&keys, registry, &store)? {
+                    Some(expert) => Some(expert),
+                    None => registry.expert(&keys)?,
+                },
+            };
+            if let Some(expert) = expert {
                 register = store.read(expert, false);
                 previous = store.read(expert, true);
                 out.read_events += 2;
             }
         }
         let mut close = token == eos;
-        let write_here = match policy {
+        let write_here = match write {
             WritePolicy::Trigger => trigger == TRIGGER_WRITE,
-            WritePolicy::TurnEnd => turn_end[position],
+            WritePolicy::TurnEnd => marks.turn_end[position],
         };
         if write_here {
-            if let (Some(expert), Some(value)) = (registry.expert(&keys)?, value) {
-                store.write(expert, value);
+            if let (Some((a, b)), Some(value)) = (last_two_distinct(&keys), value) {
+                store.write(registry.semiprime(a, b)?, value);
+                atoms.insert(a);
+                atoms.insert(b);
             }
             close = true;
         }
@@ -253,23 +354,17 @@ pub fn simulate_prime_route(
     Ok(out)
 }
 
-/// `turn_end` marks for one padded row: position `t` precedes the first token
-/// of an assistant reply. Padding is never a turn end.
-fn turn_ends(response_mask: &[u8], time: usize) -> Vec<bool> {
-    (0..time)
-        .map(|t| t + 1 < response_mask.len() && response_mask[t] == 0 && response_mask[t + 1] == 1)
-        .collect()
-}
-
 /// Prime-route registers for every row of a padded batch, from `tags` and
 /// `triggers` (row-major, one per input position).
+#[allow(clippy::too_many_arguments)]
 pub fn prime_route_registers(
     data: &DialogueBatch,
     tags: &[u32],
     triggers: &[u32],
     eos: u32,
     registry: &PrimeRegistry,
-    policy: WritePolicy,
+    write: WritePolicy,
+    read: ReadPolicy,
 ) -> Result<Registers> {
     let (batch, time) = (data.batch, data.time);
     if tags.len() != batch * time || triggers.len() != batch * time {
@@ -282,10 +377,11 @@ pub fn prime_route_registers(
             &data.ids[range.clone()],
             &tags[range.clone()],
             &triggers[range],
-            &turn_ends(&episode.response_mask, time),
+            &TurnMarks::from_response_mask(&episode.response_mask, time),
             eos,
             registry,
-            policy,
+            write,
+            read,
         )?;
         out.read_events += row.read_events;
         out.status.extend(row.status);
@@ -306,15 +402,19 @@ pub enum RegisterArm {
     ExpertTrigger,
     /// Semiprime experts, a write at each user turn's end.
     ExpertTurnEnd,
+    /// Semiprime experts, the learned write trigger, and sieve reads over
+    /// the session's registered atoms.
+    ExpertSieve,
     /// Gold registers: a perfect parser (the probe's oracle).
     Gold,
 }
 
 impl RegisterArm {
-    pub const ALL: [RegisterArm; 4] = [
+    pub const ALL: [RegisterArm; 5] = [
         RegisterArm::GV1,
         RegisterArm::ExpertTrigger,
         RegisterArm::ExpertTurnEnd,
+        RegisterArm::ExpertSieve,
         RegisterArm::Gold,
     ];
 }
@@ -407,6 +507,7 @@ pub fn evaluate_prime_route(
                     world.eos,
                     registry,
                     WritePolicy::Trigger,
+                    ReadPolicy::Tagged,
                 )?,
                 RegisterArm::ExpertTurnEnd => prime_route_registers(
                     &data,
@@ -415,6 +516,16 @@ pub fn evaluate_prime_route(
                     world.eos,
                     registry,
                     WritePolicy::TurnEnd,
+                    ReadPolicy::Tagged,
+                )?,
+                RegisterArm::ExpertSieve => prime_route_registers(
+                    &data,
+                    &tags,
+                    &triggers,
+                    world.eos,
+                    registry,
+                    WritePolicy::Trigger,
+                    ReadPolicy::Sieve,
                 )?,
                 RegisterArm::Gold => Registers {
                     status: data.status.clone(),
@@ -571,12 +682,13 @@ mod tests {
             let mut rng = Rng::new(if held { 91 } else { 90 });
             let data = world.batch(&mut rng, 24, 256, held)?;
             let silent = vec![TRIGGER_NONE; data.triggers.len()];
-            for (policy, triggers) in [
-                (WritePolicy::Trigger, &data.triggers),
-                (WritePolicy::TurnEnd, &silent),
+            for (write, read, triggers) in [
+                (WritePolicy::Trigger, ReadPolicy::Tagged, &data.triggers),
+                (WritePolicy::TurnEnd, ReadPolicy::Tagged, &silent),
+                (WritePolicy::Trigger, ReadPolicy::Sieve, &data.triggers),
             ] {
                 let registers = prime_route_registers(
-                    &data, &data.tags, triggers, world.eos, &registry, policy,
+                    &data, &data.tags, triggers, world.eos, &registry, write, read,
                 )?;
                 for row in 0..data.batch * data.time {
                     if data.real[row] == 0.0 {
@@ -595,7 +707,7 @@ mod tests {
                             data.status_previous[row],
                             data.value_previous[row]
                         ),
-                        "{policy:?} held={held}: row {row}"
+                        "{write:?}/{read:?} held={held}: row {row}"
                     );
                 }
             }
@@ -642,6 +754,7 @@ mod tests {
             world.eos,
             &registry,
             WritePolicy::Trigger,
+            ReadPolicy::Tagged,
         )?;
         let typed = model_registers(
             &data.ids,
@@ -694,20 +807,27 @@ mod tests {
             TRIGGER_NONE,
             TRIGGER_NONE,
         ];
-        let turn_end = [false; 7];
-        let registers = simulate_prime_route(
-            &tokens,
-            &tags,
-            &triggers,
-            &turn_end,
-            eos,
-            &registry,
-            WritePolicy::Trigger,
-        )?;
-        assert_eq!(
-            (registers.status[5], registers.value[5]),
-            (STATUS_ABSENT, 0)
-        );
+        let marks = TurnMarks {
+            turn_end: vec![false; 7],
+            reply: vec![false; 7],
+        };
+        for read in [ReadPolicy::Tagged, ReadPolicy::Sieve] {
+            let registers = simulate_prime_route(
+                &tokens,
+                &tags,
+                &triggers,
+                &marks,
+                eos,
+                &registry,
+                WritePolicy::Trigger,
+                read,
+            )?;
+            assert_eq!(
+                (registers.status[5], registers.value[5]),
+                (STATUS_ABSENT, 0),
+                "{read:?}"
+            );
+        }
         // The same query about Alex finds Sam.
         let tokens = [alex, friend, sam, eos, friend, alex, eos];
         let tags = [
@@ -723,10 +843,11 @@ mod tests {
             &tokens,
             &tags,
             &triggers,
-            &turn_end,
+            &marks,
             eos,
             &registry,
             WritePolicy::Trigger,
+            ReadPolicy::Tagged,
         )?;
         assert_eq!((registers.status[5], registers.value[5]), (STATUS_HIT, sam));
         // G v1 agrees on both when the tags are right.
@@ -750,15 +871,19 @@ mod tests {
             TAG_OTHER,
         ];
         let triggers = [TRIGGER_NONE; 6];
-        let turn_end = [false, true, false, false, true, false];
+        let marks = TurnMarks {
+            turn_end: vec![false, true, false, false, true, false],
+            reply: vec![false; 6],
+        };
         let registers = simulate_prime_route(
             &tokens,
             &tags,
             &triggers,
-            &turn_end,
+            &marks,
             eos,
             &registry,
             WritePolicy::TurnEnd,
+            ReadPolicy::Tagged,
         )?;
         assert_eq!(registers.status[4], STATUS_ABSENT);
         // An assertion writes at its turn end and the next question reads it.
@@ -773,20 +898,77 @@ mod tests {
             TAG_OTHER,
         ];
         let triggers = [TRIGGER_NONE; 7];
-        let turn_end = [false, false, true, false, false, true, false];
+        let marks = TurnMarks {
+            turn_end: vec![false, false, true, false, false, true, false],
+            reply: vec![false; 7],
+        };
         let registers = simulate_prime_route(
             &tokens,
             &tags,
             &triggers,
-            &turn_end,
+            &marks,
             eos,
             &registry,
             WritePolicy::TurnEnd,
+            ReadPolicy::Tagged,
         )?;
         assert_eq!(
             (registers.status[5], registers.value[5]),
             (STATUS_HIT, blue)
         );
+        Ok(())
+    }
+
+    /// The failure G v1's decomposition measured: in "Which color does Momo
+    /// have now?" the head tags the query's entity other. Tagged reads never
+    /// complete an expert; the sieve counts Momo, a registered atom of the
+    /// written expert, and finds the record. Inside a reply the sieve never
+    /// rescues a token.
+    #[test]
+    fn the_sieve_finds_a_record_whose_query_entity_was_not_tagged() -> Result<()> {
+        let registry = PrimeRegistry::new(64)?;
+        let (momo, color, blue, which, eos) = (10u32, 11u32, 12u32, 13u32, 2u32);
+        // "Momo's color is blue." then "Which color does Momo have now?"
+        let tokens = [momo, color, blue, eos, which, color, momo, eos];
+        let tags = [
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_OTHER,
+            TAG_RELATION,
+            TAG_OTHER,
+            TAG_OTHER,
+        ];
+        let mut triggers = [TRIGGER_NONE; 8];
+        triggers[2] = TRIGGER_WRITE;
+        let user = TurnMarks {
+            turn_end: vec![false; 8],
+            reply: vec![false; 8],
+        };
+        let run = |read, marks: &TurnMarks| {
+            simulate_prime_route(
+                &tokens,
+                &tags,
+                &triggers,
+                marks,
+                eos,
+                &registry,
+                WritePolicy::Trigger,
+                read,
+            )
+        };
+        let tagged = run(ReadPolicy::Tagged, &user)?;
+        assert_ne!((tagged.status[6], tagged.value[6]), (STATUS_HIT, blue));
+        let sieve = run(ReadPolicy::Sieve, &user)?;
+        assert_eq!((sieve.status[6], sieve.value[6]), (STATUS_HIT, blue));
+        // The same untagged mention inside a reply is not rescued.
+        let replying = TurnMarks {
+            turn_end: vec![false; 8],
+            reply: vec![false, false, false, false, false, false, true, false],
+        };
+        let sieve = run(ReadPolicy::Sieve, &replying)?;
+        assert_ne!((sieve.status[6], sieve.value[6]), (STATUS_HIT, blue));
         Ok(())
     }
 }
