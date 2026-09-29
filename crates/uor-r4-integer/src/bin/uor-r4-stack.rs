@@ -560,10 +560,6 @@ fn cost(args: &[String]) -> Result<(), CliError> {
 
     if let Some(out) = out_dir {
         std::fs::write(out.join("cost.json"), serde_json::to_vec_pretty(&record)?)?;
-        std::fs::write(
-            out.join("evaluation.json"),
-            serde_json::to_vec_pretty(&record)?,
-        )?;
         uor_r4_integer::report_output::seal(out)?;
         uor_r4_integer::report_output::verify(out)?;
     }

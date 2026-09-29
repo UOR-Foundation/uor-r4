@@ -68,6 +68,12 @@ To satisfy oversight comments, the following fields were added to `cost.json` an
 
 After adding these annotations, `manifest.json` was re-sealed at unix timestamp `1790641817` (`sealed_at: 1790641817`).
 
+### 3.3 Evaluation Payload Overwrite Disclosure
+In `d11-cost-profile-1`, `cost.json` and `evaluation.json` are byte-identical (both 2,368 bytes, SHA-256 `e3c54c56a27b77d5aa6c10ec61f8f6a31f175ad314950b4ceea03cea2e61337e`, schema `uor-r4.stack-d11-cost/1`).
+The CLI command `uor-r4-stack cost` wrote the same cost record to both `cost.json` and `evaluation.json` before sealing.
+Therefore, `evaluation.json` in this preserved root **no longer carries separate evaluation evidence** (such as token cross-entropy or top-1 predictions); it is an exact duplicate of the cost profile record.
+The authentic evaluation evidence resides in the original S2 evaluation roots (`s2-d11-release-baseline-1` and `s2-d11-release-optimized-1`), and the fresh gating re-run by Lab 1 will write to a newly claimed, distinct report root.
+
 ---
 
 ## 4. Lineage Limitations & Scientific Verification
