@@ -223,10 +223,9 @@ pub fn snap_parity_report(model_dir: &Path, tokens: &[u32], windows: usize) -> R
             .iter()
             .map(|e| ((e.layer, e.position, e.lane), e.root))
             .collect();
-        // The first mismatch in (layer, position) order is the point the
-        // integer rollout leaves the reference; before it the two states are
-        // identical, so its reference margin carries no cascade and bounds the
-        // selector's effective input disagreement.
+        // The first mismatch in (layer, position) order precedes every cascade,
+        // so its reference margin is measured on a rollout whose selected roots
+        // have matched up to that point.
         let mut first: Option<(usize, usize, f32)> = None;
         for (layer, selected) in &reference_selections {
             for (k, selection) in selected.iter().enumerate() {
@@ -334,7 +333,7 @@ pub fn snap_parity_report(model_dir: &Path, tokens: &[u32], windows: usize) -> R
             "weight_rounding": weight_rounding.report(targets, "trained_float"),
             "end_to_end": end_to_end.report(targets, "trained_float"),
         },
-        "nll_over_window_targets": {
+        "mean_log_prob_over_window_targets": {
             "targets": nll_targets,
             "trained_float": mean(trained_nll, nll_targets),
             "artifact_reference": mean(reference_nll, nll_targets),
