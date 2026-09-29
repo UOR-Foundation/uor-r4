@@ -33,8 +33,8 @@ use crate::geometric_stack::{
 };
 use crate::kappa_llama::{Checkpoint, LlamaShape, Site};
 use crate::lut_export::{
-    arcosh_table, grid_nearest, quantize_matrix, quantize_matrix_compensated, quantize_matrix_gptq,
-    Calibration, Packed, EXP_RANGE, EXP_STEP_LOG2, SILU_RANGE_LOG2, SILU_STEP_LOG2,
+    arcosh_table, grid_nearest, quantize_matrix, quantize_matrix_gptq, Calibration, Packed,
+    EXP_RANGE, EXP_STEP_LOG2, SILU_RANGE_LOG2, SILU_STEP_LOG2,
 };
 use crate::{invalid, Result};
 
@@ -229,6 +229,22 @@ impl StackCalibration {
     }
 }
 
+/// Quantize a row-major `rows x cols` matrix using optimal base selection
+/// and boundary-scale error minimization (head-compensated quantization).
+fn quantize_matrix_compensated_packed(values: &[f32], rows: usize, cols: usize) -> Result<Packed> {
+    let mat = uor_r4_integer::codec::quantize_matrix_compensated(values, rows, cols)
+        .map_err(|e| invalid(e.to_string()))?;
+    let rel_err = mat
+        .relative_rms_error(values)
+        .map_err(|e| invalid(e.to_string()))?;
+    Ok(Packed {
+        nibbles: mat.nibbles,
+        scales: mat.scales,
+        exp_base: mat.exp_base,
+        relative_rms_error: rel_err,
+    })
+}
+
 /// Export a geometric stack; returns the artifact bytes and a report of the
 /// quantization errors (relative RMS per matrix, worst relative error per
 /// table of grid codes and, with a calibration, each calibrated matrix's
@@ -306,12 +322,12 @@ pub fn export_stack(
                 let served_name = model.served_codec().map(|c| c.name());
                 match served_name {
                     Some("native-d4-head-compensated-all-maps") => {
-                        quantize_matrix_compensated(values, rows, cols)?
+                        quantize_matrix_compensated_packed(values, rows, cols)?
                     }
                     Some("native-d4-head-compensated-head-only")
                         if site == Some(StackSite::Head) =>
                     {
-                        quantize_matrix_compensated(values, rows, cols)?
+                        quantize_matrix_compensated_packed(values, rows, cols)?
                     }
                     Some("native-d11-grouped-4bit-g32-min-mse") => {
                         let c = uor_r4_integer::codec::Grouped4BitCodec::new(
@@ -568,8 +584,7 @@ pub fn check_export_representation(
         || saved.codec == "native-d11-grouped-4bit-g32-rtn"
         || saved.codec == "native-d11-grouped-4bit-g32-min-mse"
         || saved.codec == "native-d4-head-compensated-head-only"
-        || saved.codec == "native-d4-head-compensated-all-maps"
-        || saved.codec == "native-d4-e8-matched-bit";
+        || saved.codec == "native-d4-head-compensated-all-maps";
     if !is_export_compatible {
         return Err(invalid(format!(
             "the model was trained against the served representation {}, which the stack \
@@ -1263,7 +1278,7 @@ mod tests {
         let e8_matched_bit = SavedServedRepresentation {
             codec: "native-d4-e8-matched-bit".to_owned(),
         };
-        assert!(check_export_representation(Some(&e8_matched_bit), false).is_ok());
+        assert!(check_export_representation(Some(&e8_matched_bit), false).is_err());
         assert!(check_export_representation(Some(&e8_matched_bit), true).is_err());
 
         assert!(check_export_representation(Some(&other), false).is_err());

@@ -1,11 +1,16 @@
 use candle_core::Device;
 use std::sync::Arc;
 use uor_r4_integer::stack::IntegerStackModel;
-use uor_r4_training::geometric_stack::{
-    D11Interim, D4Grouped4BitAdapter, E8MatchedBitMapCodec, HeadCompensatedMapCodec, MapCodec,
-    ReadScore, StackAdamW, StackArch, StackConfig, StackModel,
+use uor_r4_lut::format::StackArtifact;
+use uor_r4_training::d4_codecs::{
+    codec_by_name, D4Grouped4BitAdapter, E8MatchedBitMapCodec, HeadCompensatedMapCodec,
 };
-use uor_r4_training::stack_export::{check_export_representation, export_stack};
+use uor_r4_training::geometric_stack::{
+    D11Interim, MapCodec, ReadScore, StackAdamW, StackArch, StackConfig, StackModel,
+};
+use uor_r4_training::stack_export::{
+    check_export_representation, export_stack, stack_grid_reference,
+};
 use uor_r4_training::Result;
 
 #[test]
@@ -142,7 +147,7 @@ fn qat_adapters_integrate_with_stack_model_and_export_contract() -> Result<()> {
 }
 
 #[test]
-fn qat_head_compensated_end_to_end_export_and_integer_serving_chain() -> Result<()> {
+fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     let config = StackConfig {
         arch: StackArch::Geometric,
         vocab_size: 64,
@@ -195,6 +200,9 @@ fn qat_head_compensated_end_to_end_export_and_integer_serving_chain() -> Result<
     let norm = optimizer.update(&model, &grads, 0.05)?;
     assert!(norm > 0.0, "gradient norm must be positive");
 
+    // Served float forward logits
+    let served_logits = model.forward(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+
     // 5. Save model and verify metadata
     let tmp_root = std::env::temp_dir().join(format!("d4-hc-qat-e2e-{}", std::process::id()));
     let save_dir = tmp_root.join("saved_model");
@@ -215,31 +223,65 @@ fn qat_head_compensated_end_to_end_export_and_integer_serving_chain() -> Result<
         "native-d4-head-compensated-head-only"
     );
 
+    // 7. Verify S1.1 invariant: served float forward matches exported grid reference bit for bit
+    let artifact = StackArtifact::parse(lut_bytes.clone())
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+    let grid_ref = stack_grid_reference(&model, &artifact)?;
+    let ref_logits = grid_ref.logits(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+    assert_eq!(
+        served_logits, ref_logits,
+        "Served float forward logits must match exported grid reference exactly"
+    );
+
+    // 8. Load into IntegerStackModel and verify native integer serving execution and logit parity
     let lut_path = tmp_root.join("model.lut");
     std::fs::write(&lut_path, &lut_bytes)?;
-
-    // 7. Load into IntegerStackModel and verify native integer serving execution
     let integer_model = IntegerStackModel::load(&lut_path)
         .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
     assert_eq!(integer_model.shape().vocab, 64);
     assert_eq!(integer_model.shape().width, 32);
 
     let mut session = integer_model.session();
-    let logits = session
-        .step(ids[0])
-        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
-    assert_eq!(logits.len(), 64, "logits length must match vocabulary size");
-    let next_token = uor_r4_integer::stack::stack_argmax(logits);
-    assert!(next_token < 64, "argmax token must be within vocabulary");
+    for (t, &id) in ids.iter().enumerate() {
+        let int_logits = session
+            .step(id)
+            .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+        assert_eq!(
+            int_logits.len(),
+            64,
+            "logits length must match vocabulary size"
+        );
+        let int_top = uor_r4_integer::stack::stack_argmax(int_logits);
+        let float_top = ref_logits[t]
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap()
+            .0;
+        assert_eq!(
+            int_top, float_top,
+            "position {t}: integer top-1 argmax must equal served float argmax"
+        );
 
-    // 8. Verify restore_saved_served_representation restores the codec
+        let int_f64: Vec<f64> = int_logits.iter().map(|&v| f64::from(v) / 65536.0).collect();
+        let ref_f64: Vec<f64> = ref_logits[t].iter().map(|&v| f64::from(v)).collect();
+        let max_gap = int_f64
+            .iter()
+            .zip(&ref_f64)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f64, f64::max);
+        assert!(
+            max_gap < 0.1,
+            "position {t}: gap between integer and served float logits must be bounded, got {max_gap}"
+        );
+    }
+
+    // 9. Verify reload and codec recovery via codec_by_name
     let mut reloaded = StackModel::load(&save_dir, &device)?;
     assert!(reloaded.served_codec().is_none());
-    let restored = reloaded.restore_saved_served_representation(&save_dir)?;
-    assert_eq!(
-        restored.as_deref(),
-        Some("native-d4-head-compensated-head-only")
-    );
+    let saved_rec = StackModel::saved_served_representation(&save_dir)?;
+    let recovered_codec = codec_by_name(&saved_rec.unwrap().codec)?;
+    reloaded.set_served_representation(Some(recovered_codec))?;
     assert_eq!(
         reloaded.served_codec().unwrap().name(),
         "native-d4-head-compensated-head-only"
@@ -251,7 +293,7 @@ fn qat_head_compensated_end_to_end_export_and_integer_serving_chain() -> Result<
 }
 
 #[test]
-fn qat_end_to_end_gradient_step_export_and_integer_serving_chain() -> Result<()> {
+fn qat_min_mse_end_to_end_export_and_exactness() -> Result<()> {
     let config = StackConfig {
         arch: StackArch::Geometric,
         vocab_size: 64,
@@ -268,9 +310,13 @@ fn qat_end_to_end_gradient_step_export_and_integer_serving_chain() -> Result<()>
     let device = Device::Cpu;
     let mut model = StackModel::new(config, &device)?;
 
-    // 1. Enable QAT with D4Grouped4BitAdapter
-    let adapter = Arc::new(D4Grouped4BitAdapter::rtn());
+    // 1. Enable QAT with D4Grouped4BitAdapter min_mse
+    let adapter = Arc::new(D4Grouped4BitAdapter::min_mse());
     model.set_served_representation(Some(adapter))?;
+    assert_eq!(
+        model.served_codec().unwrap().name(),
+        "native-d11-grouped-4bit-g32-min-mse"
+    );
 
     // 2. Compute loss on dummy inputs
     let ids: Vec<u32> = vec![1, 5, 12, 18];
@@ -294,38 +340,81 @@ fn qat_end_to_end_gradient_step_export_and_integer_serving_chain() -> Result<()>
     let norm = optimizer.update(&model, &grads, 0.05)?;
     assert!(norm > 0.0, "gradient norm must be positive");
 
+    // Served float forward logits
+    let served_logits = model.forward(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+
     // 5. Save model and verify metadata
-    let tmp_root = std::env::temp_dir().join(format!("d4-qat-e2e-{}", std::process::id()));
+    let tmp_root = std::env::temp_dir().join(format!("d4-min-mse-qat-e2e-{}", std::process::id()));
     let save_dir = tmp_root.join("saved_model");
     model.save(&save_dir)?;
 
     let record = StackModel::saved_served_representation(&save_dir)?;
     assert_eq!(
         record.as_ref().unwrap().codec,
-        "native-d11-grouped-4bit-g32-rtn"
+        "native-d11-grouped-4bit-g32-min-mse"
     );
 
     // 6. Export stack artifact without calibration (using QAT weights)
     check_export_representation(record.as_ref(), false)?;
-    let (lut_bytes, _summary) = export_stack(&model, "qat-e2e-test".into(), None)?;
+    let (lut_bytes, summary) = export_stack(&model, "qat-min-mse-test".into(), None)?;
     assert!(!lut_bytes.is_empty());
+    assert_eq!(
+        summary["method"]["quantizer"],
+        "native-d11-grouped-4bit-g32-min-mse"
+    );
 
+    // 7. Verify S1.1 invariant: served float forward matches exported grid reference bit for bit
+    let artifact = StackArtifact::parse(lut_bytes.clone())
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+    let grid_ref = stack_grid_reference(&model, &artifact)?;
+    let ref_logits = grid_ref.logits(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+    assert_eq!(
+        served_logits, ref_logits,
+        "Served float forward logits must match exported grid reference exactly"
+    );
+
+    // 8. Load into IntegerStackModel and verify native integer serving execution and logit parity
     let lut_path = tmp_root.join("model.lut");
     std::fs::write(&lut_path, &lut_bytes)?;
-
-    // 7. Load into IntegerStackModel and verify native integer serving execution
     let integer_model = IntegerStackModel::load(&lut_path)
         .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
     assert_eq!(integer_model.shape().vocab, 64);
     assert_eq!(integer_model.shape().width, 32);
 
     let mut session = integer_model.session();
-    let logits = session
-        .step(ids[0])
-        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
-    assert_eq!(logits.len(), 64, "logits length must match vocabulary size");
-    let next_token = uor_r4_integer::stack::stack_argmax(logits);
-    assert!(next_token < 64, "argmax token must be within vocabulary");
+    for (t, &id) in ids.iter().enumerate() {
+        let int_logits = session
+            .step(id)
+            .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+        assert_eq!(
+            int_logits.len(),
+            64,
+            "logits length must match vocabulary size"
+        );
+        let int_top = uor_r4_integer::stack::stack_argmax(int_logits);
+        let float_top = ref_logits[t]
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap()
+            .0;
+        assert_eq!(
+            int_top, float_top,
+            "position {t}: integer top-1 argmax must equal served float argmax"
+        );
+
+        let int_f64: Vec<f64> = int_logits.iter().map(|&v| f64::from(v) / 65536.0).collect();
+        let ref_f64: Vec<f64> = ref_logits[t].iter().map(|&v| f64::from(v)).collect();
+        let max_gap = int_f64
+            .iter()
+            .zip(&ref_f64)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f64, f64::max);
+        assert!(
+            max_gap < 0.1,
+            "position {t}: gap between integer and served float logits must be bounded, got {max_gap}"
+        );
+    }
 
     // Clean up
     let _ = std::fs::remove_dir_all(&tmp_root);
@@ -334,71 +423,38 @@ fn qat_end_to_end_gradient_step_export_and_integer_serving_chain() -> Result<()>
 
 #[test]
 fn head_quantization_mse_comparison() -> Result<()> {
-    let checkpoint_dir = std::path::Path::new(
-        "/Volumes/UOR-Workspace/uor-r4-models/investigations/cycle4-main-20260928/geometric_s1/model",
-    );
-    let (rows, cols, head_weights) = if checkpoint_dir.exists() {
-        let model = StackModel::load(checkpoint_dir, &Device::Cpu)?;
-        let mut embed = model
-            .variables()
-            .get("embedding.weight")
-            .unwrap()
-            .as_tensor()
-            .flatten_all()?
-            .to_vec1::<f32>()?;
-        let norm_gain = model
-            .variables()
-            .get("final_norm.weight")
-            .unwrap()
-            .as_tensor()
-            .flatten_all()?
-            .to_vec1::<f32>()?;
-        for row in embed.chunks_exact_mut(model.config.width) {
-            for (v, &g) in row.iter_mut().zip(&norm_gain) {
-                *v *= g;
-            }
-        }
-        (model.config.vocab_size, model.config.width, embed)
-    } else {
-        let r = 256;
-        let c = 64;
-        let synthetic: Vec<f32> = (0..r * c)
-            .map(|i| (((i as f32) * 0.037) % 5.0 - 2.5) * 0.05)
-            .collect();
-        (r, c, synthetic)
-    };
+    let r = 256;
+    let c = 64;
+    let head_weights: Vec<f32> = (0..r * c)
+        .map(|i| (((i as f32) * 0.037) % 5.0 - 2.5) * 0.05)
+        .collect();
 
     let codec_rtn = D4Grouped4BitAdapter::rtn();
     let codec_mse = D4Grouped4BitAdapter::min_mse();
-    let codec_comp = HeadCompensatedMapCodec::head_only_for(rows, cols);
+    let codec_comp = HeadCompensatedMapCodec::head_only_for(r, c);
 
-    let deq_rtn = codec_rtn.round_trip(&head_weights, rows, cols)?;
-    let deq_mse = codec_mse.round_trip(&head_weights, rows, cols)?;
-    let deq_comp = codec_comp.round_trip(&head_weights, rows, cols)?;
+    let deq_rtn = codec_rtn.round_trip(&head_weights, r, c)?;
+    let deq_mse = codec_mse.round_trip(&head_weights, r, c)?;
+    let deq_comp = codec_comp.round_trip(&head_weights, r, c)?;
 
     let mse_rtn: f64 = head_weights
         .iter()
         .zip(&deq_rtn)
         .map(|(&w, &q)| (f64::from(w) - f64::from(q)).powi(2))
         .sum::<f64>()
-        / (rows * cols) as f64;
+        / (r * c) as f64;
     let mse_min: f64 = head_weights
         .iter()
         .zip(&deq_mse)
         .map(|(&w, &q)| (f64::from(w) - f64::from(q)).powi(2))
         .sum::<f64>()
-        / (rows * cols) as f64;
+        / (r * c) as f64;
     let mse_comp: f64 = head_weights
         .iter()
         .zip(&deq_comp)
         .map(|(&w, &q)| (f64::from(w) - f64::from(q)).powi(2))
         .sum::<f64>()
-        / (rows * cols) as f64;
-
-    eprintln!(
-        "head_weights ({} x {}): MSE(RTN) = {:.8}, MSE(min_mse) = {:.8}, MSE(head_compensated) = {:.8}",
-        rows, cols, mse_rtn, mse_min, mse_comp
-    );
+        / (r * c) as f64;
 
     assert!(mse_rtn > 0.0 && mse_rtn.is_finite());
     assert!(mse_min > 0.0 && mse_min.is_finite());
@@ -413,7 +469,7 @@ fn head_quantization_mse_comparison() -> Result<()> {
 }
 
 #[test]
-fn test_e8_matched_bit_map_codec_qat_and_gradient_flow() -> Result<()> {
+fn test_e8_matched_bit_map_codec_qat_and_export_refusal() -> Result<()> {
     let codec = E8MatchedBitMapCodec::default();
     assert_eq!(codec.name(), "native-d4-e8-matched-bit");
 
@@ -479,25 +535,13 @@ fn test_e8_matched_bit_map_codec_qat_and_gradient_flow() -> Result<()> {
     let record = StackModel::saved_served_representation(&save_dir)?;
     assert_eq!(record.as_ref().unwrap().codec, "native-d4-e8-matched-bit");
 
-    // Export stack artifact and check representation compatibility
-    check_export_representation(record.as_ref(), false)?;
-    let (lut_bytes, summary) = export_stack(&model, "e8-matched-bit-qat-test".into(), None)?;
-    assert!(!lut_bytes.is_empty());
-    assert_eq!(summary["method"]["quantizer"], "native-d4-e8-matched-bit");
-
-    let lut_path = tmp_root.join("model.lut");
-    std::fs::write(&lut_path, &lut_bytes)?;
-
-    // Load into IntegerStackModel and verify native integer serving execution
-    let integer_model = IntegerStackModel::load(&lut_path)
-        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
-    let mut session = integer_model.session();
-    let logits = session
-        .step(ids[0])
-        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
-    assert_eq!(logits.len(), 64);
-    let next_token = uor_r4_integer::stack::stack_argmax(logits);
-    assert!(next_token < 64);
+    // Export stack artifact must be REFUSED: D11 container cannot hold E8 codes!
+    let export_err = check_export_representation(record.as_ref(), false).unwrap_err();
+    assert!(
+        export_err.to_string().contains("native-d4-e8-matched-bit")
+            && export_err.to_string().contains("export does not write"),
+        "E8 export must be refused: {export_err}"
+    );
 
     // Clean up
     let _ = std::fs::remove_dir_all(&tmp_root);

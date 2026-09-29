@@ -108,11 +108,11 @@ $$\frac{\partial \mathcal{L}}{\partial W} \approx \frac{\partial \mathcal{L}}{\p
    - `/Volumes/UOR-Workspace/locks/model-slot.json` is currently held by OpenCode (Lab 2) until ~04:02 UTC.
    - Strictly **zero training runs or heavy model fits** will be launched by Lab 3 while the lock is active.
 2. **Implementation Scope for Lab 3:**
-   - Implement production `MapCodec` adapters directly in `crates/uor-r4-training/src/geometric_stack.rs`:
+   - Propose production `MapCodec` adapters in a separate Class C proposal (`lab/anti-gravity/d4-qat-adapters`):
      - `D4Grouped4BitAdapter` (wrapping `Grouped4BitCodec` in RTN and MinMSE modes)
-     - `HeadCompensatedMapCodec` (error-diffused group quantization for output-head logit margin preservation)
+     - `HeadCompensatedMapCodec` (compensated base and boundary scale search for output head)
    - Maintain comprehensive unit and regression coverage in `crates/uor-r4-training/tests/d4_map_codec_adapter.rs`.
    - Ensure complete export compatibility: weights trained or saved with these adapters round-trip into `StackArtifact` without requiring runtime multiplier or divider instructions.
-   - Deliver through PR #1479 to unblock Lab 1's QAT training campaign under D4/D11.
+   - Deliver through PR for Lab 1 to decide on shared interfaces.
 3. **Downstream Consumer:**
    - Lab 1 (Claude main) consumes `D4Grouped4BitAdapter` and `HeadCompensatedMapCodec` via `StackModel::set_served_representation` during the S1 QAT fine-tuning run.
