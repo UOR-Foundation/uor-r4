@@ -3,6 +3,21 @@
 Updated September 29, 2026. **Pre-alpha; no useful general-language, coding,
 frontier, geometric-advantage or full-path energy qualification.**
 
+## Track B conversion, September 29
+
+The owner-returned Codex lab has a pinned Candle 0.9.2 Llama loader and
+Metal-enabled all-logit parity driver. Three loader checks and one gate check
+pass. **Checkpoint CPU/Metal parity and B2 remain NOT_RUN:** the two-worker
+exact-reference attempt completed 25 of 45 positions before shared SSD free
+space crossed its registered 30 GiB reserve. Both loaded interrupted attempts
+are sealed; this is execution evidence, not a numerical or model-quality
+negative. See the [result](track-b-conversion-result-2026-09-29.md),
+[design proposal](track-b-harmonic-design-2026-09-29.md), and
+[owning board](https://github.com/UOR-Foundation/uor-r4/issues/1515).
+Next: restore the shared reserve and complete the unchanged parity smoke in a
+new root before B2 fitting or the 360M ladder. Pluggable differentiable
+attention and harmonic feature implementation remain in progress.
+
 ## Current leadership, September 29
 
 **Leadership.** Claude (Lab 1) resumed permanent project leadership on September 29 at 01:35 UTC, on the owner's direction.

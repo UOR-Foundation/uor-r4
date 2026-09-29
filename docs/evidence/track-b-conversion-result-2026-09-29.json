@@ -1,0 +1,220 @@
+{
+  "schema": "uor-r4.track-b-conversion-evidence/1",
+  "status": "EXECUTION_BLOCKED_CANDLE_PARITY_NOT_RUN",
+  "attempt_2_inputs": {
+    "candle_version": "0.9.2",
+    "canonical_math_env": "0",
+    "dtype": "F32",
+    "exact_scalar_env": null,
+    "executable_sha256": "86665171a1a6a072f60bdcb71422e726ebcea4ec8e61535cea8926d6820cb212",
+    "model": "/Volumes/UOR-Workspace/uor-r4-models/sources/smollm2-135m-instruct",
+    "modes": [
+      "singleton_every_position",
+      "fresh_full_prefill_final",
+      "fresh_half_prefix_then_singletons_final"
+    ],
+    "schema": "uor-r4.track-b-parity-inputs/1",
+    "scope": "fixed synthetic-token numerical fidelity; no language-quality or timing claim",
+    "sha256": {
+      "config.json": "17f71c5442c79d4137c45bc79043f085c485bd69a26748080bcf2c11e0cc33a3",
+      "model.safetensors": "5af571cbf074e6d21a03528d2330792e532ca608f24ac70a143f6b369968ab8c",
+      "tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+      "tokenizer_config.json": "a27f638bd2831f5c3dea654a75838930f2b11fbe550c4d4e1d5d7bd07157b2ee"
+    },
+    "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source_revision": "a7a52b369642216f796d988dd52e59560f033525",
+    "stored_weights": "BF16",
+    "tolerance": 0.0001,
+    "wall_seconds": 600,
+    "windows": [
+      [
+        1
+      ],
+      [
+        1,
+        42,
+        17,
+        314
+      ],
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      [
+        18,
+        9991,
+        19964,
+        29937,
+        39910,
+        732,
+        10705,
+        20678,
+        30651,
+        40624,
+        1446,
+        11419,
+        21392,
+        31365,
+        41338,
+        2160,
+        12133,
+        22106,
+        32079,
+        42052,
+        2874,
+        12847,
+        22820,
+        32793,
+        42766,
+        3588,
+        13561,
+        23534,
+        33507,
+        43480,
+        4302,
+        14275
+      ]
+    ]
+  },
+  "attempt_2_result": {
+    "schema": "uor-r4.track-b-parity-result/1",
+    "status": "STOPPED_PROJECTED_WALL_BOUND",
+    "pass": false,
+    "model_quality": "NOT_EVALUATED",
+    "candle_parity": "NOT_RUN",
+    "reason": "Exact reference defaulted to one worker; observed 15-22 seconds per token projected beyond 600 seconds for 45 positions plus candidate comparison. Principal stopped the process and retained this partial attempt before changing only the already-budgeted worker count.",
+    "completed_reference_positions": 5,
+    "expected_reference_positions": 45,
+    "complete_vocabulary_per_position": 49152,
+    "candidate_backends_completed": 0,
+    "requested_workers": 1,
+    "wall_seconds": 92.47,
+    "maximum_resident_set_bytes": 817725440,
+    "exit_code": 143,
+    "training_steps": 0
+  },
+  "attempt_3_inputs": {
+    "candle_version": "0.9.2",
+    "canonical_math_env": "0",
+    "dtype": "F32",
+    "exact_scalar_env": null,
+    "executable_sha256": "32b60c0e8ed79ad7b44d4d36e44f2162401c1e9a0937df1233f29fa433579f20",
+    "model": "/Volumes/UOR-Workspace/uor-r4-models/sources/smollm2-135m-instruct",
+    "modes": [
+      "singleton_every_position",
+      "fresh_full_prefill_final",
+      "fresh_half_prefix_then_singletons_final"
+    ],
+    "schema": "uor-r4.track-b-parity-inputs/1",
+    "scope": "fixed synthetic-token numerical fidelity; no language-quality or timing claim",
+    "sha256": {
+      "config.json": "17f71c5442c79d4137c45bc79043f085c485bd69a26748080bcf2c11e0cc33a3",
+      "model.safetensors": "5af571cbf074e6d21a03528d2330792e532ca608f24ac70a143f6b369968ab8c",
+      "tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+      "tokenizer_config.json": "a27f638bd2831f5c3dea654a75838930f2b11fbe550c4d4e1d5d7bd07157b2ee"
+    },
+    "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source_revision": "76ef1d1c6b6f3b3968ccd81d59b3fb210dbc6294",
+    "stored_weights": "BF16",
+    "tolerance": 0.0001,
+    "wall_seconds": 600,
+    "windows": [
+      [
+        1
+      ],
+      [
+        1,
+        42,
+        17,
+        314
+      ],
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      [
+        18,
+        9991,
+        19964,
+        29937,
+        39910,
+        732,
+        10705,
+        20678,
+        30651,
+        40624,
+        1446,
+        11419,
+        21392,
+        31365,
+        41338,
+        2160,
+        12133,
+        22106,
+        32079,
+        42052,
+        2874,
+        12847,
+        22820,
+        32793,
+        42766,
+        3588,
+        13561,
+        23534,
+        33507,
+        43480,
+        4302,
+        14275
+      ]
+    ]
+  },
+  "attempt_3_result": {
+    "schema": "uor-r4.track-b-parity-result/1",
+    "status": "STOPPED_SHARED_STORAGE_RESERVE",
+    "pass": false,
+    "model_quality": "NOT_EVALUATED",
+    "candle_parity": "NOT_RUN",
+    "reason": "Shared SSD free space fell below the registered 30 GiB reserve while other shared-machine compilation continued. Principal stopped its own job, preserved completed reference rows, and released the model slot. No threshold, windows or arithmetic were relaxed.",
+    "completed_reference_positions": 25,
+    "expected_reference_positions": 45,
+    "complete_vocabulary_per_position": 49152,
+    "candidate_backends_completed": 0,
+    "requested_workers": 2,
+    "wall_seconds": 260.77,
+    "maximum_resident_set_bytes": 817004544,
+    "observed_available_kib_trigger": 30882200,
+    "observed_available_kib_after_stop": 30751516,
+    "reserve_bytes": 32212254720,
+    "stop_margin_bytes": 134217728,
+    "exit_code": 143,
+    "training_steps": 0
+  },
+  "first_cycle_charge": {
+    "schema": "uor-r4.model-time-charge/1",
+    "lab": "Codex Track B",
+    "work": "Complete elapsed conversion cycle: preparation, investigation, implementation, compilation, smoke, review and delivery through this cutoff; overlapping component times not added twice",
+    "started_epoch_ms": 1790712702000,
+    "ended_epoch_ms": 1790714396337,
+    "charged_ms": 1694337,
+    "before": {
+      "cumulative_ms": 782538181,
+      "limit_ms": 1130000000
+    },
+    "after": {
+      "cumulative_ms": 784232518,
+      "limit_ms": 1130000000
+    }
+  }
+}
