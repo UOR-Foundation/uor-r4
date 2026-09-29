@@ -7,6 +7,7 @@
 //! m-world evaluate out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json]
+//! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json
 //! ```
 //!
 //! `corpus` writes a prepared dialogue split (`uor-r4-chat-corpus/v1`: a UORT
@@ -469,11 +470,108 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Re-judge an evaluation's saved replies with this build's oracle. The
+/// conversations are regenerated from the report's seed and split, and every
+/// saved user turn must equal its regenerated turn, so only the checks can
+/// differ. Nothing is generated.
+fn rejudge(args: &Args, out: &Path) -> Result<()> {
+    let report_path = PathBuf::from(args.required("report")?);
+    let old: Value = serde_json::from_slice(&fs::read(&report_path)?)?;
+    if old["schema"] != "uor-r4.m-world-evaluation/1" {
+        return Err(invalid("report= is not an M-world evaluation"));
+    }
+    let split: Split = serde_json::from_value(old["split"].clone())?;
+    let seed = old["seed"]
+        .as_u64()
+        .ok_or_else(|| invalid("the report has no seed"))?;
+    let drawn = old["conversations_drawn"]
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| invalid("the report has no conversation count"))?;
+    let mut rng = Rng::new(seed);
+    let conversations: Vec<_> = (0..drawn)
+        .map(|_| MWorld::conversation(&mut rng, split))
+        .collect();
+    let rows = old["conversations"]
+        .as_array()
+        .ok_or_else(|| invalid("the report has no conversations"))?;
+    let mut by_category: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    let mut by_intent: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    let (mut whole, mut changed) = (0usize, Vec::new());
+    for row in rows {
+        let id = row["id"].as_str().unwrap_or_default();
+        let index: usize = id
+            .strip_prefix("mw-")
+            .and_then(|n| n.parse().ok())
+            .ok_or_else(|| invalid(format!("unexpected conversation id {id:?}")))?;
+        let conversation = conversations
+            .get(index)
+            .ok_or_else(|| invalid(format!("{id} is beyond the drawn conversations")))?;
+        let turns = row["turns"]
+            .as_array()
+            .ok_or_else(|| invalid(format!("{id} has no turns")))?;
+        if turns.len() != conversation.turns.len() {
+            return Err(invalid(format!("{id}: turn counts differ")));
+        }
+        let mut all = true;
+        for (number, (saved, turn)) in turns.iter().zip(&conversation.turns).enumerate() {
+            if saved["user"].as_str() != Some(turn.user.as_str()) {
+                return Err(invalid(format!(
+                    "{id} turn {}: the user turn differs",
+                    number + 1
+                )));
+            }
+            let reply = saved["reply"].as_str().unwrap_or_default();
+            let pass = judge(&turn.checks, &turn.user, reply);
+            all &= pass;
+            if saved["pass"].as_bool() != Some(pass) {
+                changed.push(json!({
+                    "id": id, "turn": number + 1, "intent": turn.intent, "user": turn.user,
+                    "reply": reply, "before": saved["pass"], "after": pass,
+                }));
+            }
+            for (key, table) in [
+                (format!("{:?}", turn.category), &mut by_category),
+                (turn.intent.clone(), &mut by_intent),
+            ] {
+                let cell = table.entry(key).or_default();
+                cell.0 += usize::from(pass);
+                cell.1 += 1;
+            }
+        }
+        whole += usize::from(all);
+    }
+    let rate = |(pass, of): (usize, usize)| json!({"pass": pass, "of": of, "rate": if of == 0 { 0.0 } else { pass as f64 / of as f64 }});
+    for (category, cell) in &by_category {
+        println!("{category}: {}/{}", cell.0, cell.1);
+    }
+    println!("{} turns changed", changed.len());
+    let executable = std::env::current_exe()?;
+    let report = json!({
+        "schema": "uor-r4.m-world-rejudge/1",
+        "executable_sha256": sha256_file(&executable)?,
+        "source_report": report_path.display().to_string(),
+        "source_report_sha256": sha256_file(&report_path)?,
+        "split": split,
+        "seed": seed,
+        "by_category_before": old["by_category"],
+        "by_category": by_category.into_iter().map(|(k, v)| (k, rate(v))).collect::<BTreeMap<_, _>>(),
+        "by_intent": by_intent.into_iter().map(|(k, v)| (k, rate(v))).collect::<BTreeMap<_, _>>(),
+        "conversations_all_pass": rate((whole, rows.len())),
+        "changed_turns": changed,
+    });
+    fs::write(
+        out.join("m_world_rejudged.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let (mode, rest) = arguments
         .split_first()
-        .ok_or_else(|| invalid("usage: m-world corpus|evaluate key=value..."))?;
+        .ok_or_else(|| invalid("usage: m-world corpus|evaluate|rejudge key=value..."))?;
     let args = match mode.as_str() {
         "corpus" => Args::parse(
             rest,
@@ -499,12 +597,14 @@ fn main() -> Result<()> {
                 "panel",
             ],
         )?,
+        "rejudge" => Args::parse(rest, &["out", "report"])?,
         other => return Err(invalid(format!("unknown mode {other}"))),
     };
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
     let result = match mode.as_str() {
         "corpus" => corpus(&args, &out),
+        "rejudge" => rejudge(&args, &out),
         _ => evaluate(&args, &out),
     };
     if let Err(error) = &result {

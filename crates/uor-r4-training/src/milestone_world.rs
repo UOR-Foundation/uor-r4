@@ -53,7 +53,10 @@ pub enum Check {
     FirstNumber(u32),
     /// The first word is this one.
     FirstWord(String),
-    /// The last standalone single-letter word is this letter.
+    /// The last standalone single-letter word that does not begin a sentence
+    /// is this uppercase letter, exactly, or the whole reply is that letter.
+    /// Sentence-initial words are skipped so the article "A" and the pronoun
+    /// "I" do not count.
     LastLetter(char),
     /// At least this many words.
     MinWords(usize),
@@ -141,20 +144,48 @@ pub fn judge(checks: &[Check], user: &str, reply: &str) -> bool {
         }
         Check::FirstNumber(value) => reply_words.iter().find_map(|w| number(w)) == Some(*value),
         Check::FirstWord(word) => reply_words.first().map(String::as_str) == Some(word.as_str()),
-        Check::LastLetter(letter) => {
-            reply_words
-                .iter()
-                .rev()
-                .find(|w| w.chars().count() == 1 && w.chars().all(char::is_alphabetic))
-                .and_then(|w| w.chars().next())
-                == Some(letter.to_ascii_lowercase())
-        }
+        Check::LastLetter(letter) => last_letter(reply) == Some(letter.to_ascii_uppercase()),
         Check::MinWords(n) => reply_words.len() >= *n,
         Check::NotEcho => {
             let user_words = words(user);
             user_words.is_empty() || !contains_phrase(&reply_words, &user_words.join(" "))
         }
     })
+}
+
+/// The letter `Check::LastLetter` compares: the last standalone single-letter
+/// word, in its original case, that does not begin a sentence; or the reply's
+/// only word when it is a single letter.
+fn last_letter(reply: &str) -> Option<char> {
+    let mut sentence_start = true;
+    let mut found = None;
+    let mut count = 0usize;
+    for token in reply.split_whitespace() {
+        let word: String = token
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '\'')
+            .collect();
+        if !word.is_empty() {
+            count += 1;
+            let mut chars = word.chars();
+            if let (Some(c), None) = (chars.next(), chars.next()) {
+                if c.is_alphabetic() && (!sentence_start || count == 1) {
+                    found = Some((c, sentence_start));
+                }
+            }
+            sentence_start = false;
+        }
+        if token.ends_with(['.', '!', '?']) {
+            sentence_start = true;
+        }
+    }
+    match found {
+        // A sentence-initial single letter counts only as the whole reply.
+        Some((c, true)) if count == 1 => Some(c),
+        Some((_, true)) => None,
+        Some((c, false)) => Some(c),
+        None => None,
+    }
 }
 
 fn pick<'a, T>(rng: &mut Rng, items: &'a [T]) -> &'a T {
@@ -1231,8 +1262,17 @@ fn relation_turn(
     }
 }
 
+/// Acknowledgment phrases for an assertion or an update, beside the stated
+/// value itself. Generic praise ("great", "nice") is not an acknowledgment:
+/// filler replies are full of it.
 const ACK_WORDS: &[&str] = &[
-    "got it", "okay", "ok", "remember", "nice", "great", "noted", "sure", "lovely", "sounds",
+    "got it",
+    "okay",
+    "ok",
+    "remember",
+    "noted",
+    "nice to meet you",
+    "thanks for telling me",
 ];
 
 /// Assert, optional distractor turns and an optional update, then the query.
@@ -1460,6 +1500,29 @@ mod tests {
         assert!(judge(&[Check::FirstWord("yes".into())], "q", "Yes, it is."));
         assert!(judge(&[Check::LastLetter('B')], "q", "It starts with a B."));
         assert!(!judge(&[Check::LastLetter('B')], "q", "It starts with a."));
+        // The baseline's false positives: the article and a sentence-initial
+        // "A" or "I" are not an answer.
+        let a = [Check::LastLetter('A')];
+        assert!(!judge(&a, "q", "I'd recommend using a mixture to create a"));
+        assert!(!judge(&a, "q", "A gentle breeze is here."));
+        assert!(judge(&a, "q", "A."));
+        assert!(judge(&a, "q", "apple starts with the letter A."));
+        let i = [Check::LastLetter('I')];
+        assert!(!judge(&i, "q", "I think it is great."));
+        assert!(judge(&i, "q", "I think it starts with I."));
+        let mut acknowledgments = strings(ACK_WORDS);
+        acknowledgments.push("pepper".into());
+        let ack = [Check::AnyOf(acknowledgments)];
+        assert!(!judge(
+            &ack,
+            "My dog goes by Pepper.",
+            "My dog's dog is a great way to play."
+        ));
+        assert!(judge(
+            &ack,
+            "My dog goes by Pepper.",
+            "Got it, your dog is Pepper."
+        ));
         let echo = [Check::NotEcho];
         assert!(!judge(&echo, "I got a kite.", "I got a kite!"));
         assert!(judge(&echo, "I got a kite.", "A kite! Fun."));
