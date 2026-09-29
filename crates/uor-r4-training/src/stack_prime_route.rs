@@ -461,6 +461,55 @@ pub fn prime_route_runs(
 }
 
 /// Why a query's sieve registers differ from gold, or that they agree.
+/// The model's tags at the gold entity and relation slots of the last gold
+/// write of `key` before `end`, and whether the model fired the write there.
+#[allow(clippy::too_many_arguments)]
+fn write_side(
+    ids: &[u32],
+    gold_tags: &[u32],
+    gold_triggers: &[u32],
+    model_tags: &[u32],
+    model_triggers: &[u32],
+    key: (u32, u32),
+    end: usize,
+    eos: u32,
+) -> String {
+    let (mut entity, mut relation, mut found) = (None, None, None);
+    for p in 0..end.min(ids.len()) {
+        match gold_tags[p] {
+            TAG_ENTITY => entity = Some(p),
+            TAG_RELATION => relation = Some(p),
+            _ => {}
+        }
+        if gold_triggers[p] == TRIGGER_WRITE {
+            if let (Some(e), Some(r)) = (entity, relation) {
+                if (ids[e], ids[r]) == key {
+                    found = Some((e, r, p));
+                }
+            }
+            (entity, relation) = (None, None);
+        } else if ids[p] == eos {
+            (entity, relation) = (None, None);
+        }
+    }
+    let name = |tag: u32| match tag {
+        TAG_OTHER => "other",
+        TAG_ENTITY => "entity",
+        TAG_RELATION => "relation",
+        TAG_VALUE => "value",
+        _ => "invalid",
+    };
+    match found {
+        None => "write=none".into(),
+        Some((e, r, w)) => format!(
+            "write_entity={},write_relation={},write_fired={}",
+            name(model_tags[e]),
+            name(model_tags[r]),
+            model_triggers[w] == TRIGGER_WRITE
+        ),
+    }
+}
+
 fn sieve_cause(
     run: &PrimeRouteRun,
     ids: &[u32],
@@ -589,6 +638,16 @@ pub fn evaluate_prime_route(
     if batch == 0 {
         return Err(invalid("the batch must be positive"));
     }
+    let held_names: BTreeSet<u32> = world.vocabulary()["held_out_names"]
+        .as_array()
+        .map(|names| {
+            names
+                .iter()
+                .filter_map(|pair| pair.get(1).and_then(|id| id.as_u64()))
+                .map(|id| id as u32)
+                .collect()
+        })
+        .unwrap_or_default();
     let mut rng = Rng::new(seed);
     let mut result = PrimeRouteEvaluation {
         episodes,
@@ -692,14 +751,31 @@ pub fn evaluate_prime_route(
                     match arm {
                         RegisterArm::GV1 => gv1_correct.push(correct),
                         RegisterArm::ExpertSieve if !correct => {
-                            let cause = sieve_cause(
+                            let row = base..base + context;
+                            let mut cause = sieve_cause(
                                 &sieve_runs[b],
-                                &data.ids[base..base + context],
+                                &data.ids[row.clone()],
                                 query,
                                 check - base,
                                 equal,
                                 world.eos,
                             );
+                            if cause.starts_with("NoRead") {
+                                cause = format!(
+                                    "{cause}/held_name={}/{}",
+                                    held_names.contains(&query.key.0),
+                                    write_side(
+                                        &data.ids[row.clone()],
+                                        &data.tags[row.clone()],
+                                        &data.triggers[row.clone()],
+                                        &tags[row.clone()],
+                                        &triggers[row],
+                                        query.key,
+                                        query.answer_start,
+                                        world.eos,
+                                    )
+                                );
+                            }
                             let class = format!("{:?}", query.class);
                             *result
                                 .sieve_failure_causes
