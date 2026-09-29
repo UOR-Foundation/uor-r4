@@ -261,6 +261,34 @@ pub struct Registers {
 /// both registers at that position; the read trigger classes no longer decide
 /// reads and never close the clause.
 pub fn simulate(tokens: &[u32], tags: &[u32], triggers: &[u32], eos: u32) -> Result<Simulation> {
+    simulate_inner(tokens, tags, triggers, eos, None)
+}
+
+/// [`simulate`] with the structural user-turn gate: at a position whose
+/// `user_turn` flag is 0 the tags and triggers are ignored, so no read or
+/// write happens outside a user turn. The world's operations all sit inside
+/// user turns, so its own episodes are unchanged; prose carries no user turns
+/// and its registers stay silent.
+pub fn simulate_gated(
+    tokens: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    eos: u32,
+    user_turn: &[u8],
+) -> Result<Simulation> {
+    if user_turn.len() != tokens.len() {
+        return Err(invalid("one user-turn flag per token"));
+    }
+    simulate_inner(tokens, tags, triggers, eos, Some(user_turn))
+}
+
+fn simulate_inner(
+    tokens: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    eos: u32,
+    user_turn: Option<&[u8]>,
+) -> Result<Simulation> {
     if tags.len() != tokens.len() || triggers.len() != tokens.len() {
         return Err(invalid("one tag and one trigger per token"));
     }
@@ -276,48 +304,53 @@ pub fn simulate(tokens: &[u32], tags: &[u32], triggers: &[u32], eos: u32) -> Res
     let mut writes = Vec::new();
     for (position, ((&token, &tag), &trigger)) in tokens.iter().zip(tags).zip(triggers).enumerate()
     {
-        match tag {
-            TAG_OTHER => {}
-            TAG_ENTITY => entity = Some(token),
-            TAG_RELATION => relation = Some(token),
-            TAG_VALUE => value = Some(token),
-            _ => return Err(invalid("tag outside the tag set")),
-        }
-        if matches!(tag, TAG_ENTITY | TAG_RELATION) {
-            if let (Some(e), Some(r)) = (entity, relation) {
-                register = store.read(e, r, false);
-                previous = store.read(e, r, true);
-                reads.push(ReadEvent {
-                    position,
-                    key: Some((e, r)),
-                    previous: false,
-                    status: register.0,
-                    value: register.1,
-                });
-                reads.push(ReadEvent {
-                    position,
-                    key: Some((e, r)),
-                    previous: true,
-                    status: previous.0,
-                    value: previous.1,
-                });
+        let active = user_turn.is_none_or(|flags| flags[position] != 0);
+        if active {
+            match tag {
+                TAG_OTHER => {}
+                TAG_ENTITY => entity = Some(token),
+                TAG_RELATION => relation = Some(token),
+                TAG_VALUE => value = Some(token),
+                _ => return Err(invalid("tag outside the tag set")),
+            }
+            if matches!(tag, TAG_ENTITY | TAG_RELATION) {
+                if let (Some(e), Some(r)) = (entity, relation) {
+                    register = store.read(e, r, false);
+                    previous = store.read(e, r, true);
+                    reads.push(ReadEvent {
+                        position,
+                        key: Some((e, r)),
+                        previous: false,
+                        status: register.0,
+                        value: register.1,
+                    });
+                    reads.push(ReadEvent {
+                        position,
+                        key: Some((e, r)),
+                        previous: true,
+                        status: previous.0,
+                        value: previous.1,
+                    });
+                }
             }
         }
         let mut close = token == eos;
-        match trigger {
-            TRIGGER_NONE | TRIGGER_READ | TRIGGER_READ_PREVIOUS => {}
-            TRIGGER_WRITE => {
-                if let (Some(e), Some(r), Some(v)) = (entity, relation, value) {
-                    store.write(e, r, v);
-                    writes.push(WriteEvent {
-                        position,
-                        key: (e, r),
-                        value: v,
-                    });
+        if active {
+            match trigger {
+                TRIGGER_NONE | TRIGGER_READ | TRIGGER_READ_PREVIOUS => {}
+                TRIGGER_WRITE => {
+                    if let (Some(e), Some(r), Some(v)) = (entity, relation, value) {
+                        store.write(e, r, v);
+                        writes.push(WriteEvent {
+                            position,
+                            key: (e, r),
+                            value: v,
+                        });
+                    }
+                    close = true;
                 }
-                close = true;
+                _ => return Err(invalid("trigger outside the trigger set")),
             }
-            _ => return Err(invalid("trigger outside the trigger set")),
         }
         if close {
             (entity, relation, value) = (None, None, None);
@@ -647,6 +680,9 @@ pub struct Episode {
     pub response_mask: Vec<u8>,
     pub tags: Vec<u32>,
     pub triggers: Vec<u32>,
+    /// 1 on the tokens of a user turn, 0 elsewhere (assistant replies, markers,
+    /// EOS, padding). Built from the protocol's role structure, never labels.
+    pub user_turn: Vec<u8>,
     pub queries: Vec<Query>,
 }
 
@@ -845,6 +881,7 @@ struct EpisodeBuilder<'a> {
     mask: Vec<u8>,
     tags: Vec<u32>,
     triggers: Vec<u32>,
+    user_turn: Vec<u8>,
     queries: Vec<Query>,
     messages: Vec<(String, String)>,
     turns: usize,
@@ -871,6 +908,7 @@ impl<'a> EpisodeBuilder<'a> {
             mask: vec![0],
             tags: vec![TAG_OTHER],
             triggers: vec![TRIGGER_NONE],
+            user_turn: vec![0],
             queries: Vec::new(),
             messages: Vec::new(),
             turns: 0,
@@ -994,6 +1032,7 @@ impl<'a> EpisodeBuilder<'a> {
             .extend(std::iter::repeat_n(TAG_OTHER, tokens.len()));
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, tokens.len()));
+        self.user_turn.extend(std::iter::repeat_n(0, tokens.len()));
     }
 
     /// Appends one user turn and its assistant reply; returns the reply's
@@ -1010,6 +1049,8 @@ impl<'a> EpisodeBuilder<'a> {
         self.tags.extend_from_slice(&user.tags);
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, user.tokens.len()));
+        self.user_turn
+            .extend(std::iter::repeat_n(1, user.tokens.len()));
         if let Some(last) = self.triggers.last_mut() {
             *last = trigger;
         }
@@ -1024,10 +1065,13 @@ impl<'a> EpisodeBuilder<'a> {
             .extend(std::iter::repeat_n(TAG_OTHER, reply.tokens.len()));
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, reply.tokens.len()));
+        self.user_turn
+            .extend(std::iter::repeat_n(0, reply.tokens.len()));
         self.tokens.push(self.world.eos);
         self.mask.push(1);
         self.tags.push(TAG_OTHER);
         self.triggers.push(TRIGGER_NONE);
+        self.user_turn.push(0);
         self.messages.push((user.text.clone(), reply.text.clone()));
         self.turns += 1;
         start
@@ -1334,6 +1378,7 @@ impl<'a> EpisodeBuilder<'a> {
             response_mask: self.mask,
             tags: self.tags,
             triggers: self.triggers,
+            user_turn: self.user_turn,
             queries: self.queries,
         })
     }
@@ -1352,6 +1397,8 @@ pub struct DialogueBatch {
     pub real: Vec<f32>,
     pub tags: Vec<u32>,
     pub triggers: Vec<u32>,
+    /// 1 on user-turn input positions, 0 elsewhere (assistant, padding).
+    pub user_turn: Vec<u8>,
     /// Gold registers (teacher forcing) for both the current and previous
     /// registers.
     pub status: Vec<u32>,
@@ -1390,6 +1437,7 @@ impl RelationWorld {
             real: vec![0.0; rows],
             tags: vec![TAG_OTHER; rows],
             triggers: vec![TRIGGER_NONE; rows],
+            user_turn: vec![0; rows],
             status: vec![STATUS_NONE; rows],
             value: vec![0; rows],
             status_previous: vec![STATUS_NONE; rows],
@@ -1401,11 +1449,12 @@ impl RelationWorld {
                 return Err(invalid("an episode must fit the context"));
             }
             let inputs = n - 1;
-            let gold = simulate(
+            let gold = simulate_gated(
                 &episode.tokens[..inputs],
                 &episode.tags[..inputs],
                 &episode.triggers[..inputs],
                 self.eos,
+                &episode.user_turn[..inputs],
             )?;
             for t in 0..inputs {
                 let row = b * context + t;
@@ -1415,6 +1464,7 @@ impl RelationWorld {
                 out.real[row] = 1.0;
                 out.tags[row] = episode.tags[t];
                 out.triggers[row] = episode.triggers[t];
+                out.user_turn[row] = episode.user_turn[t];
                 out.status[row] = gold.status[t];
                 out.value[row] = gold.value[t];
                 out.status_previous[row] = gold.status_previous[t];
@@ -1440,6 +1490,23 @@ fn normal_var(rng: &mut Rng, shape: &[usize], std: f64, device: &Device) -> Resu
         values.push((radius * (std::f64::consts::TAU * u2).cos() * std) as f32);
     }
     Ok(Var::from_vec(values, shape, device)?)
+}
+
+/// The zero-initialised memory branch: the branch contributes nothing until it
+/// is trained.
+fn zero_memory_branch(width: usize, device: &Device) -> Result<MemoryBranch> {
+    Ok(MemoryBranch {
+        status: zeros_var(&[STATUSES, width], device)?,
+        projection: zeros_var(&[width, width], device)?,
+        copy_weight: zeros_var(&[width, 1], device)?,
+        copy_bias: zeros_var(&[1], device)?,
+        copy_scale: zeros_var(&[1], device)?,
+        status_previous: zeros_var(&[STATUSES, width], device)?,
+        projection_previous: zeros_var(&[width, width], device)?,
+        copy_weight_previous: zeros_var(&[width, 1], device)?,
+        copy_bias_previous: zeros_var(&[1], device)?,
+        copy_scale_previous: zeros_var(&[1], device)?,
+    })
 }
 
 fn zeros_var(shape: &[usize], device: &Device) -> Result<Var> {
@@ -1572,18 +1639,7 @@ impl AermModel {
         let stack = StackModel::new(config, device)?;
         let mut rng = Rng::new(seed ^ 0x6165_726D_2D64_3221);
         let memory = if memory {
-            Some(MemoryBranch {
-                status: zeros_var(&[STATUSES, width], device)?,
-                projection: zeros_var(&[width, width], device)?,
-                copy_weight: zeros_var(&[width, 1], device)?,
-                copy_bias: zeros_var(&[1], device)?,
-                copy_scale: zeros_var(&[1], device)?,
-                status_previous: zeros_var(&[STATUSES, width], device)?,
-                projection_previous: zeros_var(&[width, width], device)?,
-                copy_weight_previous: zeros_var(&[width, 1], device)?,
-                copy_bias_previous: zeros_var(&[1], device)?,
-                copy_scale_previous: zeros_var(&[1], device)?,
-            })
+            Some(zero_memory_branch(width, device)?)
         } else {
             None
         };
@@ -1592,6 +1648,33 @@ impl AermModel {
             tag_bias: zeros_var(&[TAGS], device)?,
             trigger_weight: normal_var(&mut rng, &[TRIGGERS, width], 0.02, device)?,
             trigger_bias: zeros_var(&[TRIGGERS], device)?,
+            stack,
+            split,
+            memory,
+        })
+    }
+
+    /// Wraps a trained stack: the heads are initialised exactly as
+    /// [`AermModel::new`] initialises them and the memory branch is
+    /// zero-initialised, so the wrapped model reproduces the stack's logits
+    /// before any training.
+    pub fn from_stack(stack: StackModel, split: usize, memory: bool, seed: u64) -> Result<Self> {
+        if split == 0 || split >= stack.config.layers() {
+            return Err(invalid("the split must leave layers on both sides"));
+        }
+        let width = stack.config.width;
+        let device = stack.device().clone();
+        let mut rng = Rng::new(seed ^ 0x6165_726D_2D64_3221);
+        let memory = if memory {
+            Some(zero_memory_branch(width, &device)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            tag_weight: normal_var(&mut rng, &[TAGS, width], 0.02, &device)?,
+            tag_bias: zeros_var(&[TAGS], &device)?,
+            trigger_weight: normal_var(&mut rng, &[TRIGGERS, width], 0.02, &device)?,
+            trigger_bias: zeros_var(&[TRIGGERS], &device)?,
             stack,
             split,
             memory,
@@ -1783,7 +1866,16 @@ impl AermModel {
     pub fn load(directory: &Path, device: &Device) -> Result<Self> {
         let checkpoint: AermCheckpoint =
             serde_json::from_slice(&fs::read(directory.join("aerm.json"))?)?;
-        let stack = StackModel::load(&directory.join("stack"), device)?;
+        let stack_directory = directory.join("stack");
+        if StackModel::saved_served_representation(&stack_directory)?.is_some() {
+            return Err(invalid(
+                "the saved memory model carries a served representation the wrapper cannot reapply",
+            ));
+        }
+        let mut stack = StackModel::load(&stack_directory, device)?;
+        if let Some(snap) = StackModel::saved_transport_snap(&stack_directory)? {
+            stack.set_transport_snap(Some(snap))?;
+        }
         let width = stack.config.width;
         if checkpoint.split == 0 || checkpoint.split >= stack.config.layers() {
             return Err(invalid("saved split must leave layers on both sides"));
@@ -1849,6 +1941,32 @@ pub fn model_registers(
     time: usize,
     eos: u32,
 ) -> Result<Registers> {
+    model_registers_inner(ids, tags, triggers, batch, time, eos, None)
+}
+
+/// [`model_registers`] with the structural user-turn gate: positions whose
+/// flag is 0 ignore their tags and triggers.
+pub fn model_registers_gated(
+    ids: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    batch: usize,
+    time: usize,
+    eos: u32,
+    user_turn: &[u8],
+) -> Result<Registers> {
+    model_registers_inner(ids, tags, triggers, batch, time, eos, Some(user_turn))
+}
+
+fn model_registers_inner(
+    ids: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    batch: usize,
+    time: usize,
+    eos: u32,
+    user_turn: Option<&[u8]>,
+) -> Result<Registers> {
     let mut out = Registers {
         status: Vec::with_capacity(batch * time),
         value: Vec::with_capacity(batch * time),
@@ -1858,12 +1976,21 @@ pub fn model_registers(
     };
     for b in 0..batch {
         let range = b * time..(b + 1) * time;
-        let simulation = simulate(
-            &ids[range.clone()],
-            &tags[range.clone()],
-            &triggers[range],
-            eos,
-        )?;
+        let simulation = match user_turn {
+            Some(flags) => simulate_gated(
+                &ids[range.clone()],
+                &tags[range.clone()],
+                &triggers[range.clone()],
+                eos,
+                &flags[range],
+            )?,
+            None => simulate(
+                &ids[range.clone()],
+                &tags[range.clone()],
+                &triggers[range],
+                eos,
+            )?,
+        };
         out.read_events += simulation.reads.len();
         out.status.extend(simulation.status);
         out.value.extend(simulation.value);
@@ -1891,9 +2018,22 @@ pub struct AermConfig {
     /// Loss weight of a trigger-positive position relative to a negative one.
     pub trigger_positive_weight: f32,
     pub data_seed: u64,
-    /// Drop the tag and trigger auxiliary losses on ordinary-text batches.
+    /// Drop the tag auxiliary loss on ordinary-text batches.
     #[serde(default)]
     pub mask_text_tags: bool,
+    /// Drop the trigger auxiliary loss on ordinary-text batches; independent of
+    /// [`Self::mask_text_tags`]. With both set this reproduces the original
+    /// single-flag behaviour.
+    #[serde(default)]
+    pub mask_text_triggers: bool,
+    /// Gate reads and writes to user turns, located by the protocol's role
+    /// structure. New runs default to it on.
+    #[serde(default = "default_true")]
+    pub user_turn_gate: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2018,7 +2158,7 @@ pub fn train_aerm(
         } else {
             Some(head_loss(&bottom.tags, &text_tags, &text_ones)?)
         };
-        let text_trigger = if config.mask_text_tags {
+        let text_trigger = if config.mask_text_triggers {
             None
         } else {
             Some(head_loss(&bottom.triggers, &text_triggers, &text_ones)?)
@@ -2152,6 +2292,7 @@ pub fn evaluate_dialogues(
     held: bool,
     context: usize,
     batch: usize,
+    gate: bool,
 ) -> Result<DialogueEvaluation> {
     let mut rng = Rng::new(seed);
     let mut result = DialogueEvaluation {
@@ -2174,7 +2315,19 @@ pub fn evaluate_dialogues(
                 result.trigger_confusion[data.triggers[row] as usize][triggers[row] as usize] += 1;
             }
         }
-        let registers = model_registers(&data.ids, &tags, &triggers, size, context, world.eos)?;
+        let registers = if gate {
+            model_registers_gated(
+                &data.ids,
+                &tags,
+                &triggers,
+                size,
+                context,
+                world.eos,
+                &data.user_turn,
+            )?
+        } else {
+            model_registers(&data.ids, &tags, &triggers, size, context, world.eos)?
+        };
         result.read_events += registers.read_events;
         let predicted = argmax_rows(&model.top(
             &bottom.hidden,
@@ -2454,6 +2607,7 @@ pub fn text_nll(
     windows: usize,
     batch: usize,
     eos: u32,
+    gate: bool,
 ) -> Result<(f64, f64)> {
     let span = context + 1;
     if dev.len() < span || windows == 0 || batch == 0 {
@@ -2476,7 +2630,21 @@ pub fn text_nll(
         let tags = argmax_rows(&bottom.tags)?;
         let triggers = argmax_rows(&bottom.triggers)?;
         fired += triggers.iter().filter(|&&t| t != TRIGGER_NONE).count();
-        let registers = model_registers(&ids, &tags, &triggers, chunk.len(), context, eos)?;
+        // Prose carries no user turns, so with the gate on every position is
+        // outside a turn and the registers stay silent.
+        let registers = if gate {
+            model_registers_gated(
+                &ids,
+                &tags,
+                &triggers,
+                chunk.len(),
+                context,
+                eos,
+                &vec![0u8; ids.len()],
+            )?
+        } else {
+            model_registers(&ids, &tags, &triggers, chunk.len(), context, eos)?
+        };
         let logits = model
             .top(
                 &bottom.hidden,
@@ -2507,6 +2675,7 @@ pub fn free_running(
     held: bool,
     context: usize,
     max_new: usize,
+    gate: bool,
 ) -> Result<Vec<(Vec<u32>, Vec<u32>)>> {
     let mut rng = Rng::new(seed);
     let mut out = Vec::with_capacity(episodes);
@@ -2527,7 +2696,14 @@ pub fn free_running(
             let bottom = model.bottom(&ids, 1, time)?;
             let tags = argmax_rows(&bottom.tags)?;
             let triggers = argmax_rows(&bottom.triggers)?;
-            let registers = model_registers(&ids, &tags, &triggers, 1, time, world.eos)?;
+            let registers = if gate {
+                let mut flags = vec![0u8; ids.len()];
+                let known = ids.len().min(episode.user_turn.len());
+                flags[..known].copy_from_slice(&episode.user_turn[..known]);
+                model_registers_gated(&ids, &tags, &triggers, 1, time, world.eos, &flags)?
+            } else {
+                model_registers(&ids, &tags, &triggers, 1, time, world.eos)?
+            };
             let logits = model.top(
                 &bottom.hidden,
                 &registers.status,
@@ -2550,7 +2726,7 @@ pub fn free_running(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometric_stack::{ReadScore, StackArch};
+    use crate::geometric_stack::{ReadScore, StackArch, TransportSnap};
     use std::cell::RefCell;
     use std::collections::HashMap;
 
@@ -2994,6 +3170,82 @@ mod tests {
     }
 
     #[test]
+    fn gated_prose_registers_are_silent() -> Result<()> {
+        let tokens = vec![0u32, 10, 20, 30, 40, 1];
+        let tags = vec![
+            TAG_OTHER,
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_OTHER,
+        ];
+        let triggers = vec![
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_WRITE,
+            TRIGGER_NONE,
+        ];
+        let flags = vec![0u8; tokens.len()];
+        let gated = simulate_gated(&tokens, &tags, &triggers, 1, &flags)?;
+        assert!(gated.reads.is_empty());
+        assert!(gated.writes.is_empty());
+        assert!(gated.status.iter().all(|&s| s == STATUS_NONE));
+        assert!(gated.status_previous.iter().all(|&s| s == STATUS_NONE));
+        assert!(gated.store.record(10, 20).is_none());
+        let plain = simulate(&tokens, &tags, &triggers, 1)?;
+        assert!(!plain.reads.is_empty());
+        assert_eq!(plain.writes.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn the_worlds_user_turn_operations_are_unchanged() -> Result<()> {
+        let world = world()?;
+        let mut rng = Rng::new(77);
+        for index in 0..64 {
+            let episode = world.episode(&mut rng, index % 2 == 0, 257)?;
+            let plain = simulate(&episode.tokens, &episode.tags, &episode.triggers, 1)?;
+            let gated = simulate_gated(
+                &episode.tokens,
+                &episode.tags,
+                &episode.triggers,
+                1,
+                &episode.user_turn,
+            )?;
+            assert_eq!(plain.status, gated.status);
+            assert_eq!(plain.value, gated.value);
+            assert_eq!(plain.reads, gated.reads);
+            assert_eq!(plain.writes, gated.writes);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn every_tagged_or_triggered_position_is_inside_a_user_turn() -> Result<()> {
+        let world = world()?;
+        let mut rng = Rng::new(91);
+        for index in 0..64 {
+            let episode = world.episode(&mut rng, index % 2 == 0, 257)?;
+            assert_eq!(episode.tokens.len(), episode.user_turn.len());
+            for (position, ((&tag, &trigger), &flag)) in episode
+                .tags
+                .iter()
+                .zip(&episode.triggers)
+                .zip(&episode.user_turn)
+                .enumerate()
+            {
+                if tag != TAG_OTHER || trigger != TRIGGER_NONE {
+                    assert_eq!(flag, 1, "position {position} operates outside a user turn");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn many_episodes_never_evict_their_facts() -> Result<()> {
         // D2's first attempt stopped after about 3,000 training episodes when
         // two-choice placement evicted one of an episode's few facts.
@@ -3035,6 +3287,99 @@ mod tests {
         for (a, b) in reference.iter().flatten().zip(split.iter().flatten()) {
             assert!((a - b).abs() < 1e-5, "{a} vs {b}");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn from_stack_reproduces_the_stack_before_training() -> Result<()> {
+        let device = Device::Cpu;
+        let config = StackConfig {
+            arch: StackArch::Geometric,
+            vocab_size: 400,
+            width: 32,
+            heads: 2,
+            mlp_hidden: 48,
+            context: 16,
+            pattern: "rrar".into(),
+            read: ReadScore::Dot,
+            rotation: true,
+            seed: 17,
+            memory: None,
+        };
+        let stack = StackModel::new(config.clone(), &device)?;
+        let ids: Vec<u32> = (0..32).map(|i| (i * 11 % 400) as u32).collect();
+        let reference = stack.forward(&ids, 2, 16)?.to_vec2::<f32>()?;
+        // The same seed must give the same heads as `new`, and the branch must
+        // start at zero; the logit comparison below cannot see either.
+        let from_new = AermModel::new(config, 2, true, 17, &device)?;
+        let model = AermModel::from_stack(stack, 2, true, 17)?;
+        let flat = |var: &Var| -> Result<Vec<f32>> {
+            Ok(var.as_tensor().flatten_all()?.to_vec1::<f32>()?)
+        };
+        for (name, a, b) in [
+            ("tag_weight", &from_new.tag_weight, &model.tag_weight),
+            ("tag_bias", &from_new.tag_bias, &model.tag_bias),
+            (
+                "trigger_weight",
+                &from_new.trigger_weight,
+                &model.trigger_weight,
+            ),
+            ("trigger_bias", &from_new.trigger_bias, &model.trigger_bias),
+        ] {
+            assert_eq!(flat(a)?, flat(b)?, "{name} differs from new()");
+        }
+        let new_branch = from_new.memory.as_ref().expect("memory branch");
+        let branch = model.memory.as_ref().expect("memory branch");
+        for (name, a, b) in [
+            ("status", &new_branch.status, &branch.status),
+            ("projection", &new_branch.projection, &branch.projection),
+            ("copy_weight", &new_branch.copy_weight, &branch.copy_weight),
+            ("copy_bias", &new_branch.copy_bias, &branch.copy_bias),
+            ("copy_scale", &new_branch.copy_scale, &branch.copy_scale),
+            (
+                "status_previous",
+                &new_branch.status_previous,
+                &branch.status_previous,
+            ),
+            (
+                "projection_previous",
+                &new_branch.projection_previous,
+                &branch.projection_previous,
+            ),
+            (
+                "copy_weight_previous",
+                &new_branch.copy_weight_previous,
+                &branch.copy_weight_previous,
+            ),
+            (
+                "copy_bias_previous",
+                &new_branch.copy_bias_previous,
+                &branch.copy_bias_previous,
+            ),
+            (
+                "copy_scale_previous",
+                &new_branch.copy_scale_previous,
+                &branch.copy_scale_previous,
+            ),
+        ] {
+            assert_eq!(flat(a)?, flat(b)?, "{name} differs from new()");
+        }
+        let bottom = model.bottom(&ids, 2, 16)?;
+        let silent = vec![STATUS_NONE; 32];
+        let values = vec![0u32; 32];
+        let wrapped = model
+            .top(&bottom.hidden, &silent, &values, &silent, &values)?
+            .to_vec2::<f32>()?;
+        let delta = reference
+            .iter()
+            .flatten()
+            .zip(wrapped.iter().flatten())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            delta <= 1e-5,
+            "wrapped model differs from the stack by {delta}"
+        );
         Ok(())
     }
 
@@ -3081,6 +3426,74 @@ mod tests {
             let norm = grad.sqr()?.sum_all()?.to_scalar::<f32>()?;
             assert!(norm > 0.0, "{name} receives no gradient");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn load_restores_the_saved_transport_snap() -> Result<()> {
+        let device = Device::Cpu;
+        let directory = std::env::temp_dir().join(format!("aerm-snap-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        let config = StackConfig {
+            arch: StackArch::Geometric,
+            vocab_size: 400,
+            width: 32,
+            heads: 2,
+            mlp_hidden: 48,
+            context: 16,
+            pattern: "rrar".into(),
+            read: ReadScore::Dot,
+            rotation: true,
+            seed: 19,
+            memory: None,
+        };
+        let mut stack = StackModel::new(config.clone(), &device)?;
+        stack.set_transport_snap(Some(TransportSnap::Icosian))?;
+        let model = AermModel::from_stack(stack, 2, true, 19)?;
+        model.save(&directory)?;
+        let loaded = AermModel::load(&directory, &device)?;
+        assert_eq!(loaded.stack.transport_snap(), Some(TransportSnap::Icosian));
+        let ids: Vec<u32> = (0..32).map(|i| (i * 13 % 400) as u32).collect();
+        let silent = vec![STATUS_NONE; 32];
+        let values = vec![0u32; 32];
+        let before = model
+            .top(
+                &model.bottom(&ids, 2, 16)?.hidden,
+                &silent,
+                &values,
+                &silent,
+                &values,
+            )?
+            .to_vec2::<f32>()?;
+        let after = loaded
+            .top(
+                &loaded.bottom(&ids, 2, 16)?.hidden,
+                &silent,
+                &values,
+                &silent,
+                &values,
+            )?
+            .to_vec2::<f32>()?;
+        for (a, b) in before.iter().flatten().zip(after.iter().flatten()) {
+            assert_eq!(a, b, "snapped logits differ after reload");
+        }
+        // A full memory checkpoint whose *stack* carries a served
+        // representation: the wrapper cannot reapply it, so load must refuse.
+        let served_directory = directory.join("served");
+        let mut served = StackModel::new(config, &device)?;
+        served.set_served_representation(Some(std::sync::Arc::new(
+            crate::geometric_stack::D11Interim,
+        )))?;
+        let served_model = AermModel::from_stack(served, 2, true, 19)?;
+        served_model.save(&served_directory)?;
+        match AermModel::load(&served_directory, &device) {
+            Ok(_) => panic!("a saved served representation must be refused"),
+            Err(error) => assert!(
+                format!("{error}").contains("served representation"),
+                "unexpected error: {error}"
+            ),
+        }
+        fs::remove_dir_all(&directory)?;
         Ok(())
     }
 
