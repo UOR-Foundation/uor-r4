@@ -11,7 +11,7 @@ use std::{
     time::Instant,
 };
 use uor_r4_core::report_output;
-use uor_r4_model_source::{BehaviorSource, HuggingFaceLlamaOracle};
+use uor_r4_model_source::{BehaviorSource, HuggingFaceLlamaOracle, TeacherExecutionConfig};
 use uor_r4_training::{sha256_file, track_b::conversion::CandleLlamaTeacher};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -136,8 +136,13 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
     )?;
     check_wall(start)?;
     let ref_start = Instant::now();
-    let mut oracle = HuggingFaceLlamaOracle::load_with_sequence_length(model, 32)
-        .map_err(|e| format!("reference load: {e}"))?;
+    let workers = std::num::NonZeroUsize::new(2).ok_or("zero exact workers")?;
+    let mut oracle = HuggingFaceLlamaOracle::load_with_sequence_length_and_execution(
+        model,
+        32,
+        TeacherExecutionConfig::fixed_workers(workers),
+    )
+    .map_err(|e| format!("reference load: {e}"))?;
     let backend = oracle.exact_backend_report();
     if backend.arithmetic_owner != "uor-matmul exact GEMM" {
         return Err(format!(
