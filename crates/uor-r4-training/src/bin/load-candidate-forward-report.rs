@@ -154,11 +154,13 @@ fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
         | "hadamard_grouped4bit"
         | "head_compensated"
         | "head"
+        | "matched_bit_e8"
+        | "hadamard_e8_matched_bit"
         | "all"
         | "compare" => {}
         other => {
             return Err(format!(
-                "unknown codec arm '{other}'. Supported: rtn, hadamard_grouped4bit, head_compensated, all"
+                "unknown codec arm '{other}'. Supported: rtn, hadamard_grouped4bit, head_compensated, matched_bit_e8, all"
             )
             .into());
         }
@@ -853,6 +855,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "Head-Compensated 4-bit (Error Diffusion)",
                 Some(CodecArm::HeadCompensated),
             )],
+            "matched_bit_e8" | "hadamard_e8_matched_bit" => vec![(
+                "Hadamard + Matched-Bit E8 Lattice (Two-Stage Residual, ~4 bpw)",
+                Some(CodecArm::HadamardE8MatchedBit),
+            )],
             "all" | "compare" => vec![
                 ("Round-to-nearest (Baseline)", None),
                 (
@@ -863,10 +869,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "Head-Compensated 4-bit (Error Diffusion)",
                     Some(CodecArm::HeadCompensated),
                 ),
+                (
+                    "Hadamard + Matched-Bit E8 Lattice (Two-Stage Residual, ~4 bpw)",
+                    Some(CodecArm::HadamardE8MatchedBit),
+                ),
             ],
             other => {
                 return Err(format!(
-                    "Unknown codec arm '{other}'. Supported: rtn, hadamard_grouped4bit, head_compensated, all"
+                    "Unknown codec arm '{other}'. Supported: rtn, hadamard_grouped4bit, head_compensated, matched_bit_e8, all"
                 )
                 .into());
             }
@@ -881,6 +891,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(CodecArm::HadamardGrouped4Bit) => "hadamard_grouped4bit",
                 Some(CodecArm::HadamardE8) => "hadamard_e8",
                 Some(CodecArm::HeadCompensated) => "head_compensated",
+                Some(CodecArm::HadamardE8MatchedBit) => "hadamard_e8_matched_bit",
             };
             println!("\n------------------------------------------------------------");
             println!("Evaluating Arm: {} [{}]", arm_title, arm_slug);

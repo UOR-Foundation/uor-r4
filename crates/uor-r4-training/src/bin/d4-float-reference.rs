@@ -141,6 +141,7 @@ struct ParsedArgs {
     lens_path: Option<PathBuf>,
     windows: usize,
     out: PathBuf,
+    arms: Option<Vec<String>>,
 }
 
 fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
@@ -190,6 +191,12 @@ fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
         map.get("out")
             .ok_or("missing required argument 'out' (e.g. out=/path/to/report-dir)")?,
     );
+    let arms = map.get("arms").map(|s| {
+        s.split(',')
+            .map(|item| item.trim().to_lowercase())
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<String>>()
+    });
 
     Ok(ParsedArgs {
         model_dir,
@@ -197,6 +204,7 @@ fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
         lens_path,
         windows,
         out,
+        arms,
     })
 }
 
@@ -355,6 +363,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut summaries: Vec<EvaluationSummary> = Vec::new();
 
+        let should_run = |arm_id: &str| -> bool {
+            match &args.arms {
+                None => true,
+                Some(list) => list.iter().any(|item| {
+                    item == arm_id
+                        || (arm_id == "hadamard_e8_matched_bit"
+                            && (item == "matched_bit_e8"
+                                || item == "matched-bit-e8"
+                                || item == "e8_matched_bit"))
+                        || (arm_id == "hadamard_grouped4"
+                            && (item == "h+g4" || item == "hadamard_g4" || item == "g4"))
+                        || (arm_id == "hadamard_e8" && (item == "h+e8" || item == "e8"))
+                        || (arm_id == "hadamard_e8_finer_head"
+                            && (item == "h+e8_finer_head"
+                                || item == "finer_head"
+                                || item == "e8_finer_head"))
+                        || (arm_id == "negative_control_scrambled"
+                            && (item == "negative_control"
+                                || item == "neg_control"
+                                || item == "negative"
+                                || item == "scrambled"))
+                }),
+            }
+        };
+
         // -------------------------------------------------------------------
         // [2/6] Arm (i): RTN (Round to nearest baseline)
         // -------------------------------------------------------------------
@@ -379,17 +412,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             rtn_agr_rate * 100.0
         );
 
-        summaries.push(EvaluationSummary {
-            arm: "rtn".into(),
-            title: "Round-To-Nearest (RTN Baseline)".into(),
-            mean_nll: rtn_nll,
-            delta_nll: rtn_delta,
-            top1_agreement: rtn_agr_rate,
-            stored_bits_per_weight: 4.25043,
-            total_stored_bytes: rtn_artifact_bytes.len(),
-            pass_gate: rtn_delta <= 0.0200,
-            window_nlls: rtn_win,
-        });
+        if should_run("rtn") {
+            summaries.push(EvaluationSummary {
+                arm: "rtn".into(),
+                title: "Round-To-Nearest (RTN Baseline)".into(),
+                mean_nll: rtn_nll,
+                delta_nll: rtn_delta,
+                top1_agreement: rtn_agr_rate,
+                stored_bits_per_weight: 4.25043,
+                total_stored_bytes: rtn_artifact_bytes.len(),
+                pass_gate: rtn_delta <= 0.0200,
+                window_nlls: rtn_win,
+            });
+        }
 
         // -------------------------------------------------------------------
         // [3/6] Arm (ii): Online Hadamard + Grouped 4-bit
@@ -594,17 +629,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             arm2_bits_per_weight
         );
 
-        summaries.push(EvaluationSummary {
-            arm: "hadamard_grouped4".into(),
-            title: "Online Hadamard + Grouped 4-bit (H+G4)".into(),
-            mean_nll: arm2_nll,
-            delta_nll: arm2_delta,
-            top1_agreement: arm2_agr_rate,
-            stored_bits_per_weight: arm2_bits_per_weight,
-            total_stored_bytes: arm2_total_bytes,
-            pass_gate: arm2_delta <= 0.0200 && arm2_bits_per_weight <= 4.25,
-            window_nlls: arm2_win,
-        });
+        if should_run("hadamard_grouped4") {
+            summaries.push(EvaluationSummary {
+                arm: "hadamard_grouped4".into(),
+                title: "Online Hadamard + Grouped 4-bit (H+G4)".into(),
+                mean_nll: arm2_nll,
+                delta_nll: arm2_delta,
+                top1_agreement: arm2_agr_rate,
+                stored_bits_per_weight: arm2_bits_per_weight,
+                total_stored_bytes: arm2_total_bytes,
+                pass_gate: arm2_delta <= 0.0200 && arm2_bits_per_weight <= 4.25,
+                window_nlls: arm2_win,
+            });
+        }
 
         // -------------------------------------------------------------------
         // [4/6] Arm (iii): Online Hadamard + E8 Lattice Codebook
@@ -658,9 +695,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             stored_bytes += 1;
                             quantize_scale_to_byte(scale, exp_base)
                         };
-                        let deq = e8_codebook.dequantize_block(best_idx, s_q);
+                        let deq = e8_codebook.dequantize_block(best_idx, s_q)?;
                         for i in 0..E8_DIM {
                             out_row[b_idx * E8_DIM + i] = deq[i] as f32;
+                        }
+                    }
+                }
+
+                let mut eff_weights = deq_rotated;
+                fwht_matrix_rows(&mut eff_weights, cols);
+                Ok((eff_weights, stored_bytes))
+            };
+
+        // Matched-bit E8 arm: two-stage residual E8 lattice codebook (~4.0 bits per weight)
+        let quantize_dequantize_matched_bit_e8 =
+            |vals: &[f32],
+             rows: usize,
+             cols: usize|
+             -> Result<(Vec<f32>, usize), Box<dyn std::error::Error>> {
+                let mut rotated = vals.to_vec();
+                fwht_matrix_rows(&mut rotated, cols);
+
+                let mut deq_rotated = vec![0.0f32; rows * cols];
+                let mut stored_bytes = 64;
+
+                for (r, row) in rotated.chunks_exact(cols).enumerate() {
+                    let out_row = &mut deq_rotated[r * cols..(r + 1) * cols];
+                    let mut block_info = Vec::with_capacity(cols / E8_DIM);
+                    let mut max_scale1 = 0.0f64;
+                    let mut max_scale2 = 0.0f64;
+
+                    for chunk in row.chunks_exact(E8_DIM) {
+                        let mut b = [0.0f64; E8_DIM];
+                        for i in 0..E8_DIM {
+                            b[i] = chunk[i] as f64;
+                        }
+                        let (best_idx1, scale1) = e8_codebook.quantize_block(&b);
+                        let deq1 = e8_codebook.dequantize_block(best_idx1, scale1)?;
+                        let mut res = [0.0f64; E8_DIM];
+                        for i in 0..E8_DIM {
+                            res[i] = b[i] - deq1[i];
+                        }
+                        let (best_idx2, scale2) = e8_codebook.quantize_block(&res);
+                        if scale1 > max_scale1 {
+                            max_scale1 = scale1;
+                        }
+                        if scale2 > max_scale2 {
+                            max_scale2 = scale2;
+                        }
+                        block_info.push(((best_idx1, scale1), (best_idx2, scale2)));
+                    }
+
+                    let exp_base1 = if max_scale1 > 1e-12 {
+                        (max_scale1.log2().floor() as i32) - 15
+                    } else {
+                        -64
+                    };
+                    let exp_base2 = if max_scale2 > 1e-12 {
+                        (max_scale2.log2().floor() as i32) - 15
+                    } else {
+                        -64
+                    };
+
+                    for (b_idx, &((best_idx1, scale1), (best_idx2, scale2))) in
+                        block_info.iter().enumerate()
+                    {
+                        stored_bytes += 4;
+                        let s_q1 = quantize_scale_to_byte(scale1, exp_base1);
+                        let s_q2 = quantize_scale_to_byte(scale2, exp_base2);
+                        let deq1 = e8_codebook.dequantize_block(best_idx1, s_q1)?;
+                        let deq2 = e8_codebook.dequantize_block(best_idx2, s_q2)?;
+                        for i in 0..E8_DIM {
+                            out_row[b_idx * E8_DIM + i] = (deq1[i] + deq2[i]) as f32;
                         }
                     }
                 }
@@ -830,17 +936,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             arm3_bits_per_weight
         );
 
-        summaries.push(EvaluationSummary {
-            arm: "hadamard_e8".into(),
-            title: "Online Hadamard + E8 Lattice Codebook (H+E8)".into(),
-            mean_nll: arm3_nll,
-            delta_nll: arm3_delta,
-            top1_agreement: arm3_agr_rate,
-            stored_bits_per_weight: arm3_bits_per_weight,
-            total_stored_bytes: arm3_total_bytes,
-            pass_gate: arm3_delta <= 0.0200 && arm3_bits_per_weight <= 4.25,
-            window_nlls: arm3_win,
-        });
+        if should_run("hadamard_e8") {
+            summaries.push(EvaluationSummary {
+                arm: "hadamard_e8".into(),
+                title: "Online Hadamard + E8 Lattice Codebook (H+E8)".into(),
+                mean_nll: arm3_nll,
+                delta_nll: arm3_delta,
+                top1_agreement: arm3_agr_rate,
+                stored_bits_per_weight: arm3_bits_per_weight,
+                total_stored_bytes: arm3_total_bytes,
+                pass_gate: arm3_delta <= 0.0200 && arm3_bits_per_weight <= 4.25,
+                window_nlls: arm3_win,
+            });
+        }
 
         // -------------------------------------------------------------------
         // [5/6] Arm (iv): Online Hadamard + E8 with Finer Head Scale
@@ -864,17 +972,201 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Online H+E8 (Finer Head) NLL: {:.6} (Delta: {:+.6} nats, Top-1 Agr: {:.2}%, Bits: {:.4} b/w)",
             arm4_nll, arm4_delta, arm4_agr_rate * 100.0, arm4_bits_per_weight);
 
-        summaries.push(EvaluationSummary {
-            arm: "hadamard_e8_finer_head".into(),
-            title: "Online Hadamard + E8 (Finer Head Scale)".into(),
-            mean_nll: arm4_nll,
-            delta_nll: arm4_delta,
-            top1_agreement: arm4_agr_rate,
-            stored_bits_per_weight: arm4_bits_per_weight,
-            total_stored_bytes: arm4_total_bytes,
-            pass_gate: arm4_delta <= 0.0200 && arm4_bits_per_weight <= 4.25,
-            window_nlls: arm4_win,
-        });
+        if should_run("hadamard_e8_finer_head") {
+            summaries.push(EvaluationSummary {
+                arm: "hadamard_e8_finer_head".into(),
+                title: "Online Hadamard + E8 (Finer Head Scale)".into(),
+                mean_nll: arm4_nll,
+                delta_nll: arm4_delta,
+                top1_agreement: arm4_agr_rate,
+                stored_bits_per_weight: arm4_bits_per_weight,
+                total_stored_bytes: arm4_total_bytes,
+                pass_gate: arm4_delta <= 0.0200 && arm4_bits_per_weight <= 4.25,
+                window_nlls: arm4_win,
+            });
+        }
+
+        // -------------------------------------------------------------------
+        // [5/7] Arm (v): Online Hadamard + Matched-Bit E8 Lattice Codebook
+        // -------------------------------------------------------------------
+        println!("\n[5/7] Arm (v): Online Hadamard + Matched-Bit E8 Lattice Codebook (Two-Stage Residual, ~4 bpw)...");
+        let mut arm5_total_bytes = 1928usize; // 241 codewords * 8 bytes shared codebook
+        let mut arm5_weights_count = 0usize;
+
+        let arm5_model = StackModel::load(&args.model_dir, &Device::Cpu)?;
+        set_model_var(&arm5_model, "final_norm.weight", vec![1.0; d])?;
+        for (l, kind) in float_model.config.pattern.bytes().enumerate() {
+            let t = |suffix: &str| format!("layers.{l:02}.{suffix}");
+            if kind == b'r' {
+                set_model_var(&arm5_model, &t("rec_norm.weight"), vec![1.0; d])?;
+            } else {
+                set_model_var(&arm5_model, &t("read_norm.weight"), vec![1.0; d])?;
+            }
+            set_model_var(&arm5_model, &t("mlp_norm.weight"), vec![1.0; d])?;
+        }
+        for (name, var) in rtn_grid_ref.model.variables() {
+            if name.contains("bias")
+                || name.contains("decay")
+                || name.contains("conv")
+                || name.contains("age")
+                || name.contains("beta")
+                || name.contains("offset")
+            {
+                arm5_model.variables()[name].set(var.as_tensor())?;
+            }
+        }
+        arm5_model.variables()["embedding.weight"]
+            .set(rtn_grid_ref.model.variables()["embedding.weight"].as_tensor())?;
+
+        let (arm5_head_vals, arm5_head_bytes) =
+            quantize_dequantize_matched_bit_e8(&head_folded, vocab_size, d)?;
+        let arm5_head_tensor = Tensor::from_vec(arm5_head_vals, (vocab_size, d), &Device::Cpu)?;
+        arm5_total_bytes += arm5_head_bytes;
+        arm5_weights_count += vocab_size * d;
+
+        for (l, kind) in float_model.config.pattern.bytes().enumerate() {
+            let t = |suffix: &str| format!("layers.{l:02}.{suffix}");
+            let mlp_gain = float_model.variables()[&t("mlp_norm.weight")]
+                .as_tensor()
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            if kind == b'r' {
+                let rec_gain = float_model.variables()[&t("rec_norm.weight")]
+                    .as_tensor()
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                for part in ["rec.in.weight", "rec.gate.weight"] {
+                    let mut vals = float_model.variables()[&t(part)]
+                        .as_tensor()
+                        .flatten_all()?
+                        .to_vec1::<f32>()?;
+                    let rows = vals.len() / d;
+                    for row in vals.chunks_exact_mut(d) {
+                        for (w, &g) in row.iter_mut().zip(&rec_gain) {
+                            *w *= g;
+                        }
+                    }
+                    let (eff, b_count) = quantize_dequantize_matched_bit_e8(&vals, rows, d)?;
+                    set_model_var(&arm5_model, &t(part), eff)?;
+                    arm5_total_bytes += b_count;
+                    arm5_weights_count += rows * d;
+                }
+                let vals = float_model.variables()[&t("rec.out.weight")]
+                    .as_tensor()
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let rows = vals.len() / d;
+                let (eff, b_count) = quantize_dequantize_matched_bit_e8(&vals, rows, d)?;
+                set_model_var(&arm5_model, &t("rec.out.weight"), eff)?;
+                arm5_total_bytes += b_count;
+                arm5_weights_count += rows * d;
+            } else {
+                let read_gain = float_model.variables()[&t("read_norm.weight")]
+                    .as_tensor()
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                for part in [
+                    "read.query.weight",
+                    "read.key.weight",
+                    "read.value.weight",
+                    "read.null.weight",
+                ] {
+                    let mut vals = float_model.variables()[&t(part)]
+                        .as_tensor()
+                        .flatten_all()?
+                        .to_vec1::<f32>()?;
+                    let rows = vals.len() / d;
+                    for row in vals.chunks_exact_mut(d) {
+                        for (w, &g) in row.iter_mut().zip(&read_gain) {
+                            *w *= g;
+                        }
+                    }
+                    let (eff, b_count) = quantize_dequantize_matched_bit_e8(&vals, rows, d)?;
+                    set_model_var(&arm5_model, &t(part), eff)?;
+                    arm5_total_bytes += b_count;
+                    arm5_weights_count += rows * d;
+                }
+                let vals = float_model.variables()[&t("read.out.weight")]
+                    .as_tensor()
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let rows = vals.len() / d;
+                let (eff, b_count) = quantize_dequantize_matched_bit_e8(&vals, rows, d)?;
+                set_model_var(&arm5_model, &t("read.out.weight"), eff)?;
+                arm5_total_bytes += b_count;
+                arm5_weights_count += rows * d;
+            }
+
+            let mlp_h = float_model.config.mlp_hidden;
+            for part in ["mlp.gate.weight", "mlp.up.weight"] {
+                let mut vals = float_model.variables()[&t(part)]
+                    .as_tensor()
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                for row in vals.chunks_exact_mut(d) {
+                    for (w, &g) in row.iter_mut().zip(&mlp_gain) {
+                        *w *= g;
+                    }
+                }
+                let (eff, b_count) = quantize_dequantize_matched_bit_e8(&vals, mlp_h, d)?;
+                set_model_var(&arm5_model, &t(part), eff)?;
+                arm5_total_bytes += b_count;
+                arm5_weights_count += mlp_h * d;
+            }
+            let padded_cols = mlp_h.div_ceil(32) * 32;
+            let vals = float_model.variables()[&t("mlp.down.weight")]
+                .as_tensor()
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            let mut padded_down = vec![0.0f32; d * padded_cols];
+            for r in 0..d {
+                padded_down[r * padded_cols..r * padded_cols + mlp_h]
+                    .copy_from_slice(&vals[r * mlp_h..(r + 1) * mlp_h]);
+            }
+            let (eff_padded, b_count) =
+                quantize_dequantize_matched_bit_e8(&padded_down, d, padded_cols)?;
+            let mut unpadded_down = vec![0.0f32; d * mlp_h];
+            for r in 0..d {
+                unpadded_down[r * mlp_h..(r + 1) * mlp_h]
+                    .copy_from_slice(&eff_padded[r * padded_cols..r * padded_cols + mlp_h]);
+            }
+            set_model_var(&arm5_model, &t("mlp.down.weight"), unpadded_down)?;
+            arm5_total_bytes += b_count;
+            arm5_weights_count += d * mlp_h;
+        }
+
+        let (arm5_nll, arm5_win, arm5_preds) =
+            score_reference(&arm5_model, &arm5_head_tensor, "Matched-Bit E8")?;
+        let arm5_delta = arm5_nll - baseline_float_nll;
+        let arm5_agr = arm5_preds
+            .iter()
+            .zip(&float_top_preds)
+            .filter(|(a, b)| a == b)
+            .count();
+        let arm5_agr_rate = (arm5_agr as f64) / (total_targets as f64);
+        let arm5_bits_per_weight = (arm5_total_bytes * 8) as f64 / (arm5_weights_count as f64);
+        println!(
+            "  Online Matched-Bit E8 NLL: {:.6} (Delta: {:+.6} nats, Top-1 Agr: {:.2}%, Bits: {:.4} b/w)",
+            arm5_nll,
+            arm5_delta,
+            arm5_agr_rate * 100.0,
+            arm5_bits_per_weight
+        );
+
+        if should_run("hadamard_e8_matched_bit") {
+            summaries.push(EvaluationSummary {
+                arm: "hadamard_e8_matched_bit".into(),
+                title: "Online Hadamard + Matched-Bit E8 Lattice (Two-Stage Residual, ~4 bpw)"
+                    .into(),
+                mean_nll: arm5_nll,
+                delta_nll: arm5_delta,
+                top1_agreement: arm5_agr_rate,
+                stored_bits_per_weight: arm5_bits_per_weight,
+                total_stored_bytes: arm5_total_bytes,
+                pass_gate: arm5_delta <= 0.0200 && arm5_bits_per_weight <= 4.25,
+                window_nlls: arm5_win,
+            });
+        }
 
         // -------------------------------------------------------------------
         // [6/6] Negative Control: Scrambled Scales (Adversarial Check)
@@ -914,17 +1206,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             neg_delta
         );
 
-        summaries.push(EvaluationSummary {
-            arm: "negative_control_scrambled".into(),
-            title: "Negative Control (Scrambled Scales Damage Check)".into(),
-            mean_nll: neg_nll,
-            delta_nll: neg_delta,
-            top1_agreement: neg_agr_rate,
-            stored_bits_per_weight: 4.25,
-            total_stored_bytes: arm2_total_bytes,
-            pass_gate: false,
-            window_nlls: neg_win,
-        });
+        if should_run("negative_control_scrambled") {
+            summaries.push(EvaluationSummary {
+                arm: "negative_control_scrambled".into(),
+                title: "Negative Control (Scrambled Scales Damage Check)".into(),
+                mean_nll: neg_nll,
+                delta_nll: neg_delta,
+                top1_agreement: neg_agr_rate,
+                stored_bits_per_weight: 4.25,
+                total_stored_bytes: arm2_total_bytes,
+                pass_gate: false,
+                window_nlls: neg_win,
+            });
+        }
 
         // -------------------------------------------------------------------
         // Report Generation and Output Writing

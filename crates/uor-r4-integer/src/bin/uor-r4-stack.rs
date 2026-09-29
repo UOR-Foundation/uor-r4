@@ -24,6 +24,13 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use uor_r4_integer::stack::{stack_argmax, IntegerStackModel, StackError};
 
+/// Nominal bits per weight for 4-bit signed symmetric weight representation.
+pub const D11_NOMINAL_BITS_PER_WEIGHT: f64 = 4.0;
+/// Scale storage overhead per weight (1 scale byte per 32 weights = 8 / 32 = 0.25 bits/weight).
+pub const D11_SCALE_BITS_PER_WEIGHT: f64 = 0.25;
+/// Effective bits per weight for canonical D11 grouped 4-bit representation (4.25 bpw).
+pub const D11_EFFECTIVE_BITS_PER_WEIGHT: f64 = 4.25;
+
 #[derive(Debug)]
 enum CliError {
     Usage(String),
@@ -141,6 +148,10 @@ fn generate(args: &[String]) -> Result<(), CliError> {
         "generated": generated,
         "steps": steps,
         "weights_read_per_token": model.weights_per_token(),
+        "nominal_bits_per_weight": D11_NOMINAL_BITS_PER_WEIGHT,
+        "scale_bits_per_weight": D11_SCALE_BITS_PER_WEIGHT,
+        "bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
+        "effective_bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
         "load_seconds": load_seconds,
         "serve_seconds": serve_seconds,
         "decoding": "greedy integer argmax (first on ties)",
@@ -216,6 +227,10 @@ fn digest(args: &[String]) -> Result<(), CliError> {
         "seconds": seconds,
         "tokens_per_second": steps as f64 / seconds,
         "weights_read_per_token": model.weights_per_token(),
+        "nominal_bits_per_weight": D11_NOMINAL_BITS_PER_WEIGHT,
+        "scale_bits_per_weight": D11_SCALE_BITS_PER_WEIGHT,
+        "bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
+        "effective_bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
     });
     println!("{record}");
     Ok(())
@@ -524,12 +539,18 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             "peak_rss_mb": post_eval_rss_mb,
             "weights_read_per_token": model.weights_per_token(),
             "analytical_weights_read_per_token": model.weights_per_token(),
-            "weights_notes": "analytical shape-based count: 7,238,304 weights read per token (3,845,349 bytes weights/scales)",
+            "nominal_bits_per_weight": D11_NOMINAL_BITS_PER_WEIGHT,
+            "scale_bits_per_weight": D11_SCALE_BITS_PER_WEIGHT,
+            "bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
+            "effective_bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
+            "weights_notes": "analytical shape-based count: 7,238,304 weights read per token (3,845,349 bytes weights/scales; 4.25 effective bits per weight)",
             "bytes_touched_per_token": bytes_touched_per_token,
             "analytical_bytes_touched_per_token_estimate": bytes_touched_per_token,
             "rss_notes": "peak_rss_mb / post_eval_rss_mb is a single post-evaluation RSS sample via ps, not a continuous high-water mark",
             "traffic_notes": "bytes_touched is an analytical estimate derived from tensor shapes, not hardware-instrumented memory traffic",
         },
+        "bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
+        "effective_bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
         "cold_load": {
             "seconds": cold_load_seconds,
             "ms": cold_load_seconds * 1000.0,
