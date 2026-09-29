@@ -52,6 +52,7 @@ pub mod stack_memory_replies;
 pub mod stack_prime_route;
 pub mod stack_store;
 pub mod stack_tracking;
+pub mod track_b;
 
 #[cfg(test)]
 mod native_h4_contract;
