@@ -13,30 +13,33 @@ measured position of every active line of work.
 
 ## Approach
 
-The work runs on two tracks that share one set of geometric mechanisms.
+The work runs on two tracks that share one set of geometric mechanisms. The
+[plan of record](docs/plans/2026-09-29-path-to-chat.md) sets their gates, kill
+criteria and owners.
 
-- **Track A: a native geometric chat model.** A small (≤ 30M parameter) model
-  trained from scratch, served without floating point or a hardware multiplier.
-  Its first milestone is a sealed conversation panel: multi-turn replies,
-  recall of updated facts, and new instruction wordings.
-- **Track B: geometric conversion of pretrained transformers.** Distil open
-  models (SmolLM2 135M → 360M → 1.7B) into a geometric runtime: replace
-  attention and compress the weights, measuring the quality gap to the teacher
-  and the bytes and operations per token.
+- **Track A: a native geometric chat model.** A small (≤ 30M parameter) model,
+  trained from scratch and served without floating point or a hardware
+  multiplier. Its first milestone is a sealed conversation panel: multi-turn
+  replies, recall of updated facts, and new instruction wordings.
+- **Track B: geometric conversion of pretrained transformers.** Distill open
+  models (SmolLM2 135M → 360M → 1.7B) into a geometric runtime, and measure the
+  quality gap to the teacher and the bytes and operations per token.
+  - It is approved in the plan of record (D13 pending).
+  - Under D11 the source transformers stay offline teachers and comparators.
+  - A converted model is served only if it meets D11.
 
 The four geometric mechanisms under test:
 
-| Mechanism | Idea | Role |
+| Mechanism | Idea | Status |
 | --- | --- | --- |
-| Flock attention | Each query reads a sink, a local window and its *k* nearest keys, as starlings track about seven neighbours. Rank-table weights, no exponentials | Sparse attention and exact copy (k = 1) |
-| Spherical-harmonic attention | Harmonic features of normalised queries and keys give a fixed-size recurrent state | The smooth, low-frequency part of attention |
-| Quaternion / 2I transport | A recurrent state carried by unit quaternions, snapped to the 120-element binary icosahedral group | Long-range state without a key-value cache |
-| E8 / 2I lattice codes | Weights stored as lattice codewords and read by table lookup | 2–4 bit weights |
+| Flock attention | Each query reads a sink, a local window and its *k* nearest keys, as starlings track about seven neighbors. Rank-table weights; k = 1 is an exact copy | Being built (A1, B0) |
+| Spherical-harmonic attention | Harmonic features of normalized queries and keys give a fixed-size recurrent state | Planned (B2) |
+| Quaternion / 2I transport | Recurrent state carried by unit quaternions, snapped to the 120-element binary icosahedral group | Trained into the main-line model; D11 kernel in review |
+| E8 / 2I lattice codes | Weights stored as lattice codewords and read by table lookup | Weight coding planned (B3); earlier E8 codec arms lost to 4-bit rounding |
 
-A geometric mechanism stays in the model when it is within 0.02 nats of its
-ordinary matrix equivalent, a rule the owner set on 29 September. That
-comparison uses paired arms and at least two seeds. The plan, gates and kill criteria
-are in the [plan of record](docs/plans/2026-09-29-path-to-chat.md).
+A geometric mechanism stays when it is within 0.02 nats of its ordinary matrix
+equivalent. The rule was set by the owner on 29 September and is judged on
+paired arms with at least two seeds.
 
 ## Architecture
 
@@ -44,12 +47,15 @@ are in the [plan of record](docs/plans/2026-09-29-path-to-chat.md).
   interleaves quaternion-transport recurrence layers (`r`) and multi-head reads
   with a Lorentz or dot score (`a`). A SwiGLU MLP follows each layer. An
   ordinary transformer control runs on the same kernels.
-- **Memory:** an exact, addressed store keyed by prime identities (AERM).
-  Learned heads decide what to write and when to read.
+- **Memory:** an exact, addressed store keyed by prime identities (AERM). It
+  exists today as a probe, is not yet in the served model, and becomes an index
+  into an exact log of the conversation.
 - **Serving (D11):** the integer engine ([`uor-r4-integer`](crates/uor-r4-integer/README.md))
   runs 4-bit weights with integer add, shift, compare and table reads only: no
-  floating point and no multiply or divide instruction. The served binary is
-  audited at instruction level.
+  floating point, no multiply or divide instruction, and an instruction-level
+  audit of the binary.
+  - Every weight is still read for every token.
+  - The one whole-system energy measurement was 4.3× worse than float.
 - **Training:** offline in Rust (Candle), with floating point allowed.
   Quantization-aware training reads exactly the values the export writes.
 
@@ -58,7 +64,7 @@ are in the [plan of record](docs/plans/2026-09-29-path-to-chat.md).
 | Path | Contents |
 | --- | --- |
 | [`crates/uor-r4-training`](crates/uor-r4-training) | The geometric stack, memory, training worlds, export, and the experiment drivers in `examples/` |
-| [`crates/uor-r4-integer`](crates/uor-r4-integer) | The multiplier-free serving engine and the `uor-chat` and `uor-r4-stack` binaries |
+| [`crates/uor-r4-integer`](crates/uor-r4-integer) | The multiplier-free serving engine and the `uor-r4-stack` and `uor-chat` binaries |
 | [`crates/uor-r4-lut`](crates/uor-r4-lut) | The serving artifact format |
 | [`crates/uor-r4-model-source`](crates/uor-r4-model-source) | The exact CPU reference for teacher models (Llama/SmolLM2, GPT-2) and the attention-replacement seam |
 | [`crates/uor-r4-core`](crates/uor-r4-core) | Geometric primitives (R4/S3/H4, exact `Z[φ]`, prime addressing), the earlier native learner and sealed report output |
@@ -70,19 +76,23 @@ The [project map](docs/PROJECT_MAP.md) covers every crate and historical engine.
 
 ## Quick start
 
-The toolchain is Rust stable, via rustup. Training data and model artifacts
-are local material and are not in the repository.
+Rust is pinned by `rust-toolchain.toml` (1.97.1), and rustup selects it
+automatically. Training data and model artifacts are local material and are
+not in the repository.
 
 ```sh
 cargo build --release -p uor-r4-training --example geometric-stack
-cargo build --release -p uor-r4-integer --bin uor-r4-stack --bin uor-chat
+cargo build --release -p uor-r4-integer --bin uor-r4-stack
 cargo test -p uor-r4-training --lib geometric_stack
 ```
 
-`geometric-stack` trains and evaluates stacks (run it without arguments to
-list its modes). `uor-r4-stack generate ARTIFACT PROMPT_IDS NEW_TOKENS` serves
-an exported stack under D11, and `uor-chat --bundle <dir>` is the interactive
-session.
+- `geometric-stack` trains, evaluates and exports stacks. Run it without
+  arguments to list its modes.
+- `uor-r4-stack generate ARTIFACT PROMPT_IDS NEW_TOKENS` serves an artifact
+  written by `geometric-stack export` under D11. `PROMPT_IDS` is a
+  comma-separated list of token IDs.
+- The interactive `uor-chat --bundle <dir>` serves the earlier integer model.
+  Its stack profile is not built yet.
 
 ## How the work is run
 
@@ -90,22 +100,24 @@ Five labs work in parallel. Each is an AI research agent with its own GitHub
 board, and the owner holds the mission, spending and final decisions.
 
 - [Plan of record](docs/plans/2026-09-29-path-to-chat.md): tracks,
-  experiments, gates, kill criteria and owners.
-- [STATUS.md](STATUS.md): one row per lab, with the current item and the latest
-  result.
-- [ROADMAP.md](ROADMAP.md): assignments, dead paths and the anti-stall rules.
+  experiments, gates, kill criteria, owners and the anti-stall rules.
+- [STATUS.md](STATUS.md): one row per lab, with the current item and the latest result.
+- [ROADMAP.md](ROADMAP.md): assignments, the dead-path register and the cross-lab protocol.
 - [DECISIONS.md](docs/integration/DECISIONS.md): owner decisions.
 - [Current state](docs/integration/current-state.md): measured results and artifacts.
-- The [programme tracker #820](https://github.com/UOR-Foundation/uor-r4/issues/820),
-  epics [#1508](https://github.com/UOR-Foundation/uor-r4/issues/1508) (Track A),
+- The [programme tracker #820](https://github.com/UOR-Foundation/uor-r4/issues/820)
+  and epics [#1508](https://github.com/UOR-Foundation/uor-r4/issues/1508) (Track A),
   [#1509](https://github.com/UOR-Foundation/uor-r4/issues/1509) (Track B) and
   [#1510](https://github.com/UOR-Foundation/uor-r4/issues/1510) (infrastructure).
 - [AGENTS.md](AGENTS.md): the operating rules for every contributor and agent.
 
-**Evidence rules.** Every number comes from committed code run into a sealed
-report directory. Experiments are pre-registered with a gate and a kill
-criterion, negative results keep their exact scope, and claims follow the
-[formal vocabulary](docs/formal_vocabulary.md).
+**Evidence rules.**
+- Numbers come from committed code run into sealed report directories. A lab's
+  own figure is labeled self-reported until a non-author re-runs it.
+- Experiments are pre-registered with a gate and a kill criterion. A kill ends
+  an experiment, not a mechanism family (D12).
+- Negative results keep their exact scope.
+- Claims follow the [formal vocabulary](docs/formal_vocabulary.md).
 
 ## History
 
