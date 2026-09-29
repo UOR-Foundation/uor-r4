@@ -53,11 +53,10 @@ September 28, 2026. References #973 under #820.
 |:---|---:|---:|---:|---:|:---:|:---:|:---|
 | **D10 Reference (NEON)** | 2.956329 | 1.110 | 900.92 | — | 0 | (Excluded: contains NEON/floats) | `s2-d11-release-optimized-1` |
 | **D11 Baseline** | 2.956329 | 6.061 | 164.99 | 1.00x | 0 | FULL PASS | `s2-d11-release-baseline-1` |
-| **D11 Audited ILP Speedup** | 2.956329 | 5.448 | 183.55 | **+11.2% (not established)** | **0** | **FULL PASS** | `s2-d11-release-optimized-1` |
+| **D11 Audited ILP Speedup** | 2.956329 | 5.448 | 183.55 | no measured speedup: Lab 1's interleaved A/B, six base/ILP pairs, −0.3% (within noise), bit-identical (`claude-1479-rerun/interleaved-1/`) | **0** | **FULL PASS** | `s2-d11-release-optimized-1` |
 
 - **Execution Context:** Single-threaded execution (1 thread).
-- **Host Load Conditions:** Load average was 13.21 before and 11.65 after the runs.
-- **Run-to-Run Load Attribution Caveat:** In the single baseline vs. optimized run pair, the reference D10 NEON engine also exhibited a +13.3% throughput difference (795.13 tok/s in `s2-d11-release-baseline-1` vs. 900.92 tok/s in `s2-d11-release-optimized-1`). Consequently, the ILP kernel speedup is **not established** until Lab 1's quiet-machine A/B.
+- **Interleaved A/B Outcome & Qualified Step Cost:** Lab 1's quiet-machine interleaved A/B across six alternating base/ILP pairs showed −0.3% throughput difference (within noise) and bit-identical logits (`claude-1479-rerun/interleaved-1/`), establishing no measured speedup from the ILP unrolling. Qualified step cost: about 5.40 ms/token at 1 thread on the S2 artifact, quiet machine, from the same roots. Process RSS and whole-system energy stay unqualified.
 - **Numerical Parity Gate:** Fully verified across all 2,048 evaluation positions: `max_abs_logit_difference == 0`, `top1_agreement == 1.000000`, `positions_with_a_difference == 0`.
 - **Weights Traversed Per Token (Analytical Count):** 7,238,304 weights/token.
 - **Cold Load Time:** 20.6 ms.
