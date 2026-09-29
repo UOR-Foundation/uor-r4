@@ -883,6 +883,30 @@ mod tests {
         Ok(())
     }
 
+    /// Unique factorization: two semiprime experts are equal exactly when
+    /// their unordered atom pairs are. The store only compares keys for
+    /// equality, so an expert key carries the same information as a sorted
+    /// pair `(min, max)` and yields identical registers (the control Astra's
+    /// review asked for, settled for every pair of a 64-atom registry).
+    #[test]
+    fn semiprime_experts_are_exactly_unordered_pairs() -> Result<()> {
+        let atoms = 64u32;
+        let registry = PrimeRegistry::new(atoms as usize)?;
+        let mut seen: BTreeMap<u64, (u32, u32)> = BTreeMap::new();
+        for a in 0..atoms {
+            for b in 0..atoms {
+                if a == b {
+                    continue;
+                }
+                let sorted = (a.min(b), a.max(b));
+                let key = registry.semiprime(a, b)?;
+                assert_eq!(*seen.entry(key).or_insert(sorted), sorted);
+            }
+        }
+        assert_eq!(seen.len() as u32, atoms * (atoms - 1) / 2);
+        Ok(())
+    }
+
     #[test]
     fn the_expert_store_keeps_the_probe_version_semantics() {
         let mut store = ExpertStore::default();
