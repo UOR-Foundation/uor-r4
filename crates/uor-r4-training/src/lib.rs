@@ -46,6 +46,7 @@ pub mod reference_eval;
 pub mod stack_aerm;
 pub mod stack_checkpoint;
 pub mod stack_dialogue;
+pub mod stack_integration;
 pub mod stack_export;
 pub mod stack_memory;
 pub mod stack_memory_replies;
