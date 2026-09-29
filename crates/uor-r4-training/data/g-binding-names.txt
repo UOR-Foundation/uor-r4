@@ -1,6 +1,7 @@
 # G-binding training names (Lab 1's pre-registration, #973 comment 5883172773).
 # One name per line. Every name is a single #1017 token with a leading space
-# (taken from the tokenizer's own vocabulary and verified by `names-check`);
+# (taken from the tokenizer's own vocabulary; each was verified as an exact
+# `ĠName` vocabulary key before commit);
 # `aerm-probe extend_names` refuses any other. The four held-out names
 # (Molly, Leo, Emma, Rose) are excluded, as are tokens that collide with the
 # world's relation values (blue, brown, bird, cat, doggy).

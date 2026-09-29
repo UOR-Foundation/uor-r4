@@ -1,7 +1,7 @@
 {
  "schema": "uor-r4.lab2.g1-decomposition-evidence/1",
- "preregistration": "https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5876711862",
- "code_commit": "d8a11080",
+ "preregistration": "https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5881325638",
+ "code_commit": "5f3de916",
  "executable_sha256": "5c1a4a758620b07e3972bfef2c1641a7db58d55bec96c0153548d677c94e2653",
  "supervision": {
   "receipt": "/Volumes/UOR-Workspace/uor-r4-lab/opencode-g1-decompose/decompose.supervision.json",

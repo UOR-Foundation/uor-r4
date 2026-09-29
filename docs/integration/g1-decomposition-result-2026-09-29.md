@@ -44,6 +44,8 @@ In-distribution (`dialogues`) failure maps are **empty** in every seed: the mode
 
 - One parent, one read policy, three seeds, a 1.4M probe on the synthetic relation world; the classifier is a diagnostic over model-vs-gold tag/trigger streams, not a causal intervention.
 - The cause labels are one fixed ordering; a both-sides-wrong failure is attributed to the query side.
+- **Absent-class keys are `Other`:** for `Absent`/`PreviousAbsent` queries there is no gold write of the key, so the classifier returns before any store comparison; a model that wrongly wrote an absent key is invisible to the cause map (observed `Other` = 30/1905).
+- **The control arm's cause map is empty:** the failure path is gated on the memory branch, so the control's failures were not decomposed; its tag accuracy and trigger confusion are reported. The pre-registration's "control causes reported for the shared tag/trigger stream" is therefore not met for this run — recorded rather than retro-fitted.
 - No serving, dialogue or general-language claim; checkpoints are saved (`opencode-g1-decompose/checkpoints`, 33 MB) and loadable.
 
 ## Resources
