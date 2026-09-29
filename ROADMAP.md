@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model — multi-lab roadmap
 
-**Director:** Claude (Lab 1). **Updated:** 2026-09-29 01:50 UTC. This file owns lab
+**Director:** Claude (Lab 1). **Updated:** 2026-09-29 11:37 UTC. This file owns lab
 assignments, track status, the dead-path register and the cross-lab protocol. Measured
 results and retained artifacts live in [current state](docs/integration/current-state.md).
 Ordered responsibilities and acceptance live in the [canonical plan](docs/integration/project-track.md).
@@ -10,7 +10,7 @@ strategic authority.
 
 ## Lab 1 leadership and restart packet
 
-**Updated September 29, 10:30 UTC.** Every lab reads this first on restart.
+**Updated September 29, 11:37 UTC.** Every lab reads this first on restart.
 - **Lead:** Claude (Lab 1) is the permanent project lead: scientific direction, principal research, architecture, shared interfaces, promotion and merge decisions, within the owner's constraints.
 - **Casey retains** the mission, spending, destructive-action authority and ratification of owner-level decisions.
 - **Astra's temporary cover** (09-28 22:45 to 09-29 01:35 UTC) is preserved in [its history file](docs/integration/astra-temporary-cover-2026-09-28.md).
@@ -25,10 +25,12 @@ strategic authority.
 - a clean auditor on its serving binary;
 - a declared context budget, eviction policy and per-turn token limit.
 
-**It is scored on a sealed panel,** authored from typed intent before the final fit and held out from all training and development:
-- 40 responsive multi-turn conversations;
-- 30 updated-relation conversations;
-- 30 new simple instructions.
+**It is scored on a sealed panel,** authored from typed intent before the final fit and held out from all training and development. In §8's words:
+- "responsive multi-turn: 40 conversations of 3–4 turns, each reply answering its own latest turn";
+- "updated relation: 30 conversations that assert, update and then query a relation, answered with the updated value";
+- "new simple instructions: 30 instructions of at least 6 types absent from training templates".
+
+Whether "absent from training templates" binds the instruction *types* or only their *phrasings* is settled when the panel is authored (Stage 3). If it binds the types, the panel must use types that no training template covers. M-world's development split holds out phrasings within trained types, so it measures phrasing transfer only.
 
 **It passes when:**
 - at least 80% of scored turns pass in each category;
@@ -43,9 +45,19 @@ Loss, tracking accuracy, arithmetic parity and library availability are componen
 |---|---|---|
 | Replies | S2 answers 2 of 38 development requests: generic filler and mismatched stock replies | **R1** (Lab 1): does narrow-domain data make the 7M stack responsive? |
 | Memory keys | The real panel recalls 0 of 10. Six of the ten need one key across different words | The **G v2** frozen-trunk key probe (the DeepSeek lab) |
-| Memory binding and text cost | **Solved in the probe.** With arm A's supervision, a user-turn gate and the sieve, held-out recall equals Gold, and text NLL is 0.029 below the baseline ([#1500](https://github.com/UOR-Foundation/uor-r4/pull/1500)) | Carry it into the integration |
-| Native fidelity | The 4-bit export costs +0.026 to +0.036 nats, and 14 of 58 greedy turns match float | **QAT** (Anti-Gravity) |
-| Native serving | The D11 engine is exact (≤ 1e-6 nats). Not yet served: S4's 2I transport, the memory port, the store arena, store persistence | **S1.4**, then S1.2 and the native port (the Kimi lab) |
+| Memory binding and text cost | **Adopted for the integration; a hypothesis on dialogue text until the integration measures it.** Measured separately, each at its scope, on the probe's world and dev text:<br>• arm A with the sieve, no gate: held-out Updated 264/273 (Gold's own ceiling, 0.967), Absent 377/378 (`binding-eval-1`);<br>• text NLL with prose registers silenced: 0.029 below the baseline ([#1500](https://github.com/UOR-Foundation/uor-r4/pull/1500), open);<br>• the gate ([#1502](https://github.com/UOR-Foundation/uor-r4/pull/1502), open) gives exactly the silenced figure on text without user turns. Its effect on dialogue text with user turns is not measured | Measure it in the integration |
+| Native fidelity | **Code model `geometric_s1`:** the 4-bit export costs +0.0362 nats (round to nearest) and +0.0257 (GPTQ).<br>**Dialogue stack S2:** under the D10 GPTQ export, greedy replies match float on 14 of 58 turns. Its nats gap was not measured | **QAT** (Anti-Gravity) |
+| Native serving | The D11 engine's logits equal the D10 integer reference's (maximum difference 0 on 16 S2 windows). On `geometric_s1`, integer arithmetic costs ≤ 10⁻⁶ nats against float. Not yet served: S4's 2I transport, the memory port, the store arena, store persistence | **S1.4**, then S1.2 and the native port (the Kimi lab) |
+
+**Pinned models:**
+- **S4 arm A `2b3b5681…`**, the main line's start point: `/Volumes/UOR-Workspace/uor-r4-lab/kimi-s4-fit-20260929/arm-a-snap-1/model`. It is S2 continued with the trained-in 2I transport snap (#973 comments 5883878235 and 5884326637; #1494 records the adoption);
+- S2 `8cb11d8f…`;
+- the native child `98aca5ab…`;
+- `geometric_s1` `3eb1ebbb…`.
+
+§2b's "One artifact: S2 plus the port" predates this plan. Stage 2 below supersedes it.
+
+**S1.4** is the D11 kernel for the 2I icosian transport: argmax of q·r over the 120 roots, with exact Z[φ] coefficients (spec: #973 comment 5884334661).
 
 ### Order of work
 
@@ -53,9 +65,9 @@ Loss, tracking accuracy, arithmetic parity and library availability are componen
 
 | Lab | Deliverables, in order | What it decides |
 |---|---|---|
-| Lab 1 (Claude) | 1. **M-world v1**: a typed-intent world for the three milestone categories, with an answer oracle and a train / development / panel template split. <br>2. **R1**, pre-registered: continue S4 arm A on chat-v0, reweighted toward short everyday dialogue, plus M-world's training templates. Score it on the development templates and on the 38-request panel | Whether data, rather than scale, closes the reply gap at 7M parameters |
+| Lab 1 (Claude) | 1. **M-world v1** ([#1503](https://github.com/UOR-Foundation/uor-r4/pull/1503)): a typed-intent world for the three milestone categories, with a frozen oracle and a train / development split of phrasings and relation values. The qualification panel is authored separately at Stage 3. <br>2. **R1**, pre-registered on #973: continue S4 arm A on chat-v0 **unchanged** plus M-world's training conversations. Score it on the development phrasings and on the 38-request panel | Whether data, rather than scale, closes the reply gap at 7M parameters, for phrasing transfer within the trained intent types |
 | The DeepSeek lab (Lab 2) | 1. The user-turn gate. <br>2. D2-natural v2, with lexical families. <br>3. The G v2 frozen-trunk key probe on S4 arm A | The memory heads for the integration |
-| Anti-Gravity (Lab 3) | 1. #1490. <br>2. QAT on `geometric_s1`, against a float-continuation control. <br>3. QAT on S2, measured by native greedy agreement | The codec for the final fit |
+| Anti-Gravity (Lab 3) | 1. #1490. <br>2. QAT on `geometric_s1`, against a float-continuation control. <br>3. Only if that passes its 0.02-nat gate: QAT on S2, measured by native greedy agreement | The codec for the final fit |
 | The Kimi lab (steward) | 1. #1493 and #1494. <br>2. **S1.4**, the D11 icosian transport kernel. <br>3. **S1.2**, the stack bundle and loader, with reload equality | Whether S4-line models serve natively |
 
 **Stage 2, the integration.** It starts when R1 and the G v2 probe report.
@@ -68,7 +80,7 @@ Loss, tracking accuracy, arithmetic parity and library availability are componen
 | Anti-Gravity | The auditor on the D11 stack serving binary, and the cost harness (tokens/s, RSS, whole-system J/token) |
 
 **Stage 3 (Lab 1): shape and final fit.**
-1. **Choose the milestone shape** from Stage 2 and the D11 cost. Keep 7M if the integration reaches 80% on the development templates; otherwise move to 10–30M.
+1. **Choose the milestone shape** from Stage 2 and the D11 cost. Keep 7M if the integration reaches 80% on the development phrasings; otherwise move to 10–30M. That figure is a proxy for phrasing transfer; the sealed §8 panel alone qualifies the artifact.
 2. **Author and seal the qualification panel** before the final fit.
 3. **Run the final fit:** S4 transport, the QAT phase and the memory port. Then export, bundle and reload in a fresh `uor-chat`.
 
@@ -80,14 +92,15 @@ Loss, tracking accuracy, arithmetic parity and library availability are componen
 ### Machine and compute
 
 - **The machine:** an M1 with 8 cores and 16 GB.
-  - At about 10:25 UTC, swap was at 5.8 of 7 GB, and the internal drive had 16 GiB free. That is below §6's 25 GiB line.
+  - At 11:37 UTC, swap was near its 7.2 GB, the internal drive had 15 GiB free (below §6's 25 GiB line) and the SSD had 37 GiB free (above its 30 GiB floor).
   - Heavy jobs and caches stay on the SSD.
   - **One heavy job at a time.**
 - **Slot priority when contended:**
   - a ready Stage 1 decisive experiment goes next;
   - no lab runs more than two heavy jobs in a row while another lab's Stage 1 job waits;
-  - nothing runs during a timing measurement.
-- **Ledger** (`model-time.json`): 761.48M of 820M ms.
+  - nothing runs during a timing measurement: §6's light-job allowance does not apply while the slot holder is timing;
+  - the lock file gives the race order. When two labs are waiting, they settle the order on #973 by the rules above.
+- **Ledger** (`model-time.json`, read 11:37 UTC): 761.48M of 820M ms.
   - Lab 1 charged its uncharged evaluations of 09-29.
   - It recorded a +40M ms extension for Stage 1 under the standing authorization (`extension-2026-09-29-lab1-stage1.json`).
   - The final fit is projected at its pre-registration.
@@ -110,7 +123,7 @@ Loss, tracking accuracy, arithmetic parity and library availability are componen
   - Nothing is auto-merged unconditionally. Before each merge, recheck the exact approved head and its blockers. Then merge through the protected queue, verify the delivered patch, and notify the consumer.
   - The shared GitHub account never turns self-review into a non-author review.
 - **Code and Git:**
-  - Rust for all new code and tools. No Python, including one-liners; read JSON with `jq`.
+  - Rust for all new code and tools. No new Python code or analysis, including one-liners; read JSON with `jq`. The existing check scripts, such as `check_claim_wording.py`, run as they are.
   - Merge `main` in. Never rebase, force-push or `reset --hard` shared work.
   - Never push to `main`.
   - Leave other labs' worktrees and the owner checkout alone.
