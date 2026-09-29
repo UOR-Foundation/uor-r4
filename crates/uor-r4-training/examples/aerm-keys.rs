@@ -3,7 +3,8 @@
 //! A frozen S4 trunk is wrapped by four newly trained heads — a five-way tag
 //! head, a four-way trigger head, an eight-way entity-atom head read at the
 //! entity slot and a fourteen-way relation-atom head read at the trigger
-//! position — on the D2-natural v2 world. The one compared factor is the atom
+//! position — on the D2-natural v2 world. The entity-atom head is a plain
+//! K-way softmax in both arms; the one compared factor is the relation-atom
 //! head parametrization: a learned linear map to a quaternion scored against
 //! fixed unit icosians (`2I`), versus a plain K-way softmax over the same
 //! atoms. Keys are the semiprime of the entity-atom prime and the relation-atom
@@ -53,8 +54,13 @@ const TRUNK_SHA256: &str = "2b3b568141dfe213dd85e4d67e9ce0018e802f0654ee73ea10c7
 
 const ENTITY_ATOMS: usize = 8;
 const RELATION_ATOMS: usize = 14;
-/// Every pair of assigned roots has `|q . r|` at most this.
-const ROOT_BOUND: f32 = 0.5;
+/// The achieved maximum pairwise `|q . r|` of the 14 relation roots, produced
+/// by the deterministic greedy min-max search below and fixed before any fit.
+/// The pre-registered `1/2` bound is infeasible: the largest set of unit
+/// icosians with pairwise `|q . r| <= 1/2` has size 12 (the 24-cell `2T`
+/// antipodal quotient; asserted in the tests), so the 14 relation roots take
+/// the smallest bound the icosians allow.
+const RELATION_ROOT_MAX_INNER: f32 = 0.809_017;
 #[cfg(test)]
 const ROOT_BOUND_TOLERANCE: f32 = 1e-6;
 
@@ -126,11 +132,8 @@ impl Args {
 // The fixed 2I atom roots.
 
 struct AtomRoots {
-    entity: Vec<[f32; 4]>,
     relation: Vec<[f32; 4]>,
-    entity_indices: Vec<usize>,
     relation_indices: Vec<usize>,
-    entity_bound: f32,
     relation_bound: f32,
 }
 
@@ -160,22 +163,19 @@ fn pair_score(set: &[usize], roots: &[[f32; 4]]) -> (f32, usize) {
     (maximum, count)
 }
 
-/// Deterministically selects `size` roots from `roots`, avoiding `forbidden`,
-/// that minimise the largest pairwise `|q . r|`: every seed is tried and each
-/// greedy step adds the candidate whose worst inner product to the chosen set
-/// is smallest (ties to the lowest index).
-fn select_dispersed(roots: &[[f32; 4]], size: usize, forbidden: &[usize]) -> Vec<usize> {
+/// Deterministically selects `size` roots from `roots` that minimise the
+/// largest pairwise `|q . r|`: every seed is tried and each greedy step adds
+/// the candidate whose worst inner product to the chosen set is smallest
+/// (ties to the lowest index).
+fn select_dispersed(roots: &[[f32; 4]], size: usize) -> Vec<usize> {
     let mut best = Vec::new();
     let mut best_score = (f32::INFINITY, usize::MAX);
     for seed in 0..roots.len() {
-        if forbidden.contains(&seed) {
-            continue;
-        }
         let mut chosen = vec![seed];
         while chosen.len() < size {
             let mut pick: Option<(usize, f32)> = None;
             for candidate in 0..roots.len() {
-                if forbidden.contains(&candidate) || chosen.contains(&candidate) {
+                if chosen.contains(&candidate) {
                     continue;
                 }
                 let worst = chosen
@@ -207,29 +207,20 @@ fn select_dispersed(roots: &[[f32; 4]], size: usize, forbidden: &[usize]) -> Vec
     best
 }
 
-/// The fixed atom-root assignment. The pre-registered "pairwise `|q . r| <= 1/2`
-/// for the 14 relation roots" is infeasible: the largest set of unit icosians
-/// with pairwise `|q . r| <= 1/2` has size 12 (asserted in the tests), so no 14
-/// roots meet it. Each head instead takes the maximum-separation set the
-/// icosians allow (8 entity roots at `<= 1/2`, and 14 relation roots disjoint
-/// from them at the smallest achievable bound). The selection is fixed before
-/// any fit.
+/// The fixed relation-root assignment: the 14 unit icosians with the smallest
+/// achievable maximum pairwise `|q . r|` ([`RELATION_ROOT_MAX_INNER`]), chosen
+/// by the deterministic greedy min-max search and fixed before any fit. Only
+/// the relation atoms carry 2I roots; the entity-atom head is a plain K-way
+/// softmax in both arms.
 fn select_roots() -> Result<AtomRoots> {
     let roots = TransportSnap::Icosian.roots();
-    let entity_indices = select_dispersed(roots, ENTITY_ATOMS, &[]);
-    if entity_indices.len() < ENTITY_ATOMS {
-        return Err(invalid("the icosians cannot supply the entity roots"));
-    }
-    let relation_indices = select_dispersed(roots, RELATION_ATOMS, &entity_indices);
+    let relation_indices = select_dispersed(roots, RELATION_ATOMS);
     if relation_indices.len() < RELATION_ATOMS {
         return Err(invalid("the icosians cannot supply the relation roots"));
     }
     Ok(AtomRoots {
-        entity: entity_indices.iter().map(|&index| roots[index]).collect(),
         relation: relation_indices.iter().map(|&index| roots[index]).collect(),
-        entity_bound: pair_bound(&entity_indices, roots),
         relation_bound: pair_bound(&relation_indices, roots),
-        entity_indices,
         relation_indices,
     })
 }
@@ -471,14 +462,21 @@ impl AtomArm {
     fn new(
         kind: AtomKind,
         roots: &[[f32; 4]],
+        classes: usize,
         width: usize,
         seed: u64,
         device: &Device,
     ) -> Result<Self> {
         let outputs = if kind == AtomKind::TwoI {
+            if roots.len() != classes {
+                return Err(invalid(format!(
+                    "the 2I atom head needs {classes} roots, got {}",
+                    roots.len()
+                )));
+            }
             4
         } else {
-            roots.len()
+            classes
         };
         let mut rng = Rng::new(seed);
         let weight = normal_var(&mut rng, &[outputs, width], 0.02, device)?;
@@ -529,8 +527,22 @@ impl ProbeHeads {
         Ok(Self {
             tag: LinearHead::new(TAG_CLASSES, width, seed ^ 0x01, device)?,
             trigger: LinearHead::new(TRIGGER_CLASSES, width, seed ^ 0x02, device)?,
-            entity: AtomArm::new(kind, &roots.entity, width, seed ^ 0x03, device)?,
-            relation: AtomArm::new(kind, &roots.relation, width, seed ^ 0x04, device)?,
+            entity: AtomArm::new(
+                AtomKind::Softmax,
+                &[],
+                ENTITY_ATOMS,
+                width,
+                seed ^ 0x03,
+                device,
+            )?,
+            relation: AtomArm::new(
+                kind,
+                &roots.relation,
+                RELATION_ATOMS,
+                width,
+                seed ^ 0x04,
+                device,
+            )?,
         })
     }
 
@@ -1187,12 +1199,11 @@ fn run(args: &Args, out: &Path) -> Result<()> {
         "roots": {
             "snap": TransportSnap::Icosian.name(),
             "root_count": TransportSnap::Icosian.roots().len(),
-            "entity_indices": roots.entity_indices,
             "relation_indices": roots.relation_indices,
-            "entity_bound": roots.entity_bound,
             "relation_bound": roots.relation_bound,
-            "registered_bound": ROOT_BOUND,
-            "deviation": "the pre-registered 14 relation roots at pairwise |q.r| <= 1/2 are infeasible: the largest such icosian set has 12 (see the test); the relation head uses the maximum-separation 14-root set disjoint from the entity roots instead",
+            "relation_root_max_inner": RELATION_ROOT_MAX_INNER,
+            "entity_head": "plain 8-way softmax in both arms (no entity roots)",
+            "deviation": "the pre-registered 22 roots at pairwise |q.r| <= 1/2 are infeasible: the largest such icosian set has 12 (the 2T antipodal quotient; see the test); only the 14 relation atoms carry 2I roots, at the smallest achievable bound",
         },
         "keys": {
             "vocabulary_size": stack.config.vocab_size,
@@ -1245,13 +1256,10 @@ fn roots_mode(arguments: &[String]) -> Result<()> {
     let roots = select_roots()?;
     let value = json!({
         "snap": TransportSnap::Icosian.name(),
-        "entity_indices": roots.entity_indices,
         "relation_indices": roots.relation_indices,
-        "entity_roots": roots.entity,
         "relation_roots": roots.relation,
-        "entity_bound": roots.entity_bound,
         "relation_bound": roots.relation_bound,
-        "registered_bound": ROOT_BOUND,
+        "relation_root_max_inner": RELATION_ROOT_MAX_INNER,
     });
     println!("{}", serde_json::to_string_pretty(&value)?);
     let _ = arguments;
@@ -1402,42 +1410,27 @@ mod tests {
     }
 
     #[test]
-    fn two_i_roots_are_pairwise_bounded_and_complete() -> Result<()> {
+    fn relation_roots_are_complete_at_the_registered_bound() -> Result<()> {
         let icosians = TransportSnap::Icosian.roots();
         let roots = select_roots()?;
-        assert_eq!(roots.entity.len(), ENTITY_ATOMS);
         assert_eq!(roots.relation.len(), RELATION_ATOMS);
-        for (index, root) in roots.entity.iter().chain(&roots.relation).enumerate() {
+        assert_eq!(roots.relation_indices.len(), RELATION_ATOMS);
+        for (index, root) in roots.relation.iter().enumerate() {
             let norm = dot(root, root).sqrt();
             assert!(
                 (norm - 1.0).abs() <= 1e-5,
                 "root {index} is not unit: {norm}"
             );
         }
-        assert!(
-            roots.entity_bound <= ROOT_BOUND + ROOT_BOUND_TOLERANCE,
-            "entity roots exceed the 1/2 bound: {}",
-            roots.entity_bound
-        );
-        assert!(
-            roots.relation_bound <= 0.809_017 + ROOT_BOUND_TOLERANCE,
-            "relation roots exceed the smallest achievable bound: {}",
-            roots.relation_bound
-        );
-        assert!(
-            roots
-                .entity_indices
-                .iter()
-                .all(|index| !roots.relation_indices.contains(index)),
-            "the entity and relation root sets must be disjoint"
-        );
-        assert_eq!(
-            pair_bound(&roots.entity_indices, icosians),
-            roots.entity_bound
-        );
         assert_eq!(
             pair_bound(&roots.relation_indices, icosians),
             roots.relation_bound
+        );
+        assert!(
+            (roots.relation_bound - RELATION_ROOT_MAX_INNER).abs() <= ROOT_BOUND_TOLERANCE,
+            "the greedy min-max search achieved {}, not the registered {}",
+            roots.relation_bound,
+            RELATION_ROOT_MAX_INNER
         );
         Ok(())
     }
@@ -1445,7 +1438,7 @@ mod tests {
     #[test]
     fn fourteen_relation_roots_cannot_meet_the_half_bound() {
         let icosians = TransportSnap::Icosian.roots();
-        let maximum = max_compatible_set(icosians, ROOT_BOUND);
+        let maximum = max_compatible_set(icosians, 0.5);
         assert_eq!(
             maximum, 12,
             "the pre-registration assumed 14 roots exist at |q.r| <= 1/2"
