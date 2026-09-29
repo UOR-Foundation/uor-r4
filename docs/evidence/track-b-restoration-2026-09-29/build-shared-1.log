@@ -1,0 +1,110 @@
+source_revision=0f1f41e4801d992a098c29b5c8fd5d1572bd1592
+source_diff_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+cache_baseline_kib=7469744
+cache_cap_kib=7731888
+available_before_kib=26259516
+warning: method `position` is never used
+   --> crates/uor-r4-core/src/native_geometric/learner/observed_text_session.rs:175:8
+    |
+168 | impl ObservedSpan {
+    | ----------------- method in this implementation
+...
+175 |     fn position(&self) -> (u32, u32, usize) {
+    |        ^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `example` is never used
+    --> crates/uor-r4-core/src/native_geometric/learner/transferable_lexical.rs:1590:8
+     |
+1405 | impl TlTrainer {
+     | -------------- method in this implementation
+...
+1590 |     fn example(&self, q: &TlQuant, ex: &TlExample) -> TlGrads {
+     |        ^^^^^^^
+
+warning: `uor-r4-core` (lib) generated 2 warnings
+   Compiling uor-r4-training v0.1.0 (/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4/crates/uor-r4-training)
+cache_observed_kib=7469744
+cache_observed_kib=7469740
+error[E0463]: can't find crate for `serde`
+  --> crates/uor-r4-training/src/addressing_arms.rs:48:5
+   |
+48 | use serde::{Deserialize, Serialize};
+   |     ^^^^^ can't find crate
+
+error[E0463]: can't find crate for `uor_r4_core`
+  --> crates/uor-r4-training/src/addressing_arms.rs:49:5
+   |
+49 | use uor_r4_core::native_geometric::learner::embedding::canonical_h4_roots;
+   |     ^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `candle_core`
+ --> crates/uor-r4-training/src/baseline_protocol.rs:6:5
+  |
+6 | use candle_core::Device;
+  |     ^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `uor_r4_tokenizer`
+  --> crates/uor-r4-training/src/dialogue_artifact.rs:20:5
+   |
+20 | use uor_r4_tokenizer::dialogue::DialogueProtocol;
+   |     ^^^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `uor_r4_integer`
+  --> crates/uor-r4-training/src/dialogue_rounding_artifact.rs:27:5
+   |
+27 | use uor_r4_integer::config::ServingProfile;
+   |     ^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `uor_r4_lut`
+  --> crates/uor-r4-training/src/geometric_stack.rs:66:5
+   |
+66 | use uor_r4_lut::GROUP;
+   |     ^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `safetensors`
+  --> crates/uor-r4-training/src/joint_model.rs:19:5
+   |
+19 | use safetensors::{tensor::TensorView, Dtype as SafeDtype, SafeTensors};
+   |     ^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `candle_nn`
+  --> crates/uor-r4-training/src/stack_aerm.rs:53:5
+   |
+53 | use candle_nn::{AdamW, Optimizer, ParamsAdamW};
+   |     ^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `candle_transformers`
+  --> crates/uor-r4-training/src/track_b/conversion.rs:16:5
+   |
+16 | use candle_transformers::models::llama::{Cache, Config, Llama, LlamaConfig};
+   |     ^^^^^^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `uor_r4_model_source`
+  --> crates/uor-r4-training/src/lib.rs:72:5
+   |
+72 | use uor_r4_model_source::{BehaviorSource, ExactBackendReport, HuggingFaceLlamaOracle};
+   |     ^^^^^^^^^^^^^^^^^^^ can't find crate
+
+For more information about this error, try `rustc --explain E0463`.
+error: could not compile `uor-r4-training` (lib test) due to 10 previous errors
+       22.97 real         0.45 user         0.37 sys
+           168148992  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               20282  page reclaims
+                4289  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   1  signals received
+                1468  voluntary context switches
+                7372  involuntary context switches
+          1773764432  instructions retired
+           960522678  cycles elapsed
+            54002360  peak memory footprint
+BUILD_WALL_BOUND
