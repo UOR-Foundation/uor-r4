@@ -4,3 +4,6 @@
 //! not the native geometric serving runtime and carries no serving-cost claim.
 
 pub mod conversion;
+pub mod generation;
+pub mod harmonics;
+pub mod model;

@@ -1,7 +1,8 @@
-//! Fixed all-logit parity gate for the offline Track B conversion teacher.
+//! Fixed all-logit parity gate for both offline Track B Llama implementations.
 //! cargo run --release -p uor-r4-training --features metal --example track-b-parity -- MODEL NEW_REPORT
-//! Every window resets both caches. These synthetic tokens test numerical fidelity,
-//! not language quality, and the reported elapsed rates are not serving benchmarks.
+//! Every window resets oracle/stock caches; the shared model receives fresh full
+//! prefixes. These synthetic tokens test numerical fidelity, not language
+//! quality, and the reported elapsed rates are not serving benchmarks.
 use candle_core::Device;
 use serde_json::{json, Value};
 use std::{
@@ -12,12 +13,27 @@ use std::{
 };
 use uor_r4_core::report_output;
 use uor_r4_model_source::{BehaviorSource, HuggingFaceLlamaOracle, TeacherExecutionConfig};
-use uor_r4_training::{sha256_file, track_b::conversion::CandleLlamaTeacher};
+use uor_r4_training::{
+    sha256_file,
+    track_b::{conversion::CandleLlamaTeacher, model::TrackBModel},
+};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const TOLERANCE: f64 = 1e-4;
 const VOCAB: usize = 49152;
 const WALL_SECONDS: u64 = 600;
+const STOCK_ID: &str = "candle-transformers/0.9.2::models::llama::Llama";
+const SHARED_ID: &str = "uor-r4-training::track_b::model::TrackBModel+DenseAttention";
+const STOCK_MODES: &[(&str, usize)] = &[
+    ("singleton_every_position", 45),
+    ("fresh_full_prefill_final", 4),
+    ("fresh_half_prefix_then_singletons_final", 4),
+];
+const SHARED_MODES: &[(&str, usize)] = &[
+    ("fresh_full_prefix_every_position", 45),
+    ("fresh_batch2_right_padding_row0_every_position", 45),
+    ("fresh_batch2_right_padding_row1_position0", 4),
+];
 
 fn windows() -> Vec<Vec<u32>> {
     vec![
@@ -99,6 +115,37 @@ fn check_wall(start: Instant) -> Result<()> {
     }
 }
 
+fn mode_counts(rows: &[Value]) -> std::collections::BTreeMap<String, usize> {
+    let mut counts = std::collections::BTreeMap::new();
+    for row in rows {
+        let mode = row["mode"].as_str().unwrap_or("INVALID_MODE");
+        *counts.entry(mode.to_owned()).or_default() += 1;
+    }
+    counts
+}
+
+fn complete_coverage(rows: &[Value], modes: &[(&str, usize)]) -> bool {
+    let actual = mode_counts(rows);
+    rows.len() == modes.iter().map(|(_, count)| *count).sum::<usize>()
+        && actual.len() == modes.len()
+        && modes
+            .iter()
+            .all(|(mode, count)| actual.get(*mode) == Some(count))
+}
+
+fn coverage_json(modes: &[(&str, usize)]) -> Value {
+    json!(modes
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeMap<_, _>>())
+}
+
+fn set_raw_location(row: &mut Value, filename: &str, raw_row: usize) {
+    row["raw_file"] = json!(filename);
+    row["raw_row"] = json!(raw_row);
+    row["raw_byte_offset"] = json!(raw_row as u64 * VOCAB as u64 * 4);
+}
+
 fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
     let source_revision = option_env!("TRACK_B_SOURCE_REVISION")
         .ok_or("admitted builds require TRACK_B_SOURCE_REVISION")?;
@@ -123,7 +170,7 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
     write_json(
         &out.join("inputs.json"),
         &json!({
-            "schema": "uor-r4.track-b-parity-inputs/1", "windows": inputs,
+            "schema": "uor-r4.track-b-parity-inputs/2", "windows": inputs,
             "model": model, "sha256": hashes, "executable_sha256": sha256_file(&exe)?,
         "source_revision": source_revision,
         "source_diff_sha256": source_diff,
@@ -131,7 +178,27 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
             "canonical_math_env": "0", "exact_scalar_env": null, "tolerance": TOLERANCE,
             "wall_seconds": WALL_SECONDS,
             "scope": "fixed synthetic-token numerical fidelity; no language-quality or timing claim",
-            "modes": ["singleton_every_position", "fresh_full_prefill_final", "fresh_half_prefix_then_singletons_final"]
+            "reference_rows": 45, "reference_workers": 2,
+            "backends": ["cpu", "metal"],
+            "expected_compared_rows_per_backend": 147,
+            "expected_compared_rows_total": 294,
+            "implementations": [
+                {"identity": STOCK_ID, "expected_rows_per_backend": 53,
+                 "expected_mode_counts": coverage_json(STOCK_MODES)},
+                {"identity": SHARED_ID, "expected_rows_per_backend": 94,
+                 "expected_mode_counts": coverage_json(SHARED_MODES),
+                 "full_prefix_raw_rows_per_backend": 45,
+                 "batch2_raw_rows_per_backend": 90,
+                 "batch2": {"batch":2, "row0":"fixed window, every position compared",
+                     "row1":"[1, 0, ..., 0], only position zero compared to reference window zero position zero",
+                     "padding_token":0, "valid_lengths":"[window length, 1]",
+                     "padding_semantics":"right padding; future pad tokens are causally excluded from valid positions",
+                     "raw_order":"per window, batch row, position; padding outputs are retained but not scored"}}
+            ],
+            "raw_storage": {"dtype":"F32", "endianness":"little", "vocab":VOCAB,
+                "all_raw_rows_including_reference_and_unscored_padding":421,
+                "all_raw_bytes":421_u64 * VOCAB as u64 * 4,
+                "row_metadata":"raw_file, raw_row, raw_byte_offset"}
         }),
     )?;
     check_wall(start)?;
@@ -175,7 +242,7 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
     let reference_seconds = ref_start.elapsed().as_secs_f64();
     let execution = oracle.execution_snapshot();
     drop(oracle);
-    let mut backends = Vec::new();
+    let mut stock_backends = Vec::new();
     let mut overall_pass = true;
     for name in ["cpu", "metal"] {
         check_wall(start)?;
@@ -198,6 +265,8 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
         let mut worst = 0_f64;
         let mut cells = 0_u64;
         let mut over = 0_u64;
+        let mut singleton_raw_row = 0_usize;
+        let mut endpoint_raw_row = 0_usize;
         for (w, tokens) in inputs.iter().enumerate() {
             check_wall(start)?;
             let actual = candidate.logits(tokens)?;
@@ -210,6 +279,10 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
                 row["window"] = json!(w);
                 row["position"] = json!(position);
                 row["mode"] = json!("singleton_every_position");
+                row["implementation"] = json!(STOCK_ID);
+                row["backend"] = json!(name);
+                set_raw_location(&mut row, &format!("{name}-logits.f32le"), singleton_raw_row);
+                singleton_raw_row += 1;
                 worst = worst.max(row["max_abs"].as_f64().ok_or("missing max")?);
                 cells += VOCAB as u64;
                 over += row["cells_over_1e_4"].as_u64().ok_or("missing count")?;
@@ -231,6 +304,14 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
                 row["window"] = json!(w);
                 row["position"] = json!(tokens.len() - 1);
                 row["mode"] = json!(mode);
+                row["implementation"] = json!(STOCK_ID);
+                row["backend"] = json!(name);
+                set_raw_location(
+                    &mut row,
+                    &format!("{name}-prefill-logits.f32le"),
+                    endpoint_raw_row,
+                );
+                endpoint_raw_row += 1;
                 worst = worst.max(row["max_abs"].as_f64().ok_or("missing max")?);
                 cells += VOCAB as u64;
                 over += row["cells_over_1e_4"].as_u64().ok_or("missing count")?;
@@ -242,23 +323,180 @@ fn run(model: &Path, out: &Path, start: Instant) -> Result<Value> {
                 start.elapsed().as_secs_f64()
             );
         }
-        let pass = over == 0 && rows.len() == 53;
+        let coverage_pass = complete_coverage(&rows, STOCK_MODES);
+        let pass = over == 0 && coverage_pass;
         overall_pass &= pass;
-        backends.push(json!({
+        stock_backends.push(json!({
+            "implementation": STOCK_ID,
             "backend": name, "pass": pass, "maximum_absolute_error": worst,
             "cells_over_1e_4": over, "compared_cells": cells,
             "expected_rows": 53, "completed_rows": rows.len(),
+            "expected_mode_counts": coverage_json(STOCK_MODES),
+            "completed_mode_counts": mode_counts(&rows), "coverage_pass": coverage_pass,
             "load_seconds": load_seconds, "evaluation_seconds": eval_start.elapsed().as_secs_f64(),
             "rows": rows
         }));
+        // Release stock weights before any shared model is loaded. Both stock
+        // backends are evaluated first, preserving the original 53-row gate.
+        drop(candidate);
+    }
+    let mut shared_backends = Vec::new();
+    for name in ["cpu", "metal"] {
+        check_wall(start)?;
+        let device = match name {
+            "cpu" => Device::Cpu,
+            _ => Device::new_metal(0)?,
+        };
+        let load_start = Instant::now();
+        let candidate = TrackBModel::load(model, &device)?;
+        if candidate.shape().vocab != VOCAB {
+            return Err("unexpected shared-model vocabulary".into());
+        }
+        let load_seconds = load_start.elapsed().as_secs_f64();
+        let eval_start = Instant::now();
+        let full_filename = format!("{name}-shared-full-logits.f32le");
+        let batch_filename = format!("{name}-shared-batch2-logits.f32le");
+        let mut full_file = fs::File::create_new(out.join(&full_filename))?;
+        let mut batch_file = fs::File::create_new(out.join(&batch_filename))?;
+        let mut row_file = fs::File::create_new(out.join(format!("{name}-shared-rows.jsonl")))?;
+        let mut rows = Vec::new();
+        let mut worst = 0_f64;
+        let mut cells = 0_u64;
+        let mut over = 0_u64;
+        let mut full_raw_row = 0_usize;
+        let mut batch_raw_row = 0_usize;
+        for (w, tokens) in inputs.iter().enumerate() {
+            check_wall(start)?;
+            let full = candidate.forward(tokens, 1, tokens.len())?;
+            if full.dims() != [1, tokens.len(), VOCAB] {
+                return Err("shared full-prefix logit shape mismatch".into());
+            }
+            let full = full.squeeze(0)?.to_vec2::<f32>()?;
+            for (position, (r, c)) in reference[w].iter().zip(&full).enumerate() {
+                write_logits(&mut full_file, c)?;
+                let mut row = compare(r, c, tokens.get(position + 1).copied())?;
+                row["implementation"] = json!(SHARED_ID);
+                row["backend"] = json!(name);
+                row["window"] = json!(w);
+                row["batch_row"] = json!(0);
+                row["position"] = json!(position);
+                row["reference_window"] = json!(w);
+                row["reference_position"] = json!(position);
+                row["mode"] = json!("fresh_full_prefix_every_position");
+                set_raw_location(&mut row, &full_filename, full_raw_row);
+                full_raw_row += 1;
+                worst = worst.max(row["max_abs"].as_f64().ok_or("missing shared max")?);
+                cells += VOCAB as u64;
+                over += row["cells_over_1e_4"]
+                    .as_u64()
+                    .ok_or("missing shared count")?;
+                writeln!(row_file, "{}", serde_json::to_string(&row)?)?;
+                rows.push(row);
+            }
+            check_wall(start)?;
+            let mut batch_tokens = tokens.clone();
+            batch_tokens.resize(tokens.len() * 2, 0);
+            batch_tokens[tokens.len()] = 1;
+            let batched = candidate.forward(&batch_tokens, 2, tokens.len())?;
+            if batched.dims() != [2, tokens.len(), VOCAB] {
+                return Err("shared batch-two logit shape mismatch".into());
+            }
+            let batched = batched.to_vec3::<f32>()?;
+            for (batch_index, output_rows) in batched.iter().enumerate() {
+                for (position, c) in output_rows.iter().enumerate() {
+                    // Preserve even unscored padding outputs, while keeping
+                    // the independent parity gate restricted to valid tokens.
+                    write_logits(&mut batch_file, c)?;
+                    let raw_row = batch_raw_row;
+                    batch_raw_row += 1;
+                    if batch_index == 1 && position > 0 {
+                        continue;
+                    }
+                    let (r, reference_window, reference_position, target, mode) =
+                        if batch_index == 0 {
+                            (
+                                &reference[w][position],
+                                w,
+                                position,
+                                tokens.get(position + 1).copied(),
+                                "fresh_batch2_right_padding_row0_every_position",
+                            )
+                        } else {
+                            (
+                                &reference[0][0],
+                                0,
+                                0,
+                                None,
+                                "fresh_batch2_right_padding_row1_position0",
+                            )
+                        };
+                    let mut row = compare(r, c, target)?;
+                    row["implementation"] = json!(SHARED_ID);
+                    row["backend"] = json!(name);
+                    row["window"] = json!(w);
+                    row["batch_row"] = json!(batch_index);
+                    row["position"] = json!(position);
+                    row["reference_window"] = json!(reference_window);
+                    row["reference_position"] = json!(reference_position);
+                    row["mode"] = json!(mode);
+                    set_raw_location(&mut row, &batch_filename, raw_row);
+                    worst = worst.max(row["max_abs"].as_f64().ok_or("missing shared max")?);
+                    cells += VOCAB as u64;
+                    over += row["cells_over_1e_4"]
+                        .as_u64()
+                        .ok_or("missing shared count")?;
+                    writeln!(row_file, "{}", serde_json::to_string(&row)?)?;
+                    rows.push(row);
+                }
+            }
+            eprintln!(
+                "shared {name} window={w} max_abs={worst:.9} elapsed_s={:.3}",
+                start.elapsed().as_secs_f64()
+            );
+        }
+        let coverage_pass =
+            complete_coverage(&rows, SHARED_MODES) && full_raw_row == 45 && batch_raw_row == 90;
+        let pass = over == 0 && coverage_pass;
+        overall_pass &= pass;
+        shared_backends.push(json!({
+            "implementation": SHARED_ID, "backend":name, "pass":pass,
+            "maximum_absolute_error":worst, "cells_over_1e_4":over, "compared_cells":cells,
+            "expected_rows":94, "completed_rows":rows.len(),
+            "expected_mode_counts":coverage_json(SHARED_MODES),
+            "completed_mode_counts":mode_counts(&rows), "coverage_pass":coverage_pass,
+            "raw_full_rows":full_raw_row, "raw_batch_rows":batch_raw_row,
+            "unscored_padding_raw_rows":batch_raw_row - 49,
+            "load_seconds":load_seconds, "evaluation_seconds":eval_start.elapsed().as_secs_f64(),
+            "rows":rows
+        }));
+        drop(candidate);
     }
     check_wall(start)?;
+    let completed_rows: u64 = stock_backends
+        .iter()
+        .chain(&shared_backends)
+        .map(|backend| {
+            backend["completed_rows"]
+                .as_u64()
+                .ok_or("missing final row count")
+        })
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .into_iter()
+        .sum();
+    overall_pass &=
+        completed_rows == 294 && stock_backends.len() == 2 && shared_backends.len() == 2;
     Ok(json!({
-        "schema": "uor-r4.track-b-parity-result/1",
+        "schema": "uor-r4.track-b-parity-result/2",
         "status": if overall_pass { "PASS" } else { "FAIL_NUMERICAL_GATE" },
         "pass": overall_pass, "tolerance_max_absolute": TOLERANCE,
         "reference_backend": backend, "reference_execution": execution,
-        "reference_seconds": reference_seconds, "backends": backends,
+        "reference_seconds": reference_seconds, "reference_rows":45,
+        "expected_compared_rows_per_backend":147, "expected_compared_rows_total":294,
+        "completed_compared_rows_total":completed_rows,
+        "implementations":[
+            {"identity":STOCK_ID,"expected_rows_per_backend":53,"backends":stock_backends},
+            {"identity":SHARED_ID,"expected_rows_per_backend":94,"backends":shared_backends}
+        ],
         "total_seconds": start.elapsed().as_secs_f64(), "training_steps": 0,
         "b2_authorized_by_this_result": overall_pass,
         "language_quality": "NOT_EVALUATED", "serving_cost": "NOT_EVALUATED"
@@ -295,7 +533,7 @@ fn main() -> Result<()> {
             (summary, if pass { 0 } else { 2 })
         }
         Err(error) => (
-            json!({"schema":"uor-r4.track-b-parity-result/1", "status":"UNAVAILABLE",
+            json!({"schema":"uor-r4.track-b-parity-result/2", "status":"UNAVAILABLE",
             "pass":false, "error":error.to_string(), "total_seconds":start.elapsed().as_secs_f64()}),
             1,
         ),
@@ -331,5 +569,22 @@ mod tests {
         b[0] = f32::NAN;
         assert!(compare(&a, &b, None).is_err());
         assert!(compare(&a[..3], &a, None).is_err());
+    }
+
+    #[test]
+    fn complete_coverage_requires_every_registered_mode_and_count() {
+        for modes in [STOCK_MODES, SHARED_MODES] {
+            let mut rows = Vec::new();
+            for (mode, count) in modes {
+                rows.extend((0..*count).map(|_| json!({"mode":mode})));
+            }
+            assert!(complete_coverage(&rows, modes));
+            rows.pop();
+            assert!(!complete_coverage(&rows, modes));
+            // The expected total by itself is insufficient: missing a batch
+            // isolation row cannot be replaced with another full-prefix row.
+            rows.push(json!({"mode":"singleton_every_position"}));
+            assert!(!complete_coverage(&rows, modes));
+        }
     }
 }

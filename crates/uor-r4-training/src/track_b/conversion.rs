@@ -182,7 +182,7 @@ fn unsupported(message: impl Into<String>) -> ConversionError {
     ConversionError::UnsupportedConfig(message.into())
 }
 
-fn parse_config(bytes: &[u8]) -> Result<Config> {
+pub(super) fn parse_config(bytes: &[u8]) -> Result<Config> {
     let raw: serde_json::Value = serde_json::from_slice(bytes)?;
     if raw.get("model_type").and_then(|v| v.as_str()) != Some("llama") {
         return Err(unsupported("model_type must be llama"));

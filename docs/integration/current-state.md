@@ -6,8 +6,8 @@ frontier, geometric-advantage or full-path energy qualification.**
 ## Track B conversion, September 29
 
 The owner-returned Codex lab has a pinned Candle 0.9.2 Llama loader and
-Metal-enabled all-logit parity driver. Three loader checks and one gate check
-pass. **Checkpoint CPU/Metal parity and B2 remain NOT_RUN:** the two-worker
+Metal-enabled all-logit parity driver. On the recorded pre-interface revisions,
+three loader checks and one gate check pass. **Checkpoint CPU/Metal parity and B2 remain NOT_RUN:** the two-worker
 exact-reference attempt completed 25 of 45 positions before shared SSD free
 space crossed its registered 30 GiB reserve. Both loaded interrupted attempts
 are sealed; this is execution evidence, not a numerical or model-quality
@@ -15,8 +15,10 @@ negative. See the [result](track-b-conversion-result-2026-09-29.md),
 [design proposal](track-b-harmonic-design-2026-09-29.md), and
 [owning board](https://github.com/UOR-Foundation/uor-r4/issues/1515).
 Next: restore the shared reserve and complete the unchanged parity smoke in a
-new root before B2 fitting or the 360M ladder. Pluggable differentiable
-attention and harmonic feature implementation remain in progress.
+new root before B2 fitting or the 360M ladder. The [shared differentiable
+attention interface](track-b-shared-attention-2026-09-29.md), harmonic features
+and bounded seeded generation are now source-implemented in draft PR #1518;
+their compilation and new tests remain NOT_RUN while the reserve blocks builds.
 
 ## Current leadership, September 29
 
