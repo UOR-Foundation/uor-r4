@@ -1,0 +1,32 @@
+
+running 9 tests
+test tests::batch_changes_total_memory_and_work_not_per_position_cost ... ok
+test tests::capture_stops_after_selected_output_projection ... ok
+test tests::degree_changes_recurrence_not_quadratic_gemm_width ... ok
+test tests::frozen_weights_and_parameters_do_not_confuse_tied_embedding_with_two_copies ... ok
+test tests::hybrid_keeps_history_and_does_not_turn_selection_into_top_k_only ... ok
+test tests::invalid_and_overflow_requests_fail_before_wrapping ... ok
+test tests::persistent_state_uses_nine_heads_not_three ... ok
+test tests::quadratic_allocations_scale_as_square_even_when_state_is_constant ... ok
+test tests::registered_dimensions_and_source_arithmetic ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+        0.06 real         0.00 user         0.00 sys
+             2375680  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                 332  page reclaims
+                   2  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                  39  involuntary context switches
+            24709388  instructions retired
+            13064181  cycles elapsed
+             1327440  peak memory footprint

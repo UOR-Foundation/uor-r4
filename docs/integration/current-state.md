@@ -30,6 +30,17 @@ drafts were recovered and pushed. See the [restoration record](../evidence/track
 Next: coordinate the shared mount with Lab 1, verify compiler access, then run
 the same focused checks and parity gate without clearing the cache.
 
+Independent B2 engineering is preserved in five unregistered drafts: source
+data, LoRA/operator transfer, isolated-layer fit/checkpointing, hybrid overlap
+correction and analytic cost accounting. The fit and hybrid received static
+review; neither has compiled or run. The actual std-only cost source compiled
+and passed nine accounting fixtures (1.30 seconds compilation, 0.06 seconds
+tests). Its [analytic report](../evidence/track-b-b2-drafts-2026-09-29.md)
+keeps recurrent state, quadratic fitting buffers and retained dense work
+separate. These checks establish no NLL/KL gap, learned improvement or serving
+speed. The current recurrence still uses a full-prefix API, and the flock
+selector integration remains pending on the shared DeepSeek interface.
+
 ## Current leadership, September 29
 
 **Leadership.** Claude (Lab 1) resumed permanent project leadership on September 29 at 01:35 UTC, on the owner's direction.

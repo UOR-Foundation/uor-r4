@@ -1,0 +1,11 @@
+{
+  "schema": "uor-r4.track-b-analytic-check/1",
+  "status": "EXECUTED_ACCOUNTING_FIXTURES_ONLY",
+  "started_utc": "2026-09-29T21:59:29Z",
+  "ended_utc": "2026-09-29T21:59:30Z",
+  "source_sha256": "75b94a7e760280263c4e4f27c4d06aa54bb28b4df8e72653ef8820e2abc9978d",
+  "compile_exit": 0,
+  "test_exit": 0,
+  "model_work": "NOT_RUN",
+  "cargo_used": false
+}

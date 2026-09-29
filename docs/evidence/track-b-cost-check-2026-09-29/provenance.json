@@ -1,0 +1,23 @@
+{
+  "schema": "uor-r4.track-b-analytic-check-provenance/1",
+  "kind": "development_fixture_receipt_not_sealed_model_result",
+  "compiler": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "compiler_commit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+  "target": "aarch64-apple-darwin",
+  "llvm": "22.1.6",
+  "source_sha256": "75b94a7e760280263c4e4f27c4d06aa54bb28b4df8e72653ef8820e2abc9978d",
+  "executable_sha256": "6cec30ba40d36ad74f7d4c8255f0075f142129d2fdbeb70eb5f0d5bdfe8dc2bc",
+  "compile_log_sha256": "f6ce419c8017158fa02f7fe308fc40ff35cf7ca51dacb30fecc8c9b731d664e2",
+  "tests_log_sha256": "ccad748d8d32c62f345bfa3d6ebec944ca05e8d162b7f6475708813be9905a23",
+  "receipt_sha256": "e25612b5b8e256443f705cce19fb80117681fe5502147ce4cd867d2292defc9f",
+  "executable_copy": "/Volumes/UOR-Workspace/uor-r4-lab/codex-track-b-conversion-20260929/cost-check-1/cost-tests",
+  "compile_wall_seconds": 1.30,
+  "test_wall_seconds": 0.06,
+  "compile_peak_rss_bytes": 121520128,
+  "test_peak_rss_bytes": 2375680,
+  "passed": 9,
+  "failed": 0,
+  "model_inference": "NOT_RUN",
+  "model_training": "NOT_RUN",
+  "actual_model_rss_or_throughput": "NOT_MEASURED"
+}
