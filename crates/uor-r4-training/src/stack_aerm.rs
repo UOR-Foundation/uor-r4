@@ -1719,7 +1719,14 @@ impl AermModel {
             serde_json::from_slice(&fs::read(directory.join("aerm.json"))?)?;
         let stack = StackModel::load(&directory.join("stack"), device)?;
         let width = stack.config.width;
+        if checkpoint.split == 0 || checkpoint.split >= stack.config.layers() {
+            return Err(invalid("saved split must leave layers on both sides"));
+        }
         let tensors = candle_core::safetensors::load(directory.join("heads.safetensors"), device)?;
+        let expected = 4 + if checkpoint.memory { 10 } else { 0 };
+        if tensors.len() != expected {
+            return Err(invalid("saved heads tensors differ from the configuration"));
+        }
         let var = |name: &str, shape: &[usize]| -> Result<Var> {
             let tensor = tensors
                 .get(name)
@@ -2776,12 +2783,41 @@ mod tests {
             seed: 11,
             memory: None,
         };
-        let model = AermModel::new(config.clone(), 2, true, 11, &device)?;
+        let mut model = AermModel::new(config.clone(), 2, true, 11, &device)?;
+        // Non-zero, deterministic head and memory values: an all-zero branch
+        // would leave a parameter dropped from both save and load invisible.
+        let fill = |shape: &[usize], seed: usize| -> Result<Var> {
+            let count: usize = shape.iter().product();
+            let values: Vec<f32> = (0..count)
+                .map(|i| (((i * 7 + seed * 3) % 13) as f32 - 6.0) / 9.0)
+                .collect();
+            Ok(Var::from_vec(values, shape, &device)?)
+        };
+        model.tag_weight = fill(&[TAGS, 32], 1)?;
+        model.tag_bias = fill(&[TAGS], 2)?;
+        model.trigger_weight = fill(&[TRIGGERS, 32], 3)?;
+        model.trigger_bias = fill(&[TRIGGERS], 4)?;
+        let branch = model.memory.as_mut().expect("memory branch");
+        branch.status = fill(&[STATUSES, 32], 5)?;
+        branch.projection = fill(&[32, 32], 6)?;
+        branch.copy_weight = fill(&[32, 1], 7)?;
+        branch.copy_bias = fill(&[1], 8)?;
+        branch.copy_scale = fill(&[1], 9)?;
+        branch.status_previous = fill(&[STATUSES, 32], 10)?;
+        branch.projection_previous = fill(&[32, 32], 11)?;
+        branch.copy_weight_previous = fill(&[32, 1], 12)?;
+        branch.copy_bias_previous = fill(&[1], 13)?;
+        branch.copy_scale_previous = fill(&[1], 14)?;
         model.save(&directory)?;
         let loaded = AermModel::load(&directory, &device)?;
         let ids: Vec<u32> = (0..32).map(|i| (i * 5 % 400) as u32).collect();
         let status: Vec<u32> = (0..32).map(|i| (i % 4) as u32).collect();
         let value: Vec<u32> = (0..32).map(|i| (i * 7 % 400) as u32).collect();
+        let tags_a = model.bottom(&ids, 2, 16)?.tags.to_vec2::<f32>()?;
+        let tags_b = loaded.bottom(&ids, 2, 16)?.tags.to_vec2::<f32>()?;
+        for (x, y) in tags_a.iter().flatten().zip(tags_b.iter().flatten()) {
+            assert_eq!(x, y, "loaded tag logits differ");
+        }
         let a = model
             .top(
                 &model.bottom(&ids, 2, 16)?.hidden,
