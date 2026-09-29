@@ -5,8 +5,9 @@
 //!
 //! At every generated position the model's own tags and triggers over the
 //! whole window drive the prime-route store ([`crate::stack_prime_route`]:
-//! semiprime-expert keys, sieve reads, the learned write trigger), and the
-//! registers re-enter through the model's memory branch. The `Silent` arm
+//! semiprime-expert keys, sieve clause formation for reads and writes, the
+//! learned write trigger), and the registers re-enter through the model's
+//! memory branch. The `Silent` arm
 //! keeps every register at status None, which for a zero-initialised branch
 //! is the plain stack: the within-model control for what the store adds.
 //! Turn marks come from the conversation itself (the user prefixes and the
