@@ -22,6 +22,12 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const TOLERANCE: f64 = 1e-4;
 const VOCAB: usize = 49152;
 const WALL_SECONDS: u64 = 600;
+const SHARED_STORAGE_PATH: &str = "/Volumes/UOR-Workspace";
+// Prospective correction: the plan's 30 GiB is a Track B trace allocation,
+// not a free-space floor. This conservative lab guard is recorded separately.
+const STORAGE_RESERVE_BYTES: u64 = 24 * 1024 * 1024 * 1024;
+const STORAGE_STOP_MARGIN_BYTES: u64 = 128 * 1024 * 1024;
+const REPORT_ALLOWANCE_BYTES: u64 = 96 * 1024 * 1024;
 const STOCK_ID: &str = "candle-transformers/0.9.2::models::llama::Llama";
 const SHARED_ID: &str = "uor-r4-training::track_b::model::TrackBModel+DenseAttention";
 const STOCK_MODES: &[(&str, usize)] = &[
@@ -113,6 +119,74 @@ fn check_wall(start: Instant) -> Result<()> {
     } else {
         Ok(())
     }
+}
+
+fn parse_available_bytes(df: &str) -> Result<u64> {
+    let mut lines = df.lines().filter(|line| !line.trim().is_empty());
+    if !lines
+        .next()
+        .is_some_and(|header| header.starts_with("Filesystem"))
+    {
+        return Err("unrecognized POSIX df header".into());
+    }
+    let line = lines.next().ok_or("missing POSIX df filesystem row")?;
+    if lines.next().is_some() {
+        return Err("expected exactly one filesystem from POSIX df".into());
+    }
+    let available_kib = line
+        .split_whitespace()
+        .nth(3)
+        .ok_or("missing POSIX df available-block field")?
+        .parse::<u64>()?;
+    available_kib
+        .checked_mul(1024)
+        .ok_or_else(|| "available-byte overflow".into())
+}
+
+fn available_storage_bytes() -> Result<u64> {
+    // POSIX format keeps this one-filesystem report on one row. This driver is
+    // the source-bound M1/Metal smoke; its prospective reserve names this SSD.
+    let output = std::process::Command::new("/bin/df")
+        .env("LC_ALL", "C")
+        .args(["-Pk", SHARED_STORAGE_PATH])
+        .output()?;
+    if !output.status.success() {
+        return Err(format!(
+            "storage observation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
+    parse_available_bytes(std::str::from_utf8(&output.stdout)?)
+}
+
+fn admit_storage() -> Result<u64> {
+    let available = available_storage_bytes()?;
+    let required = STORAGE_RESERVE_BYTES + STORAGE_STOP_MARGIN_BYTES + REPORT_ALLOWANCE_BYTES;
+    if available < required {
+        return Err(format!(
+            "storage admission denied: available={available}, required={required} bytes"
+        )
+        .into());
+    }
+    Ok(available)
+}
+
+fn record_watchdog_stop(start: Instant, status: &str, observation: Value) -> ! {
+    let marker = json!({
+        "schema": "uor-r4.track-b-parity-interruption/1", "status": status,
+        "pass": false, "elapsed_seconds": start.elapsed().as_secs_f64(),
+        "observation": observation, "completion": "NOT_CONFIRMED",
+        "scope": "execution interruption; no numerical or model-quality decision"
+    });
+    // Job stderr must be retained outside the claimed root while it is live.
+    // Never race a background marker write against the main thread's seal.
+    eprintln!("{marker}");
+    std::process::exit(if status == "UNSEALED_TIMEOUT" {
+        124
+    } else {
+        125
+    });
 }
 
 fn mode_counts(rows: &[Value]) -> std::collections::BTreeMap<String, usize> {
@@ -514,9 +588,12 @@ fn main() -> Result<()> {
     }
     report_output::claim(&out)?;
     let start = Instant::now();
-    // A hung load/kernel may not return to the cooperative deadline. On timeout
-    // preserve the partial root unsealed; it is never a successful result.
+    // Refuse before any model load. Once admitted, enforce the actual failure
+    // seen in parity-3 automatically, even if a kernel has not returned. The
+    // margin remains reserved throughout; the report allowance is preflight.
     let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+    // Keep the hard deadline independent of filesystem observation: a stalled
+    // df command must not suspend the wall-time watchdog.
     std::thread::spawn(move || {
         if done_rx
             .recv_timeout(std::time::Duration::from_secs(WALL_SECONDS))
@@ -526,7 +603,70 @@ fn main() -> Result<()> {
             std::process::exit(124);
         }
     });
-    let result = run(&model, &out, start);
+    let stop_observation = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut observation_thread = None;
+    let mut result = match admit_storage() {
+        Err(error) => Err(error),
+        Ok(initial_available) => {
+            write_json(
+                &out.join("resource-admission.json"),
+                &json!({
+                    "schema": "uor-r4.track-b-parity-admission/1",
+                    "storage_path": SHARED_STORAGE_PATH,
+                    "available_bytes": initial_available,
+                    "reserve_bytes": STORAGE_RESERVE_BYTES,
+                    "stop_margin_bytes": STORAGE_STOP_MARGIN_BYTES,
+                    "report_allowance_bytes": REPORT_ALLOWANCE_BYTES,
+                    "watchdog_interval_ms": 1000, "wall_seconds": WALL_SECONDS
+                }),
+            )?;
+            let observed_stop = stop_observation.clone();
+            observation_thread = Some(std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if observed_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                match available_storage_bytes() {
+                    Ok(available)
+                        if available < STORAGE_RESERVE_BYTES + STORAGE_STOP_MARGIN_BYTES =>
+                    {
+                        record_watchdog_stop(
+                            start,
+                            "UNSEALED_STORAGE_STOP",
+                            json!({
+                                "available_bytes":available,
+                                "required_bytes":STORAGE_RESERVE_BYTES+STORAGE_STOP_MARGIN_BYTES
+                            }),
+                        );
+                    }
+                    Err(error) => record_watchdog_stop(
+                        start,
+                        "UNSEALED_STORAGE_OBSERVATION",
+                        json!({"error":error.to_string()}),
+                    ),
+                    Ok(_) => {}
+                }
+            }));
+            run(&model, &out, start)
+        }
+    };
+    stop_observation.store(true, std::sync::atomic::Ordering::Relaxed);
+    if let Some(observer) = observation_thread {
+        if observer.join().is_err() {
+            result = Err("storage observer panicked; execution qualification unavailable".into());
+        }
+        if result.is_ok() {
+            result = match available_storage_bytes() {
+                Ok(available) if available >= STORAGE_RESERVE_BYTES + STORAGE_STOP_MARGIN_BYTES => {
+                    result
+                }
+                Ok(available) => {
+                    Err(format!("storage below reserve at completion: {available} bytes").into())
+                }
+                Err(error) => Err(error),
+            };
+        }
+    }
     let (summary, code) = match result {
         Ok(summary) => {
             let pass = summary["pass"] == true;
@@ -556,6 +696,22 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn storage_parser_uses_available_blocks_and_fails_closed() -> Result<()> {
+        let sample = "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk6s1 209715160 183277876 26306004 88% /Volumes/UOR-Workspace\n";
+        assert_eq!(parse_available_bytes(sample)?, 26_306_004 * 1024);
+        for invalid in [
+            "",
+            "bad header\n/dev/disk6s1 1 2 3\n",
+            "Filesystem\n",
+            "Filesystem\n/dev/disk6s1 1 2 -1\n",
+            "Filesystem\n/dev/disk6s1 1 2 18446744073709551615\n",
+            "Filesystem\n/dev/a 1 2 3\n/dev/b 1 2 3\n",
+        ] {
+            assert!(parse_available_bytes(invalid).is_err());
+        }
+        Ok(())
+    }
     #[test]
     fn gate_checks_every_cell_and_rejects_nonfinite() {
         let a = vec![0_f32; VOCAB];

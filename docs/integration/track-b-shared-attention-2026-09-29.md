@@ -1,10 +1,16 @@
 # Shared Track B attention interface
 
 Status on 2026-09-29: **source implemented; compilation, new tests and checkpoint parity NOT_RUN**.
-The shared SSD reserve blocks further builds and model work. The earlier stock
+The earlier stock
 wrapper's executed checks are scoped to its [recorded revisions](track-b-conversion-result-2026-09-29.md),
 not to this newly added implementation. [Draft PR #1518](https://github.com/UOR-Foundation/uor-r4/pull/1518)
 carries both stages without claiming either checkpoint parity or B2 acceptance.
+The [prospective storage correction](../evidence/track-b-storage-correction-2026-09-29.json)
+now permits a bounded next phase: the plan reserves 30 GiB for Track B traces,
+whereas our earlier card mistakenly treated that allocation as an untouchable
+free-space floor. The new conservative lab guard is 24 GiB plus the owner's
+128 MiB stop margin, with 256 MiB additional build and 96 MiB report allocation.
+Earlier stopped attempts keep their original conditions and remain unqualified.
 
 Lab 1's [shared-model ruling](https://github.com/UOR-Foundation/uor-r4/issues/1515#issuecomment-5898192281)
 assigns one Candle model to Codex. DeepSeek supplies flock at the attention seam;
@@ -104,7 +110,10 @@ The [prospective amendment](../evidence/track-b-shared-attention-projection-2026
 [registered on the board](https://github.com/UOR-Foundation/uor-r4/issues/1515#issuecomment-5898730739),
 increases the retained-report projection from 32 to 96 MiB to preserve these
 extra raw logits. It does not increase the time, thread, RSS, build-storage or
-cumulative-ledger limits. No amended run is admitted below the original 30 GiB
-SSD reserve plus stop margin. Once restored: compile and run the named tests,
-then the unchanged-reference smoke in a new claimed root. B2 fitting remains
-gated on an actual passing shared-model result.
+cumulative-ledger limits. The later prospective correction replaces our
+30 GiB free-space interpretation with the conservative 24 GiB lab guard and
+unchanged 128 MiB margin. Preflight accounts for all projected new space;
+runtime observation fails closed, independently of the hard 600-second timer.
+The observer stops and joins before report sealing. Next: compile and run the
+named tests, then the unchanged-reference smoke in a new claimed root. B2
+fitting remains gated on an actual passing shared-model result.

@@ -14,11 +14,14 @@ are sealed; this is execution evidence, not a numerical or model-quality
 negative. See the [result](track-b-conversion-result-2026-09-29.md),
 [design proposal](track-b-harmonic-design-2026-09-29.md), and
 [owning board](https://github.com/UOR-Foundation/uor-r4/issues/1515).
-Next: restore the shared reserve and complete the unchanged parity smoke in a
+The [prospective storage correction](../evidence/track-b-storage-correction-2026-09-29.json)
+distinguishes the plan's 30 GiB trace allocation from our stricter free-space
+interpretation. Next: under the new conservative 24 GiB guard plus 128 MiB
+margin, compile the changed path and complete the unchanged parity smoke in a
 new root before B2 fitting or the 360M ladder. The [shared differentiable
 attention interface](track-b-shared-attention-2026-09-29.md), harmonic features
 and bounded seeded generation are now source-implemented in draft PR #1518;
-their compilation and new tests remain NOT_RUN while the reserve blocks builds.
+their compilation and new tests remain NOT_RUN pending that bounded execution.
 
 ## Current leadership, September 29
 
