@@ -223,6 +223,14 @@ pub struct ReadEvent {
     pub value: u32,
 }
 
+/// One completed write: the clause's exact key and value at a write trigger.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WriteEvent {
+    pub position: usize,
+    pub key: (u32, u32),
+    pub value: u32,
+}
+
 /// Registers per position and the store after the last position.
 #[derive(Clone, Debug)]
 pub struct Simulation {
@@ -231,6 +239,7 @@ pub struct Simulation {
     pub status_previous: Vec<u32>,
     pub value_previous: Vec<u32>,
     pub reads: Vec<ReadEvent>,
+    pub writes: Vec<WriteEvent>,
     pub store: RelationStore,
 }
 
@@ -264,6 +273,7 @@ pub fn simulate(tokens: &[u32], tags: &[u32], triggers: &[u32], eos: u32) -> Res
     let mut status_previous = Vec::with_capacity(tokens.len());
     let mut values_previous = Vec::with_capacity(tokens.len());
     let mut reads = Vec::new();
+    let mut writes = Vec::new();
     for (position, ((&token, &tag), &trigger)) in tokens.iter().zip(tags).zip(triggers).enumerate()
     {
         match tag {
@@ -299,6 +309,11 @@ pub fn simulate(tokens: &[u32], tags: &[u32], triggers: &[u32], eos: u32) -> Res
             TRIGGER_WRITE => {
                 if let (Some(e), Some(r), Some(v)) = (entity, relation, value) {
                     store.write(e, r, v);
+                    writes.push(WriteEvent {
+                        position,
+                        key: (e, r),
+                        value: v,
+                    });
                 }
                 close = true;
             }
@@ -318,6 +333,7 @@ pub fn simulate(tokens: &[u32], tags: &[u32], triggers: &[u32], eos: u32) -> Res
         status_previous,
         value_previous: values_previous,
         reads,
+        writes,
         store,
     })
 }
@@ -2033,6 +2049,8 @@ pub struct DialogueEvaluation {
     /// address).
     pub read_events: usize,
     pub trace: BTreeMap<String, usize>,
+    /// Every memory-arm failure decomposed by [`AddressCause`].
+    pub failure_cause: BTreeMap<String, usize>,
     /// The last query of the first episodes: gold and teacher-forced predictions.
     pub examples: Vec<QueryExample>,
 }
@@ -2167,6 +2185,23 @@ pub fn evaluate_dialogues(
                         world.eos,
                     )?;
                     *result.trace.entry(format!("{class:?}")).or_default() += 1;
+                    let inputs = episode.tokens.len() - 1;
+                    if inputs >= 2 {
+                        let cause = address_cause(
+                            &episode.tokens[..inputs],
+                            &episode.tags[..inputs],
+                            &episode.triggers[..inputs],
+                            &tags[base..base + inputs],
+                            &triggers[base..base + inputs],
+                            query.answer_start - 1,
+                            query.key,
+                            world.eos,
+                        )?;
+                        *result
+                            .failure_cause
+                            .entry(format!("{cause:?}"))
+                            .or_default() += 1;
+                    }
                 }
                 if index == last && result.examples.len() < 32 {
                     result.examples.push(QueryExample {
@@ -2233,6 +2268,113 @@ fn trace(
         Some(event) if event.key == Some(query.key) => Ok(TraceClass::WrongValue),
         _ => Ok(TraceClass::NotSelected),
     }
+}
+
+/// Where a memory-arm failure's address went wrong (the G-decomposition
+/// diagnostic; it changes no score).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum AddressCause {
+    /// The query turn's entity token was not tagged as an entity.
+    QueryEntityTag,
+    /// The query turn's relation token was not tagged as a relation.
+    QueryRelationTag,
+    /// The last gold write's entity slot was not tagged as an entity.
+    WriteEntityKey,
+    /// The last gold write's relation slot was not tagged as a relation.
+    WriteRelationKey,
+    /// The last gold write's value slot was not tagged as a value.
+    WriteValueTag,
+    /// The model fired no write trigger where gold wrote the key.
+    WriteMissed,
+    /// The key is present but the model's latest write carries another value.
+    WrongValueStored,
+    /// The store reports the query key evicted.
+    Evicted,
+    /// None of the above.
+    Other,
+}
+
+/// Classifies a failed query by comparing the model's own tags and triggers
+/// with the gold stream, on the query turn and on the last gold write of the
+/// query key. All five arrays must be the same length and `end` in range.
+pub fn address_cause(
+    tokens: &[u32],
+    gold_tags: &[u32],
+    gold_triggers: &[u32],
+    model_tags: &[u32],
+    model_triggers: &[u32],
+    end: usize,
+    key: (u32, u32),
+    eos: u32,
+) -> Result<AddressCause> {
+    if tokens.len() != gold_tags.len()
+        || tokens.len() != gold_triggers.len()
+        || tokens.len() != model_tags.len()
+        || tokens.len() != model_triggers.len()
+        || end >= tokens.len()
+    {
+        return Err(invalid("aligned arrays and an in-range end are required"));
+    }
+    let gold = simulate(
+        &tokens[..=end],
+        &gold_tags[..=end],
+        &gold_triggers[..=end],
+        eos,
+    )?;
+    let model = simulate(
+        &tokens[..=end],
+        &model_tags[..=end],
+        &model_triggers[..=end],
+        eos,
+    )?;
+    let turn_start = tokens[..end]
+        .iter()
+        .rposition(|&t| t == eos)
+        .map_or(1, |p| p + 1);
+    let query_slot = |tag: u32| (turn_start..=end).rev().find(|&p| gold_tags[p] == tag);
+    let Some(entity) = query_slot(TAG_ENTITY) else {
+        return Ok(AddressCause::Other);
+    };
+    if model_tags[entity] != TAG_ENTITY {
+        return Ok(AddressCause::QueryEntityTag);
+    }
+    let Some(relation) = query_slot(TAG_RELATION) else {
+        return Ok(AddressCause::Other);
+    };
+    if model_tags[relation] != TAG_RELATION {
+        return Ok(AddressCause::QueryRelationTag);
+    }
+    let Some(write) = gold.writes.iter().rev().find(|w| w.key == key) else {
+        return Ok(AddressCause::Other);
+    };
+    if model.store.read(key.0, key.1, false).0 == STATUS_EVICTED {
+        return Ok(AddressCause::Evicted);
+    }
+    let clause_slot = |tag: u32| (0..write.position).rev().find(|&p| gold_tags[p] == tag);
+    if let Some(p) = clause_slot(TAG_ENTITY) {
+        if model_tags[p] != TAG_ENTITY {
+            return Ok(AddressCause::WriteEntityKey);
+        }
+    }
+    if let Some(p) = clause_slot(TAG_RELATION) {
+        if model_tags[p] != TAG_RELATION {
+            return Ok(AddressCause::WriteRelationKey);
+        }
+    }
+    if let Some(p) = clause_slot(TAG_VALUE) {
+        if model_tags[p] != TAG_VALUE {
+            return Ok(AddressCause::WriteValueTag);
+        }
+    }
+    if model_triggers[write.position] != TRIGGER_WRITE {
+        return Ok(AddressCause::WriteMissed);
+    }
+    let held = model.store.record(key.0, key.1).map(|r| r.value);
+    let wanted = gold.store.record(key.0, key.1).map(|r| r.value);
+    if held != wanted {
+        return Ok(AddressCause::WrongValueStored);
+    }
+    Ok(AddressCause::Other)
 }
 
 /// Mean next-token NLL over `windows` evenly spaced development windows. The
@@ -2671,6 +2813,116 @@ mod tests {
         assert!(simulation.reads.is_empty());
         assert!(simulation.status.iter().all(|&s| s == STATUS_NONE));
         assert!(simulation.status_previous.iter().all(|&s| s == STATUS_NONE));
+        Ok(())
+    }
+
+    #[test]
+    fn write_events_record_the_exact_clause() -> Result<()> {
+        let tokens = vec![0u32, 10, 20, 30, 40, 1, 10, 20, 41, 1];
+        let tags = vec![
+            TAG_OTHER,
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_OTHER,
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_OTHER,
+            TAG_OTHER,
+        ];
+        let triggers = vec![
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_WRITE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+        ];
+        let simulation = simulate(&tokens, &tags, &triggers, 1)?;
+        assert_eq!(
+            simulation.writes,
+            vec![WriteEvent {
+                position: 4,
+                key: (10, 20),
+                value: 30,
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn address_cause_names_the_query_and_write_slots() -> Result<()> {
+        let tokens = vec![0u32, 10, 20, 30, 40, 1, 10, 20, 41, 1];
+        let tags = vec![
+            TAG_OTHER,
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_OTHER,
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_OTHER,
+            TAG_OTHER,
+        ];
+        let triggers = vec![
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_WRITE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+        ];
+        let cause = |model_tags: &[u32], model_triggers: &[u32]| -> Result<AddressCause> {
+            address_cause(
+                &tokens,
+                &tags,
+                &triggers,
+                model_tags,
+                model_triggers,
+                9,
+                (10, 20),
+                1,
+            )
+        };
+        assert_eq!(cause(&tags, &triggers)?, AddressCause::Other);
+        let flip = |at: usize, value: u32| -> (Vec<u32>, Vec<u32>) {
+            let mut model_tags = tags.clone();
+            model_tags[at] = value;
+            (model_tags, triggers.clone())
+        };
+        assert_eq!(
+            cause(&flip(6, TAG_OTHER).0, &triggers)?,
+            AddressCause::QueryEntityTag
+        );
+        assert_eq!(
+            cause(&flip(7, TAG_OTHER).0, &triggers)?,
+            AddressCause::QueryRelationTag
+        );
+        assert_eq!(
+            cause(&flip(1, TAG_OTHER).0, &triggers)?,
+            AddressCause::WriteEntityKey
+        );
+        assert_eq!(
+            cause(&flip(2, TAG_OTHER).0, &triggers)?,
+            AddressCause::WriteRelationKey
+        );
+        assert_eq!(
+            cause(&flip(3, TAG_OTHER).0, &triggers)?,
+            AddressCause::WriteValueTag
+        );
+        let mut missed = triggers.clone();
+        missed[4] = TRIGGER_NONE;
+        assert_eq!(cause(&tags, &missed)?, AddressCause::WriteMissed);
         Ok(())
     }
 
