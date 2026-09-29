@@ -6061,11 +6061,13 @@ mod tests {
                     "{label}: the snapped fused forward differs from the composed reference by {gap}"
                 );
                 worst = worst.max(gap);
-                // The snap is not trivial, witnessed at the transport it acts
-                // on (not at the logits, whose amplification is the readout
-                // weights' business): recompute layer 0's raw quaternions as
-                // the fused core sees them and require the nearest root to
-                // move at least one lane by more than 1e-3 in unit space.
+                // The snap is not trivial (Lab 1 adjudication, #1483, 2026-09-29):
+                // 1. some lane's chosen root differs from its unit quaternion
+                //    by more than 1e-3 in L2, witnessed on layer 0's raw
+                //    quaternions as the fused core computes them;
+                // 2. the snap moves the logits at least 100x the parity floor
+                //    (its own fused-vs-composed gap), so the effect is a
+                //    mechanism and not numerical noise.
                 let p = model.params()?;
                 let x = model.embed_with(&p, &ids, batch, time)?;
                 let u = model.norm(&p, &x, &layer_name(0, "rec_norm.weight"))?;
@@ -6079,13 +6081,21 @@ mod tests {
                 let mut max_displacement = 0f32;
                 for quad in unit.chunks_exact(4) {
                     let root = roots[nearest_root([quad[0], quad[1], quad[2], quad[3]], &roots)];
-                    for k in 0..4 {
-                        max_displacement = max_displacement.max((root[k] - quad[k]).abs());
-                    }
+                    let l2: f32 = (0..4)
+                        .map(|k| (root[k] - quad[k]) * (root[k] - quad[k]))
+                        .sum::<f32>()
+                        .sqrt();
+                    max_displacement = max_displacement.max(l2);
                 }
                 assert!(
                     max_displacement > 1e-3,
                     "{label}: the snap left every transport unchanged ({max_displacement})"
+                );
+                let floor = gap.max(1e-7);
+                let moved = max_abs_gap(&fused, &free)?;
+                assert!(
+                    moved > 100.0 * floor,
+                    "{label}: the snap's effect ({moved}) is within noise of the parity floor ({floor})"
                 );
                 let usage = model.transport_usage(&ids, batch, time, None)?;
                 let pooled = usage.pooled();
