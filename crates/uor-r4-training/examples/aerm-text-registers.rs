@@ -147,7 +147,11 @@ fn score(
         }
         let bottom = model.bottom(&ids, chunk.len(), context)?;
         let tags = bottom.tags.detach().argmax(D::Minus1)?.to_vec1::<u32>()?;
-        let triggers = bottom.triggers.detach().argmax(D::Minus1)?.to_vec1::<u32>()?;
+        let triggers = bottom
+            .triggers
+            .detach()
+            .argmax(D::Minus1)?
+            .to_vec1::<u32>()?;
         tally.triggers += triggers.iter().filter(|&&t| t != TRIGGER_NONE).count();
         tally.writes += triggers.iter().filter(|&&t| t == TRIGGER_WRITE).count();
         let registers = model_registers(&ids, &tags, &triggers, chunk.len(), context, eos)?;
