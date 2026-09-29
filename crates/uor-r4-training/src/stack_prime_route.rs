@@ -15,25 +15,38 @@
 //! names keeps its direction: "Alex's friend is Sam" does not answer "Sam's
 //! friend".
 //!
-//! Two read policies:
-//! - [`ReadPolicy::Tagged`] is G v1's: whenever a key tag completes an
-//!   expert, both registers (current and previous distinct value) read, and
-//!   reads never close the clause;
-//! - [`ReadPolicy::Sieve`] also counts, inside a user turn, a token the head
+//! Two policies for which tokens form a clause's key atoms. They govern
+//! **both reads and writes**, since both use the clause's key atoms:
+//! - [`ReadPolicy::Tagged`]: only tokens the head tagged entity or relation.
+//!   Whenever a key tag completes an expert, both registers (current and
+//!   previous distinct value) read, and reads never close the clause. This
+//!   is G v1's policy when a clause has at most one entity tag and one
+//!   relation tag; with two same-role tags the expert keys the last two
+//!   distinct atoms where G v1 keys the latest of each role.
+//! - [`ReadPolicy::Sieve`]: also counts, inside a user turn, a token the head
 //!   tagged other as a key atom when it is already a registered atom of the
 //!   session: a key atom of an expert the store has written (from the model's
-//!   own write-time tags, never gold). A read then prefers a written expert
-//!   whose two primes both divide the clause's product of key atoms, the
-//!   latest atom first. This is the prime router's factor sieve: a query
-//!   finds its record by the atoms the two share, however the query phrases
-//!   them.
+//!   own write-time tags, never gold). The rescued atom joins the clause's
+//!   key atoms, so it changes **writes as well as reads**. A rescued entity
+//!   lets a later assertion about it be written, not only read. The one
+//!   read-only part is the preference: a read prefers a written expert both
+//!   of whose atoms are among the clause's key atoms, latest atom first. That
+//!   is a pairwise membership scan, equivalent to a divisibility filter on the
+//!   clause's product of primes, though no product or gcd is formed. The
+//!   read-side and write-side contributions are not separated here.
+//!
+//! Role-agnostic keys would alias `(X, Y)` with `(Y, X)` if a token could play
+//! both roles; D2's names and relation words are disjoint, so this is not
+//! exercised.
 //!
 //! Two write policies:
 //! - [`WritePolicy::Trigger`]: the model's learned write trigger, as G v1;
-//! - [`WritePolicy::TurnEnd`]: a write where the user's turn ends, if the
-//!   clause then has an expert and a value atom. A question carries no value
-//!   atom and never writes. A session knows where a user turn ends, so this
-//!   uses no gold label; the learned trigger is ignored.
+//! - [`WritePolicy::TurnEnd`]: a write at the last input position before the
+//!   assistant's reply (after the assistant marker), if the clause then has an
+//!   expert and a value atom. A question whose tokens the head tags no value
+//!   never writes; a value-tagged question would be written, the mood case the
+//!   ROADMAP's memory port still lists as open. A session knows where a user
+//!   turn ends, so this uses no gold label; the learned trigger is ignored.
 //!
 //! The store's version semantics are the probe's ([`crate::stack_aerm::RelationStore`]):
 //! a different value becomes current and keeps the previous distinct value; a
@@ -197,7 +210,7 @@ impl ExpertStore {
     }
 }
 
-/// Which tokens a read counts as key atoms.
+/// Which tokens form a clause's key atoms, for its reads **and** its writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadPolicy {
@@ -214,7 +227,8 @@ pub enum ReadPolicy {
 pub enum WritePolicy {
     /// The model's learned write trigger, which also closes the clause (G v1).
     Trigger,
-    /// The end of each user turn, which also closes the clause.
+    /// The last input position before each assistant reply (after the
+    /// assistant marker), which also closes the clause.
     TurnEnd,
 }
 
@@ -460,7 +474,6 @@ pub fn prime_route_runs(
         .collect()
 }
 
-/// Why a query's sieve registers differ from gold, or that they agree.
 /// The model's tags at the gold entity and relation slots of the last gold
 /// write of `key` before `end`, and whether the model fired the write there.
 #[allow(clippy::too_many_arguments)]
@@ -510,6 +523,7 @@ fn write_side(
     }
 }
 
+/// Why a query's sieve registers differ from gold, or that they agree.
 fn sieve_cause(
     run: &PrimeRouteRun,
     ids: &[u32],
@@ -553,8 +567,8 @@ fn sieve_cause(
 }
 
 /// The register sources compared on the same episodes and the same model.
+/// Serialized under the same names reports use (`GV1`, `ExpertSieve`, ...).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum RegisterArm {
     /// G v1: typed `(entity, relation)` keys, the learned write trigger.
     GV1,
@@ -562,8 +576,8 @@ pub enum RegisterArm {
     ExpertTrigger,
     /// Semiprime experts, a write at each user turn's end.
     ExpertTurnEnd,
-    /// Semiprime experts, the learned write trigger, and sieve reads over
-    /// the session's registered atoms.
+    /// Semiprime experts, the learned write trigger, and sieve clause
+    /// formation (reads and writes) over the session's registered atoms.
     ExpertSieve,
     /// Gold registers: a perfect parser (the probe's oracle).
     Gold,
@@ -638,16 +652,21 @@ pub fn evaluate_prime_route(
     if batch == 0 {
         return Err(invalid("the batch must be positive"));
     }
-    let held_names: BTreeSet<u32> = world.vocabulary()["held_out_names"]
+    let vocabulary = world.vocabulary();
+    let held_names = vocabulary["held_out_names"]
         .as_array()
-        .map(|names| {
-            names
-                .iter()
-                .filter_map(|pair| pair.get(1).and_then(|id| id.as_u64()))
-                .map(|id| id as u32)
-                .collect()
+        .ok_or_else(|| invalid("the world's vocabulary lists no held-out names"))?
+        .iter()
+        .map(|pair| {
+            pair.get(1)
+                .and_then(|id| id.as_u64())
+                .and_then(|id| u32::try_from(id).ok())
+                .ok_or_else(|| invalid("a held-out name has no token id"))
         })
-        .unwrap_or_default();
+        .collect::<Result<BTreeSet<u32>>>()?;
+    if held_names.is_empty() {
+        return Err(invalid("the world's vocabulary lists no held-out names"));
+    }
     let mut rng = Rng::new(seed);
     let mut result = PrimeRouteEvaluation {
         episodes,
@@ -886,8 +905,9 @@ mod tests {
     /// Unique factorization: two semiprime experts are equal exactly when
     /// their unordered atom pairs are. The store only compares keys for
     /// equality, so an expert key carries the same information as a sorted
-    /// pair `(min, max)` and yields identical registers (the control Astra's
-    /// review asked for, settled for every pair of a 64-atom registry).
+    /// pair `(min, max)` and yields identical registers (the sorted-pair
+    /// control requested on #973, settled for every pair of a 64-atom
+    /// registry).
     #[test]
     fn semiprime_experts_are_exactly_unordered_pairs() -> Result<()> {
         let atoms = 64u32;
@@ -924,8 +944,9 @@ mod tests {
     }
 
     /// With gold tags, the expert arms reproduce the gold registers at every
-    /// input position, for the trigger policy and for the turn-end policy
-    /// with every learned trigger removed.
+    /// input position for three of the four (write, read) pairs: the trigger
+    /// policy with tagged and with sieve reads, and the turn-end policy with
+    /// every learned trigger removed and tagged reads.
     #[test]
     fn gold_tags_reproduce_the_gold_registers() -> Result<()> {
         let world = world()?;
@@ -1221,6 +1242,58 @@ mod tests {
         };
         let sieve = run(ReadPolicy::Sieve, &replying)?;
         assert_ne!((sieve.status[6], sieve.value[6]), (STATUS_HIT, blue));
+        Ok(())
+    }
+
+    /// The sieve changes writes too: an entity tagged other in a later
+    /// assertion, but registered by an earlier write, joins that assertion's
+    /// key atoms, so the new fact is written and a later query finds it. Under
+    /// tagged key atoms the assertion has one key atom and nothing is written.
+    #[test]
+    fn the_sieve_rescues_a_write_whose_entity_was_not_tagged() -> Result<()> {
+        let registry = PrimeRegistry::new(64)?;
+        let (molly, color, red, pet, cat, eos) = (10u32, 11u32, 12u32, 13u32, 14u32, 2u32);
+        // "Molly's color is red." / "Now Molly's pet is a cat." (Molly tagged
+        // other) / "Molly's pet?"
+        let tokens = [
+            molly, color, red, eos, molly, pet, cat, eos, molly, pet, eos,
+        ];
+        let tags = [
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_OTHER,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_OTHER,
+        ];
+        let mut triggers = [TRIGGER_NONE; 11];
+        triggers[2] = TRIGGER_WRITE;
+        triggers[6] = TRIGGER_WRITE;
+        let marks = TurnMarks {
+            turn_end: vec![false; 11],
+            reply: vec![false; 11],
+        };
+        let run = |read| {
+            simulate_prime_route(
+                &tokens,
+                &tags,
+                &triggers,
+                &marks,
+                eos,
+                &registry,
+                WritePolicy::Trigger,
+                read,
+            )
+        };
+        let tagged = run(ReadPolicy::Tagged)?;
+        assert_eq!((tagged.status[9], tagged.value[9]), (STATUS_ABSENT, 0));
+        let sieve = run(ReadPolicy::Sieve)?;
+        assert_eq!((sieve.status[9], sieve.value[9]), (STATUS_HIT, cat));
         Ok(())
     }
 
