@@ -16,8 +16,25 @@
 //!   [weight_decay=0.1] [clip=1] [trigger_positive=5] [eval_episodes=512] \
 //!   [eval_batch=16] [dev_episodes=256] [seed=9001] [data_seed=9002] \
 //!   [eval_seed=9003] [dev_seed=9004]
+//! aerm-keys decode out=NEW_REPORT_ROOT trunk=TRUNK_DIR tokenizer=TOKENIZER.json \
+//!   [splits=2,4] [steps=30000] [train_episodes=1024] [eval_episodes=512] \
+//!   [dev_episodes=256] [batch=16] [eval_batch=16] [context=256] [lr=0.01] \
+//!   [warmup=100] [weight_decay=0] [clip=10] [seed=9001] [data_seed=9002] \
+//!   [eval_seed=9003] [dev_seed=9004]
 //! aerm-keys roots
+//! aerm-keys decode out=NEW_REPORT_ROOT trunk=TRUNK_DIR tokenizer=TOKENIZER.json \
+//!   [splits=2,4] [steps=30000] [train_episodes=1024] [eval_episodes=512] \
+//!   [dev_episodes=256] [batch=16] [eval_batch=16] [context=256] [lr=0.01] \
+//!   [warmup=100] [weight_decay=0] [clip=10] [seed=9001] [data_seed=9002] \
+//!   [eval_seed=9003] [dev_seed=9004]
 //! ```
+//!
+//! `decode` is the additive frozen-feature decodability diagnostic: it loads
+//! the same pinned trunk, extracts the identical atom-supervised feature rows
+//! the key probe uses, and drives one multinomial logistic map per atom head
+//! to convergence, reporting per-split in-distribution and held-out atom
+//! accuracy against the majority and chance baselines with the predeclared
+//! exposure-limited/information-absent reading.
 //!
 //! `run` claims an exclusive report root before loading anything, refuses a
 //! trunk whose `model.safetensors` SHA-256 is not the pinned S4 arm-A value,
@@ -628,6 +645,33 @@ fn gather_rows(logits: &Tensor, rows: &[u32], device: &Device) -> Result<Tensor>
     Ok(logits.index_select(&index, 0)?)
 }
 
+/// The atom supervision rows of a batch, exactly as the key probe's head
+/// losses select them: entity rows are real positions carrying an entity atom
+/// (target `entity_atom - 1`); relation rows are each clause's trigger
+/// position (target `relation_atom - 1`). Shared by `head_losses` and the
+/// `decode` mode so both read the identical feature rows.
+fn atom_rows(batch: &DialogueBatch) -> (Vec<u32>, Vec<u32>, Vec<u32>, Vec<u32>) {
+    let rows = batch.batch * batch.time;
+    let entity_rows: Vec<u32> = (0..rows)
+        .filter(|&row| batch.entity_atom[row] != 0 && batch.real[row] > 0.0)
+        .map(|row| row as u32)
+        .collect();
+    let entity_targets: Vec<u32> = entity_rows
+        .iter()
+        .map(|&row| batch.entity_atom[row as usize] - 1)
+        .collect();
+
+    let mut relation_rows = Vec::new();
+    let mut relation_targets = Vec::new();
+    for (episode_index, episode) in batch.episodes.iter().enumerate() {
+        for clause in &episode.clauses {
+            relation_rows.push((episode_index * batch.time + clause.trigger_position) as u32);
+            relation_targets.push(clause.relation_atom - 1);
+        }
+    }
+    (entity_rows, entity_targets, relation_rows, relation_targets)
+}
+
 fn head_losses(
     stack: &StackModel,
     split: usize,
@@ -636,7 +680,6 @@ fn head_losses(
     config: &ProbeConfig,
 ) -> Result<Tensor> {
     let device = stack.device();
-    let rows = batch.batch * batch.time;
     let feature = split_features(stack, split, &batch.ids, batch.batch, batch.time)?;
 
     let tag_logits = heads.tag.logits(&feature)?;
@@ -658,23 +701,7 @@ fn head_losses(
     let trigger_loss =
         logits_cross_entropy(&trigger_logits, &batch.triggers, Some(&trigger_weights))?;
 
-    let entity_rows: Vec<u32> = (0..rows)
-        .filter(|&row| batch.entity_atom[row] != 0 && batch.real[row] > 0.0)
-        .map(|row| row as u32)
-        .collect();
-    let entity_targets: Vec<u32> = entity_rows
-        .iter()
-        .map(|&row| batch.entity_atom[row as usize] - 1)
-        .collect();
-
-    let mut relation_rows = Vec::new();
-    let mut relation_targets = Vec::new();
-    for (episode_index, episode) in batch.episodes.iter().enumerate() {
-        for clause in &episode.clauses {
-            relation_rows.push((episode_index * batch.time + clause.trigger_position) as u32);
-            relation_targets.push(clause.relation_atom - 1);
-        }
-    }
+    let (entity_rows, entity_targets, relation_rows, relation_targets) = atom_rows(batch);
 
     let mut loss = (&tag_loss + &trigger_loss)?;
     if !entity_rows.is_empty() {
@@ -1080,6 +1107,454 @@ struct ArmResult {
 }
 
 // ---------------------------------------------------------------------------
+// The `decode` mode: frozen-feature linear decodability of the atom heads.
+//
+// Where `run` trains four heads jointly for a bounded number of steps, the
+// decode probe asks the narrower diagnostic question: do the frozen trunk's
+// features at a split linearly encode the gold entity/relation atoms at all?
+// It extracts the identical feature rows the key probe supervises (via
+// [`split_features`] and [`atom_rows`]) on a fixed in-distribution sample,
+// then drives one multinomial logistic map per atom head to convergence with
+// full-batch Adam. The predeclared reading: in-distribution atom accuracy
+// >= 0.98 for both heads at either split means the key probe's guard failure
+// was exposure-limited; otherwise the frozen trunk does not expose the atom
+// information at this seam.
+
+#[derive(Clone)]
+struct DecodeConfig {
+    steps: usize,
+    train_episodes: usize,
+    eval_episodes: usize,
+    dev_episodes: usize,
+    batch: usize,
+    eval_batch: usize,
+    context: usize,
+    learning_rate: f64,
+    warmup: usize,
+    weight_decay: f64,
+    clip: f64,
+    seed: u64,
+    data_seed: u64,
+    eval_seed: u64,
+    dev_seed: u64,
+}
+
+/// The cached gold-atom rows of a fixed episode sample: the detached frozen
+/// features at the supervised rows and their atom targets.
+struct AtomSample {
+    episodes: usize,
+    entity_features: Tensor,
+    entity_targets: Vec<u32>,
+    relation_features: Tensor,
+    relation_targets: Vec<u32>,
+}
+
+fn collect_atom_sample(
+    stack: &StackModel,
+    split: usize,
+    world: &RelationWorld,
+    config: &DecodeConfig,
+    held: bool,
+    seed: u64,
+    episodes: usize,
+) -> Result<AtomSample> {
+    let device = stack.device().clone();
+    let mut rng = Rng::new(seed);
+    let mut collected = 0usize;
+    let mut entity_features = Vec::new();
+    let mut entity_targets = Vec::new();
+    let mut relation_features = Vec::new();
+    let mut relation_targets = Vec::new();
+    while collected < episodes {
+        let batch = world.batch(&mut rng, config.batch, config.context, held)?;
+        let feature = split_features(stack, split, &batch.ids, batch.batch, batch.time)?;
+        let (entity_rows, entity_row_targets, relation_rows, relation_row_targets) =
+            atom_rows(&batch);
+        if !entity_rows.is_empty() {
+            entity_features.push(gather_rows(&feature, &entity_rows, &device)?);
+            entity_targets.extend(entity_row_targets);
+        }
+        if !relation_rows.is_empty() {
+            relation_features.push(gather_rows(&feature, &relation_rows, &device)?);
+            relation_targets.extend(relation_row_targets);
+        }
+        collected += batch.episodes.len();
+    }
+    if entity_features.is_empty() || relation_features.is_empty() {
+        return Err(invalid("the decode sample has no supervised atom rows"));
+    }
+    Ok(AtomSample {
+        episodes: collected,
+        entity_features: Tensor::cat(&entity_features, 0)?,
+        entity_targets,
+        relation_features: Tensor::cat(&relation_features, 0)?,
+        relation_targets,
+    })
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct DecodeStep {
+    step: usize,
+    loss: f64,
+    train_accuracy: f64,
+    seconds: f64,
+}
+
+/// Evidence that the train curve plateaued: the best train accuracy over the
+/// final `window` steps against the best over everything before it.
+#[derive(Clone, Debug, Serialize)]
+struct Plateau {
+    window: usize,
+    best_accuracy_final_window: f64,
+    best_accuracy_before_window: f64,
+    stopped_improving: bool,
+}
+
+fn head_accuracy(head: &LinearHead, features: &Tensor, targets: &[u32]) -> Result<f64> {
+    let predicted = argmax_rows(&head.logits(features)?)?;
+    let correct = predicted
+        .iter()
+        .zip(targets)
+        .filter(|(left, right)| left == right)
+        .count();
+    Ok(correct as f64 / targets.len().max(1) as f64)
+}
+
+/// Full-batch multinomial logistic regression on cached frozen features,
+/// driven for `config.steps` Adam steps under the same cosine schedule shape
+/// as the key probe, with the train curve recorded for the plateau check.
+fn fit_decode_probe(
+    features: &Tensor,
+    targets: &[u32],
+    classes: usize,
+    width: usize,
+    seed: u64,
+    config: &DecodeConfig,
+    device: &Device,
+) -> Result<(LinearHead, Vec<DecodeStep>, Plateau)> {
+    let head = LinearHead::new(classes, width, seed, device)?;
+    let params = |weight_decay| ParamsAdamW {
+        lr: config.learning_rate,
+        beta1: 0.9,
+        beta2: 0.95,
+        eps: 1e-8,
+        weight_decay,
+    };
+    let mut weight_optimizer = AdamW::new(vec![head.weight.clone()], params(config.weight_decay))?;
+    let mut bias_optimizer = AdamW::new(vec![head.bias.clone()], params(0.0))?;
+    let all = [head.weight.clone(), head.bias.clone()];
+    let mut history = Vec::new();
+    let started = Instant::now();
+    for step in 0..config.steps {
+        let lr = config.learning_rate * schedule(step, config.warmup, config.steps);
+        weight_optimizer.set_learning_rate(lr);
+        bias_optimizer.set_learning_rate(lr);
+        let loss = logits_cross_entropy(&head.logits(features)?, targets, None)?;
+        let mut grads = loss.backward()?;
+        clip_gradients(&mut grads, &all, config.clip)?;
+        weight_optimizer.step(&grads)?;
+        bias_optimizer.step(&grads)?;
+        if step % 250 == 0 || step + 1 == config.steps {
+            history.push(DecodeStep {
+                step,
+                loss: f64::from(loss.to_scalar::<f32>()?),
+                train_accuracy: head_accuracy(&head, features, targets)?,
+                seconds: started.elapsed().as_secs_f64(),
+            });
+        }
+    }
+    let window = 2000.min(config.steps / 2).max(1);
+    let split_at = config.steps - window;
+    let best = |records: &[&DecodeStep]| {
+        records
+            .iter()
+            .map(|record| record.train_accuracy)
+            .fold(0f64, f64::max)
+    };
+    let before: Vec<&DecodeStep> = history
+        .iter()
+        .filter(|record| record.step < split_at)
+        .collect();
+    let final_window: Vec<&DecodeStep> = history
+        .iter()
+        .filter(|record| record.step >= split_at)
+        .collect();
+    let plateau = Plateau {
+        window,
+        best_accuracy_final_window: best(&final_window),
+        best_accuracy_before_window: best(&before),
+        stopped_improving: best(&final_window) <= best(&before) + 1e-12,
+    };
+    Ok((head, history, plateau))
+}
+
+fn majority_baseline(train_targets: &[u32], targets: &[u32], classes: usize) -> Result<f64> {
+    let mut counts = vec![0usize; classes];
+    for &target in train_targets {
+        let slot = counts
+            .get_mut(target as usize)
+            .ok_or_else(|| invalid(format!("atom target {target} outside {classes} classes")))?;
+        *slot += 1;
+    }
+    let majority = counts
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, count)| *count)
+        .map(|(class, _)| class as u32)
+        .ok_or_else(|| invalid("no train targets for the majority baseline"))?;
+    let correct = targets.iter().filter(|&&target| target == majority).count();
+    Ok(correct as f64 / targets.len().max(1) as f64)
+}
+
+fn current_rss_kib() -> Option<u64> {
+    let pid = std::process::id().to_string();
+    let output = std::process::Command::new("ps")
+        .args(["-o", "rss=", "-p", &pid])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse::<u64>()
+        .ok()
+}
+
+fn decode_head_json(
+    head: &str,
+    classes: usize,
+    chance: f64,
+    width: usize,
+    fitted: &(LinearHead, Vec<DecodeStep>, Plateau),
+    train: &AtomSample,
+    dev: &AtomSample,
+    held: &AtomSample,
+) -> Result<Value> {
+    let (probe, history, plateau) = fitted;
+    let (train_features, train_targets) = match head {
+        "entity" => (&train.entity_features, &train.entity_targets),
+        _ => (&train.relation_features, &train.relation_targets),
+    };
+    let (dev_features, dev_targets) = match head {
+        "entity" => (&dev.entity_features, &dev.entity_targets),
+        _ => (&dev.relation_features, &dev.relation_targets),
+    };
+    let (held_features, held_targets) = match head {
+        "entity" => (&held.entity_features, &held.entity_targets),
+        _ => (&held.relation_features, &held.relation_targets),
+    };
+    Ok(json!({
+        "head": head,
+        "classes": classes,
+        "chance": chance,
+        "parameter_count": probe.weight.elem_count() + probe.bias.elem_count(),
+        "feature_width": width,
+        "rows": {
+            "train": train_targets.len(),
+            "in_distribution": dev_targets.len(),
+            "held_out": held_targets.len(),
+        },
+        "train_accuracy": head_accuracy(probe, train_features, train_targets)?,
+        "in_distribution_accuracy": head_accuracy(probe, dev_features, dev_targets)?,
+        "held_out_accuracy": head_accuracy(probe, held_features, held_targets)?,
+        "majority_baseline": {
+            "train": majority_baseline(train_targets, train_targets, classes)?,
+            "in_distribution": majority_baseline(train_targets, dev_targets, classes)?,
+            "held_out": majority_baseline(train_targets, held_targets, classes)?,
+        },
+        "plateau": plateau,
+        "history": history,
+    }))
+}
+
+fn decode(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    let trunk_directory = PathBuf::from(args.required("trunk")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let splits: Vec<usize> = args.list("splits", "2,4")?;
+    if splits.is_empty() || splits.iter().any(|&split| split == 0) {
+        return Err(invalid("splits must be non-empty positive layer counts"));
+    }
+    let config = DecodeConfig {
+        steps: args.number("steps", 30_000)?,
+        train_episodes: args.number("train_episodes", 1024)?,
+        eval_episodes: args.number("eval_episodes", 512)?,
+        dev_episodes: args.number("dev_episodes", 256)?,
+        batch: args.number("batch", 16)?,
+        eval_batch: args.number("eval_batch", 16)?,
+        context: args.number("context", 256)?,
+        learning_rate: args.number("lr", 0.01)?,
+        warmup: args.number("warmup", 100)?,
+        weight_decay: args.number("weight_decay", 0.0)?,
+        clip: args.number("clip", 10.0)?,
+        seed: args.number("seed", 9001)?,
+        data_seed: args.number("data_seed", 9002)?,
+        eval_seed: args.number("eval_seed", 9003)?,
+        dev_seed: args.number("dev_seed", 9004)?,
+    };
+    if config.steps < 2
+        || config.batch == 0
+        || config.eval_batch == 0
+        || config.context < 2
+        || config.train_episodes == 0
+        || config.eval_episodes == 0
+        || config.dev_episodes == 0
+    {
+        return Err(invalid(
+            "steps, episodes, batch, eval_batch and context must be usable",
+        ));
+    }
+
+    let trunk_weights = trunk_directory.join("model.safetensors");
+    let trunk_sha256 = sha256_file(&trunk_weights)?;
+    if trunk_sha256 != TRUNK_SHA256 {
+        return Err(invalid(format!(
+            "trunk {} is not the pinned S4 arm-A checkpoint: model.safetensors SHA-256 {trunk_sha256}",
+            trunk_directory.display()
+        )));
+    }
+    let device = Device::Cpu;
+    let mut stack = StackModel::load(&trunk_directory, &device)?;
+    let mut snap_restored = false;
+    if let Some(snap) = StackModel::saved_transport_snap(&trunk_directory)? {
+        stack.set_transport_snap(Some(snap))?;
+        snap_restored = true;
+    }
+    if splits.iter().any(|&split| split >= stack.config.layers()) {
+        return Err(invalid("a split must leave layers on both sides"));
+    }
+    let model = AermModel::from_stack(stack, splits[0], false, config.seed)?;
+    let stack = &model.stack;
+    let width = stack.config.width;
+
+    let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(&tokenizer_path)?)
+        .ok_or_else(|| invalid("tokenizer JSON is not a supported byte-level BPE"))?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|error| invalid(format!("protocol: {error}")))?;
+    let encode = |text: &str| tokenizer.encode(text);
+    let world = RelationWorld::natural(&encode, protocol.bos_id, protocol.eos_id)?;
+
+    let mut split_reports = Vec::new();
+    for &split in &splits {
+        let train = collect_atom_sample(
+            stack,
+            split,
+            &world,
+            &config,
+            false,
+            config.data_seed,
+            config.train_episodes,
+        )?;
+        let dev_batch = DecodeConfig {
+            batch: config.eval_batch,
+            ..config.clone()
+        };
+        let dev = collect_atom_sample(
+            stack,
+            split,
+            &world,
+            &dev_batch,
+            false,
+            config.dev_seed,
+            config.dev_episodes,
+        )?;
+        let held = collect_atom_sample(
+            stack,
+            split,
+            &world,
+            &dev_batch,
+            true,
+            config.eval_seed,
+            config.eval_episodes,
+        )?;
+        let entity = fit_decode_probe(
+            &train.entity_features,
+            &train.entity_targets,
+            ENTITY_ATOMS,
+            width,
+            config.seed ^ 0x11,
+            &config,
+            &device,
+        )?;
+        let relation = fit_decode_probe(
+            &train.relation_features,
+            &train.relation_targets,
+            RELATION_ATOMS,
+            width,
+            config.seed ^ 0x12,
+            &config,
+            &device,
+        )?;
+        split_reports.push(json!({
+            "split": split,
+            "samples": {
+                "train_episodes": train.episodes,
+                "in_distribution_episodes": dev.episodes,
+                "held_out_episodes": held.episodes,
+            },
+            "entity": decode_head_json("entity", ENTITY_ATOMS, 1.0 / ENTITY_ATOMS as f64, width, &entity, &train, &dev, &held)?,
+            "relation": decode_head_json("relation", RELATION_ATOMS, 1.0 / RELATION_ATOMS as f64, width, &relation, &train, &dev, &held)?,
+        }));
+    }
+
+    // Predeclared reading: in-distribution atom accuracy >= 0.98 for both
+    // heads at either split means the key probe's guard failure was
+    // exposure-limited; otherwise the frozen trunk does not expose the atom
+    // information at this seam.
+    let exposure_limited = split_reports.iter().any(|report| {
+        report["entity"]["in_distribution_accuracy"]
+            .as_f64()
+            .is_some_and(|accuracy| accuracy >= 0.98)
+            && report["relation"]["in_distribution_accuracy"]
+                .as_f64()
+                .is_some_and(|accuracy| accuracy >= 0.98)
+    });
+    let conclusion = if exposure_limited {
+        "exposure_limited"
+    } else {
+        "information_absent"
+    };
+
+    let report = json!({
+        "schema": "uor-r4.g2-decode-probe/1",
+        "trunk": {
+            "directory": trunk_directory.display().to_string(),
+            "model_safetensors_sha256": trunk_sha256,
+            "pinned_sha256": TRUNK_SHA256,
+            "splits": splits,
+            "loaded_through": "AermModel::from_stack",
+            "transport_snap_restored": snap_restored,
+            "layers": stack.config.layers(),
+            "width": width,
+        },
+        "features": "identical to the key probe: split_features (RMS-normalized detached hidden at the split) at the atom_rows supervision rows",
+        "config": {
+            "steps": config.steps,
+            "train_episodes": config.train_episodes,
+            "eval_episodes": config.eval_episodes,
+            "dev_episodes": config.dev_episodes,
+            "batch": config.batch,
+            "eval_batch": config.eval_batch,
+            "context": config.context,
+            "learning_rate": config.learning_rate,
+            "warmup": config.warmup,
+            "weight_decay": config.weight_decay,
+            "clip": config.clip,
+            "seed": config.seed,
+            "data_seed": config.data_seed,
+            "eval_seed": config.eval_seed,
+            "dev_seed": config.dev_seed,
+        },
+        "splits": split_reports,
+        "predeclared_reading": "in-distribution >= 0.98 for both heads at either split -> exposure_limited; otherwise -> information_absent",
+        "conclusion": conclusion,
+        "wall_seconds": started.elapsed().as_secs_f64(),
+        "peak_rss_kib": current_rss_kib(),
+        "peak_rss_note": "in-process sample via ps at report time; the true maximum resident set size is captured by running the sealed binary under /usr/bin/time -l",
+    });
+    fs::write(out.join("result.json"), serde_json::to_vec_pretty(&report)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Entry points.
 
 fn run(args: &Args, out: &Path) -> Result<()> {
@@ -1281,7 +1756,7 @@ fn finish(out: &Path, result: Result<()>) -> Result<()> {
 fn execute(arguments: &[String]) -> Result<()> {
     let (mode, rest) = arguments
         .split_first()
-        .ok_or_else(|| invalid("usage: aerm-keys {run|roots} ..."))?;
+        .ok_or_else(|| invalid("usage: aerm-keys {run|decode|roots} ..."))?;
     match mode.as_str() {
         "run" => {
             let args = Args::parse(
@@ -1311,6 +1786,36 @@ fn execute(arguments: &[String]) -> Result<()> {
             let out = PathBuf::from(args.required("out")?);
             report_output::claim(&out)?;
             let result = run(&args, &out);
+            finish(&out, result)
+        }
+        "decode" => {
+            let args = Args::parse(
+                rest,
+                &[
+                    "out",
+                    "trunk",
+                    "tokenizer",
+                    "splits",
+                    "steps",
+                    "train_episodes",
+                    "eval_episodes",
+                    "dev_episodes",
+                    "batch",
+                    "eval_batch",
+                    "context",
+                    "lr",
+                    "warmup",
+                    "weight_decay",
+                    "clip",
+                    "seed",
+                    "data_seed",
+                    "eval_seed",
+                    "dev_seed",
+                ],
+            )?;
+            let out = PathBuf::from(args.required("out")?);
+            report_output::claim(&out)?;
+            let result = decode(&args, &out);
             finish(&out, result)
         }
         "roots" => roots_mode(rest),
@@ -1544,6 +2049,108 @@ mod tests {
             .flatten_all()?
             .to_vec1::<f32>()?;
         assert_eq!(before, after, "an optimizer step changed the frozen trunk");
+        Ok(())
+    }
+
+    #[test]
+    fn decode_probe_smoke_runs_end_to_end() -> Result<()> {
+        let stack = tiny_stack()?;
+        let world = natural_world()?;
+        let config = DecodeConfig {
+            steps: 4,
+            train_episodes: 4,
+            eval_episodes: 4,
+            dev_episodes: 2,
+            batch: 2,
+            eval_batch: 2,
+            context: 256,
+            learning_rate: 0.01,
+            warmup: 1,
+            weight_decay: 0.0,
+            clip: 10.0,
+            seed: 11,
+            data_seed: 13,
+            eval_seed: 17,
+            dev_seed: 19,
+        };
+        let train = collect_atom_sample(&stack, 1, &world, &config, false, config.data_seed, 4)?;
+        let dev = collect_atom_sample(&stack, 1, &world, &config, false, config.dev_seed, 2)?;
+        let held = collect_atom_sample(&stack, 1, &world, &config, true, config.eval_seed, 4)?;
+        assert_eq!(train.entity_features.dims()[0], train.entity_targets.len());
+        assert_eq!(
+            train.relation_features.dims()[0],
+            train.relation_targets.len()
+        );
+        assert!(train
+            .entity_targets
+            .iter()
+            .all(|&t| t < ENTITY_ATOMS as u32));
+        assert!(train
+            .relation_targets
+            .iter()
+            .all(|&t| t < RELATION_ATOMS as u32));
+        let device = stack.device().clone();
+        let width = stack.config.width;
+        let (entity, entity_history, entity_plateau) = fit_decode_probe(
+            &train.entity_features,
+            &train.entity_targets,
+            ENTITY_ATOMS,
+            width,
+            23,
+            &config,
+            &device,
+        )?;
+        let (relation, _, _) = fit_decode_probe(
+            &train.relation_features,
+            &train.relation_targets,
+            RELATION_ATOMS,
+            width,
+            29,
+            &config,
+            &device,
+        )?;
+        assert_eq!(entity_history.len(), 2);
+        assert!(entity_plateau.window >= 1);
+        for (head, features, targets) in [
+            (&entity, &dev.entity_features, &dev.entity_targets),
+            (&relation, &held.relation_features, &held.relation_targets),
+        ] {
+            let accuracy = head_accuracy(head, features, targets)?;
+            assert!((0.0..=1.0).contains(&accuracy));
+        }
+        let baseline = majority_baseline(&train.entity_targets, &dev.entity_targets, ENTITY_ATOMS)?;
+        assert!((0.0..=1.0).contains(&baseline));
+        // The decode fit must not touch the frozen trunk.
+        let before = stack
+            .variables()
+            .values()
+            .next()
+            .ok_or_else(|| invalid("the tiny stack has no variables"))?
+            .as_tensor()
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let (entity_again, _, _) = fit_decode_probe(
+            &train.entity_features,
+            &train.entity_targets,
+            ENTITY_ATOMS,
+            width,
+            23,
+            &config,
+            &device,
+        )?;
+        let _ = entity_again;
+        let after = stack
+            .variables()
+            .values()
+            .next()
+            .ok_or_else(|| invalid("the tiny stack has no variables"))?
+            .as_tensor()
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert_eq!(
+            before, after,
+            "a decode probe step changed the frozen trunk"
+        );
         Ok(())
     }
 
