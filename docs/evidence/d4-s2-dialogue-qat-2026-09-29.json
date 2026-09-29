@@ -70,17 +70,35 @@
       "gate_status": "PASS (margin 0.026817 nats against <= +0.0300 bound)"
     },
     "greedy_turn_agreement_58_turns": {
-      "arm2_float_control_ptq_vs_float": {
-        "matching_turns": 5,
-        "divergent_turns": 53,
-        "agreement_pct": 8.6207,
-        "note": "Standard post-training quantization diverges on 91.38% of turns"
-      },
-      "arm1_qat_native_integer_engine_vs_served_forward": {
+      "kernel_parity_arm1_qat_integer_vs_training_served_forward": {
         "matching_turns": 56,
         "divergent_turns": 2,
         "agreement_pct": 96.5517,
-        "note": "QAT training through served representation restores 96.55% parity (only 2 turns diverge)"
+        "note": "Serving kernel agreement between native D11 integer engine and training served forward representation"
+      },
+      "arm1_qat_integer_vs_preadaptation_float_baseline": {
+        "matching_turns": 5,
+        "divergent_turns": 53,
+        "agreement_pct": 8.6207,
+        "note": "Greedy agreement against pre-adaptation float baseline 8cb11d8f... (policy drifted during fine-tuning)"
+      },
+      "arm1_qat_integer_vs_arm2_float_continuation_control": {
+        "matching_turns": 6,
+        "divergent_turns": 52,
+        "agreement_pct": 10.3448,
+        "note": "Greedy agreement against matched fine-tuned float control"
+      },
+      "arm2_float_control_vs_preadaptation_float_baseline": {
+        "matching_turns": 7,
+        "divergent_turns": 51,
+        "agreement_pct": 12.0690,
+        "note": "Policy drift of unquantized float fine-tuning vs pre-adaptation baseline"
+      },
+      "arm2_float_control_ptq_vs_its_own_float": {
+        "matching_turns": 5,
+        "divergent_turns": 53,
+        "agreement_pct": 8.6207,
+        "note": "Standard post-training quantization diverges on 91.38% of turns vs its own float model"
       }
     },
     "integer_serving_fidelity": {

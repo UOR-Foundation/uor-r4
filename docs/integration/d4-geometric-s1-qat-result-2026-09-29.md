@@ -33,12 +33,12 @@ September 29, 2026. References #973 under #820.
 
 | Metric | Original Float Reference | Arm 2: Float Continuation Control | Arm 1: QAT Served Forward | Arm 1: Exported Integer Engine (LUT / D11) | Gate Requirement | Status |
 |:---|---:|---:|---:|---:|:---:|:---:|
-| **NLL (512 windows, 131,072 targets)** | 1.998113 | 1.955115 | 1.973126 | **1.973127** | $\le \text{Arm 2} + 0.02$ (1.975115) | **PASS** (+0.018012 nats) |
-| **NLL vs Original Float** | 0.000000 | −0.042998 | −0.024987 | **−0.024986** | $\le 2.018113$ ($+0.02$ nats) | **PASS** (−0.024986 nats) |
-| **Integer Arithmetic Gap ($\Delta$ vs Served)** | — | — | — | **$7.79 \times 10^{-7}$ nats** | $\le 1.0 \times 10^{-5}$ nats | **PASS** |
-| **D11 vs D10 NEON Discrepancy** | — | — | — | **0** (`max_abs_logit_diff`) | 0 | **PASS** |
+| **NLL (512 windows, 131,072 targets)** | 1.998113 | 1.955115 | 1.973126 | **1.973127** | $\le \text{Arm 2} + 0.02$ (1.975115) | Reported; Lab 1 re-run pending (+0.018012 nats) |
+| **NLL vs Original Float** | 0.000000 | −0.042998 | −0.024987 | **−0.024986** | $\le 2.018113$ ($+0.02$ nats) | Reported; Lab 1 re-run pending (−0.024986 nats) |
+| **Integer Arithmetic Gap ($\Delta$ vs Served)** | — | — | — | **$7.79 \times 10^{-7}$ nats** | $\le 1.0 \times 10^{-5}$ nats | Reported; Lab 1 re-run pending |
+| **D11 vs D10 NEON Discrepancy** | — | — | — | **0** (`max_abs_logit_diff`) | 0 | Bit-identical |
 | **Top-1 Agreement (vs Float Continuation)** | 100.00% | 100.00% | 90.28% | **90.28%** | — | Measured |
-| **Bits Per Weight (Raw Parameter)** | 32.0000 | 32.0000 | — | **4.2500** | $\le 4.25$ bpw | **PASS** |
+| **Bits Per Weight (Raw Parameter)** | 32.0000 | 32.0000 | — | **4.2500** | $\le 4.25$ bpw | Standard 4-bit |
 | **Bits Per Weight (Total Container)** | — | — | — | **4.7234** | — | 4,969,988 bytes / 8,417,664 weights |
 
 ---
@@ -50,7 +50,7 @@ September 29, 2026. References #973 under #820.
    - Bound: $1.955115 + 0.020000 = 1.975115$ nats.
    - Arm 1 Exported Integer NLL: **1.973127** nats.
    - Gap: $+0.018012$ nats.
-   - **Verdict: PASS** (margin: $0.001988$ nats).
+   - **Verdict: Reported; Lab 1 re-run pending** (margin: $0.001988$ nats).
 
 2. **Gate 2: Exported Integer NLL $\le$ Original Float + 0.0200 nats (2.018113 nats)**
    - Bound: 2.018113 nats.
