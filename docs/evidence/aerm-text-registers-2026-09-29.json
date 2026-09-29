@@ -161,5 +161,83 @@
     "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-prime-route/armc-memory-replies-1",
     "manifest_sha256": "e9b3c5402c4397441c6bdf0aeb8428667f243b2cdfc4009fcbb2db424631301a",
     "result": "0/10 for arm A and arm C, Store and Silent"
-  }
+  },
+  "arm_a_prime_route": {
+    "root": "/Volumes/UOR-Workspace/uor-r4-lab/claude-prime-route/arma-route-1",
+    "manifest_sha256": "a12fabecf810bddb01bd8acbaf06366508b3c6815f2cc53f071ace7732b1d57c",
+    "executable_sha256": "5469a238e22705be48ca0316b5b6f1c681173d4bda12c0f2c3d3200f6fc90123",
+    "note": "arm A through the same prime-route-eval binary as arm C (reproduces binding-eval-1, manifest fee7889c)",
+    "held_out": {
+      "tag_accuracy": 0.9959706295999102,
+      "seed": 9002,
+      "episodes": 512,
+      "arms": {
+        "ExpertSieve": {
+          "Absent": "377/378",
+          "First": "141/144",
+          "Previous": "195/195",
+          "PreviousAbsent": "157/157",
+          "Reasserted": "31/31",
+          "Updated": "264/273"
+        },
+        "ExpertTrigger": {
+          "Absent": "377/378",
+          "First": "141/144",
+          "Previous": "164/195",
+          "PreviousAbsent": "146/157",
+          "Reasserted": "31/31",
+          "Updated": "264/273"
+        },
+        "ExpertTurnEnd": {
+          "Absent": "377/378",
+          "First": "141/144",
+          "Previous": "164/195",
+          "PreviousAbsent": "146/157",
+          "Reasserted": "31/31",
+          "Updated": "264/273"
+        },
+        "GV1": {
+          "Absent": "377/378",
+          "First": "141/144",
+          "Previous": "164/195",
+          "PreviousAbsent": "146/157",
+          "Reasserted": "31/31",
+          "Updated": "264/273"
+        },
+        "Gold": {
+          "Absent": "378/378",
+          "First": "141/144",
+          "Previous": "195/195",
+          "PreviousAbsent": "157/157",
+          "Reasserted": "31/31",
+          "Updated": "264/273"
+        }
+      }
+    }
+  },
+  "configurations": {
+    "baseline (dc-s1)": {
+      "mask_text_tags": false,
+      "mask_text_triggers": false,
+      "root": "opencode-g1-decompose/dc-s1"
+    },
+    "arm A": {
+      "mask_text_tags": true,
+      "mask_text_triggers": "true in effect: at 57dfca49 the single mask_text_tags flag masked both text losses; the saved train block predates the split",
+      "root": "opencode-g1-binding/arm-a"
+    },
+    "arm B": {
+      "mask_text_tags": true,
+      "names": "83-name list",
+      "root": "opencode-g1-binding/arm-b"
+    },
+    "arm C": {
+      "mask_text_tags": true,
+      "mask_text_triggers": false,
+      "commit": "cfe5c6bd (lab/opencode/arm-c, #1498)",
+      "root": "opencode-arm-c/arm-c"
+    }
+  },
+  "dev_text_markers": "dev.u16 (74f7d85f...) holds no User:, Assistant: or System: marker sequence (non-author review scan), so a user-turn gate gives the silent column on it",
+  "cost": "the sealed roots are charged in extension-2026-09-29-lab1-stage1.json (catch-up), plus arma-route-1"
 }
