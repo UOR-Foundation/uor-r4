@@ -18,7 +18,6 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use candle_core::{Device, Tensor};
-use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uor_r4_core::report_output;
@@ -27,15 +26,10 @@ use uor_r4_tokenizer::dialogue::DialogueProtocol;
 use uor_r4_tokenizer::ByteBpeTokenizer;
 use uor_r4_training::geometric_stack::{StackModel, StackSite};
 use uor_r4_training::lut_export::dequantize_matrix;
-use uor_r4_training::stack_dialogue::{Reply, Request};
+use uor_r4_training::stack_dialogue::{load_requests, Reply};
 
 const MAX_NEW_TOKENS: usize = 32;
 const WINDOW_TIME: usize = 256;
-
-#[derive(Deserialize)]
-struct DevelopmentPanel {
-    development: Vec<Request>,
-}
 
 struct ParsedArgs {
     model_dir: PathBuf,
@@ -115,6 +109,23 @@ fn sha256_file(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
 
 fn read_u16_tokens(path: &Path, vocab_size: usize) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
     let bytes = fs::read(path)?;
+    if bytes.starts_with(b"UORT") {
+        let reader = uor_r4_core::native_geometric::mmap_corpus::MmapCorpusReader::open(path)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        if reader.vocab_size() as usize > vocab_size {
+            return Err(format!(
+                "{} declares a larger vocabulary ({}) than model ({vocab_size})",
+                path.display(),
+                reader.vocab_size()
+            )
+            .into());
+        }
+        let tokens: Vec<u32> = reader.as_slice().iter().map(|&id| u32::from(id)).collect();
+        if tokens.iter().any(|&id| id as usize >= vocab_size) {
+            return Err(format!("{} has ids outside the vocabulary", path.display()).into());
+        }
+        return Ok(tokens);
+    }
     if bytes.len() % 2 != 0 {
         return Err(format!("token file {} has odd byte count", path.display()).into());
     }
@@ -143,8 +154,34 @@ fn set_model_var(
         .variables()
         .get(name)
         .ok_or_else(|| format!("model has no variable {name}"))?;
+    let shape = var.as_tensor().shape();
+    let dims = shape.dims();
+    let unpadded_values = if dims.len() == 2 && (dims[0] * dims[1] != values.len()) {
+        let (rows, cols) = (dims[0], dims[1]);
+        if values.len() % cols == 0 && values.len() / cols > rows {
+            // Padded rows (gate / up)
+            values[..rows * cols].to_vec()
+        } else if values.len() % rows == 0 && values.len() / rows > cols {
+            // Padded cols (down)
+            let padded_cols = values.len() / rows;
+            let mut unpadded = Vec::with_capacity(rows * cols);
+            for r in 0..rows {
+                unpadded.extend_from_slice(&values[r * padded_cols..r * padded_cols + cols]);
+            }
+            unpadded
+        } else {
+            return Err(format!(
+                "shape mismatch for {name}: var is {:?}, values has {}",
+                shape,
+                values.len()
+            )
+            .into());
+        }
+    } else {
+        values.to_vec()
+    };
     var.set(&Tensor::from_vec(
-        values.to_vec(),
+        unpadded_values,
         var.as_tensor().shape(),
         var.as_tensor().device(),
     )?)?;
@@ -327,7 +364,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     });
                 }
                 map_specs.push(MapSpec {
-                    name: a("read_out"),
+                    name: a("out"),
                     var_name: Some(t("read.out.weight")),
                     rows: d,
                     cols: d,
@@ -339,7 +376,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
             map_specs.push(MapSpec {
-                name: a("mlp_gate"),
+                name: a("gate"),
                 var_name: Some(t("mlp.gate.weight")),
                 rows: mlp,
                 cols: d,
@@ -350,7 +387,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 component: "mlp_gate".into(),
             });
             map_specs.push(MapSpec {
-                name: a("mlp_up"),
+                name: a("up"),
                 var_name: Some(t("mlp.up.weight")),
                 rows: mlp,
                 cols: d,
@@ -361,7 +398,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 component: "mlp_up".into(),
             });
             map_specs.push(MapSpec {
-                name: a("mlp_down"),
+                name: a("down"),
                 var_name: Some(t("mlp.down.weight")),
                 rows: d,
                 cols: mlp,
@@ -449,7 +486,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ("read.query.weight", a("query")),
                     ("read.key.weight", a("key")),
                     ("read.value.weight", a("value")),
-                    ("read.no_read.weight", a("null")),
+                    ("read.null.weight", a("null")),
                 ] {
                     let mut vals = float_model.variables()[&t(part)]
                         .as_tensor()
@@ -462,13 +499,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .as_tensor()
                     .flatten_all()?
                     .to_vec1::<f32>()?;
-                float_folded.insert(a("read_out"), vals);
+                float_folded.insert(a("out"), vals);
             }
 
-            for (part, name) in [
-                ("mlp.gate.weight", a("mlp_gate")),
-                ("mlp.up.weight", a("mlp_up")),
-            ] {
+            for (part, name) in [("mlp.gate.weight", a("gate")), ("mlp.up.weight", a("up"))] {
                 let unpadded = float_model.variables()[&t(part)]
                     .as_tensor()
                     .flatten_all()?
@@ -489,7 +523,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vals_down[r * mlp..r * mlp + unpadded_cols]
                     .copy_from_slice(&unpadded_down[r * unpadded_cols..(r + 1) * unpadded_cols]);
             }
-            float_folded.insert(a("mlp_down"), vals_down);
+            float_folded.insert(a("down"), vals_down);
         }
 
         // Dequantize from artifact
@@ -652,8 +686,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // (C)(ii) Greedy-Flip Attribution on 58 Panel Turns
         // -------------------------------------------------------------------
         println!("\n[2/3] Building 58 Teacher-Forced Prefixes from Development Requests...");
-        let raw_requests = fs::read(&args.requests_path)?;
-        let panel: DevelopmentPanel = serde_json::from_slice(&raw_requests)?;
+        let requests = load_requests(&args.requests_path)?;
         let tokenizer_bytes = fs::read(&args.tokenizer_path)?;
         let tokenizer =
             ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes).ok_or_else(|| {
@@ -701,7 +734,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut teacher_turns: Vec<TeacherTurn> = Vec::new();
         let mut total_turns = 0usize;
 
-        for request in &panel.development {
+        for request in &requests {
             let mut history = vec![protocol.bos_id];
             for (turn, user) in request.user_turns.iter().enumerate() {
                 let prefix = encoder.encode_user_prefix(user, turn != 0);
