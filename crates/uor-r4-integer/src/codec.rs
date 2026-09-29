@@ -1079,30 +1079,35 @@ impl E8Codebook {
     }
 
     /// Find the index of the nearest E8 root (or zero) to a given 8D block.
+    ///
+    /// Evaluates the least-squares projection scale s = max(0, <block, root> / 8),
+    /// which minimizes squared reconstruction error ||block - s * root||^2 = energy - <block, root>^2 / 8.
     pub fn quantize_block(&self, block: &[f64; E8_DIM]) -> (u8, f64) {
         let energy: f64 = block.iter().map(|&x| x * x).sum();
-        let scale = (energy / 8.0).sqrt();
-
-        if scale < 1e-9 {
+        if energy < 1e-12 {
             return (0, 0.0);
         }
 
         let mut best_idx = 0u8;
-        let mut best_dist = energy; // Distance to zero codeword is energy
+        let mut best_dot = 0.0f64;
 
-        for (idx, root) in self.roots.iter().enumerate() {
-            let mut dist = 0.0f64;
+        for (idx, root) in self.roots.iter().enumerate().skip(1) {
+            let mut dot = 0.0f64;
             for i in 0..E8_DIM {
-                let diff = block[i] - (root[i] as f64) * scale;
-                dist += diff * diff;
+                dot += block[i] * (root[i] as f64);
             }
-            if dist < best_dist {
-                best_dist = dist;
+            if dot > best_dot {
+                best_dot = dot;
                 best_idx = idx as u8;
             }
         }
 
-        (best_idx, scale)
+        if best_idx == 0 || best_dot <= 0.0 {
+            (0, 0.0)
+        } else {
+            let scale = best_dot / 8.0;
+            (best_idx, scale)
+        }
     }
 
     /// Dequantize a root index given block scale.

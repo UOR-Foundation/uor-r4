@@ -527,7 +527,9 @@ pub fn check_export_representation(
         return Ok(());
     };
     let interim = D11Interim.name();
-    if saved.codec != interim {
+    let is_interim_compatible =
+        saved.codec == interim || saved.codec == "native-d11-grouped-4bit-g32-rtn";
+    if !is_interim_compatible {
         return Err(invalid(format!(
             "the model was trained against the served representation {}, which the stack \
              export does not write (it writes {interim} when rounding to nearest)",
@@ -536,9 +538,10 @@ pub fn check_export_representation(
     }
     if calibrated {
         return Err(invalid(format!(
-            "the model was trained against {interim} (quantization-aware training); a \
+            "the model was trained against {} (quantization-aware training); a \
              calibrated (GPTQ) export would write values it never trained on, so export it \
-             without calibration= to write exactly that representation"
+             without calibration= to write exactly that representation",
+            saved.codec
         )));
     }
     Ok(())

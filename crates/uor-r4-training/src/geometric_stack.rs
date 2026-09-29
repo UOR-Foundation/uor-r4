@@ -1719,6 +1719,91 @@ impl MapCodec for D11Interim {
     }
 }
 
+/// Lab 3 adapter connecting [`uor_r4_integer::codec::Grouped4BitCodec`] to the shared
+/// [`MapCodec`] training interface.
+///
+/// Supports standard round-to-nearest (`rtn`) and minimum-MSE scale search (`min_mse`).
+/// In `rtn` mode, output matches [`D11Interim`] bit for bit.
+#[derive(Clone, Debug, Default)]
+pub struct D4Grouped4BitAdapter(pub uor_r4_integer::codec::Grouped4BitCodec);
+
+impl D4Grouped4BitAdapter {
+    /// Construct a round-to-nearest grouped 4-bit adapter matching D11 interim format.
+    pub fn rtn() -> Self {
+        Self(uor_r4_integer::codec::Grouped4BitCodec::default())
+    }
+
+    /// Construct a minimum-MSE scale-optimized grouped 4-bit adapter.
+    pub fn min_mse() -> Self {
+        Self(uor_r4_integer::codec::Grouped4BitCodec::new(
+            uor_r4_lut::GROUP,
+            uor_r4_integer::codec::Grouped4BitRounding::MinimumMseScale,
+        ))
+    }
+}
+
+impl MapCodec for D4Grouped4BitAdapter {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        self.0.round_trip(values, rows, cols).map_err(Into::into)
+    }
+}
+
+/// Lab 3 head-compensated codec implementing error-diffused group quantization.
+///
+/// Compensates accumulated quantization error across groups in each row,
+/// reducing output-head distortion in logit margins without requiring
+/// any changes to the served D11 runtime kernels or multiplier instructions.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HeadCompensatedMapCodec {
+    /// If `head_only` is true, only rows x cols matching the output head (vocab x width)
+    /// receive error diffusion, while other matrices use standard D11Interim.
+    /// If false, all maps receive head-compensated quantization.
+    pub head_only: bool,
+}
+
+impl HeadCompensatedMapCodec {
+    pub fn new(head_only: bool) -> Self {
+        Self { head_only }
+    }
+
+    pub fn head_only() -> Self {
+        Self { head_only: true }
+    }
+
+    pub fn all_maps() -> Self {
+        Self { head_only: false }
+    }
+}
+
+impl MapCodec for HeadCompensatedMapCodec {
+    fn name(&self) -> &str {
+        if self.head_only {
+            "native-d4-head-compensated-head-only"
+        } else {
+            "native-d4-head-compensated-all-maps"
+        }
+    }
+
+    fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        if self.head_only && rows <= cols {
+            D11Interim.round_trip(values, rows, cols)
+        } else {
+            uor_r4_integer::codec::apply_codec_arm(
+                values,
+                rows,
+                cols,
+                uor_r4_integer::codec::CodecArm::HeadCompensated,
+                0,
+            )
+            .map_err(Into::into)
+        }
+    }
+}
+
 /// What a saved stack's `config.json` records, beside its configuration, of
 /// the served representation the forward pass read when it was saved
 /// ([`StackModel::save`] in served mode; read back by
