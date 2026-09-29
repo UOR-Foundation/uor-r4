@@ -1,0 +1,147 @@
+{
+  "schema": "uor-r4.geometric-read-negative/1",
+  "created_at": "2026-09-29T20:05:00+00:00",
+  "title": "G v2 frozen-trunk key probe — recorded negative (D12)",
+  "lab": "Lab 2 (DeepSeek/OpenCode)",
+  "board": "https://github.com/UOR-Foundation/uor-r4/issues/1512",
+  "pr": "https://github.com/UOR-Foundation/uor-r4/pull/1505",
+  "branch": "lab/opencode/g2-keys",
+  "source_commit": "750c9f8fa01ae6946a7bd7053f98d653a64786de",
+  "executable": {
+    "path": "/Volumes/UOR-Workspace/BuildCaches/opencode-g2/release/examples/aerm-keys",
+    "sha256": "be345c048d3490f1ee10239d381b02b08ff21cb7d25119070df17b70d1447660",
+    "bytes": 5960128,
+    "built_local": "2026-09-29T13:34:00-04:00"
+  },
+  "trunk": {
+    "path": "/Volumes/UOR-Workspace/uor-r4-lab/kimi-s4-fit-20260929/arm-a-snap-1/model",
+    "model_safetensors_sha256": "2b3b568141dfe213dd85e4d67e9ce0018e802f0654ee73ea10c7e552fc327b96",
+    "pin_status": "matched",
+    "icosian_snap_restored": true,
+    "frozen": true,
+    "layers": 6,
+    "width": 288
+  },
+  "tokenizer": "/Users/casey.allard/uor-r4/.uor-models/research/issue-1017/tokenizer/tokenizer.json",
+  "pre_registration": [
+    "https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5890046442",
+    "https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5890604495",
+    "https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5892575118"
+  ],
+  "headline_root": "/Volumes/UOR-Workspace/uor-r4-lab/opencode-g2/keys-9",
+  "headline": {
+    "role": "full pre-registered run (the record)",
+    "manifest_blake3_result": "c37974df8d05ef311e62876df0c1b76b7114cc4e58ddc60c56d4daebe7a707a3",
+    "manifest_blake3_attempt": "620cb0a0b2798afe11ac65d595812f31686ed362aa8fd87fec3eda86ed5ac1a5",
+    "sealed_at_utc": "2026-09-29T19:43:23+00:00",
+    "config": {
+      "steps": 30000,
+      "train_episodes": 1024,
+      "eval_episodes": 512,
+      "dev_episodes": 256,
+      "learning_rate": 0.01,
+      "weight_decay": 0.0,
+      "batch": 16,
+      "context": 256,
+      "splits": [2, 4],
+      "seeds": [9001, 9002, 9003, 9004]
+    },
+    "guard": { "in_distribution_key_accuracy_at_least": 0.98, "passes": false },
+    "decision_flags": {
+      "lexical_below_0_5_at_both_splits": true,
+      "lexical_phenomena": ["synonyms_morphology", "wh_carried"],
+      "all_phenomena_at_least_0_90": false,
+      "geometric_atoms_used": false,
+      "heads_to_integration": false,
+      "report_to_lab_1": true
+    },
+    "arms": {
+      "two_i_held_key_accuracy": 0.3269666558756879,
+      "softmax_held_key_accuracy": 0.4910974425380382,
+      "softmax_minus_two_i_gap": 0.16413078666235031,
+      "two_i_lead_over_softmax": false
+    },
+    "per_phenomenon_two_i_held_key_accuracy": {
+      "absent": 0.3227222832052689,
+      "distractors_chatter": 0.4,
+      "hypernym": 0.2692307692307692,
+      "implicit_attribute": 0.46296296296296297,
+      "possessed_pronoun": 0.3191489361702128,
+      "previous": 0.2638888888888889,
+      "synonyms_morphology": 0.3468354430379747,
+      "update": 0.2079646017699115,
+      "wh_carried": 0.3541666666666667
+    }
+  },
+  "exploratory_roots": [
+    {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/opencode-g2/keys-1",
+      "role": "exploratory: first run, 1500 steps at lr 0.003 — under-exposed",
+      "manifest_blake3_result": "ca44ae104a837ac24c762d275f7adf775e2d46037e7e5266a9a032eec530dfe2",
+      "sealed_at_utc": "2026-09-29T13:54:22+00:00",
+      "wall_seconds": 2383.79,
+      "peak_rss_bytes": 462176256,
+      "guard_passes": false,
+      "two_i_held_key_accuracy": 0.2113952735513111,
+      "softmax_held_key_accuracy": 0.4111362900615086
+    },
+    {
+      "path": "/Volumes/UOR-Workspace/uor-r4-lab/opencode-g2/keys-11",
+      "role": "exploratory: reduced calibration, 6000 steps, 256 train episodes",
+      "manifest_blake3_result": "bfeb60b018f55bef7c92424428d2556c380a155a41789f75e46b3f09aa1ed00d",
+      "sealed_at_utc": "2026-09-29T19:27:32+00:00",
+      "wall_seconds": 142.569287667,
+      "peak_rss_bytes": 133824512,
+      "guard_passes": false,
+      "two_i_held_key_accuracy": 0.2862694300518135,
+      "softmax_held_key_accuracy": 0.4326424870466321
+    }
+  ],
+  "diagnostic": {
+    "path": "/Volumes/UOR-Workspace/uor-r4-lab/opencode-g2/decode-1",
+    "role": "decodability diagnostic resolving the first guard failure",
+    "manifest_blake3_result": "4e8faa710a25f7a257c5ce1e65377521587d3b928a015052596e0432c20f8c6f",
+    "sealed_at_utc": "2026-09-29T14:29:31+00:00",
+    "wall_seconds": 541.36530175,
+    "peak_rss_kib": 63344,
+    "conclusion": "exposure_limited",
+    "per_head": {
+      "entity_split_2": { "train": 0.994, "held_out": 0.963, "chance": 0.125 },
+      "entity_split_4": { "train": 1.0, "held_out": 0.994, "chance": 0.125 },
+      "relation_split_2": { "train": 1.0, "held_out": 0.45, "chance": 0.07142857142857142 },
+      "relation_split_4": { "train": 1.0, "held_out": 0.491, "chance": 0.07142857142857142 }
+    }
+  },
+  "design_amendments": [
+    {
+      "name": "root bound",
+      "recorded_before_fit": true,
+      "detail": "pairwise |q.r| <= 1/2 is infeasible for 14 roots; at most 12 mutually separated icosians exist (24-cell 2T antipodal quotient). 14 relation roots at the best feasible greedy min-max bound RELATION_ROOT_MAX_INNER = phi/2 ~= 0.809017, indices [0,2,4,6,8,9,10,11,12,13,14,15,24,25]; entity head plain softmax in both arms."
+    },
+    {
+      "name": "exposure",
+      "recorded_before_fit": true,
+      "detail": "first run diagnosed exposure-limited (decode-1); supervision-row feature cache, heads trained to convergence; metrics, guard and decision rules unchanged."
+    }
+  ],
+  "conclusion": {
+    "statement": "The frozen S4 arm A trunk does not carry the v2 natural world's relation semantics at this seam: the joint key is not recoverable from its frozen representation, and every lexical phenomenon is below 0.5 exact-key accuracy in the 2I arm at both splits.",
+    "retired_at_scope": "reading v2 entity/relation atoms and the semiprime joint key from the frozen S4 arm A trunk with linear heads at splits 2 and 4",
+    "not_covered": "joint training of trunk and heads; other trunks, splits, or read paths",
+    "geometric_verdict": "2I parametrization neither promoted nor demoted (both arms under a failing guard)",
+    "integration": "none"
+  },
+  "attempts_preserved": [
+    "keys-2.failed-attempt-1..5",
+    "keys-3",
+    "keys-4",
+    "keys-5 (abandoned duplicate; abandoned.json)",
+    "keys-6",
+    "keys-7",
+    "keys-8",
+    "keys-small-1",
+    "diag-mem",
+    "diag-mem-1..5"
+  ],
+  "limitations": "One frozen trunk, two splits, one world, one head family. A frozen-trunk probe decides only whether the atoms are readable there; it cannot show that a jointly trained model would fail. Held-out numbers are under the failing in-distribution guard unless stated otherwise."
+}
