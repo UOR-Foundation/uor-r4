@@ -1442,6 +1442,23 @@ fn normal_var(rng: &mut Rng, shape: &[usize], std: f64, device: &Device) -> Resu
     Ok(Var::from_vec(values, shape, device)?)
 }
 
+/// The zero-initialised memory branch: the branch contributes nothing until it
+/// is trained.
+fn zero_memory_branch(width: usize, device: &Device) -> Result<MemoryBranch> {
+    Ok(MemoryBranch {
+        status: zeros_var(&[STATUSES, width], device)?,
+        projection: zeros_var(&[width, width], device)?,
+        copy_weight: zeros_var(&[width, 1], device)?,
+        copy_bias: zeros_var(&[1], device)?,
+        copy_scale: zeros_var(&[1], device)?,
+        status_previous: zeros_var(&[STATUSES, width], device)?,
+        projection_previous: zeros_var(&[width, width], device)?,
+        copy_weight_previous: zeros_var(&[width, 1], device)?,
+        copy_bias_previous: zeros_var(&[1], device)?,
+        copy_scale_previous: zeros_var(&[1], device)?,
+    })
+}
+
 fn zeros_var(shape: &[usize], device: &Device) -> Result<Var> {
     Ok(Var::from_tensor(&Tensor::zeros(
         shape,
@@ -1572,18 +1589,7 @@ impl AermModel {
         let stack = StackModel::new(config, device)?;
         let mut rng = Rng::new(seed ^ 0x6165_726D_2D64_3221);
         let memory = if memory {
-            Some(MemoryBranch {
-                status: zeros_var(&[STATUSES, width], device)?,
-                projection: zeros_var(&[width, width], device)?,
-                copy_weight: zeros_var(&[width, 1], device)?,
-                copy_bias: zeros_var(&[1], device)?,
-                copy_scale: zeros_var(&[1], device)?,
-                status_previous: zeros_var(&[STATUSES, width], device)?,
-                projection_previous: zeros_var(&[width, width], device)?,
-                copy_weight_previous: zeros_var(&[width, 1], device)?,
-                copy_bias_previous: zeros_var(&[1], device)?,
-                copy_scale_previous: zeros_var(&[1], device)?,
-            })
+            Some(zero_memory_branch(width, device)?)
         } else {
             None
         };
@@ -1592,6 +1598,33 @@ impl AermModel {
             tag_bias: zeros_var(&[TAGS], device)?,
             trigger_weight: normal_var(&mut rng, &[TRIGGERS, width], 0.02, device)?,
             trigger_bias: zeros_var(&[TRIGGERS], device)?,
+            stack,
+            split,
+            memory,
+        })
+    }
+
+    /// Wraps a trained stack: the heads are initialised exactly as
+    /// [`AermModel::new`] initialises them and the memory branch is
+    /// zero-initialised, so the wrapped model reproduces the stack's logits
+    /// before any training.
+    pub fn from_stack(stack: StackModel, split: usize, memory: bool, seed: u64) -> Result<Self> {
+        if split == 0 || split >= stack.config.layers() {
+            return Err(invalid("the split must leave layers on both sides"));
+        }
+        let width = stack.config.width;
+        let device = stack.device().clone();
+        let mut rng = Rng::new(seed ^ 0x6165_726D_2D64_3221);
+        let memory = if memory {
+            Some(zero_memory_branch(width, &device)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            tag_weight: normal_var(&mut rng, &[TAGS, width], 0.02, &device)?,
+            tag_bias: zeros_var(&[TAGS], &device)?,
+            trigger_weight: normal_var(&mut rng, &[TRIGGERS, width], 0.02, &device)?,
+            trigger_bias: zeros_var(&[TRIGGERS], &device)?,
             stack,
             split,
             memory,
@@ -3035,6 +3068,45 @@ mod tests {
         for (a, b) in reference.iter().flatten().zip(split.iter().flatten()) {
             assert!((a - b).abs() < 1e-5, "{a} vs {b}");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn from_stack_reproduces_the_stack_before_training() -> Result<()> {
+        let device = Device::Cpu;
+        let config = StackConfig {
+            arch: StackArch::Geometric,
+            vocab_size: 400,
+            width: 32,
+            heads: 2,
+            mlp_hidden: 48,
+            context: 16,
+            pattern: "rrar".into(),
+            read: ReadScore::Dot,
+            rotation: true,
+            seed: 17,
+            memory: None,
+        };
+        let stack = StackModel::new(config, &device)?;
+        let ids: Vec<u32> = (0..32).map(|i| (i * 11 % 400) as u32).collect();
+        let reference = stack.forward(&ids, 2, 16)?.to_vec2::<f32>()?;
+        let model = AermModel::from_stack(stack, 2, true, 17)?;
+        let bottom = model.bottom(&ids, 2, 16)?;
+        let silent = vec![STATUS_NONE; 32];
+        let values = vec![0u32; 32];
+        let wrapped = model
+            .top(&bottom.hidden, &silent, &values, &silent, &values)?
+            .to_vec2::<f32>()?;
+        let delta = reference
+            .iter()
+            .flatten()
+            .zip(wrapped.iter().flatten())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            delta <= 1e-5,
+            "wrapped model differs from the stack by {delta}"
+        );
         Ok(())
     }
 
