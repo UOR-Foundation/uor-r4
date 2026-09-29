@@ -568,7 +568,8 @@ pub fn check_export_representation(
         || saved.codec == "native-d11-grouped-4bit-g32-rtn"
         || saved.codec == "native-d11-grouped-4bit-g32-min-mse"
         || saved.codec == "native-d4-head-compensated-head-only"
-        || saved.codec == "native-d4-head-compensated-all-maps";
+        || saved.codec == "native-d4-head-compensated-all-maps"
+        || saved.codec == "native-d4-e8-matched-bit";
     if !is_export_compatible {
         return Err(invalid(format!(
             "the model was trained against the served representation {}, which the stack \
@@ -1258,6 +1259,12 @@ mod tests {
         };
         assert!(check_export_representation(Some(&min_mse), false).is_ok());
         assert!(check_export_representation(Some(&min_mse), true).is_err());
+
+        let e8_matched_bit = SavedServedRepresentation {
+            codec: "native-d4-e8-matched-bit".to_owned(),
+        };
+        assert!(check_export_representation(Some(&e8_matched_bit), false).is_ok());
+        assert!(check_export_representation(Some(&e8_matched_bit), true).is_err());
 
         assert!(check_export_representation(Some(&other), false).is_err());
         assert!(check_export_representation(Some(&other), true).is_err());

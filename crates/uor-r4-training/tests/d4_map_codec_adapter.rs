@@ -2,8 +2,8 @@ use candle_core::Device;
 use std::sync::Arc;
 use uor_r4_integer::stack::IntegerStackModel;
 use uor_r4_training::geometric_stack::{
-    D11Interim, D4Grouped4BitAdapter, HeadCompensatedMapCodec, MapCodec, ReadScore, StackAdamW,
-    StackArch, StackConfig, StackModel,
+    D11Interim, D4Grouped4BitAdapter, E8MatchedBitMapCodec, HeadCompensatedMapCodec, MapCodec,
+    ReadScore, StackAdamW, StackArch, StackConfig, StackModel,
 };
 use uor_r4_training::stack_export::{check_export_representation, export_stack};
 use uor_r4_training::Result;
@@ -409,5 +409,97 @@ fn head_quantization_mse_comparison() -> Result<()> {
         "Minimum-MSE scale search must achieve <= MSE than RTN: min_mse={mse_min:.8}, rtn={mse_rtn:.8}"
     );
 
+    Ok(())
+}
+
+#[test]
+fn test_e8_matched_bit_map_codec_qat_and_gradient_flow() -> Result<()> {
+    let codec = E8MatchedBitMapCodec::default();
+    assert_eq!(codec.name(), "native-d4-e8-matched-bit");
+
+    // Verify round_trip on test weights
+    let values: Vec<f32> = (0..64 * 32)
+        .map(|i| (((i as f32) * 0.13) % 4.0 - 2.0) * 0.05)
+        .collect();
+    let deq = codec.round_trip(&values, 64, 32)?;
+    assert_eq!(deq.len(), 64 * 32);
+    assert!(deq.iter().all(|v| v.is_finite()));
+
+    // Instantiate StackModel with E8MatchedBitMapCodec
+    let config = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 64,
+        width: 32,
+        heads: 1,
+        mlp_hidden: 32,
+        context: 8,
+        pattern: "r".into(),
+        read: ReadScore::Dot,
+        rotation: false,
+        seed: 88,
+        memory: None,
+    };
+    let device = Device::Cpu;
+    let mut model = StackModel::new(config, &device)?;
+    model.set_served_representation(Some(Arc::new(codec)))?;
+    assert_eq!(
+        model.served_codec().unwrap().name(),
+        "native-d4-e8-matched-bit"
+    );
+
+    // Compute loss and backward gradients through STE
+    let ids: Vec<u32> = vec![3, 11, 22, 33];
+    let targets: Vec<u32> = vec![11, 22, 33, 44];
+    let loss = model.loss(&ids, &targets, 1, 4)?;
+    let initial_loss = loss.to_scalar::<f32>()?;
+    assert!(initial_loss.is_finite());
+
+    let grads = loss.backward()?;
+    let embed_var = model.variables().get("embedding.weight").unwrap();
+    let embed_grad = grads.get(embed_var.as_tensor());
+    assert!(
+        embed_grad.is_some(),
+        "gradient must reach embedding.weight under E8 matched-bit QAT"
+    );
+    assert!(
+        embed_grad.unwrap().sqr()?.sum_all()?.to_scalar::<f32>()? > 0.0,
+        "gradient on embedding.weight must be non-zero"
+    );
+
+    // Update master parameters via optimizer
+    let mut optimizer = StackAdamW::new(&model, 0.01, 1.0)?;
+    let norm = optimizer.update(&model, &grads, 0.05)?;
+    assert!(norm > 0.0);
+
+    // Save and check metadata
+    let tmp_root = std::env::temp_dir().join(format!("d4-e8-qat-test-{}", std::process::id()));
+    let save_dir = tmp_root.join("saved_model_e8");
+    model.save(&save_dir)?;
+
+    let record = StackModel::saved_served_representation(&save_dir)?;
+    assert_eq!(record.as_ref().unwrap().codec, "native-d4-e8-matched-bit");
+
+    // Export stack artifact and check representation compatibility
+    check_export_representation(record.as_ref(), false)?;
+    let (lut_bytes, summary) = export_stack(&model, "e8-matched-bit-qat-test".into(), None)?;
+    assert!(!lut_bytes.is_empty());
+    assert_eq!(summary["method"]["quantizer"], "native-d4-e8-matched-bit");
+
+    let lut_path = tmp_root.join("model.lut");
+    std::fs::write(&lut_path, &lut_bytes)?;
+
+    // Load into IntegerStackModel and verify native integer serving execution
+    let integer_model = IntegerStackModel::load(&lut_path)
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+    let mut session = integer_model.session();
+    let logits = session
+        .step(ids[0])
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+    assert_eq!(logits.len(), 64);
+    let next_token = uor_r4_integer::stack::stack_argmax(logits);
+    assert!(next_token < 64);
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&tmp_root);
     Ok(())
 }

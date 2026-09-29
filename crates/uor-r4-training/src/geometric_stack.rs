@@ -1830,6 +1830,45 @@ impl MapCodec for HeadCompensatedMapCodec {
     }
 }
 
+/// Lab 3 Matched-Bit E8 Lattice MapCodec for QAT training and representation evaluation.
+///
+/// Implements two-stage residual E8 lattice vector quantization (Conway-Sloane A_8* / E_8)
+/// achieving ~4.0 bits per weight (2 index bytes + 2 scale bytes per 8-weight block)
+/// within the <= 4.25 bpw D4 gate.
+#[derive(Clone, Copy, Debug)]
+pub struct E8MatchedBitMapCodec {
+    pub seed: u64,
+}
+
+impl Default for E8MatchedBitMapCodec {
+    fn default() -> Self {
+        Self { seed: 42 }
+    }
+}
+
+impl E8MatchedBitMapCodec {
+    pub fn new(seed: u64) -> Self {
+        Self { seed }
+    }
+}
+
+impl MapCodec for E8MatchedBitMapCodec {
+    fn name(&self) -> &str {
+        "native-d4-e8-matched-bit"
+    }
+
+    fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        uor_r4_integer::codec::apply_codec_arm(
+            values,
+            rows,
+            cols,
+            uor_r4_integer::codec::CodecArm::HadamardE8MatchedBit,
+            self.seed,
+        )
+        .map_err(Into::into)
+    }
+}
+
 /// What a saved stack's `config.json` records, beside its configuration, of
 /// the served representation the forward pass read when it was saved
 /// ([`StackModel::save`] in served mode; read back by
@@ -2210,6 +2249,9 @@ impl StackModel {
             }
             "native-d4-head-compensated-all-maps" => {
                 self.set_served_representation(Some(Arc::new(HeadCompensatedMapCodec::new(false))))
+            }
+            "native-d4-e8-matched-bit" => {
+                self.set_served_representation(Some(Arc::new(E8MatchedBitMapCodec::default())))
             }
             _ => Err(invalid(format!("unknown served codec name: {name}"))),
         }
