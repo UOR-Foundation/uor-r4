@@ -24,7 +24,8 @@
 //! oracle and reports per category and per intent. A conversation whose
 //! history cannot fit the context with every reply at `max_new_tokens` is
 //! skipped and counted. With `panel=`, it also answers that request panel and
-//! scores its ten memory requests (`stack_memory_replies::score_memory`). A
+//! scores its ten memory requests (`stack_memory_replies::score_memory`) into
+//! `panel_replies.json`, after the M-world report is written. A
 //! saved transport snap is restored; a saved served representation is
 //! refused. Every root is claimed before anything is loaded and sealed at the
 //! end. Set RAYON_NUM_THREADS to bound the threads.
@@ -43,7 +44,7 @@ use uor_r4_tokenizer::ByteBpeTokenizer;
 use uor_r4_training::geometric_stack::StackModel;
 use uor_r4_training::milestone_world::{judge, normalized, Category, MWorld, Split};
 use uor_r4_training::stack_dialogue::{
-    check_panel, greedy_reply, load_requests, reply_panel, Request,
+    check_panel, episode_contract, greedy_reply, load_requests, reply_panel, DialogueSplit, Request,
 };
 use uor_r4_training::stack_memory_replies::score_memory;
 use uor_r4_training::stack_tracking::Rng;
@@ -130,6 +131,18 @@ fn corpus(args: &Args, out: &Path) -> Result<()> {
             "chat= must be a uor-r4-chat-corpus/v1 split with no special-token text, \
              prepared with this tokenizer",
         ));
+    }
+    // The chat split's files must be the ones its manifest names.
+    for (path, key) in [
+        (&chat_tokens_path, "tokens_sha256"),
+        (&chat_mask_path, "mask_sha256"),
+    ] {
+        if chat_manifest[key] != json!(sha256_file(path)?) {
+            return Err(invalid(format!(
+                "{} does not match the chat manifest's {key}",
+                path.display()
+            )));
+        }
     }
     let reader = MmapCorpusReader::open(&chat_tokens_path)
         .map_err(|e| invalid(format!("chat token store: {e}")))?;
@@ -259,19 +272,30 @@ fn corpus(args: &Args, out: &Path) -> Result<()> {
             },
         },
     });
-    fs::write(
-        train.join("manifest.json"),
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
+    let manifest_path = train.join("manifest.json");
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+    // The split must load and index exactly as `dialogue-train` will read it.
+    let (_, contract) = episode_contract(&tokenizer, vocab as usize)?;
+    let split = DialogueSplit::load(&tokens_path, &mask_path, &manifest_path)?;
+    let index = split.index(contract)?;
+    let sources: Vec<Value> = index
+        .population()
+        .sources
+        .iter()
+        .map(|s| json!({"label": s.label, "documents": s.documents, "eligible_responses": s.eligible_responses}))
+        .collect();
     let executable = std::env::current_exe()?;
     fs::write(
         out.join("corpus.json"),
         serde_json::to_vec_pretty(&json!({
             "schema": "uor-r4.m-world-corpus/1",
             "executable_sha256": sha256_file(&executable)?,
+            "world_digest": MWorld::digest(),
             "tokenizer_sha256": sha256_file(&tokenizer_path)?,
             "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
             "composition": manifest["composition"],
+            "eligible_responses": index.episodes().len(),
+            "sources": sources,
             "sample": sample,
             "wall_seconds": started.elapsed().as_secs_f64(),
         }))?,
@@ -377,7 +401,9 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
         let mut all = true;
         let mut turns = Vec::with_capacity(replies.len());
         for (turn, answer) in conversation.turns.iter().zip(replies) {
-            let text = answer["reply"].as_str().unwrap_or_default();
+            let text = answer["reply"]
+                .as_str()
+                .ok_or_else(|| invalid(format!("{}: a turn without a reply", row["id"])))?;
             let pass = judge(&turn.checks, &turn.user, text);
             all &= pass;
             for (key, table) in [
@@ -418,34 +444,12 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
             }
         );
     }
-    let panel = match args.optional("panel") {
-        None => Value::Null,
-        Some(path) => {
-            let path = PathBuf::from(path);
-            let requests = load_requests(&path)?;
-            let replies = reply_panel(
-                &encoder,
-                &protocol,
-                &requests,
-                context,
-                max_new_tokens,
-                &decode,
-                &mut reply,
-            )?;
-            let memory = score_memory(&replies)?;
-            println!("panel memory: {}/{}", memory["correct"], memory["of"]);
-            json!({
-                "requests": path.display().to_string(),
-                "requests_sha256": sha256_file(&path)?,
-                "memory": memory,
-                "replies": replies,
-            })
-        }
-    };
     let executable = std::env::current_exe()?;
+    let executable_sha256 = sha256_file(&executable)?;
     let report = json!({
         "schema": "uor-r4.m-world-evaluation/1",
-        "executable_sha256": sha256_file(&executable)?,
+        "executable_sha256": executable_sha256,
+        "world_digest": MWorld::digest(),
         "model": model_dir.display().to_string(),
         "model_identity": identity,
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
@@ -460,13 +464,41 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
         "by_intent": by_intent.into_iter().map(|(k, v)| (k, rate(v))).collect::<BTreeMap<_, _>>(),
         "conversations_all_pass": rate((whole, kept.len())),
         "conversations": judged,
-        "panel": panel,
         "wall_seconds": started.elapsed().as_secs_f64(),
     });
+    // Written before the panel, so a panel error cannot discard it.
     fs::write(
         out.join("m_world_evaluation.json"),
         serde_json::to_vec_pretty(&report)?,
     )?;
+    if let Some(path) = args.optional("panel") {
+        let path = PathBuf::from(path);
+        let requests = load_requests(&path)?;
+        let replies = reply_panel(
+            &encoder,
+            &protocol,
+            &requests,
+            context,
+            max_new_tokens,
+            &decode,
+            &mut reply,
+        )?;
+        let memory = score_memory(&replies)?;
+        println!("panel memory: {}/{}", memory["correct"], memory["of"]);
+        fs::write(
+            out.join("panel_replies.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.m-world-panel/1",
+                "executable_sha256": executable_sha256,
+                "model_identity": report["model_identity"],
+                "requests": path.display().to_string(),
+                "requests_sha256": sha256_file(&path)?,
+                "max_new_tokens": max_new_tokens,
+                "memory": memory,
+                "replies": replies,
+            }))?,
+        )?;
+    }
     Ok(())
 }
 
@@ -549,6 +581,7 @@ fn rejudge(args: &Args, out: &Path) -> Result<()> {
     let executable = std::env::current_exe()?;
     let report = json!({
         "schema": "uor-r4.m-world-rejudge/1",
+        "world_digest": MWorld::digest(),
         "executable_sha256": sha256_file(&executable)?,
         "source_report": report_path.display().to_string(),
         "source_report_sha256": sha256_file(&report_path)?,

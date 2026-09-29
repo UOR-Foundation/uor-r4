@@ -4,8 +4,10 @@
 //! the user phrasings.
 //!
 //! Every user turn comes from a typed intent: the intent fixes the reply the
-//! world trains on and the checks that judge any reply (membership only, as in
-//! `uor_r4_core::answer_oracle`). Each intent's phrasings are split once, here:
+//! world trains on and the frozen checks that judge any reply. Unlike
+//! `uor_r4_core::answer_oracle`'s exact-string lists, several checks read the
+//! reply (numbers, a letter, word counts, echo). Each intent's phrasings are
+//! split once, here:
 //! training renders only the `train` phrasings, development only the
 //! `development` ones, so development measures phrasing generalization within
 //! the milestone's intent types. The qualification panel's phrasings are not in
@@ -16,6 +18,7 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::stack_tracking::Rng;
 use crate::{invalid, Result};
@@ -62,6 +65,14 @@ pub enum Check {
     MinWords(usize),
     /// The reply does not contain the user's whole turn.
     NotEcho,
+    /// Every one of these numbers occurs, as digits or a number word.
+    Numbers(Vec<u32>),
+    /// This number does not occur, as digits or a number word.
+    NoNumber(u32),
+    /// `answer` is the number the reply calls the larger one: "{answer} is
+    /// bigger" or "the bigger one is {answer}", with no "than" before it; or
+    /// the only number the reply names, without "smaller", "less" or "lower".
+    Larger { answer: u32, other: u32 },
 }
 
 /// One user turn, the reply the world trains on, and the oracle's checks.
@@ -81,7 +92,9 @@ pub struct Conversation {
 }
 
 fn words(text: &str) -> Vec<String> {
-    text.split(|c: char| !(c.is_alphanumeric() || c == '\''))
+    text.replace(['\u{2018}', '\u{2019}'], "'")
+        .split(|c: char| !(c.is_alphanumeric() || c == '\''))
+        .map(|w| w.trim_matches('\''))
         .filter(|w| !w.is_empty())
         .map(str::to_lowercase)
         .collect()
@@ -150,7 +163,44 @@ pub fn judge(checks: &[Check], user: &str, reply: &str) -> bool {
             let user_words = words(user);
             user_words.is_empty() || !contains_phrase(&reply_words, &user_words.join(" "))
         }
+        Check::Numbers(values) => values
+            .iter()
+            .all(|v| reply_words.iter().any(|w| number(w) == Some(*v))),
+        Check::NoNumber(value) => !reply_words.iter().any(|w| number(w) == Some(*value)),
+        Check::Larger { answer, other } => larger(&reply_words, *answer, *other),
     })
+}
+
+/// [`Check::Larger`]. Number words exclude "one", which in "the bigger one"
+/// is a pronoun; the operands are written as digits.
+fn larger(words: &[String], answer: u32, other: u32) -> bool {
+    const MORE: [&str; 4] = ["bigger", "larger", "greater", "higher"];
+    const LESS: [&str; 4] = ["smaller", "less", "lower", "fewer"];
+    let value = |w: &str| if w == "one" { None } else { number(w) };
+    let is = |w: &String, set: &[&str]| set.contains(&w.as_str());
+    for (i, word) in words.iter().enumerate() {
+        if value(word) != Some(answer) || (i > 0 && words[i - 1] == "than") {
+            continue;
+        }
+        let after = &words[i + 1..(i + 4).min(words.len())];
+        // "{answer} is bigger", up to the first "than".
+        let stated_after = after
+            .iter()
+            .take_while(|w| w.as_str() != "than")
+            .any(|w| is(w, &MORE));
+        // "the bigger one is {answer}".
+        let stated_before = i > 0
+            && words[i - 1] == "is"
+            && words[i.saturating_sub(4)..i - 1]
+                .iter()
+                .any(|w| is(w, &MORE));
+        let negated = after.iter().any(|w| is(w, &LESS));
+        if (stated_after || stated_before) && !negated {
+            return true;
+        }
+    }
+    let named: BTreeSet<u32> = words.iter().filter_map(|w| value(w)).collect();
+    named.contains(&answer) && !named.contains(&other) && !words.iter().any(|w| is(w, &LESS))
 }
 
 /// The letter `Check::LastLetter` compares: the last standalone single-letter
@@ -641,7 +691,12 @@ fn fact(rng: &mut Rng, split: Split, relation: &Fact) -> Turn {
     let mut reply = fill(pick(rng, relation.replies), &slots);
     capitalize(&mut user);
     capitalize(&mut reply);
-    let mut checks = vec![Check::AnyOf(vec![answer.into()])];
+    // A number answer ("eight") is accepted as digits too.
+    let mut accepted = vec![answer.to_owned()];
+    if let Some(n) = number(answer) {
+        accepted.push(n.to_string());
+    }
+    let mut checks = vec![Check::AnyOf(accepted)];
     if relation.exclusive {
         let others: Vec<String> = relation
             .pairs
@@ -782,6 +837,129 @@ const YES_NO: &[(&str, bool)] = &[
     ("Is the sky green?", false),
 ];
 
+/// Development rephrasings of the same twelve facts, index for index, so a
+/// development draw consumes the generator exactly as a training draw does.
+const YES_NO_DEVELOPMENT: &[(&str, bool)] = &[
+    ("Fire is hot, isn't it?", true),
+    ("Is it true that ice is hot?", false),
+    ("Snow is cold, right?", true),
+    ("Is it true that fish can swim?", true),
+    ("Would a dog be able to fly?", false),
+    ("The sun is cold, isn't it?", false),
+    ("Is it true that cows eat grass?", true),
+    ("Would a mouse be bigger than an elephant?", false),
+    ("Birds can fly, right?", true),
+    ("Is it true that water is wet?", true),
+    ("Would a cat bark?", false),
+    ("The sky is green, right?", false),
+];
+
+const REPEAT: Phrasings = Phrasings {
+    train: &[
+        "Repeat after me: {x}.",
+        "Say \"{x}\".",
+        "Please repeat this: {x}.",
+        "Can you say {x}?",
+    ],
+    development: &["Say back to me: {x}.", "Copy this exactly: {x}."],
+};
+
+const SPELL: Phrasings = Phrasings {
+    train: &[
+        "Spell the word {x}.",
+        "How do you spell {x}?",
+        "Spell {x} letter by letter.",
+    ],
+    development: &["What are the letters in {x}?", "Can you spell out {x}?"],
+};
+
+const COUNT: Phrasings = Phrasings {
+    train: &[
+        "Count from {a} to {b}.",
+        "Can you count from {a} up to {b}?",
+        "Please count from {a} to {b}.",
+    ],
+    development: &[
+        "List the numbers from {a} to {b}.",
+        "Count up from {a} until {b}.",
+    ],
+};
+
+const ADD: Phrasings = Phrasings {
+    train: &[
+        "What is {a} plus {b}?",
+        "Add {a} and {b}.",
+        "What is {a} + {b}?",
+    ],
+    development: &["{a} plus {b} equals what?", "Sum {a} and {b}."],
+};
+
+const OPPOSITE: Phrasings = Phrasings {
+    train: &[
+        "What is the opposite of {x}?",
+        "Give me the opposite of {x}.",
+        "Tell me a word that means the opposite of {x}.",
+    ],
+    development: &["What's the reverse of {x}?", "Name the antonym of {x}."],
+};
+
+const LIST: Phrasings = Phrasings {
+    train: &["Name {n} {x}.", "List {n} {x}.", "Give me {n} {x}, please."],
+    development: &[
+        "Tell me {n} kinds of {x}.",
+        "Which {n} {x} can you think of?",
+    ],
+};
+
+const FIRST_LETTER: Phrasings = Phrasings {
+    train: &[
+        "What letter does {x} start with?",
+        "What is the first letter of {x}?",
+        "Which letter begins the word {x}?",
+    ],
+    development: &[
+        "{x} begins with which letter?",
+        "Tell me the starting letter of {x}.",
+    ],
+};
+
+const COMPARE: Phrasings = Phrasings {
+    train: &[
+        "Which is bigger, {a} or {b}?",
+        "Which number is larger: {a} or {b}?",
+        "What is the bigger number, {a} or {b}?",
+    ],
+    development: &[
+        "Out of {a} and {b}, which is greater?",
+        "Pick the larger number: {a} or {b}.",
+    ],
+};
+
+const SENTENCE: Phrasings = Phrasings {
+    train: &[
+        "Use the word {x} in a sentence.",
+        "Make a sentence with the word {x}.",
+        "Write a sentence that has the word {x}.",
+    ],
+    development: &[
+        "Put {x} into a short sentence.",
+        "Say something using the word {x}.",
+    ],
+};
+
+/// Every instruction phrasing table, for the disjointness checks.
+const INSTRUCTIONS: [&Phrasings; 9] = [
+    &REPEAT,
+    &SPELL,
+    &COUNT,
+    &ADD,
+    &OPPOSITE,
+    &LIST,
+    &FIRST_LETTER,
+    &COMPARE,
+    &SENTENCE,
+];
+
 const SENTENCE_WORDS: &[&str] = &[
     "dog", "rain", "happy", "school", "apple", "garden", "music", "friend", "river", "blue",
 ];
@@ -790,16 +968,7 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
     let (name, user, reply, checks) = match rng.below(10) {
         0 => {
             let phrase = *pick(rng, REPEAT_PHRASES);
-            let template = Phrasings {
-                train: &[
-                    "Repeat after me: {x}.",
-                    "Say \"{x}\".",
-                    "Please repeat this: {x}.",
-                    "Can you say {x}?",
-                ],
-                development: &["Say back to me: {x}.", "Copy this exactly: {x}."],
-            }
-            .pick(rng, split);
+            let template = REPEAT.pick(rng, split);
             let mut reply = format!("{phrase}.");
             capitalize(&mut reply);
             (
@@ -812,15 +981,7 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
         1 => {
             let word = *pick(rng, SPELL_WORDS);
             let spelled: Vec<String> = word.chars().map(|c| c.to_string()).collect();
-            let template = Phrasings {
-                train: &[
-                    "Spell the word {x}.",
-                    "How do you spell {x}?",
-                    "Spell {x} letter by letter.",
-                ],
-                development: &["What are the letters in {x}?", "Can you spell out {x}?"],
-            }
-            .pick(rng, split);
+            let template = SPELL.pick(rng, split);
             (
                 "spell",
                 fill(template, &[("x", word)]),
@@ -832,29 +993,15 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
             let start = 1 + rng.below(4) as u32;
             let end = start + 2 + rng.below(5) as u32;
             let (a, b) = (start.to_string(), end.to_string());
-            let template = Phrasings {
-                train: &[
-                    "Count from {a} to {b}.",
-                    "Can you count from {a} up to {b}?",
-                    "Please count from {a} to {b}.",
-                ],
-                development: &[
-                    "List the numbers from {a} to {b}.",
-                    "Count up from {a} until {b}.",
-                ],
-            }
-            .pick(rng, split);
+            let template = COUNT.pick(rng, split);
             let numbers: Vec<String> = (start..=end).map(|n| n.to_string()).collect();
             (
                 "count",
                 fill(template, &[("a", &a), ("b", &b)]),
                 format!("{}.", numbers.join(", ")),
                 vec![
-                    Check::Members {
-                        at_least: numbers.len(),
-                        set: numbers,
-                    },
-                    Check::NoneOf(vec![(end + 1).to_string()]),
+                    Check::Numbers((start..=end).collect()),
+                    Check::NoNumber(end + 1),
                 ],
             )
         }
@@ -862,15 +1009,7 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
             let a = 1 + rng.below(9) as u32;
             let b = 1 + rng.below(9) as u32;
             let (sa, sb) = (a.to_string(), b.to_string());
-            let template = Phrasings {
-                train: &[
-                    "What is {a} plus {b}?",
-                    "Add {a} and {b}.",
-                    "What is {a} + {b}?",
-                ],
-                development: &["{a} plus {b} equals what?", "Sum {a} and {b}."],
-            }
-            .pick(rng, split);
+            let template = ADD.pick(rng, split);
             (
                 "add",
                 fill(template, &[("a", &sa), ("b", &sb)]),
@@ -883,15 +1022,7 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
         }
         4 => {
             let (word, opposite) = *pick(rng, OPPOSITES);
-            let template = Phrasings {
-                train: &[
-                    "What is the opposite of {x}?",
-                    "Give me the opposite of {x}.",
-                    "Tell me a word that means the opposite of {x}.",
-                ],
-                development: &["What's the reverse of {x}?", "Name the antonym of {x}."],
-            }
-            .pick(rng, split);
+            let template = OPPOSITE.pick(rng, split);
             (
                 "opposite",
                 fill(template, &[("x", word)]),
@@ -902,14 +1033,7 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
         5 => {
             let (category, members) = *pick(rng, CATEGORIES);
             let count = 2 + rng.below(3);
-            let template = Phrasings {
-                train: &["Name {n} {x}.", "List {n} {x}.", "Give me {n} {x}, please."],
-                development: &[
-                    "Tell me {n} kinds of {x}.",
-                    "Which {n} {x} can you think of?",
-                ],
-            }
-            .pick(rng, split);
+            let template = LIST.pick(rng, split);
             let mut chosen: Vec<&str> = Vec::new();
             while chosen.len() < count {
                 let member = *pick(rng, members);
@@ -944,18 +1068,7 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
         6 => {
             let word = *pick(rng, FIRST_LETTER_WORDS);
             let letter = word.chars().next().unwrap_or('a').to_ascii_uppercase();
-            let template = Phrasings {
-                train: &[
-                    "What letter does {x} start with?",
-                    "What is the first letter of {x}?",
-                    "Which letter begins the word {x}?",
-                ],
-                development: &[
-                    "{x} begins with which letter?",
-                    "Tell me the starting letter of {x}.",
-                ],
-            }
-            .pick(rng, split);
+            let template = FIRST_LETTER.pick(rng, split);
             let mut user = fill(template, &[("x", word)]);
             capitalize(&mut user);
             (
@@ -972,28 +1085,24 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
                 b = if a == 20 { 19 } else { a + 1 };
             }
             let (sa, sb) = (a.to_string(), b.to_string());
-            let template = Phrasings {
-                train: &[
-                    "Which is bigger, {a} or {b}?",
-                    "Which number is larger: {a} or {b}?",
-                    "What is the bigger number, {a} or {b}?",
-                ],
-                development: &[
-                    "Out of {a} and {b}, which is greater?",
-                    "Pick the larger number: {a} or {b}.",
-                ],
-            }
-            .pick(rng, split);
-            let big = a.max(b);
+            let template = COMPARE.pick(rng, split);
+            let (big, small) = (a.max(b), a.min(b));
             (
                 "compare",
                 fill(template, &[("a", &sa), ("b", &sb)]),
                 format!("{big} is bigger."),
-                vec![Check::FirstNumber(big)],
+                vec![Check::Larger {
+                    answer: big,
+                    other: small,
+                }],
             )
         }
         8 => {
-            let (question, yes) = *pick(rng, YES_NO);
+            let questions = match split {
+                Split::Train => YES_NO,
+                Split::Development => YES_NO_DEVELOPMENT,
+            };
+            let (question, yes) = *pick(rng, questions);
             let reply = if yes { "Yes." } else { "No." };
             (
                 "yes_no",
@@ -1004,18 +1113,7 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
         }
         _ => {
             let word = *pick(rng, SENTENCE_WORDS);
-            let template = Phrasings {
-                train: &[
-                    "Use the word {x} in a sentence.",
-                    "Make a sentence with the word {x}.",
-                    "Write a sentence that has the word {x}.",
-                ],
-                development: &[
-                    "Put {x} into a short sentence.",
-                    "Say something using the word {x}.",
-                ],
-            }
-            .pick(rng, split);
+            let template = SENTENCE.pick(rng, split);
             let sentences: &[&str] = &[
                 "I saw a {x} today.",
                 "The {x} made me smile.",
@@ -1269,9 +1367,8 @@ const ACK_WORDS: &[&str] = &[
     "got it",
     "okay",
     "ok",
-    "remember",
+    "i'll remember",
     "noted",
-    "nice to meet you",
     "thanks for telling me",
 ];
 
@@ -1326,14 +1423,23 @@ fn relation_conversation(rng: &mut Rng, split: Split) -> Vec<Turn> {
         while other.name == relation.name {
             other = pick(rng, RELATIONS);
         }
-        let mut stated = vec![first.to_lowercase(), current.to_lowercase()];
-        stated.dedup();
+        // Reject this conversation's values and every value the asked
+        // relation can take, so a hedged guess fails.
+        let rejected: BTreeSet<String> = [first, current]
+            .into_iter()
+            .chain(other.train_values.iter().copied())
+            .chain(other.development_values.iter().copied())
+            .map(str::to_lowercase)
+            .collect();
         turns.push(Turn {
             intent: format!("{}_absent", other.name),
             category: Category::Relation,
             user: other.query.pick(rng, split).into(),
             reply: (*pick(rng, ABSENT_REPLIES)).into(),
-            checks: vec![Check::AnyOf(strings(ABSENT_ACCEPT)), Check::NoneOf(stated)],
+            checks: vec![
+                Check::AnyOf(strings(ABSENT_ACCEPT)),
+                Check::NoneOf(rejected.into_iter().collect()),
+            ],
         });
         return turns;
     }
@@ -1383,8 +1489,8 @@ impl MWorld {
             turns.push(social(rng, split, &SOCIAL[0]));
         }
         // Weights 2 : 3 : 2 (responsive : instructions : relation), with up to
-        // three instructions: ten instruction types share their branch, so
-        // instructions get the largest share of turns.
+        // three instructions. Responsive turns still outnumber them, since
+        // openers, closers, acknowledgments and distractors are responsive.
         match rng.below(7) {
             0 | 1 => {
                 let body = 1 + rng.below(3);
@@ -1403,6 +1509,10 @@ impl MWorld {
         if turns.len() < MAX_TURNS && rng.below(3) == 0 {
             let index = 2 + rng.below(2);
             turns.push(social(rng, split, &SOCIAL[index]));
+        }
+        for turn in &mut turns {
+            turn.user = articles(&turn.user);
+            turn.reply = articles(&turn.reply);
         }
         Conversation { turns }
     }
@@ -1453,8 +1563,60 @@ impl MWorld {
             add(&relation.update);
             add(&relation.query);
         }
+        for instruction in INSTRUCTIONS {
+            add(instruction);
+        }
+        all.extend(
+            match split {
+                Split::Train => YES_NO,
+                Split::Development => YES_NO_DEVELOPMENT,
+            }
+            .iter()
+            .map(|(question, _)| *question),
+        );
         all
     }
+
+    /// SHA-256 of every table the world draws from and the version string, so
+    /// two builds' worlds can be compared without reading the source.
+    pub fn digest() -> String {
+        let phrasings = |p: &Phrasings| serde_json::json!([p.train, p.development]);
+        let tables = serde_json::json!({
+            "version": "m-world-v1",
+            "social": SOCIAL.iter().map(|s| serde_json::json!([s.name, phrasings(&s.user), s.replies, s.accept, s.question])).collect::<Vec<_>>(),
+            "share": [phrasings(&SHARE_EVENT), SHARE_EVENT_REPLIES, THINGS, phrasings(&SHARE_FEELING), FEELINGS_GOOD, FEELINGS_BAD],
+            "facts": FACTS.iter().map(|f| serde_json::json!([f.name, f.pairs, phrasings(&f.user), f.replies, f.exclusive])).collect::<Vec<_>>(),
+            "instructions": INSTRUCTIONS.iter().map(|p| phrasings(p)).collect::<Vec<_>>(),
+            "instruction_tables": [REPEAT_PHRASES, SPELL_WORDS, FIRST_LETTER_WORDS, SENTENCE_WORDS],
+            "opposites": OPPOSITES,
+            "categories": CATEGORIES,
+            "yes_no": [YES_NO, YES_NO_DEVELOPMENT],
+            "relations": RELATIONS.iter().map(|r| serde_json::json!([r.name, r.train_values, r.development_values, phrasings(&r.assert), phrasings(&r.update), phrasings(&r.query), r.acks, r.answers])).collect::<Vec<_>>(),
+            "acknowledgments": ACK_WORDS,
+            "abstentions": [ABSENT_REPLIES, ABSENT_ACCEPT],
+        });
+        hex::encode(Sha256::digest(tables.to_string().as_bytes()))
+    }
+}
+
+/// "a" before a word that begins with a vowel letter becomes "an" ("an owl",
+/// "an apple"). The world's vocabulary has no vowel letter sounded as a
+/// consonant.
+fn articles(text: &str) -> String {
+    let pieces: Vec<&str> = text.split(' ').collect();
+    let mut out = Vec::with_capacity(pieces.len());
+    for (i, piece) in pieces.iter().enumerate() {
+        let vowel = pieces
+            .get(i + 1)
+            .and_then(|next| next.chars().next())
+            .is_some_and(|c| "aeiouAEIOU".contains(c));
+        out.push(match (*piece, vowel) {
+            ("a", true) => "an",
+            ("A", true) => "An",
+            _ => piece,
+        });
+    }
+    out.join(" ")
 }
 
 /// The most user turns in one conversation: a greeting, an assertion, a
@@ -1530,6 +1692,64 @@ mod tests {
     }
 
     #[test]
+    fn the_review_cases_judge_as_intended() {
+        // #1503 review, required 3: the pronoun is not an answer, and a
+        // trailing sentence does not hide one.
+        assert!(!judge(&[Check::LastLetter('I')], "q", "I do not know."));
+        let z = "Zebra starts with the letter Z. I hope that helps!";
+        assert!(judge(&[Check::LastLetter('Z')], "q", z));
+        // Suggestion 1: the number called larger, not the first number.
+        let larger = |answer, other, reply| judge(&[Check::Larger { answer, other }], "q", reply);
+        assert!(larger(7, 3, "Out of 3 and 7, 7 is greater."));
+        assert!(larger(12, 3, "The bigger one is 12."));
+        assert!(larger(7, 3, "7 is bigger than 3."));
+        assert!(larger(12, 3, "12."));
+        assert!(!larger(7, 3, "3 is bigger than 7."));
+        assert!(!larger(12, 3, "12 is smaller."));
+        assert!(!larger(7, 3, "3 and 7."));
+        // Suggestion 2: numerals as digits or words.
+        let count = [Check::Numbers(vec![1, 2, 3]), Check::NoNumber(4)];
+        assert!(judge(&count, "q", "One, two, three."));
+        assert!(judge(&count, "q", "1, 2, 3."));
+        assert!(!judge(&count, "q", "1, 2, 3, 4."));
+        assert!(!judge(&count, "q", "1, 2."));
+        // Suggestion 4: typographic apostrophes and quotes.
+        assert!(judge(
+            &[Check::AnyOf(vec!["don't know".into()])],
+            "q",
+            "I don\u{2019}t know."
+        ));
+        assert!(judge(&[Check::AnyOf(vec!["paris".into()])], "q", "'Paris'"));
+        // Suggestion 8: articles.
+        assert_eq!(articles("A owl says hoot."), "An owl says hoot.");
+        assert_eq!(
+            articles("I saw a apple and a dog."),
+            "I saw an apple and a dog."
+        );
+        assert_eq!(MWorld::digest().len(), 64);
+    }
+
+    #[test]
+    fn a_filler_reply_fails_every_intent() {
+        // Suggestion 12: the baseline model's typical filler answers nothing.
+        // ("I'm glad I could help" is a fair reply to thanks, so it is not used.)
+        let filler = "The main difference is a simple yet simple way to spend the day at the park.";
+        for split in [Split::Train, Split::Development] {
+            let mut rng = Rng::new(19);
+            for _ in 0..2000 {
+                for turn in MWorld::conversation(&mut rng, split).turns {
+                    assert!(
+                        !judge(&turn.checks, &turn.user, filler),
+                        "{:?}: {:?} passes filler",
+                        turn.intent,
+                        turn.checks
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn every_trained_reply_passes_its_own_checks() {
         for split in [Split::Train, Split::Development] {
             let mut rng = Rng::new(7);
@@ -1585,6 +1805,16 @@ mod tests {
                 let hedge = format!("I don't know, maybe {stated}.");
                 assert!(!judge(&query.checks, &query.user, &hedge));
                 assert!(judge(&query.checks, &query.user, "I don't know."));
+                // Review, required 4: a guess from outside the conversation
+                // fails too.
+                let asked = RELATIONS
+                    .iter()
+                    .find(|r| query.intent == format!("{}_absent", r.name))
+                    .expect("the asked relation");
+                for value in asked.train_values.iter().chain(asked.development_values) {
+                    let guess = format!("You haven't told me that yet, but I think it is {value}.");
+                    assert!(!judge(&query.checks, &query.user, &guess), "{guess}");
+                }
             }
             if turns.iter().any(|t| t.intent.ends_with("_update")) {
                 updated += 1;
