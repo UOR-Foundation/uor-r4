@@ -1240,11 +1240,13 @@ impl StackModel {
         // log a = -softplus(-decay) keeps a in (0, 1); log lambda = c r log a.
         let log_a = p
             .layer(layer, "rec.decay")?
+            .to_dtype(DType::F64)?
             .neg()?
             .exp()?
             .affine(1.0, 1.0)?
             .log()?
-            .neg()?;
+            .neg()?
+            .to_dtype(DType::F32)?;
         let log_lambda = opening.broadcast_mul(&log_a)?.affine(DECAY_EXPONENT, 0.0)?;
         let lambda = log_lambda.exp()?.unsqueeze(3)?;
         let keep = lambda
@@ -6059,11 +6061,31 @@ mod tests {
                     "{label}: the snapped fused forward differs from the composed reference by {gap}"
                 );
                 worst = worst.max(gap);
-                // The snap is not trivial: the logits move, and the transports
-                // use many roots, the identity for few of them.
+                // The snap is not trivial, witnessed at the transport it acts
+                // on (not at the logits, whose amplification is the readout
+                // weights' business): recompute layer 0's raw quaternions as
+                // the fused core sees them and require the nearest root to
+                // move at least one lane by more than 1e-3 in unit space.
+                let p = model.params()?;
+                let x = model.embed_with(&p, &ids, batch, time)?;
+                let u = model.norm(&p, &x, &layer_name(0, "rec_norm.weight"))?;
+                let gates = model.recurrence_gates(&p, 0, &u)?;
+                let lanes = model.config.width / 4;
+                let raw = gates
+                    .narrow(2, lanes, model.config.width)?
+                    .reshape((batch, time, lanes, 4))?;
+                let norm = raw.sqr()?.sum_keepdim(3)?.affine(1.0, 1e-6)?.sqrt()?;
+                let unit = raw.broadcast_div(&norm)?.flatten_all()?.to_vec1::<f32>()?;
+                let mut max_displacement = 0f32;
+                for quad in unit.chunks_exact(4) {
+                    let root = roots[nearest_root([quad[0], quad[1], quad[2], quad[3]], &roots)];
+                    for k in 0..4 {
+                        max_displacement = max_displacement.max((root[k] - quad[k]).abs());
+                    }
+                }
                 assert!(
-                    max_abs_gap(&fused, &free)? > 1e-3,
-                    "{label}: the snap left the logits unchanged"
+                    max_displacement > 1e-3,
+                    "{label}: the snap left every transport unchanged ({max_displacement})"
                 );
                 let usage = model.transport_usage(&ids, batch, time, None)?;
                 let pooled = usage.pooled();
@@ -6480,6 +6502,7 @@ mod tests {
         fs::remove_dir_all(&root)?;
         Ok(())
     }
+
     /// The snap's cost in the fused recurrence core at the main line's shape
     /// (width 288, so 72 lanes, and 16 windows of 256): one layer's forward
     /// and backward, alternating free and snapped, median seconds. Timing
