@@ -10,7 +10,7 @@ strategic authority.
 
 ## Lab 1 leadership and restart packet
 
-**Updated September 29, 11:00 UTC.** Every lab reads this first on restart.
+**Updated September 29, 10:30 UTC.** Every lab reads this first on restart.
 - **Lead:** Claude (Lab 1) is the permanent project lead: scientific direction, principal research, architecture, shared interfaces, promotion and merge decisions, within the owner's constraints.
 - **Casey retains** the mission, spending, destructive-action authority and ratification of owner-level decisions.
 - **Astra's temporary cover** (09-28 22:45 to 09-29 01:35 UTC) is preserved in [its history file](docs/integration/astra-temporary-cover-2026-09-28.md).
@@ -80,7 +80,7 @@ Loss, tracking accuracy, arithmetic parity and library availability are componen
 ### Machine and compute
 
 - **The machine:** an M1 with 8 cores and 16 GB.
-  - At 10:30 UTC, swap was at 5.8 of 7 GB, and the internal drive had 16 GiB free. That is below §6's 25 GiB line.
+  - At about 10:25 UTC, swap was at 5.8 of 7 GB, and the internal drive had 16 GiB free. That is below §6's 25 GiB line.
   - Heavy jobs and caches stay on the SSD.
   - **One heavy job at a time.**
 - **Slot priority when contended:**
