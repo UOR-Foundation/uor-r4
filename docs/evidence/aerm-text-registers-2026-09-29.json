@@ -234,8 +234,9 @@
     "arm C": {
       "mask_text_tags": true,
       "mask_text_triggers": false,
-      "commit": "cfe5c6bd (lab/opencode/arm-c, #1498)",
-      "root": "opencode-arm-c/arm-c"
+      "root": "opencode-arm-c/arm-c",
+      "executable_sha256_prefix": "cfe5c6bd",
+      "branch": "lab/opencode/arm-c (#1498)"
     }
   },
   "dev_text_markers": "dev.u16 (74f7d85f...) holds no User:, Assistant: or System: marker sequence (non-author review scan), so a user-turn gate gives the silent column on it",
