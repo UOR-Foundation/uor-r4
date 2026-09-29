@@ -169,6 +169,13 @@ pub struct Header {
 pub trait Sections: Clone + Serialize + DeserializeOwned {
     /// Schema, group size and shape checks, before any section is read.
     fn validate(&self) -> Result<()>;
+    /// The checks of [`Sections::validate`] for offline reference
+    /// construction: identical except that a header record only a serving
+    /// engine interprets (the stack's `transport_snap`) is accepted. Serving
+    /// code must use [`Sections::validate`].
+    fn validate_for_reference(&self) -> Result<()> {
+        self.validate()
+    }
     fn matrices(&self) -> &[MatrixSpec];
     fn tables(&self) -> &[TableSpec];
     fn matrices_mut(&mut self) -> &mut Vec<MatrixSpec>;
@@ -335,6 +342,13 @@ impl Sections for StackHeader {
                  multiplier-free stack engine serves; this engine computes the free transport",
                 snap.name, snap.roots
             )));
+        }
+        self.shape.validate()
+    }
+
+    fn validate_for_reference(&self) -> Result<()> {
+        if self.schema != STACK_SCHEMA || self.group != crate::GROUP {
+            return Err(format_error("unsupported schema or group size"));
         }
         self.shape.validate()
     }
@@ -560,9 +574,17 @@ impl<H: Sections> Container<H> {
     }
 
     pub fn parse(bytes: Vec<u8>) -> Result<Self> {
+        Self::parse_impl(bytes, true)
+    }
+
+    fn parse_impl(bytes: Vec<u8>, serving: bool) -> Result<Self> {
         let header_len = header_bytes(&bytes)?.len();
         let header: H = serde_json::from_slice(&bytes[16..16 + header_len])?;
-        header.validate()?;
+        if serving {
+            header.validate()?;
+        } else {
+            header.validate_for_reference()?;
+        }
         let unaligned = 16 + header_len;
         let data_start = unaligned + (ALIGN - unaligned % ALIGN) % ALIGN;
         if data_start > bytes.len() {
@@ -651,6 +673,19 @@ impl<H: Sections> Container<H> {
     }
 }
 
+impl Container<StackHeader> {
+    /// Parse a stack artifact for OFFLINE reference construction only: this
+    /// behaves identically to [`Container::parse`] except that a
+    /// `transport_snap` record is accepted rather than refused, so the
+    /// exporter's dequantized float reference can be built from a snapped
+    /// artifact. Serving code must use [`Container::parse`] (or
+    /// `uor_r4_lut::stack::StackModel::from_artifact`), which refuses a
+    /// snapped artifact.
+    pub fn parse_for_reference(bytes: Vec<u8>) -> Result<Self> {
+        Self::parse_impl(bytes, false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -734,7 +769,7 @@ mod tests {
         let len = u64::from_le_bytes(snapped[8..16].try_into().unwrap()) as usize;
         let header: serde_json::Value = serde_json::from_slice(&snapped[16..16 + len]).unwrap();
         assert_eq!(header["transport_snap"]["name"], "icosian");
-        let refusal = match StackArtifact::parse(snapped) {
+        let refusal = match StackArtifact::parse(snapped.clone()) {
             Err(error) => error,
             Ok(_) => panic!("the D10 read path refuses the snap"),
         };
@@ -742,6 +777,12 @@ mod tests {
             refusal.to_string().contains("transport_snap=icosian"),
             "{refusal}"
         );
+        // The offline reference parse accepts the same bytes and keeps the
+        // record; the serving parse above is unchanged.
+        let reference = StackArtifact::parse_for_reference(snapped).expect("reference parse");
+        let record = reference.header.transport_snap.expect("the record is kept");
+        assert_eq!(record.name, "icosian");
+        assert_eq!(record.roots, 120);
     }
 
     #[test]
