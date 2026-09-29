@@ -30,7 +30,8 @@ use uor_r4_lut::kernels::grid_encode;
 use uor_r4_lut::GROUP;
 
 use crate::geometric_stack::{
-    D11Interim, MapCodec, ReadScore, SavedServedRepresentation, StackArch, StackModel, StackSite,
+    D11Interim, MapCodec, ReadScore, SavedServedRepresentation, StackArch, StackConfig, StackModel,
+    StackSite,
 };
 use crate::kappa_llama::{Checkpoint, LlamaShape, Site};
 use crate::lut_export::{
@@ -230,6 +231,28 @@ impl StackCalibration {
     }
 }
 
+/// Refuse a configuration no integer export or engine serves yet: a
+/// pointer-copy head (no D11 port) or a flock selection of the reads
+/// (compare-and-select, but no export or engine implements it), whose
+/// artifacts would not compute the model that was trained. Every export path
+/// calls this before it writes.
+pub fn check_export_config(config: &StackConfig) -> Result<()> {
+    if config.pointer.is_some() {
+        return Err(invalid(
+            "the pointer head has no D11 port yet: the stack export and its integer engines \
+             serve the plain output distribution, so no export writes a model with a pointer",
+        ));
+    }
+    if let Some(select) = config.select {
+        return Err(invalid(format!(
+            "the model was trained with flock selection (window {}, k {}), which no integer \
+             export or engine implements yet, so no export writes this model",
+            select.window, select.k
+        )));
+    }
+    Ok(())
+}
+
 /// Export a geometric stack; returns the artifact bytes and a report of the
 /// quantization errors (relative RMS per matrix, worst relative error per
 /// table of grid codes and, with a calibration, each calibrated matrix's
@@ -241,6 +264,7 @@ pub fn export_stack(
     calibration: Option<(&StackCalibration, f64)>,
 ) -> Result<(Vec<u8>, Value)> {
     let c = &model.config;
+    check_export_config(c)?;
     if c.arch != StackArch::Geometric {
         return Err(invalid(
             "export_stack takes a geometric stack; the control exports as a Llama checkpoint",
@@ -574,6 +598,7 @@ pub fn check_export_transport(model_dir: &Path) -> Result<()> {
 /// [`crate::lut_export::export_llama`].
 pub fn control_checkpoint(model: &StackModel, weights_sha256: String) -> Result<Checkpoint> {
     let c = &model.config;
+    check_export_config(c)?;
     if c.arch != StackArch::Transformer || c.memory.is_some() {
         return Err(invalid(
             "control_checkpoint takes the transformer control without memories",

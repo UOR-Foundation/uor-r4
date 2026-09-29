@@ -41,7 +41,7 @@
 //!   train_tokens=TRAIN.uort train_mask=TRAIN.mask train_manifest=TRAIN/manifest.json \
 //!   dev_tokens=DEV.uort dev_mask=DEV.mask dev_manifest=DEV/manifest.json \
 //!   (init=ROOT/model | arch=geometric|transformer [shape options as train]) [qat=false|true] \
-//!   [transport_snap=none|icosian] \
+//!   [transport_snap=none|icosian] [select=none|flock:WINDOW:K] [pointer=none|DIM] \
 //!   [policy=full_prefix|role_only] [data_seed=1] [steps=1024] [batch=16] [lr=0.001] [warmup=50] \
 //!   [min_lr=0.1] [weight_decay=0.1] [clip=1.0] [eval_every=128] [dev_seed=1] [dev_per_source=32] \
 //!   [checkpoint_every=128] [resume=OLD_ROOT/checkpoint] [max_seconds=inf] [requests=REQUESTS.json] \
@@ -150,6 +150,25 @@
 //! 256-position context starts a new conversation). Replies stop as the
 //! study's do: at EOS, at a terminal cycle of one to four ids repeated three
 //! times, or at `max_new_tokens`.
+//!
+//! `select=flock:WINDOW:K` and `pointer=DIM` (`dialogue-train`, for fresh shapes
+//! and after `init=` alike) are the A1 retrieval mechanisms of
+//! `uor_r4_training::geometric_stack`. A flock makes every read row (the
+//! geometric reads and the control's attention) softmax over the sink, the
+//! last WINDOW positions and the K best-scoring other sources only. A pointer
+//! adds a copy head after the final norm: a DIM-wide query and key attend the
+//! input tokens (through the flock, if set) and a gate mixes the copied
+//! token's distribution with the ordinary one; the loss, the development
+//! scores and the greedy replies are the mixture's. Both go into the saved
+//! `config.json` and the report. After `init=`, `select=` replaces the saved
+//! flock (the weights are unchanged), and `pointer=DIM` on a model saved
+//! without a pointer adds one with weights drawn fresh from `seed=` (default:
+//! the saved model's seed), recorded in the report (`flock_and_pointer`). Each
+//! evaluation reports the pointer's mean gate and hit rate on the scored
+//! targets (`dev_pointer_*` in the curve, `pointer` in the developments). The
+//! pointer has no served representation: `qat=true` and `export` refuse it,
+//! and `export` refuses a flock too until a D11 port exists. `--help` prints
+//! the usage.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -164,8 +183,9 @@ use uor_r4_core::report_output;
 use uor_r4_training::dialogue_development;
 use uor_r4_training::dialogue_episodes::{EpisodeIndex, PrefixPolicy, EPISODE_CONTEXT};
 use uor_r4_training::geometric_stack::{
-    logits_cross_entropy, D11Interim, MapCodec, ReadScore, ServedStatistics, StackAdamW, StackArch,
-    StackConfig, StackModel, TransportSnap, TransportUsage,
+    logits_cross_entropy, D11Interim, FlockSelect, MapCodec, PointerConfig, ReadScore,
+    ServedStatistics, StackAdamW, StackArch, StackConfig, StackModel, TransportSnap,
+    TransportUsage,
 };
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
@@ -173,7 +193,7 @@ use uor_r4_training::stack_dialogue::{
     DialogueSplit, Reply, MAX_NEW_TOKENS,
 };
 use uor_r4_training::stack_export::{
-    check_export_representation, check_export_transport, control_checkpoint,
+    check_export_config, check_export_representation, check_export_transport, control_checkpoint,
     control_grid_reference, export_stack, stack_grid_reference, StackCalibration,
 };
 use uor_r4_training::stack_memory::{Codebook, MemoryConfig, MemoryScore};
@@ -614,8 +634,63 @@ fn qat_flag(args: &Args) -> Result<bool> {
     }
 }
 
+/// `select=none|flock:<window>:<k>`: `Some(None)` clears a saved flock, `None`
+/// is not given.
+fn select_arg(args: &Args) -> Result<Option<Option<FlockSelect>>> {
+    let Some(text) = args.optional("select") else {
+        return Ok(None);
+    };
+    if text == "none" {
+        return Ok(Some(None));
+    }
+    let bad = || {
+        invalid(format!(
+            "invalid select={text} (none or flock:<window>:<k>)"
+        ))
+    };
+    let parts: Vec<&str> = text.split(':').collect();
+    match parts.as_slice() {
+        ["flock", window, k] => {
+            let select = FlockSelect {
+                window: window.parse().map_err(|_| bad())?,
+                k: k.parse().map_err(|_| bad())?,
+            };
+            select.validate()?;
+            Ok(Some(Some(select)))
+        }
+        _ => Err(bad()),
+    }
+}
+
+/// `pointer=none|<dim>`: `Some(None)` is `none`, `None` is not given.
+fn pointer_arg(args: &Args) -> Result<Option<Option<PointerConfig>>> {
+    let Some(text) = args.optional("pointer") else {
+        return Ok(None);
+    };
+    if text == "none" {
+        return Ok(Some(None));
+    }
+    match text.parse::<usize>() {
+        Ok(dim) if dim > 0 => Ok(Some(Some(PointerConfig { dim }))),
+        _ => Err(invalid(format!(
+            "invalid pointer={text} (none or a positive query width)"
+        ))),
+    }
+}
+
+/// The refusal of a pointer head under `qat=true`.
+fn pointer_qat_refusal() -> TrainingError {
+    invalid(
+        "qat=true with a pointer head: the pointer has no served representation yet (no D11 \
+         port); train it without qat=true",
+    )
+}
+
 /// The stacks `qat=true` can train: those the geometric stack export writes.
 fn check_qat_config(config: &StackConfig) -> Result<()> {
+    if config.pointer.is_some() {
+        return Err(pointer_qat_refusal());
+    }
     if config.arch != StackArch::Geometric
         || config.memory.is_some()
         || !config.width.is_multiple_of(uor_r4_lut::GROUP)
@@ -985,6 +1060,15 @@ fn stack_config(args: &Args, vocab: Option<usize>) -> Result<StackConfig> {
         });
         config.validate()?;
     }
+    // The A1 read mechanisms, on any fresh shape (`dialogue-train` alone
+    // accepts the options; the other modes never see them).
+    if let Some(select) = select_arg(args)? {
+        config.select = select;
+    }
+    if let Some(pointer) = pointer_arg(args)? {
+        config.pointer = pointer;
+    }
+    config.validate()?;
     Ok(config)
 }
 
@@ -1244,8 +1328,8 @@ fn generate(
     let mut tokens = prompt.to_vec();
     for _ in 0..new_tokens {
         let window = &tokens[tokens.len().saturating_sub(context)..];
-        let logits = model.forward(window, 1, window.len())?.detach();
-        let last = logits.get(window.len() - 1)?.to_vec1::<f32>()?;
+        // The last position's logits, or a pointer model's mixture scores.
+        let last = model.next_scores(window)?;
         let next = if temperature <= 0.0 {
             last.iter()
                 .enumerate()
@@ -1809,6 +1893,9 @@ fn export_mode(arguments: &[String]) -> Result<()> {
         let served = StackModel::saved_served_representation(&model_dir)?;
         check_export_representation(served.as_ref(), calibration_tokens.is_some())?;
         let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        // A pointer head or a flock has no integer engine yet: refuse before
+        // any calibration work.
+        check_export_config(&model.config)?;
         let time: usize = args.number("calibration_time", model.config.context)?;
         if time == 0 || time > model.config.context {
             return Err(invalid("calibration_time must be within the context"));
@@ -2745,6 +2832,9 @@ struct DialogueSettings {
     qat: bool,
     /// Train with the transport snapped (`transport_snap=`), as `train` does.
     transport_snap: Option<TransportSnap>,
+    /// `select=` and `pointer=` as given (the A1 read mechanisms).
+    select: Option<String>,
+    pointer: Option<String>,
     policy: PrefixPolicy,
     data_seed: u64,
     steps: usize,
@@ -2766,7 +2856,7 @@ struct DialogueSettings {
 
 impl DialogueSettings {
     fn record(&self) -> Value {
-        json!({
+        let mut record = json!({
             "tokenizer": self.tokenizer, "train": self.train, "dev": self.dev,
             "init": self.init,
             "qat": self.qat, "qat_codec": self.qat.then(|| qat_codec().name().to_owned()),
@@ -2777,7 +2867,16 @@ impl DialogueSettings {
             "eval_every": self.eval_every, "dev_seed": self.dev_seed,
             "dev_per_source": self.dev_per_source, "checkpoint_every": self.checkpoint_every,
             "requests": self.requests, "max_new_tokens": self.max_new_tokens,
-        })
+        });
+        // As given on the command line; only when given, so other runs'
+        // records are unchanged. The configuration (`config`) has the result.
+        if let Some(select) = &self.select {
+            record["select"] = json!(select);
+        }
+        if let Some(pointer) = &self.pointer {
+            record["pointer"] = json!(pointer);
+        }
+        record
     }
 
     /// Settings, input contents and executable a resumed run must share with
@@ -2892,8 +2991,13 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "max_new_tokens",
             "qat",
             "transport_snap",
+            "select",
+            "pointer",
         ],
     )?;
+    // Validate the A1 options before anything is claimed or loaded.
+    select_arg(&args)?;
+    let pointer_requested = pointer_arg(&args)?;
     let path = |key: &str| -> Result<PathBuf> { Ok(PathBuf::from(args.required(key)?)) };
     let settings = DialogueSettings {
         tokenizer: path("tokenizer")?,
@@ -2910,6 +3014,8 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         init: args.optional("init").map(PathBuf::from),
         qat: qat_flag(&args)?,
         transport_snap: transport_snap_arg(&args)?,
+        select: args.optional("select"),
+        pointer: args.optional("pointer"),
         policy: match args.optional("policy").as_deref() {
             None | Some("full_prefix") => PrefixPolicy::FullPrefix,
             Some("role_only") => PrefixPolicy::RoleOnly,
@@ -2955,10 +3061,57 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         };
         snap.check(&config)?;
     }
+    // The pointer has no served representation: refuse it under qat before
+    // anything is claimed, whether the run asks for one or `init=` has one.
+    if settings.qat {
+        let saved_pointer = match &settings.init {
+            Some(directory) => {
+                serde_json::from_slice::<StackConfig>(&fs::read(directory.join("config.json"))?)?
+                    .pointer
+            }
+            None => None,
+        };
+        if saved_pointer.is_some() || matches!(pointer_requested, Some(Some(_))) {
+            return Err(pointer_qat_refusal());
+        }
+    }
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
     let result = dialogue_train(&settings, &args, &out);
     finish(&out, result)
+}
+
+/// The configuration of a `dialogue-train` run from `init=`'s saved model with
+/// the run's `select=` and `pointer=` applied: `select=` replaces the saved
+/// flock (no weights change); `pointer=DIM` keeps a saved head of that width,
+/// refuses another width, and on a model saved without one asks for a new head
+/// (the returned flag). A saved head cannot be removed.
+fn init_extended_config(args: &Args, saved: &StackConfig) -> Result<(StackConfig, bool)> {
+    let mut config = saved.clone();
+    if let Some(select) = select_arg(args)? {
+        config.select = select;
+    }
+    let mut added = false;
+    match (pointer_arg(args)?, saved.pointer) {
+        (None, _) | (Some(None), None) => {}
+        (Some(None), Some(_)) => {
+            return Err(invalid(
+                "pointer=none cannot remove the saved model's pointer head",
+            ))
+        }
+        (Some(Some(asked)), Some(saved)) if asked != saved => {
+            return Err(invalid(format!(
+                "pointer={} conflicts with the saved model's pointer head of width {}",
+                asked.dim, saved.dim
+            )))
+        }
+        (Some(Some(asked)), saved) => {
+            added = saved.is_none();
+            config.pointer = Some(asked);
+        }
+    }
+    config.validate()?;
+    Ok((config, added))
 }
 
 /// The roots the snapped forward selects over the development panel, as
@@ -3021,12 +3174,21 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
     let dev = dev_split.index(contract)?;
     let panel = dialogue_development::select(&dev, s.dev_seed, s.dev_per_source)?;
     let requests = s.requests.as_deref().map(load_requests).transpose()?;
-    let config = match &s.init {
+    // After `init=`, `select=` and `pointer=` extend the saved model; a pointer
+    // added to a model saved without one draws its weights from `seed=` (the
+    // saved seed by default).
+    let (config, pointer_added) = match &s.init {
         Some(directory) => {
             check_init_tokenizer(directory, &s.tokenizer)?;
-            StackModel::load(directory, &device)?.config
+            let saved = StackModel::load(directory, &device)?.config;
+            init_extended_config(args, &saved)?
         }
-        None => stack_config(args, Some(vocab))?,
+        None => (stack_config(args, Some(vocab))?, false),
+    };
+    let pointer_seed: u64 = if pointer_added {
+        args.number("seed", config.seed)?
+    } else {
+        config.seed
     };
     if config.context != EPISODE_CONTEXT || config.vocab_size != vocab {
         return Err(invalid(
@@ -3047,9 +3209,22 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
     let (mut model, mut optimizer, mut progress, resumed_from) = match &s.resume {
         None => {
             let model = match &s.init {
-                Some(directory) => StackModel::load(directory, &device)?,
+                Some(directory) => {
+                    let mut model = StackModel::load(directory, &device)?;
+                    model.set_select(config.select)?;
+                    if let Some(pointer) = config.pointer {
+                        model.add_pointer(pointer, pointer_seed)?;
+                    }
+                    if model.config != config {
+                        return Err(invalid(
+                            "the extended init= model differs from its configuration",
+                        ));
+                    }
+                    model
+                }
                 None => StackModel::new(config.clone(), &device)?,
             };
+            // The optimizer is built after any pointer head is added.
             let optimizer = StackAdamW::new(&model, s.weight_decay, s.clip)?;
             let progress = Progress {
                 step: 0,
@@ -3079,6 +3254,18 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         train.episodes().len(),
         panel.len(),
     );
+    if model.config.select.is_some() || model.config.pointer.is_some() {
+        eprintln!(
+            "select {:?}, pointer {:?}{}",
+            model.config.select,
+            model.config.pointer,
+            if pointer_added {
+                format!(" (new weights from seed {pointer_seed})")
+            } else {
+                String::new()
+            }
+        );
+    }
     // In a QAT run each development score is of the served representation,
     // with the float weights' on the same panel beside it; in a transport-snap
     // run the panel is also scored unsnapped, with the icosian usage.
@@ -3098,6 +3285,17 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
             unsnapped["first_four_response_targets_mean_nll"],
             usage.summary()
         );
+    }
+    if let Some((served, _)) = &initial {
+        if let Some(pointer) = served.get("pointer") {
+            eprintln!(
+                "step 0 dev response NLL {}; pointer mean gate {} hit rate {} reachable {}",
+                served["response_mean_nll"],
+                pointer["mean_gate"],
+                pointer["pointer_hit_rate"],
+                pointer["target_reachable_rate"]
+            );
+        }
     }
     // Visits of earlier steps follow from the stateless sampler.
     let mut visits = (0usize, 0usize);
@@ -3161,6 +3359,12 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                 point["dev_float_response_nll"] = float["response_mean_nll"].clone();
                 point["dev_float_first_four_nll"] =
                     float["first_four_response_targets_mean_nll"].clone();
+            }
+            // A pointer head's gate and hit rate on the scored dev targets.
+            if let Some(pointer) = dev_report.get("pointer") {
+                point["dev_pointer_mean_gate"] = pointer["mean_gate"].clone();
+                point["dev_pointer_hit_rate"] = pointer["pointer_hit_rate"].clone();
+                point["dev_pointer_reachable_rate"] = pointer["target_reachable_rate"].clone();
             }
             if let Some((unsnapped, usage)) = &transport {
                 point["dev_unsnapped_response_nll"] = unsnapped["response_mean_nll"].clone();
@@ -3281,6 +3485,30 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
             section["final_transport_usage"] = usage.summary();
         }
         report["transport_snap"] = section;
+    }
+    if model.config.select.is_some() || model.config.pointer.is_some() {
+        let final_pointer = final_development.get("pointer").cloned();
+        let seed_source = if args.optional("seed").is_some() {
+            "seed="
+        } else {
+            "the saved model's seed"
+        };
+        let pointer_parameters: usize = model
+            .variables()
+            .iter()
+            .filter(|(name, _)| name.starts_with("pointer."))
+            .map(|(_, var)| var.elem_count())
+            .sum();
+        report["flock_and_pointer"] = json!({
+            "select": model.config.select,
+            "pointer": model.config.pointer,
+            "pointer_head_added_to_init": pointer_added,
+            "pointer_init_seed": pointer_added.then_some(pointer_seed),
+            "pointer_init_seed_source": pointer_added.then_some(seed_source),
+            "pointer_parameters": pointer_parameters,
+            "final_pointer_diagnostics": final_pointer,
+            "scope": "Flock selection (sink, last WINDOW positions and the K best-scoring other sources per read row; unkept sources weigh and receive exactly 0) applies to every read of the model, the pointer's attention included. The pointer head copies the input token at the attended position and a gate g = sigmoid(w.h + b) (b starts at -2) mixes that with the ordinary distribution; `response_mean_nll`, the losses and the greedy replies are the mixture's. `pointer` diagnostics are over the scored dev targets. Neither mechanism has a D11 port, and `export` and `qat=true` refuse a pointer. Offline float training only; not a served or quality result.",
+        });
     }
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
     Ok(())
@@ -3550,8 +3778,47 @@ fn finish(out: &Path, result: Result<()>) -> Result<()> {
     result
 }
 
+/// `--help`: the modes, and the options of `dialogue-train` (the module
+/// documentation has every mode's full usage).
+const HELP: &str = "\
+geometric-stack MODE key=value ...
+modes: train|sample|evaluate|encode|corpus|export|lut-evaluate|d11-evaluate|lut-sample|\
+snap-evaluate|rounding-attribution|dialogue-train|lut-chat
+(every mode's full usage is in the header of examples/geometric-stack.rs)
+
+geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
+  train_tokens=TRAIN.uort train_mask=TRAIN.mask train_manifest=TRAIN/manifest.json \\
+  dev_tokens=DEV.uort dev_mask=DEV.mask dev_manifest=DEV/manifest.json \\
+  (init=ROOT/model | arch=geometric|transformer [width= heads= layers= pattern= read= rotation= \\
+  stack_mlp= mlp=]) [qat=false|true] [transport_snap=none|icosian] \\
+  [select=none|flock:WINDOW:K] [pointer=none|DIM] [seed=] [policy=] [data_seed=] [steps=] \\
+  [batch=] [lr=] [warmup=] [min_lr=] [weight_decay=] [clip=] [eval_every=] [dev_seed=] \\
+  [dev_per_source=] [checkpoint_every=] [resume=] [max_seconds=] [requests=] [max_new_tokens=]
+
+  select=flock:WINDOW:K  every read row (geometric reads and the control's attention) softmaxes
+                         over the sink, the last WINDOW positions and the K best-scoring other
+                         sources only; unkept sources weigh 0. With init=, replaces the saved
+                         flock (select=none clears it); the weights do not change.
+  pointer=DIM            a pointer-copy head after the final norm (DIM-wide query and key over
+                         the input tokens, honouring select=, and a gate that starts at
+                         sigmoid(-2)); the loss, dev scores and greedy replies are the mixture's.
+                         With init= on a model saved without one, adds the head with weights
+                         drawn fresh from seed= (default: the saved seed), recorded in the report.
+                         Refused with qat=true and by export (no D11 port yet).
+  reports                each eval adds dev_pointer_mean_gate / dev_pointer_hit_rate /
+                         dev_pointer_reachable_rate to the curve; both settings are in the saved
+                         config.json and the report's config and flock_and_pointer.
+";
+
 fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "--help" | "-h" | "help"))
+    {
+        print!("{HELP}");
+        return Ok(());
+    }
     let Some((mode, rest)) = arguments.split_first() else {
         return Err(invalid(
             "usage: geometric-stack train|sample|evaluate|encode|corpus|export|lut-evaluate|d11-evaluate|lut-sample|dialogue-train|lut-chat key=value ...",
