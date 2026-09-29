@@ -251,6 +251,13 @@ pub fn export_stack(
             "integer export of product-key memories is not implemented",
         ));
     }
+    if let Some(snap) = model.transport_snap() {
+        return Err(invalid(format!(
+            "the model was trained with transport_snap={}; the stack export and its integer \
+             engines serve the unsnapped transport, so no export writes this model yet",
+            snap.name()
+        )));
+    }
     let (d, heads) = (c.width, c.heads);
     let mlp = c.mlp_hidden.div_ceil(GROUP) * GROUP;
     let shape = StackShape {
@@ -1258,5 +1265,21 @@ mod tests {
         let (bytes, _) = export_stack(&reloaded, json!({}), None).expect("export");
         assert!(!bytes.is_empty(), "the export wrote no artifact");
         fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    #[test]
+    fn export_refuses_an_in_memory_transport_snap() {
+        let mut model = small("rarr", ReadScore::Lorentz, true);
+        model
+            .set_transport_snap(Some(TransportSnap::Icosian))
+            .expect("transport snap");
+        let refusal =
+            export_stack(&model, json!({}), None).expect_err("a snapped model is refused");
+        let text = refusal.to_string();
+        assert!(text.contains("transport_snap=icosian"), "{text}");
+        assert!(text.contains("unsnapped transport"), "{text}");
+        model.set_transport_snap(None).expect("no snap");
+        let (bytes, _) = export_stack(&model, json!({}), None).expect("export");
+        assert!(!bytes.is_empty(), "the export wrote no artifact");
     }
 }
