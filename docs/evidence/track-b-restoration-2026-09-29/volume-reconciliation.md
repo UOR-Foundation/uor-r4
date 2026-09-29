@@ -76,3 +76,27 @@ rejection. Their activity does not establish that all external executable
 loading works. The new findings
 must be shared with the infrastructure steward before coordinated repair;
 the fixed shared-model parity gate remains unchanged.
+
+## Independent internal-build option
+
+A later metadata audit identified a normal internal build path that does not
+require modifying the shared volume's trust settings or copying its rejected
+library. B0's internal release cache is approximately 0.62 GiB and B3's release
+cache approximately 0.69 GiB; both bind the same rustc and Candle core/nn 0.9.2.
+Neither contains the required Candle Transformers or Metal fingerprints, so
+neither qualifies the unchanged gate. B3's full target includes about 4.77 GiB
+of debug output and should not be duplicated for this purpose.
+
+At the observation point, internal free space was 28,458,104 KiB (27.14 GiB).
+A prospective private build can retain a 24 GiB plus 128 MiB free-space reserve
+with at most 2 GiB new build output and 128 MiB temporary allowance. Refresh
+physical free space and current jobs before admission. Prefer a fresh private
+internal target from the pinned source; a private copy-on-write snapshot of
+stable internal CPU artifacts is another possibility, but their active cache
+was still growing and must not be snapshotted mid-build.
+
+This is a feasible bounded build plan, not an executed workaround or a claim
+that the external mount is repaired. No cache copy, new compile or model run
+was launched during this reconciliation. Current lab timing work must finish
+before the next build. The required Metal feature, exact tokenizer, windows,
+all-vocabulary comparisons and 1e-4 tolerance remain unchanged.
