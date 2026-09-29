@@ -1342,15 +1342,18 @@ impl MWorld {
         if rng.below(3) == 0 {
             turns.push(social(rng, split, &SOCIAL[0]));
         }
-        match rng.below(3) {
-            0 => {
+        // Weights 2 : 3 : 2 (responsive : instructions : relation), with up to
+        // three instructions: ten instruction types share their branch, so
+        // instructions get the largest share of turns.
+        match rng.below(7) {
+            0 | 1 => {
                 let body = 1 + rng.below(3);
                 for _ in 0..body {
                     turns.push(responsive(rng, split));
                 }
             }
-            1 => {
-                let body = 1 + rng.below(2);
+            2..=4 => {
+                let body = 1 + rng.below(3);
                 for _ in 0..body {
                     turns.push(instruction(rng, split));
                 }
