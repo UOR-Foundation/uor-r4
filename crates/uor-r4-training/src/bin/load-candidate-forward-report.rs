@@ -20,13 +20,13 @@ use candle_core::Device;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uor_r4_core::report_output;
-use uor_r4_integer::codec::CodecArm;
+use uor_r4_integer::codec::{quantize_matrix_compensated, CodecArm};
 use uor_r4_lut::format::{
     Fixed, StackArtifact, StackArtifactBuilder, StackNumerics, StackShape, TableValues,
 };
 use uor_r4_lut::GROUP;
 use uor_r4_training::geometric_stack::{ReadScore, StackArch, StackModel};
-use uor_r4_training::lut_export::{arcosh_table, quantize_matrix, quantize_matrix_compensated};
+use uor_r4_training::lut_export::{arcosh_table, quantize_matrix};
 use uor_r4_training::stack_export::{decay_rate, export_stack, grid_code, stack_grid_reference};
 
 const EXPECTED_MODEL_SHA256: &str =
@@ -456,7 +456,7 @@ fn export_stack_candidate(
             &packed.nibbles,
             &packed.scales,
         )?;
-        errors.insert("head".to_owned(), json!(packed.relative_rms_error));
+        errors.insert("head".to_owned(), json!(packed.relative_rms_error(&head)?));
     } else {
         let head_values = match head_codec {
             Some(arm) => {

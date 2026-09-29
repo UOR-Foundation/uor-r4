@@ -157,22 +157,6 @@ pub fn quantize_matrix(values: &[f32], rows: usize, cols: usize) -> Result<Packe
     })
 }
 
-/// Quantize a row-major `rows x cols` matrix using optimal base selection
-/// and boundary-scale error minimization (head-compensated quantization).
-pub fn quantize_matrix_compensated(values: &[f32], rows: usize, cols: usize) -> Result<Packed> {
-    let mat = uor_r4_integer::codec::quantize_matrix_compensated(values, rows, cols)
-        .map_err(|e| invalid(e.to_string()))?;
-    let rel_err = mat
-        .relative_rms_error(values)
-        .map_err(|e| invalid(e.to_string()))?;
-    Ok(Packed {
-        nibbles: mat.nibbles,
-        scales: mat.scales,
-        exp_base: mat.exp_base,
-        relative_rms_error: rel_err,
-    })
-}
-
 /// Second moments `sum_t x_t x_t^T` of every weight map's input over
 /// calibration text, as seen by the folded export (see
 /// [`KappaLlama::forward_with_capture`]).
