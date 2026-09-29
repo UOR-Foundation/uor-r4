@@ -21,12 +21,13 @@
 //!   [dev_episodes=256] [batch=16] [eval_batch=16] [context=256] [lr=0.01] \
 //!   [warmup=100] [weight_decay=0] [clip=10] [seed=9001] [data_seed=9002] \
 //!   [eval_seed=9003] [dev_seed=9004]
+//! aerm-keys run-cached out=NEW_REPORT_ROOT trunk=TRUNK_DIR tokenizer=TOKENIZER.json \
+//!   [splits=2,4] [steps=30000] [train_episodes=1024] [batch=16] [context=256] \
+//!   [lr=0.01] [warmup=100] [weight_decay=0] [clip=10] [trigger_positive=5] \
+//!   [eval_episodes=512] [eval_batch=16] [dev_episodes=256] [seed=9001] \
+//!   [data_seed=9002] [eval_seed=9003] [dev_seed=9004] [plateau_window=2000] \
+//!   [record_every=250]
 //! aerm-keys roots
-//! aerm-keys decode out=NEW_REPORT_ROOT trunk=TRUNK_DIR tokenizer=TOKENIZER.json \
-//!   [splits=2,4] [steps=30000] [train_episodes=1024] [eval_episodes=512] \
-//!   [dev_episodes=256] [batch=16] [eval_batch=16] [context=256] [lr=0.01] \
-//!   [warmup=100] [weight_decay=0] [clip=10] [seed=9001] [data_seed=9002] \
-//!   [eval_seed=9003] [dev_seed=9004]
 //! ```
 //!
 //! `decode` is the additive frozen-feature decodability diagnostic: it loads
@@ -35,6 +36,15 @@
 //! to convergence, reporting per-split in-distribution and held-out atom
 //! accuracy against the majority and chance baselines with the predeclared
 //! exposure-limited/information-absent reading.
+//!
+//! `run-cached` is the exposure-only amendment of the pre-registered key
+//! probe: it extracts the identical frozen-trunk features once over a fixed
+//! training sample, keeping only the supervision rows the heads consume (the
+//! `atom_rows` entity/relation rows, with their tag/trigger labels), then
+//! trains the same four heads full-batch over those cached rows to
+//! convergence (high lr, no weight decay, explicit plateau early-stop). The
+//! compared 2I versus softmax factor, the metrics, the in-distribution guard
+//! and the decision rules are unchanged from `run`.
 //!
 //! `run` claims an exclusive report root before loading anything, refuses a
 //! trunk whose `model.safetensors` SHA-256 is not the pinned S4 arm-A value,
@@ -78,6 +88,11 @@ const RELATION_ATOMS: usize = 14;
 /// antipodal quotient; asserted in the tests), so the 14 relation roots take
 /// the smallest bound the icosians allow.
 const RELATION_ROOT_MAX_INNER: f32 = 0.809_017;
+/// The pinned S4 trunk width; supervision-row features are stored as fixed
+/// `[f32; FEATURE_WIDTH]` vectors.
+const FEATURE_WIDTH: usize = 288;
+/// The `run-cached` peak-RSS bound (1.5 GiB), asserted before sealing.
+const PEAK_RSS_BOUND_KIB: u64 = 1_572_864;
 #[cfg(test)]
 const ROOT_BOUND_TOLERANCE: f32 = 1e-6;
 
@@ -1103,7 +1118,24 @@ struct ArmResult {
     learnable_parameters: usize,
     held: EvalReport,
     dev: EvalReport,
-    records: Vec<StepRecord>,
+    history: Value,
+    plateau: Option<CachedPlateau>,
+}
+
+fn arm_json(arm: &ArmResult) -> Value {
+    let mut value = json!({
+        "split": arm.split,
+        "atom_kind": arm.kind.as_str(),
+        "learnable_parameters": arm.learnable_parameters,
+        "held_out": report_json(&arm.held),
+        "in_distribution": report_json(&arm.dev),
+        "in_distribution_key_accuracy": arm.dev.totals.key_accuracy(),
+        "history": arm.history.clone(),
+    });
+    if let Some(plateau) = &arm.plateau {
+        value["plateau"] = json!(plateau);
+    }
+    value
 }
 
 // ---------------------------------------------------------------------------
@@ -1555,6 +1587,817 @@ fn decode(args: &Args, out: &Path) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// The `run-cached` mode: the pre-registered key probe at adequate exposure.
+//
+// The decode probe proved the frozen trunk's features linearly encode the
+// atoms in-distribution, so the key probe's guard failure at 1500 stepped
+// batches was predeclared exposure-limited. This mode changes only the
+// exposure: the identical features (`split_features` at the same supervision
+// rows) are extracted once over a fixed training sample, and the same four
+// heads are trained full-batch to convergence. The compared 2I versus
+// softmax factor, the store, the keys, the metrics, the guard and the
+// decision rules are unchanged.
+
+#[derive(Clone)]
+struct CachedConfig {
+    steps: usize,
+    train_episodes: usize,
+    batch: usize,
+    context: usize,
+    learning_rate: f64,
+    warmup: usize,
+    weight_decay: f64,
+    clip: f64,
+    trigger_positive: f32,
+    eval_episodes: usize,
+    eval_batch: usize,
+    dev_episodes: usize,
+    seed: u64,
+    data_seed: u64,
+    eval_seed: u64,
+    dev_seed: u64,
+    plateau_window: usize,
+    record_every: usize,
+}
+
+/// One cached supervision row: the detached frozen-trunk feature at a
+/// position the key probe's heads supervise (an `atom_rows` entity row or a
+/// clause trigger position), with the labels the four heads consume and the
+/// episode id. No per-token sequence or autodiff graph is retained.
+struct SupervisionRow {
+    episode: usize,
+    feature: [f32; FEATURE_WIDTH],
+    tag: u32,
+    real: f32,
+    trigger: u32,
+    trigger_weight: f32,
+    entity_atom: u32,
+    relation_atom: u32,
+}
+
+/// The cached supervision rows of a fixed in-distribution training sample,
+/// extracted episode by episode from the frozen trunk: the full kept-row
+/// feature matrix for the tag/trigger heads and the gathered atom rows (via
+/// [`atom_rows`], exactly as [`head_losses`] selects them) for the
+/// entity/relation heads.
+struct CachedTrain {
+    episodes: usize,
+    rows: Vec<SupervisionRow>,
+    features: Tensor,
+    tag_targets: Vec<u32>,
+    real: Vec<f32>,
+    triggers: Vec<u32>,
+    trigger_weights: Vec<f32>,
+    entity_features: Tensor,
+    entity_targets: Vec<u32>,
+    relation_features: Tensor,
+    relation_targets: Vec<u32>,
+}
+
+fn collect_train_cache(
+    stack: &StackModel,
+    split: usize,
+    world: &RelationWorld,
+    config: &CachedConfig,
+) -> Result<CachedTrain> {
+    let device = stack.device().clone();
+    if stack.config.width != FEATURE_WIDTH {
+        return Err(invalid(format!(
+            "the trunk width {} is not the pinned {FEATURE_WIDTH}",
+            stack.config.width
+        )));
+    }
+    let mut rng = Rng::new(config.data_seed);
+    let mut episodes = 0usize;
+    let mut rows: Vec<SupervisionRow> = Vec::new();
+    while episodes < config.train_episodes {
+        let batch = world.batch(&mut rng, 1, config.context, false)?;
+        let feature = split_features(stack, split, &batch.ids, 1, batch.time)?;
+        let tags = gold_tags5(&batch);
+        let (entity_rows, _, relation_rows, relation_row_targets) = atom_rows(&batch);
+        let mut kept: BTreeMap<usize, (u32, u32)> = BTreeMap::new();
+        for &row in &entity_rows {
+            kept.entry(row as usize).or_default().0 = batch.entity_atom[row as usize];
+        }
+        for (&row, &target) in relation_rows.iter().zip(&relation_row_targets) {
+            kept.entry(row as usize).or_default().1 = target + 1;
+        }
+        for (row, (entity_atom, relation_atom)) in kept {
+            let values = feature.get(row)?.to_vec1::<f32>()?;
+            let feature_row: [f32; FEATURE_WIDTH] = values
+                .as_slice()
+                .try_into()
+                .map_err(|_| invalid("a supervision row is not FEATURE_WIDTH wide"))?;
+            let trigger = batch.triggers[row];
+            let real = batch.real[row];
+            rows.push(SupervisionRow {
+                episode: episodes,
+                feature: feature_row,
+                tag: tags[row],
+                real,
+                trigger,
+                trigger_weight: if trigger == TRIGGER_NONE {
+                    real
+                } else {
+                    real * config.trigger_positive
+                },
+                entity_atom,
+                relation_atom,
+            });
+        }
+        episodes += 1;
+    }
+    let entity: Vec<&SupervisionRow> = rows.iter().filter(|row| row.entity_atom != 0).collect();
+    let relation: Vec<&SupervisionRow> = rows.iter().filter(|row| row.relation_atom != 0).collect();
+    if entity.is_empty() || relation.is_empty() {
+        return Err(invalid(
+            "the cached training sample has no supervised atom rows",
+        ));
+    }
+    let mut rows_per_episode = vec![0usize; episodes];
+    for row in &rows {
+        rows_per_episode[row.episode] += 1;
+    }
+    if rows_per_episode.iter().any(|&count| count == 0) {
+        return Err(invalid("a cached training episode has no supervision rows"));
+    }
+    let flat: Vec<f32> = rows.iter().flat_map(|row| row.feature).collect();
+    let entity_flat: Vec<f32> = entity.iter().flat_map(|row| row.feature).collect();
+    let relation_flat: Vec<f32> = relation.iter().flat_map(|row| row.feature).collect();
+    Ok(CachedTrain {
+        episodes,
+        tag_targets: rows.iter().map(|row| row.tag).collect(),
+        real: rows.iter().map(|row| row.real).collect(),
+        triggers: rows.iter().map(|row| row.trigger).collect(),
+        trigger_weights: rows.iter().map(|row| row.trigger_weight).collect(),
+        entity_targets: entity.iter().map(|row| row.entity_atom - 1).collect(),
+        relation_targets: relation.iter().map(|row| row.relation_atom - 1).collect(),
+        features: Tensor::from_vec(flat, (rows.len(), FEATURE_WIDTH), &device)?,
+        entity_features: Tensor::from_vec(entity_flat, (entity.len(), FEATURE_WIDTH), &device)?,
+        relation_features: Tensor::from_vec(
+            relation_flat,
+            (relation.len(), FEATURE_WIDTH),
+            &device,
+        )?,
+        rows,
+    })
+}
+
+/// Row chunk for the full-batch tag/trigger loss and accuracy passes. The
+/// weighted-mean cross-entropy decomposes exactly over chunks (each chunk
+/// loss is scaled by its share of the total weight), so every row still
+/// contributes to every step's gradient. The pieces are backpropped one at a
+/// time and their gradient stores merged: candle's matmul backward
+/// materializes the gradient wrt both operands, so one combined graph would
+/// hold a features-sized gradient per chunk at once.
+const FULL_BATCH_CHUNK_ROWS: usize = 131072;
+
+fn weighted_cross_entropy_pieces(
+    head: &LinearHead,
+    features: &Tensor,
+    targets: &[u32],
+    weights: &[f32],
+    pieces: &mut Vec<Tensor>,
+) -> Result<()> {
+    let rows = targets.len();
+    let total_weight: f64 = weights.iter().map(|&w| f64::from(w)).sum();
+    let before = pieces.len();
+    for start in (0..rows).step_by(FULL_BATCH_CHUNK_ROWS) {
+        let end = (start + FULL_BATCH_CHUNK_ROWS).min(rows);
+        let chunk_weights = &weights[start..end];
+        let chunk_weight: f64 = chunk_weights.iter().map(|&w| f64::from(w)).sum();
+        if chunk_weight <= 0.0 {
+            continue;
+        }
+        let chunk_features = features.narrow(0, start, end - start)?;
+        let chunk_logits = head.logits(&chunk_features)?;
+        let chunk_loss =
+            logits_cross_entropy(&chunk_logits, &targets[start..end], Some(chunk_weights))?;
+        pieces.push((chunk_loss * (chunk_weight / total_weight))?);
+    }
+    if pieces.len() == before {
+        return Err(invalid("the cached training sample has no weighted rows"));
+    }
+    Ok(())
+}
+
+/// The same loss composition as [`head_losses`] — tag, trigger, entity atom,
+/// relation atom, with the same weights — as separately differentiable
+/// pieces over the cached features. Gathering the atom rows before the
+/// linear heads is the same map as [`head_losses`]' gather after them,
+/// because every head is linear in the feature.
+fn cached_head_loss_pieces(heads: &ProbeHeads, cache: &CachedTrain) -> Result<Vec<Tensor>> {
+    let mut pieces = Vec::new();
+    // The small atom pieces come first: the first piece's gradient store is
+    // reused as the accumulator and keeps its entries for the whole step, so
+    // its untracked-input gradient should stay small.
+    let entity_logits = heads.entity.logits(&cache.entity_features)?;
+    pieces.push(logits_cross_entropy(
+        &entity_logits,
+        &cache.entity_targets,
+        None,
+    )?);
+    let relation_logits = heads.relation.logits(&cache.relation_features)?;
+    pieces.push(logits_cross_entropy(
+        &relation_logits,
+        &cache.relation_targets,
+        None,
+    )?);
+    weighted_cross_entropy_pieces(
+        &heads.tag,
+        &cache.features,
+        &cache.tag_targets,
+        &cache.real,
+        &mut pieces,
+    )?;
+    weighted_cross_entropy_pieces(
+        &heads.trigger,
+        &cache.features,
+        &cache.triggers,
+        &cache.trigger_weights,
+        &mut pieces,
+    )?;
+    Ok(pieces)
+}
+
+/// The summed loss value and the merged gradient store of all pieces.
+fn cached_head_loss_and_grads(
+    heads: &ProbeHeads,
+    cache: &CachedTrain,
+    vars: &[Var],
+) -> Result<(f64, GradStore)> {
+    let mut combined: Option<GradStore> = None;
+    let mut loss_value = 0f64;
+    for piece in cached_head_loss_pieces(heads, cache)? {
+        loss_value += f64::from(piece.to_scalar::<f32>()?);
+        let piece_grads = piece.backward()?;
+        match &mut combined {
+            None => combined = Some(piece_grads),
+            Some(acc) => {
+                for var in vars {
+                    if let Some(grad) = piece_grads.get(var.as_tensor()) {
+                        let merged = match acc.get(var.as_tensor()) {
+                            Some(existing) => (existing + grad)?,
+                            None => grad.clone(),
+                        };
+                        acc.insert(var.as_tensor(), merged);
+                    }
+                }
+            }
+        }
+    }
+    match combined {
+        Some(grads) => Ok((loss_value, grads)),
+        None => Err(invalid(
+            "the cached training sample produced no loss pieces",
+        )),
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CachedStep {
+    step: usize,
+    loss: f64,
+    tag_accuracy: f64,
+    trigger_accuracy: f64,
+    entity_accuracy: f64,
+    relation_accuracy: f64,
+    tracked_accuracy: f64,
+    seconds: f64,
+}
+
+/// The plateau/early-stop evidence: the tracked train accuracy (the minimum
+/// of the four head accuracies) over the final `window` steps against
+/// everything before it, with the steps actually run.
+#[derive(Clone, Debug, Serialize)]
+struct CachedPlateau {
+    window: usize,
+    best_tracked_final_window: f64,
+    best_tracked_before_window: f64,
+    stopped_improving: bool,
+    stopped_early: bool,
+    steps_run: usize,
+    final_tag_accuracy: f64,
+    final_trigger_accuracy: f64,
+    final_entity_accuracy: f64,
+    final_relation_accuracy: f64,
+}
+
+fn masked_head_accuracy(
+    head: &LinearHead,
+    features: &Tensor,
+    targets: &[u32],
+    real: &[f32],
+) -> Result<f64> {
+    let mut predicted = Vec::with_capacity(targets.len());
+    for start in (0..targets.len()).step_by(FULL_BATCH_CHUNK_ROWS) {
+        let end = (start + FULL_BATCH_CHUNK_ROWS).min(targets.len());
+        let logits = head.logits(&features.narrow(0, start, end - start)?)?;
+        predicted.extend(argmax_rows(&logits)?);
+    }
+    let mut correct = 0usize;
+    let mut total = 0usize;
+    for ((&prediction, &target), &weight) in predicted.iter().zip(targets).zip(real) {
+        if weight > 0.0 {
+            total += 1;
+            correct += usize::from(prediction == target);
+        }
+    }
+    Ok(correct as f64 / total.max(1) as f64)
+}
+
+fn arm_accuracy(arm: &AtomArm, features: &Tensor, targets: &[u32]) -> Result<f64> {
+    let predicted = argmax_rows(&arm.logits(features)?)?;
+    let correct = predicted
+        .iter()
+        .zip(targets)
+        .filter(|(left, right)| left == right)
+        .count();
+    Ok(correct as f64 / targets.len().max(1) as f64)
+}
+
+/// Full-batch training of the four probe heads on the cached features, with
+/// the same initialization seeds, optimizer groups and schedule shape as
+/// [`train_heads`]. Stops early when the tracked train accuracy (the minimum
+/// of the four head accuracies) has not improved in the last
+/// `plateau_window` steps.
+fn train_heads_cached(
+    width: usize,
+    kind: AtomKind,
+    roots: &AtomRoots,
+    cache: &CachedTrain,
+    config: &CachedConfig,
+    device: &Device,
+) -> Result<(ProbeHeads, Vec<CachedStep>, CachedPlateau)> {
+    let heads = ProbeHeads::new(kind, roots, width, config.seed, device)?;
+    let (decayed, plain) = heads.optimizer_groups();
+    let all: Vec<Var> = decayed.iter().chain(&plain).cloned().collect();
+    let params = |weight_decay| ParamsAdamW {
+        lr: config.learning_rate,
+        beta1: 0.9,
+        beta2: 0.95,
+        eps: 1e-8,
+        weight_decay,
+    };
+    let mut decayed_optimizer = AdamW::new(decayed, params(config.weight_decay))?;
+    let mut plain_optimizer = AdamW::new(plain, params(0.0))?;
+    let mut records: Vec<CachedStep> = Vec::new();
+    let started = Instant::now();
+    let mut steps_run = 0usize;
+    let mut stopped_early = false;
+    for step in 0..config.steps {
+        let lr = config.learning_rate * schedule(step, config.warmup, config.steps);
+        decayed_optimizer.set_learning_rate(lr);
+        plain_optimizer.set_learning_rate(lr);
+        let (loss, mut grads) = cached_head_loss_and_grads(&heads, cache, &all)?;
+        clip_gradients(&mut grads, &all, config.clip)?;
+        decayed_optimizer.step(&grads)?;
+        plain_optimizer.step(&grads)?;
+        steps_run = step + 1;
+        if step % config.record_every == 0 || step + 1 == config.steps {
+            let tag_accuracy =
+                masked_head_accuracy(&heads.tag, &cache.features, &cache.tag_targets, &cache.real)?;
+            let trigger_accuracy = masked_head_accuracy(
+                &heads.trigger,
+                &cache.features,
+                &cache.triggers,
+                &cache.real,
+            )?;
+            let entity_accuracy =
+                arm_accuracy(&heads.entity, &cache.entity_features, &cache.entity_targets)?;
+            let relation_accuracy = arm_accuracy(
+                &heads.relation,
+                &cache.relation_features,
+                &cache.relation_targets,
+            )?;
+            let tracked = tag_accuracy
+                .min(trigger_accuracy)
+                .min(entity_accuracy)
+                .min(relation_accuracy);
+            records.push(CachedStep {
+                step,
+                loss,
+                tag_accuracy,
+                trigger_accuracy,
+                entity_accuracy,
+                relation_accuracy,
+                tracked_accuracy: tracked,
+                seconds: started.elapsed().as_secs_f64(),
+            });
+            let window = config.plateau_window;
+            if steps_run >= 2 * window {
+                let split_at = steps_run - window;
+                let best_final = records
+                    .iter()
+                    .filter(|record| record.step >= split_at)
+                    .map(|record| record.tracked_accuracy)
+                    .fold(0f64, f64::max);
+                let best_before = records
+                    .iter()
+                    .filter(|record| record.step < split_at)
+                    .map(|record| record.tracked_accuracy)
+                    .fold(0f64, f64::max);
+                if best_final <= best_before + 1e-12 {
+                    stopped_early = true;
+                    break;
+                }
+            }
+        }
+    }
+    let window = (config.plateau_window.min(steps_run / 2)).max(1);
+    let split_at = steps_run - window;
+    let best_final = records
+        .iter()
+        .filter(|record| record.step >= split_at)
+        .map(|record| record.tracked_accuracy)
+        .fold(0f64, f64::max);
+    let best_before = records
+        .iter()
+        .filter(|record| record.step < split_at)
+        .map(|record| record.tracked_accuracy)
+        .fold(0f64, f64::max);
+    let last = records
+        .last()
+        .ok_or_else(|| invalid("the cached fit recorded no steps"))?;
+    let plateau = CachedPlateau {
+        window,
+        best_tracked_final_window: best_final,
+        best_tracked_before_window: best_before,
+        stopped_improving: best_final <= best_before + 1e-12,
+        stopped_early,
+        steps_run,
+        final_tag_accuracy: last.tag_accuracy,
+        final_trigger_accuracy: last.trigger_accuracy,
+        final_entity_accuracy: last.entity_accuracy,
+        final_relation_accuracy: last.relation_accuracy,
+    };
+    Ok((heads, records, plateau))
+}
+
+/// One evaluation episode with the heads' atom predictions at its
+/// supervision rows: entity predictions at the `atom_rows` entity positions
+/// and relation predictions at the clause trigger positions. The store/sieve
+/// evaluation below runs the real store path from these predictions.
+struct EvalEpisode {
+    episode: Episode,
+    entity_predictions: BTreeMap<usize, u32>,
+    relation_predictions: BTreeMap<usize, u32>,
+}
+
+/// Extracts the same supervision-row features as the training cache, once per
+/// evaluation episode, and records the heads' argmax predictions at them.
+fn collect_eval_episodes(
+    stack: &StackModel,
+    split: usize,
+    heads: &ProbeHeads,
+    world: &RelationWorld,
+    context: usize,
+    held: bool,
+    seed: u64,
+    episodes: usize,
+) -> Result<Vec<EvalEpisode>> {
+    let device = stack.device().clone();
+    let mut rng = Rng::new(seed);
+    let mut out = Vec::new();
+    while out.len() < episodes {
+        let batch = world.batch(&mut rng, 1, context, held)?;
+        let feature = split_features(stack, split, &batch.ids, 1, batch.time)?;
+        let (entity_rows, _, relation_rows, _) = atom_rows(&batch);
+        let mut entity_predictions = BTreeMap::new();
+        if !entity_rows.is_empty() {
+            let selected = gather_rows(&feature, &entity_rows, &device)?;
+            let predicted = argmax_rows(&heads.entity.logits(&selected)?)?;
+            for (&row, &prediction) in entity_rows.iter().zip(&predicted) {
+                entity_predictions.insert(row as usize, prediction + 1);
+            }
+        }
+        let mut relation_predictions = BTreeMap::new();
+        if !relation_rows.is_empty() {
+            let selected = gather_rows(&feature, &relation_rows, &device)?;
+            let predicted = argmax_rows(&heads.relation.logits(&selected)?)?;
+            for (&row, &prediction) in relation_rows.iter().zip(&predicted) {
+                relation_predictions.insert(row as usize, prediction + 1);
+            }
+        }
+        let episode = batch
+            .episodes
+            .into_iter()
+            .next()
+            .ok_or_else(|| invalid("the eval batch has no episode"))?;
+        out.push(EvalEpisode {
+            episode,
+            entity_predictions,
+            relation_predictions,
+        });
+    }
+    Ok(out)
+}
+
+/// The store/sieve evaluation over cached supervision-row predictions: the
+/// same per-episode real store path as [`evaluate_heads`], keyed by the
+/// semiprime of the predicted entity/relation atoms, against the v2 world's
+/// `AtomStore` gold.
+fn evaluate_cached_episodes(keys: &AtomKeys, episodes: &[EvalEpisode]) -> Result<EvalReport> {
+    let mut report = EvalReport::default();
+    for eval in episodes {
+        let episode = &eval.episode;
+        let mut turn_start = 0usize;
+        let mut gold = AtomStore::new();
+        let mut model_store = SemiprimeStore::default();
+        for clause in &episode.clauses {
+            let (entity_slot, _) = clause_slots(episode, clause, turn_start)?;
+            turn_start = clause.trigger_position + 1;
+            let predicted_entity = *eval
+                .entity_predictions
+                .get(&entity_slot)
+                .ok_or_else(|| invalid("the eval cache lacks the entity slot row"))?;
+            let predicted_relation = *eval
+                .relation_predictions
+                .get(&clause.trigger_position)
+                .ok_or_else(|| invalid("the eval cache lacks the trigger row"))?;
+            let key_correct = predicted_entity == clause.entity_atom
+                && predicted_relation == clause.relation_atom;
+            let semiprime = keys.semiprime(predicted_entity, predicted_relation)?;
+            let phenomenon = clause.phenomenon.as_str();
+            let class = format!("{:?}", clause.class);
+            let mut counts = Counts {
+                clauses: 1,
+                key_correct: usize::from(key_correct),
+                ..Counts::default()
+            };
+            if episode.triggers[clause.trigger_position] == TRIGGER_WRITE {
+                counts.writes = 1;
+                counts.write_key_correct = usize::from(key_correct);
+                let value = clause
+                    .value
+                    .ok_or_else(|| invalid("a natural write clause lacks its value"))?;
+                gold.write(clause.entity_atom, clause.relation_atom, value);
+                model_store.write(semiprime, value);
+            } else {
+                counts.reads = 1;
+                counts.read_key_correct = usize::from(key_correct);
+                let gold_read =
+                    gold.read(clause.entity_atom, clause.relation_atom, clause.previous);
+                let model_read = model_store.read(semiprime, clause.previous);
+                counts.register_correct = usize::from(gold_read == model_read);
+            }
+            if !key_correct {
+                if predicted_entity != clause.entity_atom {
+                    *report
+                        .entity_confusion
+                        .entry(format!(
+                            "{phenomenon}:{}->{predicted_entity}",
+                            clause.entity_atom
+                        ))
+                        .or_default() += 1;
+                }
+                if predicted_relation != clause.relation_atom {
+                    *report
+                        .relation_confusion
+                        .entry(format!(
+                            "{phenomenon}:{}->{predicted_relation}",
+                            clause.relation_atom
+                        ))
+                        .or_default() += 1;
+                }
+            }
+            report.totals.absorb(&counts);
+            report
+                .phenomena
+                .entry(phenomenon.to_owned())
+                .or_default()
+                .absorb(&counts);
+            report.classes.entry(class).or_default().absorb(&counts);
+        }
+        report.episodes += 1;
+    }
+    Ok(report)
+}
+
+fn run_cached(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    let trunk_directory = PathBuf::from(args.required("trunk")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let splits: Vec<usize> = args.list("splits", "2,4")?;
+    if splits.is_empty() || splits.iter().any(|&split| split == 0) {
+        return Err(invalid("splits must be non-empty positive layer counts"));
+    }
+    let config = CachedConfig {
+        steps: args.number("steps", 30_000)?,
+        train_episodes: args.number("train_episodes", 1024)?,
+        batch: args.number("batch", 16)?,
+        context: args.number("context", 256)?,
+        learning_rate: args.number("lr", 0.01)?,
+        warmup: args.number("warmup", 100)?,
+        weight_decay: args.number("weight_decay", 0.0)?,
+        clip: args.number("clip", 10.0)?,
+        trigger_positive: args.number("trigger_positive", 5.0)?,
+        eval_episodes: args.number("eval_episodes", 512)?,
+        eval_batch: args.number("eval_batch", 16)?,
+        dev_episodes: args.number("dev_episodes", 256)?,
+        seed: args.number("seed", 9001)?,
+        data_seed: args.number("data_seed", 9002)?,
+        eval_seed: args.number("eval_seed", 9003)?,
+        dev_seed: args.number("dev_seed", 9004)?,
+        plateau_window: args.number("plateau_window", 2000)?,
+        record_every: args.number("record_every", 250)?,
+    };
+    if config.steps < 2
+        || config.batch == 0
+        || config.eval_batch == 0
+        || config.context < 2
+        || config.train_episodes == 0
+        || config.eval_episodes == 0
+        || config.dev_episodes == 0
+        || config.plateau_window == 0
+        || config.record_every == 0
+    {
+        return Err(invalid(
+            "steps, episodes, batch, eval_batch, context, plateau_window and record_every must be usable",
+        ));
+    }
+
+    let trunk_weights = trunk_directory.join("model.safetensors");
+    let trunk_sha256 = sha256_file(&trunk_weights)?;
+    if trunk_sha256 != TRUNK_SHA256 {
+        return Err(invalid(format!(
+            "trunk {} is not the pinned S4 arm-A checkpoint: model.safetensors SHA-256 {trunk_sha256}",
+            trunk_directory.display()
+        )));
+    }
+    let device = Device::Cpu;
+    let mut stack = StackModel::load(&trunk_directory, &device)?;
+    let mut snap_restored = false;
+    if let Some(snap) = StackModel::saved_transport_snap(&trunk_directory)? {
+        stack.set_transport_snap(Some(snap))?;
+        snap_restored = true;
+    }
+    if splits.iter().any(|&split| split >= stack.config.layers()) {
+        return Err(invalid("a split must leave layers on both sides"));
+    }
+    let model = AermModel::from_stack(stack, splits[0], false, config.seed)?;
+    let stack = &model.stack;
+
+    let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(&tokenizer_path)?)
+        .ok_or_else(|| invalid("tokenizer JSON is not a supported byte-level BPE"))?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|error| invalid(format!("protocol: {error}")))?;
+    let encode = |text: &str| tokenizer.encode(text);
+    let world = RelationWorld::natural(&encode, protocol.bos_id, protocol.eos_id)?;
+    let roots = select_roots()?;
+    let keys = AtomKeys::new(stack.config.vocab_size)?;
+
+    let debug_rss = std::env::var_os("AERM_KEYS_DEBUG_RSS").is_some();
+    let mut arms = Vec::new();
+    let mut training_samples = Vec::new();
+    for &split in &splits {
+        let cache = collect_train_cache(stack, split, &world, &config)?;
+        if debug_rss {
+            eprintln!(
+                "split {split}: cache collected ({} rows), rss {:?}",
+                cache.rows.len(),
+                current_rss_kib()
+            );
+        }
+        training_samples.push(json!({
+            "split": split,
+            "episodes": cache.episodes,
+            "rows": cache.features.dims()[0],
+            "entity_rows": cache.entity_targets.len(),
+            "relation_rows": cache.relation_targets.len(),
+        }));
+        for kind in [AtomKind::TwoI, AtomKind::Softmax] {
+            let (heads, history, plateau) =
+                train_heads_cached(stack.config.width, kind, &roots, &cache, &config, &device)?;
+            if debug_rss {
+                eprintln!(
+                    "split {split} {:?}: trained {} steps, rss {:?}",
+                    kind,
+                    plateau.steps_run,
+                    current_rss_kib()
+                );
+            }
+            let held_episodes = collect_eval_episodes(
+                stack,
+                split,
+                &heads,
+                &world,
+                config.context,
+                true,
+                config.eval_seed,
+                config.eval_episodes,
+            )?;
+            let held = evaluate_cached_episodes(&keys, &held_episodes)?;
+            let dev_episodes = collect_eval_episodes(
+                stack,
+                split,
+                &heads,
+                &world,
+                config.context,
+                false,
+                config.dev_seed,
+                config.dev_episodes,
+            )?;
+            let dev = evaluate_cached_episodes(&keys, &dev_episodes)?;
+            arms.push(ArmResult {
+                split,
+                kind,
+                learnable_parameters: heads.parameter_count(),
+                held,
+                dev,
+                history: json!(history),
+                plateau: Some(plateau),
+            });
+        }
+    }
+
+    let peak_rss_kib = current_rss_kib();
+    if let Some(rss) = peak_rss_kib {
+        if rss > PEAK_RSS_BOUND_KIB {
+            return Err(invalid(format!(
+                "peak RSS {rss} KiB exceeds the 1.5 GiB supervision-row cache bound"
+            )));
+        }
+    }
+
+    let decisions = decision_rules(&arms);
+    let guard_passes = arms
+        .iter()
+        .filter(|arm| arm.kind == AtomKind::TwoI)
+        .all(|arm| arm.dev.totals.key_accuracy().unwrap_or(0.0) >= 0.98);
+    let report = json!({
+        "schema": "uor-r4.g2-key-probe/1",
+        "amendment": "exposure only (supervision-row feature cache); metrics, guard and decision rules unchanged",
+        "attempt_note": "keys-2 failed under full-token feature caching; this run caches supervision rows only; both failed attempts are preserved",
+        "expected": "the in-distribution guard should now pass; the discriminating measurement is held-out relation-atom and key accuracy, where the frozen trunk is expected to be weak (decode probe held-out relation 0.450/0.491)",
+        "trunk": {
+            "directory": trunk_directory.display().to_string(),
+            "model_safetensors_sha256": trunk_sha256,
+            "pinned_sha256": TRUNK_SHA256,
+            "splits": splits,
+            "loaded_through": "AermModel::from_stack",
+            "transport_snap_restored": snap_restored,
+            "layers": stack.config.layers(),
+            "width": stack.config.width,
+        },
+        "roots": {
+            "snap": TransportSnap::Icosian.name(),
+            "root_count": TransportSnap::Icosian.roots().len(),
+            "relation_indices": roots.relation_indices,
+            "relation_bound": roots.relation_bound,
+            "relation_root_max_inner": RELATION_ROOT_MAX_INNER,
+            "entity_head": "plain 8-way softmax in both arms (no entity roots)",
+            "deviation": "the pre-registered 22 roots at pairwise |q.r| <= 1/2 are infeasible: the largest such icosian set has 12 (the 2T antipodal quotient; see the test); only the 14 relation atoms carry 2I roots, at the smallest achievable bound",
+        },
+        "keys": {
+            "vocabulary_size": stack.config.vocab_size,
+            "vocab_prime_ceiling": keys.vocab_prime_ceiling,
+            "entity_primes": keys.entity,
+            "relation_primes": keys.relation,
+            "registry": "uor-r4-token primes are the first vocab_size primes; atom primes are the next 22 above the ceiling, validated by uor_r4_core::prime_route_attention::PrimeAtom and combined by SemiprimeExpert",
+        },
+        "features": "identical to the key probe: split_features (RMS-normalized detached hidden at the split), extracted episode by episode over the fixed samples; only the atom_rows supervision rows (entity rows and clause trigger positions, with tag/trigger labels) are cached as [f32; 288] rows; no per-token sequences or autodiff graphs are retained",
+        "training_samples": training_samples,
+        "config": {
+            "steps": config.steps,
+            "train_episodes": config.train_episodes,
+            "batch": config.batch,
+            "context": config.context,
+            "learning_rate": config.learning_rate,
+            "warmup": config.warmup,
+            "weight_decay": config.weight_decay,
+            "clip": config.clip,
+            "trigger_positive": config.trigger_positive,
+            "eval_episodes": config.eval_episodes,
+            "eval_batch": config.eval_batch,
+            "dev_episodes": config.dev_episodes,
+            "seed": config.seed,
+            "data_seed": config.data_seed,
+            "eval_seed": config.eval_seed,
+            "dev_seed": config.dev_seed,
+            "plateau_window": config.plateau_window,
+            "record_every": config.record_every,
+        },
+        "arms": arms.iter().map(arm_json).collect::<Vec<_>>(),
+        "guard": {
+            "in_distribution_key_accuracy_at_least": 0.98,
+            "passes": guard_passes,
+        },
+        "decisions": decisions,
+        "parameter_comparison": {
+            "2i_learnable_parameters": arms.iter().find(|arm| arm.kind == AtomKind::TwoI).map(|arm| arm.learnable_parameters),
+            "softmax_learnable_parameters": arms.iter().find(|arm| arm.kind == AtomKind::Softmax).map(|arm| arm.learnable_parameters),
+        },
+        "wall_seconds": started.elapsed().as_secs_f64(),
+        "peak_rss_kib": peak_rss_kib,
+        "peak_rss_bound_kib": PEAK_RSS_BOUND_KIB,
+        "peak_rss_note": "in-process sample via ps at report time, asserted <= peak_rss_bound_kib; the true maximum resident set size is captured by running the sealed binary under /usr/bin/time -l",
+    });
+    fs::write(out.join("result.json"), serde_json::to_vec_pretty(&report)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Entry points.
 
 fn run(args: &Args, out: &Path) -> Result<()> {
@@ -1649,7 +2492,8 @@ fn run(args: &Args, out: &Path) -> Result<()> {
                 learnable_parameters: heads.parameter_count(),
                 held,
                 dev,
-                records,
+                history: json!(records),
+                plateau: None,
             });
         }
     }
@@ -1704,15 +2548,7 @@ fn run(args: &Args, out: &Path) -> Result<()> {
             "eval_seed": config.eval_seed,
             "dev_seed": config.dev_seed,
         },
-        "arms": arms.iter().map(|arm| json!({
-            "split": arm.split,
-            "atom_kind": arm.kind.as_str(),
-            "learnable_parameters": arm.learnable_parameters,
-            "held_out": report_json(&arm.held),
-            "in_distribution": report_json(&arm.dev),
-            "in_distribution_key_accuracy": arm.dev.totals.key_accuracy(),
-            "history": arm.records,
-        })).collect::<Vec<_>>(),
+        "arms": arms.iter().map(arm_json).collect::<Vec<_>>(),
         "guard": {
             "in_distribution_key_accuracy_at_least": 0.98,
             "passes": guard_passes,
@@ -1756,7 +2592,7 @@ fn finish(out: &Path, result: Result<()>) -> Result<()> {
 fn execute(arguments: &[String]) -> Result<()> {
     let (mode, rest) = arguments
         .split_first()
-        .ok_or_else(|| invalid("usage: aerm-keys {run|decode|roots} ..."))?;
+        .ok_or_else(|| invalid("usage: aerm-keys {run|run-cached|decode|roots} ..."))?;
     match mode.as_str() {
         "run" => {
             let args = Args::parse(
@@ -1786,6 +2622,39 @@ fn execute(arguments: &[String]) -> Result<()> {
             let out = PathBuf::from(args.required("out")?);
             report_output::claim(&out)?;
             let result = run(&args, &out);
+            finish(&out, result)
+        }
+        "run-cached" => {
+            let args = Args::parse(
+                rest,
+                &[
+                    "out",
+                    "trunk",
+                    "tokenizer",
+                    "splits",
+                    "steps",
+                    "train_episodes",
+                    "batch",
+                    "context",
+                    "lr",
+                    "warmup",
+                    "weight_decay",
+                    "clip",
+                    "trigger_positive",
+                    "eval_episodes",
+                    "eval_batch",
+                    "dev_episodes",
+                    "seed",
+                    "data_seed",
+                    "eval_seed",
+                    "dev_seed",
+                    "plateau_window",
+                    "record_every",
+                ],
+            )?;
+            let out = PathBuf::from(args.required("out")?);
+            report_output::claim(&out)?;
+            let result = run_cached(&args, &out);
             finish(&out, result)
         }
         "decode" => {
@@ -1880,7 +2749,7 @@ mod tests {
         let config = StackConfig {
             arch: StackArch::Geometric,
             vocab_size: 4096,
-            width: 32,
+            width: FEATURE_WIDTH,
             heads: 4,
             mlp_hidden: 64,
             context: 256,
@@ -2151,6 +3020,152 @@ mod tests {
             before, after,
             "a decode probe step changed the frozen trunk"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn cached_probe_smoke_runs_end_to_end() -> Result<()> {
+        let stack = tiny_stack()?;
+        let roots = select_roots()?;
+        let keys = AtomKeys::new(stack.config.vocab_size)?;
+        let world = natural_world()?;
+        let config = CachedConfig {
+            steps: 6,
+            train_episodes: 4,
+            batch: 2,
+            context: 256,
+            learning_rate: 0.01,
+            warmup: 1,
+            weight_decay: 0.0,
+            clip: 10.0,
+            trigger_positive: 5.0,
+            eval_episodes: 4,
+            eval_batch: 2,
+            dev_episodes: 2,
+            seed: 11,
+            data_seed: 13,
+            eval_seed: 17,
+            dev_seed: 19,
+            plateau_window: 2,
+            record_every: 1,
+        };
+        let cache = collect_train_cache(&stack, 1, &world, &config)?;
+        assert_eq!(cache.features.dims()[0], cache.tag_targets.len());
+        assert_eq!(cache.features.dims()[0], cache.triggers.len());
+        assert_eq!(cache.entity_features.dims()[0], cache.entity_targets.len());
+        assert_eq!(
+            cache.relation_features.dims()[0],
+            cache.relation_targets.len()
+        );
+        let before = stack
+            .variables()
+            .values()
+            .next()
+            .ok_or_else(|| invalid("the tiny stack has no variables"))?
+            .as_tensor()
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let device = stack.device().clone();
+        let width = stack.config.width;
+        for kind in [AtomKind::TwoI, AtomKind::Softmax] {
+            let (heads, history, plateau) =
+                train_heads_cached(width, kind, &roots, &cache, &config, &device)?;
+            assert!(!history.is_empty());
+            assert!(plateau.steps_run >= 1 && plateau.steps_run <= config.steps);
+            for accuracy in [
+                plateau.final_tag_accuracy,
+                plateau.final_trigger_accuracy,
+                plateau.final_entity_accuracy,
+                plateau.final_relation_accuracy,
+            ] {
+                assert!((0.0..=1.0).contains(&accuracy));
+            }
+            let held_episodes = collect_eval_episodes(
+                &stack,
+                1,
+                &heads,
+                &world,
+                config.context,
+                true,
+                config.eval_seed,
+                config.eval_episodes,
+            )?;
+            let held = evaluate_cached_episodes(&keys, &held_episodes)?;
+            assert!(held.totals.clauses > 0, "no held clauses were scored");
+            assert!(held.totals.reads > 0, "no held reads were scored");
+        }
+        let after = stack
+            .variables()
+            .values()
+            .next()
+            .ok_or_else(|| invalid("the tiny stack has no variables"))?
+            .as_tensor()
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert_eq!(
+            before, after,
+            "a cached probe step changed the frozen trunk"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cached_loss_and_merged_grads_match_single_graph() -> Result<()> {
+        let stack = tiny_stack()?;
+        let roots = select_roots()?;
+        let world = natural_world()?;
+        let config = CachedConfig {
+            steps: 2,
+            train_episodes: 4,
+            batch: 2,
+            context: 256,
+            learning_rate: 0.01,
+            warmup: 1,
+            weight_decay: 0.0,
+            clip: 10.0,
+            trigger_positive: 5.0,
+            eval_episodes: 2,
+            eval_batch: 2,
+            dev_episodes: 2,
+            seed: 11,
+            data_seed: 13,
+            eval_seed: 17,
+            dev_seed: 19,
+            plateau_window: 2,
+            record_every: 1,
+        };
+        let cache = collect_train_cache(&stack, 1, &world, &config)?;
+        let device = stack.device().clone();
+        for kind in [AtomKind::TwoI, AtomKind::Softmax] {
+            let heads = ProbeHeads::new(kind, &roots, stack.config.width, config.seed, &device)?;
+            let (decayed, plain) = heads.optimizer_groups();
+            let all: Vec<Var> = decayed.iter().chain(&plain).cloned().collect();
+            let (loss_value, merged) = cached_head_loss_and_grads(&heads, &cache, &all)?;
+            let pieces = cached_head_loss_pieces(&heads, &cache)?;
+            let mut total = pieces[0].clone();
+            for piece in &pieces[1..] {
+                total = (&total + piece)?;
+            }
+            let single_value = f64::from(total.to_scalar::<f32>()?);
+            assert!(
+                (loss_value - single_value).abs() <= 1e-6,
+                "merged loss {loss_value} != single-graph loss {single_value}"
+            );
+            let single = total.backward()?;
+            for var in &all {
+                let left = merged
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("the merged store lacks a gradient"))?;
+                let right = single
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("the single store lacks a gradient"))?;
+                let difference = (left - right)?.abs()?.max_all()?.to_scalar::<f32>()?;
+                assert!(
+                    difference <= 1e-5,
+                    "merged and single-graph gradients differ by {difference}"
+                );
+            }
+        }
         Ok(())
     }
 
