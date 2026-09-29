@@ -586,7 +586,7 @@ const RELATIONS: &[(&str, Option<&str>, Option<&[&str]>)] = &[
 
 #[derive(Clone, Debug)]
 struct Word {
-    text: &'static str,
+    text: String,
     id: u32,
 }
 
@@ -595,6 +595,8 @@ struct RelationSpec {
     word: Word,
     article: Option<&'static str>,
     values: Vec<Word>,
+    /// The values were the name pool at construction; `extend_names` grows them.
+    from_names: bool,
 }
 
 /// The class of a query, from the gold store when it is asked.
@@ -685,7 +687,10 @@ impl RelationWorld {
     pub fn new(encode: &dyn Fn(&str) -> Vec<u32>, bos: u32, eos: u32) -> Result<Self> {
         let single = |text: &'static str| -> Result<Word> {
             match encode(text).as_slice() {
-                [id] => Ok(Word { text, id: *id }),
+                [id] => Ok(Word {
+                    text: text.to_owned(),
+                    id: *id,
+                }),
                 _ => Err(invalid(format!("{text:?} is not a single token"))),
             }
         };
@@ -699,17 +704,21 @@ impl RelationWorld {
             .collect::<Result<Vec<_>>>()?;
         let mut relations = Vec::new();
         for &(word, article, values) in RELATIONS {
-            let values = match values {
-                Some(values) => values
-                    .iter()
-                    .map(|&v| single(v))
-                    .collect::<Result<Vec<_>>>()?,
-                None => names.clone(),
+            let (values, from_names) = match values {
+                Some(values) => (
+                    values
+                        .iter()
+                        .map(|&v| single(v))
+                        .collect::<Result<Vec<_>>>()?,
+                    false,
+                ),
+                None => (names.clone(), true),
             };
             relations.push(RelationSpec {
                 word: single(word)?,
                 article,
                 values,
+                from_names,
             });
         }
         let mut pieces = BTreeMap::new();
@@ -748,6 +757,47 @@ impl RelationWorld {
         })
     }
 
+    /// Extends the training name pool from a list of first names. A name must
+    /// encode together with its leading space to exactly one token; duplicates
+    /// and held-out names are skipped. Returns how many names were added.
+    pub fn extend_names(
+        &mut self,
+        encode: &dyn Fn(&str) -> Vec<u32>,
+        names: &[String],
+    ) -> Result<usize> {
+        let mut added = 0usize;
+        for name in names {
+            let trimmed = name.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let text = format!(" {trimmed}");
+            if self
+                .held_names
+                .iter()
+                .chain(&self.names)
+                .any(|w| w.text == text)
+            {
+                continue;
+            }
+            let word = match encode(&text).as_slice() {
+                [id] => Word { text, id: *id },
+                _ => return Err(invalid(format!("{text:?} is not a single token"))),
+            };
+            if self.relations.iter().any(|r| r.word.id == word.id) {
+                continue;
+            }
+            for relation in self.relations.iter_mut() {
+                if relation.from_names {
+                    relation.values.push(word.clone());
+                }
+            }
+            self.names.push(word);
+            added += 1;
+        }
+        Ok(added)
+    }
+
     /// Every slot word with its token id: names, held-out names and each
     /// relation's word and values.
     pub fn vocabulary(&self) -> serde_json::Value {
@@ -758,7 +808,7 @@ impl RelationWorld {
             "names": words(&self.names),
             "held_out_names": words(&self.held_names),
             "relations": self.relations.iter().map(|r| serde_json::json!({
-                "word": (r.word.text, r.word.id),
+                "word": (r.word.text.clone(), r.word.id),
                 "article": r.article,
                 "values": words(&r.values),
             })).collect::<Vec<_>>(),
@@ -851,12 +901,12 @@ impl<'a> EpisodeBuilder<'a> {
                     out.tags.extend(std::iter::repeat_n(TAG_OTHER, piece.len()));
                 }
                 Entity => {
-                    out.text.push_str(entity.text);
+                    out.text.push_str(&entity.text);
                     out.tokens.push(entity.id);
                     out.tags.push(TAG_ENTITY);
                 }
                 Relation => {
-                    out.text.push_str(relation.word.text);
+                    out.text.push_str(&relation.word.text);
                     out.tokens.push(relation.word.id);
                     out.tags.push(TAG_RELATION);
                 }
@@ -868,7 +918,7 @@ impl<'a> EpisodeBuilder<'a> {
                         out.tokens.extend_from_slice(piece);
                         out.tags.extend(std::iter::repeat_n(TAG_OTHER, piece.len()));
                     }
-                    out.text.push_str(value.text);
+                    out.text.push_str(&value.text);
                     out.value_offset = Some(out.tokens.len());
                     out.tokens.push(value.id);
                     out.tags.push(TAG_VALUE);
@@ -906,7 +956,7 @@ impl<'a> EpisodeBuilder<'a> {
             out.tokens.extend_from_slice(piece);
             out.tags.extend(std::iter::repeat_n(TAG_OTHER, piece.len()));
         }
-        out.text.push_str(value.text);
+        out.text.push_str(&value.text);
         out.text.push('.');
         out.value_offset = Some(out.tokens.len());
         out.tokens.push(value.id);
@@ -1841,6 +1891,9 @@ pub struct AermConfig {
     /// Loss weight of a trigger-positive position relative to a negative one.
     pub trigger_positive_weight: f32,
     pub data_seed: u64,
+    /// Drop the tag and trigger auxiliary losses on ordinary-text batches.
+    #[serde(default)]
+    pub mask_text_tags: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1960,8 +2013,16 @@ pub fn train_aerm(
             &silent_value,
         )?;
         let text_loss = logits_cross_entropy(&logits, &targets, None)?;
-        let text_tag = head_loss(&bottom.tags, &text_tags, &text_ones)?;
-        let text_trigger = head_loss(&bottom.triggers, &text_triggers, &text_ones)?;
+        let text_tag = if config.mask_text_tags {
+            None
+        } else {
+            Some(head_loss(&bottom.tags, &text_tags, &text_ones)?)
+        };
+        let text_trigger = if config.mask_text_tags {
+            None
+        } else {
+            Some(head_loss(&bottom.triggers, &text_triggers, &text_ones)?)
+        };
         // Dialogues.
         let dialogues = world.batch(&mut rng, batch, context, false)?;
         let bottom = model.bottom(&dialogues.ids, batch, context)?;
@@ -1988,8 +2049,14 @@ pub fn train_aerm(
             })
             .collect();
         let trigger_loss = head_loss(&bottom.triggers, &dialogues.triggers, &trigger_weights)?;
-        let aux_tag = ((&text_tag + &tag_loss)? * (0.5 * config.tag_weight))?;
-        let aux_trigger = ((&text_trigger + &trigger_loss)? * (0.5 * config.trigger_weight))?;
+        let aux_tag = match &text_tag {
+            Some(text_term) => ((text_term + &tag_loss)? * (0.5 * config.tag_weight))?,
+            None => (&tag_loss * (0.5 * config.tag_weight))?,
+        };
+        let aux_trigger = match &text_trigger {
+            Some(text_term) => ((text_term + &trigger_loss)? * (0.5 * config.trigger_weight))?,
+            None => (&trigger_loss * (0.5 * config.trigger_weight))?,
+        };
         let loss = (((&text_loss + &dialogue_loss)? + aux_tag)? + aux_trigger)?;
         let mut grads = loss.backward()?;
         let norm = clip_gradients(&mut grads, &all, config.clip)?;
