@@ -1,32 +1,56 @@
-//! M-world v1 corpora and evaluation (Lab 1; ROADMAP restart packet, Stage 1,
-//! R1). The world is `uor_r4_training::milestone_world`.
+//! M-world corpora and evaluation (Lab 1; ROADMAP restart packet, Stage 1, R1
+//! and A1). `world=v1` (the default) is `uor_r4_training::milestone_world`, R1's
+//! sealed instrument; `world=v2` is `uor_r4_training::milestone_world_v2`, the
+//! retrieval instrument (open value pools, MQAR and copy episodes, the #1516
+//! oracle fixes).
 //!
 //! ```text
-//! m-world corpus out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json chat=CHAT_V0_TRAIN_DIR \
+//! m-world corpus [world=v1] out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json chat=CHAT_V0_TRAIN_DIR \
 //!   exclude=REQUESTS.json [conversations=5600] [seed=1]
-//! m-world evaluate out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
+//! m-world corpus world=v2 out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [chat=CHAT_V0_TRAIN_DIR] \
+//!   [exclude=REQUESTS.json] [conversations=5600] [seed=1] \
+//!   [mqar_share=0.35] [copy_share=0.10] [relation_share=0.30] [other_share=0.25]
+//! m-world evaluate [world=v1] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json]
-//! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json
+//! m-world evaluate world=v2 out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
+//!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
+//!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
+//! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! ```
 //!
 //! `corpus` writes a prepared dialogue split (`uor-r4-chat-corpus/v1`: a UORT
-//! token store, its response mask and its manifest) under `OUT/train/`. The
-//! whole chat-v0 training split comes first, unchanged, then `conversations`
-//! M-world training conversations as one more source. None of their user
-//! turns equals (ignoring case and punctuation) a user turn of the `exclude`
-//! panel. `dialogue-train` reads it with `train_tokens=OUT/train/tokens.u16
+//! token store, its response mask and its manifest) under `OUT/train/`. With
+//! `chat=`, the whole chat-v0 training split comes first, unchanged, then
+//! `conversations` M-world training conversations as one more source. None of
+//! their user turns equals (ignoring case and punctuation) a user turn of the
+//! `exclude` panel. v1 requires `chat=` and `exclude=`; v2 makes both
+//! optional (without `chat=` the split is the M-world source alone).
+//! `dialogue-train` reads it with `train_tokens=OUT/train/tokens.u16
 //! train_mask=OUT/train/response_mask.u8 train_manifest=OUT/train/manifest.json`.
 //!
-//! `evaluate` answers M-world conversations of `split` with the saved stack's
-//! greedy replies, each turn after the model's own earlier replies, as
+//! `evaluate` (v1) answers M-world conversations of `split` with the saved
+//! stack's greedy replies, each turn after the model's own earlier replies, as
 //! `stack_dialogue::reply_panel` does. It judges every turn with the frozen
 //! oracle and reports per category and per intent. A conversation whose
 //! history cannot fit the context with every reply at `max_new_tokens` is
 //! skipped and counted. With `panel=`, it also answers that request panel and
 //! scores its ten memory requests (`stack_memory_replies::score_memory`) into
-//! `panel_replies.json`, after the M-world report is written. A
-//! saved transport snap is restored; a saved served representation is
+//! `panel_replies.json`, after the M-world report is written.
+//!
+//! `evaluate world=v2` answers each turn after the episode's REFERENCE
+//! history (the world's own earlier replies, not the model's), so an MQAR
+//! item is asked at exactly its recorded token distance and every episode
+//! fits the context. It judges with the v2 oracle and reports accuracy per
+//! category and intent, MQAR recall by distance and by N, copy exact match,
+//! relation recall on open and closed pools (abstentions apart), and the A1
+//! gate: MQAR recall >= 0.9 at every distance AND open-relation recall >= 0.9,
+//! computed on this report's split (the gate counts on `split=development`).
+//!
+//! `rejudge` re-judges an evaluation's saved replies with this build's oracle;
+//! a v2 report needs `tokenizer=` (its MQAR distances depend on it).
+//!
+//! A saved transport snap is restored; a saved served representation is
 //! refused. Every root is claimed before anything is loaded and sealed at the
 //! end. Set RAYON_NUM_THREADS to bound the threads.
 
@@ -39,12 +63,16 @@ use candle_core::Device;
 use serde_json::{json, Value};
 use uor_r4_core::native_geometric::mmap_corpus::{CorpusWriter, MmapCorpusReader};
 use uor_r4_core::report_output;
-use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
+use uor_r4_tokenizer::dialogue::{DialogueEncoder, DialogueProtocol, Message};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 use uor_r4_training::geometric_stack::StackModel;
 use uor_r4_training::milestone_world::{judge, normalized, Category, MWorld, Split};
+use uor_r4_training::milestone_world_v2::{
+    judge_v2, render, Conversation2, Kind, MWorld2, Mix, Pool, Scorecard, Turn2, CONTEXT,
+};
 use uor_r4_training::stack_dialogue::{
-    check_panel, episode_contract, greedy_reply, load_requests, reply_panel, DialogueSplit, Request,
+    check_panel, episode_contract, greedy_reply, load_requests, reply_panel, DialogueSplit, Reply,
+    Request,
 };
 use uor_r4_training::stack_memory_replies::score_memory;
 use uor_r4_training::stack_tracking::Rng;
@@ -92,6 +120,43 @@ impl Args {
     }
 }
 
+/// Which world a corpus or evaluation uses.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum World {
+    V1,
+    V2,
+}
+
+/// The arguments only world=v2 reads.
+const V2_ONLY: [&str; 4] = ["mqar_share", "copy_share", "relation_share", "other_share"];
+
+fn world_of(args: &Args) -> Result<World> {
+    match args.optional("world").as_deref() {
+        None | Some("v1") => {
+            for key in V2_ONLY {
+                if args.0.contains_key(key) {
+                    return Err(invalid(format!("{key}= applies to world=v2 only")));
+                }
+            }
+            Ok(World::V1)
+        }
+        Some("v2") => Ok(World::V2),
+        Some(other) => Err(invalid(format!("unknown world={other}; use v1 or v2"))),
+    }
+}
+
+/// The v2 mix from the shares given (the defaults otherwise).
+fn mix_of(args: &Args) -> Result<Mix> {
+    let defaults = Mix::default();
+    Ok(Mix {
+        mqar: args.number("mqar_share", defaults.mqar)?,
+        copy: args.number("copy_share", defaults.copy)?,
+        relation: args.number("relation_share", defaults.relation)?,
+        other: args.number("other_share", defaults.other)?,
+        closed: defaults.closed,
+    })
+}
+
 fn load_tokenizer(path: &Path) -> Result<ByteBpeTokenizer> {
     ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(path)?)
         .ok_or_else(|| invalid("tokenizer JSON is not a supported byte-level BPE"))
@@ -105,27 +170,26 @@ fn panel_turns(path: &Path) -> Result<BTreeSet<String>> {
         .collect())
 }
 
-fn corpus(args: &Args, out: &Path) -> Result<()> {
-    let started = Instant::now();
-    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
-    let chat = PathBuf::from(args.required("chat")?);
-    let exclude_path = PathBuf::from(args.required("exclude")?);
-    let conversations: usize = args.number("conversations", 5_600)?;
-    let seed: u64 = args.number("seed", 1)?;
-    let tokenizer = load_tokenizer(&tokenizer_path)?;
-    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
-        .map_err(|e| invalid(format!("protocol: {e}")))?;
-    let encoder = protocol
-        .bind(&tokenizer)
-        .map_err(|e| invalid(format!("protocol: {e}")))?;
-    let excluded = panel_turns(&exclude_path)?;
+fn rate_json((pass, of): (usize, usize)) -> Value {
+    json!({"pass": pass, "of": of, "rate": if of == 0 { 0.0 } else { pass as f64 / of as f64 }})
+}
+
+/// A prepared chat-v0 split, validated against the tokenizer.
+struct Chat {
+    manifest: Value,
+    manifest_path: PathBuf,
+    reader: MmapCorpusReader,
+    mask: Vec<u8>,
+}
+
+fn load_chat(chat: &Path, tokenizer_path: &Path) -> Result<Chat> {
     let chat_tokens_path = chat.join("tokens.u16");
     let chat_mask_path = chat.join("response_mask.u8");
-    let chat_manifest_path = chat.join("manifest.json");
-    let chat_manifest: Value = serde_json::from_slice(&fs::read(&chat_manifest_path)?)?;
-    if chat_manifest["schema"] != "uor-r4-chat-corpus/v1"
-        || chat_manifest["drops"]["special_token_occurrences"] != 0
-        || chat_manifest["tokenizer"]["sha256"] != json!(sha256_file(&tokenizer_path)?)
+    let manifest_path = chat.join("manifest.json");
+    let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+    if manifest["schema"] != "uor-r4-chat-corpus/v1"
+        || manifest["drops"]["special_token_occurrences"] != 0
+        || manifest["tokenizer"]["sha256"] != json!(sha256_file(tokenizer_path)?)
     {
         return Err(invalid(
             "chat= must be a uor-r4-chat-corpus/v1 split with no special-token text, \
@@ -137,7 +201,7 @@ fn corpus(args: &Args, out: &Path) -> Result<()> {
         (&chat_tokens_path, "tokens_sha256"),
         (&chat_mask_path, "mask_sha256"),
     ] {
-        if chat_manifest[key] != json!(sha256_file(path)?) {
+        if manifest[key] != json!(sha256_file(path)?) {
             return Err(invalid(format!(
                 "{} does not match the chat manifest's {key}",
                 path.display()
@@ -146,11 +210,39 @@ fn corpus(args: &Args, out: &Path) -> Result<()> {
     }
     let reader = MmapCorpusReader::open(&chat_tokens_path)
         .map_err(|e| invalid(format!("chat token store: {e}")))?;
-    let vocab = reader.vocab_size();
-    let mut mask = fs::read(&chat_mask_path)?;
+    let mask = fs::read(&chat_mask_path)?;
     if mask.len() != reader.as_slice().len() {
         return Err(invalid("chat tokens and mask differ in length"));
     }
+    Ok(Chat {
+        manifest,
+        manifest_path,
+        reader,
+        mask,
+    })
+}
+
+fn corpus(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let chat_dir = PathBuf::from(args.required("chat")?);
+    let exclude_path = PathBuf::from(args.required("exclude")?);
+    let conversations: usize = args.number("conversations", 5_600)?;
+    let seed: u64 = args.number("seed", 1)?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let excluded = panel_turns(&exclude_path)?;
+    let Chat {
+        manifest: chat_manifest,
+        manifest_path: chat_manifest_path,
+        reader,
+        mut mask,
+    } = load_chat(&chat_dir, &tokenizer_path)?;
+    let vocab = reader.vocab_size();
     // M-world conversations, encoded exactly as corpus documents.
     let mut rng = Rng::new(seed);
     let (mut rejected, mut world_tokens, mut world_mask) = (0usize, Vec::new(), Vec::new());
@@ -309,6 +401,369 @@ fn corpus(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// The chat-v0 manifest's rules, for a split with no chat source (verbatim).
+const MASK_SCHEMA: &str = "uor-r4-response-mask/u8/v1";
+const MASK_RULE: &str = "1 = each token of an assistant turn's response content and its terminating <|eos|>; 0 = <|bos|>, all role markers, turn separators, system/user content, and an unmasked document-terminal <|eos|>.";
+const TEMPLATE_RULE: &str = "<|bos|> then turns joined by a single '\\n' separator (placed before every turn after the first); a turn is '<marker><content>' with markers 'System: ', 'User: ', 'Assistant: '; every assistant turn ends with <|eos|>; a document-terminal <|eos|> is appended only when the final emitted turn is not assistant. Content is \\r\\n/\\r-normalised and trimmed; interior whitespace preserved.";
+
+/// The messages of `turns[..=upto]`: every exchange before `upto` complete,
+/// then the user turn at `upto` alone.
+fn messages_through(turns: &[Turn2], upto: usize) -> Vec<Message<'_>> {
+    let mut messages = Vec::with_capacity(2 * upto + 1);
+    for (i, turn) in turns.iter().enumerate().take(upto + 1) {
+        messages.push(Message {
+            role: "user",
+            content: &turn.user,
+        });
+        if i < upto {
+            messages.push(Message {
+                role: "assistant",
+                content: &turn.reply,
+            });
+        }
+    }
+    messages
+}
+
+/// v2 corpus: M-world v2 training conversations, one document each, measured
+/// in this tokenizer's real tokens, optionally after the chat-v0 split.
+fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let conversations: usize = args.number("conversations", 5_600)?;
+    let seed: u64 = args.number("seed", 1)?;
+    let mix = mix_of(args)?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let exclude_path = args.optional("exclude").map(PathBuf::from);
+    let excluded = match &exclude_path {
+        Some(path) => panel_turns(path)?,
+        None => BTreeSet::new(),
+    };
+    let chat = match args.optional("chat") {
+        Some(dir) => Some(load_chat(Path::new(&dir), &tokenizer_path)?),
+        None => None,
+    };
+    let vocab = match &chat {
+        Some(chat) => chat.reader.vocab_size(),
+        None => u32::try_from(tokenizer.vocab_size())
+            .map_err(|_| invalid("the tokenizer's vocabulary does not fit the token store"))?,
+    };
+    let count = |text: &str| tokenizer.encode(text).len();
+    let mut world = MWorld2::new(&count, mix)?;
+    let mut rng = Rng::new(seed);
+    let (mut rejected, mut world_tokens, mut world_mask) = (0usize, Vec::new(), Vec::new());
+    let mut responses = 0usize;
+    // (episodes, tokens, response tokens) per kind; (turns, tokens, response
+    // tokens) per category; achieved distances per distance bucket.
+    let mut per_kind: BTreeMap<String, (usize, usize, usize)> = BTreeMap::new();
+    let mut per_category: BTreeMap<String, (usize, usize, usize)> = BTreeMap::new();
+    let mut achieved: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    let mut n_matrix: BTreeMap<String, usize> = BTreeMap::new();
+    let mut length_histogram: BTreeMap<usize, usize> = BTreeMap::new();
+    let (mut longest, mut sample) = (0usize, Vec::new());
+    let mut examples: BTreeMap<&str, Value> = BTreeMap::new();
+    for index in 0..conversations {
+        let conversation =
+            world.conversation_excluding(&mut rng, Split::Train, &excluded, &mut rejected)?;
+        let messages: Vec<Message<'_>> = conversation
+            .turns
+            .iter()
+            .flat_map(|turn| {
+                [
+                    Message {
+                        role: "user",
+                        content: &turn.user,
+                    },
+                    Message {
+                        role: "assistant",
+                        content: &turn.reply,
+                    },
+                ]
+            })
+            .collect();
+        let encoded = encoder.encode_document(&messages);
+        if encoded.emitted_turns != messages.len() || encoded.special_token_occurrences != 0 {
+            return Err(invalid(format!(
+                "M-world v2 conversation {index} did not encode"
+            )));
+        }
+        if encoded.tokens.len() != conversation.tokens {
+            return Err(invalid(format!(
+                "M-world v2 conversation {index}: the meter counted {} tokens, the protocol {}",
+                conversation.tokens,
+                encoded.tokens.len()
+            )));
+        }
+        if encoded.tokens.len() > CONTEXT {
+            return Err(invalid(format!(
+                "M-world v2 conversation {index} has {} tokens, over the {CONTEXT}-token context",
+                encoded.tokens.len()
+            )));
+        }
+        for &id in &encoded.tokens {
+            if id >= vocab {
+                return Err(invalid("an M-world token is outside the vocabulary"));
+            }
+            world_tokens.push(id as u16);
+        }
+        let response_tokens = encoded.response_mask.iter().filter(|&&m| m == 1).count();
+        world_mask.extend(&encoded.response_mask);
+        longest = longest.max(encoded.tokens.len());
+        *length_histogram
+            .entry(encoded.tokens.len() / 32 * 32)
+            .or_default() += 1;
+        let kind = per_kind
+            .entry(format!("{:?}", conversation.kind))
+            .or_default();
+        *kind = (
+            kind.0 + 1,
+            kind.1 + encoded.tokens.len(),
+            kind.2 + response_tokens,
+        );
+        responses += conversation.turns.len();
+        for (i, turn) in conversation.turns.iter().enumerate() {
+            let cell = per_category
+                .entry(format!("{:?}", turn.category))
+                .or_default();
+            *cell = (
+                cell.0 + 1,
+                cell.1 + world.meter().exchange(i, &turn.user, &turn.reply),
+                cell.2 + world.meter().text(&turn.reply) + 1,
+            );
+            if let Some(mqar) = &turn.tag.mqar {
+                achieved
+                    .entry(mqar.target_distance)
+                    .or_default()
+                    .push(mqar.distance);
+                *n_matrix
+                    .entry(format!(
+                        "D{}xN{}->N{}",
+                        mqar.target_distance, mqar.n_requested, mqar.n
+                    ))
+                    .or_default() += 1;
+            }
+        }
+        let open_relation = conversation.kind == Kind::Relation
+            && conversation
+                .turns
+                .last()
+                .is_some_and(|t| t.tag.pool == Some(Pool::Open) && !t.tag.abstain);
+        let label = match conversation.kind {
+            Kind::Mqar => Some("mqar"),
+            Kind::Copy => Some("copy"),
+            Kind::Relation if open_relation => Some("open_relation"),
+            _ => None,
+        };
+        if let Some(label) = label {
+            examples.entry(label).or_insert_with(
+                || json!({"tokens": conversation.tokens, "episode": render(&conversation.turns)}),
+            );
+        }
+        if index < 24 {
+            sample.push(json!(conversation));
+        }
+    }
+    let train = out.join("train");
+    fs::create_dir_all(&train)?;
+    let tokens_path = train.join("tokens.u16");
+    let mut writer = CorpusWriter::create(&tokens_path, vocab)
+        .map_err(|e| invalid(format!("token store: {e}")))?;
+    if let Some(chat) = &chat {
+        writer
+            .write_tokens(chat.reader.as_slice())
+            .map_err(|e| invalid(format!("token store: {e}")))?;
+    }
+    writer
+        .write_tokens(&world_tokens)
+        .map_err(|e| invalid(format!("token store: {e}")))?;
+    let total = writer
+        .finish()
+        .map_err(|e| invalid(format!("token store: {e}")))?;
+    let mut mask = chat.as_ref().map_or_else(Vec::new, |c| c.mask.clone());
+    mask.extend(&world_mask);
+    let mask_path = train.join("response_mask.u8");
+    fs::write(&mask_path, &mask)?;
+    let world_response_tokens = world_mask.iter().filter(|&&m| m == 1).count();
+    let world_file = json!({
+        "label": "m-world-v2.train",
+        "path": "generated: uor_r4_training::milestone_world_v2 (Split::Train)",
+        "rows_total": conversations,
+        "rows_used": conversations,
+        "tokens": world_tokens.len(),
+        "response_tokens": world_response_tokens,
+        "special_token_occurrences": 0,
+    });
+    let world_input = json!({"label": "m-world-v2.train", "path": "generated"});
+    let (mut files, mut inputs) = (Vec::new(), Vec::new());
+    if let Some(chat) = &chat {
+        files.extend(
+            chat.manifest["files"]
+                .as_array()
+                .cloned()
+                .ok_or_else(|| invalid("the chat manifest has no files"))?,
+        );
+        inputs.extend(
+            chat.manifest["inputs"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default(),
+        );
+    }
+    files.push(world_file);
+    inputs.push(world_input);
+    let tokenizer_entry = match &chat {
+        Some(chat) => chat.manifest["tokenizer"].clone(),
+        None => json!({
+            "bos_id": protocol.bos_id,
+            "eos_id": protocol.eos_id,
+            "unk_id": protocol.unk_id,
+            "path": tokenizer_path.display().to_string(),
+            "sha256": sha256_file(&tokenizer_path)?,
+            "tokenizer_cid": protocol.tokenizer_cid,
+            "vocab_size": tokenizer.vocab_size(),
+        }),
+    };
+    let pick = |key: &str, fallback: Value| match &chat {
+        Some(chat) => chat.manifest[key].clone(),
+        None => fallback,
+    };
+    let distance_report: BTreeMap<String, Value> = achieved
+        .iter()
+        .map(|(target, seen)| {
+            let mean = seen.iter().sum::<usize>() as f64 / seen.len().max(1) as f64;
+            (
+                target.to_string(),
+                json!({
+                    "episodes": seen.len(),
+                    "achieved_min": seen.iter().min(),
+                    "achieved_max": seen.iter().max(),
+                    "achieved_mean": mean,
+                }),
+            )
+        })
+        .collect();
+    let table = |cells: &BTreeMap<String, (usize, usize, usize)>, unit: &str| -> Value {
+        json!(cells
+            .iter()
+            .map(|(k, v)| (
+                k.clone(),
+                json!({unit: v.0, "tokens": v.1, "response_tokens": v.2})
+            ))
+            .collect::<BTreeMap<_, _>>())
+    };
+    let composition = json!({
+        "chat_v0": chat.as_ref().map(|chat| json!({
+            "manifest": chat.manifest_path.display().to_string(),
+            "manifest_sha256": sha256_file(&chat.manifest_path).ok(),
+            "tokens_sha256": chat.manifest["tokens_sha256"],
+            "tokens": chat.reader.as_slice().len(),
+        })),
+        "m_world": {
+            "version": "m-world-v2",
+            "world_digest": MWorld2::digest(),
+            "split": "train",
+            "seed": seed,
+            "mix": world.mix(),
+            "conversations": conversations,
+            "responses": responses,
+            "tokens": world_tokens.len(),
+            "response_tokens": world_response_tokens,
+            "rejected_draws": rejected,
+            "excluded_panel": exclude_path.as_ref().map(|p| p.display().to_string()),
+            "excluded_turns": excluded.len(),
+            "episodes_per_kind": table(&per_kind, "episodes"),
+            "turns_per_category": table(&per_category, "turns"),
+            "mqar_achieved_distance_by_bucket": distance_report,
+            "mqar_n_requested_to_achieved": n_matrix,
+            "episode_tokens_max": longest,
+            "episode_tokens_histogram_by_32": length_histogram
+                .iter()
+                .map(|(bucket, n)| (format!("{bucket}-{}", bucket + 31), *n))
+                .collect::<BTreeMap<_, _>>(),
+        },
+    });
+    let manifest = json!({
+        "schema": "uor-r4-chat-corpus/v1",
+        "mask_schema": pick("mask_schema", json!(MASK_SCHEMA)),
+        "split": "train",
+        "mask_rule": pick("mask_rule", json!(MASK_RULE)),
+        "template_rule": pick("template_rule", json!(TEMPLATE_RULE)),
+        "tokenizer": tokenizer_entry,
+        "max_tokens": pick("max_tokens", json!(CONTEXT)),
+        "inputs": inputs,
+        "files": files,
+        "drops": pick("drops", json!({
+            "messages_skipped_empty": 0, "messages_skipped_unknown_role": 0,
+            "rows_dropped_empty": 0, "rows_dropped_malformed": 0, "rows_dropped_no_messages": 0,
+            "rows_dropped_no_response": 0, "rows_dropped_oversized": 0,
+            "special_token_occurrences": 0,
+        })),
+        "tokens": total,
+        "response_tokens": mask.iter().filter(|&&m| m == 1).count(),
+        "tokens_bytes": fs::metadata(&tokens_path)?.len(),
+        "mask_bytes": mask.len(),
+        "tokens_sha256": sha256_file(&tokens_path)?,
+        "mask_sha256": sha256_file(&mask_path)?,
+        "composition": composition,
+    });
+    let manifest_path = train.join("manifest.json");
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+    // The split must load and index exactly as `dialogue-train` will read it.
+    let (_, contract) = episode_contract(&tokenizer, vocab as usize)?;
+    let split = DialogueSplit::load(&tokens_path, &mask_path, &manifest_path)?;
+    let index = split.index(contract)?;
+    let sources: Vec<Value> = index
+        .population()
+        .sources
+        .iter()
+        .map(|s| json!({"label": s.label, "documents": s.documents, "eligible_responses": s.eligible_responses}))
+        .collect();
+    let executable = std::env::current_exe()?;
+    fs::write(
+        out.join("corpus.json"),
+        serde_json::to_vec_pretty(&json!({
+            "schema": "uor-r4.m-world-corpus/2",
+            "executable_sha256": sha256_file(&executable)?,
+            "world": "m-world-v2",
+            "world_digest": MWorld2::digest(),
+            "v1_world_digest": MWorld::digest(),
+            "mix": world.mix(),
+            "tokenizer_sha256": sha256_file(&tokenizer_path)?,
+            "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
+            "composition": manifest["composition"],
+            "eligible_responses": index.episodes().len(),
+            "sources": sources,
+            "examples": examples,
+            "sample": sample,
+            "wall_seconds": started.elapsed().as_secs_f64(),
+        }))?,
+    )?;
+    println!(
+        "{total} tokens: M-world v2 {} ({conversations} conversations, {responses} responses, \
+         {rejected} draws rejected), longest episode {longest} tokens",
+        world_tokens.len()
+    );
+    println!("episodes per kind (episodes, tokens, response tokens): {per_kind:?}");
+    println!("turns per category (turns, tokens, response tokens): {per_category:?}");
+    println!(
+        "MQAR achieved distance by bucket: {}",
+        serde_json::to_string(&composition["m_world"]["mqar_achieved_distance_by_bucket"])?
+    );
+    for (label, example) in &examples {
+        println!(
+            "--- example: {label} ({} tokens)\n{}",
+            example["tokens"],
+            example["episode"].as_str().unwrap_or_default()
+        );
+    }
+    Ok(())
+}
+
 fn load_model(directory: &Path, device: &Device) -> Result<(StackModel, Value)> {
     if StackModel::saved_served_representation(directory)?.is_some() {
         return Err(invalid(
@@ -331,15 +786,62 @@ fn load_model(directory: &Path, device: &Device) -> Result<(StackModel, Value)> 
     ))
 }
 
+fn split_of(args: &Args) -> Result<Split> {
+    match args.optional("split").as_deref() {
+        None | Some("development") => Ok(Split::Development),
+        Some("train") => Ok(Split::Train),
+        Some(other) => Err(invalid(format!("unknown split={other}"))),
+    }
+}
+
+/// Answer the request panel of `panel=` and score its ten memory requests
+/// into `panel_replies.json`, after the M-world report is written.
+#[allow(clippy::too_many_arguments)]
+fn answer_panel(
+    path: &Path,
+    out: &Path,
+    encoder: &DialogueEncoder<'_>,
+    protocol: &DialogueProtocol,
+    context: usize,
+    max_new_tokens: usize,
+    decode: &dyn Fn(&[u32]) -> String,
+    reply: &mut dyn FnMut(&[u32], usize) -> Result<Reply>,
+    model_identity: &Value,
+    executable_sha256: &str,
+) -> Result<()> {
+    let requests = load_requests(path)?;
+    let replies = reply_panel(
+        encoder,
+        protocol,
+        &requests,
+        context,
+        max_new_tokens,
+        decode,
+        reply,
+    )?;
+    let memory = score_memory(&replies)?;
+    println!("panel memory: {}/{}", memory["correct"], memory["of"]);
+    fs::write(
+        out.join("panel_replies.json"),
+        serde_json::to_vec_pretty(&json!({
+            "schema": "uor-r4.m-world-panel/1",
+            "executable_sha256": executable_sha256,
+            "model_identity": model_identity,
+            "requests": path.display().to_string(),
+            "requests_sha256": sha256_file(path)?,
+            "max_new_tokens": max_new_tokens,
+            "memory": memory,
+            "replies": replies,
+        }))?,
+    )?;
+    Ok(())
+}
+
 fn evaluate(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
     let model_dir = PathBuf::from(args.required("model")?);
     let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
-    let split = match args.optional("split").as_deref() {
-        None | Some("development") => Split::Development,
-        Some("train") => Split::Train,
-        Some(other) => return Err(invalid(format!("unknown split={other}"))),
-    };
+    let split = split_of(args)?;
     let conversations: usize = args.number("conversations", 300)?;
     let seed: u64 = args.number("seed", 9_101)?;
     let max_new_tokens: usize = args.number("max_new_tokens", 32)?;
@@ -472,31 +974,171 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
         serde_json::to_vec_pretty(&report)?,
     )?;
     if let Some(path) = args.optional("panel") {
-        let path = PathBuf::from(path);
-        let requests = load_requests(&path)?;
-        let replies = reply_panel(
+        answer_panel(
+            Path::new(&path),
+            out,
             &encoder,
             &protocol,
-            &requests,
             context,
             max_new_tokens,
             &decode,
             &mut reply,
+            &report["model_identity"],
+            &executable_sha256,
         )?;
-        let memory = score_memory(&replies)?;
-        println!("panel memory: {}/{}", memory["correct"], memory["of"]);
-        fs::write(
-            out.join("panel_replies.json"),
-            serde_json::to_vec_pretty(&json!({
-                "schema": "uor-r4.m-world-panel/1",
-                "executable_sha256": executable_sha256,
-                "model_identity": report["model_identity"],
-                "requests": path.display().to_string(),
-                "requests_sha256": sha256_file(&path)?,
-                "max_new_tokens": max_new_tokens,
-                "memory": memory,
-                "replies": replies,
-            }))?,
+    }
+    Ok(())
+}
+
+/// v2 evaluation: each turn is answered after the episode's reference
+/// history, so MQAR items are asked at exactly their recorded distance.
+fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let split = split_of(args)?;
+    let conversations: usize = args.number("conversations", 300)?;
+    let seed: u64 = args.number("seed", 9_101)?;
+    let max_new_tokens: usize = args.number("max_new_tokens", 32)?;
+    let mix = mix_of(args)?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let device = Device::Cpu;
+    let (model, identity) = load_model(&model_dir, &device)?;
+    let context = model.config.context;
+    let decode = |ids: &[u32]| tokenizer.decode(ids);
+    let mut reply =
+        |history: &[u32], cap: usize| greedy_reply(&model, history, cap, protocol.eos_id);
+    let count = |text: &str| tokenizer.encode(text).len();
+    let mut world = MWorld2::new(&count, mix)?;
+    let mut rng = Rng::new(seed);
+    let mut card = Scorecard::default();
+    let (mut whole, mut judged) = (0usize, Vec::with_capacity(conversations));
+    for index in 0..conversations {
+        let conversation = world.conversation(&mut rng, split)?;
+        let mut all = true;
+        let mut turns = Vec::with_capacity(conversation.turns.len());
+        for (t, turn) in conversation.turns.iter().enumerate() {
+            let messages = messages_through(&conversation.turns, t);
+            let prefix = encoder.encode_assistant_prefix(&messages);
+            if prefix.emitted_turns != messages.len() || prefix.special_token_occurrences != 0 {
+                return Err(invalid(format!("mw2-{index:04}: turn {t} did not encode")));
+            }
+            let cap = max_new_tokens.min(context.saturating_sub(prefix.tokens.len()));
+            let generated = greedy_reply(&model, &prefix.tokens, cap, protocol.eos_id)?;
+            let text_ids: Vec<u32> = generated
+                .ids
+                .iter()
+                .copied()
+                .filter(|&id| id != protocol.eos_id)
+                .collect();
+            let text = decode(&text_ids);
+            let pass = judge_v2(&turn.checks, &turn.user, &text);
+            all &= pass;
+            card.record(turn, pass);
+            turns.push(json!({
+                "intent": turn.intent, "category": turn.category, "user": turn.user,
+                "reference_reply": turn.reply, "reply": text, "pass": pass,
+                "checks": turn.checks, "tag": turn.tag, "stop": generated.stop_record(),
+                "history_tokens": prefix.tokens.len(),
+            }));
+        }
+        whole += usize::from(all);
+        judged.push(json!({
+            "id": format!("mw2-{index:04}"), "kind": conversation.kind,
+            "tokens": conversation.tokens, "all_pass": all, "turns": turns,
+        }));
+    }
+    let scores = card.to_json();
+    for (category, cell) in scores["by_category"].as_object().into_iter().flatten() {
+        println!(
+            "{category}: {}/{} ({:.3})",
+            cell["pass"],
+            cell["of"],
+            cell["rate"].as_f64().unwrap_or(0.0)
+        );
+    }
+    for (distance, cell) in scores["mqar"]["by_distance"]
+        .as_object()
+        .into_iter()
+        .flatten()
+    {
+        println!(
+            "MQAR D={distance}: {}/{} ({:.3})",
+            cell["pass"],
+            cell["of"],
+            cell["rate"].as_f64().unwrap_or(0.0)
+        );
+    }
+    for (n, cell) in scores["mqar"]["by_n"].as_object().into_iter().flatten() {
+        println!(
+            "MQAR N={n}: {}/{} ({:.3})",
+            cell["pass"],
+            cell["of"],
+            cell["rate"].as_f64().unwrap_or(0.0)
+        );
+    }
+    println!(
+        "copy: {}/{}; open relation: {}/{}; closed relation: {}/{}; a1_gate: {}",
+        scores["copy"]["pass"],
+        scores["copy"]["of"],
+        scores["relation"]["open"]["pass"],
+        scores["relation"]["open"]["of"],
+        scores["relation"]["closed"]["pass"],
+        scores["relation"]["closed"]["of"],
+        scores["a1_gate"]
+    );
+    let executable = std::env::current_exe()?;
+    let executable_sha256 = sha256_file(&executable)?;
+    let mut report = json!({
+        "schema": "uor-r4.m-world-evaluation/2",
+        "executable_sha256": executable_sha256,
+        "world": "m-world-v2",
+        "world_digest": MWorld2::digest(),
+        "model": model_dir.display().to_string(),
+        "model_identity": identity,
+        "tokenizer_sha256": sha256_file(&tokenizer_path)?,
+        "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
+        "split": split,
+        "seed": seed,
+        "mix": world.mix(),
+        "conversations_drawn": conversations,
+        "history": "reference: every turn is answered after the episode's own earlier replies",
+        "context": context,
+        "max_new_tokens": max_new_tokens,
+        "a1_gate_scope": if split == Split::Development {
+            "development: this is the A1 gate"
+        } else {
+            "train: informational; the A1 gate is decided on split=development"
+        },
+        "conversations_all_pass": rate_json((whole, conversations)),
+        "conversations": judged,
+        "wall_seconds": started.elapsed().as_secs_f64(),
+    });
+    if let (Some(report), Some(scores)) = (report.as_object_mut(), scores.as_object()) {
+        report.extend(scores.clone());
+    }
+    // Written before the panel, so a panel error cannot discard it.
+    fs::write(
+        out.join("m_world_evaluation.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    if let Some(path) = args.optional("panel") {
+        answer_panel(
+            Path::new(&path),
+            out,
+            &encoder,
+            &protocol,
+            context,
+            max_new_tokens,
+            &decode,
+            &mut reply,
+            &report["model_identity"],
+            &executable_sha256,
         )?;
     }
     Ok(())
@@ -509,6 +1151,9 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
 fn rejudge(args: &Args, out: &Path) -> Result<()> {
     let report_path = PathBuf::from(args.required("report")?);
     let old: Value = serde_json::from_slice(&fs::read(&report_path)?)?;
+    if old["schema"] == "uor-r4.m-world-evaluation/2" {
+        return rejudge_v2(args, out, &report_path, &old);
+    }
     if old["schema"] != "uor-r4.m-world-evaluation/1" {
         return Err(invalid("report= is not an M-world evaluation"));
     }
@@ -600,6 +1245,105 @@ fn rejudge(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// The v2 counterpart: regenerate the report's conversations with the same
+/// tokenizer and mix, require every saved user turn to match, and judge the
+/// saved replies with this build's v2 oracle.
+fn rejudge_v2(args: &Args, out: &Path, report_path: &Path, old: &Value) -> Result<()> {
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    if old["tokenizer_sha256"] != json!(sha256_file(&tokenizer_path)?) {
+        return Err(invalid(
+            "tokenizer= is not the tokenizer the report was evaluated with",
+        ));
+    }
+    let split: Split = serde_json::from_value(old["split"].clone())?;
+    let seed = old["seed"]
+        .as_u64()
+        .ok_or_else(|| invalid("the report has no seed"))?;
+    let drawn = old["conversations_drawn"]
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| invalid("the report has no conversation count"))?;
+    let mix: Mix = serde_json::from_value(old["mix"].clone())?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let count = |text: &str| tokenizer.encode(text).len();
+    let mut world = MWorld2::new(&count, mix)?;
+    let mut rng = Rng::new(seed);
+    let conversations: Vec<Conversation2> = (0..drawn)
+        .map(|_| world.conversation(&mut rng, split))
+        .collect::<Result<_>>()?;
+    let rows = old["conversations"]
+        .as_array()
+        .ok_or_else(|| invalid("the report has no conversations"))?;
+    let mut card = Scorecard::default();
+    let (mut whole, mut changed) = (0usize, Vec::new());
+    for row in rows {
+        let id = row["id"].as_str().unwrap_or_default();
+        let index: usize = id
+            .strip_prefix("mw2-")
+            .and_then(|n| n.parse().ok())
+            .ok_or_else(|| invalid(format!("unexpected conversation id {id:?}")))?;
+        let conversation = conversations
+            .get(index)
+            .ok_or_else(|| invalid(format!("{id} is beyond the drawn conversations")))?;
+        let turns = row["turns"]
+            .as_array()
+            .ok_or_else(|| invalid(format!("{id} has no turns")))?;
+        if turns.len() != conversation.turns.len() {
+            return Err(invalid(format!("{id}: turn counts differ")));
+        }
+        let mut all = true;
+        for (number, (saved, turn)) in turns.iter().zip(&conversation.turns).enumerate() {
+            if saved["user"].as_str() != Some(turn.user.as_str()) {
+                return Err(invalid(format!(
+                    "{id} turn {}: the user turn differs",
+                    number + 1
+                )));
+            }
+            let reply = saved["reply"].as_str().unwrap_or_default();
+            let pass = judge_v2(&turn.checks, &turn.user, reply);
+            all &= pass;
+            card.record(turn, pass);
+            if saved["pass"].as_bool() != Some(pass) {
+                changed.push(json!({
+                    "id": id, "turn": number + 1, "intent": turn.intent, "user": turn.user,
+                    "reply": reply, "before": saved["pass"], "after": pass,
+                }));
+            }
+        }
+        whole += usize::from(all);
+    }
+    let scores = card.to_json();
+    println!(
+        "{} turns changed; a1_gate {} (was {})",
+        changed.len(),
+        scores["a1_gate"],
+        old["a1_gate"]
+    );
+    let executable = std::env::current_exe()?;
+    let mut report = json!({
+        "schema": "uor-r4.m-world-rejudge/2",
+        "world_digest": MWorld2::digest(),
+        "source_world_digest": old["world_digest"],
+        "executable_sha256": sha256_file(&executable)?,
+        "source_report": report_path.display().to_string(),
+        "source_report_sha256": sha256_file(report_path)?,
+        "split": split,
+        "seed": seed,
+        "mix": mix,
+        "a1_gate_before": old["a1_gate"],
+        "conversations_all_pass": rate_json((whole, rows.len())),
+        "changed_turns": changed,
+    });
+    if let (Some(report), Some(scores)) = (report.as_object_mut(), scores.as_object()) {
+        report.extend(scores.clone());
+    }
+    fs::write(
+        out.join("m_world_rejudged.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let (mode, rest) = arguments
@@ -610,17 +1354,23 @@ fn main() -> Result<()> {
             rest,
             &[
                 "out",
+                "world",
                 "tokenizer",
                 "chat",
                 "exclude",
                 "conversations",
                 "seed",
+                "mqar_share",
+                "copy_share",
+                "relation_share",
+                "other_share",
             ],
         )?,
         "evaluate" => Args::parse(
             rest,
             &[
                 "out",
+                "world",
                 "model",
                 "tokenizer",
                 "split",
@@ -628,17 +1378,28 @@ fn main() -> Result<()> {
                 "seed",
                 "max_new_tokens",
                 "panel",
+                "mqar_share",
+                "copy_share",
+                "relation_share",
+                "other_share",
             ],
         )?,
-        "rejudge" => Args::parse(rest, &["out", "report"])?,
+        "rejudge" => Args::parse(rest, &["out", "report", "tokenizer"])?,
         other => return Err(invalid(format!("unknown mode {other}"))),
+    };
+    let world = if mode == "rejudge" {
+        World::V1
+    } else {
+        world_of(&args)?
     };
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
-    let result = match mode.as_str() {
-        "corpus" => corpus(&args, &out),
-        "rejudge" => rejudge(&args, &out),
-        _ => evaluate(&args, &out),
+    let result = match (mode.as_str(), world) {
+        ("corpus", World::V1) => corpus(&args, &out),
+        ("corpus", World::V2) => corpus_v2(&args, &out),
+        ("rejudge", _) => rejudge(&args, &out),
+        (_, World::V1) => evaluate(&args, &out),
+        (_, World::V2) => evaluate_v2(&args, &out),
     };
     if let Err(error) = &result {
         fs::write(
