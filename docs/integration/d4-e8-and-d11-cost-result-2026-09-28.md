@@ -71,9 +71,16 @@ In `crates/uor-r4-integer/src/stack/kernels.rs`:
    - Class II (hardware dividers): 0
    - Class III (floating-point instructions / vector registers): 0
    - Checked across all 31 mandatory symbol ranges and 34 reachable call-graph functions.
-4. **Oracle Verification:** `cargo test -p uor-r4-training --test stack_d11_oracle --offline` yields 6 passed, 0 failed. Note: `stack_d11_oracle` tests small synthetic stack fixtures and error-handling wrap semantics in the release binary, not the 2,048-target S2 model evaluation.
+4. **Oracle Verification:** `cargo test -p uor-r4-training --test stack_d11_oracle --offline` yields 6 passed, 0 failed. Note: `stack_d11_oracle` tests small synthetic stack fixtures, numerical corner cases, and error-handling wrap semantics in the release binary; it is an integration and bounds unit test, **not an evaluation of the 2,048-target S2 model benchmark**. Likewise, unit adapter tests (`d4_map_codec_adapter`) test arithmetic and round-trip mechanics on synthetic matrices, which does not constitute proof of trained model fidelity on full evaluation sets.
 
 ### 4. Comprehensive M1 Cost Profile (Sealed Root `d11-cost-profile-1`)
+
+> [!WARNING]
+> **Provenance and Lineage Disclosure:**
+> As documented in [Evidence Lineage and Resealing Correction](d11-cost-profile-1-lineage-correction.md), `d11-cost-profile-1` is an **annotated report**, not the raw immutable run record.
+> We formally withdraw any assertion that git commit history or source tracking proves bitwise identity of the overwritten pre-reseal raw disk bytes.
+> The exact post-reseal bytes are preserved read-only at `/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-d4/d11-cost-profile-1.snapshot-preserved` (`chmod -R a-w`), and authentic gating qualification awaits Lab 1's re-run into a fresh, distinct report root.
+
 Sealed root: `/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-d4/d11-cost-profile-1` (claimed, sealed, and verified via `report_output::{claim, seal, verify}`).
 Execution configuration: 1 thread, release build with `opt-level = 3`.
 Full Provenance Identities:

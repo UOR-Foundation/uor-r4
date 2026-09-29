@@ -30,31 +30,43 @@ This plan specifies the proposed numerical mechanisms, exact storage accounting 
 
 ## 2. Forensic Distortion Breakdown
 
-In the S1.0 layerwise attribution (`docs/integration/s1-stack-serving-measurements-2026-09-28.md`), the representation loss from single-group perturbations is localized as follows:
+In the S1.0c layerwise attribution (`docs/integration/s1-stack-serving-measurements-2026-09-28.md`), the representation loss from single-group perturbations on `geometric_s1` is localized as follows:
 
-| Parameter Group (S1.0c) | GPTQ $\Delta\text{NLL}$ | Top-1 Agr. | RTN $\Delta\text{NLL}$ | Top-1 Agr. | Causal Observation |
+| Parameter Group (S1.0c) | GPTQ $\Delta\text{NLL}$ | Top-1 Agr. | RTN $\Delta\text{NLL}$ | Top-1 Agr. | Causal Observation (Empirical Hypotheses) |
 |:---|---:|---:|---:|---:|:---|
-| **Output Head (`head`)** | **+0.0119 nats** | 0.9467 | **+0.0149 nats** | 0.9395 | Largest single share (46.3% of GPTQ gap). Embedding folded with final RMSNorm gain ($W_{\text{head}} = W_{\text{embed}} \cdot g_{\text{norm}}$). Logit margins between top tokens are small ($\Delta z \sim 0.1-0.5$); 4-bit grouping inverts top-1 decisions. |
-| **All MLPs (`l0`–`l5.mlp`)** | **+0.0061 nats** | — | **+0.0113 nats** | — | Non-power-of-two width (749 padded to 768) introduces scale distortion. `l0.mlp` is +0.0027, `l5.mlp` is +0.0021 under GPTQ. |
-| **Layer 5 (`l5.mixer_maps`, `l5.mlp`, `l5.scalars`)** | **+0.0047 nats** | — | **+0.0077 nats** | — | Deepest layer. Under GPTQ: `l5.mixer_maps` (+0.0018), `l5.mlp` (+0.0021), `l5.mixer_scalars` (+0.0008). |
+| **Output Head (`head`)** | **+0.0119 nats** | 0.9467 | **+0.0149 nats** | 0.9395 | Largest single group (46.3% of GPTQ gap). Embedding folded with final RMSNorm gain ($W_{\text{head}} = W_{\text{embed}} \cdot g_{\text{norm}}$). Logit margin explanations ($\Delta z$) are hypotheses; 4-bit grouping inverts top-1 decisions. |
+| **`l0.mlp`** | **+0.0027 nats** | 0.9772 | **+0.0043 nats** | 0.9718 | First MLP layer. Non-power-of-two width (749 padded to 768). |
+| **`l5.mlp`** | **+0.0021 nats** | 0.9745 | **+0.0037 nats** | 0.9695 | Final MLP layer. |
+| **`l5.mixer_maps`** | **+0.0018 nats** | 0.9817 | **+0.0032 nats** | 0.9744 | Final layer read/mixer projections. |
+| **`l5.mixer_scalars`** | **+0.0008 nats** | 0.9949 | **+0.0008 nats** | 0.9949 | Final layer conv taps and decay rates via 8-bit grid codes. |
+| **Layer 5 Total (Sum of 3 groups)** | **+0.0047 nats** | — | **+0.0077 nats** | — | Sum of `l5.mixer_maps` (+0.0018), `l5.mlp` (+0.0021), and `l5.mixer_scalars` (+0.0008) under GPTQ. |
 | **Input Embedding (`embed`)** | **+0.0026 nats** | 0.9742 | **+0.0026 nats** | 0.9742 | Unfolded discrete lookup table. |
-| **Mixer Maps Layers 0–4** | **+0.0016 nats** | — | **+0.0027 nats** | — | Recurrence and read projections in layers 0–4 (`l0`: +0.0004, `l1`: +0.0004, `l2`: +0.0001, `l3`: +0.0004, `l4`: +0.0003 under GPTQ). |
-| **State Mixer Scalars (All)** | **+0.0013 nats** | 0.9919 | **+0.0013 nats** | 0.9919 | Conv taps and decay rates via 8-bit grid codes. |
+| **`l1`–`l4.mlp` Combined** | **+0.0014 nats** | — | **+0.0033 nats** | — | Intermediate MLP layers (`l1`: +0.0003, `l2`: +0.0004, `l3`: +0.0004, `l4`: +0.0003 under GPTQ). |
+| **`l0`–`l4.mixer_maps` Combined** | **+0.0016 nats** | — | **+0.0027 nats** | — | Intermediate mixer projections (`l0`: +0.0004, `l1`: +0.0004, `l2`: +0.0001, `l3`: +0.0004, `l4`: +0.0003 under GPTQ). |
+| **`l0`–`l4.mixer_scalars` Combined** | **+0.0005 nats** | — | **+0.0005 nats** | — | Intermediate layer conv/decay scalar grid codes. |
+| **All MLPs (`l0`–`l5.mlp`)** | **+0.0061 nats** | — | **+0.0113 nats** | — | Aggregate MLP perturbation share across all 6 layers. |
+| **Mixer Maps (`l0`–`l5.mixer_maps`)** | **+0.0034 nats** | — | **+0.0059 nats** | — | Aggregate mixer map perturbation share. |
+| **Mixer Scalars (`all_scalars`)** | **+0.0013 nats** | 0.9919 | **+0.0013 nats** | 0.9919 | All scalar grid codes together. |
 | **Simultaneous Perturbation (`all`)** | **+0.0257 nats** | 0.9184 | **+0.0362 nats** | 0.9065 | Full export model evaluated against float reference. |
 
 > [!IMPORTANT]
 > **Non-Additive Perturbation Caveat:**
-> Single-group perturbation measurements (evaluating one quantized group while keeping all other parameters at float) are **non-additive hypotheses**, not provably independent causal partitions.
-> While the linear sum of single-group perturbations (+0.0254 nats under GPTQ) happens to align closely with the simultaneous perturbation (+0.0257 nats) on `geometric_s1`, in general non-linear neural networks contain interaction effects across layers.
-> Therefore, attributing the representation gap to individual groups serves as an empirical hypothesis to prioritize QAT intervention, not a decoupled mathematical theorem.
+> Single-group perturbation measurements (evaluating one quantized group while keeping all other parameters at float) are **non-additive hypotheses**, not an exact additive causal partition.
+> While the linear sum of single-group perturbations (+0.0254 nats under GPTQ) happens to align closely with the simultaneous perturbation (+0.0257 nats) on `geometric_s1`, non-linear neural networks exhibit cross-layer interaction effects.
+> Therefore, attributing the representation gap to individual groups serves as an empirical hypothesis to prioritize QAT investigation, not a decoupled mathematical partition.
 
-**Finding:** The output head alone accounts for almost half of the total degradation. Any post-hoc quantizer (RTN, GPTQ, or FWHT) treats the weights as fixed and attempts minimum MSE reconstruction $\min_W \|W - \hat{W}\|_F^2$. However, minimum Frobenius weight error does NOT minimize cross-entropy loss $\mathcal{L}_{\text{CE}}$, because logit ranking is highly non-linear around the top-1 boundary.
+**Finding:** The output head alone accounts for almost half of the total degradation. Any post-hoc quantizer (RTN, GPTQ, or FWHT) treats the weights as fixed and attempts minimum MSE reconstruction $\min_W \|W - \hat{W}\|_F^2$. However, minimum Frobenius weight error does NOT necessarily minimize cross-entropy loss $\mathcal{L}_{\text{CE}}$, because logit ranking is non-linear around the top-1 boundary.
 
 ---
 
 ## 3. Causal Interventions via Lab 1 QAT Hook
 
-Lab 1 has implemented the QAT interface in `crates/uor-r4-training/src/geometric_stack.rs`:
+The owner decision of September 28 at 17:00 UTC ([DECISIONS.md](DECISIONS.md)) directed:
+> "Lab 1 adds QAT, and D4 targets the same gap. The D11 port, bundle and audit continue."
+
+This mandate authorizes developing QAT-compatible representation adapters and loss hooks; it is not approval of new model widths, training doses, or predicted gain claims. All training doses and gain numbers described below are **proposed hypotheses submitted for Lab 1 review and owner approval**.
+
+Lab 1 implemented the QAT interface in `crates/uor-r4-training/src/geometric_stack.rs`:
 ```rust
 pub trait MapCodec: Send + Sync {
     fn name(&self) -> &str;
@@ -64,25 +76,29 @@ pub trait MapCodec: Send + Sync {
 In served training mode (`StackModel::set_served_representation`), the forward pass evaluates through `codec.round_trip()`, while the backward pass uses a Straight-Through Estimator (STE):
 $$\frac{\partial \mathcal{L}}{\partial W} \approx \frac{\partial \mathcal{L}}{\partial W_{\text{served}}}$$
 
-### Intervention A: Straight-Through Estimator (STE) Head Adaptation
-- **Hypothesis:** By evaluating the output head through `Grouped4BitCodec` during the final 256–512 steps of training, the float master weights will adjust to separate the pre-quantization logit margins.
-- **Expected Causal Effect:** Eliminates top-1 logit inversions caused by grid quantization, reducing output head degradation from +0.0119 nats to $< +0.0040$ nats.
+### Intervention A: Straight-Through Estimator (STE) Head Adaptation (Proposed Plan)
+- **Hypothesis:** By evaluating the output head through `HeadCompensatedMapCodec` or `Grouped4BitCodec` during candidate training steps (e.g. proposed 256–512 steps), the float master weights adjust to separate pre-quantization logit margins.
+- **Predicted Effect (Hypothesis):** Aims to reduce output head degradation from +0.0119 nats toward $\le +0.0040$ nats. This is an empirical target to be tested, not a guaranteed result.
 - **Matched Control:** Float checkpoint fine-tuned for identical steps without `set_served_representation`.
 
-### Intervention B: Structural Group-32 Dimension Alignment
-- **Problem:** In `geometric_s1`, $d_{\text{mlp}} = 749$. When padded to whole groups of 32 ($768$), $19$ zero units per row are stored:
+### Intervention B: Structural Group-32 Dimension Alignment & Total Storage Accounting
+- **Total Storage Rate Accounting:**
+  Under D4, storage rate must count all container framing (headers, table descriptors, checksums), group scales, and zero-padding against the **true original unpadded weight denominator**:
+  $$\text{Total Stored Rate (bpw)} = \frac{\text{Total Payload Bytes (weights + scales + framing + padding)} \times 8}{\text{Total Original Unpadded Weights}}$$
+  The aligned code-plus-scale rate ($4.0 + 8.0/32 = 4.25$ bpw) is the raw parameter rate, not the total stored rate.
+- **Problem in `geometric_s1`:** In `geometric_s1`, $d_{\text{mlp}} = 749$. When padded to whole groups of 32 ($768$), $19$ zero units per row are stored:
   $$\text{Storage} = 24 \text{ groups} \times (16\text{ B nibbles} + 1\text{ B scale}) = 408\text{ B} = 3,264\text{ bits}$$
   $$\text{Bits / Original Weight} = \frac{3,264}{749} = 4.3578\text{ bits/weight}$$
-  Across the full model, this structural padding pushed total storage to **4.2725 bits/weight**, violating the $\le 4.25$ D4 gate.
-- **Intervention:**
-  1. For future stack architectures (S4+), enforce $d_{\text{mlp}} \equiv 0 \pmod{32}$ (e.g. $d_{\text{mlp}} = 768$ or $736$). At exact multiples of 32:
-     $$\text{Storage Rate} = \frac{16 + 1}{32} \times 8 = 4.2500\text{ bits/weight}$$
-  2. For legacy width-749 checkpoints, implement partial-group packing: the trailing 13 weights pack into 7 nibble bytes + 1 scale byte = 8 bytes (instead of 17 bytes), achieving $399\text{ B} = 3,192\text{ bits} \rightarrow 4.2616$ bits/weight.
+  Across the full model, this structural padding pushed total storage to **4.2725 bits/weight**, exceeding the $\le 4.25$ D4 gate.
+- **Invariant:** The frozen `geometric_s1` architecture must NOT be modified retroactively to disguise a codec miss.
+- **Proposed Future Options (Subject to Lab 1 Architectural Direction):**
+  1. For future stack architectures, Lab 1 may consider sizing dimensions such that $d \equiv 0 \pmod{32}$ (e.g. $d_{\text{mlp}} = 768$ or $736$).
+  2. Alternatively, partial-group packing may be explored where trailing weights use smaller group structures if supported by the D11 integer serving kernel.
 
-### Intervention C: Conway-Sloane E8 Lattice Codebook STE
-- **Problem:** H+E8 exhibited catastrophic degradation (+2.4235 nats) because post-training VQ mapped 8-dimensional vectors to the 240 minimal roots on a single sphere ($r = \sqrt{2}$), collapsing radial dynamics.
-- **Intervention:** Under QAT, an 8D E8 quantizer with learned per-channel gain allows the network to learn representations that naturally cluster into E8 lattice Voronoi cells.
-- **Rate Target:** 8 dimensions encoded in 8-bit index + 8-bit scale = 2.00 bits/weight, achieving extreme laptop memory reduction if calibrated via STE.
+### Intervention C: Conway-Sloane E8 Lattice Codebook STE (Proposed Research)
+- **Problem:** H+E8 exhibited degradation (+2.4235 nats) because post-training single-shell VQ mapped 8-dimensional vectors to 240 minimal roots on a single sphere ($r = \sqrt{2}$), collapsing radial dynamics.
+- **Proposed Investigation:** Under QAT, two-stage residual matched-bit E8 lattice quantization ($b \to \text{E8}_1 + \text{E8}_2(\text{residual})$ at ~4.0 bpw, now implemented in `crates/uor-r4-integer/src/codec.rs`) can be tested through the `MapCodec` interface.
+- **Status:** Unpromoted negative result under D12 at single-shell scope; matched-bit E8 remains a research arm for subsequent evaluation.
 
 ---
 
