@@ -10,6 +10,8 @@ strategic authority.
 
 ## Lab 1 leadership and restart packet
 
+> **Superseded as the plan by the [plan of record](docs/plans/2026-09-29-path-to-chat.md) (29 September, [#1507](https://github.com/UOR-Foundation/uor-r4/pull/1507)) and by D13 once it is recorded.** This packet keeps the milestone target and the measured state as of 11:37 UTC. A rewritten ROADMAP will replace it.
+
 **Updated September 29, 11:37 UTC.** Every lab reads this first on restart.
 - **Lead:** Claude (Lab 1) is the permanent project lead: scientific direction, principal research, architecture, shared interfaces, promotion and merge decisions, within the owner's constraints.
 - **Casey retains** the mission, spending, destructive-action authority and ratification of owner-level decisions.
@@ -30,7 +32,7 @@ strategic authority.
 - "updated relation: 30 conversations that assert, update and then query a relation, answered with the updated value";
 - "new simple instructions: 30 instructions of at least 6 types absent from training templates".
 
-Whether "absent from training templates" binds the instruction *types* or only their *phrasings* is settled when the panel is authored (Stage 3). If it binds the types, the panel must use types that no training template covers. M-world's development split holds out phrasings within trained types, so it measures phrasing transfer only.
+The owner settled on 29 September that "absent from training templates" binds the *wording*: the panel uses new wording of trained instruction types. M-world's development split holds out phrasings within trained types, so it measures phrasing transfer only.
 
 **It passes when:**
 - at least 80% of scored turns pass in each category;
@@ -45,9 +47,9 @@ Loss, tracking accuracy, arithmetic parity and library availability are componen
 |---|---|---|
 | Replies | S2 answers 2 of 38 development requests: generic filler and mismatched stock replies | **R1** (Lab 1): does narrow-domain data make the 7M stack responsive? |
 | Memory keys | The real panel recalls 0 of 10. Six of the ten need one key across different words | The **G v2** frozen-trunk key probe (the DeepSeek lab) |
-| Memory binding and text cost | **Adopted for the integration; a hypothesis on dialogue text until the integration measures it.** Measured separately, each at its scope, on the probe's world and dev text:<br>• arm A with the sieve, no gate: held-out Updated 264/273 (Gold's own ceiling, 0.967), Absent 377/378 (`binding-eval-1`);<br>• text NLL with prose registers silenced: 0.029 below the baseline ([#1500](https://github.com/UOR-Foundation/uor-r4/pull/1500), open);<br>• the gate ([#1502](https://github.com/UOR-Foundation/uor-r4/pull/1502), open) gives exactly the silenced figure on text without user turns. Its effect on dialogue text with user turns is not measured | Measure it in the integration |
+| Memory binding and text cost | **Adopted for the integration; a hypothesis on dialogue text until the integration measures it.** Measured separately, each at its scope, on the probe's world and dev text:<br>• arm A with the sieve, no gate: held-out Updated 264/273 (Gold's own ceiling, 0.967), Absent 377/378 (`binding-eval-1`);<br>• text NLL with prose registers silenced: 0.029 below the baseline ([#1500](https://github.com/UOR-Foundation/uor-r4/pull/1500));<br>• the gate ([#1502](https://github.com/UOR-Foundation/uor-r4/pull/1502), merged) gives exactly the silenced figure on text without user turns. Its effect on dialogue text with user turns is not measured | Measure it in the integration |
 | Native fidelity | **Code model `geometric_s1`:** the 4-bit export costs +0.0362 nats (round to nearest) and +0.0257 (GPTQ).<br>**Dialogue stack S2:** under the D10 GPTQ export, greedy replies match float on 14 of 58 turns. Its nats gap was not measured | **QAT** (Anti-Gravity) |
-| Native serving | The D11 engine's logits equal the D10 integer reference's (maximum difference 0 on 16 S2 windows). On `geometric_s1`, integer arithmetic costs ≤ 10⁻⁶ nats against float. Not yet served: S4's 2I transport, the memory port, the store arena, store persistence | **S1.4**, then S1.2 and the native port (the Kimi lab) |
+| Native serving | The D11 engine's logits equal the D10 integer reference's (maximum difference 0 on 16 S2 windows). On `geometric_s1`, integer arithmetic costs ≤ 10⁻⁶ nats against the artifact's own f32 values. Not yet served: S4's 2I transport, the memory port, the store arena, store persistence | **S1.4**, then S1.2 and the native port (the Kimi lab) |
 
 **Pinned models:**
 - **S4 arm A `2b3b5681…`**, the main line's start point: `/Volumes/UOR-Workspace/uor-r4-lab/kimi-s4-fit-20260929/arm-a-snap-1/model`. It is S2 continued with the trained-in 2I transport snap (#973 comments 5883878235 and 5884326637; #1494 records the adoption);
