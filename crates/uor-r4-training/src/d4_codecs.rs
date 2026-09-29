@@ -104,20 +104,16 @@ impl MapCodec for HeadCompensatedMapCodec {
         let is_target_head = if let Some((target_rows, target_cols)) = self.head_shape {
             rows == target_rows && cols == target_cols
         } else {
-            rows > cols
+            rows > cols && rows != 2 * cols
         };
 
         if self.head_only && !is_target_head {
             D11Interim.round_trip(values, rows, cols)
         } else {
-            uor_r4_integer::codec::apply_codec_arm(
-                values,
-                rows,
-                cols,
-                uor_r4_integer::codec::CodecArm::HeadCompensated,
-                0,
-            )
-            .map_err(Into::into)
+            let mat = uor_r4_integer::codec::quantize_matrix_compensated(values, rows, cols)
+                .map_err(|e| invalid(e.to_string()))?;
+            let codec = uor_r4_integer::codec::Grouped4BitCodec::default();
+            codec.dequantize(&mat).map_err(Into::into)
         }
     }
 }
@@ -167,18 +163,12 @@ pub fn codec_by_name(name: &str) -> Result<Arc<dyn MapCodec>> {
         "native-d11-grouped-4bit-g32-rtn" | "native-d11-grouped-4bit-g32" => {
             Ok(Arc::new(D11Interim))
         }
-        "native-d11-grouped-4bit-g32-min-mse" => {
-            Ok(Arc::new(D4Grouped4BitAdapter::min_mse()))
-        }
+        "native-d11-grouped-4bit-g32-min-mse" => Ok(Arc::new(D4Grouped4BitAdapter::min_mse())),
         "native-d4-head-compensated-head-only" => {
             Ok(Arc::new(HeadCompensatedMapCodec::head_only()))
         }
-        "native-d4-head-compensated-all-maps" => {
-            Ok(Arc::new(HeadCompensatedMapCodec::all_maps()))
-        }
-        "native-d4-e8-matched-bit" => {
-            Ok(Arc::new(E8MatchedBitMapCodec::default()))
-        }
+        "native-d4-head-compensated-all-maps" => Ok(Arc::new(HeadCompensatedMapCodec::all_maps())),
+        "native-d4-e8-matched-bit" => Ok(Arc::new(E8MatchedBitMapCodec::default())),
         _ => Err(invalid(format!("unknown served codec name: {name}"))),
     }
 }

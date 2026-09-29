@@ -64,13 +64,8 @@ fn head_compensated_codec_produces_finite_values() -> Result<()> {
     // Test explicit target shape with head_only_for:
     let codec_targeted = HeadCompensatedMapCodec::head_only_for(64, 32);
     let rt_targeted_match = codec_targeted.round_trip(&values, 64, 32)?;
-    let rt_comp = uor_r4_integer::codec::apply_codec_arm(
-        &values,
-        64,
-        32,
-        uor_r4_integer::codec::CodecArm::HeadCompensated,
-        0,
-    )?;
+    let mat = uor_r4_integer::codec::quantize_matrix_compensated(&values, 64, 32)?;
+    let rt_comp = uor_r4_integer::codec::Grouped4BitCodec::default().dequantize(&mat)?;
     assert_eq!(rt_targeted_match, rt_comp);
 
     // Non-matching shape falls back to D11Interim:
@@ -150,7 +145,7 @@ fn qat_adapters_integrate_with_stack_model_and_export_contract() -> Result<()> {
 fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     let config = StackConfig {
         arch: StackArch::Geometric,
-        vocab_size: 64,
+        vocab_size: 96,
         width: 32,
         heads: 1,
         mlp_hidden: 32,
@@ -165,7 +160,7 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     let mut model = StackModel::new(config, &device)?;
 
     // 1. Enable QAT with HeadCompensatedMapCodec
-    let codec = Arc::new(HeadCompensatedMapCodec::head_only_for(64, 32));
+    let codec = Arc::new(HeadCompensatedMapCodec::head_only_for(96, 32));
     model.set_served_representation(Some(codec))?;
     assert_eq!(
         model.served_codec().unwrap().name(),
@@ -238,7 +233,7 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     std::fs::write(&lut_path, &lut_bytes)?;
     let integer_model = IntegerStackModel::load(&lut_path)
         .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
-    assert_eq!(integer_model.shape().vocab, 64);
+    assert_eq!(integer_model.shape().vocab, 96);
     assert_eq!(integer_model.shape().width, 32);
 
     let mut session = integer_model.session();
@@ -248,7 +243,7 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
             .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
         assert_eq!(
             int_logits.len(),
-            64,
+            96,
             "logits length must match vocabulary size"
         );
         let int_top = uor_r4_integer::stack::stack_argmax(int_logits);
@@ -545,5 +540,168 @@ fn test_e8_matched_bit_map_codec_qat_and_export_refusal() -> Result<()> {
 
     // Clean up
     let _ = std::fs::remove_dir_all(&tmp_root);
+    Ok(())
+}
+
+fn fold_columns(values: &mut [f32], cols: usize, gain: &[f32]) {
+    for row in values.chunks_exact_mut(cols) {
+        for (v, &g) in row.iter_mut().zip(gain) {
+            *v *= g;
+        }
+    }
+}
+
+fn pad(values: &[f32], rows: usize, cols: usize, to_rows: usize, to_cols: usize) -> Vec<f32> {
+    let mut out = vec![0.0f32; to_rows * to_cols];
+    for r in 0..rows {
+        out[r * to_cols..r * to_cols + cols].copy_from_slice(&values[r * cols..(r + 1) * cols]);
+    }
+    out
+}
+
+#[test]
+fn test_exported_artifact_dequantized_weights_equal_served_view_element_by_element() -> Result<()> {
+    let codecs: Vec<Arc<dyn MapCodec>> = vec![
+        Arc::new(D4Grouped4BitAdapter::min_mse()),
+        Arc::new(HeadCompensatedMapCodec::all_maps()),
+        Arc::new(HeadCompensatedMapCodec::head_only_for(96, 32)),
+    ];
+
+    for codec in codecs {
+        let codec_name = codec.name().to_string();
+        let config = StackConfig {
+            arch: StackArch::Geometric,
+            vocab_size: 96,
+            width: 32,
+            heads: 2,
+            mlp_hidden: 40,
+            context: 8,
+            pattern: "rar".into(),
+            read: ReadScore::Lorentz,
+            rotation: true,
+            seed: 42,
+            memory: None,
+        };
+        let device = Device::Cpu;
+        let mut model = StackModel::new(config.clone(), &device)?;
+        model.set_served_representation(Some(codec.clone()))?;
+
+        let (lut_bytes, _summary) =
+            export_stack(&model, serde_json::json!({"test": "parity"}), None)?;
+        let artifact = StackArtifact::parse(lut_bytes)
+            .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+
+        // Check every single matrix in the exported artifact against the served view element by element
+        let vars = model.variables();
+        for spec in &artifact.header.matrices {
+            let dequantized = uor_r4_training::lut_export::dequantize_matrix(
+                spec.rows,
+                spec.cols,
+                spec.exp_base,
+                artifact.section(spec.nibbles),
+                artifact.section(spec.scales),
+            )?;
+
+            let var_name = |name: &str| -> Result<Vec<f32>> {
+                Ok(vars
+                    .get(name)
+                    .ok_or_else(|| uor_r4_training::TrainingError::Invalid(name.to_string()))?
+                    .as_tensor()
+                    .flatten_all()?
+                    .to_vec1::<f32>()?)
+            };
+
+            let expected_served = match spec.name.as_str() {
+                "embed" => {
+                    let src = var_name("embedding.weight")?;
+                    codec.round_trip(&src, spec.rows, spec.cols)?
+                }
+                "head" => {
+                    let mut src = var_name("embedding.weight")?;
+                    let gain = var_name("final_norm.weight")?;
+                    fold_columns(&mut src, spec.cols, &gain);
+                    codec.round_trip(&src, spec.rows, spec.cols)?
+                }
+                name if name.starts_with("l0.")
+                    || name.starts_with("l1.")
+                    || name.starts_with("l2.") =>
+                {
+                    let layer = name[1..2].parse::<usize>().unwrap();
+                    let part = &name[3..];
+                    match part {
+                        "rec_in" => {
+                            let mut src = var_name(&format!("layers.{layer:02}.rec.in.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.rec_norm.weight"))?;
+                            fold_columns(&mut src, spec.cols, &gain);
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "rec_gate" => {
+                            let mut src = var_name(&format!("layers.{layer:02}.rec.gate.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.rec_norm.weight"))?;
+                            fold_columns(&mut src, spec.cols, &gain);
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "rec_out" => {
+                            let src = var_name(&format!("layers.{layer:02}.rec.out.weight"))?;
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "query" | "key" | "value" | "null" => {
+                            let mut src =
+                                var_name(&format!("layers.{layer:02}.read.{part}.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.read_norm.weight"))?;
+                            fold_columns(&mut src, spec.cols, &gain);
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "out" => {
+                            let src = var_name(&format!("layers.{layer:02}.read.out.weight"))?;
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "gate" | "up" => {
+                            let mut src =
+                                var_name(&format!("layers.{layer:02}.mlp.{part}.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.mlp_norm.weight"))?;
+                            fold_columns(&mut src, config.width, &gain);
+                            let padded =
+                                pad(&src, config.mlp_hidden, config.width, spec.rows, spec.cols);
+                            codec.round_trip(&padded, spec.rows, spec.cols)?
+                        }
+                        "down" => {
+                            let src = var_name(&format!("layers.{layer:02}.mlp.down.weight"))?;
+                            let padded =
+                                pad(&src, config.width, config.mlp_hidden, spec.rows, spec.cols);
+                            codec.round_trip(&padded, spec.rows, spec.cols)?
+                        }
+                        other => panic!("unknown matrix in artifact: {other}"),
+                    }
+                }
+                other => panic!("unknown matrix name: {other}"),
+            };
+
+            assert_eq!(
+                dequantized.len(),
+                expected_served.len(),
+                "codec {codec_name}, matrix {}: length mismatch",
+                spec.name
+            );
+            assert_eq!(
+                dequantized,
+                expected_served,
+                "codec {codec_name}, matrix {}: exported artifact's dequantized weights must equal served view element by element bit for bit",
+                spec.name
+            );
+        }
+
+        // Also check forward logits bit-for-bit against stack_grid_reference
+        let ids: Vec<u32> = vec![3, 15, 29, 44];
+        let served_logits = model.forward(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+        let grid_ref = stack_grid_reference(&model, &artifact)?;
+        let ref_logits = grid_ref.logits(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+        assert_eq!(
+            served_logits,
+            ref_logits,
+            "codec {codec_name}: served forward logits must equal exported grid reference logits bit for bit"
+        );
+    }
+
     Ok(())
 }

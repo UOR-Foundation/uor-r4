@@ -325,7 +325,7 @@ pub fn export_stack(
                         quantize_matrix_compensated_packed(values, rows, cols)?
                     }
                     Some("native-d4-head-compensated-head-only")
-                        if site == Some(StackSite::Head) =>
+                        if site == Some(StackSite::Head) || site.is_none() =>
                     {
                         quantize_matrix_compensated_packed(values, rows, cols)?
                     }

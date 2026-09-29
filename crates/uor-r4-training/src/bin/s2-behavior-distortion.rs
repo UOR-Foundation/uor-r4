@@ -18,13 +18,14 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use candle_core::{Device, Tensor};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uor_r4_core::report_output;
-use uor_r4_lut::format::{Container, StackArtifact, TableValues};
-use uor_r4_tokenizer::dialogue::{DialogueEncoder, DialogueProtocol};
-use uor_r4_training::geometric_stack::{ReadScore, StackArch, StackConfig, StackModel, StackSite};
+use uor_r4_lut::format::StackArtifact;
+use uor_r4_tokenizer::dialogue::DialogueProtocol;
+use uor_r4_tokenizer::ByteBpeTokenizer;
+use uor_r4_training::geometric_stack::{StackModel, StackSite};
 use uor_r4_training::lut_export::dequantize_matrix;
 use uor_r4_training::stack_dialogue::{Reply, Request};
 
@@ -73,7 +74,8 @@ fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
         "/Volumes/UOR-Workspace/uor-r4-lab/claude-s2-dialogue-baseline/dialogue-1/model".to_string()
     }));
     let artifact_path = PathBuf::from(map.get("artifact").cloned().unwrap_or_else(|| {
-        "/Volumes/UOR-Workspace/uor-r4-lab/claude-s2-dialogue-baseline/export-1/model.lut".to_string()
+        "/Volumes/UOR-Workspace/uor-r4-lab/claude-s2-dialogue-baseline/export-1/model.lut"
+            .to_string()
     }));
     let heldout_path = PathBuf::from(map.get("heldout").cloned().unwrap_or_else(|| {
         "/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout/tokens.u16".to_string()
@@ -200,6 +202,7 @@ fn greedy_reply_with_head(
     })
 }
 
+#[allow(dead_code)]
 struct MapSpec {
     name: String,
     var_name: Option<String>,
@@ -212,6 +215,7 @@ struct MapSpec {
     component: String,
 }
 
+#[allow(dead_code)]
 struct TeacherTurn {
     turn_index: usize,
     prefix_ids: Vec<u32>,
@@ -245,7 +249,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 2. Load model and artifact
         let float_model = StackModel::load(&args.model_dir, &Device::Cpu)?;
         let artifact_bytes = fs::read(&args.artifact_path)?;
-        let artifact = StackArtifact::read(&artifact_bytes)?;
+        let artifact = StackArtifact::parse(artifact_bytes)?;
         let d = float_model.config.width;
         let vocab_size = float_model.config.vocab_size;
         let mlp = artifact.header.shape.mlp;
@@ -280,10 +284,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     layer: Some(l),
                     component: "rec_in".into(),
                 });
+                let rot_rows = if float_model.config.rotation { d } else { 0 };
                 map_specs.push(MapSpec {
                     name: a("rec_gate"),
                     var_name: Some(t("rec.gate.weight")),
-                    rows: float_model.config.gate_rows(),
+                    rows: d / 4 + rot_rows,
                     cols: d,
                     site: Some(StackSite::Recurrence(l)),
                     is_head: false,
@@ -419,7 +424,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .as_tensor()
                     .flatten_all()?
                     .to_vec1::<f32>()?;
-                for (part, name) in [("rec.in.weight", a("rec_in")), ("rec.gate.weight", a("rec_gate"))] {
+                for (part, name) in [
+                    ("rec.in.weight", a("rec_in")),
+                    ("rec.gate.weight", a("rec_gate")),
+                ] {
                     let mut vals = float_model.variables()[&t(part)]
                         .as_tensor()
                         .flatten_all()?
@@ -457,7 +465,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 float_folded.insert(a("read_out"), vals);
             }
 
-            for (part, name) in [("mlp.gate.weight", a("mlp_gate")), ("mlp.up.weight", a("mlp_up"))] {
+            for (part, name) in [
+                ("mlp.gate.weight", a("mlp_gate")),
+                ("mlp.up.weight", a("mlp_up")),
+            ] {
                 let unpadded = float_model.variables()[&t(part)]
                     .as_tensor()
                     .flatten_all()?
@@ -499,7 +510,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // -------------------------------------------------------------------
         // (C)(i) Activation-Weighted Output Error: E ||(W - \hat{W})x||^2 = tr(E \Sigma_x E^T)
         // -------------------------------------------------------------------
-        println!("\n[1/3] Computing Activation Second Moments tr(E \Sigma_x E^T) via hidden_with_capture...");
+        println!("\n[1/3] Computing Activation Second Moments tr(E \\Sigma_x E^T) via hidden_with_capture...");
         let heldout_tokens = read_u16_tokens(&args.heldout_path, vocab_size)?;
         let mut moments: BTreeMap<StackSite, (usize, Vec<f64>)> = BTreeMap::new();
         let total_windows = args.windows;
@@ -532,7 +543,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let total_positions = (total_windows * WINDOW_TIME) as f64;
-        println!("Captured moments over {total_positions} tokens across {} sites.", moments.len());
+        println!(
+            "Captured moments over {total_positions} tokens across {} sites.",
+            moments.len()
+        );
 
         let mut activation_errors: BTreeMap<String, Value> = BTreeMap::new();
 
@@ -641,8 +655,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let raw_requests = fs::read(&args.requests_path)?;
         let panel: DevelopmentPanel = serde_json::from_slice(&raw_requests)?;
         let tokenizer_bytes = fs::read(&args.tokenizer_path)?;
-        let tokenizer = uor_r4_tokenizer::Tokenizer::from_json(&tokenizer_bytes)?;
-        let protocol = DialogueProtocol::literal();
+        let tokenizer =
+            ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes).ok_or_else(|| {
+                uor_r4_training::TrainingError::Invalid("invalid tokenizer json".into())
+            })?;
+        let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)?;
         let encoder = protocol.bind(&tokenizer)?;
         let eos = protocol.eos_id;
 
@@ -689,8 +706,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for (turn, user) in request.user_turns.iter().enumerate() {
                 let prefix = encoder.encode_user_prefix(user, turn != 0);
                 history.extend(&prefix.tokens);
-                let reply =
-                    greedy_reply_with_head(&ref_model, &float_head_tensor, &history, MAX_NEW_TOKENS, eos)?;
+                let reply = greedy_reply_with_head(
+                    &ref_model,
+                    &float_head_tensor,
+                    &history,
+                    MAX_NEW_TOKENS,
+                    eos,
+                )?;
                 teacher_turns.push(TeacherTurn {
                     turn_index: total_turns,
                     prefix_ids: history.clone(),
@@ -707,37 +729,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Constructed {total_turns} teacher-forced turns (expected 58).");
 
         // Helper: evaluate model with specified quantized subset
-        let evaluate_quantized_subset = |quantized_names: &[&str]| -> Result<(usize, usize), Box<dyn std::error::Error>> {
-            // Set variables
-            for spec in &map_specs {
-                let use_quantized = quantized_names.contains(&spec.name.as_str());
-                let source_vals = if use_quantized {
-                    &dequantized[&spec.name]
+        let evaluate_quantized_subset =
+            |quantized_names: &[&str]| -> Result<(usize, usize), Box<dyn std::error::Error>> {
+                // Set variables
+                for spec in &map_specs {
+                    let use_quantized = quantized_names.contains(&spec.name.as_str());
+                    let source_vals = if use_quantized {
+                        &dequantized[&spec.name]
+                    } else {
+                        &float_folded[&spec.name]
+                    };
+                    if let Some(var_name) = &spec.var_name {
+                        set_model_var(&ref_model, var_name, source_vals)?;
+                    }
+                }
+
+                let head_vals = if quantized_names.contains(&"head") {
+                    &dequantized["head"]
                 } else {
-                    &float_folded[&spec.name]
+                    &float_folded["head"]
                 };
-                if let Some(var_name) = &spec.var_name {
-                    set_model_var(&ref_model, var_name, source_vals)?;
-                }
-            }
+                let head_tensor =
+                    Tensor::from_vec(head_vals.clone(), (vocab_size, d), &Device::Cpu)?;
 
-            let head_vals = if quantized_names.contains(&"head") {
-                &dequantized["head"]
-            } else {
-                &float_folded["head"]
+                let mut matches = 0usize;
+                for turn in &teacher_turns {
+                    let reply = greedy_reply_with_head(
+                        &ref_model,
+                        &head_tensor,
+                        &turn.prefix_ids,
+                        MAX_NEW_TOKENS,
+                        eos,
+                    )?;
+                    if reply.ids == turn.float_reply_ids {
+                        matches += 1;
+                    }
+                }
+                let flips = total_turns - matches;
+                Ok((matches, flips))
             };
-            let head_tensor = Tensor::from_vec(head_vals.clone(), (vocab_size, d), &Device::Cpu)?;
-
-            let mut matches = 0usize;
-            for turn in &teacher_turns {
-                let reply = greedy_reply_with_head(&ref_model, &head_tensor, &turn.prefix_ids, MAX_NEW_TOKENS, eos)?;
-                if reply.ids == turn.float_reply_ids {
-                    matches += 1;
-                }
-            }
-            let flips = total_turns - matches;
-            Ok((matches, flips))
-        };
 
         // 1. Verify Float baseline: must be 58/58
         let (float_matches, float_flips) = evaluate_quantized_subset(&[])?;
@@ -746,7 +776,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 2. Verify All-Quantized baseline: must match baseline (~14/58)
         let all_names: Vec<&str> = map_specs.iter().map(|s| s.name.as_str()).collect();
         let (all_q_matches, all_q_flips) = evaluate_quantized_subset(&all_names)?;
-        println!("All-Quantized Baseline: {all_q_matches}/{total_turns} matches ({all_q_flips} flips)");
+        println!(
+            "All-Quantized Baseline: {all_q_matches}/{total_turns} matches ({all_q_flips} flips)"
+        );
 
         // 3. Component Groups Attribution (quantize ONE component group at a time)
         println!("\n[3/3] Evaluating Component-wise Greedy-Flip Attribution...");
@@ -791,7 +823,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(l) => format!("layer_{l}"),
                 None => spec.name.clone(),
             };
-            layer_groups.entry(layer_key).or_default().push(spec.name.as_str());
+            layer_groups
+                .entry(layer_key)
+                .or_default()
+                .push(spec.name.as_str());
         }
 
         let mut layer_results: Vec<Value> = Vec::new();
