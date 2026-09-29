@@ -29,6 +29,12 @@ Held-out classes: First 79/144, Updated 151/273, Reasserted 26/31, Previous 156/
 
 **Conclusion at this scope:** the supervision split alone cannot satisfy all three; the pre-registered structural escape — **gating address-driven reads (and the tags that drive them) to user turns**, so prose needs no tag supervision at all — is the next unit. No promotion; D12 keeps both supervision configurations active at their measured scopes.
 
+## Lab 1 re-read and decision (10:05 UTC, [#973 comment](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5891185998))
+
+Lab 1 re-read every reported figure exactly and established the cause of the text-NLL cost: it is a **prose register mismatch**, not either auxiliary loss. `train_aerm` feeds prose with silent registers, while `text_nll` scores it with registers driven by the model's own tags; scoring the same 512 windows with silent registers (`claude-prime-route/text-registers-2`, manifest `17281d8f…`) gives baseline 2.373827, **arm A 2.492566 → 2.345184 (0.029 below baseline)**, arm C 2.456862 → 2.375804, arm B 2.433725 → 2.353099. On prose, arm C's address-driven reads leave registers active at 868 of every 1,000 positions. Arm C's binding is rescued by the prime-route sieve (`claude-prime-route/armc-route-1`: `GV1` = 151/273 reproduced; `ExpertSieve` = 273/273, Absent 322/378). The real panel is 0/10 for arms A and C: the world stores no first-person fact.
+
+**Decision:** arm C's supervision is **not adopted**. Adopted for all memory training: **arm A's supervision** (both text auxiliary losses masked), a **structural user-turn gate** (reads and writes only inside user turns, located by the protocol's roles), and sieve clause formation. The gate's effect on chat-v0 user turns belongs to the integration run's pre-registration. Lab 2's next units are the gate, D2-natural v2 and G v2; the frame-only run is superseded.
+
 ## Artifacts and consumer
 
 - Checkpoint `/Volumes/UOR-Workspace/uor-r4-lab/opencode-arm-c/checkpoints/aerm-s1` (loads through `AermModel::load`, #1482/#1497).
