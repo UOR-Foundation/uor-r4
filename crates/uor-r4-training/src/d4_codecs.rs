@@ -157,6 +157,58 @@ impl MapCodec for E8MatchedBitMapCodec {
     }
 }
 
+/// Lab 3 codec applying minimum-MSE scale optimization to recurrence output projections
+/// (`rec_out`), preserving greedy dialogue trajectories.
+///
+/// Discovered via S2 greedy-flip behavior-sensitive attribution, where recurrence output
+/// projections are highly sensitive to round-to-nearest quantization distortion.
+/// Using Minimum-MSE scale search on recurrence output maps increases matching greedy
+/// turns from 14/58 to 16/58 without increasing the 4.2500 bpw budget or requiring
+/// format/kernel modifications.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RecurrenceOutMinMseMapCodec {
+    /// Target shape for recurrence output projections (e.g. `(width, width)`).
+    /// If specified, only matrices matching `(rows, cols) == (width, width)` receive
+    /// Minimum-MSE quantization, while others use standard RTN.
+    pub target_shape: Option<(usize, usize)>,
+}
+
+impl RecurrenceOutMinMseMapCodec {
+    pub fn new() -> Self {
+        Self { target_shape: None }
+    }
+
+    pub fn for_shape(rows: usize, cols: usize) -> Self {
+        Self {
+            target_shape: Some((rows, cols)),
+        }
+    }
+}
+
+impl MapCodec for RecurrenceOutMinMseMapCodec {
+    fn name(&self) -> &str {
+        "native-d4-rec-out-min-mse"
+    }
+
+    fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
+        let is_target = if let Some((target_rows, target_cols)) = self.target_shape {
+            rows == target_rows && cols == target_cols
+        } else {
+            rows == cols
+        };
+
+        if is_target {
+            let codec = uor_r4_integer::codec::Grouped4BitCodec::new(
+                uor_r4_lut::GROUP,
+                uor_r4_integer::codec::Grouped4BitRounding::MinimumMseScale,
+            );
+            codec.round_trip(values, rows, cols).map_err(Into::into)
+        } else {
+            D11Interim.round_trip(values, rows, cols)
+        }
+    }
+}
+
 /// Look up a codec by name.
 pub fn codec_by_name(name: &str) -> Result<Arc<dyn MapCodec>> {
     match name {
@@ -169,6 +221,9 @@ pub fn codec_by_name(name: &str) -> Result<Arc<dyn MapCodec>> {
         }
         "native-d4-head-compensated-all-maps" => Ok(Arc::new(HeadCompensatedMapCodec::all_maps())),
         "native-d4-e8-matched-bit" => Ok(Arc::new(E8MatchedBitMapCodec::default())),
+        "native-d4-rec-out-min-mse" | "native-d4-s2-rec-out-min-mse" => {
+            Ok(Arc::new(RecurrenceOutMinMseMapCodec::default()))
+        }
         _ => Err(invalid(format!("unknown served codec name: {name}"))),
     }
 }

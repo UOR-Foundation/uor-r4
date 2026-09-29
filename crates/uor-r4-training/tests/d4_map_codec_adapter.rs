@@ -4,6 +4,7 @@ use uor_r4_integer::stack::IntegerStackModel;
 use uor_r4_lut::format::StackArtifact;
 use uor_r4_training::d4_codecs::{
     codec_by_name, D4Grouped4BitAdapter, E8MatchedBitMapCodec, HeadCompensatedMapCodec,
+    RecurrenceOutMinMseMapCodec,
 };
 use uor_r4_training::geometric_stack::{
     D11Interim, MapCodec, ReadScore, StackAdamW, StackArch, StackConfig, StackModel,
@@ -703,5 +704,241 @@ fn test_exported_artifact_dequantized_weights_equal_served_view_element_by_eleme
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn qat_rec_out_min_mse_end_to_end_export_and_exactness() -> Result<()> {
+    let config = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 96,
+        width: 32,
+        heads: 1,
+        mlp_hidden: 40,
+        context: 8,
+        pattern: "r".into(),
+        read: ReadScore::Dot,
+        rotation: false,
+        seed: 88,
+        memory: None,
+    };
+    let device = Device::Cpu;
+    let mut model = StackModel::new(config, &device)?;
+
+    // 1. Enable QAT with RecurrenceOutMinMseMapCodec
+    let codec = Arc::new(RecurrenceOutMinMseMapCodec::for_shape(32, 32));
+    model.set_served_representation(Some(codec))?;
+    assert_eq!(
+        model.served_codec().unwrap().name(),
+        "native-d4-rec-out-min-mse"
+    );
+
+    // 2. Compute loss on dummy inputs
+    let ids: Vec<u32> = vec![3, 9, 17, 27];
+    let targets: Vec<u32> = vec![9, 17, 27, 33];
+    let loss = model.loss(&ids, &targets, 1, 4)?;
+    let initial_loss = loss.to_scalar::<f32>()?;
+    assert!(
+        initial_loss.is_finite(),
+        "initial rec_out Min-MSE QAT loss must be finite"
+    );
+
+    // 3. Backward pass: gradients flow through StraightThrough op to master variables
+    let grads = loss.backward()?;
+    let rec_out_var = model.variables().get("layers.00.rec.out.weight").unwrap();
+    let rec_out_grad = grads.get(rec_out_var.as_tensor());
+    assert!(
+        rec_out_grad.is_some(),
+        "gradient must reach layers.00.rec.out.weight under rec_out Min-MSE QAT"
+    );
+    assert!(
+        rec_out_grad.unwrap().sqr()?.sum_all()?.to_scalar::<f32>()? > 0.0,
+        "gradient on layers.00.rec.out.weight must be non-zero"
+    );
+
+    // 4. Optimizer update modifies master parameters
+    let mut optimizer = StackAdamW::new(&model, 0.01, 1.0)?;
+    let norm = optimizer.update(&model, &grads, 0.05)?;
+    assert!(norm > 0.0, "gradient norm must be positive");
+
+    // Served float forward logits
+    let served_logits = model.forward(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+
+    // 5. Save model and verify metadata
+    let tmp_root = std::env::temp_dir().join(format!("d4-rec-out-qat-e2e-{}", std::process::id()));
+    let save_dir = tmp_root.join("saved_model");
+    model.save(&save_dir)?;
+
+    let record = StackModel::saved_served_representation(&save_dir)?;
+    assert_eq!(record.as_ref().unwrap().codec, "native-d4-rec-out-min-mse");
+
+    // 6. Export stack artifact without calibration (using QAT weights)
+    check_export_representation(record.as_ref(), false)?;
+    assert!(check_export_representation(record.as_ref(), true).is_err());
+    let (lut_bytes, summary) = export_stack(&model, "rec-out-min-mse-qat-test".into(), None)?;
+    assert!(!lut_bytes.is_empty());
+    assert_eq!(summary["method"]["quantizer"], "native-d4-rec-out-min-mse");
+
+    // 7. Verify S1.1 invariant: served float forward matches exported grid reference bit for bit
+    let artifact = StackArtifact::parse(lut_bytes.clone())
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+
+    // Element-by-element exactness across all matrices in artifact
+    let vars = model.variables();
+    let codec_ref = RecurrenceOutMinMseMapCodec::for_shape(32, 32);
+    for spec in &artifact.header.matrices {
+        let dequantized = uor_r4_training::lut_export::dequantize_matrix(
+            spec.rows,
+            spec.cols,
+            spec.exp_base,
+            artifact.section(spec.nibbles),
+            artifact.section(spec.scales),
+        )?;
+        let expected_served = match spec.name.as_str() {
+            "l0.rec_out" => {
+                let src = vars["layers.00.rec.out.weight"]
+                    .as_tensor()
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                codec_ref.round_trip(&src, spec.rows, spec.cols)?
+            }
+            _ => {
+                let d11 = D11Interim;
+                let src = match spec.name.as_str() {
+                    "embed" => vars["embedding.weight"]
+                        .as_tensor()
+                        .flatten_all()?
+                        .to_vec1::<f32>()?,
+                    "head" => {
+                        let mut w = vars["embedding.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        let gain = vars["final_norm.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        fold_columns(&mut w, spec.cols, &gain);
+                        w
+                    }
+                    "l0.rec_in" => {
+                        let mut w = vars["layers.00.rec.in.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        let gain = vars["layers.00.rec_norm.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        fold_columns(&mut w, spec.cols, &gain);
+                        w
+                    }
+                    "l0.rec_gate" => {
+                        let mut w = vars["layers.00.rec.gate.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        let gain = vars["layers.00.rec_norm.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        fold_columns(&mut w, spec.cols, &gain);
+                        w
+                    }
+                    "l0.gate" | "l0.up" => {
+                        let part = if spec.name == "l0.gate" { "gate" } else { "up" };
+                        let mut w = vars[&format!("layers.00.mlp.{part}.weight")]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        let gain = vars["layers.00.mlp_norm.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        fold_columns(&mut w, 32, &gain);
+                        pad(&w, 40, 32, spec.rows, spec.cols)
+                    }
+                    "l0.down" => {
+                        let w = vars["layers.00.mlp.down.weight"]
+                            .as_tensor()
+                            .flatten_all()?
+                            .to_vec1::<f32>()?;
+                        pad(&w, 32, 40, spec.rows, spec.cols)
+                    }
+                    other => panic!("unknown matrix: {other}"),
+                };
+                d11.round_trip(&src, spec.rows, spec.cols)?
+            }
+        };
+        assert_eq!(
+            dequantized, expected_served,
+            "matrix {}: exported artifact dequantized weights must match served view element by element",
+            spec.name
+        );
+    }
+
+    let grid_ref = stack_grid_reference(&model, &artifact)?;
+    let ref_logits = grid_ref.logits(&ids, 1, ids.len())?.to_vec2::<f32>()?;
+    assert_eq!(
+        served_logits, ref_logits,
+        "Served float forward logits must match exported grid reference exactly"
+    );
+
+    // 8. Load into IntegerStackModel and verify native integer serving execution and logit parity
+    let lut_path = tmp_root.join("model.lut");
+    std::fs::write(&lut_path, &lut_bytes)?;
+    let integer_model = IntegerStackModel::load(&lut_path)
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+    assert_eq!(integer_model.shape().vocab, 96);
+    assert_eq!(integer_model.shape().width, 32);
+
+    let mut session = integer_model.session();
+    for (t, &id) in ids.iter().enumerate() {
+        let int_logits = session
+            .step(id)
+            .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+        assert_eq!(
+            int_logits.len(),
+            96,
+            "logits length must match vocabulary size"
+        );
+        let int_top = uor_r4_integer::stack::stack_argmax(int_logits);
+        let float_top = ref_logits[t]
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap()
+            .0;
+        assert_eq!(
+            int_top, float_top,
+            "position {t}: integer top-1 argmax must equal served float argmax"
+        );
+
+        let int_f64: Vec<f64> = int_logits.iter().map(|&v| f64::from(v) / 65536.0).collect();
+        let ref_f64: Vec<f64> = ref_logits[t].iter().map(|&v| f64::from(v)).collect();
+        let max_gap = int_f64
+            .iter()
+            .zip(&ref_f64)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f64, f64::max);
+        assert!(
+            max_gap < 0.1,
+            "position {t}: gap between integer and served float logits must be bounded, got {max_gap}"
+        );
+    }
+
+    // 9. Verify reload and codec recovery via codec_by_name
+    let mut reloaded = StackModel::load(&save_dir, &device)?;
+    assert!(reloaded.served_codec().is_none());
+    let saved_rec = StackModel::saved_served_representation(&save_dir)?;
+    let recovered_codec = codec_by_name(&saved_rec.unwrap().codec)?;
+    reloaded.set_served_representation(Some(recovered_codec))?;
+    assert_eq!(
+        reloaded.served_codec().unwrap().name(),
+        "native-d4-rec-out-min-mse"
+    );
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&tmp_root);
     Ok(())
 }

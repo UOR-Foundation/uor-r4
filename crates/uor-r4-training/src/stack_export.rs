@@ -347,6 +347,26 @@ pub fn export_stack(
                             relative_rms_error: rel_err,
                         }
                     }
+                    Some("native-d4-rec-out-min-mse") | Some("native-d4-s2-rec-out-min-mse")
+                        if matches!(site, Some(StackSite::RecurrenceOut(_))) =>
+                    {
+                        let c = uor_r4_integer::codec::Grouped4BitCodec::new(
+                            GROUP,
+                            uor_r4_integer::codec::Grouped4BitRounding::MinimumMseScale,
+                        );
+                        let mat = c
+                            .quantize(values, rows, cols)
+                            .map_err(|e| invalid(e.to_string()))?;
+                        let rel_err = mat
+                            .relative_rms_error(values)
+                            .map_err(|e| invalid(e.to_string()))?;
+                        Packed {
+                            nibbles: mat.nibbles,
+                            scales: mat.scales,
+                            exp_base: mat.exp_base,
+                            relative_rms_error: rel_err,
+                        }
+                    }
                     _ => quantize_matrix(values, rows, cols)?,
                 }
             }
@@ -584,7 +604,9 @@ pub fn check_export_representation(
         || saved.codec == "native-d11-grouped-4bit-g32-rtn"
         || saved.codec == "native-d11-grouped-4bit-g32-min-mse"
         || saved.codec == "native-d4-head-compensated-head-only"
-        || saved.codec == "native-d4-head-compensated-all-maps";
+        || saved.codec == "native-d4-head-compensated-all-maps"
+        || saved.codec == "native-d4-rec-out-min-mse"
+        || saved.codec == "native-d4-s2-rec-out-min-mse";
     if !is_export_compatible {
         return Err(invalid(format!(
             "the model was trained against the served representation {}, which the stack \
@@ -1274,6 +1296,12 @@ mod tests {
         };
         assert!(check_export_representation(Some(&min_mse), false).is_ok());
         assert!(check_export_representation(Some(&min_mse), true).is_err());
+
+        let rec_out_min_mse = SavedServedRepresentation {
+            codec: "native-d4-rec-out-min-mse".to_owned(),
+        };
+        assert!(check_export_representation(Some(&rec_out_min_mse), false).is_ok());
+        assert!(check_export_representation(Some(&rec_out_min_mse), true).is_err());
 
         let e8_matched_bit = SavedServedRepresentation {
             codec: "native-d4-e8-matched-bit".to_owned(),

@@ -268,6 +268,12 @@ fn main() -> Result<()> {
             map.insert(k.trim_start_matches('-').to_string(), v.to_string());
         }
     }
+    let skip_diagnostic = args
+        .iter()
+        .any(|a| a == "--skip-diagnostic" || a == "-skip-diagnostic");
+    let selected_arms: Option<Vec<String>> = map
+        .get("arms")
+        .map(|s| s.split(',').map(|x| x.trim().to_string()).collect());
 
     let model_dir = PathBuf::from(map.get("model").cloned().unwrap_or_else(|| {
         "/Volumes/UOR-Workspace/uor-r4-lab/claude-s2-dialogue-baseline/dialogue-1/model".into()
@@ -645,106 +651,51 @@ fn main() -> Result<()> {
             &mut diag_reply_fn,
         )?;
         let (diag_matches, _) = count_turn_matches(&diag_panel, &float_panel);
-        println!("Diagnostic dequantized baseline in float forward: {}/58 turns (matches integer engine exactly: {})", diag_matches, diag_matches == base_matches);
-
-        // Test replacing HEAD with float head
-        println!("\nTesting individual matrix replacements in baseline dequantized model:");
-        let float_head_tensor =
-            Tensor::from_vec(float_folded["head"].clone(), (vocab_size, d), &Device::Cpu).unwrap();
-        let mut test_reply_fn = |h: &[u32], cap: usize| {
-            greedy_reply_with_head(&diag_model, &float_head_tensor, h, cap, protocol.eos_id)
-        };
-        let panel_float_head = reply_panel(
-            &encoder,
-            &protocol,
-            &requests,
-            float_model.config.context,
-            MAX_NEW_TOKENS,
-            &decode,
-            &mut test_reply_fn,
-        )?;
-        let (m_float_head, _) = count_turn_matches(&panel_float_head, &float_panel);
+        let (base_survived_matches, base_survived_total) =
+            count_turn_matches(&baseline_int_panel, &diag_panel);
+        let base_survives_export = base_survived_matches == base_survived_total;
         println!(
-            "  - If HEAD is float: {}/58 matching turns (Delta: +{})",
-            m_float_head,
-            m_float_head as isize - base_matches as isize
+            "Diagnostic dequantized baseline in float forward: {}/58 turns match float baseline",
+            diag_matches
+        );
+        println!(
+            "Baseline survives export (integer engine == served float forward): {}/{} turns match ({:.2}%)",
+            base_survived_matches,
+            base_survived_total,
+            (base_survived_matches as f64) / (base_survived_total as f64) * 100.0
         );
 
-        // Test replacing HEAD with min_mse head
         let c_opt = uor_r4_integer::codec::Grouped4BitCodec::new(
             uor_r4_lut::GROUP,
             uor_r4_integer::codec::Grouped4BitRounding::MinimumMseScale,
         );
-        let q_head_min_mse = c_opt
-            .quantize(&float_folded["head"], vocab_size, d)
-            .map_err(|e| invalid(e.to_string()))?;
-        let deq_head_min_mse = c_opt
-            .dequantize(&q_head_min_mse)
-            .map_err(|e| invalid(e.to_string()))?;
-        let head_min_mse_tensor =
-            Tensor::from_vec(deq_head_min_mse.clone(), (vocab_size, d), &Device::Cpu).unwrap();
-        let mut test_reply_fn = |h: &[u32], cap: usize| {
-            greedy_reply_with_head(&diag_model, &head_min_mse_tensor, h, cap, protocol.eos_id)
-        };
-        let panel_min_mse_head = reply_panel(
-            &encoder,
-            &protocol,
-            &requests,
-            float_model.config.context,
-            MAX_NEW_TOKENS,
-            &decode,
-            &mut test_reply_fn,
-        )?;
-        let (m_min_mse_head, _) = count_turn_matches(&panel_min_mse_head, &float_panel);
-        println!(
-            "  - If HEAD is Min-MSE: {}/58 matching turns (Delta: +{})",
-            m_min_mse_head,
-            m_min_mse_head as isize - base_matches as isize
-        );
-
-        // Test replacing HEAD with compensated head
         let q_head_comp = uor_r4_integer::codec::quantize_matrix_compensated(
             &float_folded["head"],
             vocab_size,
             d,
         )
         .map_err(|e| invalid(e.to_string()))?;
+        let comp_head_entry = (
+            q_head_comp.exp_base,
+            q_head_comp.nibbles.clone(),
+            q_head_comp.scales.clone(),
+        );
         let deq_head_comp = uor_r4_integer::codec::Grouped4BitCodec::default()
             .dequantize(&q_head_comp)
             .map_err(|e| invalid(e.to_string()))?;
         let head_comp_tensor =
-            Tensor::from_vec(deq_head_comp.clone(), (vocab_size, d), &Device::Cpu).unwrap();
-        let mut test_reply_fn = |h: &[u32], cap: usize| {
-            greedy_reply_with_head(&diag_model, &head_comp_tensor, h, cap, protocol.eos_id)
-        };
-        let panel_comp_head = reply_panel(
-            &encoder,
-            &protocol,
-            &requests,
-            float_model.config.context,
-            MAX_NEW_TOKENS,
-            &decode,
-            &mut test_reply_fn,
-        )?;
-        let (m_comp_head, _) = count_turn_matches(&panel_comp_head, &float_panel);
-        println!(
-            "  - If HEAD is Head-Compensated: {}/58 matching turns (Delta: +{})",
-            m_comp_head,
-            m_comp_head as isize - base_matches as isize
-        );
+            Tensor::from_vec(deq_head_comp, (vocab_size, d), &Device::Cpu).unwrap();
 
-        // Test replacing MLP_DOWN maps with float
-        for l in 0..6 {
-            let name = format!("l{l}.down");
-            set_model_var(
-                &diag_model,
-                &format!("layers.{l:02}.mlp.down.weight"),
-                &float_folded[&name],
-            )?;
+        if !skip_diagnostic {
+            // Test replacing HEAD with float head
+            println!("\nTesting individual matrix replacements in baseline dequantized model:");
+            let float_head_tensor =
+                Tensor::from_vec(float_folded["head"].clone(), (vocab_size, d), &Device::Cpu)
+                    .unwrap();
             let mut test_reply_fn = |h: &[u32], cap: usize| {
-                greedy_reply_with_head(&diag_model, &diag_base_head, h, cap, protocol.eos_id)
+                greedy_reply_with_head(&diag_model, &float_head_tensor, h, cap, protocol.eos_id)
             };
-            let panel_down = reply_panel(
+            let panel_float_head = reply_panel(
                 &encoder,
                 &protocol,
                 &requests,
@@ -753,34 +704,26 @@ fn main() -> Result<()> {
                 &decode,
                 &mut test_reply_fn,
             )?;
-            let (m_down, _) = count_turn_matches(&panel_down, &float_panel);
-            println!("  - If {name} is float: {}/58 matching turns", m_down);
-            // Restore
-            set_model_var(
-                &diag_model,
-                &format!("layers.{l:02}.mlp.down.weight"),
-                &dequantized[&name],
-            )?;
-        }
+            let (m_float_head, _) = count_turn_matches(&panel_float_head, &float_panel);
+            println!(
+                "  - If HEAD is float: {}/58 matching turns (Delta: +{})",
+                m_float_head,
+                m_float_head as isize - base_matches as isize
+            );
 
-        // Test replacing MLP_DOWN maps with Min-MSE
-        for l in [0, 5, 4, 3] {
-            let name = format!("l{l}.down");
-            let q_down = c_opt
-                .quantize(&float_folded[&name], d, mlp)
+            // Test replacing HEAD with min_mse head
+            let q_head_min_mse = c_opt
+                .quantize(&float_folded["head"], vocab_size, d)
                 .map_err(|e| invalid(e.to_string()))?;
-            let deq_down = c_opt
-                .dequantize(&q_down)
+            let deq_head_min_mse = c_opt
+                .dequantize(&q_head_min_mse)
                 .map_err(|e| invalid(e.to_string()))?;
-            set_model_var(
-                &diag_model,
-                &format!("layers.{l:02}.mlp.down.weight"),
-                &deq_down,
-            )?;
+            let head_min_mse_tensor =
+                Tensor::from_vec(deq_head_min_mse.clone(), (vocab_size, d), &Device::Cpu).unwrap();
             let mut test_reply_fn = |h: &[u32], cap: usize| {
-                greedy_reply_with_head(&diag_model, &diag_base_head, h, cap, protocol.eos_id)
+                greedy_reply_with_head(&diag_model, &head_min_mse_tensor, h, cap, protocol.eos_id)
             };
-            let panel_down = reply_panel(
+            let panel_min_mse_head = reply_panel(
                 &encoder,
                 &protocol,
                 &requests,
@@ -789,23 +732,34 @@ fn main() -> Result<()> {
                 &decode,
                 &mut test_reply_fn,
             )?;
-            let (m_down, _) = count_turn_matches(&panel_down, &float_panel);
-            println!("  - If {name} is Min-MSE: {}/58 matching turns", m_down);
-            // Restore
-            set_model_var(
-                &diag_model,
-                &format!("layers.{l:02}.mlp.down.weight"),
-                &dequantized[&name],
-            )?;
-        }
+            let (m_min_mse_head, _) = count_turn_matches(&panel_min_mse_head, &float_panel);
+            println!(
+                "  - If HEAD is Min-MSE: {}/58 matching turns (Delta: +{})",
+                m_min_mse_head,
+                m_min_mse_head as isize - base_matches as isize
+            );
 
-        // Test combined: HEAD (compensated or min_mse) + down maps
-        for (head_label, head_t) in [
-            ("Compensated", &head_comp_tensor),
-            ("Min-MSE", &head_min_mse_tensor),
-            ("Float", &float_head_tensor),
-        ] {
-            // Apply all mlp_down in float
+            // Test replacing HEAD with compensated head
+            let mut test_reply_fn = |h: &[u32], cap: usize| {
+                greedy_reply_with_head(&diag_model, &head_comp_tensor, h, cap, protocol.eos_id)
+            };
+            let panel_comp_head = reply_panel(
+                &encoder,
+                &protocol,
+                &requests,
+                float_model.config.context,
+                MAX_NEW_TOKENS,
+                &decode,
+                &mut test_reply_fn,
+            )?;
+            let (m_comp_head, _) = count_turn_matches(&panel_comp_head, &float_panel);
+            println!(
+                "  - If HEAD is Head-Compensated: {}/58 matching turns (Delta: +{})",
+                m_comp_head,
+                m_comp_head as isize - base_matches as isize
+            );
+
+            // Test replacing MLP_DOWN maps with float
             for l in 0..6 {
                 let name = format!("l{l}.down");
                 set_model_var(
@@ -813,96 +767,169 @@ fn main() -> Result<()> {
                     &format!("layers.{l:02}.mlp.down.weight"),
                     &float_folded[&name],
                 )?;
-            }
-            let mut test_reply_fn = |h: &[u32], cap: usize| {
-                greedy_reply_with_head(&diag_model, head_t, h, cap, protocol.eos_id)
-            };
-            let panel_comb = reply_panel(
-                &encoder,
-                &protocol,
-                &requests,
-                float_model.config.context,
-                MAX_NEW_TOKENS,
-                &decode,
-                &mut test_reply_fn,
-            )?;
-            let (m_comb, _) = count_turn_matches(&panel_comb, &float_panel);
-            println!("  - If HEAD is {head_label} AND all mlp_down are float: {m_comb}/58 matching turns");
-
-            // Restore mlp_down
-            for l in 0..6 {
-                let name = format!("l{l}.down");
+                let mut test_reply_fn = |h: &[u32], cap: usize| {
+                    greedy_reply_with_head(&diag_model, &diag_base_head, h, cap, protocol.eos_id)
+                };
+                let panel_down = reply_panel(
+                    &encoder,
+                    &protocol,
+                    &requests,
+                    float_model.config.context,
+                    MAX_NEW_TOKENS,
+                    &decode,
+                    &mut test_reply_fn,
+                )?;
+                let (m_down, _) = count_turn_matches(&panel_down, &float_panel);
+                println!("  - If {name} is float: {}/58 matching turns", m_down);
+                // Restore
                 set_model_var(
                     &diag_model,
                     &format!("layers.{l:02}.mlp.down.weight"),
                     &dequantized[&name],
                 )?;
             }
-        }
 
-        // Test replacing other maps
-        for map_name in [
-            "l5.gate",
-            "l0.gate",
-            "l5.up",
-            "l3.rec_in",
-            "l3.rec_out",
-            "embed",
-        ] {
-            if let Some(spec) = map_specs.iter().find(|s| s.name == map_name) {
-                if let Some(var_name) = &spec.var_name {
-                    set_model_var(&diag_model, var_name, &float_folded[map_name])?;
-                    let mut test_reply_fn = |h: &[u32], cap: usize| {
-                        greedy_reply_with_head(
-                            &diag_model,
-                            &diag_base_head,
-                            h,
-                            cap,
-                            protocol.eos_id,
-                        )
-                    };
-                    let p = reply_panel(
-                        &encoder,
-                        &protocol,
-                        &requests,
-                        float_model.config.context,
-                        MAX_NEW_TOKENS,
-                        &decode,
-                        &mut test_reply_fn,
-                    )?;
-                    let (m, _) = count_turn_matches(&p, &float_panel);
-                    println!("  - If {map_name} is float: {}/58 matching turns", m);
-                    // Also with Min-MSE
-                    let q = c_opt
-                        .quantize(&float_folded[map_name], spec.rows, spec.cols)
-                        .map_err(|e| invalid(e.to_string()))?;
-                    let deq = c_opt.dequantize(&q).map_err(|e| invalid(e.to_string()))?;
-                    set_model_var(&diag_model, var_name, &deq)?;
-                    let mut test_reply_fn = |h: &[u32], cap: usize| {
-                        greedy_reply_with_head(
-                            &diag_model,
-                            &diag_base_head,
-                            h,
-                            cap,
-                            protocol.eos_id,
-                        )
-                    };
-                    let p_opt = reply_panel(
-                        &encoder,
-                        &protocol,
-                        &requests,
-                        float_model.config.context,
-                        MAX_NEW_TOKENS,
-                        &decode,
-                        &mut test_reply_fn,
-                    )?;
-                    let (m_opt, _) = count_turn_matches(&p_opt, &float_panel);
-                    println!("  - If {map_name} is Min-MSE: {}/58 matching turns", m_opt);
+            // Test replacing MLP_DOWN maps with Min-MSE
+            for l in [0, 5, 4, 3] {
+                let name = format!("l{l}.down");
+                let q_down = c_opt
+                    .quantize(&float_folded[&name], d, mlp)
+                    .map_err(|e| invalid(e.to_string()))?;
+                let deq_down = c_opt
+                    .dequantize(&q_down)
+                    .map_err(|e| invalid(e.to_string()))?;
+                set_model_var(
+                    &diag_model,
+                    &format!("layers.{l:02}.mlp.down.weight"),
+                    &deq_down,
+                )?;
+                let mut test_reply_fn = |h: &[u32], cap: usize| {
+                    greedy_reply_with_head(&diag_model, &diag_base_head, h, cap, protocol.eos_id)
+                };
+                let panel_down = reply_panel(
+                    &encoder,
+                    &protocol,
+                    &requests,
+                    float_model.config.context,
+                    MAX_NEW_TOKENS,
+                    &decode,
+                    &mut test_reply_fn,
+                )?;
+                let (m_down, _) = count_turn_matches(&panel_down, &float_panel);
+                println!("  - If {name} is Min-MSE: {}/58 matching turns", m_down);
+                // Restore
+                set_model_var(
+                    &diag_model,
+                    &format!("layers.{l:02}.mlp.down.weight"),
+                    &dequantized[&name],
+                )?;
+            }
 
-                    set_model_var(&diag_model, var_name, &dequantized[map_name])?;
+            // Test combined: HEAD (compensated or min_mse) + down maps
+            for (head_label, head_t) in [
+                ("Compensated", &head_comp_tensor),
+                ("Min-MSE", &head_min_mse_tensor),
+                ("Float", &float_head_tensor),
+            ] {
+                // Apply all mlp_down in float
+                for l in 0..6 {
+                    let name = format!("l{l}.down");
+                    set_model_var(
+                        &diag_model,
+                        &format!("layers.{l:02}.mlp.down.weight"),
+                        &float_folded[&name],
+                    )?;
+                }
+                let mut test_reply_fn = |h: &[u32], cap: usize| {
+                    greedy_reply_with_head(&diag_model, head_t, h, cap, protocol.eos_id)
+                };
+                let panel_comb = reply_panel(
+                    &encoder,
+                    &protocol,
+                    &requests,
+                    float_model.config.context,
+                    MAX_NEW_TOKENS,
+                    &decode,
+                    &mut test_reply_fn,
+                )?;
+                let (m_comb, _) = count_turn_matches(&panel_comb, &float_panel);
+                println!("  - If HEAD is {head_label} AND all mlp_down are float: {m_comb}/58 matching turns");
+
+                // Restore mlp_down
+                for l in 0..6 {
+                    let name = format!("l{l}.down");
+                    set_model_var(
+                        &diag_model,
+                        &format!("layers.{l:02}.mlp.down.weight"),
+                        &dequantized[&name],
+                    )?;
                 }
             }
-        }
+
+            // Test replacing other maps
+            for map_name in [
+                "l5.gate",
+                "l0.gate",
+                "l5.up",
+                "l3.rec_in",
+                "l3.rec_out",
+                "embed",
+            ] {
+                if let Some(spec) = map_specs.iter().find(|s| s.name == map_name) {
+                    if let Some(var_name) = &spec.var_name {
+                        set_model_var(&diag_model, var_name, &float_folded[map_name])?;
+                        let mut test_reply_fn = |h: &[u32], cap: usize| {
+                            greedy_reply_with_head(
+                                &diag_model,
+                                &diag_base_head,
+                                h,
+                                cap,
+                                protocol.eos_id,
+                            )
+                        };
+                        let p = reply_panel(
+                            &encoder,
+                            &protocol,
+                            &requests,
+                            float_model.config.context,
+                            MAX_NEW_TOKENS,
+                            &decode,
+                            &mut test_reply_fn,
+                        )?;
+                        let (m, _) = count_turn_matches(&p, &float_panel);
+                        println!("  - If {map_name} is float: {}/58 matching turns", m);
+                        // Also with Min-MSE
+                        let q = c_opt
+                            .quantize(&float_folded[map_name], spec.rows, spec.cols)
+                            .map_err(|e| invalid(e.to_string()))?;
+                        let deq = c_opt.dequantize(&q).map_err(|e| invalid(e.to_string()))?;
+                        set_model_var(&diag_model, var_name, &deq)?;
+                        let mut test_reply_fn = |h: &[u32], cap: usize| {
+                            greedy_reply_with_head(
+                                &diag_model,
+                                &diag_base_head,
+                                h,
+                                cap,
+                                protocol.eos_id,
+                            )
+                        };
+                        let p_opt = reply_panel(
+                            &encoder,
+                            &protocol,
+                            &requests,
+                            float_model.config.context,
+                            MAX_NEW_TOKENS,
+                            &decode,
+                            &mut test_reply_fn,
+                        )?;
+                        let (m_opt, _) = count_turn_matches(&p_opt, &float_panel);
+                        println!("  - If {map_name} is Min-MSE: {}/58 matching turns", m_opt);
+
+                        set_model_var(&diag_model, var_name, &dequantized[map_name])?;
+                    }
+                }
+            }
+        } // end if !skip_diagnostic
 
         // 4. Native Integer Serving Engine Evaluation of Candidates
         println!("\n[4/5] Evaluating candidate replacements in native IntegerStackModel...");
@@ -917,19 +944,6 @@ fn main() -> Result<()> {
                 min_mse_matrices.insert(spec.name.clone(), (q.exp_base, q.nibbles, q.scales));
             }
         }
-
-        // Also candidate for head with compensation
-        let q_head_comp = uor_r4_integer::codec::quantize_matrix_compensated(
-            &float_folded["head"],
-            vocab_size,
-            d,
-        )
-        .map_err(|e| invalid(e.to_string()))?;
-        let comp_head_entry = (
-            q_head_comp.exp_base,
-            q_head_comp.nibbles,
-            q_head_comp.scales,
-        );
 
         struct CandidateArm {
             name: &'static str,
@@ -1026,10 +1040,17 @@ fn main() -> Result<()> {
         let mut best_matches = base_matches;
         let mut best_lut_bytes = Vec::new();
         let mut best_dev_nll = base_dev_nll;
+        let mut best_survives_export = base_survives_export;
 
         for arm in &candidate_arms {
+            if let Some(ref selected) = selected_arms {
+                if !selected.contains(&arm.name.to_string()) {
+                    continue;
+                }
+            }
             let lut_bytes = build_modified_artifact(&base_artifact, &arm.replacements)?;
-            let bpw = (lut_bytes.len() as f64 * 8.0) / (total_weights as f64);
+            let container_bpw = (lut_bytes.len() as f64 * 8.0) / (total_weights as f64);
+            let param_bpw = 4.2500f64;
             let cand_path = out.join(format!("{}.lut", arm.name));
             fs::write(&cand_path, &lut_bytes)?;
 
@@ -1048,7 +1069,7 @@ fn main() -> Result<()> {
             )?;
             let (matches, turns) = count_turn_matches(&cand_panel, &float_panel);
 
-            // Compute development NLL on diag_model with these replacements
+            // Compute development NLL and served float forward replies on diag_model with these replacements
             for (name, _) in &arm.replacements {
                 if let Some(spec) = map_specs.iter().find(|s| &s.name == name) {
                     if let Some(var_name) = &spec.var_name {
@@ -1069,6 +1090,27 @@ fn main() -> Result<()> {
             let dev_score = development(&diag_model, &index, &dev_panel_ids, 16)?;
             let dev_nll = dev_score["response_mean_nll"].as_f64().unwrap_or(0.0);
 
+            let head_t = if arm.replacements.contains_key("head") {
+                &head_comp_tensor
+            } else {
+                &diag_base_head
+            };
+            let mut served_float_reply_fn = |h: &[u32], cap: usize| {
+                greedy_reply_with_head(&diag_model, head_t, h, cap, protocol.eos_id)
+            };
+            let served_float_panel = reply_panel(
+                &encoder,
+                &protocol,
+                &requests,
+                float_model.config.context,
+                MAX_NEW_TOKENS,
+                &decode,
+                &mut served_float_reply_fn,
+            )?;
+            let (survived_matches, survived_total) =
+                count_turn_matches(&cand_panel, &served_float_panel);
+            let survives_export = survived_matches == survived_total;
+
             // restore diag_model
             for (name, _) in &arm.replacements {
                 if let Some(spec) = map_specs.iter().find(|s| &s.name == name) {
@@ -1079,8 +1121,18 @@ fn main() -> Result<()> {
             }
 
             println!(
-                "Candidate [{}] ({}): {}/{} turns match float ({:.2}%), 161-dev NLL = {:.6}, bpw = {:.4}",
-                arm.name, arm.label, matches, turns, (matches as f64) / (turns as f64) * 100.0, dev_nll, bpw
+                "Candidate [{}] ({}): {}/{} turns match float ({:.2}%), survives export: {}/{} ({:.2}%), 161-dev NLL = {:.6}, param bpw = {:.4}, container bpw = {:.4}",
+                arm.name,
+                arm.label,
+                matches,
+                turns,
+                (matches as f64) / (turns as f64) * 100.0,
+                survived_matches,
+                survived_total,
+                (survived_matches as f64) / (survived_total as f64) * 100.0,
+                dev_nll,
+                param_bpw,
+                container_bpw
             );
 
             results_map.insert(
@@ -1090,9 +1142,15 @@ fn main() -> Result<()> {
                     "label": arm.label,
                     "matching_turns": matches,
                     "total_turns": turns,
-                    "response_nll_161": dev_nll,
-                    "bits_per_weight": bpw,
                     "delta_turns": matches as isize - base_matches as isize,
+                    "survives_export": survives_export,
+                    "survived_matches": survived_matches,
+                    "survived_total": survived_total,
+                    "survived_turns": format!("{survived_matches}/{survived_total}"),
+                    "response_nll_161": dev_nll,
+                    "parameter_bits_per_weight": param_bpw,
+                    "container_bits_per_weight": container_bpw,
+                    "bits_per_weight": param_bpw,
                 }),
             );
 
@@ -1101,6 +1159,7 @@ fn main() -> Result<()> {
                 best_arm_name = arm.name.to_string();
                 best_lut_bytes = lut_bytes;
                 best_dev_nll = dev_nll;
+                best_survives_export = survives_export;
             }
         }
 
@@ -1114,14 +1173,22 @@ fn main() -> Result<()> {
                 "artifact_sha256": baseline_lut_sha,
                 "matching_turns": base_matches,
                 "total_turns": base_turns,
+                "survives_export": base_survives_export,
+                "survived_matches": base_survived_matches,
+                "survived_total": base_survived_total,
+                "survived_turns": format!("{base_survived_matches}/{base_survived_total}"),
                 "response_nll_161": base_dev_nll,
-                "bits_per_weight": (fs::metadata(&baseline_lut)?.len() as f64 * 8.0) / (total_weights as f64),
+                "parameter_bits_per_weight": 4.2500,
+                "container_bits_per_weight": (fs::metadata(&baseline_lut)?.len() as f64 * 8.0) / (total_weights as f64),
+                "bits_per_weight": 4.2500,
             },
             "candidates": results_map,
             "selected": {
                 "name": best_arm_name,
                 "matching_turns": best_matches,
                 "delta_turns": best_matches as isize - base_matches as isize,
+                "survives_export": best_survives_export,
+                "parameter_bits_per_weight": 4.2500,
                 "response_nll_161": best_dev_nll,
             },
             "elapsed_seconds": clock.elapsed().as_secs_f64(),
