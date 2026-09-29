@@ -53,7 +53,7 @@ use candle_core::{backprop::GradStore, DType, Device, Tensor, Var, D};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW};
 use serde::{Deserialize, Serialize};
 
-use crate::geometric_stack::{logits_cross_entropy, StackConfig, StackModel, TransportSnap};
+use crate::geometric_stack::{logits_cross_entropy, StackConfig, StackModel};
 use crate::stack_tracking::Rng;
 use crate::{invalid, Result};
 
@@ -392,6 +392,34 @@ pub struct Registers {
 /// both registers at that position; the read trigger classes no longer decide
 /// reads and never close the clause.
 pub fn simulate(tokens: &[u32], tags: &[u32], triggers: &[u32], eos: u32) -> Result<Simulation> {
+    simulate_inner(tokens, tags, triggers, eos, None)
+}
+
+/// [`simulate`] with the structural user-turn gate: at a position whose
+/// `user_turn` flag is 0 the tags and triggers are ignored, so no read or
+/// write happens outside a user turn. The world's operations all sit inside
+/// user turns, so its own episodes are unchanged; prose carries no user turns
+/// and its registers stay silent.
+pub fn simulate_gated(
+    tokens: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    eos: u32,
+    user_turn: &[u8],
+) -> Result<Simulation> {
+    if user_turn.len() != tokens.len() {
+        return Err(invalid("one user-turn flag per token"));
+    }
+    simulate_inner(tokens, tags, triggers, eos, Some(user_turn))
+}
+
+fn simulate_inner(
+    tokens: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    eos: u32,
+    user_turn: Option<&[u8]>,
+) -> Result<Simulation> {
     if tags.len() != tokens.len() || triggers.len() != tokens.len() {
         return Err(invalid("one tag and one trigger per token"));
     }
@@ -407,48 +435,53 @@ pub fn simulate(tokens: &[u32], tags: &[u32], triggers: &[u32], eos: u32) -> Res
     let mut writes = Vec::new();
     for (position, ((&token, &tag), &trigger)) in tokens.iter().zip(tags).zip(triggers).enumerate()
     {
-        match tag {
-            TAG_OTHER => {}
-            TAG_ENTITY => entity = Some(token),
-            TAG_RELATION => relation = Some(token),
-            TAG_VALUE => value = Some(token),
-            _ => return Err(invalid("tag outside the tag set")),
-        }
-        if matches!(tag, TAG_ENTITY | TAG_RELATION) {
-            if let (Some(e), Some(r)) = (entity, relation) {
-                register = store.read(e, r, false);
-                previous = store.read(e, r, true);
-                reads.push(ReadEvent {
-                    position,
-                    key: Some((e, r)),
-                    previous: false,
-                    status: register.0,
-                    value: register.1,
-                });
-                reads.push(ReadEvent {
-                    position,
-                    key: Some((e, r)),
-                    previous: true,
-                    status: previous.0,
-                    value: previous.1,
-                });
+        let active = user_turn.is_none_or(|flags| flags[position] != 0);
+        if active {
+            match tag {
+                TAG_OTHER => {}
+                TAG_ENTITY => entity = Some(token),
+                TAG_RELATION => relation = Some(token),
+                TAG_VALUE => value = Some(token),
+                _ => return Err(invalid("tag outside the tag set")),
+            }
+            if matches!(tag, TAG_ENTITY | TAG_RELATION) {
+                if let (Some(e), Some(r)) = (entity, relation) {
+                    register = store.read(e, r, false);
+                    previous = store.read(e, r, true);
+                    reads.push(ReadEvent {
+                        position,
+                        key: Some((e, r)),
+                        previous: false,
+                        status: register.0,
+                        value: register.1,
+                    });
+                    reads.push(ReadEvent {
+                        position,
+                        key: Some((e, r)),
+                        previous: true,
+                        status: previous.0,
+                        value: previous.1,
+                    });
+                }
             }
         }
         let mut close = token == eos;
-        match trigger {
-            TRIGGER_NONE | TRIGGER_READ | TRIGGER_READ_PREVIOUS => {}
-            TRIGGER_WRITE => {
-                if let (Some(e), Some(r), Some(v)) = (entity, relation, value) {
-                    store.write(e, r, v);
-                    writes.push(WriteEvent {
-                        position,
-                        key: (e, r),
-                        value: v,
-                    });
+        if active {
+            match trigger {
+                TRIGGER_NONE | TRIGGER_READ | TRIGGER_READ_PREVIOUS => {}
+                TRIGGER_WRITE => {
+                    if let (Some(e), Some(r), Some(v)) = (entity, relation, value) {
+                        store.write(e, r, v);
+                        writes.push(WriteEvent {
+                            position,
+                            key: (e, r),
+                            value: v,
+                        });
+                    }
+                    close = true;
                 }
-                close = true;
+                _ => return Err(invalid("trigger outside the trigger set")),
             }
-            _ => return Err(invalid("trigger outside the trigger set")),
         }
         if close {
             (entity, relation, value) = (None, None, None);
@@ -778,6 +811,9 @@ pub struct Episode {
     pub response_mask: Vec<u8>,
     pub tags: Vec<u32>,
     pub triggers: Vec<u32>,
+    /// 1 on the tokens of a user turn, 0 elsewhere (assistant replies, markers,
+    /// EOS, padding). Built from the protocol's role structure, never labels.
+    pub user_turn: Vec<u8>,
     pub queries: Vec<Query>,
     /// Canonical entity atom at a tagged entity position, 0 elsewhere. In the
     /// standard world every entry is 0.
@@ -1035,6 +1071,7 @@ struct EpisodeBuilder<'a> {
     mask: Vec<u8>,
     tags: Vec<u32>,
     triggers: Vec<u32>,
+    user_turn: Vec<u8>,
     queries: Vec<Query>,
     messages: Vec<(String, String)>,
     turns: usize,
@@ -1061,6 +1098,7 @@ impl<'a> EpisodeBuilder<'a> {
             mask: vec![0],
             tags: vec![TAG_OTHER],
             triggers: vec![TRIGGER_NONE],
+            user_turn: vec![0],
             queries: Vec::new(),
             messages: Vec::new(),
             turns: 0,
@@ -1184,6 +1222,7 @@ impl<'a> EpisodeBuilder<'a> {
             .extend(std::iter::repeat_n(TAG_OTHER, tokens.len()));
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, tokens.len()));
+        self.user_turn.extend(std::iter::repeat_n(0, tokens.len()));
     }
 
     /// Appends one user turn and its assistant reply; returns the reply's
@@ -1200,6 +1239,8 @@ impl<'a> EpisodeBuilder<'a> {
         self.tags.extend_from_slice(&user.tags);
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, user.tokens.len()));
+        self.user_turn
+            .extend(std::iter::repeat_n(1, user.tokens.len()));
         if let Some(last) = self.triggers.last_mut() {
             *last = trigger;
         }
@@ -1214,10 +1255,13 @@ impl<'a> EpisodeBuilder<'a> {
             .extend(std::iter::repeat_n(TAG_OTHER, reply.tokens.len()));
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, reply.tokens.len()));
+        self.user_turn
+            .extend(std::iter::repeat_n(0, reply.tokens.len()));
         self.tokens.push(self.world.eos);
         self.mask.push(1);
         self.tags.push(TAG_OTHER);
         self.triggers.push(TRIGGER_NONE);
+        self.user_turn.push(0);
         self.messages.push((user.text.clone(), reply.text.clone()));
         self.turns += 1;
         start
@@ -1525,6 +1569,7 @@ impl<'a> EpisodeBuilder<'a> {
             response_mask: self.mask,
             tags: self.tags,
             triggers: self.triggers,
+            user_turn: self.user_turn,
             queries: self.queries,
             entity_atom: vec![0; tokens],
             relation_atom: vec![0; tokens],
@@ -1550,6 +1595,8 @@ pub struct DialogueBatch {
     /// standard world and padding.
     pub entity_atom: Vec<u32>,
     pub relation_atom: Vec<u32>,
+    /// 1 on user-turn input positions, 0 elsewhere (assistant, padding).
+    pub user_turn: Vec<u8>,
     /// Gold registers (teacher forcing) for both the current and previous
     /// registers.
     pub status: Vec<u32>,
@@ -1590,6 +1637,7 @@ impl RelationWorld {
             triggers: vec![TRIGGER_NONE; rows],
             entity_atom: vec![0; rows],
             relation_atom: vec![0; rows],
+            user_turn: vec![0; rows],
             status: vec![STATUS_NONE; rows],
             value: vec![0; rows],
             status_previous: vec![STATUS_NONE; rows],
@@ -1601,11 +1649,12 @@ impl RelationWorld {
                 return Err(invalid("an episode must fit the context"));
             }
             let inputs = n - 1;
-            let gold = simulate(
+            let gold = simulate_gated(
                 &episode.tokens[..inputs],
                 &episode.tags[..inputs],
                 &episode.triggers[..inputs],
                 self.eos,
+                &episode.user_turn[..inputs],
             )?;
             for t in 0..inputs {
                 let row = b * context + t;
@@ -1617,6 +1666,7 @@ impl RelationWorld {
                 out.triggers[row] = episode.triggers[t];
                 out.entity_atom[row] = episode.entity_atom[t];
                 out.relation_atom[row] = episode.relation_atom[t];
+                out.user_turn[row] = episode.user_turn[t];
                 out.status[row] = gold.status[t];
                 out.value[row] = gold.value[t];
                 out.status_previous[row] = gold.status_previous[t];
@@ -1634,7 +1684,7 @@ impl RelationWorld {
 /// One part of a natural phrasing template. `Entity`/`Relation` carry the exact
 /// surface word used at that slot (each must encode to one token); `Value` is
 /// filled from the family's value pool.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NSlot {
     Text(&'static str),
     Entity(&'static str),
@@ -2088,7 +2138,15 @@ const NATURAL_FAMILIES: &[NaturalFamily] = &[
             &[nt("My"), ne(" car"), nt(" is"), nr(" painted"), NY, nt(".")],
         ],
         statements_held: &[
-            &[nt("I"), nr(" drive"), nt(" a"), NY, ne(" car"), nt(".")],
+            &[
+                nt("The"),
+                ne(" car"),
+                nt(" I"),
+                nr(" drive"),
+                nt(" is"),
+                NY,
+                nt("."),
+            ],
             &[nt("I"), nr(" have"), nt(" a"), NY, ne(" car"), nt(".")],
         ],
         queries_train: &[&[nr("What"), nt(" color do"), ne(" I"), nt(" drive?")]],
@@ -2155,14 +2213,7 @@ const NATURAL_FAMILIES: &[NaturalFamily] = &[
                 NY,
                 nt("."),
             ],
-            &[
-                ne("My"),
-                nt(" favorite"),
-                nr(" color"),
-                nt(" is"),
-                NY,
-                nt("."),
-            ],
+            &[ne("I"), nt(" like the"), nr(" color"), NY, nt(" best.")],
         ],
         queries_train: &[&[nr("What"), nt(" color do"), ne(" I"), nt(" love most?")]],
         queries_held: &[&[
@@ -2213,7 +2264,7 @@ const NATURAL_FAMILIES: &[NaturalFamily] = &[
         ],
         statements_held: &[&[
             ne("My"),
-            nt(" favorite"),
+            nt(" preferred"),
             nr(" food"),
             nt(" is"),
             NY,
@@ -2646,6 +2697,7 @@ struct NaturalBuilder<'a> {
     mask: Vec<u8>,
     tags: Vec<u32>,
     triggers: Vec<u32>,
+    user_turn: Vec<u8>,
     entity_atom: Vec<u32>,
     relation_atom: Vec<u32>,
     queries: Vec<Query>,
@@ -2673,6 +2725,7 @@ impl<'a> NaturalBuilder<'a> {
             mask: vec![0],
             tags: vec![TAG_OTHER],
             triggers: vec![TRIGGER_NONE],
+            user_turn: vec![0],
             entity_atom: vec![0],
             relation_atom: vec![0],
             queries: Vec::new(),
@@ -2842,6 +2895,7 @@ impl<'a> NaturalBuilder<'a> {
             .extend(std::iter::repeat_n(TAG_OTHER, tokens.len()));
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, tokens.len()));
+        self.user_turn.extend(std::iter::repeat_n(0, tokens.len()));
         self.entity_atom
             .extend(std::iter::repeat_n(0, tokens.len()));
         self.relation_atom
@@ -2862,6 +2916,8 @@ impl<'a> NaturalBuilder<'a> {
         self.tags.extend_from_slice(&user.tags);
         self.entity_atom.extend_from_slice(&user.entity_atom);
         self.relation_atom.extend_from_slice(&user.relation_atom);
+        self.user_turn
+            .extend(std::iter::repeat_n(1, user.tokens.len()));
         self.triggers
             .extend(std::iter::repeat_n(TRIGGER_NONE, user.tokens.len()));
         let trigger_position = self.tokens.len() - 1;
@@ -2883,12 +2939,15 @@ impl<'a> NaturalBuilder<'a> {
             .extend(std::iter::repeat_n(0, reply.tokens.len()));
         self.relation_atom
             .extend(std::iter::repeat_n(0, reply.tokens.len()));
+        self.user_turn
+            .extend(std::iter::repeat_n(0, reply.tokens.len()));
         self.tokens.push(self.world.eos);
         self.mask.push(1);
         self.tags.push(TAG_OTHER);
         self.triggers.push(TRIGGER_NONE);
         self.entity_atom.push(0);
         self.relation_atom.push(0);
+        self.user_turn.push(0);
         self.messages.push((user.text.clone(), reply.text.clone()));
         self.turns += 1;
         (start, trigger_position)
@@ -3224,6 +3283,7 @@ impl<'a> NaturalBuilder<'a> {
             response_mask: self.mask,
             tags: self.tags,
             triggers: self.triggers,
+            user_turn: self.user_turn,
             queries: self.queries,
             entity_atom: self.entity_atom,
             relation_atom: self.relation_atom,
@@ -3707,6 +3767,32 @@ pub fn model_registers(
     time: usize,
     eos: u32,
 ) -> Result<Registers> {
+    model_registers_inner(ids, tags, triggers, batch, time, eos, None)
+}
+
+/// [`model_registers`] with the structural user-turn gate: positions whose
+/// flag is 0 ignore their tags and triggers.
+pub fn model_registers_gated(
+    ids: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    batch: usize,
+    time: usize,
+    eos: u32,
+    user_turn: &[u8],
+) -> Result<Registers> {
+    model_registers_inner(ids, tags, triggers, batch, time, eos, Some(user_turn))
+}
+
+fn model_registers_inner(
+    ids: &[u32],
+    tags: &[u32],
+    triggers: &[u32],
+    batch: usize,
+    time: usize,
+    eos: u32,
+    user_turn: Option<&[u8]>,
+) -> Result<Registers> {
     let mut out = Registers {
         status: Vec::with_capacity(batch * time),
         value: Vec::with_capacity(batch * time),
@@ -3716,12 +3802,21 @@ pub fn model_registers(
     };
     for b in 0..batch {
         let range = b * time..(b + 1) * time;
-        let simulation = simulate(
-            &ids[range.clone()],
-            &tags[range.clone()],
-            &triggers[range],
-            eos,
-        )?;
+        let simulation = match user_turn {
+            Some(flags) => simulate_gated(
+                &ids[range.clone()],
+                &tags[range.clone()],
+                &triggers[range.clone()],
+                eos,
+                &flags[range],
+            )?,
+            None => simulate(
+                &ids[range.clone()],
+                &tags[range.clone()],
+                &triggers[range],
+                eos,
+            )?,
+        };
         out.read_events += simulation.reads.len();
         out.status.extend(simulation.status);
         out.value.extend(simulation.value);
@@ -3757,6 +3852,14 @@ pub struct AermConfig {
     /// single-flag behaviour.
     #[serde(default)]
     pub mask_text_triggers: bool,
+    /// Gate reads and writes to user turns, located by the protocol's role
+    /// structure. New runs default to it on.
+    #[serde(default = "default_true")]
+    pub user_turn_gate: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -4015,6 +4118,7 @@ pub fn evaluate_dialogues(
     held: bool,
     context: usize,
     batch: usize,
+    gate: bool,
 ) -> Result<DialogueEvaluation> {
     let mut rng = Rng::new(seed);
     let mut result = DialogueEvaluation {
@@ -4037,7 +4141,19 @@ pub fn evaluate_dialogues(
                 result.trigger_confusion[data.triggers[row] as usize][triggers[row] as usize] += 1;
             }
         }
-        let registers = model_registers(&data.ids, &tags, &triggers, size, context, world.eos)?;
+        let registers = if gate {
+            model_registers_gated(
+                &data.ids,
+                &tags,
+                &triggers,
+                size,
+                context,
+                world.eos,
+                &data.user_turn,
+            )?
+        } else {
+            model_registers(&data.ids, &tags, &triggers, size, context, world.eos)?
+        };
         result.read_events += registers.read_events;
         let predicted = argmax_rows(&model.top(
             &bottom.hidden,
@@ -4317,6 +4433,7 @@ pub fn text_nll(
     windows: usize,
     batch: usize,
     eos: u32,
+    gate: bool,
 ) -> Result<(f64, f64)> {
     let span = context + 1;
     if dev.len() < span || windows == 0 || batch == 0 {
@@ -4339,7 +4456,21 @@ pub fn text_nll(
         let tags = argmax_rows(&bottom.tags)?;
         let triggers = argmax_rows(&bottom.triggers)?;
         fired += triggers.iter().filter(|&&t| t != TRIGGER_NONE).count();
-        let registers = model_registers(&ids, &tags, &triggers, chunk.len(), context, eos)?;
+        // Prose carries no user turns, so with the gate on every position is
+        // outside a turn and the registers stay silent.
+        let registers = if gate {
+            model_registers_gated(
+                &ids,
+                &tags,
+                &triggers,
+                chunk.len(),
+                context,
+                eos,
+                &vec![0u8; ids.len()],
+            )?
+        } else {
+            model_registers(&ids, &tags, &triggers, chunk.len(), context, eos)?
+        };
         let logits = model
             .top(
                 &bottom.hidden,
@@ -4370,6 +4501,7 @@ pub fn free_running(
     held: bool,
     context: usize,
     max_new: usize,
+    gate: bool,
 ) -> Result<Vec<(Vec<u32>, Vec<u32>)>> {
     let mut rng = Rng::new(seed);
     let mut out = Vec::with_capacity(episodes);
@@ -4390,7 +4522,14 @@ pub fn free_running(
             let bottom = model.bottom(&ids, 1, time)?;
             let tags = argmax_rows(&bottom.tags)?;
             let triggers = argmax_rows(&bottom.triggers)?;
-            let registers = model_registers(&ids, &tags, &triggers, 1, time, world.eos)?;
+            let registers = if gate {
+                let mut flags = vec![0u8; ids.len()];
+                let known = ids.len().min(episode.user_turn.len());
+                flags[..known].copy_from_slice(&episode.user_turn[..known]);
+                model_registers_gated(&ids, &tags, &triggers, 1, time, world.eos, &flags)?
+            } else {
+                model_registers(&ids, &tags, &triggers, 1, time, world.eos)?
+            };
             let logits = model.top(
                 &bottom.hidden,
                 &registers.status,
@@ -4413,7 +4552,7 @@ pub fn free_running(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometric_stack::{ReadScore, StackArch};
+    use crate::geometric_stack::{ReadScore, StackArch, TransportSnap};
     use std::cell::RefCell;
     use std::collections::HashMap;
 
@@ -4853,6 +4992,82 @@ mod tests {
         let mut missed = triggers.clone();
         missed[4] = TRIGGER_NONE;
         assert_eq!(cause(&tags, &missed)?, AddressCause::WriteMissed);
+        Ok(())
+    }
+
+    #[test]
+    fn gated_prose_registers_are_silent() -> Result<()> {
+        let tokens = vec![0u32, 10, 20, 30, 40, 1];
+        let tags = vec![
+            TAG_OTHER,
+            TAG_ENTITY,
+            TAG_RELATION,
+            TAG_VALUE,
+            TAG_OTHER,
+            TAG_OTHER,
+        ];
+        let triggers = vec![
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_NONE,
+            TRIGGER_WRITE,
+            TRIGGER_NONE,
+        ];
+        let flags = vec![0u8; tokens.len()];
+        let gated = simulate_gated(&tokens, &tags, &triggers, 1, &flags)?;
+        assert!(gated.reads.is_empty());
+        assert!(gated.writes.is_empty());
+        assert!(gated.status.iter().all(|&s| s == STATUS_NONE));
+        assert!(gated.status_previous.iter().all(|&s| s == STATUS_NONE));
+        assert!(gated.store.record(10, 20).is_none());
+        let plain = simulate(&tokens, &tags, &triggers, 1)?;
+        assert!(!plain.reads.is_empty());
+        assert_eq!(plain.writes.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn the_worlds_user_turn_operations_are_unchanged() -> Result<()> {
+        let world = world()?;
+        let mut rng = Rng::new(77);
+        for index in 0..64 {
+            let episode = world.episode(&mut rng, index % 2 == 0, 257)?;
+            let plain = simulate(&episode.tokens, &episode.tags, &episode.triggers, 1)?;
+            let gated = simulate_gated(
+                &episode.tokens,
+                &episode.tags,
+                &episode.triggers,
+                1,
+                &episode.user_turn,
+            )?;
+            assert_eq!(plain.status, gated.status);
+            assert_eq!(plain.value, gated.value);
+            assert_eq!(plain.reads, gated.reads);
+            assert_eq!(plain.writes, gated.writes);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn every_tagged_or_triggered_position_is_inside_a_user_turn() -> Result<()> {
+        let world = world()?;
+        let mut rng = Rng::new(91);
+        for index in 0..64 {
+            let episode = world.episode(&mut rng, index % 2 == 0, 257)?;
+            assert_eq!(episode.tokens.len(), episode.user_turn.len());
+            for (position, ((&tag, &trigger), &flag)) in episode
+                .tags
+                .iter()
+                .zip(&episode.triggers)
+                .zip(&episode.user_turn)
+                .enumerate()
+            {
+                if tag != TAG_OTHER || trigger != TRIGGER_NONE {
+                    assert_eq!(flag, 1, "position {position} operates outside a user turn");
+                }
+            }
+        }
         Ok(())
     }
 
@@ -5341,6 +5556,30 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn natural_held_out_templates_are_not_training_templates() {
+        for family in NATURAL_FAMILIES {
+            for held in [
+                family.statements_held,
+                family.queries_held,
+                family.previous_held,
+            ] {
+                for template in held {
+                    for train in [
+                        family.statements_train,
+                        family.queries_train,
+                        family.previous_train,
+                    ] {
+                        assert!(
+                            !train.contains(template),
+                            "a held-out phrasing is also a training phrasing: {template:?}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
