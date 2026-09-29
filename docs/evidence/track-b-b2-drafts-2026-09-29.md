@@ -135,9 +135,9 @@ student forward positions, backward steps and evaluation positions separately.
 The fit draft supports isolated dense-control and harmonic arms only. It uses
 actual dense-teacher post-WO targets, frozen full-width matrices, rank-4/alpha-4
 Q/K/V LoRA, explicit paired seed and at most 500 scheduled updates. Constructor
-and evaluation documents are separated. Initial parameters are evaluated before
-the updates and final parameters after the fixed schedule, without
-development-driven selection. A
+and evaluation documents are separated. After the fixed update schedule, the
+draft reconstructs the initial parameter set and evaluates both it and the final
+parameter set, without intermediate development-driven selection. A
 positive harmonic baseline requires at least 50% reduction in aggregate
 target-energy-normalized squared error; dense zero-baseline reduction is
 non-applicable. This is an implemented decision rule, not a passed model gate.

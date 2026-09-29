@@ -1,0 +1,26 @@
+error: /Volumes/UOR-Workspace/BuildCaches/fourth-lab-dialogue-debug-20260927-1/target/release/deps/libserde_derive-916883dc6a4602e7.dylib: dlopen(/Volumes/UOR-Workspace/BuildCaches/fourth-lab-dialogue-debug-20260927-1/target/release/deps/libserde_derive-916883dc6a4602e7.dylib, 0x0005): tried: '/Volumes/UOR-Workspace/BuildCaches/fourth-lab-dialogue-debug-20260927-1/target/release/deps/libserde_derive-916883dc6a4602e7.dylib' (code signature in <EE11A679-0425-3CED-B49C-79B903773953> '/Volumes/UOR-Workspace/BuildCaches/fourth-lab-dialogue-debug-20260927-1/target/release/deps/libserde_derive-916883dc6a4602e7.dylib' not valid for use in process: library load disallowed by system policy), '/System/Volumes/Preboot/Cryptexes/OS/Volumes/UOR-Workspace/BuildCaches/fourth-lab-dialogue-debug-20260927-1/target/release/deps/libserde_derive-916883dc6a4602e7.dylib' (no such file), '/Volumes/UOR-Workspace/BuildCaches/fourth-lab-dialogue-debug-20260927-1/target/release/deps/libserde_derive-916883dc6a4602e7.dylib' (code signature in <EE11A679-0425-3CED-B49C-79B903773953> '/Volumes/UOR-Workspace/BuildCaches/fourth-lab-dialogue-debug-20260927-1/target/release/deps/libserde_derive-916883dc6a4602e7.dylib' not valid for use in process: library load disallowed by system policy)
+ --> /tmp/codex-track-b-verify-restored.rs:4:9
+  |
+4 |         uor_r4_core::report_output::verify(&root)?;
+  |         ^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+        5.53 real         0.02 user         0.07 sys
+            74661888  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                3626  page reclaims
+                3781  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  38  voluntary context switches
+                2218  involuntary context switches
+           683660407  instructions retired
+           310449862  cycles elapsed
+            18121328  peak memory footprint

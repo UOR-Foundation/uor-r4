@@ -20,6 +20,17 @@ contemporary direct rlib/rmeta pairs are readable with matching embedded
 metadata. The [diagnostic was sent to Lab 1](https://github.com/UOR-Foundation/uor-r4/issues/1515#issuecomment-5899377775).
 No mount, code-signature or security-attribute changes were made by Codex.
 
+The subsequent [metadata-only recheck](compiler-policy-recheck-3.log) still
+rejects the same procedural macro with `library load disallowed by system policy`
+(exit 1, 5.53 seconds, peak RSS 74,661,888 bytes). It used the same tiny
+core-verifier source and existing rlib, wrote its proposed metadata path under
+internal `/tmp`, and loaded no model. The compiler-access dependency was sent
+to the [infrastructure steward](https://github.com/UOR-Foundation/uor-r4/issues/1514#issuecomment-5899632333).
+The new shared model remains uncompiled; further model retries require normal
+compiler access and the shared compute slot. Independent B2 draft engineering
+and nine std-only accounting checks are preserved in the
+[draft record](../track-b-b2-drafts-2026-09-29.md); they do not resolve this gate.
+
 The log's trailing `BUILD_WALL_BOUND` is **not a real timeout**. The original
 wrapper's cleanup killed a watchdog sleep, whose shell then continued to its
 next statement. The closed `/usr/bin/time` record and exit receipt establish
