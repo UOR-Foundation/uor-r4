@@ -3267,16 +3267,22 @@ mod tests {
         for (a, b) in before.iter().flatten().zip(after.iter().flatten()) {
             assert_eq!(a, b, "snapped logits differ after reload");
         }
+        // A full memory checkpoint whose *stack* carries a served
+        // representation: the wrapper cannot reapply it, so load must refuse.
         let served_directory = directory.join("served");
         let mut served = StackModel::new(config, &device)?;
         served.set_served_representation(Some(std::sync::Arc::new(
             crate::geometric_stack::D11Interim,
         )))?;
-        served.save(&served_directory)?;
-        assert!(
-            AermModel::load(&served_directory, &device).is_err(),
-            "a saved served representation must be refused"
-        );
+        let served_model = AermModel::from_stack(served, 2, true, 19)?;
+        served_model.save(&served_directory)?;
+        match AermModel::load(&served_directory, &device) {
+            Ok(_) => panic!("a saved served representation must be refused"),
+            Err(error) => assert!(
+                format!("{error}").contains("served representation"),
+                "unexpected error: {error}"
+            ),
+        }
         fs::remove_dir_all(&directory)?;
         Ok(())
     }
