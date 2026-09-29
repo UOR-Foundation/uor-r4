@@ -3087,10 +3087,64 @@ mod tests {
             seed: 17,
             memory: None,
         };
-        let stack = StackModel::new(config, &device)?;
+        let stack = StackModel::new(config.clone(), &device)?;
         let ids: Vec<u32> = (0..32).map(|i| (i * 11 % 400) as u32).collect();
         let reference = stack.forward(&ids, 2, 16)?.to_vec2::<f32>()?;
+        // The same seed must give the same heads as `new`, and the branch must
+        // start at zero; the logit comparison below cannot see either.
+        let from_new = AermModel::new(config, 2, true, 17, &device)?;
         let model = AermModel::from_stack(stack, 2, true, 17)?;
+        let flat = |var: &Var| -> Result<Vec<f32>> {
+            Ok(var.as_tensor().flatten_all()?.to_vec1::<f32>()?)
+        };
+        for (name, a, b) in [
+            ("tag_weight", &from_new.tag_weight, &model.tag_weight),
+            ("tag_bias", &from_new.tag_bias, &model.tag_bias),
+            (
+                "trigger_weight",
+                &from_new.trigger_weight,
+                &model.trigger_weight,
+            ),
+            ("trigger_bias", &from_new.trigger_bias, &model.trigger_bias),
+        ] {
+            assert_eq!(flat(a)?, flat(b)?, "{name} differs from new()");
+        }
+        let new_branch = from_new.memory.as_ref().expect("memory branch");
+        let branch = model.memory.as_ref().expect("memory branch");
+        for (name, a, b) in [
+            ("status", &new_branch.status, &branch.status),
+            ("projection", &new_branch.projection, &branch.projection),
+            ("copy_weight", &new_branch.copy_weight, &branch.copy_weight),
+            ("copy_bias", &new_branch.copy_bias, &branch.copy_bias),
+            ("copy_scale", &new_branch.copy_scale, &branch.copy_scale),
+            (
+                "status_previous",
+                &new_branch.status_previous,
+                &branch.status_previous,
+            ),
+            (
+                "projection_previous",
+                &new_branch.projection_previous,
+                &branch.projection_previous,
+            ),
+            (
+                "copy_weight_previous",
+                &new_branch.copy_weight_previous,
+                &branch.copy_weight_previous,
+            ),
+            (
+                "copy_bias_previous",
+                &new_branch.copy_bias_previous,
+                &branch.copy_bias_previous,
+            ),
+            (
+                "copy_scale_previous",
+                &new_branch.copy_scale_previous,
+                &branch.copy_scale_previous,
+            ),
+        ] {
+            assert_eq!(flat(a)?, flat(b)?, "{name} differs from new()");
+        }
         let bottom = model.bottom(&ids, 2, 16)?;
         let silent = vec![STATUS_NONE; 32];
         let values = vec![0u32; 32];
