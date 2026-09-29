@@ -295,6 +295,19 @@ pub struct StackNumerics {
 /// `l{l}.down`. Norm gains are folded into the maps that read the normalized
 /// state; `head` carries the final norm's gain. Tables `exp`, `silu`, `gelu`,
 /// and for Lorentz `arcosh`, are shared.
+/// The transport snap a stack artifact records (`transport_snap` in the
+/// header): the trained-in replacement of every unit transport quaternion by
+/// the nearest of these roots before its scaling by lambda. Only the
+/// multiplier-free engine (`uor_r4_integer::stack`) serves it; this crate's
+/// D10 comparator computes the free transport, so its read path refuses an
+/// artifact that carries the record.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StackTransportSnap {
+    pub name: String,
+    pub roots: usize,
+    pub roots_sha256: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StackHeader {
     pub schema: String,
@@ -305,12 +318,23 @@ pub struct StackHeader {
     pub tables: Vec<TableSpec>,
     /// Provenance recorded by the exporter; never read by serving arithmetic.
     pub source: serde_json::Value,
+    /// The trained-in transport snap; absent (and absent from the JSON) on a
+    /// free-transport artifact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_snap: Option<StackTransportSnap>,
 }
 
 impl Sections for StackHeader {
     fn validate(&self) -> Result<()> {
         if self.schema != STACK_SCHEMA || self.group != crate::GROUP {
             return Err(format_error("unsupported schema or group size"));
+        }
+        if let Some(snap) = &self.transport_snap {
+            return Err(format_error(format!(
+                "the artifact records transport_snap={} ({} roots), which only the \
+                 multiplier-free stack engine serves; this engine computes the free transport",
+                snap.name, snap.roots
+            )));
         }
         self.shape.validate()
     }
@@ -390,9 +414,20 @@ impl Builder<StackHeader> {
                 matrices: Vec::new(),
                 tables: Vec::new(),
                 source,
+                transport_snap: None,
             },
             blob: Vec::new(),
         })
+    }
+
+    /// Record the trained-in transport snap the artifact is served with
+    /// (`uor_r4_integer::stack`; this crate's engine refuses such artifacts).
+    pub fn set_transport_snap(&mut self, name: String, roots: usize, roots_sha256: String) {
+        self.header.transport_snap = Some(StackTransportSnap {
+            name,
+            roots,
+            roots_sha256,
+        });
     }
 }
 
@@ -661,6 +696,51 @@ mod tests {
         assert!(
             Artifact::parse(bytes).is_err(),
             "a stack artifact is not a Llama artifact"
+        );
+    }
+
+    #[test]
+    fn a_snap_free_stack_header_serializes_without_the_record_and_a_snapped_one_is_refused_on_read()
+    {
+        let numerics = StackNumerics {
+            rms_eps: Fixed {
+                mantissa: 1,
+                exp: -48,
+            },
+            score_scale_q30: 1 << 28,
+            exp_step_log2: -8,
+            silu_step_log2: -8,
+            silu_range_log2: 4,
+            gelu_step_log2: -8,
+            gelu_range_log2: 4,
+        };
+        let plain =
+            StackArtifactBuilder::new(stack_shape(), numerics.clone(), serde_json::json!({}))
+                .unwrap()
+                .finish()
+                .unwrap();
+        // No `transport_snap` key: a snap-free artifact is byte-identical to
+        // one written before the field existed.
+        let len = u64::from_le_bytes(plain[8..16].try_into().unwrap()) as usize;
+        let header: serde_json::Value = serde_json::from_slice(&plain[16..16 + len]).unwrap();
+        assert!(header.get("transport_snap").is_none());
+        assert!(StackArtifact::parse(plain).is_ok());
+
+        let mut builder =
+            StackArtifactBuilder::new(stack_shape(), numerics, serde_json::json!({})).unwrap();
+        builder.set_transport_snap("icosian".to_owned(), 120, "ab".repeat(32));
+        // The writer path still finishes; only this crate's read path refuses.
+        let snapped = builder.finish().unwrap();
+        let len = u64::from_le_bytes(snapped[8..16].try_into().unwrap()) as usize;
+        let header: serde_json::Value = serde_json::from_slice(&snapped[16..16 + len]).unwrap();
+        assert_eq!(header["transport_snap"]["name"], "icosian");
+        let refusal = match StackArtifact::parse(snapped) {
+            Err(error) => error,
+            Ok(_) => panic!("the D10 read path refuses the snap"),
+        };
+        assert!(
+            refusal.to_string().contains("transport_snap=icosian"),
+            "{refusal}"
         );
     }
 
