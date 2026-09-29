@@ -1817,7 +1817,8 @@ fn export_mode(arguments: &[String]) -> Result<()> {
         // run's) exports only as that representation.
         let served = StackModel::saved_served_representation(&model_dir)?;
         check_export_representation(served.as_ref(), calibration_tokens.is_some())?;
-        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let mut model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let _ = model.restore_saved_served_representation(&model_dir)?;
         let time: usize = args.number("calibration_time", model.config.context)?;
         if time == 0 || time > model.config.context {
             return Err(invalid("calibration_time must be within the context"));

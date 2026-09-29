@@ -2196,6 +2196,39 @@ impl StackModel {
         self.served.as_ref().map(|state| state.codec.as_ref())
     }
 
+    /// Set the served representation by name.
+    pub fn set_served_codec_by_name(&mut self, name: &str) -> Result<()> {
+        match name {
+            "native-d11-grouped-4bit-g32-rtn" | "native-d11-grouped-4bit-g32" => {
+                self.set_served_representation(Some(Arc::new(D11Interim)))
+            }
+            "native-d11-grouped-4bit-g32-min-mse" => {
+                self.set_served_representation(Some(Arc::new(D4Grouped4BitAdapter::min_mse())))
+            }
+            "native-d4-head-compensated-head-only" => {
+                self.set_served_representation(Some(Arc::new(HeadCompensatedMapCodec::head_only())))
+            }
+            "native-d4-head-compensated-all-maps" => {
+                self.set_served_representation(Some(Arc::new(HeadCompensatedMapCodec::new(false))))
+            }
+            _ => Err(invalid(format!("unknown served codec name: {name}"))),
+        }
+    }
+
+    /// Restore the saved served representation from a model directory's `config.json`.
+    pub fn restore_saved_served_representation(
+        &mut self,
+        directory: &Path,
+    ) -> Result<Option<String>> {
+        let saved = Self::saved_served_representation(directory)?;
+        if let Some(record) = saved {
+            self.set_served_codec_by_name(&record.codec)?;
+            Ok(Some(record.codec))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// The served representation's work so far, in served mode.
     pub fn served_statistics(&self) -> Result<Option<ServedStatistics>> {
         self.served

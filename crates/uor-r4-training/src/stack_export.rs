@@ -33,8 +33,8 @@ use crate::geometric_stack::{
 };
 use crate::kappa_llama::{Checkpoint, LlamaShape, Site};
 use crate::lut_export::{
-    arcosh_table, grid_nearest, quantize_matrix, quantize_matrix_gptq, Calibration, EXP_RANGE,
-    EXP_STEP_LOG2, SILU_RANGE_LOG2, SILU_STEP_LOG2,
+    arcosh_table, grid_nearest, quantize_matrix, quantize_matrix_compensated, quantize_matrix_gptq,
+    Calibration, Packed, EXP_RANGE, EXP_STEP_LOG2, SILU_RANGE_LOG2, SILU_STEP_LOG2,
 };
 use crate::{invalid, Result};
 
@@ -302,7 +302,38 @@ pub fn export_stack(
                 );
                 packed
             }
-            _ => quantize_matrix(values, rows, cols)?,
+            _ => {
+                let served_name = model.served_codec().map(|c| c.name());
+                match served_name {
+                    Some("native-d4-head-compensated-all-maps") => {
+                        quantize_matrix_compensated(values, rows, cols)?
+                    }
+                    Some("native-d4-head-compensated-head-only")
+                        if site == Some(StackSite::Head) =>
+                    {
+                        quantize_matrix_compensated(values, rows, cols)?
+                    }
+                    Some("native-d11-grouped-4bit-g32-min-mse") => {
+                        let c = uor_r4_integer::codec::Grouped4BitCodec::new(
+                            GROUP,
+                            uor_r4_integer::codec::Grouped4BitRounding::MinimumMseScale,
+                        );
+                        let mat = c
+                            .quantize(values, rows, cols)
+                            .map_err(|e| invalid(e.to_string()))?;
+                        let rel_err = mat
+                            .relative_rms_error(values)
+                            .map_err(|e| invalid(e.to_string()))?;
+                        Packed {
+                            nibbles: mat.nibbles,
+                            scales: mat.scales,
+                            exp_base: mat.exp_base,
+                            relative_rms_error: rel_err,
+                        }
+                    }
+                    _ => quantize_matrix(values, rows, cols)?,
+                }
+            }
         };
         builder
             .add_matrix(
@@ -495,10 +526,16 @@ pub fn export_stack(
             "calibration_positions": calibration.positions,
             "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp,
         }),
-        None => json!({
-            "quantizer": "round_to_nearest",
-            "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp,
-        }),
+        None => {
+            let quantizer_name = match model.served_codec().map(|c| c.name()) {
+                Some(name) => name,
+                None => "round_to_nearest",
+            };
+            json!({
+                "quantizer": quantizer_name,
+                "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp,
+            })
+        }
     };
     Ok((
         bytes,
@@ -527,9 +564,12 @@ pub fn check_export_representation(
         return Ok(());
     };
     let interim = D11Interim.name();
-    let is_interim_compatible =
-        saved.codec == interim || saved.codec == "native-d11-grouped-4bit-g32-rtn";
-    if !is_interim_compatible {
+    let is_export_compatible = saved.codec == interim
+        || saved.codec == "native-d11-grouped-4bit-g32-rtn"
+        || saved.codec == "native-d11-grouped-4bit-g32-min-mse"
+        || saved.codec == "native-d4-head-compensated-head-only"
+        || saved.codec == "native-d4-head-compensated-all-maps";
+    if !is_export_compatible {
         return Err(invalid(format!(
             "the model was trained against the served representation {}, which the stack \
              export does not write (it writes {interim} when rounding to nearest)",
@@ -1206,6 +1246,19 @@ mod tests {
         assert!(check_export_representation(Some(&interim), false).is_ok());
         let refusal = check_export_representation(Some(&interim), true).unwrap_err();
         assert!(refusal.to_string().contains("calibration="), "{refusal}");
+
+        let head_comp = SavedServedRepresentation {
+            codec: "native-d4-head-compensated-head-only".to_owned(),
+        };
+        assert!(check_export_representation(Some(&head_comp), false).is_ok());
+        assert!(check_export_representation(Some(&head_comp), true).is_err());
+
+        let min_mse = SavedServedRepresentation {
+            codec: "native-d11-grouped-4bit-g32-min-mse".to_owned(),
+        };
+        assert!(check_export_representation(Some(&min_mse), false).is_ok());
+        assert!(check_export_representation(Some(&min_mse), true).is_err());
+
         assert!(check_export_representation(Some(&other), false).is_err());
         assert!(check_export_representation(Some(&other), true).is_err());
     }

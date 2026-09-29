@@ -122,6 +122,129 @@ fn qat_adapters_integrate_with_stack_model_and_export_contract() -> Result<()> {
         "native-d4-head-compensated-head-only"
     );
 
+    let save_dir_hc = tmp_root.join("saved_model_hc");
+    model.save(&save_dir_hc)?;
+
+    let record_hc = StackModel::saved_served_representation(&save_dir_hc)?;
+    assert_eq!(
+        record_hc.as_ref().unwrap().codec,
+        "native-d4-head-compensated-head-only"
+    );
+
+    // Verify export representation check passes for HeadCompensated QAT model
+    check_export_representation(record_hc.as_ref(), false)?;
+    // Calibrated export should be rejected for a HeadCompensated QAT model
+    assert!(check_export_representation(record_hc.as_ref(), true).is_err());
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&tmp_root);
+    Ok(())
+}
+
+#[test]
+fn qat_head_compensated_end_to_end_export_and_integer_serving_chain() -> Result<()> {
+    let config = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 64,
+        width: 32,
+        heads: 1,
+        mlp_hidden: 32,
+        context: 8,
+        pattern: "r".into(),
+        read: ReadScore::Dot,
+        rotation: false,
+        seed: 77,
+        memory: None,
+    };
+    let device = Device::Cpu;
+    let mut model = StackModel::new(config, &device)?;
+
+    // 1. Enable QAT with HeadCompensatedMapCodec
+    let codec = Arc::new(HeadCompensatedMapCodec::head_only_for(64, 32));
+    model.set_served_representation(Some(codec))?;
+    assert_eq!(
+        model.served_codec().unwrap().name(),
+        "native-d4-head-compensated-head-only"
+    );
+
+    // 2. Compute loss on dummy inputs
+    let ids: Vec<u32> = vec![2, 7, 15, 25];
+    let targets: Vec<u32> = vec![7, 15, 25, 30];
+    let loss = model.loss(&ids, &targets, 1, 4)?;
+    let initial_loss = loss.to_scalar::<f32>()?;
+    assert!(
+        initial_loss.is_finite(),
+        "initial head-compensated QAT loss must be finite"
+    );
+
+    // 3. Backward pass: gradients flow through StraightThrough op to master variables
+    let grads = loss.backward()?;
+    let embed_var = model.variables().get("embedding.weight").unwrap();
+    let embed_grad = grads.get(embed_var.as_tensor());
+    assert!(
+        embed_grad.is_some(),
+        "gradient must reach embedding.weight under head-compensated QAT"
+    );
+    assert!(
+        embed_grad.unwrap().sqr()?.sum_all()?.to_scalar::<f32>()? > 0.0,
+        "gradient on embedding.weight must be non-zero"
+    );
+
+    // 4. Optimizer update modifies master parameters
+    let mut optimizer = StackAdamW::new(&model, 0.01, 1.0)?;
+    let norm = optimizer.update(&model, &grads, 0.05)?;
+    assert!(norm > 0.0, "gradient norm must be positive");
+
+    // 5. Save model and verify metadata
+    let tmp_root = std::env::temp_dir().join(format!("d4-hc-qat-e2e-{}", std::process::id()));
+    let save_dir = tmp_root.join("saved_model");
+    model.save(&save_dir)?;
+
+    let record = StackModel::saved_served_representation(&save_dir)?;
+    assert_eq!(
+        record.as_ref().unwrap().codec,
+        "native-d4-head-compensated-head-only"
+    );
+
+    // 6. Export stack artifact without calibration (using QAT weights)
+    check_export_representation(record.as_ref(), false)?;
+    let (lut_bytes, summary) = export_stack(&model, "head-compensated-qat-test".into(), None)?;
+    assert!(!lut_bytes.is_empty());
+    assert_eq!(
+        summary["method"]["quantizer"],
+        "native-d4-head-compensated-head-only"
+    );
+
+    let lut_path = tmp_root.join("model.lut");
+    std::fs::write(&lut_path, &lut_bytes)?;
+
+    // 7. Load into IntegerStackModel and verify native integer serving execution
+    let integer_model = IntegerStackModel::load(&lut_path)
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+    assert_eq!(integer_model.shape().vocab, 64);
+    assert_eq!(integer_model.shape().width, 32);
+
+    let mut session = integer_model.session();
+    let logits = session
+        .step(ids[0])
+        .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+    assert_eq!(logits.len(), 64, "logits length must match vocabulary size");
+    let next_token = uor_r4_integer::stack::stack_argmax(logits);
+    assert!(next_token < 64, "argmax token must be within vocabulary");
+
+    // 8. Verify restore_saved_served_representation restores the codec
+    let mut reloaded = StackModel::load(&save_dir, &device)?;
+    assert!(reloaded.served_codec().is_none());
+    let restored = reloaded.restore_saved_served_representation(&save_dir)?;
+    assert_eq!(
+        restored.as_deref(),
+        Some("native-d4-head-compensated-head-only")
+    );
+    assert_eq!(
+        reloaded.served_codec().unwrap().name(),
+        "native-d4-head-compensated-head-only"
+    );
+
     // Clean up
     let _ = std::fs::remove_dir_all(&tmp_root);
     Ok(())
