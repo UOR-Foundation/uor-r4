@@ -1,5 +1,11 @@
 # Track B workspace restoration checkpoint
 
+The owner's later reconnection review is recorded in the
+[volume/path reconciliation](volume-reconciliation.md): current mount and
+aliases resolve, other labs run from internal executable caches, and the
+backing image's parent directory carries a quarantine attribute. This adds
+execution-policy evidence without proving that ancestor caused the mount flag.
+
 Lab 1's [notice on #820](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5899196492)
 records the owner's 21:19 UTC switch to a restored workspace image. Writes after
 about 21:05 UTC may be missing or stale. Codex did not alter the storage image.
