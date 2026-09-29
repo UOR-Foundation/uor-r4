@@ -55,6 +55,22 @@ fn head_compensated_codec_produces_finite_values() -> Result<()> {
     let rt_d11 = D11Interim.round_trip(&values, 32, 64)?;
     assert_eq!(rt_head, rt_d11);
 
+    // Test explicit target shape with head_only_for:
+    let codec_targeted = HeadCompensatedMapCodec::head_only_for(64, 32);
+    let rt_targeted_match = codec_targeted.round_trip(&values, 64, 32)?;
+    let rt_comp = uor_r4_integer::codec::apply_codec_arm(
+        &values,
+        64,
+        32,
+        uor_r4_integer::codec::CodecArm::HeadCompensated,
+        0,
+    )?;
+    assert_eq!(rt_targeted_match, rt_comp);
+
+    // Non-matching shape falls back to D11Interim:
+    let rt_targeted_nonmatch = codec_targeted.round_trip(&values, 32, 64)?;
+    assert_eq!(rt_targeted_nonmatch, rt_d11);
+
     Ok(())
 }
 

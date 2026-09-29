@@ -1759,23 +1759,43 @@ impl MapCodec for D4Grouped4BitAdapter {
 /// any changes to the served D11 runtime kernels or multiplier instructions.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HeadCompensatedMapCodec {
-    /// If `head_only` is true, only rows x cols matching the output head (vocab x width)
-    /// receive error diffusion, while other matrices use standard D11Interim.
+    /// If `head_only` is true, only rows x cols matching the output head receive
+    /// error diffusion, while other matrices use standard D11Interim.
     /// If false, all maps receive head-compensated quantization.
     pub head_only: bool,
+    /// Explicit target dimensions for the head (e.g. `(vocab_size, width)`).
+    /// If specified, only matrices matching `(rows, cols) == (vocab_size, width)`
+    /// receive error diffusion in `head_only` mode.
+    pub head_shape: Option<(usize, usize)>,
 }
 
 impl HeadCompensatedMapCodec {
     pub fn new(head_only: bool) -> Self {
-        Self { head_only }
+        Self {
+            head_only,
+            head_shape: None,
+        }
     }
 
     pub fn head_only() -> Self {
-        Self { head_only: true }
+        Self {
+            head_only: true,
+            head_shape: None,
+        }
+    }
+
+    pub fn head_only_for(rows: usize, cols: usize) -> Self {
+        Self {
+            head_only: true,
+            head_shape: Some((rows, cols)),
+        }
     }
 
     pub fn all_maps() -> Self {
-        Self { head_only: false }
+        Self {
+            head_only: false,
+            head_shape: None,
+        }
     }
 }
 
@@ -1789,7 +1809,13 @@ impl MapCodec for HeadCompensatedMapCodec {
     }
 
     fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
-        if self.head_only && rows <= cols {
+        let is_target_head = if let Some((target_rows, target_cols)) = self.head_shape {
+            rows == target_rows && cols == target_cols
+        } else {
+            rows > cols
+        };
+
+        if self.head_only && !is_target_head {
             D11Interim.round_trip(values, rows, cols)
         } else {
             uor_r4_integer::codec::apply_codec_arm(
