@@ -101,6 +101,10 @@
     "PreviousAbsent": {
      "correct": 168,
      "queries": 168
+    },
+    "Absent": {
+     "correct": 355,
+     "queries": 355
     }
    },
    "text_dev_nll": 2.4925663098692894,
@@ -180,6 +184,10 @@
     "PreviousAbsent": {
      "correct": 149,
      "queries": 149
+    },
+    "Absent": {
+     "correct": 374,
+     "queries": 374
     }
    },
    "text_dev_nll": 2.4337248355150223,

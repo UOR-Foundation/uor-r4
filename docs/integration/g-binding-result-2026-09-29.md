@@ -28,6 +28,8 @@ Arm A, held out: Reasserted 31/31, Previous 164/195, PreviousAbsent 146/157, Abs
 
 ## Decision (pre-registered rule)
 
+The pre-registered rule was applied to the **aerm-probe's own held-out Updated metric** (the numbers below); Lab 1's `prime-route-eval` sieve-register evaluation of these checkpoints is a separate, still-pending result and is not claimed here.
+
 1. **A − baseline = +0.809 ≥ 0.30 → the supervision artifact is a major cause; adopt masking in memory training, including the S2 integration.** This is the strongest held-out Updated measured on this world; 9 of 273 Updated queries fail.
 2. **B − A = −0.322, so B does not beat A by 0.20.** Name diversity in the cast is **not indicated** at this scale and is recorded as a negative. B's world also has different denominators (287 Updated, 134 First), because extending the name pool also extends the `friend` relation's values and changes episode composition.
 3. **Guards.** In-distribution ≥ 0.98 in every class: **PASS** (1.000 everywhere in both arms). Text NLL within 0.05 of the baseline: **FAIL for both** (A +0.119, B +0.060). Masking removes auxiliary text supervision and costs language NLL; whether that price is acceptable for adoption is Lab 1's decision, not this record's.
