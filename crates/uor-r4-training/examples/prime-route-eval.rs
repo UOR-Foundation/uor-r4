@@ -7,6 +7,9 @@
 //!   trigger;
 //! - `ExpertTrigger`: semiprime-expert keys, the learned write trigger;
 //! - `ExpertTurnEnd`: semiprime-expert keys, a write at each user turn's end;
+//! - `ExpertSieve`: semiprime-expert keys, the learned write trigger, and
+//!   sieve clause formation (for reads and writes) over the session's
+//!   registered atoms;
 //! - `Gold`: gold registers, a perfect parser.
 //!
 //! ```text
@@ -180,8 +183,10 @@ fn run(args: &Args, out: &Path) -> Result<()> {
             "held_out": held,
         }));
     }
+    let executable = std::env::current_exe()?;
     let report = json!({
         "schema": "uor-r4.prime-route-eval/1",
+        "executable_sha256": sha256_file(&executable)?,
         "arms": RegisterArm::ALL.iter().map(|arm| format!("{arm:?}")).collect::<Vec<_>>(),
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
