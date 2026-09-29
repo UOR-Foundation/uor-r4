@@ -140,6 +140,12 @@ pub fn sha256_file(path: &Path) -> Result<String> {
     Ok(hex::encode(digest.finalize()))
 }
 
+pub fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(bytes);
+    hex::encode(digest.finalize())
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReferenceConfig {
     pub vocab_size: usize,
