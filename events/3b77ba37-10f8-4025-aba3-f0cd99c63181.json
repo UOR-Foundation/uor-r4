@@ -1,0 +1,25 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "3b77ba37-10f8-4025-aba3-f0cd99c63181",
+    "issue": 1520,
+    "op": "checkpoint",
+    "packet": {
+      "charge_count": 1,
+      "claim_after_exit_seconds": 5,
+      "evidence": {
+        "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-b-successor-evidence.json",
+        "sha256": "2f9b06ea00ad188ee8b9ac332584e51bc9f6f164b168a58ed05b2ab733616a09"
+      },
+      "internal_reserve_bytes": 42949672960,
+      "next_action": "Root may reacquire issue1520 for protected source delivery; normal admissions remain held. Live successor-lease acquisition remains unqualified because epoch2 claim landed five seconds after B exit; decide if a longer inert drill is warranted. Preserve failed A and completed B; do not resubmit either attempt.",
+      "outcome": "completed",
+      "pilot_attempt": "continuity-pilot-20260930-b",
+      "policy_admission_enabled": false,
+      "source_sha": "a345e766816403cb3eec888fb4cf694665e82e5d"
+    },
+    "session": "codex-storage-pilot-successor"
+  },
+  "observed_server_time": 1790736489,
+  "previous_head": "ae413a4a44fa482eb6bf5e9b22e184f4bf83bf33"
+}
