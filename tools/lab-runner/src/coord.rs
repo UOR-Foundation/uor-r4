@@ -1593,7 +1593,12 @@ pub fn validate_job_admission(
     require_unblocked(&state.repository, issue)
 }
 
-fn validate_specs(state: &State, spec: &JobSpec, running: &[JobSpec], host: &str) -> Result<()> {
+pub(crate) fn validate_specs(
+    state: &State,
+    spec: &JobSpec,
+    running: &[JobSpec],
+    host: &str,
+) -> Result<()> {
     let claim = spec
         .coordination
         .as_ref()
