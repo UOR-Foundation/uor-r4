@@ -1,0 +1,24 @@
+{
+  "event": {
+    "epoch": 1,
+    "event_id": "7cfd7495-5359-451d-b5b9-2ab5f3a879cc",
+    "issue": 1536,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [
+        "Active Antigravity Cargo outside protocol; source fixes/reviews remain eligible",
+        "Exact recovery execution packet and two non-author votes pending"
+      ],
+      "branch": "codex/runner-stable-boot-recovery-20260930",
+      "checkpoint_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b",
+      "checks": "standalone rustfmt and git diff --check passed; Cargo NOT RUN",
+      "next_action": "Finalize bounded repair observer/packet, verify host quiescence, obtain council votes; execute focused runner tests only then",
+      "pr": 1537,
+      "production": "admissions-held.json preserved; Claude UNKNOWN reservation fenced",
+      "source_review": "runner1536-source-review1-preexecution.md"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790745127,
+  "previous_head": "43d37920256b8b73a3fde230ee1210cca3792f0b"
+}

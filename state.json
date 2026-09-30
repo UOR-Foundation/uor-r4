@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 71,
-  "observed_server_time": 1790744644,
+  "sequence": 72,
+  "observed_server_time": 1790745127,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -180,7 +180,19 @@
       ],
       "expires": 1790745675,
       "phase": "claimed",
-      "checkpoint": null
+      "checkpoint": {
+        "blockers": [
+          "Active Antigravity Cargo outside protocol; source fixes/reviews remain eligible",
+          "Exact recovery execution packet and two non-author votes pending"
+        ],
+        "branch": "codex/runner-stable-boot-recovery-20260930",
+        "checkpoint_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b",
+        "checks": "standalone rustfmt and git diff --check passed; Cargo NOT RUN",
+        "next_action": "Finalize bounded repair observer/packet, verify host quiescence, obtain council votes; execute focused runner tests only then",
+        "pr": 1537,
+        "production": "admissions-held.json preserved; Claude UNKNOWN reservation fenced",
+        "source_review": "runner1536-source-review1-preexecution.md"
+      }
     }
   },
   "attempts": {
