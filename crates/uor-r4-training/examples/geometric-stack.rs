@@ -114,7 +114,7 @@
 //! weight map over `calibration_windows` evenly spaced windows of that token
 //! file, which should be training data. A model whose `config.json` records a
 //! served representation (a `qat=true` run's) exports only as that
-//! representation: by rounding to nearest, with the record in `export.json`
+//! representation using its restored codec, with the record in `export.json`
 //! and the artifact's source; `calibration=` is refused. `lut-evaluate` runs
 //! either engine position by position over the evenly spaced windows of
 //! `train`'s evaluation (`windows=512` is the final evaluation's 131,072
@@ -212,11 +212,11 @@ use uor_r4_training::stack_dialogue::{
 };
 use uor_r4_training::stack_export::{
     check_export_config, check_export_representation, check_raw_logit_evaluation,
-    control_checkpoint, control_grid_reference, export_stack, stack_grid_reference,
-    StackCalibration,
+    control_checkpoint, control_grid_reference, export_quantizer_method, export_stack,
+    stack_grid_reference, StackCalibration,
 };
 use uor_r4_training::stack_memory::{Codebook, MemoryConfig, MemoryScore};
-use uor_r4_training::{sha256_file, Result, TrainingError};
+use uor_r4_training::{codec_by_name, sha256_file, Result, TrainingError};
 
 fn invalid(message: impl Into<String>) -> TrainingError {
     TrainingError::Invalid(message.into())
@@ -1994,7 +1994,13 @@ fn export_mode(arguments: &[String]) -> Result<()> {
         // run's) exports only as that representation.
         let served = StackModel::saved_served_representation(&model_dir)?;
         check_export_representation(served.as_ref(), calibration_tokens.is_some())?;
-        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let mut model = StackModel::load(&model_dir, &Device::Cpu)?;
+        if let Some(saved_served) = &served {
+            if model.config.arch == StackArch::Geometric {
+                let codec = codec_by_name(&saved_served.codec)?;
+                model.set_served_representation(Some(codec))?;
+            }
+        }
         // A pointer head or a flock has no integer engine yet: refuse before
         // any calibration work.
         check_export_config(&model.config)?;
@@ -2019,7 +2025,10 @@ fn export_mode(arguments: &[String]) -> Result<()> {
                 "calibration_time": time,
                 "damp": damp,
             }),
-            None => json!({"method": "round_to_nearest"}),
+            None => {
+                let method_name = export_quantizer_method(&model);
+                json!({"method": method_name})
+            }
         };
         let mut source = json!({
             "exporter": "geometric-stack export",
@@ -2031,7 +2040,10 @@ fn export_mode(arguments: &[String]) -> Result<()> {
         if let Some(served) = &served {
             source["served_representation"] = json!({
                 "codec": served.codec,
-                "scope": "recorded in the model's config.json: the model was trained against this representation (quantization-aware training), which this round-to-nearest export writes",
+                "scope": format!(
+                    "recorded in the model's config.json: the model was trained against this representation (quantization-aware training), which this export writes using codec '{}'",
+                    served.codec
+                ),
             });
         }
         let (bytes, report) = match model.config.arch {
