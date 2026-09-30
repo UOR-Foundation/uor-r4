@@ -355,7 +355,7 @@ pub fn top_k_select_integer(
 
 /// Precomputed raw unnormalized rank weights `1 / (i + 1)` in Q16 for support up to 129 entries.
 ///
-/// Guaranteed zero hardware multiplier, divider, or floating-point instructions.
+/// Precomputed lookup table; avoids runtime division operations through direct table indexing.
 pub const RAW_RANK_WEIGHTS_Q16: [u16; 129] = [
     65535, 32768, 21845, 16384, 13107, 10922, 9362, 8192, 7281, 6553, 5957, 5461, 5041, 4681, 4369,
     4096, 3855, 3640, 3449, 3276, 3120, 2978, 2849, 2730, 2621, 2520, 2427, 2340, 2259, 2184, 2114,
@@ -369,7 +369,7 @@ pub const RAW_RANK_WEIGHTS_Q16: [u16; 129] = [
 
 /// Precomputed Q32 reciprocals `2^32 / (i + 1)` for harmonic sums up to 129 entries.
 ///
-/// Guaranteed zero hardware multiplier, divider, or floating-point instructions.
+/// Precomputed lookup table; avoids runtime division operations through direct table indexing.
 pub const RECIPROCAL_Q32: [u64; 129] = [
     4294967296, 2147483648, 1431655765, 1073741824, 858993459, 715827882, 613566756, 536870912,
     477218588, 429496729, 390451572, 357913941, 330382099, 306783378, 286331153, 268435456,
@@ -406,7 +406,7 @@ pub fn rank_table_q31(count: usize, out: &mut [u32]) -> Result<()> {
         return Ok(());
     }
 
-    // Compute harmonic sum in Q32 without hardware division instructions
+    // Compute harmonic sum in Q32 using table lookups and scalar additions
     let mut sum_q32 = 0u128;
     for i in 0..count {
         let term = if i < RECIPROCAL_Q32.len() {
@@ -418,7 +418,7 @@ pub fn rank_table_q31(count: usize, out: &mut [u32]) -> Result<()> {
     }
 
     // Normalize each term to Q31: w_i = (term / sum_q32) * 2^31
-    // (term * 2^63) / sum_q32 via restoring division (shift and subtract, no hardware divider)
+    // (term * 2^63) / sum_q32 via software restoring division (shift-and-subtract loop)
     for (i, slot) in out[..count].iter_mut().enumerate() {
         let term = if i < RECIPROCAL_Q32.len() {
             RECIPROCAL_Q32[i] as u128
@@ -435,7 +435,7 @@ pub fn rank_table_q31(count: usize, out: &mut [u32]) -> Result<()> {
 
 /// Raw unnormalized rank weights: `a_i = 1 / (i + 1)` in Q16.
 ///
-/// Unnormalized B2 hybrid scale. Multiplier-free and hardware-divider-free.
+/// Unnormalized B2 hybrid scale using direct table lookup and software division fallback.
 #[inline(never)]
 pub fn raw_rank_weights_q16(count: usize, out: &mut [u16]) -> Result<()> {
     if out.len() < count {
