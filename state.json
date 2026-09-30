@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 389,
-  "observed_server_time": 1790804498,
+  "sequence": 390,
+  "observed_server_time": 1790804741,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -33,7 +33,7 @@
         "S1.4 D11 snap safety"
       ],
       "available": true,
-      "heartbeat": 1790804498
+      "heartbeat": 1790804741
     },
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -330,7 +330,7 @@
         "crates/uor-r4-core/src/native_geometric/learner/geometric_attention.rs",
         "crates/uor-r4-core/src/native_geometric/learner/lowbit_attention.rs"
       ],
-      "expires": 1790805698,
+      "expires": 1790805941,
       "phase": "claimed",
       "checkpoint": null
     }
