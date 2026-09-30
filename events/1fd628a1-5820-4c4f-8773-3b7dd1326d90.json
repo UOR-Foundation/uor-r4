@@ -1,0 +1,30 @@
+{
+  "event": {
+    "epoch": 1,
+    "event_id": "1fd628a1-5820-4c4f-8773-3b7dd1326d90",
+    "issue": 1536,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [
+        "08:47 owner removable-volume-consent admission hold",
+        "memory pressure2; heavy admission requires<=1"
+      ],
+      "branch": "codex/runner-stable-boot-recovery-20260930",
+      "charges": "Shared cumulative ledger retained; no reserved or running Codex job",
+      "checkpoint_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b",
+      "checks": "Previously recorded89 source tests; Kimi release24/24 and continuity pilot exit0,5895ms,singlecharge,reservation finalized. Launchd consent unresolved.",
+      "delivered_pr": 1537,
+      "live_attempts": [],
+      "main_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+      "next_action": "Kimi retains deployment execution. Source stewardship claim released, not issue acceptance. Verify owner consent, actual launchd process and admission state before new jobs; never duplicate daemon or pilot. Existing review receipts remain reusable at unchanged heads. Bounded sentinel-read follow-up is recorded but not implemented.",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "preserve": "Clean source frozen for installed release provenance",
+      "review_index": "https://github.com/UOR-Foundation/uor-r4/tree/codex/lab-state/integration/20260930",
+      "status": "WAITING_EXTERNAL_DEPENDENCY",
+      "worktree": "/Users/casey.allard/uor-r4/.worktrees/durable-lab-system-20260929"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790761570,
+  "previous_head": "49f38c0b606b5f6c98848c4a1f4f7195dce43728"
+}
