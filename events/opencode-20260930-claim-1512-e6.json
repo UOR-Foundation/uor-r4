@@ -1,0 +1,21 @@
+{
+  "event": {
+    "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+    "dependencies": [],
+    "event_id": "opencode-20260930-claim-1512-e6",
+    "issue": 1512,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/flock.rs",
+      "crates/uor-r4-training/src/flock_transport.rs",
+      "crates/uor-r4-training/src/kappa_llama.rs",
+      "crates/uor-r4-training/examples/kappa-conversion.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "reacquisition: epoch-5 lease expired while waiting on the wall-killed G1a attempt g; same session continues the delivery checks for f99a0830 with a reduced loaded-behavior retry (g2); no source change",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:9dd6655bc6304b8f35153f9cdaab0785ba0b79370c62599ac3ff0d2974569274"
+  },
+  "observed_server_time": 1790777887,
+  "previous_head": "c2d0ffabe70e04f411b6be9546dd58b9e754bdf7"
+}
