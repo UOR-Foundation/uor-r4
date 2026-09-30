@@ -1,0 +1,20 @@
+{
+  "event": {
+    "base_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+    "dependencies": [],
+    "event_id": "b8266c8f-cac0-445c-afab-d620592ae8fe",
+    "issue": 1515,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/track_b",
+      "crates/uor-r4-training/drafts",
+      "crates/uor-r4-training/examples/track-b-parity.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "Resume own released1515checkpoint; no own live attempts. PR1543delivered; ownerdirectsmallchecks policy applies. Preserve .local-recovery and historicalparity negatives.",
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:77303452e678ae9d37ac51848020dbbcddbb0900fef4dbe00f144c3f1834492c"
+  },
+  "observed_server_time": 1790779552,
+  "previous_head": "a5bee2cf4fbdb3e78f7e5b55cebe726e9f69d388"
+}
