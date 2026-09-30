@@ -18,6 +18,14 @@
 //!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
+//! m-world evaluate-cells [world=v2] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
+//!   [conversations=200] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
+//!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
+//! m-world baselines world=v2 out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \
+//!   [split=development|train] [conversations=2000] [seed=9101] [cells=true] \
+//!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
+//! m-world probe out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json [max_new_tokens=48]
+//! m-world probe-static out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [context=256]
 //! ```
 //!
 //! `corpus` writes a prepared dialogue split (`uor-r4-chat-corpus/v1`: a UORT
@@ -61,6 +69,29 @@
 //! excepted). The report's `selection_override` records what was given, what
 //! the saved model had and what applied; it is null without an override.
 //!
+//! The council's A1 amendments (issue 1511), all world=v2:
+//!
+//! - `evaluate-cells` draws every retrieval item under each of the four
+//!   (phrasing split x value split) cells from the same seed and reports
+//!   accuracy per cell, category, MQAR distance and pool, with the mean NLL of
+//!   the gold reply and of the gold value beside it (teacher-forced, through the
+//!   pointer mixture for a pointer model). The A1 gate is computed on
+//!   `dev_phrasing x dev_value` alone, exactly as `evaluate` computes it, and
+//!   `train_phrasing x dev_value` is reported as the pure-retrieval cell. It has
+//!   its own parser; `evaluate`'s is untouched.
+//! - `baselines` runs the untrained rules R-recency (the latest open value) and
+//!   R-nlet (the continuation of the latest earlier occurrence of the query's
+//!   last two words) on the same episodes and judges them with the v2 oracle.
+//!   `instrument_freeze_ok` is true only if both are below 0.6 on every gated
+//!   cell (MQAR per distance and open-relation recall on the development
+//!   cell); a leak names its query templates. No model is loaded.
+//! - `probe` answers the sealed 40-item English retrieval probe
+//!   (`data/a1-english-probe.json`, SHA-256 pinned in
+//!   `milestone_world_v2_probe`) greedily and teacher-forced; `probe-static`
+//!   reports its token counts, distances, fit and the two rules, without a model.
+//!   `corpus world=v2` redraws any conversation that shares an 8-word user-turn
+//!   n-gram with the probe.
+//!
 //! A saved transport snap is restored; a saved served representation is
 //! refused. Every root is claimed before anything is loaded and sealed at the
 //! end. Set RAYON_NUM_THREADS to bound the threads.
@@ -88,6 +119,15 @@ use uor_r4_training::stack_dialogue::{
 use uor_r4_training::stack_memory_replies::score_memory;
 use uor_r4_training::stack_tracking::Rng;
 use uor_r4_training::{sha256_file, Result, TrainingError};
+
+// The council's A1 amendments: cells, rule baselines, the sealed English probe.
+use uor_r4_training::milestone_world_v2::{
+    freeze_report, is_retrieval, run_rules, Cell, CellScores, Meter, RuleRun, REVISION,
+};
+use uor_r4_training::milestone_world_v2_probe::{
+    answer_layout, conversation_excluding_probe, history_messages, probe, probe_ngrams,
+    probe_sha256, static_report, teacher_forced, NllCard, ProbeGroup, Rejected, EXCLUSION_NGRAM,
+};
 
 fn invalid(message: impl Into<String>) -> TrainingError {
     TrainingError::Invalid(message.into())
@@ -467,7 +507,12 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     let count = |text: &str| tokenizer.encode(text).len();
     let mut world = MWorld2::new(&count, mix)?;
     let mut rng = Rng::new(seed);
-    let (mut rejected, mut world_tokens, mut world_mask) = (0usize, Vec::new(), Vec::new());
+    // The sealed English probe is never trained on: a conversation that shares
+    // an 8-word user-turn n-gram with it is drawn again.
+    let probe_items = probe()?;
+    let probe_grams = probe_ngrams(&probe_items);
+    let mut rejections = Rejected::default();
+    let (mut world_tokens, mut world_mask) = (Vec::new(), Vec::new());
     let mut responses = 0usize;
     // (episodes, tokens, response tokens) per kind; (turns, tokens, response
     // tokens) per category; achieved distances per distance bucket.
@@ -479,8 +524,14 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     let (mut longest, mut sample) = (0usize, Vec::new());
     let mut examples: BTreeMap<&str, Value> = BTreeMap::new();
     for index in 0..conversations {
-        let conversation =
-            world.conversation_excluding(&mut rng, Split::Train, &excluded, &mut rejected)?;
+        let conversation = conversation_excluding_probe(
+            &mut world,
+            &mut rng,
+            Split::Train,
+            &excluded,
+            &probe_grams,
+            &mut rejections,
+        )?;
         let messages: Vec<Message<'_>> = conversation
             .turns
             .iter()
@@ -579,6 +630,7 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
             sample.push(json!(conversation));
         }
     }
+    let rejected = rejections.total();
     let train = out.join("train");
     fs::create_dir_all(&train)?;
     let tokens_path = train.join("tokens.u16");
@@ -687,6 +739,13 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
             "rejected_draws": rejected,
             "excluded_panel": exclude_path.as_ref().map(|p| p.display().to_string()),
             "excluded_turns": excluded.len(),
+            "probe_exclusion": {
+                "probe_sha256": probe_sha256(),
+                "ngram_words": EXCLUSION_NGRAM,
+                "probe_ngrams": probe_grams.len(),
+                "rejected_by_panel": rejections.panel,
+                "rejected_by_probe": rejections.probe,
+            },
             "episodes_per_kind": table(&per_kind, "episodes"),
             "turns_per_category": table(&per_category, "turns"),
             "mqar_achieved_distance_by_bucket": distance_report,
@@ -1401,11 +1460,561 @@ fn rejudge_v2(args: &Args, out: &Path, report_path: &Path, old: &Value) -> Resul
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// The council's A1 amendments: cross cells, untrained rule baselines, the sealed
+// English probe and teacher-forced answer-span scores. Each mode has its own
+// parser and claims its report root like the modes above.
+
+/// The stack under `model=`, as these modes load it (one place to follow
+/// `load_model`), with `select=` and `pointer_select=` applied post hoc and
+/// recorded exactly as `evaluate` records them.
+fn open_model(directory: &Path, device: &Device, args: &Args) -> Result<(StackModel, Value, Value)> {
+    load_model(directory, device, args)
+}
+
+/// These modes are world=v2 only; `world=v2` may be spelled out.
+fn require_v2(args: &Args) -> Result<()> {
+    match args.optional("world").as_deref() {
+        None | Some("v2") => Ok(()),
+        Some(other) => Err(invalid(format!(
+            "this mode is world=v2 only, not world={other}"
+        ))),
+    }
+}
+
+/// A greedy reply to one turn, after the episode's reference history.
+struct Answer {
+    text: String,
+    stop: Value,
+    history_tokens: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn answer_turn(
+    model: &StackModel,
+    encoder: &DialogueEncoder<'_>,
+    protocol: &DialogueProtocol,
+    decode: &dyn Fn(&[u32]) -> String,
+    turns: &[Turn2],
+    index: usize,
+    max_new_tokens: usize,
+    context: usize,
+) -> Result<Answer> {
+    let messages = history_messages(turns, index);
+    let prefix = encoder.encode_assistant_prefix(&messages);
+    if prefix.emitted_turns != messages.len() || prefix.special_token_occurrences != 0 {
+        return Err(invalid(format!("turn {index} did not encode")));
+    }
+    let cap = max_new_tokens.min(context.saturating_sub(prefix.tokens.len()));
+    let generated = greedy_reply(model, &prefix.tokens, cap, protocol.eos_id)?;
+    let ids: Vec<u32> = generated
+        .ids
+        .iter()
+        .copied()
+        .filter(|&id| id != protocol.eos_id)
+        .collect();
+    Ok(Answer {
+        text: decode(&ids),
+        stop: generated.stop_record(),
+        history_tokens: prefix.tokens.len(),
+    })
+}
+
+/// `evaluate-cells`: every retrieval turn (MQAR queries, relation queries and
+/// abstentions, copy) of the four (phrasing x value) cells, each drawn from
+/// the same seed, answered after its reference history, judged by the v2 oracle
+/// and, unless `teacher_forced=false`, teacher-forced. The A1 gate is decided on
+/// `dev_phrasing x dev_value`, the development split, as before.
+fn evaluate_cells(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    require_v2(args)?;
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let conversations: usize = args.number("conversations", 200)?;
+    let seed: u64 = args.number("seed", 9_101)?;
+    let max_new_tokens: usize = args.number("max_new_tokens", 32)?;
+    let forced: bool = args.number("teacher_forced", true)?;
+    let mix = mix_of(args)?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let device = Device::Cpu;
+    let (model, identity, selection_override) = open_model(&model_dir, &device, args)?;
+    let context = model.config.context;
+    let decode = |ids: &[u32]| tokenizer.decode(ids);
+    let count = |text: &str| tokenizer.encode(text).len();
+    let mut scores = CellScores::default();
+    let mut nll: BTreeMap<Cell, NllCard> = BTreeMap::new();
+    let mut items: Vec<Value> = Vec::new();
+    let mut unscored = 0usize;
+    for cell in Cell::ALL {
+        // A fresh world and stream per cell: each cell cycles the same MQAR
+        // (distance, N) sequence from the same seed.
+        let mut world = MWorld2::new(&count, mix)?;
+        let mut rng = Rng::new(seed);
+        for index in 0..conversations {
+            let conversation = world.conversation_in(&mut rng, cell)?;
+            for (t, turn) in conversation.turns.iter().enumerate() {
+                if !is_retrieval(turn) {
+                    continue;
+                }
+                let answer = answer_turn(
+                    &model,
+                    &encoder,
+                    &protocol,
+                    &decode,
+                    &conversation.turns,
+                    t,
+                    max_new_tokens,
+                    context,
+                )?;
+                let pass = judge_v2(&turn.checks, &turn.user, &answer.text);
+                scores.record(cell, turn, pass);
+                let mut record = json!({
+                    "cell": cell.key(),
+                    "id": format!("mw2-{index:04}"),
+                    "turn": t,
+                    "kind": conversation.kind,
+                    "intent": turn.intent,
+                    "category": turn.category,
+                    "user": turn.user,
+                    "reference_reply": turn.reply,
+                    "reply": answer.text,
+                    "pass": pass,
+                    "checks": turn.checks,
+                    "tag": turn.tag,
+                    "stop": answer.stop,
+                    "history_tokens": answer.history_tokens,
+                });
+                if forced {
+                    let layout = answer_layout(&encoder, &tokenizer, &conversation.turns, t)?;
+                    match teacher_forced(&model, &layout)? {
+                        Some(scored) => {
+                            nll.entry(cell).or_default().record(turn, &scored);
+                            record["teacher_forced"] = json!({
+                                "reply_tokens": scored.reply_tokens,
+                                "reply_nll": scored.reply_nll,
+                                "answer_tokens": scored.answer_tokens,
+                                "answer_nll": scored.answer_nll,
+                            });
+                        }
+                        None => unscored += 1,
+                    }
+                }
+                items.push(record);
+            }
+        }
+    }
+    // The teacher-forced scores sit beside each cell's accuracy.
+    let mut scores_json = scores.to_json();
+    for (cell, card) in &nll {
+        scores_json["cells"][cell.key()]["teacher_forced"] = card.to_json();
+    }
+    scores_json["pure_retrieval"]["teacher_forced"] =
+        json!(nll.get(&Cell::PURE_RETRIEVAL).map(NllCard::to_json));
+    // The pure-retrieval cell first, then the development cell the gate reads.
+    let order = [
+        Cell::PURE_RETRIEVAL,
+        Cell::GATED,
+        Cell::new(Split::Train, Split::Train),
+        Cell::new(Split::Development, Split::Train),
+    ];
+    for cell in order {
+        let row = &scores_json["matrix"][cell.key()];
+        let rate = |key: &str| row[key]["rate"].as_f64().unwrap_or(0.0);
+        let note = if cell == Cell::PURE_RETRIEVAL {
+            "  <- pure retrieval"
+        } else if cell == Cell::GATED {
+            "  <- the A1 gate is decided here"
+        } else {
+            ""
+        };
+        println!(
+            "{}: MQAR D16 {:.3} D64 {:.3} D200 {:.3}; open relation {:.3}, closed {:.3}; copy {:.3}{note}",
+            cell.key(),
+            rate("mqar/distance/16"),
+            rate("mqar/distance/64"),
+            rate("mqar/distance/200"),
+            rate("relation/open/recall"),
+            rate("relation/closed/recall"),
+            rate("copy"),
+        );
+    }
+    println!(
+        "a1_gate (decided on {}): {}",
+        Cell::GATED.key(),
+        scores_json["a1_gate"]
+    );
+    let executable = std::env::current_exe()?;
+    let mut report = json!({
+        "schema": "uor-r4.m-world-cells/1",
+        "executable_sha256": sha256_file(&executable)?,
+        "world": "m-world-v2",
+        "world_digest": MWorld2::digest(),
+        "revision": REVISION,
+        "model": model_dir.display().to_string(),
+        "model_identity": identity,
+        "selection_override": selection_override,
+        "tokenizer_sha256": sha256_file(&tokenizer_path)?,
+        "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
+        "seed": seed,
+        "mix": mix,
+        "conversations_per_cell": conversations,
+        "history": "reference: every retrieval turn is answered after the episode's own earlier replies",
+        "scope": "retrieval turns only (MQAR queries, relation queries and abstentions, copy); the A1 gate is computed on the development cell alone, and train_phrasing x dev_value is the pure-retrieval cell",
+        "context": context,
+        "max_new_tokens": max_new_tokens,
+        "teacher_forced": forced,
+        "teacher_forced_unscored": unscored,
+        "items": items,
+        "wall_seconds": started.elapsed().as_secs_f64(),
+    });
+    if let (Some(report), Some(scores)) = (report.as_object_mut(), scores_json.as_object()) {
+        report.extend(scores.clone());
+    }
+    fs::write(
+        out.join("m_world_cells.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    Ok(())
+}
+
+/// `baselines`: the two untrained rules (R-recency, R-nlet) and the reference
+/// replies over the same episodes, judged by the v2 oracle, per cell, category
+/// and distance. The instrument freezes only if both rules are below 0.6 on
+/// every gated cell (MQAR per distance and open-relation recall on the
+/// development cell); otherwise the report names the leaking templates.
+fn baselines(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    if args.optional("world").as_deref() != Some("v2") {
+        return Err(invalid("baselines needs world=v2"));
+    }
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let split = split_of(args)?;
+    let conversations: usize = args.number("conversations", 2_000)?;
+    let seed: u64 = args.number("seed", 9_101)?;
+    let cells: bool = args.number("cells", true)?;
+    let mix = mix_of(args)?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let count = |text: &str| tokenizer.encode(text).len();
+    let primary = Cell::same(split);
+    let to_run: Vec<Cell> = if cells {
+        Cell::ALL.to_vec()
+    } else {
+        vec![primary]
+    };
+    let mut by_cell: BTreeMap<Cell, BTreeMap<&'static str, RuleRun>> = BTreeMap::new();
+    for cell in &to_run {
+        let mut world = MWorld2::new(&count, mix)?;
+        let mut rng = Rng::new(seed);
+        by_cell.insert(*cell, run_rules(&mut world, &mut rng, *cell, conversations)?);
+    }
+    let cells_json: BTreeMap<&str, Value> = by_cell
+        .iter()
+        .map(|(cell, runs)| {
+            let rows: BTreeMap<&str, Value> = runs
+                .iter()
+                .map(|(name, run)| (*name, run.card.to_json()))
+                .collect();
+            (cell.key(), json!(rows))
+        })
+        .collect();
+    // The freeze is decided on the development cell alone.
+    let freeze = by_cell.get(&Cell::GATED).map(freeze_report);
+    match &freeze {
+        Some(freeze) => {
+            println!("instrument_freeze_ok: {}", freeze["instrument_freeze_ok"]);
+            for (rule, rows) in freeze["gated"].as_object().into_iter().flatten() {
+                for (key, row) in rows.as_object().into_iter().flatten() {
+                    println!(
+                        "{rule} {key}: {}/{} ({:.3}){}",
+                        row["pass"],
+                        row["of"],
+                        row["rate"].as_f64().unwrap_or(0.0),
+                        if row["below_limit"] == json!(true) {
+                            ""
+                        } else {
+                            "  LEAK"
+                        }
+                    );
+                }
+            }
+        }
+        None => println!(
+            "instrument_freeze_ok: not decided (the development cell was not run; use cells=true or split=development)"
+        ),
+    }
+    let executable = std::env::current_exe()?;
+    let report = json!({
+        "schema": "uor-r4.m-world-baselines/1",
+        "executable_sha256": sha256_file(&executable)?,
+        "world": "m-world-v2",
+        "world_digest": MWorld2::digest(),
+        "revision": REVISION,
+        "tokenizer_sha256": sha256_file(&tokenizer_path)?,
+        "split": split,
+        "seed": seed,
+        "mix": mix,
+        "conversations_per_cell": conversations,
+        "cells_run": to_run.iter().map(|c| c.key()).collect::<Vec<_>>(),
+        "history": "reference: every retrieval turn is answered after the episode's own earlier replies",
+        "rules": {
+            "R-recency": "the most recent open-pool value the generator recorded in the history",
+            "R-nlet": "the words after the latest earlier occurrence of the query's last two words, up to the clause end; otherwise \"I don't know.\"",
+            "reference": "the world's own reference replies through the oracle: 1.0 unless the harness is broken",
+        },
+        "instrument_freeze_ok": freeze.as_ref().map(|f| f["instrument_freeze_ok"].clone()),
+        "freeze_scope": "decided on dev_phrasing x dev_value (the development split); null when that cell was not run",
+        "freeze": freeze,
+        "cells": cells_json,
+        "wall_seconds": started.elapsed().as_secs_f64(),
+    });
+    fs::write(
+        out.join("m_world_baselines.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    Ok(())
+}
+
+/// `probe`: the sealed 40-item English retrieval probe, answered greedily after
+/// each item's reference history and teacher-forced.
+fn probe_evaluate(args: &Args, out: &Path) -> Result<()> {
+    let started = Instant::now();
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let max_new_tokens: usize = args.number("max_new_tokens", 48)?;
+    let items = probe()?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let device = Device::Cpu;
+    let (model, identity, selection_override) = open_model(&model_dir, &device, args)?;
+    let context = model.config.context;
+    let decode = |ids: &[u32]| tokenizer.decode(ids);
+    let count = |text: &str| tokenizer.encode(text).len();
+    let meter = Meter::new(&count);
+    let mut tallies: BTreeMap<ProbeGroup, (usize, usize)> = BTreeMap::new();
+    let mut nll: BTreeMap<ProbeGroup, NllCard> = BTreeMap::new();
+    let mut rows: Vec<Value> = Vec::with_capacity(items.len());
+    let (mut passed, mut skipped, mut unscored) = (0usize, 0usize, 0usize);
+    for item in &items {
+        let conversation = item.conversation(&meter)?;
+        let Some(last) = conversation.turns.len().checked_sub(1) else {
+            continue;
+        };
+        let turn = &conversation.turns[last];
+        let distance = (last >= 1).then(|| meter.distance(&conversation.turns));
+        if conversation.tokens > context {
+            skipped += 1;
+            rows.push(json!({
+                "id": item.id,
+                "group": item.group,
+                "tokens": conversation.tokens,
+                "skipped": "the item's document is longer than the model's context",
+            }));
+            continue;
+        }
+        let answer = answer_turn(
+            &model,
+            &encoder,
+            &protocol,
+            &decode,
+            &conversation.turns,
+            last,
+            max_new_tokens,
+            context,
+        )?;
+        let pass = judge_v2(&turn.checks, &turn.user, &answer.text);
+        passed += usize::from(pass);
+        let tally = tallies.entry(item.group).or_default();
+        tally.0 += usize::from(pass);
+        tally.1 += 1;
+        let layout = answer_layout(&encoder, &tokenizer, &conversation.turns, last)?;
+        let mut row = json!({
+            "id": item.id,
+            "group": item.group,
+            "tokens": conversation.tokens,
+            "distance": distance,
+            "user": turn.user,
+            "reference_reply": turn.reply,
+            "reply": answer.text,
+            "pass": pass,
+            "stop": answer.stop,
+            "history_tokens": answer.history_tokens,
+        });
+        match teacher_forced(&model, &layout)? {
+            Some(scored) => {
+                nll.entry(item.group).or_default().record(turn, &scored);
+                row["teacher_forced"] = json!({
+                    "reply_tokens": scored.reply_tokens,
+                    "reply_nll": scored.reply_nll,
+                    "answer_tokens": scored.answer_tokens,
+                    "answer_nll": scored.answer_nll,
+                });
+            }
+            None => unscored += 1,
+        }
+        rows.push(row);
+    }
+    let scored_items = items.len() - skipped;
+    let by_group: BTreeMap<&str, Value> = tallies
+        .iter()
+        .map(|(group, &tally)| (group.name(), rate_json(tally)))
+        .collect();
+    let teacher_forced_by_group: BTreeMap<&str, Value> = nll
+        .iter()
+        .map(|(group, card)| (group.name(), card.to_json()))
+        .collect();
+    for (group, cell) in &by_group {
+        println!(
+            "probe {group}: {}/{} ({:.3})",
+            cell["pass"],
+            cell["of"],
+            cell["rate"].as_f64().unwrap_or(0.0)
+        );
+    }
+    println!("probe: {passed}/{scored_items} pass ({skipped} skipped for the context)");
+    let executable = std::env::current_exe()?;
+    let report = json!({
+        "schema": "uor-r4.m-world-probe-evaluation/1",
+        "executable_sha256": sha256_file(&executable)?,
+        "probe_sha256": probe_sha256(),
+        "world_digest": MWorld2::digest(),
+        "model": model_dir.display().to_string(),
+        "model_identity": identity,
+        "selection_override": selection_override,
+        "tokenizer_sha256": sha256_file(&tokenizer_path)?,
+        "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
+        "history": "reference: the scored turn is answered after the item's own earlier replies",
+        "scope": "a sealed English retrieval probe, never trained on; a result on it is not chat quality",
+        "context": context,
+        "max_new_tokens": max_new_tokens,
+        "items": items.len(),
+        "scored": scored_items,
+        "skipped_context": skipped,
+        "teacher_forced_unscored": unscored,
+        "pass": rate_json((passed, scored_items)),
+        "by_group": by_group,
+        "teacher_forced_by_group": teacher_forced_by_group,
+        "results": rows,
+        "wall_seconds": started.elapsed().as_secs_f64(),
+    });
+    fs::write(
+        out.join("m_world_probe.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    Ok(())
+}
+
+/// `probe-static`: the probe's token counts, whether each item fits the
+/// context, its distance, and the two untrained rules' replies on it. Needs the
+/// tokenizer and no model.
+fn probe_static(args: &Args, out: &Path) -> Result<()> {
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let context: usize = args.number("context", CONTEXT)?;
+    let items = probe()?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let count = |text: &str| tokenizer.encode(text).len();
+    let meter = Meter::new(&count);
+    let mut report = static_report(&items, &meter, context)?;
+    report["tokenizer_sha256"] = json!(sha256_file(&tokenizer_path)?);
+    for (group, cell) in report["by_group"].as_object().into_iter().flatten() {
+        println!(
+            "{group}: {} items, {} fit {context} tokens; rules {}",
+            cell["items"], cell["fit_context"], cell["rules"]
+        );
+    }
+    fs::write(
+        out.join("m_world_probe_static.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    Ok(())
+}
+
+/// One of the amendment modes, if `mode` is one: parse its arguments, claim its
+/// report root, run, seal and verify.
+fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
+    let cells: &[&str] = &[
+        "out",
+        "world",
+        "model",
+        "tokenizer",
+        "conversations",
+        "seed",
+        "max_new_tokens",
+        "teacher_forced",
+        "select",
+        "pointer_select",
+        "mqar_share",
+        "copy_share",
+        "relation_share",
+        "other_share",
+    ];
+    let baseline: &[&str] = &[
+        "out",
+        "world",
+        "tokenizer",
+        "split",
+        "conversations",
+        "seed",
+        "cells",
+        "mqar_share",
+        "copy_share",
+        "relation_share",
+        "other_share",
+    ];
+    let evaluate_probe: &[&str] = &[
+        "out",
+        "model",
+        "tokenizer",
+        "max_new_tokens",
+        "select",
+        "pointer_select",
+    ];
+    let static_probe: &[&str] = &["out", "tokenizer", "context"];
+    match mode {
+        "evaluate-cells" => Some(claimed(rest, cells, evaluate_cells)),
+        "baselines" => Some(claimed(rest, baseline, baselines)),
+        "probe" => Some(claimed(rest, evaluate_probe, probe_evaluate)),
+        "probe-static" => Some(claimed(rest, static_probe, probe_static)),
+        _ => None,
+    }
+}
+
+fn claimed(
+    rest: &[String],
+    allowed: &[&str],
+    run: fn(&Args, &Path) -> Result<()>,
+) -> Result<()> {
+    let args = Args::parse(rest, allowed)?;
+    let out = PathBuf::from(args.required("out")?);
+    report_output::claim(&out)?;
+    let result = run(&args, &out);
+    if let Err(error) = &result {
+        fs::write(
+            out.join("error.json"),
+            serde_json::to_vec_pretty(&json!({"error": error.to_string()}))?,
+        )?;
+    }
+    report_output::seal(&out)?;
+    report_output::verify(&out)?;
+    result
+}
+
 fn main() -> Result<()> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let (mode, rest) = arguments
         .split_first()
         .ok_or_else(|| invalid("usage: m-world corpus|evaluate|rejudge key=value..."))?;
+    if let Some(result) = run_v2_extras(mode, rest) {
+        return result;
+    }
     let args = match mode.as_str() {
         "corpus" => Args::parse(
             rest,
