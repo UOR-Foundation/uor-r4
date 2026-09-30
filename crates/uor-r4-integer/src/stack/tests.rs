@@ -1102,3 +1102,99 @@ fn session_restore_validates_and_restores_snap_trace() {
         late_reset_session.snap_trace().unwrap()
     );
 }
+
+#[test]
+fn test_pointer_copy_boosts_prior_token_logits_and_preserves_across_save_restore() {
+    let model = IntegerStackModel::parse(&artifact(42)).expect("parse model");
+
+    // 1. Baseline stepping with copy_scale_q16 == 0
+    let mut baseline_session = model.session();
+    assert_eq!(baseline_session.copy_scale(), 0);
+    assert!(baseline_session.pointer_weights().is_empty());
+
+    let prompt = [3u32, 7u32, 11u32, 7u32];
+    let mut baseline_logits = Vec::new();
+    for &tok in &prompt {
+        let logits = baseline_session.step(tok).expect("step baseline").to_vec();
+        baseline_logits.push(logits);
+    }
+    assert_eq!(baseline_session.position(), prompt.len());
+    assert_eq!(baseline_session.pointer_weights().len(), prompt.len());
+
+    // 2. Stepping with pointer copy enabled (scale = 1.0 in Q16 = 1 << 16)
+    let mut copy_session = model.session();
+    copy_session.set_copy_scale(1 << 16);
+    assert_eq!(copy_session.copy_scale(), 1 << 16);
+
+    let mut copy_logits = Vec::new();
+    for &tok in &prompt {
+        let logits = copy_session.step(tok).expect("step copy").to_vec();
+        copy_logits.push(logits);
+    }
+    assert_eq!(copy_session.position(), prompt.len());
+    assert_eq!(copy_session.pointer_weights().len(), prompt.len());
+
+    // Step 0: prompt[0] has no preceding context tokens, so logits must match baseline bit-for-bit
+    assert_eq!(
+        copy_logits[0], baseline_logits[0],
+        "step 0 has no preceding context, logits must match baseline exactly"
+    );
+
+    // Subsequent steps: tokens present in prompt[..step_idx] receive non-negative pointer copy boost;
+    // tokens NOT present in prompt[..step_idx] must remain strictly equal to baseline logits.
+    for step_idx in 1..prompt.len() {
+        let prefix = &prompt[..step_idx];
+        let prefix_set: std::collections::BTreeSet<u32> = prefix.iter().copied().collect();
+
+        // Any token not in prefix must have bit-identical logit to baseline
+        for v in 0..VOCAB as u32 {
+            if !prefix_set.contains(&v) {
+                assert_eq!(
+                    copy_logits[step_idx][v as usize],
+                    baseline_logits[step_idx][v as usize],
+                    "unseen token {v} at step {step_idx} must have unchanged logits"
+                );
+            }
+        }
+
+        // Pointer weights must be valid normalized values (sum <= Q31)
+        let weights = &copy_session.pointer_weights()[..step_idx];
+        for &w in weights {
+            assert!(w <= (1u64 << 31), "normalized pointer weight must be <= Q31");
+        }
+    }
+
+    // 3. Save / restore state roundtrip preserves copy_scale_q16 and produces bit-identical continuation
+    let saved = copy_session.save_state();
+    assert_eq!(saved.copy_scale_q16, 1 << 16);
+    assert_eq!(saved.position, prompt.len());
+
+    let mut restored_session = model.session();
+    restored_session.restore_state(&saved).expect("restore state");
+    assert_eq!(restored_session.copy_scale(), 1 << 16);
+    assert_eq!(restored_session.position(), prompt.len());
+    assert_eq!(
+        restored_session.logits(),
+        copy_session.logits(),
+        "restored logits must match saved session logits"
+    );
+
+    let continuation_token = 5u32;
+    let next_copy = copy_session.step(continuation_token).expect("next copy").to_vec();
+    let next_rest = restored_session.step(continuation_token).expect("next restored").to_vec();
+    assert_eq!(
+        next_copy, next_rest,
+        "continuation logits after restore must be bit-for-bit identical"
+    );
+
+    // 4. Session reset clears pointer weights and position but allows clean reuse
+    copy_session.reset();
+    assert_eq!(copy_session.position(), 0);
+    assert_eq!(copy_session.tokens().len(), 0);
+    assert!(copy_session.pointer_weights().is_empty());
+    let reset_step0 = copy_session.step(prompt[0]).expect("step after reset").to_vec();
+    assert_eq!(
+        reset_step0, baseline_logits[0],
+        "step 0 after reset must match baseline step 0"
+    );
+}
