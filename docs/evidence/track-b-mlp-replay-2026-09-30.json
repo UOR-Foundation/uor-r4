@@ -1,0 +1,367 @@
+{
+  "schema": "uor-r4.track-b-mlp-receipt/1",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "parity_pass": false,
+  "runs": [
+    {
+      "root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-3c6007ec-20260930",
+      "source": "3c6007ec3174188480a7aa4e203159d345da0318",
+      "build_seconds": 5.17,
+      "execution_seconds": 7.59,
+      "maximum_execution_rss_bytes": 855326720,
+      "anchor": {
+        "different_bits": 0,
+        "elements": 4608,
+        "max_abs": 0.0,
+        "reference_rms": 597.3104100512219,
+        "rms": 0.0
+      },
+      "counts": {
+        "original_stage_rows": 160,
+        "local_rows": 48
+      },
+      "effect_rows": 56,
+      "effects": [
+        {
+          "arm": "cpu-gate-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 532,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.886384055651856e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.005859375
+        },
+        {
+          "arm": "cpu-up-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 561,
+              "elements": 576,
+              "max_abs": 9.1552734375e-05,
+              "reference_rms": 35.24030749811143,
+              "rms": 9.16663812097769e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.00390625
+        },
+        {
+          "arm": "cpu-silu-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 272,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.119816861517726e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.0001220703125
+        },
+        {
+          "arm": "metal-gate-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 532,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.886384055651856e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.005859375
+        },
+        {
+          "arm": "metal-up-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 561,
+              "elements": 576,
+              "max_abs": 9.1552734375e-05,
+              "reference_rms": 35.24030749811143,
+              "rms": 9.16663812097769e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.00390625
+        },
+        {
+          "arm": "metal-silu-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 261,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.116211855127246e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.0001220703125
+        },
+        {
+          "arm": "host-division-silu-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 272,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.119816861517726e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.0001220703125
+        }
+      ],
+      "files": {
+        "attempt.json": "edb36eae9cc862d6efa1bf15ade1220b0f2d93a80c775caa38f3f6055a76cb90",
+        "cpu-gate-projection-only-down.f32le": "2ee7dd1a1378688ea35630411a07243efa5cae3daea5000d04422e5b704e18cb",
+        "cpu-gate_projection.f32le": "e1628757f847ae5af9508e52321dc2536b6b40062c95e105889d5607c76dc4bb",
+        "cpu-silu-only-down.f32le": "e2bff788f542fa083149b1a3f6ebcea3974000bddebdb5ed36f12ec02fb131a9",
+        "cpu-silu.f32le": "9bc4211cb36eb6b52b63c0410e2b5c08d2f6d4e69d8922f2cd0746a6f6aaacb8",
+        "cpu-up-projection-only-down.f32le": "56960a7f5cc3ca8a36e3b2159848354979b4ab2e6d8f830334f62fcb7bb390bc",
+        "cpu-up_projection.f32le": "9ad1d6f5072ae720dc116c52342b5c8d87110174b91dde7bcb8cc6945f716b2e",
+        "host-division-silu-only-down.f32le": "e2bff788f542fa083149b1a3f6ebcea3974000bddebdb5ed36f12ec02fb131a9",
+        "inputs.json": "d0fd98b2844f7005c4379b255cc88baed9eb1e861e844c2fb7b05f4598e25af1",
+        "manifest.json": "8a87e1513a08d6640ed8fb06e8ef9543d476a9d18371c1ff7eff98d84ee5f8c8",
+        "metal-gate-projection-only-down.f32le": "2ee7dd1a1378688ea35630411a07243efa5cae3daea5000d04422e5b704e18cb",
+        "metal-gate_projection.f32le": "e1628757f847ae5af9508e52321dc2536b6b40062c95e105889d5607c76dc4bb",
+        "metal-silu-only-down.f32le": "f5b69f4266ee242390b3eb27c850273481fee864c098028befb02fd426512e03",
+        "metal-silu.f32le": "b6da327726505db542876751e8debc0d068a7fafed25e1fe9ea491addd75ca8f",
+        "metal-up-projection-only-down.f32le": "56960a7f5cc3ca8a36e3b2159848354979b4ab2e6d8f830334f62fcb7bb390bc",
+        "metal-up_projection.f32le": "9ad1d6f5072ae720dc116c52342b5c8d87110174b91dde7bcb8cc6945f716b2e",
+        "reference-after_attention.f32le": "7ea9fb6d39aa4b5abda0f8d84f36be4fc1e507989390f3685b0a645074218724",
+        "reference-attended.f32le": "89b8d4149840f50de3e8e3b397e89e06632e34560a53c7d8dacb371882795838",
+        "reference-attention_output.f32le": "8fcbe831d4cbc63ed87e9d6287d6452e3ecacca186b6dab8868f0d764eb46c50",
+        "reference-down.f32le": "fc3d26fea5e626479b87ae0e871e800c6ff65193f17f595c9c2f62b101d1ba47",
+        "reference-gate.f32le": "e849125f2435ad3e94a9295de043fceacb42adf8f0a3116d9a7742b781082991",
+        "reference-gate_pre.f32le": "2867ab58924a41d8a92d131c9648aafa39d359af0e41ce05b550a399cf10d01c",
+        "reference-gated.f32le": "aae9f44c48ecd04b9d668567b0ae6a5da125e30813ccaef5b974fcd83f3d7c77",
+        "reference-output.f32le": "dfd5fa667b3f88e0d8a46641a95f4b8194581202136c9190000e0f48ce503772",
+        "reference-post_norm.f32le": "b45503313ddb882b2233f7df880fa238f33be5441fdc92dcde52cacbbc2abf55",
+        "reference-up.f32le": "f4cb08ec1995d7348e4bdfd9fadec207081432379cb88bb95e9520d31bb51507",
+        "result.json": "efdd1d7892a132bef2da35e991738e9da7b9d1d8984dbaaa56298c60379cb1d5"
+      }
+    },
+    {
+      "root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-0db94dbf-20260930",
+      "source": "0db94dbf024c60bc240b4cf73068e54015522d48",
+      "build_seconds": 5.04,
+      "execution_seconds": 14.22,
+      "maximum_execution_rss_bytes": 864010240,
+      "anchor": {
+        "different_bits": 0,
+        "elements": 4608,
+        "max_abs": 0.0,
+        "reference_rms": 597.3104100512219,
+        "rms": 0.0
+      },
+      "counts": {
+        "original_stage_rows": 160,
+        "local_rows": 48
+      },
+      "effect_rows": 88,
+      "effects": [
+        {
+          "arm": "cpu-gate-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 532,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.886384055651856e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.005859375
+        },
+        {
+          "arm": "cpu-up-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 561,
+              "elements": 576,
+              "max_abs": 9.1552734375e-05,
+              "reference_rms": 35.24030749811143,
+              "rms": 9.16663812097769e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.00390625
+        },
+        {
+          "arm": "cpu-silu-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 272,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.119816861517726e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.0001220703125
+        },
+        {
+          "arm": "cpu-rms-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 567,
+              "elements": 576,
+              "max_abs": 0.0003662109375,
+              "reference_rms": 35.24030749811143,
+              "rms": 1.584428673382172e-05
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.017578125
+        },
+        {
+          "arm": "cpu-incoming-attention-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 553,
+              "elements": 576,
+              "max_abs": 0.00152587890625,
+              "reference_rms": 35.24030749811143,
+              "rms": 6.379537797687829e-05
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.00390625
+        },
+        {
+          "arm": "metal-gate-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 532,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.886384055651856e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.005859375
+        },
+        {
+          "arm": "metal-up-projection-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 561,
+              "elements": 576,
+              "max_abs": 9.1552734375e-05,
+              "reference_rms": 35.24030749811143,
+              "rms": 9.16663812097769e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.00390625
+        },
+        {
+          "arm": "metal-silu-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 261,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.116211855127246e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.0001220703125
+        },
+        {
+          "arm": "metal-rms-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 567,
+              "elements": 576,
+              "max_abs": 0.0003662109375,
+              "reference_rms": 35.24030749811143,
+              "rms": 1.583440183780795e-05
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.021484375
+        },
+        {
+          "arm": "metal-incoming-attention-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 524,
+              "elements": 576,
+              "max_abs": 0.0010986328125,
+              "reference_rms": 35.24030749811143,
+              "rms": 4.597211270729423e-05
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.005859375
+        },
+        {
+          "arm": "host-division-silu-only",
+          "position5": {
+            "down_difference": {
+              "different_bits": 272,
+              "elements": 576,
+              "max_abs": 0.0001220703125,
+              "reference_rms": 35.24030749811143,
+              "rms": 5.119816861517726e-06
+            },
+            "position": 5
+          },
+          "max_all_positions": 0.0001220703125
+        }
+      ],
+      "files": {
+        "attempt.json": "b71d1b34732b5be72763167a30ecdd0d8fb4ba5d5e29416147bf1a8668f96346",
+        "cpu-gate-projection-only-down.f32le": "2ee7dd1a1378688ea35630411a07243efa5cae3daea5000d04422e5b704e18cb",
+        "cpu-gate_projection.f32le": "e1628757f847ae5af9508e52321dc2536b6b40062c95e105889d5607c76dc4bb",
+        "cpu-incoming-attention-only-down.f32le": "e3a4ff4d23c53a6542f5417f9ebc90cb16dc387f9065d71de91946720cdfd70f",
+        "cpu-incoming-attention-only-norm.f32le": "8a0960682de9804bd2477d7088866c8e8f3895bd12f2a48c26516c1c895f69ac",
+        "cpu-rms-only-down.f32le": "17ce32af5b5f18375a36cee811560e967e3db3f625512c2e37a78bf8e4446869",
+        "cpu-rms-only-norm.f32le": "407518a78f936fe1b7805d6c2063444ea2d976618ba23277fe7176b5b3c49871",
+        "cpu-silu-only-down.f32le": "e2bff788f542fa083149b1a3f6ebcea3974000bddebdb5ed36f12ec02fb131a9",
+        "cpu-silu.f32le": "9bc4211cb36eb6b52b63c0410e2b5c08d2f6d4e69d8922f2cd0746a6f6aaacb8",
+        "cpu-up-projection-only-down.f32le": "56960a7f5cc3ca8a36e3b2159848354979b4ab2e6d8f830334f62fcb7bb390bc",
+        "cpu-up_projection.f32le": "9ad1d6f5072ae720dc116c52342b5c8d87110174b91dde7bcb8cc6945f716b2e",
+        "host-division-silu-only-down.f32le": "e2bff788f542fa083149b1a3f6ebcea3974000bddebdb5ed36f12ec02fb131a9",
+        "inputs.json": "cfaa2850512b39d6bf694119301bd094088c7595760a3980ff12561a93719d32",
+        "manifest.json": "15b01d067be6658c54d58fda55d83d8b2eb6f3dd5b56fdae5cb1ee2dce22d21a",
+        "metal-gate-projection-only-down.f32le": "2ee7dd1a1378688ea35630411a07243efa5cae3daea5000d04422e5b704e18cb",
+        "metal-gate_projection.f32le": "e1628757f847ae5af9508e52321dc2536b6b40062c95e105889d5607c76dc4bb",
+        "metal-incoming-attention-only-down.f32le": "5d57e1ac37f34a86e21bdf8edb9a969dacaedb02e0dfa4e54f4773e79a0bfb08",
+        "metal-incoming-attention-only-norm.f32le": "71309e63b48bf597baef124fab498215cb6b698fcde75d7268ff00f3b3345d82",
+        "metal-rms-only-down.f32le": "ecb5705a095031cdcbc479b61c3e21a937d3a413e6a07feae3bcf322b7676c1a",
+        "metal-rms-only-norm.f32le": "94446f75d83c9ec4ca0a3625f1d2bb6c31fb3d27aeee350433c460cf540de345",
+        "metal-silu-only-down.f32le": "f5b69f4266ee242390b3eb27c850273481fee864c098028befb02fd426512e03",
+        "metal-silu.f32le": "b6da327726505db542876751e8debc0d068a7fafed25e1fe9ea491addd75ca8f",
+        "metal-up-projection-only-down.f32le": "56960a7f5cc3ca8a36e3b2159848354979b4ab2e6d8f830334f62fcb7bb390bc",
+        "metal-up_projection.f32le": "9ad1d6f5072ae720dc116c52342b5c8d87110174b91dde7bcb8cc6945f716b2e",
+        "reference-after_attention.f32le": "7ea9fb6d39aa4b5abda0f8d84f36be4fc1e507989390f3685b0a645074218724",
+        "reference-attended.f32le": "89b8d4149840f50de3e8e3b397e89e06632e34560a53c7d8dacb371882795838",
+        "reference-attention_output.f32le": "8fcbe831d4cbc63ed87e9d6287d6452e3ecacca186b6dab8868f0d764eb46c50",
+        "reference-down.f32le": "fc3d26fea5e626479b87ae0e871e800c6ff65193f17f595c9c2f62b101d1ba47",
+        "reference-gate.f32le": "e849125f2435ad3e94a9295de043fceacb42adf8f0a3116d9a7742b781082991",
+        "reference-gate_pre.f32le": "2867ab58924a41d8a92d131c9648aafa39d359af0e41ce05b550a399cf10d01c",
+        "reference-gated.f32le": "aae9f44c48ecd04b9d668567b0ae6a5da125e30813ccaef5b974fcd83f3d7c77",
+        "reference-output.f32le": "dfd5fa667b3f88e0d8a46641a95f4b8194581202136c9190000e0f48ce503772",
+        "reference-post_norm.f32le": "b45503313ddb882b2233f7df880fa238f33be5441fdc92dcde52cacbbc2abf55",
+        "reference-up.f32le": "f4cb08ec1995d7348e4bdfd9fadec207081432379cb88bb95e9520d31bb51507",
+        "result.json": "842c5463a9ad737e1008940854c32b8d343f718de0846cb0d0c1a9623bb1a0de"
+      }
+    }
+  ]
+}

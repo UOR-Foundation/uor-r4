@@ -54,9 +54,14 @@ uniform across positions. No incorrect MLP or repair is established. The
 [common-input down-projection comparison](../evidence/track-b-down-replay-2026-09-30.md)
 then reproduced both saved outputs and showed CPU/Metal bitwise equality for
 each fixed input. At position 5, exact arithmetic retains most of the gap between
-the two candidate inputs; local rounding is smaller. Next isolate gate/up
-projections and SiLU operation order on common saved inputs, retaining exact down
-arithmetic as a control. No full-reference gated state was captured here.
+the two candidate inputs; local rounding is smaller. The [anchored reference-tail reconstruction](../evidence/track-b-mlp-replay-2026-09-30.md)
+now reproduces all 4,608 reference residual values exactly and supplies reference
+MLP intermediates for this window. Its interventions identify incoming
+after-attention differences as the largest selected-position effect, with
+normalization arithmetic significant across the window. This diagnostic scope is
+complete; next prepare a coherent source-order normalization/activation correction
+that preserves differentiation, then compare against saved full parity outputs.
+No single-kernel defect or full-model repair has been demonstrated.
 
 Earlier interrupted attempts and the restored external compiler-cache failure
 remain historical execution evidence in the [September 29 record](track-b-conversion-result-2026-09-29.md)
