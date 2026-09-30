@@ -1,0 +1,18 @@
+{
+  "event": {
+    "base_sha": "9efa5f6ddda1d8f58c3aee1e7237a607a2ce731d",
+    "dependencies": [],
+    "event_id": "opencode-20260930-steward-claim-1533-e4",
+    "issue": 1533,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/geometric_stack.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "reacquisition: epoch-3 stewardship released; adopting only the two diagnosed test corrections in an isolated branch from the preserved codex/s14-snap-safety source; no execution",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:cff79b41365f9a786658fdf49b67657d2e7cdb17e254fbe10339d0c924104bc0"
+  },
+  "observed_server_time": 1790748669,
+  "previous_head": "7d9783fd56b4be85e37d8fe8de88281ed9f94880"
+}

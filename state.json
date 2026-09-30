@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 96,
-  "observed_server_time": 1790748667,
+  "sequence": 97,
+  "observed_server_time": 1790748669,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -165,13 +165,15 @@
     },
     "1533": {
       "session": "opencode-deepseek-20260930",
-      "epoch": 3,
-      "work_card": "sha256:b37fdce05c361cbd742a20d36479f97bbc1f306932a586104d07df76d5d1772c",
+      "epoch": 4,
+      "work_card": "sha256:cff79b41365f9a786658fdf49b67657d2e7cdb17e254fbe10339d0c924104bc0",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-      "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-      "paths": [],
-      "expires": 1790746568,
-      "phase": "released",
+      "base_sha": "9efa5f6ddda1d8f58c3aee1e7237a607a2ce731d",
+      "paths": [
+        "crates/uor-r4-training/src/geometric_stack.rs"
+      ],
+      "expires": 1790749869,
+      "phase": "claimed",
       "checkpoint": null
     },
     "1536": {
