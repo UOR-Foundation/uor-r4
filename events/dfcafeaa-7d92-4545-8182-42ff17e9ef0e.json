@@ -1,0 +1,17 @@
+{
+  "event": {
+    "adapter": "manual continuation; source/recovery successor steward",
+    "capabilities": [
+      "GitHub coordination",
+      "process-identity verification",
+      "storage recovery",
+      "ledger reconciliation"
+    ],
+    "event_id": "dfcafeaa-7d92-4545-8182-42ff17e9ef0e",
+    "lab": "Codex internal subagent",
+    "op": "register",
+    "session": "codex-storage-pilot-successor"
+  },
+  "observed_server_time": 1790735969,
+  "previous_head": "20cc418805c3f943b9e1a483eb6c3962a36aebd9"
+}
