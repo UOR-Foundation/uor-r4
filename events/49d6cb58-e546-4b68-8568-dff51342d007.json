@@ -1,0 +1,26 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "49d6cb58-e546-4b68-8568-dff51342d007",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "charges": "Attempts1+2 and estimated preparation/reviews charged with unique codex-track-b-dcb8b107-20260930 events. Attempt3 pending.",
+      "checkpoint_sha": "dcb8b107f499395c65b86404d67e9e83916054fd",
+      "checks": "Static checks PASS; two compiler attempts stopped at declared wall/RSS estimates. Attempt3 continues same source with remaining total build allowance and 3 GiB RSS; all failed attempts retained. CPU/Metal loaded parity NOT_RUN.",
+      "direct_check": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuation-20260930/track-b-direct-dcb8b107-3/launch.json",
+      "main_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+      "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
+      "next_action": "Read attempt3 receipt or verify PID70263 from launch identity before any duplicate. Attempt3 owns its direct monitor; collect outcome, charge its measured elapsed once, then relevant focused checks and unchanged CPU/Metal parity. Source review posted1518/5913829718. Pointer-copy1540 fc73dd8d findings cleared in5913949475. PR1545 closed superseded with branch retained.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "status": "ACTIVE",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790780862,
+  "previous_head": "e8e52d15c9c6a9ed9c7e72f6340dcfd9ee587f93"
+}
