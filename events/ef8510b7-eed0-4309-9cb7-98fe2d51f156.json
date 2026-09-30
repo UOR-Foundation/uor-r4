@@ -1,0 +1,22 @@
+{
+  "event": {
+    "epoch": 1,
+    "event_id": "ef8510b7-eed0-4309-9cb7-98fe2d51f156",
+    "issue": 1536,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [
+        "Helddeployment receipt and bounded pilot remain; NOT model validation"
+      ],
+      "branch": "codex/runner-stable-boot-recovery-20260930",
+      "checkpoint_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b",
+      "checks": "89 runner tests PASS; offline build PASS; clean source/loghashes independentlyverified",
+      "merge_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+      "next_action": "Kimi singleexecutor:verify prior deploymentreceipt and exactpacketv2 council; reserve suppliedsleep30pilot beforeholdarchive; preserve newholds; finishreceipt/charge before regularadmission",
+      "production": "Kimi held-startedmatchingbinarypid74632; originalhold retained; no pilot yet"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790751780,
+  "previous_head": "aba2ffa4a65acb4c55e4cb4fbe839d726f539e20"
+}

@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 106,
-  "observed_server_time": 1790751777,
+  "sequence": 107,
+  "observed_server_time": 1790751780,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -214,19 +214,14 @@
       "phase": "claimed",
       "checkpoint": {
         "blockers": [
-          "Internal free about39.1GiB below40GiB floor before reserved growth; memory pressure2 observed",
-          "Repair tests/build remain NOT_RUN; deployment requires executed validation and protected delivery"
+          "Helddeployment receipt and bounded pilot remain; NOT model validation"
         ],
         "branch": "codex/runner-stable-boot-recovery-20260930",
         "checkpoint_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b",
-        "checks": "standalone rustfmt and git diff --check passed; Cargo NOT RUN",
-        "council": "Root plus seat2 and seat3 conditionalapprovals obtained; no Cargo executed",
-        "execution_packet": "runner1536-execution-packet-v4.json",
-        "handoff": "51e893b846fbff7c840922bb70b239c35d159b9b/handoffs/20260930-coordinator-transition",
-        "next_action": "Use approved v4 repair packet only after fresh physical/resource/process/source checks all pass; do not repeat refusal-only attempts or lower thresholds. Independent source/review work may continue under Kimi priorities.",
-        "pr": 1537,
-        "production": "LaunchAgent stopped; original hold retained. OpenCode queued -e was canceled prelaunch by its owner; no duplicate execution authorized. Original UNKNOWN records retained alongside peer reconciliation.",
-        "source_review": "runner1536-source-review1-preexecution.md"
+        "checks": "89 runner tests PASS; offline build PASS; clean source/loghashes independentlyverified",
+        "merge_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+        "next_action": "Kimi singleexecutor:verify prior deploymentreceipt and exactpacketv2 council; reserve suppliedsleep30pilot beforeholdarchive; preserve newholds; finishreceipt/charge before regularadmission",
+        "production": "Kimi held-startedmatchingbinarypid74632; originalhold retained; no pilot yet"
       }
     }
   },
