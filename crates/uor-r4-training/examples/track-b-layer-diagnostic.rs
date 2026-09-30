@@ -233,27 +233,219 @@ fn run(model_path: &Path, parent: &Path, out: &Path) -> Result<Value> {
         "scope":"layer QKV divergence; no isolated-operator causal attribution or parity qualification"}),
     )
 }
+// Same arithmetic as the fixed shared layer, on saved reference residuals.
+// This diagnostic deliberately does not patch a model or change the gate.
+fn replay_layer12(model_path: &Path, parent: &Path, out: &Path) -> Result<Value> {
+    use candle_core::DType;
+    use uor_r4_training::kappa_llama::rope;
+    if std::env::var("TLESS_CANONICAL_DETERMINISTIC").as_deref() != Ok("0")
+        || std::env::var_os("TLESS_EXACT_SCALAR").is_some()
+    {
+        return Err("requires native math matching the trace".into());
+    }
+    report_output::verify(parent)?;
+    let inputs: Value = serde_json::from_slice(&fs::read(parent.join("inputs.json"))?)?;
+    let prior: Value = serde_json::from_slice(&fs::read(parent.join("result.json"))?)?;
+    if prior["anchors_match_bitwise"] != true
+        || inputs["tokens"] != json!([1, 2, 3, 4, 5, 6, 7, 8])
+        || inputs["batch"] != 1
+        || inputs["time"] != 8
+    {
+        return Err("requires the bitwise-anchored eight-token trace".into());
+    }
+    for name in [
+        "config.json",
+        "model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ] {
+        if inputs["parent_inputs"]["sha256"][name] != sha256_file(&model_path.join(name))? {
+            return Err(format!("trace input mismatch: {name}").into());
+        }
+    }
+    fs::write(
+        out.join("inputs.json"),
+        serde_json::to_vec_pretty(&json!({
+            "source_revision":option_env!("TRACK_B_SOURCE_REVISION").ok_or("missing source")?,
+            "source_diff_sha256":option_env!("TRACK_B_SOURCE_DIFF_SHA256").ok_or("missing source diff")?,
+            "executable_sha256":sha256_file(&std::env::current_exe()?)?,
+            "parent_manifest_sha256":sha256_file(&parent.join("manifest.json"))?,
+            "parent_inputs":inputs,"layer":12,"input_residual_after_layer":11,"batch":1,"time":8,
+            "scope":"same reference residual input, native RMS versus reference scalar RMS; no full forward"
+        }))?,
+    )?;
+    let residual = floats(&parent.join("reference-residual.f32le"))?;
+    let reference = floats(&parent.join("reference-qkv.f32le"))?;
+    let mut backends = Vec::new();
+    for name in ["cpu", "metal"] {
+        let device = if name == "cpu" {
+            Device::Cpu
+        } else {
+            Device::new_metal(0)?
+        };
+        let model = TrackBModel::load(model_path, &device)?;
+        let shape = model.shape();
+        if shape.layers != 30
+            || shape.width != 576
+            || shape.heads != 9
+            || shape.kv_heads != 3
+            || shape.head_dim != 64
+            || shape.rms_eps != 1e-5
+        {
+            return Err("unexpected fixed replay geometry or epsilon".into());
+        }
+        let width = shape.width;
+        let kv = shape.kv_heads * shape.head_dim;
+        let stride = width + 2 * kv;
+        if residual.len() != 30 * T * width || reference.len() != 30 * T * stride {
+            return Err("incomplete trace arrays".into());
+        }
+        let x = &residual[11 * T * width..12 * T * width];
+        let target = &reference[12 * T * stride..13 * T * stride];
+        let observed = floats(&parent.join(format!("{name}-qkv.f32le")))?;
+        if observed.len() != reference.len() {
+            return Err("incomplete candidate trace".into());
+        }
+        let observed = &observed[12 * T * stride..13 * T * stride];
+        let weights = model.attention_weights(12)?;
+        let gain = weights.input_norm.to_vec1::<f32>()?;
+        // Exact operation order from model-source rmsnorm_with_mode, native
+        // math mode: sequential F32 sum, reciprocal sqrt, weight*(r*x).
+        let mut scalar_norm = vec![0f32; T * width];
+        for (row, output) in x
+            .chunks_exact(width)
+            .zip(scalar_norm.chunks_exact_mut(width))
+        {
+            let mut ss = row.iter().map(|v| v * v).sum::<f32>();
+            ss /= width as f32;
+            ss += 1e-5f32;
+            ss = 1.0f32 / ss.sqrt();
+            for ((output, value), weight) in output.iter_mut().zip(row).zip(&gain) {
+                *output = *weight * (ss * *value);
+            }
+        }
+        let xt = Tensor::from_slice(x, (T, width), &device)?;
+        let denominator = xt
+            .sqr()?
+            .mean_keepdim(1)?
+            .affine(1.0, shape.rms_eps)?
+            .sqrt()?;
+        let native_norm = xt
+            .broadcast_div(&denominator)?
+            .broadcast_mul(&weights.input_norm)?;
+        let normalization_difference =
+            compare(&scalar_norm, &native_norm.flatten_all()?.to_vec1::<f32>()?)?;
+        // Match model.rs candle_f32_rope_tables, not the older F64 Kappa table helper.
+        let frequency: Vec<f32> = (0..shape.head_dim)
+            .step_by(2)
+            .map(|index| {
+                1.0f32 / (shape.rope_theta as f32).powf(index as f32 / shape.head_dim as f32)
+            })
+            .collect();
+        let frequency = Tensor::from_vec(frequency, (1, shape.head_dim / 2), &device)?;
+        let positions = Tensor::arange(0u32, T as u32, &device)?
+            .to_dtype(DType::F32)?
+            .reshape((T, 1))?;
+        let phase = positions.matmul(&frequency)?;
+        let cosine = phase.cos()?.reshape((1, 1, T, shape.head_dim / 2))?;
+        let sine = phase.sin()?.reshape((1, 1, T, shape.head_dim / 2))?;
+        let mut arms = Vec::new();
+        for (arm, norm) in [
+            ("native_rms", native_norm),
+            (
+                "reference_scalar_rms",
+                Tensor::from_slice(&scalar_norm, (T, width), &device)?,
+            ),
+        ] {
+            let project = |weight: &Tensor, heads: usize| -> Result<Tensor> {
+                Ok(norm
+                    .matmul(&weight.t()?)?
+                    .reshape((1, T, heads, shape.head_dim))?
+                    .transpose(1, 2)?
+                    .contiguous()?)
+            };
+            let q = time_major(&rope(
+                &project(&weights.query, shape.heads)?,
+                &cosine,
+                &sine,
+            )?)?;
+            let k = time_major(&rope(
+                &project(&weights.key, shape.kv_heads)?,
+                &cosine,
+                &sine,
+            )?)?;
+            let v = time_major(&project(&weights.value, shape.kv_heads)?)?;
+            let mut packed = Vec::with_capacity(T * stride);
+            for pos in 0..T {
+                packed.extend_from_slice(&q[pos * width..(pos + 1) * width]);
+                packed.extend_from_slice(&k[pos * kv..(pos + 1) * kv]);
+                packed.extend_from_slice(&v[pos * kv..(pos + 1) * kv]);
+            }
+            write_floats(&out.join(format!("{name}-{arm}-qkv.f32le")), &packed)?;
+            let mut rows = Vec::new();
+            for pos in 0..T {
+                for (kind, start, end) in [
+                    ("q", 0, width),
+                    ("k", width, width + kv),
+                    ("v", width + kv, stride),
+                ] {
+                    let start = pos * stride + start;
+                    let end = pos * stride + end;
+                    rows.push(json!({"position":pos,"kind":kind,
+                    "replay_vs_reference":compare(&target[start..end],&packed[start..end])?,
+                    "original_candidate_vs_reference":compare(&target[start..end],&observed[start..end])?,
+                    "replay_vs_original_candidate":compare(&observed[start..end],&packed[start..end])?}));
+                }
+            }
+            arms.push(json!({"arm":arm,"rows":rows}));
+        }
+        write_floats(
+            &out.join(format!("{name}-reference-normalized.f32le")),
+            &scalar_norm,
+        )?;
+        backends.push(
+            json!({"backend":name,"normalization_difference":normalization_difference,"arms":arms}),
+        );
+    }
+    Ok(
+        json!({"schema":"uor-r4.track-b-layer12-replay/1","status":"DIAGNOSTIC_COMPLETE",
+        "parent_anchors_verified":true,"parity_pass":false,"backends":backends,
+        "scope":"common-input local replay; no correction or full parity qualification"}),
+    )
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    if args.len() != 3 {
-        return Err("usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT".into());
+    let replay = args.len() == 4 && args[3] == "replay-layer12";
+    if args.len() != 3 && !replay {
+        return Err(
+            "usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT [replay-layer12]"
+                .into(),
+        );
     }
     let out = Path::new(&args[2]);
     report_output::claim(out)?;
     let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let wall_seconds = if replay { 60 } else { 180 };
     std::thread::spawn(move || {
         if rx
-            .recv_timeout(std::time::Duration::from_secs(180))
+            .recv_timeout(std::time::Duration::from_secs(wall_seconds))
             .is_err()
         {
-            eprintln!("UNSEALED_TIMEOUT: diagnostic 180-second bound");
+            eprintln!("UNSEALED_TIMEOUT: diagnostic {wall_seconds}-second bound");
             std::process::exit(124);
         }
     });
-    let result = run(Path::new(&args[0]), Path::new(&args[1]), out);
+    let result = if replay {
+        replay_layer12(Path::new(&args[0]), Path::new(&args[1]), out)
+    } else {
+        run(Path::new(&args[0]), Path::new(&args[1]), out)
+    };
     let (value, code) = match result {
         Ok(v) => {
-            let code = if v["anchors_match_bitwise"] == true {
+            let code = if v["anchors_match_bitwise"] == true
+                || (replay && v["parent_anchors_verified"] == true)
+            {
                 0
             } else {
                 2
