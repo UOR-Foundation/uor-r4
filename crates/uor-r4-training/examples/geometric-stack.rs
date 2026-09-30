@@ -757,6 +757,15 @@ fn pointer_qat_refusal() -> TrainingError {
 /// The single-source pointer is soft-trained weights with `top:1` applied
 /// afterwards (`m-world evaluate pointer_select=top:1`). A wider `top:K` and a
 /// flock train the scores of the sources they keep.
+/// A raw-logit evaluator's float comparator: the model at `model_dir`, refused
+/// when it has a pointer head, whose distribution is the mixture and not the
+/// raw logits `mode` scores.
+fn load_raw_logit_comparator(model_dir: &Path, mode: &str) -> Result<StackModel> {
+    let model = StackModel::load(model_dir, &Device::Cpu)?;
+    check_raw_logit_evaluation(&model.config, mode)?;
+    Ok(model)
+}
+
 fn refuse_trained_single_source(select: Option<PointerSelect>) -> Result<()> {
     if select == Some(PointerSelect::TopK(1)) {
         return Err(invalid(
@@ -1164,6 +1173,9 @@ fn train_settings(args: &Args) -> Result<Settings> {
         Some(directory) => init_config(args, directory)?,
         None => stack_config(args, None)?,
     };
+    // An `init=` model saved with a single-source pointer would train nothing
+    // but its gate; refused here as `dialogue-train` refuses it.
+    refuse_trained_single_source(config.pointer.and_then(|pointer| pointer.select))?;
     let qat = qat_flag(args)?;
     if qat {
         check_qat_config(&config)?;
@@ -2873,7 +2885,8 @@ fn d11_evaluate_snapped(
     artifact_path: &std::path::Path,
     out: &std::path::Path,
 ) -> Result<()> {
-    let mut float = StackModel::load(model_dir, &Device::Cpu)?;
+    // The comparator's raw logits are scored: a pointer model is refused.
+    let mut float = load_raw_logit_comparator(model_dir, "d11-evaluate")?;
     float.set_transport_snap(Some(match snap.name.as_str() {
         "icosian" => TransportSnap::Icosian,
         other => return Err(invalid(format!("unknown transport snap {other}"))),
@@ -4369,6 +4382,64 @@ mod tests {
             "{refusal}"
         );
         assert!(!out.exists(), "the refusal claimed {}", out.display());
+    }
+
+    #[test]
+    fn the_d11_evaluate_comparator_refuses_a_pointer_model() -> Result<()> {
+        let directory = std::env::temp_dir().join(format!(
+            "geometric-stack-d11-comparator-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        // A pointer model's raw logits are not its distribution: refused, as
+        // the snapped D11 evaluator loads its comparator.
+        StackModel::new(saved_with_head(), &Device::Cpu)?.save(&directory)?;
+        let refusal = load_raw_logit_comparator(&directory, "d11-evaluate")
+            .err()
+            .ok_or_else(|| invalid("a pointer comparator was accepted"))?;
+        assert!(
+            refusal
+                .to_string()
+                .contains("d11-evaluate reads the model's raw logits"),
+            "{refusal}"
+        );
+        // Without the head it is an ordinary comparator.
+        fs::remove_dir_all(&directory)?;
+        StackModel::new(saved(), &Device::Cpu)?.save(&directory)?;
+        load_raw_logit_comparator(&directory, "d11-evaluate")?;
+        fs::remove_dir_all(&directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn ordinary_train_refuses_a_saved_single_source_pointer() -> Result<()> {
+        let directory =
+            std::env::temp_dir().join(format!("geometric-stack-train-top1-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory)?;
+        // `train init=` with a model saved with `select`, as far as the settings.
+        let settings_for = |select: Option<PointerSelect>| -> Result<Result<Settings>> {
+            let mut config = saved_with_head();
+            if let Some(pointer) = config.pointer.as_mut() {
+                pointer.select = select;
+            }
+            fs::write(directory.join("config.json"), serde_json::to_vec(&config)?)?;
+            let arguments = vec![format!("init={}", directory.display())];
+            Ok(train_settings(&Args::parse(&arguments, &["init"])?))
+        };
+        let refusal = match settings_for(Some(PointerSelect::TopK(1)))? {
+            Ok(_) => return Err(invalid("a saved top:1 pointer was accepted for training")),
+            Err(error) => error.to_string(),
+        };
+        assert!(refusal.contains("not a training setting"), "{refusal}");
+        // A soft head passes this check and stops later, at the missing train=.
+        let other = match settings_for(None)? {
+            Ok(_) => return Err(invalid("the settings were accepted without train=")),
+            Err(error) => error.to_string(),
+        };
+        assert!(!other.contains("not a training setting"), "{other}");
+        fs::remove_dir_all(&directory)?;
+        Ok(())
     }
 
     #[test]
