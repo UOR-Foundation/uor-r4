@@ -1,0 +1,24 @@
+{
+  "event": {
+    "base_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1541-5",
+    "issue": 1541,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/examples/m-world.rs",
+      "crates/uor-r4-training/src/milestone_world_v2.rs",
+      "crates/uor-r4-training/data/a1-english-probe.json",
+      "crates/uor-r4-training/src/milestone_world_v2_probe.rs",
+      "crates/uor-r4-training/src/geometric_stack.rs",
+      "crates/uor-r4-training/examples/geometric-stack.rs",
+      "crates/uor-r4-training/src/stack_export.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "same-session successor card v3 https://github.com/UOR-Foundation/uor-r4/issues/1541#issuecomment-5913479862; epoch 4 released by claude-lab-20260930-release-1541-e4; source codex/a1-retrieval-integration@a8eaf647 pushed, clean",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:e3d982d3c4ef4cc24748e5c16bb4b4d8f6eaccd44ab9b5b1829dde7b4da72cdf"
+  },
+  "observed_server_time": 1790779034,
+  "previous_head": "83e0e55d5669d3f872cb5dbe80219b70ed06ee28"
+}
