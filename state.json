@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 70,
-  "observed_server_time": 1790744475,
+  "sequence": 71,
+  "observed_server_time": 1790744644,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -93,8 +93,8 @@
         "crates/uor-r4-training/src/lib.rs",
         "crates/uor-r4-training/examples/kappa-conversion.rs"
       ],
-      "expires": 1790745561,
-      "phase": "claimed",
+      "expires": 1790744644,
+      "phase": "released",
       "checkpoint": null
     },
     "1520": {
