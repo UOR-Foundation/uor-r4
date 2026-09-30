@@ -1,0 +1,20 @@
+{
+  "event": {
+    "base_sha": "3b7c2d54141336e5c2f46b9391bbef1f0014c182",
+    "dependencies": [],
+    "event_id": "4dbe72c6-7b2b-4fbf-8763-6da66c62296a",
+    "issue": 1515,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/track_b",
+      "crates/uor-r4-training/drafts",
+      "crates/uor-r4-training/examples/track-b-parity.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "Same owner resumes expired1515 epoch3. Existing direct Cargo session56521 process81481 survives and continues unchanged; no new or duplicate execution. Local merge97dcd0cf preserved, prior checkpoint22a1b4c and artifacts unchanged; own source integration only. No runner attempts involved.",
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:ec0fd900a63594175c0abf08d08c67c188fbb42003a5df371c3432f7d787c317"
+  },
+  "observed_server_time": 1790791283,
+  "previous_head": "45bab5cd3ce03d20cf8b2289b56dddfda87f255b"
+}
