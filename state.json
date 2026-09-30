@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 54,
-  "observed_server_time": 1790740925,
+  "sequence": 55,
+  "observed_server_time": 1790741182,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -29,7 +29,7 @@
         "independent-subagents"
       ],
       "available": true,
-      "heartbeat": 1790740153
+      "heartbeat": 1790741182
     },
     "codex-review1-pilot-c-origin-20260930": {
       "lab": "Codex independent reviewer continuity drill",
@@ -101,7 +101,7 @@
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "paths": [],
-      "expires": 1790741356,
+      "expires": 1790742382,
       "phase": "claimed",
       "checkpoint": null
     },
