@@ -58,6 +58,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
+#[cfg(feature = "metal")]
+use candle_core::{backend::BackendStorage, MetalStorage, Storage};
 use candle_core::{CpuStorage, CustomOp2, CustomOp3, DType, Device, Layout, Shape, Tensor, Var};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -2029,6 +2031,32 @@ impl CustomOp2 for StraightThrough {
         ))
     }
 
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        _s1: &MetalStorage,
+        l1: &Layout,
+        s2: &MetalStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if l1.shape() != l2.shape() {
+            candle_core::bail!("straight-through inputs must have one shape");
+        }
+        let device = s2.device();
+        let total = l2.shape().elem_count();
+        let out_buf = device.new_buffer(total, DType::F32, "straight_through_out")?;
+        crate::metal_stack_kernels::metal::call_straight_through(
+            device,
+            s2.buffer(),
+            &out_buf,
+            total,
+        )?;
+        Ok((
+            MetalStorage::new(out_buf, device.clone(), total, DType::F32),
+            l2.shape().clone(),
+        ))
+    }
+
     fn bwd(
         &self,
         _source: &Tensor,
@@ -2038,6 +2066,13 @@ impl CustomOp2 for StraightThrough {
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
         Ok((Some(grad.clone()), None))
     }
+}
+
+/// Straight-through estimator: forward is `quantized`, backward gradient flows to `continuous`.
+pub fn straight_through(continuous: &Tensor, quantized: &Tensor) -> Result<Tensor> {
+    Ok(continuous
+        .contiguous()?
+        .apply_op2(&quantized.contiguous()?, StraightThrough)?)
 }
 
 /// Work of the served representation so far ([`StackModel::served_statistics`]).
@@ -2611,6 +2646,36 @@ impl CustomOp2 for QuaternionScan {
         Ok((CpuStorage::F32(state), l1.shape().clone()))
     }
 
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        s1: &MetalStorage,
+        l1: &Layout,
+        s2: &MetalStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        let (batch, time, lanes, four) = l1.shape().dims4()?;
+        if four != 4 || l2.shape() != l1.shape() {
+            candle_core::bail!("quaternion scan needs matching [batch, time, lanes, 4] inputs");
+        }
+        let device = s1.device();
+        let total = l1.shape().elem_count();
+        let out_buf = device.new_buffer(total, DType::F32, "quaternion_scan_out")?;
+        crate::metal_stack_kernels::metal::call_quaternion_scan_fwd(
+            device,
+            s1.buffer(),
+            s2.buffer(),
+            &out_buf,
+            batch,
+            time,
+            lanes,
+        )?;
+        Ok((
+            MetalStorage::new(out_buf, device.clone(), total, DType::F32),
+            l1.shape().clone(),
+        ))
+    }
+
     /// Reverse scan: `g_t = dh_t + conj(q_{t+1}) * g_{t+1}` is the total
     /// gradient of `h_t`; then `db_t = g_t` and `dq_t = g_t * conj(h_{t-1})`.
     fn bwd(
@@ -2620,6 +2685,58 @@ impl CustomOp2 for QuaternionScan {
         state: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "metal")]
+        if let Device::Metal(device) = transition.device() {
+            let (batch, time, lanes, four) = transition.dims4()?;
+            if four == 4 {
+                let total = transition.shape().elem_count();
+                let dq_buf = device.new_buffer(total, DType::F32, "quaternion_scan_bwd_dq")?;
+                let db_buf = device.new_buffer(total, DType::F32, "quaternion_scan_bwd_db")?;
+
+                let (t_storage, _) = transition.storage_and_layout();
+                let (s_storage, _) = state.storage_and_layout();
+                let (g_storage, _) = grad.storage_and_layout();
+
+                if let (Storage::Metal(t_ms), Storage::Metal(s_ms), Storage::Metal(g_ms)) =
+                    (&*t_storage, &*s_storage, &*g_storage)
+                {
+                    crate::metal_stack_kernels::metal::call_quaternion_scan_bwd(
+                        device,
+                        t_ms.buffer(),
+                        s_ms.buffer(),
+                        g_ms.buffer(),
+                        &dq_buf,
+                        &db_buf,
+                        batch,
+                        time,
+                        lanes,
+                    )?;
+                    let dq = Tensor::from_storage(
+                        Storage::Metal(MetalStorage::new(
+                            dq_buf,
+                            device.clone(),
+                            total,
+                            DType::F32,
+                        )),
+                        transition.shape().clone(),
+                        candle_core::op::BackpropOp::none(),
+                        false,
+                    );
+                    let db = Tensor::from_storage(
+                        Storage::Metal(MetalStorage::new(
+                            db_buf,
+                            device.clone(),
+                            total,
+                            DType::F32,
+                        )),
+                        transition.shape().clone(),
+                        candle_core::op::BackpropOp::none(),
+                        false,
+                    );
+                    return Ok((Some(dq), Some(db)));
+                }
+            }
+        }
         let (batch, time, lanes, _) = transition.dims4()?;
         let q = transition.flatten_all()?.to_vec1::<f32>()?;
         let h = state.flatten_all()?.to_vec1::<f32>()?;
@@ -2863,6 +2980,55 @@ impl CustomOp3 for RecurrenceCore {
                 }
             });
         Ok((CpuStorage::F32(out), Shape::from((self.batch, time, width))))
+    }
+
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        s1: &MetalStorage,
+        _l1: &Layout,
+        s2: &MetalStorage,
+        _l2: &Layout,
+        s3: &MetalStorage,
+        l3: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        let (time, width) = (self.time, self.width);
+        let device = s1.device();
+        let total_state = self.batch * time * width;
+
+        let state_buf = device.new_buffer(total_state, DType::F32, "recurrence_state")?;
+        let drive_buf = device.new_buffer(total_state, DType::F32, "recurrence_drive")?;
+        let out_buf = device.new_buffer(total_state, DType::F32, "recurrence_out")?;
+
+        let param_tensor = Tensor::from_storage(
+            Storage::Metal(s3.clone()),
+            l3.shape().clone(),
+            candle_core::op::BackpropOp::none(),
+            false,
+        );
+        let param_vec = param_tensor.to_vec1::<f32>()?;
+        let log_a_vec = self.log_a(&param_vec);
+        let log_a_buf = device.new_buffer_with_data(&log_a_vec)?;
+
+        crate::metal_stack_kernels::metal::call_recurrence_core_fwd(
+            device,
+            s1.buffer(),
+            s2.buffer(),
+            s3.buffer(),
+            &log_a_buf,
+            &state_buf,
+            &drive_buf,
+            &out_buf,
+            self.batch,
+            time,
+            width,
+            self.rotation,
+        )?;
+
+        Ok((
+            MetalStorage::new(out_buf, device.clone(), total_state, DType::F32),
+            Shape::from((self.batch, time, width)),
+        ))
     }
 
     fn bwd(
@@ -3548,6 +3714,39 @@ impl CustomOp3 for FusedRead {
         ))
     }
 
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        s1: &MetalStorage,
+        _l1: &Layout,
+        s2: &MetalStorage,
+        _l2: &Layout,
+        s3: &MetalStorage,
+        _l3: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        let (time, value) = (self.time, self.value);
+        let device = s1.device();
+        let total = self.batch * self.heads * time * value;
+        let out_buf = device.new_buffer(total, DType::F32, "fused_read_out")?;
+
+        crate::metal_stack_kernels::metal::call_fused_read_fwd(
+            device,
+            s1.buffer(),
+            s2.buffer(),
+            s3.buffer(),
+            &out_buf,
+            self.batch,
+            self.heads,
+            time,
+            self.key,
+            value,
+        )?;
+        Ok((
+            MetalStorage::new(out_buf, device.clone(), total, DType::F32),
+            Shape::from((self.batch, self.heads, time, value)),
+        ))
+    }
+
     fn bwd(
         &self,
         query: &Tensor,
@@ -3826,6 +4025,34 @@ impl CustomOp2 for RmsNorm {
         Ok((CpuStorage::F32(out), l1.shape().clone()))
     }
 
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        s1: &MetalStorage,
+        l1: &Layout,
+        s2: &MetalStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        let width = l2.shape().elem_count();
+        let total = l1.shape().elem_count();
+        let rows = total / width;
+        let device = s1.device();
+        let out_buf = device.new_buffer(total, DType::F32, "rms_norm_out")?;
+        crate::metal_stack_kernels::metal::call_rms_norm_fwd(
+            device,
+            s1.buffer(),
+            s2.buffer(),
+            &out_buf,
+            rows,
+            width,
+            RMS_EPSILON as f32,
+        )?;
+        Ok((
+            MetalStorage::new(out_buf, device.clone(), total, DType::F32),
+            l1.shape().clone(),
+        ))
+    }
+
     fn bwd(
         &self,
         x: &Tensor,
@@ -3833,6 +4060,48 @@ impl CustomOp2 for RmsNorm {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "metal")]
+        if let Device::Metal(device) = x.device() {
+            let width = w.elem_count();
+            let total = x.elem_count();
+            let rows = total / width;
+
+            let dx_buf = device.new_buffer(total, DType::F32, "rms_norm_dx")?;
+            let dw_buf = device.new_buffer(width, DType::F32, "rms_norm_dw")?;
+
+            let (x_storage, _) = x.storage_and_layout();
+            let (w_storage, _) = w.storage_and_layout();
+            let (g_storage, _) = grad.storage_and_layout();
+
+            if let (Storage::Metal(x_ms), Storage::Metal(w_ms), Storage::Metal(g_ms)) =
+                (&*x_storage, &*w_storage, &*g_storage)
+            {
+                crate::metal_stack_kernels::metal::call_rms_norm_bwd(
+                    device,
+                    x_ms.buffer(),
+                    w_ms.buffer(),
+                    g_ms.buffer(),
+                    &dx_buf,
+                    &dw_buf,
+                    rows,
+                    width,
+                    RMS_EPSILON as f32,
+                )?;
+                let dx = Tensor::from_storage(
+                    Storage::Metal(MetalStorage::new(dx_buf, device.clone(), total, DType::F32)),
+                    x.shape().clone(),
+                    candle_core::op::BackpropOp::none(),
+                    false,
+                );
+                let dw = Tensor::from_storage(
+                    Storage::Metal(MetalStorage::new(dw_buf, device.clone(), width, DType::F32)),
+                    w.shape().clone(),
+                    candle_core::op::BackpropOp::none(),
+                    false,
+                );
+                return Ok((Some(dx), Some(dw)));
+            }
+        }
         let xs = x.flatten_all()?.to_vec1::<f32>()?;
         let ws = w.to_vec1::<f32>()?;
         let gs = grad.flatten_all()?.to_vec1::<f32>()?;
@@ -3883,6 +4152,11 @@ impl CustomOp2 for RmsNorm {
     }
 }
 
+/// Fused RMSNorm: `x * w / sqrt(mean(x^2) + eps)` over the last dimension.
+pub fn rms_norm(x: &Tensor, weight: &Tensor) -> Result<Tensor> {
+    Ok(x.contiguous()?.apply_op2(&weight.contiguous()?, RmsNorm)?)
+}
+
 /// `silu(gate) * up`.
 struct SwiGlu;
 
@@ -3918,6 +4192,33 @@ impl CustomOp2 for SwiGlu {
         Ok((CpuStorage::F32(out), l1.shape().clone()))
     }
 
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        s1: &MetalStorage,
+        l1: &Layout,
+        s2: &MetalStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if l1.shape() != l2.shape() {
+            candle_core::bail!("SwiGLU inputs must match");
+        }
+        let total = l1.shape().elem_count();
+        let device = s1.device();
+        let out_buf = device.new_buffer(total, DType::F32, "swiglu_out")?;
+        crate::metal_stack_kernels::metal::call_swiglu_fwd(
+            device,
+            s1.buffer(),
+            s2.buffer(),
+            &out_buf,
+            total,
+        )?;
+        Ok((
+            MetalStorage::new(out_buf, device.clone(), total, DType::F32),
+            l1.shape().clone(),
+        ))
+    }
+
     fn bwd(
         &self,
         gate: &Tensor,
@@ -3925,6 +4226,43 @@ impl CustomOp2 for SwiGlu {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "metal")]
+        if let Device::Metal(device) = gate.device() {
+            let total = gate.elem_count();
+            let dg_buf = device.new_buffer(total, DType::F32, "swiglu_dg")?;
+            let du_buf = device.new_buffer(total, DType::F32, "swiglu_du")?;
+
+            let (g_storage, _) = gate.storage_and_layout();
+            let (u_storage, _) = up.storage_and_layout();
+            let (d_storage, _) = grad.storage_and_layout();
+
+            if let (Storage::Metal(g_ms), Storage::Metal(u_ms), Storage::Metal(d_ms)) =
+                (&*g_storage, &*u_storage, &*d_storage)
+            {
+                crate::metal_stack_kernels::metal::call_swiglu_bwd(
+                    device,
+                    g_ms.buffer(),
+                    u_ms.buffer(),
+                    d_ms.buffer(),
+                    &dg_buf,
+                    &du_buf,
+                    total,
+                )?;
+                let dg = Tensor::from_storage(
+                    Storage::Metal(MetalStorage::new(dg_buf, device.clone(), total, DType::F32)),
+                    gate.shape().clone(),
+                    candle_core::op::BackpropOp::none(),
+                    false,
+                );
+                let du = Tensor::from_storage(
+                    Storage::Metal(MetalStorage::new(du_buf, device.clone(), total, DType::F32)),
+                    up.shape().clone(),
+                    candle_core::op::BackpropOp::none(),
+                    false,
+                );
+                return Ok((Some(dg), Some(du)));
+            }
+        }
         let gs = gate.flatten_all()?.to_vec1::<f32>()?;
         let us = up.flatten_all()?.to_vec1::<f32>()?;
         let ds = grad.flatten_all()?.to_vec1::<f32>()?;
@@ -3950,6 +4288,11 @@ impl CustomOp2 for SwiGlu {
             Some(Tensor::from_vec(d_up, up.shape(), up.device())?),
         ))
     }
+}
+
+/// Fused SwiGLU: `silu(gate) * up`.
+pub fn swiglu(gate: &Tensor, up: &Tensor) -> Result<Tensor> {
+    Ok(gate.contiguous()?.apply_op2(&up.contiguous()?, SwiGlu)?)
 }
 
 // ---------------------------------------------------------------------------
@@ -4005,6 +4348,59 @@ impl candle_core::CustomOp1 for CrossEntropy {
         Ok((CpuStorage::F32(vec![mean as f32]), Shape::from(())))
     }
 
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        storage: &MetalStorage,
+        layout: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        let (rows, vocabulary) = layout.shape().dims2()?;
+        let device = storage.device();
+        let target_buf = device.new_buffer_with_data(&self.targets)?;
+        let loss_per_row = device.new_buffer(rows, DType::F32, "cross_entropy_row_loss")?;
+
+        crate::metal_stack_kernels::metal::call_cross_entropy_fwd(
+            device,
+            storage.buffer(),
+            &target_buf,
+            &loss_per_row,
+            rows,
+            vocabulary,
+        )?;
+
+        let row_losses_tensor = Tensor::from_storage(
+            Storage::Metal(MetalStorage::new(
+                loss_per_row,
+                device.clone(),
+                rows,
+                DType::F32,
+            )),
+            Shape::from(rows),
+            candle_core::op::BackpropOp::none(),
+            false,
+        );
+        let row_losses = row_losses_tensor.to_vec1::<f32>()?;
+        let mean = match &self.weights {
+            None => {
+                let total: f64 = row_losses.iter().map(|&v| f64::from(v)).sum();
+                total / rows as f64
+            }
+            Some(weights) => {
+                let total: f64 = row_losses
+                    .iter()
+                    .zip(weights.iter())
+                    .map(|(&l, &w)| f64::from(l) * f64::from(w))
+                    .sum();
+                total / weights.iter().map(|&w| f64::from(w)).sum::<f64>()
+            }
+        };
+        let out_buf = device.new_buffer_with_data(&[mean as f32])?;
+        Ok((
+            MetalStorage::new(out_buf, device.clone(), 1, DType::F32),
+            Shape::from(()),
+        ))
+    }
+
     fn bwd(
         &self,
         logits: &Tensor,
@@ -4012,6 +4408,39 @@ impl candle_core::CustomOp1 for CrossEntropy {
         grad: &Tensor,
     ) -> candle_core::Result<Option<Tensor>> {
         let (rows, vocabulary) = logits.dims2()?;
+        #[cfg(feature = "metal")]
+        if self.weights.is_none() {
+            if let Device::Metal(device) = logits.device() {
+                let scale = (grad.to_scalar::<f32>()? / rows as f32) as f32;
+                let target_buf = device.new_buffer_with_data(&self.targets)?;
+                let total = rows * vocabulary;
+                let grad_buf = device.new_buffer(total, DType::F32, "ce_grad")?;
+                let (l_storage, _) = logits.storage_and_layout();
+                if let Storage::Metal(l_ms) = &*l_storage {
+                    crate::metal_stack_kernels::metal::call_cross_entropy_bwd(
+                        device,
+                        l_ms.buffer(),
+                        &target_buf,
+                        &grad_buf,
+                        rows,
+                        vocabulary,
+                        scale,
+                    )?;
+                    let g_tensor = Tensor::from_storage(
+                        Storage::Metal(MetalStorage::new(
+                            grad_buf,
+                            device.clone(),
+                            total,
+                            DType::F32,
+                        )),
+                        logits.shape().clone(),
+                        candle_core::op::BackpropOp::none(),
+                        false,
+                    );
+                    return Ok(Some(g_tensor));
+                }
+            }
+        }
         let values = logits.flatten_all()?.to_vec1::<f32>()?;
         let mut out = vec![0f32; values.len()];
         let grad = f64::from(grad.to_scalar::<f32>()?);
@@ -4080,6 +4509,11 @@ pub fn logits_cross_entropy(
         targets: targets.to_vec(),
         weights: weights.map(<[f32]>::to_vec),
     })?)
+}
+
+/// Fused CrossEntropy loss: mean cross entropy of logits vs target class indices.
+pub fn cross_entropy(logits: &Tensor, targets: &[u32]) -> Result<Tensor> {
+    logits_cross_entropy(logits, targets, None)
 }
 
 /// Per-row negative log-likelihood of `targets`, without a backward graph.
