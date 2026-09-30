@@ -1,0 +1,11 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "opencode-20260930-release-1512-e3",
+    "issue": 1512,
+    "op": "release",
+    "session": "opencode-deepseek-20260930"
+  },
+  "observed_server_time": 1790747493,
+  "previous_head": "aebb481b919d4b95e0e54f816cf7eed85e3686a0"
+}
