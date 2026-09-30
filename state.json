@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 45,
-  "observed_server_time": 1790740153,
+  "sequence": 46,
+  "observed_server_time": 1790740156,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -93,6 +93,17 @@
         "same_operator_two_cli_sessions": true,
         "single_charge_proof": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/single-charge-proof.json"
       }
+    },
+    "1525": {
+      "session": "codex-durable-20260929-root",
+      "epoch": 1,
+      "work_card": "sha256:6f991716192278511a22caf7a9058806effe85d02748f5e7e7e0247455619272",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "paths": [],
+      "expires": 1790741356,
+      "phase": "claimed",
+      "checkpoint": null
     }
   },
   "attempts": {
