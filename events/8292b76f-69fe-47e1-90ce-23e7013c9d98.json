@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": false,
+    "event_id": "8292b76f-69fe-47e1-90ce-23e7013c9d98",
+    "op": "heartbeat",
+    "session": "codex-storage-pilot-successor"
+  },
+  "observed_server_time": 1790736512,
+  "previous_head": "2c015ba16dbc64d89ddf533d422cdfd207c36fad"
+}

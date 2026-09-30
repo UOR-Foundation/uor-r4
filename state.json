@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-  "sequence": 15,
-  "observed_server_time": 1790736510,
+  "sequence": 16,
+  "observed_server_time": 1790736512,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -26,8 +26,8 @@
         "storage recovery",
         "ledger reconciliation"
       ],
-      "available": true,
-      "heartbeat": 1790735969
+      "available": false,
+      "heartbeat": 1790736512
     }
   },
   "tasks": {
