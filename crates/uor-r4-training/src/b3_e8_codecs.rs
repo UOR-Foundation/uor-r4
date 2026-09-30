@@ -142,10 +142,16 @@ pub fn decode_e8p_codeword(c: u16) -> [f32; E8_DIM] {
 
 /// Reference finite oracle that performs an exhaustive enumeration under declared f32 arithmetic
 /// over all 65,536 E8P codewords to find the nearest codeword.
+/// Finds the nearest E8P codeword by exhaustive evaluation over all 65,536 candidates.
 /// O(65,536) search; intended for verification, small-scale diagnostics, and test regressions.
+/// Scale must be finite and positive (`scale > 1e-9`).
+/// Rejects non-finite inputs, normalization overflow, non-finite squared distances (where all candidates overflow),
+/// and non-finite reconstruction.
 pub fn oracle_nearest_e8p_codeword(y: &[f32; E8_DIM], scale: f32) -> Result<([f32; E8_DIM], u16)> {
     if !scale.is_finite() || scale <= 1e-9 {
-        return Err(invalid("oracle scale must be finite and positive"));
+        return Err(invalid(
+            "oracle scale must be finite and positive (scale > 1e-9)",
+        ));
     }
     for (i, &val) in y.iter().enumerate() {
         if !val.is_finite() {
@@ -154,10 +160,16 @@ pub fn oracle_nearest_e8p_codeword(y: &[f32; E8_DIM], scale: f32) -> Result<([f3
     }
     let mut norm_y = [0.0f32; E8_DIM];
     for i in 0..E8_DIM {
-        norm_y[i] = y[i] / scale;
+        let ny = y[i] / scale;
+        if !ny.is_finite() {
+            return Err(invalid(format!(
+                "normalized input y[{i}] / scale is not finite"
+            )));
+        }
+        norm_y[i] = ny;
     }
     let mut best_err = f32::INFINITY;
-    let mut best_c = 0u16;
+    let mut best_c = None;
     for c in 0..=u16::MAX {
         let dec = decode_e8p_codeword(c);
         let mut err = 0.0f32;
@@ -167,16 +179,30 @@ pub fn oracle_nearest_e8p_codeword(y: &[f32; E8_DIM], scale: f32) -> Result<([f3
         }
         if err < best_err {
             best_err = err;
-            best_c = c;
+            best_c = Some(c);
             if err == 0.0 {
                 break;
             }
         }
     }
+    let best_c = best_c.ok_or_else(|| {
+        invalid("oracle search failed to find a candidate with finite squared distance")
+    })?;
+    if !best_err.is_finite() {
+        return Err(invalid(
+            "oracle search produced non-finite minimum squared distance",
+        ));
+    }
     let best_dec = decode_e8p_codeword(best_c);
     let mut out = [0.0f32; E8_DIM];
     for i in 0..E8_DIM {
-        out[i] = best_dec[i] * scale;
+        let o = best_dec[i] * scale;
+        if !o.is_finite() {
+            return Err(invalid(format!(
+                "reconstructed oracle output[{i}] is not finite"
+            )));
+        }
+        out[i] = o;
     }
     Ok((out, best_c))
 }
@@ -1559,9 +1585,20 @@ mod tests {
         // Oracle rejects non-finite scale and vector inputs
         assert!(oracle_nearest_e8p_codeword(&v, f32::NAN).is_err());
         assert!(oracle_nearest_e8p_codeword(&v, 0.0).is_err());
+        assert!(oracle_nearest_e8p_codeword(&v, 1e-10).is_err());
         let mut nan_v = v;
         nan_v[3] = f32::NAN;
         assert!(oracle_nearest_e8p_codeword(&nan_v, 1.0).is_err());
+
+        // Oracle rejects finite overflow cases where distances or normalized values exceed finite domain
+        assert!(
+            oracle_nearest_e8p_codeword(&[1e20; E8_DIM], 1.0).is_err(),
+            "finite input with squared-distance overflow must be rejected"
+        );
+        assert!(
+            oracle_nearest_e8p_codeword(&[f32::MAX; E8_DIM], 0.5).is_err(),
+            "normalization overflow must be rejected"
+        );
 
         // Documented heuristic encoder limitation: returns code 128 with squared error 4.0
         let (heur_v, heur_c) = quantize_e8p_block(&v, 1.0);

@@ -82,7 +82,7 @@ All metrics were computed across all 32,768 tokens and 235.9M weights, with refe
    Bitrates were derived strictly from stored file bytes:
    $$\text{bpw} = \frac{8 \times \text{serialized\_bytes}}{\text{quantized\_weights}}$$
    The E8P codecs achieve exact theoretical storage: 2.0134 bpw for 2-bit, 3.0134 bpw for 3-bit, and 4.0134 bpw for 4-bit (including row scales and metadata).
-3. **The Root Cause of Lattice Vector Quantization Collapse**:
+3. **Possible contributors to this implementation's degradation**:
    - Why does a scalar grid beat the $E_8$ lattice by 4.23 nats at 3 bits?
      Scalar quantization at group size 32 assigns an independent scale factor every 32 weights ($2560/32 = 80$ scales per row). This allows fine-grained local scale adaptation across different feature channels.
    - In contrast, $E_8$ lattice vector quantization packages 8 dimensions into a single codeword normalized by a single row-level or coarse-block scale. Even though $E_8$ offers optimal 8D sphere packing density in $\mathbb{R}^8$, the uncompensated residual orientation error across 8 coupled dimensions propagates nonlinearly through the SwiGLU activation ($\text{Swish}(x W_{\text{gate}}) \odot (x W_{\text{up}})$) and across 32 transformer layers.
