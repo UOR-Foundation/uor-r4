@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 313,
-  "observed_server_time": 1790789610,
+  "sequence": 314,
+  "observed_server_time": 1790789676,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -101,7 +101,7 @@
         "runner-coordinated-jobs"
       ],
       "available": true,
-      "heartbeat": 1790789610
+      "heartbeat": 1790789676
     }
   },
   "tasks": {
@@ -302,7 +302,7 @@
         "crates/uor-r4-core/src/native_geometric/workspace_coding.rs",
         "crates/uor-r4-core/src/native_geometric/workspace_coding_tests.rs"
       ],
-      "expires": 1790790810,
+      "expires": 1790790876,
       "phase": "claimed",
       "checkpoint": null
     }
