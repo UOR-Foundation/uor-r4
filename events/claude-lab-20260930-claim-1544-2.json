@@ -1,0 +1,20 @@
+{
+  "event": {
+    "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1544-2",
+    "issue": 1544,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-workbench/src/comparison.rs",
+      "crates/uor-r4-workbench/src/host.rs",
+      "crates/uor-r4-core/tests/conditioned_skip_engram_syntactic_tests.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "same-session successor card v2 https://github.com/UOR-Foundation/uor-r4/issues/1544#issuecomment-5913086119; epoch 1 released by claude-lab-20260930-release-1544-e1; source codex/fix-workbench-compile@2fbfed35 pushed",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:20d31fab5fa52b3d76bc5119aeca740ced50ea47882c326baf221599c7a417ce"
+  },
+  "observed_server_time": 1790777756,
+  "previous_head": "8e8e580edd4b854c79880d84e71a1aa7955cfa6c"
+}
