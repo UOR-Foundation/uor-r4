@@ -522,9 +522,10 @@ pub struct IntegerStackSession<'m> {
 }
 
 /// Maximum justified serialized JSON size for a session of the given model shape.
-/// Derived with checked arithmetic from actual layer kinds, allocating 32 bytes per
-/// integer to soundly bound compact JSON (<=12 bytes/int) and pretty JSON (23-32 bytes/int).
-fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
+/// Derived using checked arithmetic over model shape dimensions, allocating up to 24 bytes
+/// per numerical element to soundly bound compact JSON (where i64/u64 with punctuation can take
+/// up to 21 bytes) produced by `save_session_to_file`.
+pub(super) fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
     let s = &model.shape;
     let d = s.width as u64;
     let ctx = s.context as u64;
@@ -537,24 +538,36 @@ fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
         .bytes()
         .map(|c| {
             if c == b'a' {
-                let lifts = if model.lorentz { ctx * heads } else { 0 };
-                (2 * ctx * d + lifts) * 32
+                let lifts = if model.lorentz {
+                    ctx.checked_mul(heads).unwrap_or(u64::MAX / 4)
+                } else {
+                    0
+                };
+                (2 * ctx * d + lifts).checked_mul(24).unwrap_or(u64::MAX / 2)
             } else {
-                (CONVOLUTION_WIDTH as u64 * d) * 32
+                (CONVOLUTION_WIDTH as u64 * d).checked_mul(24).unwrap_or(u64::MAX / 2)
             }
         })
         .sum();
 
-    let logits_bytes = vocab * 32;
-    let tokens_bytes = ctx * 16;
+    let logits_bytes = vocab.checked_mul(24).unwrap_or(1024 * 1024);
+    let tokens_bytes = ctx.checked_mul(24).unwrap_or(1024 * 1024);
     let trace_bytes = if model.snapped {
-        ctx * (s.lanes() as u64) * rec_layers * 16
+        ctx.checked_mul(s.lanes() as u64)
+            .and_then(|x| x.checked_mul(rec_layers))
+            .and_then(|x| x.checked_mul(24))
+            .unwrap_or(1024 * 1024)
     } else {
         0
     };
-    let margin = 131072u64; // 128 KiB for schema, metadata keys, and formatting whitespace
+    let margin = 131072u64; // 128 KiB for schema, metadata keys, and formatting punctuation
 
-    layer_bytes + logits_bytes + tokens_bytes + trace_bytes + margin
+    layer_bytes
+        .checked_add(logits_bytes)
+        .and_then(|acc| acc.checked_add(tokens_bytes))
+        .and_then(|acc| acc.checked_add(trace_bytes))
+        .and_then(|acc| acc.checked_add(margin))
+        .unwrap_or(100 * 1024 * 1024)
 }
 
 impl IntegerStackSession<'_> {
@@ -571,8 +584,7 @@ impl IntegerStackSession<'_> {
     pub fn enable_snap_trace(&mut self) {
         let s = &self.model.shape;
         let recurrences = s.pattern.bytes().filter(|&c| c == b'r').count();
-        let remaining_positions = s.context.saturating_sub(self.position);
-        let entries = remaining_positions * recurrences * s.lanes();
+        let entries = s.context * recurrences * s.lanes();
         self.b.snap_trace = Some(SnapTrace {
             origin_position: self.position,
             selected: vec![u32::MAX; entries],
@@ -626,8 +638,14 @@ impl IntegerStackSession<'_> {
         self.tokens.clear();
         self.b.logits.fill(0);
         if let Some(trace) = &mut self.b.snap_trace {
+            let s = &self.model.shape;
+            let recurrences = s.pattern.bytes().filter(|&c| c == b'r').count();
+            let full_entries = s.context * recurrences * s.lanes();
             trace.origin_position = 0;
             trace.written = 0;
+            if trace.selected.len() < full_entries {
+                trace.selected.resize(full_entries, u32::MAX);
+            }
             trace.selected.fill(u32::MAX);
         }
         for state in &mut self.states {
@@ -707,8 +725,11 @@ impl IntegerStackSession<'_> {
                 .count();
             let expected_len = self.position * self.model.shape.lanes() * rec_layers;
             self.b.snap_trace.as_ref().and_then(|t| {
-                if t.origin_position == 0 && t.written == expected_len {
-                    Some(t.selected[..t.written].to_vec())
+                if t.origin_position == 0
+                    && t.written == expected_len
+                    && expected_len <= t.selected.len()
+                {
+                    Some(t.selected[..expected_len].to_vec())
                 } else {
                     None
                 }
@@ -946,10 +967,19 @@ impl IntegerStackSession<'_> {
     /// Save session state to a JSON file at `path` atomically and durably.
     ///
     /// Writes to an exclusive temporary sibling file, flushes and synchronizes content to disk,
-    /// atomically renames over destination `path`, and synchronizes the parent directory,
-    /// guaranteeing that any previously existing valid checkpoint at `path` is preserved intact
-    /// if a failure occurs during writing.
+    /// atomically renames over destination `path`, and synchronizes the parent directory.
+    /// If an error occurs prior to rename, any existing checkpoint file at `path` remains intact.
+    /// Note that if an error occurs during parent directory synchronization after rename, the
+    /// destination file has already been replaced but directory durability remains unconfirmed.
     pub fn save_session_to_file(&self, path: &Path) -> Result<(), StackError> {
+        self.save_session_to_file_internal(path, None)
+    }
+
+    pub(super) fn save_session_to_file_internal(
+        &self,
+        path: &Path,
+        temp_override: Option<PathBuf>,
+    ) -> Result<(), StackError> {
         let serialized = self.save_state();
         let bytes =
             serde_json::to_vec(&serialized).map_err(|e| StackError::Numerics(e.to_string()))?;
@@ -966,7 +996,9 @@ impl IntegerStackSession<'_> {
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("session");
-        let temp_path = parent.join(format!(".{file_name}.tmp-{pid}-{count}"));
+        let temp_path = temp_override.unwrap_or_else(|| {
+            parent.join(format!(".{file_name}.tmp-{pid}-{count}"))
+        });
 
         let mut temp_created = false;
         let write_res = (|| -> Result<(), std::io::Error> {
@@ -983,9 +1015,8 @@ impl IntegerStackSession<'_> {
             std::fs::rename(&temp_path, path)?;
             temp_created = false;
 
-            if let Ok(dir) = std::fs::File::open(parent) {
-                dir.sync_all()?;
-            }
+            let dir = std::fs::File::open(parent)?;
+            dir.sync_all()?;
             Ok(())
         })();
 

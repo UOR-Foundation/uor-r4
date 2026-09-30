@@ -796,22 +796,21 @@ fn session_save_to_file_is_atomic_and_preserves_existing_on_failure() {
     assert!(!original_bytes.is_empty());
 
     // 2. Preexisting colliding temporary file must NOT be deleted on creation collision
-    let pid = std::process::id();
-    for counter in 0..5 {
-        let collision_path = temp_dir.join(format!(".checkpoint.json.tmp-{pid}-{counter}"));
-        let sentinel_content = format!("sentinel-data-{counter}");
-        let _ = std::fs::write(&collision_path, sentinel_content.as_bytes());
-    }
+    let colliding_temp = temp_dir.join(".checkpoint.json.injected-colliding-temp");
+    let sentinel_data = b"preexisting-colliding-sentinel-data";
+    std::fs::write(&colliding_temp, sentinel_data).expect("write colliding");
 
-    // Attempt save to an impossible destination (child of an existing file)
-    let bad_path = save_path.join("impossible_subfile.json");
-    let res = session.save_session_to_file(&bad_path);
-    assert!(res.is_err());
+    // Force save with the exact colliding temp file path
+    let res = session.save_session_to_file_internal(&save_path, Some(colliding_temp.clone()));
+    assert!(res.is_err(), "save must fail when temp file already exists");
 
-    // Original checkpoint remains identical and intact
-    let current_bytes = std::fs::read(&save_path).expect("read after fail");
-    assert_eq!(original_bytes, current_bytes);
+    // Both original checkpoint and colliding file remain intact
+    let current_ckpt = std::fs::read(&save_path).expect("read ckpt");
+    assert_eq!(original_bytes, current_ckpt, "original checkpoint must remain intact");
+    let current_temp = std::fs::read(&colliding_temp).expect("read colliding");
+    assert_eq!(sentinel_data, current_temp.as_slice(), "colliding file must NOT be deleted");
 
+    let _ = std::fs::remove_file(&colliding_temp);
     let _ = std::fs::remove_file(&save_path);
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
@@ -858,7 +857,7 @@ fn session_restore_accepts_valid_edge_value_snapshot_within_bound() {
 
     session.save_session_to_file(&save_path).expect("save full");
     let file_len = std::fs::metadata(&save_path).expect("metadata").len();
-    let max_len = super::max_serialized_session_bytes(&model);
+    let max_len = super::session::max_serialized_session_bytes(&model);
     assert!(
         file_len > 0 && file_len <= max_len,
         "valid serialized session size {file_len} must be <= max bound {max_len}"
@@ -955,4 +954,35 @@ fn session_restore_validates_and_restores_snap_trace() {
     assert!(saved_unsnapped.snap_trace.is_none());
     let mut fresh_unsnapped = unsnapped_model.session();
     assert!(fresh_unsnapped.restore_state(&saved_unsnapped).is_ok());
+
+    // 5. Late enable -> reset -> full new stream -> save/restore without capacity panic
+    let mut late_reset_session = model.session();
+    late_reset_session.step(1).expect("step 1");
+    late_reset_session.step(2).expect("step 2");
+    assert_eq!(late_reset_session.position(), 2);
+    late_reset_session.enable_snap_trace();
+    late_reset_session.reset();
+    assert_eq!(late_reset_session.position(), 0);
+
+    for tok in 0..CONTEXT as u32 {
+        late_reset_session.step(tok % VOCAB as u32).expect("step full");
+    }
+    assert_eq!(late_reset_session.position(), CONTEXT);
+    let saved_reset_stream = late_reset_session.save_state();
+    assert!(saved_reset_stream.snap_trace.is_some());
+    let full_trace_roots = saved_reset_stream.snap_trace.as_ref().unwrap();
+    let rec_layers = model.shape.pattern.bytes().filter(|&b| b == b'r').count();
+    assert_eq!(
+        full_trace_roots.len(),
+        CONTEXT * model.shape.lanes() * rec_layers
+    );
+
+    let mut restored_reset_session = model.session();
+    restored_reset_session
+        .restore_state(&saved_reset_stream)
+        .expect("restore reset full");
+    assert_eq!(
+        restored_reset_session.snap_trace().unwrap(),
+        late_reset_session.snap_trace().unwrap()
+    );
 }
