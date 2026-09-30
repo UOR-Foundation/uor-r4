@@ -99,7 +99,7 @@
     "costs": {
       "wall_seconds": 1682.518831625,
       "peak_rss_kib": 169120,
-      "peak_rss_measurement": "end-of-run ps sample (current RSS at report time), asserted <= peak_rss_bound_kib 1572864; the true maximum resident set requires running the sealed binary under /usr/bin/time -l",
+      "peak_rss_measurement": "end-of-run ps sample (current RSS at report time), asserted <= peak_rss_bound_kib 1572864; the historical run's true peak RSS is unavailable and cannot be reconstructed; a separately authorized future run could measure only its own peak",
       "recorded_wall_sum_seconds": 6955.003,
       "recorded_wall_sources": {
         "keys_1": "external 2383.79",
@@ -182,7 +182,7 @@
   "sequence": {
     "order": ["keys-1", "decode-1", "keys-2.failed-attempt-1..5", "keys-3", "keys-4", "keys-5..keys-8", "keys-9", "keys-10 (gap)", "keys-11"],
     "keys_4": "completed 30k run under peer-duplicate contention (wall 2204.757749833 s); sealed (result.json blake3 6f7d8a930a986dcf47a97f0ca6a96c55e93d643ca8da9960cd6eb8ceab760d6a); superseded by the keys-9 re-run, which ran with no peer-duplicate contention (keys-11 overlapped keys-9 for 142.6 s) and reproduces its numbers at reported precision",
-    "keys_10": "numbering gap: no root under this name in the branch record, either preserved-attempt list, or the two session transcripts; the concurrent duplicate sessions (keys-2, keys-5..keys-8) are the likely source of an additional claimed-but-unsealed attempt; a claimed root is never reused, so the next completed run took keys-11; the store cannot be re-listed while /Volumes/UOR-Workspace is detached (#1520), so this absence is recorded, not re-verified"
+    "keys_10": "numbering gap: no root under this name in the branch record, either preserved-attempt list, or the two session transcripts; the concurrent duplicate sessions (keys-2, keys-5..keys-8) are the likely source of an additional claimed-but-unsealed attempt; a claimed root is never reused, so the next completed run took keys-11; at record time the mount was detached (#1520), preventing re-listing; the mount is now restored, and a current listing establishes only what exists now, not that a prior claimed attempt never existed; recorded as a numbering gap, not as a missing result"
   },
   "conclusion": {
     "statement": "Linear per-head readouts trained on training phrasings do not transfer relation atoms to held-out phrasings at splits 2 and 4. Whether the limit is the trunk, the readout, or template diversity (about 5 training templates per family vs 1-2 held out) is unresolved.",
