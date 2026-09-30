@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
-  "sequence": 22,
-  "observed_server_time": 1790737467,
+  "sequence": 23,
+  "observed_server_time": 1790737991,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -15,7 +15,7 @@
         "independent-subagents"
       ],
       "available": true,
-      "heartbeat": 1790737467
+      "heartbeat": 1790737991
     },
     "codex-storage-pilot-successor": {
       "lab": "Codex internal subagent",
@@ -42,7 +42,7 @@
         "docs/integration/project-track.md",
         "docs/plans/2026-09-29-path-to-chat.md"
       ],
-      "expires": 1790738667,
+      "expires": 1790739191,
       "phase": "claimed",
       "checkpoint": {
         "charge_count": 1,
