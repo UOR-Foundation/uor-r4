@@ -1,0 +1,58 @@
+{
+  "event": {
+    "attempt": "runner1536-continuity-1",
+    "epoch": 7,
+    "event_id": "kimi-1536-ceremony-4",
+    "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+    "issue": 1520,
+    "op": "reserve",
+    "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner",
+    "session": "kimi-coordinator-20260930",
+    "spec": {
+      "argv": [
+        "/bin/sleep",
+        "2"
+      ],
+      "cargo": false,
+      "coordination": {
+        "attempt_id": "runner1536-continuity-1",
+        "epoch": 7,
+        "issue": 1520,
+        "session": "kimi-coordinator-20260930",
+        "work_card": "sha256:c5e27e6bfae8813bcdccb559d7ce606a78f05a07030e0dca8d58bb50d2c2b9cc"
+      },
+      "cwd": "/Users/casey.allard/uor-r4/.worktrees/durable-lab-system-20260929",
+      "env": null,
+      "exclusive": false,
+      "gpu": false,
+      "id": "runner1536-continuity-1",
+      "kill_criterion": {
+        "kind": "wall",
+        "value": ""
+      },
+      "lab": "coordination",
+      "provenance": {
+        "executable": {
+          "path": "/bin/sleep",
+          "sha256": "8e05389ad2b0c2c59b36cbd1488980b821ae12ce32c2db7c89af1c372355747e"
+        },
+        "inputs": [],
+        "source_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b"
+      },
+      "rss_gib": 1.0,
+      "schema": "uor-r4.lab-runner-job/1",
+      "stop_grace_ms": 250,
+      "storage": [
+        {
+          "additional_bytes": 0,
+          "checkpoint_bytes": 0,
+          "volume": "internal"
+        }
+      ],
+      "threads": 1,
+      "wall_s": 30
+    }
+  },
+  "observed_server_time": 1790756044,
+  "previous_head": "847819c259d8b9006fdfa69534de2f4d0068193c"
+}
