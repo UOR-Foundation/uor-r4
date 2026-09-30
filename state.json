@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 222,
-  "observed_server_time": 1790779934,
+  "sequence": 223,
+  "observed_server_time": 1790779937,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -135,22 +135,16 @@
       "expires": 1790781134,
       "phase": "claimed",
       "checkpoint": {
-        "blockers": [
-          "08:47 owner removable-volume-consent admission hold",
-          "memory pressure2; heavy admission requires<=1"
-        ],
+        "blockers": [],
         "branch": "codex/track-b-conversion",
-        "charges": "Shared cumulative ledger retained; no reserved or running Codex job",
-        "checkpoint_sha": "1074399db87a2dda54602c661142a499bfb618a0",
-        "checks": "Existing scoped source/rustfmt/diff review retained; current loaded CPU+Metal reference parity NOT_RUN",
-        "live_attempts": [],
-        "main_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
-        "next_action": "Fresh claim citing this checkpoint; coordinate single Cargo slot after verified consent release and pressure<=1. Reuse retained reference-parity work card and verified internal cache; complete unchanged all-logit1e-4 CPU+Metal gate before B2/hybrid continuation. Do not start a new mechanism branch.",
-        "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+        "checkpoint_sha": "dcb8b107f499395c65b86404d67e9e83916054fd",
+        "checks": "Offline locked metadata, touched Rust formatting, actual PR delta whitespace and claim wording PASS. Compilation ongoing; full reference parity NOT_RUN.",
+        "direct_check": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuation-20260930/track-b-direct-dcb8b107-1/launch.json",
+        "main_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+        "next_action": "Collect bounded direct conversion test outcome, fix any relevant compile defect, independent review and protected delivery; unchanged CPU/Metal parity before B2. Small checks need no runner lane.",
         "pr": 1518,
-        "preserve": "Unique untracked .local-recovery/; tracked tree clean",
-        "review_index": "https://github.com/UOR-Foundation/uor-r4/tree/codex/lab-state/integration/20260930",
-        "status": "WAITING_EXTERNAL_DEPENDENCY",
+        "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+        "status": "ACTIVE",
         "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
       }
     },

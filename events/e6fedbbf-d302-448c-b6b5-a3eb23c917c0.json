@@ -1,0 +1,24 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "e6fedbbf-d302-448c-b6b5-a3eb23c917c0",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "checkpoint_sha": "dcb8b107f499395c65b86404d67e9e83916054fd",
+      "checks": "Offline locked metadata, touched Rust formatting, actual PR delta whitespace and claim wording PASS. Compilation ongoing; full reference parity NOT_RUN.",
+      "direct_check": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuation-20260930/track-b-direct-dcb8b107-1/launch.json",
+      "main_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+      "next_action": "Collect bounded direct conversion test outcome, fix any relevant compile defect, independent review and protected delivery; unchanged CPU/Metal parity before B2. Small checks need no runner lane.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "status": "ACTIVE",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790779937,
+  "previous_head": "14c3f5d7971506fea7e17b13b99a0741d95ee3e8"
+}
