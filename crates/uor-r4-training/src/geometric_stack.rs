@@ -6489,7 +6489,10 @@ mod tests {
         loaded.set_transport_snap(None)?;
         loaded.save(&snapped_dir)?;
         assert_eq!(StackModel::saved_transport_snap(&snapped_dir)?, None);
-        assert_eq!(StackModel::load(&snapped_dir, &cpu())?.transport_snap(), None);
+        assert_eq!(
+            StackModel::load(&snapped_dir, &cpu())?.transport_snap(),
+            None
+        );
         // A record of other roots is refused, by the reader and by the load.
         fs::write(
             free_dir.join(TRANSPORT_RECORD),
