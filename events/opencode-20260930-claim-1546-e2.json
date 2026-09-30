@@ -1,0 +1,21 @@
+{
+  "event": {
+    "base_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+    "dependencies": [],
+    "event_id": "opencode-20260930-claim-1546-e2",
+    "issue": 1546,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-core/src/native_geometric/learner/lowbit.rs",
+      "crates/uor-r4-core/src/native_geometric/learner/lowbit_core.rs",
+      "crates/uor-r4-core/src/native_geometric/workspace_coding.rs",
+      "crates/uor-r4-core/src/native_geometric/workspace_coding_tests.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "reacquisition: epoch-1 lease lapsed during CI waits; same session continues #1549 (delivered head 513026e7) through review/merge and the four-failure owner/council decision; no new model work",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:e2adc0f78adb937f8971cf1e839992f0ec67a979e19917edb0accaf2208dc559"
+  },
+  "observed_server_time": 1790788913,
+  "previous_head": "96f483f6453e729081ff12da756e4f1c86f4e386"
+}
