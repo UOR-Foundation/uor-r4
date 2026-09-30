@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 178,
-  "observed_server_time": 1790775641,
+  "sequence": 179,
+  "observed_server_time": 1790775643,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -220,15 +220,15 @@
     },
     "1536": {
       "session": "codex-durable-20260929-root",
-      "epoch": 2,
-      "work_card": "sha256:ee4ea3fb6ea16722a83d67f2bffe5731552465dc44a4a824afc14a187afe3baf",
+      "epoch": 3,
+      "work_card": "sha256:8e06f9f8fb77411f87f1e9ee0bcbac4f4ba767931c291ff617e52d3326de684d",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
       "paths": [
         "tools/lab-runner"
       ],
-      "expires": 1790775641,
-      "phase": "released",
+      "expires": 1790776843,
+      "phase": "claimed",
       "checkpoint": {
         "branch": "codex/runner-small-validation",
         "checkpoint_sha": "604eae9333a4e29efe5a902d241d25bc40d556c1",

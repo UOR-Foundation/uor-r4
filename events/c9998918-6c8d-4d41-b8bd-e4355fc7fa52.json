@@ -1,0 +1,18 @@
+{
+  "event": {
+    "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+    "dependencies": [],
+    "event_id": "c9998918-6c8d-4d41-b8bd-e4355fc7fa52",
+    "issue": 1536,
+    "op": "claim",
+    "paths": [
+      "tools/lab-runner"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "Root successor card expands same PR1543 under direct owner correction to remove whole-host serialization; no existing root attempt.",
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:8e06f9f8fb77411f87f1e9ee0bcbac4f4ba767931c291ff617e52d3326de684d"
+  },
+  "observed_server_time": 1790775643,
+  "previous_head": "5e953380a59edec969ef2e452d9da89a128db534"
+}
