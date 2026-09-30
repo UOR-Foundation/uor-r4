@@ -524,6 +524,7 @@ fn session_save_and_restore_produces_bit_identical_logits() {
     assert_eq!(session.position(), 3);
     assert_eq!(session.cache_at(), 3 * WIDTH);
     assert_eq!(session.lift_at(), 3 * HEADS);
+    assert_eq!(session.tokens(), &initial_tokens);
 
     let mut restored_logits = Vec::new();
     for &tok in &next_tokens {
@@ -540,6 +541,13 @@ fn session_save_and_restore_produces_bit_identical_logits() {
     fresh_session.restore_state(&saved).expect("restore fresh");
     assert_eq!(fresh_session.position(), 3);
     assert_eq!(fresh_session.cache_at(), 3 * WIDTH);
+    assert_eq!(fresh_session.tokens(), &initial_tokens);
+    // Next-token logits immediately after restore must match
+    assert_eq!(
+        fresh_session.logits(),
+        session.logits(),
+        "fresh restored session logits must match saved session logits before next step"
+    );
 
     let mut fresh_logits = Vec::new();
     for &tok in &next_tokens {
@@ -561,6 +569,7 @@ fn session_save_and_restore_produces_bit_identical_logits() {
     json_restored_session
         .restore_state(&deserialized)
         .expect("restore from deserialized");
+    assert_eq!(json_restored_session.tokens(), &initial_tokens);
     let mut json_logits = Vec::new();
     for &tok in &next_tokens {
         let logits = json_restored_session.step(tok).expect("step").to_vec();
@@ -641,4 +650,237 @@ fn session_restore_strictly_validates_checksums_and_dimensions() {
         session.restore_state(&bad_rec),
         Err(StackError::SessionState)
     ));
+
+    // 8. Inconsistent logits length
+    let mut bad_logits = saved.clone();
+    bad_logits.logits.pop();
+    assert!(matches!(
+        session.restore_state(&bad_logits),
+        Err(StackError::SessionState)
+    ));
+
+    // 9. Inconsistent tokens length
+    let mut bad_tokens = saved.clone();
+    bad_tokens.tokens.pop();
+    assert!(matches!(
+        session.restore_state(&bad_tokens),
+        Err(StackError::SessionState)
+    ));
+
+    // 10. Out-of-vocab token in tokens
+    let mut bad_tok_val = saved.clone();
+    bad_tok_val.tokens[0] = VOCAB as u32 + 50;
+    assert!(matches!(
+        session.restore_state(&bad_tok_val),
+        Err(StackError::Token { .. })
+    ));
+
+    // 11. Inconsistent snap trace length
+    let mut bad_trace = saved.clone();
+    bad_trace.snap_trace = Some(vec![0u32; 1]);
+    assert!(matches!(
+        session.restore_state(&bad_trace),
+        Err(StackError::SessionState)
+    ));
+
+    // 12. Out-of-range root in snap trace
+    let mut bad_trace_root = saved.clone();
+    let rec_layers = model.shape().pattern.bytes().filter(|&b| b == b'r').count();
+    let expected_entries = saved.position * model.shape().lanes() * rec_layers;
+    bad_trace_root.snap_trace = Some(vec![120u32; expected_entries]);
+    assert!(matches!(
+        session.restore_state(&bad_trace_root),
+        Err(StackError::SessionState)
+    ));
+}
+
+#[test]
+fn session_pause_save_fresh_restore_greedy_continuation() {
+    use super::stack_argmax;
+
+    let bytes = artifact(13);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+
+    // Stream 1: Run uninterrupted generation
+    let mut continuous_session = model.session();
+    continuous_session.step(2).expect("prompt 1");
+    continuous_session.step(5).expect("prompt 2");
+
+    let mut uninterrupted_tokens = Vec::new();
+    let mut uninterrupted_logits = Vec::new();
+    for _ in 0..3 {
+        let logits = continuous_session.logits().to_vec();
+        uninterrupted_logits.push(logits.clone());
+        let next_tok = stack_argmax(&logits) as u32;
+        uninterrupted_tokens.push(next_tok);
+        continuous_session.step(next_tok).expect("step next");
+    }
+
+    // Stream 2: Run prompt, pause, save to file, restore into a brand-new session, continue
+    let mut pause_session = model.session();
+    pause_session.step(2).expect("prompt 1");
+    pause_session.step(5).expect("prompt 2");
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("uor-stack-test-greedy-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let ckpt_path = temp_dir.join("paused_session.json");
+    pause_session
+        .save_session_to_file(&ckpt_path)
+        .expect("save");
+
+    // Fresh session restore
+    let mut resumed_session = model.session();
+    resumed_session
+        .restore_session_from_file(&ckpt_path)
+        .expect("restore");
+
+    // Immediate logits must match
+    assert_eq!(
+        resumed_session.logits(),
+        pause_session.logits(),
+        "resumed session logits immediately after restore must match paused session"
+    );
+    assert_eq!(
+        resumed_session.tokens(),
+        pause_session.tokens(),
+        "resumed session tokens must match paused session"
+    );
+
+    // Continue greedy generation from resumed session
+    let mut resumed_tokens = Vec::new();
+    let mut resumed_logits = Vec::new();
+    for _ in 0..3 {
+        let logits = resumed_session.logits().to_vec();
+        resumed_logits.push(logits.clone());
+        let next_tok = stack_argmax(&logits) as u32;
+        resumed_tokens.push(next_tok);
+        resumed_session.step(next_tok).expect("step next");
+    }
+
+    assert_eq!(
+        resumed_tokens, uninterrupted_tokens,
+        "greedy generated token sequence must be bit-for-bit identical across save/restore boundary"
+    );
+    assert_eq!(
+        resumed_logits, uninterrupted_logits,
+        "greedy generated logits must be bit-for-bit identical across save/restore boundary"
+    );
+
+    let _ = std::fs::remove_file(&ckpt_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_save_to_file_is_atomic_and_preserves_existing_on_failure() {
+    let bytes = artifact(11);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+    session.step(1).expect("step");
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("uor-stack-test-atomic-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let save_path = temp_dir.join("checkpoint.json");
+
+    // 1. Initial valid save
+    session
+        .save_session_to_file(&save_path)
+        .expect("save initial");
+    let original_bytes = std::fs::read(&save_path).expect("read original");
+    assert!(!original_bytes.is_empty());
+
+    // 2. Attempt save to an impossible destination (child of an existing file)
+    let bad_path = save_path.join("impossible_subfile.json");
+    let res = session.save_session_to_file(&bad_path);
+    assert!(res.is_err());
+
+    // Original checkpoint remains identical and intact
+    let current_bytes = std::fs::read(&save_path).expect("read after fail");
+    assert_eq!(original_bytes, current_bytes);
+
+    let _ = std::fs::remove_file(&save_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_restore_rejects_oversized_file_without_allocating() {
+    let bytes = artifact(17);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("uor-stack-test-oversized-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let oversized_path = temp_dir.join("oversized.json");
+
+    // Create a 100 MB sparse file, well above max expected bound
+    let file = std::fs::File::create(&oversized_path).expect("create");
+    file.set_len(100 * 1024 * 1024).expect("set_len");
+    drop(file);
+
+    let res = session.restore_session_from_file(&oversized_path);
+    assert!(
+        res.is_err(),
+        "restore_session_from_file must refuse oversized file before loading"
+    );
+
+    let _ = std::fs::remove_file(&oversized_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_restore_validates_and_restores_snap_trace() {
+    let bytes = artifact(19);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+
+    let mut session = model.session();
+    session.enable_snap_trace();
+    session.step(1).expect("step 1");
+    session.step(3).expect("step 2");
+
+    let original_trace = session.snap_trace().expect("trace");
+    assert!(!original_trace.is_empty());
+
+    let saved = session.save_state();
+    assert!(saved.snap_trace.is_some());
+
+    // 1. Restore into fresh session with snap trace enabled
+    let mut fresh_session = model.session();
+    fresh_session.enable_snap_trace();
+    fresh_session.restore_state(&saved).expect("restore");
+    assert_eq!(
+        fresh_session.snap_trace().expect("restored trace"),
+        original_trace,
+        "restored snap trace must match original exactly"
+    );
+
+    // 2. Restore into fresh session without snap trace initially enabled (model has snap)
+    let mut lazy_session = model.session();
+    lazy_session.restore_state(&saved).expect("restore lazy");
+    assert_eq!(
+        lazy_session.snap_trace().expect("restored trace"),
+        original_trace,
+        "snap trace should be populated from saved state when model has snap"
+    );
+
+    // 3. Restore state without snap trace into session that had snap trace: resets trace to avoid stale entries
+    let mut no_trace_session = model.session();
+    no_trace_session.step(1).expect("step 1");
+    let saved_no_trace = no_trace_session.save_state();
+    assert!(saved_no_trace.snap_trace.is_none());
+
+    let mut used_trace_session = model.session();
+    used_trace_session.enable_snap_trace();
+    used_trace_session.step(2).expect("step");
+    assert!(!used_trace_session.snap_trace().unwrap().is_empty());
+
+    used_trace_session
+        .restore_state(&saved_no_trace)
+        .expect("restore no trace");
+    // Should reset trace so no stale trace entries from used session are exposed
+    assert_eq!(
+        used_trace_session.snap_trace().unwrap(),
+        Vec::<super::SnapTraceEntry>::new()
+    );
 }

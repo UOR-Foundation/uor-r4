@@ -349,6 +349,7 @@ impl IntegerStackModel {
             position: 0,
             cache_at: 0,
             lift_at: 0,
+            tokens: Vec::with_capacity(context),
             states,
             b: Buffers {
                 x: vec![0; d],
@@ -436,6 +437,15 @@ pub struct SerializedStackSession {
     pub cache_at: usize,
     /// Lifts cache length (`position * heads`).
     pub lift_at: usize,
+    /// Pending next-token logits produced by the last step (length equals vocab when position > 0).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub logits: Vec<i32>,
+    /// Optional sequence of tokens ingested so far (`[position]` entries).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tokens: Vec<u32>,
+    /// Optional opt-in snap trace root indices recorded so far.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snap_trace: Option<Vec<u32>>,
     /// Per-layer state snapshots.
     pub layers: Vec<SerializedStackLayerState>,
 }
@@ -502,10 +512,35 @@ pub struct IntegerStackSession<'m> {
     cache_at: usize,
     /// `position * heads`: where this position's Lorentz key lifts go.
     lift_at: usize,
+    /// Sequence of tokens stepped in this session so far.
+    tokens: Vec<u32>,
     /// Boxed, like the model's layers, for a power-of-two stride.
     #[allow(clippy::vec_box)]
     states: Vec<Box<LayerState>>,
     b: Buffers,
+}
+
+/// Maximum justified serialized JSON size for a session of the given model shape.
+/// Used to reject oversized inputs before reading or allocating into memory.
+fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
+    let s = &model.shape;
+    let d = s.width as u64;
+    let ctx = s.context as u64;
+    let heads = s.heads as u64;
+    let vocab = s.vocab as u64;
+    let layers = model.layers.len() as u64;
+    let rec_layers = s.pattern.bytes().filter(|&b| b == b'r').count() as u64;
+
+    // In JSON, integer arrays format as numbers + commas + whitespace (~16 bytes per entry).
+    let max_read_per_layer = 2 * ctx * d * 16 + ctx * heads * 24;
+    let max_rec_per_layer = 4 * d * 16;
+    let max_layer_bytes = layers * max_read_per_layer.max(max_rec_per_layer);
+    let max_logits_bytes = vocab * 16;
+    let max_tokens_bytes = ctx * 16;
+    let max_trace_bytes = ctx * (s.lanes() as u64) * rec_layers * 16;
+    let margin = 65536u64;
+
+    max_layer_bytes + max_logits_bytes + max_tokens_bytes + max_trace_bytes + margin
 }
 
 impl IntegerStackSession<'_> {
@@ -562,13 +597,21 @@ impl IntegerStackSession<'_> {
         Some(entries)
     }
 
+    /// Sequence of tokens stepped in this session so far.
+    pub fn tokens(&self) -> &[u32] {
+        &self.tokens
+    }
+
     /// Start a new stream.
     pub fn reset(&mut self) {
         self.position = 0;
         self.cache_at = 0;
         self.lift_at = 0;
+        self.tokens.clear();
+        self.b.logits.fill(0);
         if let Some(trace) = &mut self.b.snap_trace {
             trace.written = 0;
+            trace.selected.fill(u32::MAX);
         }
         for state in &mut self.states {
             match state.as_mut() {
@@ -601,8 +644,9 @@ impl IntegerStackSession<'_> {
 
     /// Snapshot the active session state into a [`SerializedStackSession`].
     ///
-    /// Preserves exact recurrence vectors, causal convolution histories, and
-    /// populated read caches up to the current position (`cache_at` / `lift_at`).
+    /// Preserves exact recurrence vectors, causal convolution histories,
+    /// populated read caches up to the current position (`cache_at` / `lift_at`),
+    /// pending next-token logits from the last step, ingested tokens, and opt-in snap trace.
     pub fn save_state(&self) -> SerializedStackSession {
         let layers = self
             .states
@@ -630,6 +674,18 @@ impl IntegerStackSession<'_> {
             })
             .collect();
 
+        let logits = if self.position > 0 {
+            self.b.logits.clone()
+        } else {
+            Vec::new()
+        };
+
+        let snap_trace = self
+            .b
+            .snap_trace
+            .as_ref()
+            .map(|t| t.selected[..t.written].to_vec());
+
         SerializedStackSession {
             schema: STACK_SESSION_SCHEMA.to_string(),
             version: 1,
@@ -637,15 +693,19 @@ impl IntegerStackSession<'_> {
             position: self.position,
             cache_at: self.cache_at,
             lift_at: self.lift_at,
+            logits,
+            tokens: self.tokens.clone(),
+            snap_trace,
             layers,
         }
     }
 
     /// Restore session state from a [`SerializedStackSession`].
     ///
-    /// Validates schema, version, artifact SHA-256, context bounds, and layer dimensions
-    /// before applying state. After restoration, subsequent step calls produce bit-for-bit
-    /// identical outputs to continuing the original session.
+    /// Validates schema, version, artifact SHA-256, context bounds, layer dimensions,
+    /// pending logits, ingested tokens, and snap trace before applying state. After
+    /// restoration, subsequent step calls produce bit-for-bit identical outputs to
+    /// continuing the original session.
     pub fn restore_state(&mut self, saved: &SerializedStackSession) -> Result<(), StackError> {
         if saved.schema != STACK_SESSION_SCHEMA {
             return Err(StackError::Schema(format!(
@@ -685,6 +745,52 @@ impl IntegerStackSession<'_> {
         }
         if saved.layers.len() != self.states.len() {
             return Err(StackError::SessionState);
+        }
+
+        // Validate pending logits length if present
+        if saved.position > 0 && !saved.logits.is_empty() {
+            if saved.logits.len() != self.model.shape.vocab {
+                return Err(StackError::SessionState);
+            }
+        }
+
+        // Validate tokens if present
+        if !saved.tokens.is_empty() {
+            if saved.tokens.len() != saved.position {
+                return Err(StackError::SessionState);
+            }
+            for &tok in &saved.tokens {
+                if tok as usize >= self.model.shape.vocab {
+                    return Err(StackError::Token {
+                        token: tok,
+                        vocab: self.model.shape.vocab,
+                    });
+                }
+            }
+        }
+
+        // Validate snap trace if present
+        let rec_layers = self
+            .model
+            .shape
+            .pattern
+            .bytes()
+            .filter(|&b| b == b'r')
+            .count();
+        let expected_snap_entries = saved
+            .position
+            .checked_mul(self.model.shape.lanes())
+            .and_then(|x| x.checked_mul(rec_layers))
+            .ok_or(StackError::SessionState)?;
+        if let Some(ref trace_entries) = saved.snap_trace {
+            if trace_entries.len() != expected_snap_entries {
+                return Err(StackError::SessionState);
+            }
+            for &root in trace_entries {
+                if root >= 120 {
+                    return Err(StackError::SessionState);
+                }
+            }
         }
 
         // Validate all layers before mutating session
@@ -766,37 +872,115 @@ impl IntegerStackSession<'_> {
         self.cache_at = saved.cache_at;
         self.lift_at = saved.lift_at;
 
-        if let Some(trace) = &mut self.b.snap_trace {
-            let rec_layers = self
-                .model
-                .shape
-                .pattern
-                .bytes()
-                .filter(|&b| b == b'r')
-                .count();
-            trace.written = self.position * self.model.shape.lanes() * rec_layers;
+        // Restore pending logits
+        if saved.position > 0 && !saved.logits.is_empty() {
+            self.b.logits.copy_from_slice(&saved.logits);
+        } else {
+            self.b.logits.fill(0);
+        }
+
+        // Restore tokens
+        self.tokens.clear();
+        if !saved.tokens.is_empty() {
+            self.tokens.extend_from_slice(&saved.tokens);
+        }
+
+        // Restore snap trace
+        if let Some(ref trace_entries) = saved.snap_trace {
+            if let Some(trace) = &mut self.b.snap_trace {
+                trace.selected[..trace_entries.len()].copy_from_slice(trace_entries);
+                trace.written = trace_entries.len();
+            } else if self.model.snap().is_some() {
+                let total = self.model.shape.context * self.model.shape.lanes() * rec_layers;
+                let mut selected = vec![u32::MAX; total];
+                selected[..trace_entries.len()].copy_from_slice(trace_entries);
+                self.b.snap_trace = Some(SnapTrace {
+                    selected,
+                    written: trace_entries.len(),
+                });
+            }
+        } else if let Some(trace) = &mut self.b.snap_trace {
+            trace.written = 0;
+            trace.selected.fill(u32::MAX);
         }
 
         Ok(())
     }
 
-    /// Save session state to a JSON file at `path`.
+    /// Save session state to a JSON file at `path` atomically and durably.
+    ///
+    /// Writes to an exclusive temporary sibling file, flushes and synchronizes content to disk,
+    /// atomically renames over destination `path`, and synchronizes the parent directory,
+    /// guaranteeing that any previously existing valid checkpoint at `path` is preserved intact
+    /// if a failure occurs during writing.
     pub fn save_session_to_file(&self, path: &Path) -> Result<(), StackError> {
         let serialized = self.save_state();
         let bytes = serde_json::to_vec_pretty(&serialized)
             .map_err(|e| StackError::Numerics(e.to_string()))?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).map_err(StackError::Io)?;
-            }
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(StackError::Io)?;
         }
-        std::fs::write(path, bytes).map_err(StackError::Io)?;
+
+        static SAVE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let count = SAVE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let pid = std::process::id();
+        let file_name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("session");
+        let temp_path = parent.join(format!(".{file_name}.tmp-{pid}-{count}"));
+
+        let write_res = (|| -> Result<(), std::io::Error> {
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp_path)?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+            drop(file);
+            std::fs::rename(&temp_path, path)?;
+            if let Ok(dir) = std::fs::File::open(parent) {
+                let _ = dir.sync_all();
+            }
+            Ok(())
+        })();
+
+        if let Err(e) = write_res {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(StackError::Io(e));
+        }
+
         Ok(())
     }
 
     /// Load and restore session state from a JSON file at `path`.
+    ///
+    /// Validates file length against a model-derived upper bound before reading
+    /// to prevent memory exhaustion from oversized or malformed payloads.
     pub fn restore_session_from_file(&mut self, path: &Path) -> Result<(), StackError> {
-        let bytes = std::fs::read(path).map_err(StackError::Io)?;
+        use std::io::Read;
+        let mut file = std::fs::File::open(path).map_err(StackError::Io)?;
+        let max_len = max_serialized_session_bytes(self.model);
+        if let Ok(meta) = file.metadata() {
+            if meta.len() > max_len {
+                return Err(StackError::Numerics(format!(
+                    "session file size {} exceeds maximum expected bound {}",
+                    meta.len(),
+                    max_len
+                )));
+            }
+        }
+        let mut bytes = Vec::new();
+        file.take(max_len + 1)
+            .read_to_end(&mut bytes)
+            .map_err(StackError::Io)?;
+        if bytes.len() as u64 > max_len {
+            return Err(StackError::Numerics(format!(
+                "session file size exceeds maximum expected bound {max_len}"
+            )));
+        }
         let serialized: SerializedStackSession = serde_json::from_slice(&bytes)
             .map_err(|e| StackError::Numerics(format!("invalid session JSON: {e}")))?;
         self.restore_state(&serialized)
@@ -889,6 +1073,7 @@ impl IntegerStackSession<'_> {
         self.position += 1;
         self.cache_at += d;
         self.lift_at += heads;
+        self.tokens.push(token);
         Ok(&self.b.logits)
     }
 }
