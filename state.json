@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 59,
-  "observed_server_time": 1790742976,
+  "sequence": 60,
+  "observed_server_time": 1790742978,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -108,13 +108,11 @@
       "expires": 1790744176,
       "phase": "claimed",
       "checkpoint": {
-        "artifact_root": "https://github.com/UOR-Foundation/uor-r4/tree/codex/lab-state/activation/20260930",
-        "external_labs": "All three have now posted manual activity; Claude atomic registration verified; OpenCode/Antigravity registration pending and correction posted",
-        "host": "pressure2; no root model/build; queued OpenCode spec unbound",
-        "next_action": "Independently review1531 wording/evidence and confirm1532 B2 API; no duplicate source authoring.",
-        "phase": "activation records delivered; source-review next",
-        "source_main_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-        "startup_packet_sha256": "a906f7e18c59d2b2702e613e8544bbe62e6932955f1b51000851a3ca3f7d0177"
+        "branch": "codex/persistent-lab-goals-20260930",
+        "evidence": "https://github.com/UOR-Foundation/uor-r4/tree/codex/lab-state/activation/20260930/continuation",
+        "next_action": "Create protected PR and complete review/delivery; reconcile Claude unknown job without rerun.",
+        "source_sha": "3ed9f73d206d016679251697954db29bdadce6d2",
+        "status": "source pushed; independent review requested; prompt delivered to owner"
       }
     },
     "1533": {

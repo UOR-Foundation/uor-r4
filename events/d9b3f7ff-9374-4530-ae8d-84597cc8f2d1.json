@@ -1,0 +1,18 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "d9b3f7ff-9374-4530-ae8d-84597cc8f2d1",
+    "issue": 1525,
+    "op": "checkpoint",
+    "packet": {
+      "branch": "codex/persistent-lab-goals-20260930",
+      "evidence": "https://github.com/UOR-Foundation/uor-r4/tree/codex/lab-state/activation/20260930/continuation",
+      "next_action": "Create protected PR and complete review/delivery; reconcile Claude unknown job without rerun.",
+      "source_sha": "3ed9f73d206d016679251697954db29bdadce6d2",
+      "status": "source pushed; independent review requested; prompt delivered to owner"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790742978,
+  "previous_head": "c4afffc5523e93f81b0fe4f7bb8184f88beb72df"
+}
