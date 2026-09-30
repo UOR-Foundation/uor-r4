@@ -1,0 +1,23 @@
+{
+  "event": {
+    "epoch": 1,
+    "event_id": "ac3155f2-6ea0-43a1-a21a-658c8176722f",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [
+        "runner repair and admission hold",
+        "internal free below40GiB and memory pressure2 observed"
+      ],
+      "branch": "codex/track-b-conversion",
+      "checkpoint_sha": "1074399db87a2dda54602c661142a499bfb618a0",
+      "checks": "Direct rustfmt, diff check and claim-wording passed. Independent source review approved corrected delta. Cargo NOT_RUN; unregistered draft.",
+      "next_action": "Register/compile draft and run fixture only after valid admission and existing shared reference-parity dependency; do not alter frozen arms.",
+      "pr": 1518,
+      "preserved": ".local-recovery untracked unchanged"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790749572,
+  "previous_head": "73dc16d9168e28f9846b6280100d008f575df282"
+}

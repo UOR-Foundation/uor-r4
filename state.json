@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 100,
-  "observed_server_time": 1790749461,
+  "sequence": 101,
+  "observed_server_time": 1790749572,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -123,7 +123,18 @@
       ],
       "expires": 1790750661,
       "phase": "claimed",
-      "checkpoint": null
+      "checkpoint": {
+        "blockers": [
+          "runner repair and admission hold",
+          "internal free below40GiB and memory pressure2 observed"
+        ],
+        "branch": "codex/track-b-conversion",
+        "checkpoint_sha": "1074399db87a2dda54602c661142a499bfb618a0",
+        "checks": "Direct rustfmt, diff check and claim-wording passed. Independent source review approved corrected delta. Cargo NOT_RUN; unregistered draft.",
+        "next_action": "Register/compile draft and run fixture only after valid admission and existing shared reference-parity dependency; do not alter frozen arms.",
+        "pr": 1518,
+        "preserved": ".local-recovery untracked unchanged"
+      }
     },
     "1520": {
       "session": "codex-review1-pilot-c-successor-20260930",
