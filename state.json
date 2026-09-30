@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 238,
-  "observed_server_time": 1790781227,
+  "sequence": 239,
+  "observed_server_time": 1790781331,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -276,8 +276,8 @@
         "crates/uor-r4-core/src/bin/support/kvar_relative_energy.rs",
         "crates/uor-r4-core/src/bin/kvar-recall.rs"
       ],
-      "expires": 1790782427,
-      "phase": "claimed",
+      "expires": 1790781331,
+      "phase": "released",
       "checkpoint": null
     }
   },
