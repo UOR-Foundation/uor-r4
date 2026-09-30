@@ -390,9 +390,9 @@ pub const RECIPROCAL_Q32: [u64; 129] = [
 
 /// Normalized fixed rank table weights: `w_i ∝ 1 / (i + 1)` in Q31.
 ///
-/// Sums to `(1 << 31) - 1` (within roundoff). Multiplier-free and divider-free,
-/// uses precomputed reciprocal tables for support up to 129 and exact restoring
-/// long division (`stack_div_u128`) for normalization.
+/// Sums to `(1 << 31) - 1` (within roundoff). Uses precomputed reciprocal tables
+/// for support up to 129 and software restoring long division (`stack_div_u128`,
+/// a shift-and-subtract loop) for normalization.
 #[inline(never)]
 pub fn rank_table_q31(count: usize, out: &mut [u32]) -> Result<()> {
     if out.len() < count {
