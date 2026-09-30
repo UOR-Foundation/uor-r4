@@ -1,0 +1,27 @@
+{
+  "event": {
+    "base_sha": "3b7c2d54141336e5c2f46b9391bbef1f0014c182",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1541-9",
+    "issue": 1541,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/examples/m-world.rs",
+      "crates/uor-r4-training/src/milestone_world_v2.rs",
+      "crates/uor-r4-training/data/a1-english-probe.json",
+      "crates/uor-r4-training/src/milestone_world_v2_probe.rs",
+      "crates/uor-r4-training/src/geometric_stack.rs",
+      "crates/uor-r4-training/examples/geometric-stack.rs",
+      "crates/uor-r4-training/src/stack_export.rs",
+      "crates/uor-r4-training/tests/d4_map_codec_adapter.rs",
+      "crates/uor-r4-training/src/stack_dialogue.rs",
+      "crates/uor-r4-training/examples/aerm-keys.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "same-session successor card v6 https://github.com/UOR-Foundation/uor-r4/issues/1541#issuecomment-5918817406; epoch 8 released by claude-lab-20260930-release-1541-e8; source codex/a1-retrieval-integration@a2311a7f pushed",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:cd8d2162d39a3f6caa3a50eae5bd6f7f57aea3a5d07e709fa83cf6114bb12bbe"
+  },
+  "observed_server_time": 1790799049,
+  "previous_head": "2e5d3066fc54e58dee7817b8ec5f1eb7425df078"
+}

@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 361,
-  "observed_server_time": 1790799047,
+  "sequence": 362,
+  "observed_server_time": 1790799049,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -252,8 +252,8 @@
     },
     "1541": {
       "session": "claude-lab-20260930",
-      "epoch": 8,
-      "work_card": "sha256:005a20d94354b3d7d1cb2517a25648a814f515b75e87be2f080d6f4db256a393",
+      "epoch": 9,
+      "work_card": "sha256:cd8d2162d39a3f6caa3a50eae5bd6f7f57aea3a5d07e709fa83cf6114bb12bbe",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "3b7c2d54141336e5c2f46b9391bbef1f0014c182",
       "paths": [
@@ -265,10 +265,11 @@
         "crates/uor-r4-training/examples/geometric-stack.rs",
         "crates/uor-r4-training/src/stack_export.rs",
         "crates/uor-r4-training/tests/d4_map_codec_adapter.rs",
-        "crates/uor-r4-training/src/stack_dialogue.rs"
+        "crates/uor-r4-training/src/stack_dialogue.rs",
+        "crates/uor-r4-training/examples/aerm-keys.rs"
       ],
-      "expires": 1790799047,
-      "phase": "released",
+      "expires": 1790800249,
+      "phase": "claimed",
       "checkpoint": null
     },
     "1544": {
