@@ -1,0 +1,21 @@
+{
+  "event": {
+    "base_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+    "dependencies": [],
+    "event_id": "a168cf11-0f77-4690-932c-06a9c4a2acbe",
+    "issue": 1520,
+    "op": "claim",
+    "paths": [
+      "tools/lab-runner",
+      "docs/labs",
+      ".github/workflows/lab-delivery.yml",
+      "AGENTS.md"
+    ],
+    "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+    "recovery_receipt": "continuity-pilot-successor-receipt.json sha256:c6e94f2adab886516418833c4364d7941df50d90a176b22f4da51cb91f667e7e; A/B finalized, no live worker, normal admissions held; root resumes protected delivery and integration-first owner goal",
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:a527af51dfe737971a18333a49c12f05875c95976294f525e6599e085c569083"
+  },
+  "observed_server_time": 1790736650,
+  "previous_head": "9e8bc1f7a6c3cb5b17603b0309f284edde80fecd"
+}
