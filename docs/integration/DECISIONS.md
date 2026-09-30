@@ -460,3 +460,81 @@ Context. Near misses on one configuration of mechanisms still under construction
    > leave closed mechanisms that demonstrated real geometric capabilities that are absent from the rest of our mechanisms so that we have their tools and pieces available to fix other problems later - use your context and project understanding synthesis to evaluate them and their novelty
 
    Lab 1 keeps such mechanisms' code building and documented, with their demonstrated capability, novelty and reuse points, in the [geometric toolbox](geometric-toolbox-2026-09-28.md).
+
+
+## D13 — The 29 September plan of record, the owner's answers on converted models, cost and energy, and the council's proposed working rules
+
+Owner: Casey · Drafted by: the Claude lab · Dates: 2026-09-29 and 2026-09-30.
+
+**Items 1–3 are owner decisions and are final.**
+- Item 1 was recorded in the plan of record ([#1507](https://github.com/UOR-Foundation/uor-r4/pull/1507)) on 29 September.
+- Items 2–3 are the owner's answers to three prompts in the Claude-lab session on 30 September, about 01:30 UTC. Each answer picked the recommended option.
+
+**Items 4–7 are working rules proposed by the adversarial council.** The council was 23 agents: evidence briefs, four proposals, twelve red-team verdicts, a judge and a completeness critic. Under the owner's durable-lab charter ([#1520](https://github.com/UOR-Foundation/uor-r4/issues/1520)), these rules take effect when a three-seat council with at least two non-author seats has recorded two approving votes on the PR that carries this entry. The [path memo](path-to-chat-2026-09-29.md) holds the evidence and the ordered work.
+
+**Context.**
+- R1, the best chat artifact, scores development Responsive 0.52, Instruction 0.27 and Relation 0.01.
+- No geometric read has beaten a matched ordinary control in the main-line 7M stack. At smaller scope the native model's Lorentz read beat Dot at width 128 in 3 of 4 seeds.
+- The owner asked for honest answers, an adversarial council and a credible path to a model that chats. The owner's goal is geometry that replaces the transformer's runtime cost on a 16 GB M1.
+
+1. **Owner decisions of 29 September** (the plan of record).
+   - **§8 instruction panel:** new wording of trained instruction types. The §8 bar is unchanged: at least 0.80 per category, on a sealed panel, for a model of at most 30M parameters served under D11.
+   - **Offline teacher:** the local SmolLM2 135M/360M/1.7B-Instruct, for data and distillation. It never authors a served reply.
+   - **Compute:** local only, CPU and GPU in parallel. Outside compute comes later, by owner decision.
+   - **Tracks:** Track A (a native chat model) and Track B (geometric conversion of SmolLM2, 135M → 360M → 1.7B) both start.
+   - **Cleanup:** regenerable caches and clean merged worktrees may be removed after a manifest, inactivity checks and a 2-hour notice. Unique data is never deleted without the owner's pick.
+   - **The geometric parity rule:**
+     - a geometric mechanism stays whenever it is within 0.02 nats, or 0.03 accuracy, of its matmul equivalent;
+     - arms are paired in the same run, with at least two seeds, and a one-seed tie decides nothing;
+     - the ordinary form replaces it only beyond tolerance, and the geometric form then stays in the toolbox (D12).
+2. **D11 §2 is amended** (owner, 30 September).
+   - A converted open-weight student (Track B) may become a **served candidate** once an audit of its release binary shows D11's R1–R4:
+     - no floating point and no integer multiply or divide in served kernels;
+     - token mixing that is not mostly dense all-pairs reads;
+     - weights of at most 4 bits, read from tables;
+     - reported per-token parameter reads.
+   - Until that audit passes, a converted model remains a comparator or offline teacher, as D11 §2 says.
+   - Nothing else in D11 changes, and the D10 exception stays withdrawn.
+3. **Cost and energy** (owner, 30 September).
+   - **(a) D11 R1–R2 are unchanged.**
+     - Every runtime claim needs measured ms/token on this M1, against the D10 NEON engine and an ordinary 4-bit model of equal quality. Every energy claim needs measured J/token against the same.
+     - Analytic byte and operation tables are hypotheses, not claims.
+     - Closing the serving-kernel gap is a named Anti-Gravity item.
+     - R2 is revisited only if a measured, independently re-run gap cannot be brought below 2× with threads and table layout.
+     - The one same-artifact figure stands as self-reported until that re-run: about 5.40 ms/token for D11 against 1.11 for D10 on the S2 model. The D10 figure was not re-run, and the identity of the logits is not independently verified.
+   - **(b) Energy:** the first J/token (`sudo powermetrics`, run by the owner) is taken at A3's D11 export, next to D10 and an ordinary 4-bit model of equal quality.
+4. **Applying the parity rule so that it always decides** (proposed).
+   - For each seed or disjoint draw i, **d_i** is the geometric arm's metric minus its paired ordinary arm's metric, with the loss in nats or the accuracy drop.
+   - **Keep:** the geometric form stays if the mean of the d_i is at most the tolerance.
+   - **Replace:** the ordinary form takes the main-line slot if every d_i exceeds the tolerance. The geometric form goes to the toolbox, never deleted.
+   - **Mixed** (the mean above tolerance, but some d_i within it): run exactly one more seed, then the mean of the three decides against the tolerance.
+   - **Advantage:** a geometric advantage is claimed only if every d_i is below minus the tolerance.
+   - For training-free arms, disjoint window draws stand in for seeds.
+   - A kill rests on the ordinary arm (for example dot top-k), so that sparsity is never confounded with geometry.
+   - This replaces the plan memo's "unresolved" band, which with two seeds could almost never decide.
+5. **Direction** (proposed). The council refuted all four proposals as written (12 of 12 verdicts) and kept their salvage.
+   - **Track A is the main line toward §8:** retrieval first (A1, amended on [#1511](https://github.com/UOR-Foundation/uor-r4/issues/1511)), then data (A3).
+     - **A3 waits** for A1's decision, for A2's truncated-prefix policy (so the fit stops discarding 88% of chat-v0's responses), for the R1-X cross-cell diagnostic, and for the §8 panel's authoring.
+   - **Track B is a fixed-teacher measurement instrument and teacher source.** Each pillar is measured training-free as the share of the window-to-dense gap it recovers, plus a bound retrieval probe. It becomes a serving route only through item 2.
+   - **Harmonic attention.**
+     - It is tested at equal feature count against Taylor-2. At degree 2 on the sphere they span the same functions, so parity is the expected outcome there.
+     - The owner's Lie-group case is tested by an arm that can differ: a RoPE-plane-aligned or SU(2)/Wigner-D harmonic basis.
+     - It enters serving only on a measured win over a byte-matched window.
+   - **Quaternion transport** gets a Track B arm with decayed or gated recurrence, so its parking condition can be tested.
+   - **E8 weight coding** is credited only through E8P against RHT-plus-scalar codes at equal bits.
+   - **Retrieval instruments** must defeat fixed untrained rules before they are frozen.
+6. **Records relabelled** (proposed, measurements unchanged).
+   - The B3 root `b3-e8-smollm2-mlp/attempt-full-32layers` has a **disputed instrument**. Its float reference scored 9.45 nats/token on SmolLM2, which is consistent with #1017 token IDs (max 4095) being fed to a 49,152-token model. Its measurements are preserved, and it is not a verdict on E8 until a re-run on SmolLM2-tokenized windows with a float-NLL validity band.
+   - #1505: `keys-1` was the originally pre-registered probe (under-exposed). `keys-9` is the full-exposure run under the amended pre-registration. Both are kept; the negative is scoped to linear per-head readouts at splits 2 and 4.
+   - The R1 panel: only the memory score (0/10) is stored; "about 7/38" has no stored source.
+   - Plan-text corrections as listed in the memo:
+     - GM-Net 2605.13262 is a molecular model;
+     - Hedgehog's degree-2 Taylor map is spiky;
+     - the literature for forcing retrieval is 2205.05055, 2312.03002 and 2602.11374;
+     - "the pointer was dropped at D0" is an inference.
+7. **Coordination** (proposed).
+   - **One shared flock selector** (`crate::flock`, owned by the DeepSeek lab) serves A1's reads and pointer, B0, B2 and the later D11 port.
+   - **One Track B host for all reported numbers:** the shared candle model once its parity gate passes. The exact model-source path serves only as its oracle.
+   - **Labs are peers** under the durable-lab charter (#1520). No lab is a permanent director.
+
+**Preserved:** D9, D11 (except §2 as amended in item 2) and D12 with their scopes, and every sealed root with its scoped numbers.
