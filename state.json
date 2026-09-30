@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 98,
-  "observed_server_time": 1790748748,
+  "sequence": 99,
+  "observed_server_time": 1790748901,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -109,6 +109,20 @@
       ],
       "expires": 1790748624,
       "phase": "released",
+      "checkpoint": null
+    },
+    "1515": {
+      "session": "codex-durable-20260929-root",
+      "epoch": 1,
+      "work_card": "sha256:4906ba49f96b630ac50e229865067b298bf53e70c211ca5214bfd00f0d1115ea",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "ea03435808c67791b76ae0e9868978e3188cba04",
+      "paths": [
+        "crates/uor-r4-training/drafts/track_b_hybrid.rs",
+        "crates/uor-r4-training/drafts/README.md"
+      ],
+      "expires": 1790750101,
+      "phase": "claimed",
       "checkpoint": null
     },
     "1520": {

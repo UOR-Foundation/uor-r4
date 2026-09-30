@@ -1,0 +1,19 @@
+{
+  "event": {
+    "base_sha": "ea03435808c67791b76ae0e9868978e3188cba04",
+    "dependencies": [],
+    "event_id": "e6f27e19-dd1b-45ec-8721-2ff0da0930de",
+    "issue": 1515,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/drafts/track_b_hybrid.rs",
+      "crates/uor-r4-training/drafts/README.md"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": null,
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:4906ba49f96b630ac50e229865067b298bf53e70c211ca5214bfd00f0d1115ea"
+  },
+  "observed_server_time": 1790748901,
+  "previous_head": "d7101659ed1576c246d9c51fad44c972651653f6"
+}
