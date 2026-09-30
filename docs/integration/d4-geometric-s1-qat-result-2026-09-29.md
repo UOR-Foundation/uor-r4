@@ -37,7 +37,7 @@ September 29, 2026. References #973 under #820.
 | **NLL vs Original Float** | 0.000000 | −0.042998 | −0.024987 | **−0.024986** | $\le 2.018113$ ($+0.02$ nats) | Reported; Lab 1 re-run pending (−0.024986 nats) |
 | **Integer Arithmetic Gap ($\Delta$ vs Served)** | — | — | — | **$7.79 \times 10^{-7}$ nats** | $\le 1.0 \times 10^{-5}$ nats | Reported; Lab 1 re-run pending |
 | **D11 vs D10 NEON Discrepancy** | — | — | — | **0** (`max_abs_logit_diff`) | 0 | Bit-identical |
-| **Top-1 Agreement (vs Float Continuation)** | 100.00% | 100.00% | 90.28% | **90.28%** | — | Measured |
+| **Top-1 Agreement (vs QAT Own Float Model)** | — | — | 90.28% | **90.28%** | — | Measured (vs Arm 1 own float `f4caf562`, not Arm 2) |
 | **Bits Per Weight (Raw Parameter)** | 32.0000 | 32.0000 | — | **4.2500** | $\le 4.25$ bpw | Standard 4-bit |
 | **Bits Per Weight (Total Container)** | — | — | — | **4.7234** | — | 4,969,988 bytes / 8,417,664 weights |
 

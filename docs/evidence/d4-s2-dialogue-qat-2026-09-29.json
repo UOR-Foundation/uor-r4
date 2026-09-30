@@ -107,7 +107,7 @@
       "arm1_valid_window_nll": 2.971733069410822,
       "arm2_d11_minus_d10_nll": 0.0,
       "arm2_max_abs_logit_difference": 0,
-      "arm2_valid_window_nll": 2.971783307682384
+      "arm2_valid_window_nll": 2.984152881893584
     },
     "cost": {
       "arm1_wall_seconds": 2180,

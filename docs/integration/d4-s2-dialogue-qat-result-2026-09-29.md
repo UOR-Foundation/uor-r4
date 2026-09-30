@@ -55,7 +55,7 @@ September 29, 2026. References #973 under programme tracker #820.
 | **Greedy Agreement vs Matched Float Control** | — | — | 6 / 58 turns (10.34%) | — | Characterized (QAT integer vs Arm 2 float control) |
 | **QAT Integer vs Own Float Weights (`with_float_forward`)** | — | — | **MISSING / UNAVAILABLE** | — | Unresolved: QAT integer vs own unquantized float was not evaluated |
 | **D11 vs D10 Discrepancy** | `diff = 0` | `diff = 0` | `diff = 0` | Bit-identical | **PASS** (Bit-identical) |
-| **Held-out Window NLL (valid.u16)** | 2.9805 nats | 2.9718 nats | **2.9717 nats** | — | Improved |
+| **Held-out Window NLL (valid.u16)** | 2.9805 nats | 2.9842 nats | **2.9717 nats** | — | Improved |
 | **Raw Parameter Bit Budget** | 4.2500 bpw | 4.2500 bpw | **4.2500 bpw** | $\le 4.2500$ bpw | **PASS** |
 
 ---
@@ -75,9 +75,10 @@ September 29, 2026. References #973 under programme tracker #820.
    The absolute served NLL of $2.5680$ misses both targets ($+0.0425$ nats above the literal target and $+0.0171$ nats above the corrected parent target) because the base float model drifted upward to $2.5649$ nats during the 1,024 update adaptation schedule.
 5. **QAT Integer vs Own Float Weights Remains Missing:**
    The comparison of Arm 1 QAT integer output directly against its *own* unquantized float weights (`with_float_forward`) was not evaluated during the run and remains missing. Current comparisons against the pre-adaptation parent (5/58) and the separate float control (6/58) cannot substitute for an own-float evaluation. Consequently, we cannot infer that all difference from float is fine-tuning drift; some part may represent integer-vs-float divergence within the adapted checkpoint.
-6. **Ledger & Invariant Reconciliation:**
+6. **Ledger, Opcode Scope & Parameter Access Accounting:**
    - Both Arm 1 ($2,180\text{ s}$) and Arm 2 ($1,401\text{ s}$) were executed within budget under model slot exclusive locks.
    - Cumulative ledger charged $3,581,000\text{ ms}$ total ($768,447,701 / 780,000,000\text{ ms}$).
-   - All D11 serving invariants preserved: 0 multipliers, 0 dividers, 0 floats in serving path.
+   - **Opcode Scope:** These finite output comparisons evaluate model predictions and do not themselves prove whole-path opcode restrictions (zero mul/div/float) for this specific evaluation run; opcode certification references the D11 integer stack engine audit (PR #1467 for `uor-r4-stack`), while whole-path runtime opcode verification for this specific binary remains unverified without an exact-binary disassembly receipt.
+   - **Parameter Access Scope:** The evaluation records 7,238,304 weights read per token (100% dense parameter access across all layers) and does not establish or claim D5 sparse selected-access compliance.
    - Status: **reported; Lab 1 re-run pending**.
 

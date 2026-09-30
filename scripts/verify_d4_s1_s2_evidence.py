@@ -110,6 +110,26 @@ def main():
             print("  [FAIL] D11 eval mismatch")
             failures += 1
 
+    # Check Arm 2 D11 Evaluation
+    arm2_d11_path = s2_ev["sealed_roots_arm2_float_control"]["d11_eval"]["path"]
+    arm2_d11_file = os.path.join(arm2_d11_path, "evaluation.json")
+    if os.path.exists(arm2_d11_file):
+        with open(arm2_d11_file) as f:
+            arm2_d11_ev = json.load(f)
+        windows = arm2_d11_ev["per_window"]
+        mean_arm2_d11_nll = sum(w["d11_nll"] for w in windows) / len(windows)
+        diff_count = arm2_d11_ev["positions_with_a_difference"]
+        rec_arm2_valid = s2_ev["measurements"]["integer_serving_fidelity"]["arm2_valid_window_nll"]
+
+        print(f"  Arm 2 D11 Eval: {len(windows)} windows, positions_with_a_difference={diff_count}")
+        print(f"  Computed mean Arm 2 D11 NLL: {mean_arm2_d11_nll:.12f} (recorded: {rec_arm2_valid:.12f})")
+        if diff_count == 0 and abs(mean_arm2_d11_nll - rec_arm2_valid) < 1e-9:
+            print("  [PASS] Arm 2 D11 eval confirms bit-identical integer serving (diff=0) and exact NLL match (2.984152881894)")
+            passes += 1
+        else:
+            print("  [FAIL] Arm 2 D11 eval mismatch")
+            failures += 1
+
     # Check Turn Counts in Chat
     arm1_chat_path = s2_ev["sealed_roots_arm1_qat"]["chat"]["path"]
     chat_file = os.path.join(arm1_chat_path, "chat.json")
@@ -138,13 +158,33 @@ def main():
             "Literal target",
             "Corrected parent target",
             "MISSING / UNAVAILABLE",
+            "2.9842 nats",
+            "7,238,304 weights read per token",
+            "dense parameter access",
         ]
         for req in required_strings:
             if req in md_content:
-                print(f"  [PASS] Markdown contains required scope marker: '{req}'")
+                print(f"  [PASS] S2 Markdown contains required scope marker: '{req}'")
                 passes += 1
             else:
-                print(f"  [FAIL] Markdown missing required scope marker: '{req}'")
+                print(f"  [FAIL] S2 Markdown missing required scope marker: '{req}'")
+                failures += 1
+
+    s1_md_path = os.path.join(repo_root, "docs/integration/d4-geometric-s1-qat-result-2026-09-29.md")
+    if os.path.exists(s1_md_path):
+        with open(s1_md_path) as f:
+            s1_md_content = f.read()
+
+        s1_required_strings = [
+            "Top-1 Agreement (vs QAT Own Float Model)",
+            "f4caf562",
+        ]
+        for req in s1_required_strings:
+            if req in s1_md_content:
+                print(f"  [PASS] S1 Markdown contains required scope marker: '{req}'")
+                passes += 1
+            else:
+                print(f"  [FAIL] S1 Markdown missing required scope marker: '{req}'")
                 failures += 1
 
     print(f"\nVerification summary: {passes} passed, {failures} failed.")
