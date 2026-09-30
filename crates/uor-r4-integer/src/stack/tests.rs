@@ -1131,8 +1131,10 @@ fn test_pointer_copy_boosts_prior_token_logits_and_preserves_across_save_restore
     assert_eq!(copy_session.copy_scale(), 1 << 16);
 
     let mut copy_logits = Vec::new();
+    let mut step_weights_snapshots = Vec::new();
     for &tok in &prompt {
         let logits = copy_session.step(tok).expect("step copy").to_vec();
+        step_weights_snapshots.push(copy_session.pointer_weights().to_vec());
         copy_logits.push(logits);
     }
     assert_eq!(copy_session.position(), prompt.len());
@@ -1165,7 +1167,7 @@ fn test_pointer_copy_boosts_prior_token_logits_and_preserves_across_save_restore
         }
 
         // Pointer weights must be valid normalized values (sum <= Q31)
-        let weights = &copy_session.pointer_weights()[..step_idx];
+        let weights = &step_weights_snapshots[step_idx][..step_idx];
         for &w in weights {
             assert!(
                 w <= (1u64 << 31),
@@ -1175,7 +1177,7 @@ fn test_pointer_copy_boosts_prior_token_logits_and_preserves_across_save_restore
 
         // Any seen token with non-zero attention mass must receive a non-negative boost
         for (pos, &tok) in prefix.iter().enumerate() {
-            let pw = copy_session.pointer_weights()[pos];
+            let pw = step_weights_snapshots[step_idx][pos];
             if pw > 0 {
                 assert!(
                     copy_logits[step_idx][tok as usize] >= baseline_logits[step_idx][tok as usize],
@@ -1221,7 +1223,16 @@ fn test_pointer_copy_boosts_prior_token_logits_and_preserves_across_save_restore
         "continuation logits after restore must be bit-for-bit identical"
     );
 
-    // 4. Session reset clears pointer weights and position but allows clean reuse
+    // 4. Disabling copy scale clears pointer weights buffer
+    assert!(copy_session.pointer_weights().iter().any(|&w| w > 0));
+    copy_session.set_copy_scale(0);
+    assert_eq!(copy_session.copy_scale(), 0);
+    assert!(
+        copy_session.pointer_weights().iter().all(|&w| w == 0),
+        "disabling copy scale must clear pointer weights buffer"
+    );
+
+    // 5. Session reset clears pointer weights and position but allows clean reuse
     copy_session.reset();
     assert_eq!(copy_session.position(), 0);
     assert_eq!(copy_session.tokens().len(), 0);
@@ -1261,9 +1272,29 @@ fn test_pointer_copy_retrieval_boost_argmax_override_and_duplicate_accumulation(
     // Verify duplicate token accumulation: token 7 was present at pos 1 and pos 3
     let pw1 = i128::from(copy.pointer_weights()[1]);
     let pw3 = i128::from(copy.pointer_weights()[3]);
+    assert!(
+        pw1 > 0,
+        "token 7 at pos 1 must have non-zero attention weight"
+    );
+    assert!(
+        pw3 > 0,
+        "token 7 at pos 3 must have non-zero attention weight"
+    );
     let expected_boost_pos1 = (pw1 * (1i128 << 16)) >> 31;
     let expected_boost_pos3 = (pw3 * (1i128 << 16)) >> 31;
+    assert!(
+        expected_boost_pos1 > 0,
+        "expected boost at pos 1 must be strictly positive"
+    );
+    assert!(
+        expected_boost_pos3 > 0,
+        "expected boost at pos 3 must be strictly positive"
+    );
     let expected_total_boost = (expected_boost_pos1 + expected_boost_pos3) as i32;
+    assert!(
+        expected_total_boost < i32::MAX,
+        "expected total boost must be non-saturating"
+    );
 
     let actual_diff = copy_continuation[7] - baseline_continuation[7];
     assert_eq!(
@@ -1294,7 +1325,7 @@ fn test_pointer_copy_retrieval_boost_argmax_override_and_duplicate_accumulation(
         );
     }
 
-    // Extremal scale test: i32::MAX scale saturates cleanly without overflow or panic
+    // Extremal scale test: i32::MAX scale saturates cleanly via saturating_add without overflow or panic
     let mut max_scale_session = model.session();
     max_scale_session.set_copy_scale(i32::MAX);
     for &tok in &prompt {
@@ -1305,7 +1336,8 @@ fn test_pointer_copy_retrieval_boost_argmax_override_and_duplicate_accumulation(
     let max_continuation = max_scale_session
         .step(5)
         .expect("step 5 with i32::MAX scale");
-    for &logit in max_continuation {
-        assert!(logit <= i32::MAX, "logits must remain valid i32");
-    }
+    assert!(
+        max_continuation[7] > copy_continuation[7],
+        "under extremal i32::MAX scale, boosted logits must exceed unit-scale copy logits"
+    );
 }

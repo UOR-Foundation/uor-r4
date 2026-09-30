@@ -658,6 +658,9 @@ impl IntegerStackSession<'_> {
     /// ensure zero overhead for default serving.
     pub fn set_copy_scale(&mut self, scale_q16: i32) {
         self.copy_scale_q16 = scale_q16.max(0);
+        if self.copy_scale_q16 == 0 {
+            self.b.pointer_weights.fill(0);
+        }
     }
 
     /// The active pointer copy scale in Q16.
