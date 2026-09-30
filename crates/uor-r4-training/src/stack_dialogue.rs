@@ -240,12 +240,7 @@ where
         let episodes = index.materialize(chunk, PrefixPolicy::FullPrefix)?;
         let trimmed = trim(&episodes);
         let time = trimmed.time;
-        let nll = score_fn(
-            &trimmed.inputs,
-            &trimmed.targets,
-            episodes.batch,
-            time,
-        )?;
+        let nll = score_fn(&trimmed.inputs, &trimmed.targets, episodes.batch, time)?;
         for (lane, row) in episodes.rows.iter().enumerate() {
             let total = &mut totals[row.source_index];
             selected[row.source_index].push(row.response_id);

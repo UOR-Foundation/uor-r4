@@ -4216,12 +4216,18 @@ mod tests {
         // Malformed head: [1, 16] instead of [32, 16]
         let bad_head = Tensor::zeros((1, 16), DType::F32, &Device::Cpu)?;
         let res = model.target_nll_with_head(&ids, &targets, &bad_head, 1, 2);
-        assert!(res.is_err(), "target_nll_with_head must reject [1, 16] head shape");
+        assert!(
+            res.is_err(),
+            "target_nll_with_head must reject [1, 16] head shape"
+        );
 
         // Malformed head: [32, 8] instead of [32, 16]
         let bad_width_head = Tensor::zeros((32, 8), DType::F32, &Device::Cpu)?;
         let res2 = model.target_nll_with_head(&ids, &targets, &bad_width_head, 1, 2);
-        assert!(res2.is_err(), "target_nll_with_head must reject [32, 8] head shape");
+        assert!(
+            res2.is_err(),
+            "target_nll_with_head must reject [32, 8] head shape"
+        );
 
         Ok(())
     }
