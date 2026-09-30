@@ -22,7 +22,7 @@
   - In the 7M stack no geometric read has beaten a matched ordinary control.
   - Lorentz against Dot changes sign with configuration (−0.076 to +0.046 nats), and one arm's seed spread (0.040) exceeds the 0.02 tolerance, so the stack comparison is unresolved.
   - At smaller scope the native model's Lorentz read beat Dot at width 128 in 3 of 4 seeds (by 0.018 nats at context 128, 0.051–0.061 at 256), and a learned Lorentz cache beat equal dot and Euclidean caches.
-  - 2I codes used as addresses have lost so far (#1505: 2I 0.327 against softmax 0.491, at the scope in D16).
+  - 2I codes used as addresses have lost so far (#1505: at D16's frozen-S4 linear-readout scope the losing measurement is the held-out relation transfer — 2I 0.327 against softmax 0.491 — while the joint key stays readable in distribution: 2I in-distribution 0.884/0.906 against softmax 0.9799/0.9792).
 - **Runtime saving: not established; the one same-artifact figure points the other way.**
   - On the S2 model, D11 takes about 5.40 ms/token and D10 NEON about 1.11 (*self-reported*, not re-run).
   - At 7M parameters or fewer the engine is instruction-bound (derived), so byte savings do not become latency.
