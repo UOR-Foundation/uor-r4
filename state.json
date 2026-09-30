@@ -2,9 +2,22 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-  "sequence": 0,
-  "observed_server_time": 0,
-  "labs": {},
+  "sequence": 1,
+  "observed_server_time": 1790735359,
+  "labs": {
+    "codex-durable-20260929-root": {
+      "lab": "Codex",
+      "adapter": "Codex desktop with local executor; heartbeat automation installed; other clients manual",
+      "capabilities": [
+        "Rust",
+        "GitHub",
+        "local-recovery",
+        "independent-subagents"
+      ],
+      "available": true,
+      "heartbeat": 1790735359
+    }
+  },
   "tasks": {},
   "attempts": {}
 }

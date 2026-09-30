@@ -1,0 +1,17 @@
+{
+  "event": {
+    "adapter": "Codex desktop with local executor; heartbeat automation installed; other clients manual",
+    "capabilities": [
+      "Rust",
+      "GitHub",
+      "local-recovery",
+      "independent-subagents"
+    ],
+    "event_id": "adcaec30-c9a8-419b-bf0a-d48219a8575d",
+    "lab": "Codex",
+    "op": "register",
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790735359,
+  "previous_head": "4a4e47944f320250a4b6aa41513761c68484f166"
+}
