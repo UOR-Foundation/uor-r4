@@ -1,0 +1,19 @@
+{
+  "event": {
+    "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1544-1",
+    "issue": 1544,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-workbench/src/comparison.rs",
+      "crates/uor-r4-workbench/src/host.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:31b219f8b101e722bc8cfc176592ae3d62d2d7b69a349cf251594baae6eef8ae"
+  },
+  "observed_server_time": 1790775963,
+  "previous_head": "057ec79d9545866e8098bd277b2363b381a2e738"
+}
