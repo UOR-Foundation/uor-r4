@@ -1,0 +1,16 @@
+{
+  "event": {
+    "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "dependencies": [],
+    "event_id": "pilot-c-claim-origin-84cfceb5-3159-49bf-b820-db44eaaf91c4",
+    "issue": 1520,
+    "op": "claim",
+    "paths": [],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/preflight.json; prior epoch4 released, all earlier attempts finalized, existing evidence preserved",
+    "session": "codex-review1-pilot-c-origin-20260930",
+    "work_card": "sha256:1c522eb02cc7c3f8488c996aeece9410cb871a77c0b767b98cfa9e231c0675fd"
+  },
+  "observed_server_time": 1790739368,
+  "previous_head": "79ca1e90d6d36c9c6912bddfc76250d2153af69e"
+}

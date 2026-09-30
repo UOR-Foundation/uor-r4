@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 29,
-  "observed_server_time": 1790739366,
+  "sequence": 30,
+  "observed_server_time": 1790739368,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -52,18 +52,14 @@
   },
   "tasks": {
     "1520": {
-      "session": "codex-durable-20260929-root",
-      "epoch": 4,
-      "work_card": "sha256:20b5c440ba12e496f47146d844476c601447edf5c5015dd05bd10b56cbe34889",
-      "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
-      "base_sha": "0dcdb6e970fc94d2c47f5ea879b1e7a2db620abd",
-      "paths": [
-        "docs/labs",
-        "docs/integration/project-track.md",
-        "docs/plans/2026-09-29-path-to-chat.md"
-      ],
-      "expires": 1790739108,
-      "phase": "released",
+      "session": "codex-review1-pilot-c-origin-20260930",
+      "epoch": 5,
+      "work_card": "sha256:1c522eb02cc7c3f8488c996aeece9410cb871a77c0b767b98cfa9e231c0675fd",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "paths": [],
+      "expires": 1790740568,
+      "phase": "claimed",
       "checkpoint": {
         "active_attempts": [],
         "branch": "codex/lab-integration-goals-20260930",
