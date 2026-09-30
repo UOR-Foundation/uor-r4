@@ -336,6 +336,52 @@ fn test_ensure_capacity_growth_and_postcondition() {
     assert!(scratch.slots_capacity() >= 300);
     assert!(scratch.rest_capacity() >= 300);
     assert!(scratch.entries_capacity() >= 300);
+
+    // Rapid sequence of edge resizing requests: zero request
+    scratch.ensure_capacity(0);
+    assert!(scratch.slots_capacity() >= 300);
+    assert!(scratch.rest_capacity() >= 300);
+    assert!(scratch.entries_capacity() >= 300);
+
+    // Rapid sequence: large request exceeding MAX_FLOCK_CONTEXT is clamped
+    scratch.ensure_capacity(MAX_FLOCK_CONTEXT + 500);
+    assert!(
+        scratch.slots_capacity() >= MAX_FLOCK_CONTEXT,
+        "slots_capacity {} < {}",
+        scratch.slots_capacity(),
+        MAX_FLOCK_CONTEXT
+    );
+    assert!(
+        scratch.rest_capacity() >= MAX_FLOCK_CONTEXT,
+        "rest_capacity {} < {}",
+        scratch.rest_capacity(),
+        MAX_FLOCK_CONTEXT
+    );
+    assert!(
+        scratch.entries_capacity() >= MAX_FLOCK_CONTEXT,
+        "entries_capacity {} < {}",
+        scratch.entries_capacity(),
+        MAX_FLOCK_CONTEXT
+    );
+
+    // Rapid sequence: shrink request after max-context expansion does not shrink
+    scratch.ensure_capacity(50);
+    assert!(scratch.slots_capacity() >= MAX_FLOCK_CONTEXT);
+    assert!(scratch.rest_capacity() >= MAX_FLOCK_CONTEXT);
+    assert!(scratch.entries_capacity() >= MAX_FLOCK_CONTEXT);
+
+    let max_slots_cap = scratch.slots_capacity();
+    let max_rest_cap = scratch.rest_capacity();
+    let max_entries_cap = scratch.entries_capacity();
+
+    // Valid selection near maximum context does not reallocate preallocated buffers
+    let mut large_scores = vec![0i64; MAX_FLOCK_CONTEXT];
+    large_scores[5] = 100;
+    let scan2 = flock_select_integer(&large_scores, 4000, select, &mut scratch).unwrap();
+    assert_eq!(scan2.visible, 4001);
+    assert_eq!(scratch.slots_capacity(), max_slots_cap);
+    assert_eq!(scratch.rest_capacity(), max_rest_cap);
+    assert_eq!(scratch.entries_capacity(), max_entries_cap);
 }
 
 #[test]
