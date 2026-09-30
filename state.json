@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 30,
-  "observed_server_time": 1790739368,
+  "sequence": 31,
+  "observed_server_time": 1790739371,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -61,17 +61,17 @@
       "expires": 1790740568,
       "phase": "claimed",
       "checkpoint": {
-        "active_attempts": [],
-        "branch": "codex/lab-integration-goals-20260930",
-        "host_admission": "held normal40GiB",
-        "next_action": "Commit exact D17 and goals head, executed docs checks, two nonauthor reviews, recorded three-seat repair vote; protectedqueue only thenAdoptPolicy. Cleanup agents read-only.",
-        "old_head": "38962b26ab09acf79436af7239bcf2ac42605efe",
-        "owner_clarification": "Keep the transformer-free requirement; conversion must remove the transformer architecture.",
-        "policy_adoption": "HELD: unreviewed1522 merged; D17 council recovery prepared",
-        "pull_request": 1529,
-        "successor_card": {
-          "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/integration-backlog/work-card-successor-policy.md",
-          "sha256": "07ea1917ed584251a160c51bdc79618b62478e639e7464304c422962b6ab4464"
+        "next_action": "Reserve and submit exactly one inert C attempt, verify live worker, release origin and acquire successor while same worker lives.",
+        "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+        "preflight": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/preflight.json",
+        "source_sha": "c1063bf921057e498c7429c0a4302afc7aae0368",
+        "spec": {
+          "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/spec.json",
+          "sha256": "5c8fac3d350f3d8e9b1ba4f989c58945c996275b0e702cfb4b4d5f44116a0a44"
+        },
+        "work_card": {
+          "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/work-card.md",
+          "sha256": "1c522eb02cc7c3f8488c996aeece9410cb871a77c0b767b98cfa9e231c0675fd"
         }
       }
     }

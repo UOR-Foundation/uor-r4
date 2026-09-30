@@ -1,0 +1,25 @@
+{
+  "event": {
+    "epoch": 5,
+    "event_id": "pilot-c-checkpoint-origin-f90cfd2a-21ef-40fd-b520-5674c45e3411",
+    "issue": 1520,
+    "op": "checkpoint",
+    "packet": {
+      "next_action": "Reserve and submit exactly one inert C attempt, verify live worker, release origin and acquire successor while same worker lives.",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "preflight": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/preflight.json",
+      "source_sha": "c1063bf921057e498c7429c0a4302afc7aae0368",
+      "spec": {
+        "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/spec.json",
+        "sha256": "5c8fac3d350f3d8e9b1ba4f989c58945c996275b0e702cfb4b4d5f44116a0a44"
+      },
+      "work_card": {
+        "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/work-card.md",
+        "sha256": "1c522eb02cc7c3f8488c996aeece9410cb871a77c0b767b98cfa9e231c0675fd"
+      }
+    },
+    "session": "codex-review1-pilot-c-origin-20260930"
+  },
+  "observed_server_time": 1790739371,
+  "previous_head": "6cb3b8bff69a63abaaaffbea5a5bc2b1baad06ee"
+}
