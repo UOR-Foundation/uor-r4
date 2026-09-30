@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 94,
-  "observed_server_time": 1790748194,
+  "sequence": 95,
+  "observed_server_time": 1790748624,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -107,8 +107,8 @@
         "docs/evidence/g2-key-probe-2026-09-29.json",
         "docs/integration/council-verdict-2026-09-29.md"
       ],
-      "expires": 1790749264,
-      "phase": "claimed",
+      "expires": 1790748624,
+      "phase": "released",
       "checkpoint": null
     },
     "1520": {
