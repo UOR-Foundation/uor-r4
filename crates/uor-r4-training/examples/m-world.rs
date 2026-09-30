@@ -566,7 +566,11 @@ fn messages_through(turns: &[Turn2], upto: usize) -> Vec<Message<'_>> {
 /// The user turns of a decoded literal-role document ("User: ..." lines, with
 /// "Assistant: " and "System: " turns between them): a line that begins (after
 /// optional spaces) with a role marker opens a turn of that role, and any other
-/// line continues the turn before it.
+/// line continues the turn before it. The text does not say where a turn ends,
+/// so a line inside a user turn that itself begins with `Assistant:` or
+/// `System:` ends that turn early (an n-gram after it is not seen), and one
+/// inside another turn that begins with `User:` counts as a user turn (the
+/// safe side: the document is dropped).
 fn user_turns_of(text: &str) -> Vec<String> {
     let mut turns: Vec<(bool, String)> = Vec::new();
     for line in text.split('\n') {
@@ -673,7 +677,11 @@ fn screen_chat(
 /// without its specials, its user turns read off, and it is dropped whole when
 /// the rule fires. The counts of a source that lost a document (`tokens`,
 /// `response_tokens`, `rows_used`) are reduced by exactly what it lost; with no
-/// hit the tokens, mask and sources come back exactly as they went in.
+/// hit the tokens, mask and sources come back exactly as they went in. A source
+/// that would lose every document is refused (the split loader takes no empty
+/// source), before anything is written. The rule is n-gram based: a probe user
+/// turn of fewer than [`EXCLUSION_NGRAM`] words has no window, so it is not
+/// screened.
 fn screen_documents(
     tokens: &[u16],
     mask: &[u8],
@@ -765,6 +773,12 @@ fn screen_documents(
         }));
         if dropped == 0 {
             continue;
+        }
+        if dropped == seen {
+            return Err(invalid(format!(
+                "the probe screen would drop every document of chat source {}",
+                file["label"].as_str().unwrap_or("?")
+            )));
         }
         let object = file
             .as_object_mut()
@@ -2605,6 +2619,9 @@ mod tests {
         assert_eq!(clean.tokens, tokens);
         assert_eq!(clean.mask, mask);
         assert_eq!(clean.files, files);
+        // A source the screen would empty is refused before anything is written.
+        let emptied = vec![source("a", 0..1), source("b", 1..2), source("c", 2..4)];
+        assert!(screen_documents(&tokens, &mask, emptied, (1, 2, 0), &decode, &grams).is_err());
         // Sources that do not cover the store, and a store that does not begin
         // with a document, are refused.
         let mut short = files.clone();
