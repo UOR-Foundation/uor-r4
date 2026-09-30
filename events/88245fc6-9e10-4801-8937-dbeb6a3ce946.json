@@ -1,0 +1,21 @@
+{
+  "event": {
+    "base_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+    "dependencies": [],
+    "event_id": "88245fc6-9e10-4801-8937-dbeb6a3ce946",
+    "issue": 1520,
+    "op": "claim",
+    "paths": [
+      "tools/lab-runner",
+      "docs/labs",
+      ".github/workflows/lab-delivery.yml",
+      "AGENTS.md"
+    ],
+    "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+    "recovery_receipt": "Retained root checkpoint from coordination sequence 11 in /Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-b-successor-coord-before-claim.json; independently verified same live PID/PGID 32418 and nonce at /Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-b-successor-live-process.json; no new execution; preserve attempt continuity-pilot-20260930-b.",
+    "session": "codex-storage-pilot-successor",
+    "work_card": "sha256:a527af51dfe737971a18333a49c12f05875c95976294f525e6599e085c569083"
+  },
+  "observed_server_time": 1790736340,
+  "previous_head": "1496e514c35cf9f2f21176da99b52dfaa0b39990"
+}
