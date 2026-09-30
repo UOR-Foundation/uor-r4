@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": false,
+    "event_id": "pilot-c-origin-unavailable-33f745c3-309e-4c2f-ab48-4b1bac01e8fb",
+    "op": "heartbeat",
+    "session": "codex-review1-pilot-c-origin-20260930"
+  },
+  "observed_server_time": 1790739482,
+  "previous_head": "823b571e57b1a911142cf00ebab87f7aefb1038c"
+}
