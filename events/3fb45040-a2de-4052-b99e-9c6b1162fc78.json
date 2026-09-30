@@ -1,0 +1,25 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "3fb45040-a2de-4052-b99e-9c6b1162fc78",
+    "issue": 1536,
+    "op": "checkpoint",
+    "packet": {
+      "admission_enabled": true,
+      "branch": "codex/runner-small-validation",
+      "checkpoint_sha": "04981eb211a39cab23958996556dabf232b22a4c",
+      "checks": "84tests+buildPASS; actualinstalledCLIlaunchdverifyexit0; 3volumeUUIDs/sentinels/floorsverified",
+      "deployed_binary": "/Users/casey.allard/.local/share/uor-r4/bin/lab-runner-04981eb2-debug",
+      "evidence": "codex/lab-state:deployment/pr1543/",
+      "installed_pid": 41632,
+      "limitation": "Intermittent process-observation failclosed limitation retained fromattempt6, no productionoverlapclaim.",
+      "max_jobs": 8,
+      "merge_sha": "c2de9525d886a5d4e181d3219881668a0d857aab",
+      "next_action": "OwnerunblockingchildDELIVERED+DEPLOYED. SmallchecksrunDIRECTLY no runner/reservation. Kimiownscoordination. NextCodexwork existingTrackB/sourceconsumerintegration andfocusedchecks, no infrastructureexpansion. Broader1536acceptance notclosedbythischild.",
+      "pr": 1543
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790778442,
+  "previous_head": "c2aed067f19b44bfc7912a55a19e8c926ed4dadf"
+}

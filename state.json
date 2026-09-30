@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 205,
-  "observed_server_time": 1790778362,
+  "sequence": 206,
+  "observed_server_time": 1790778442,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -230,14 +230,18 @@
       "expires": 1790778757,
       "phase": "claimed",
       "checkpoint": {
+        "admission_enabled": true,
         "branch": "codex/runner-small-validation",
         "checkpoint_sha": "04981eb211a39cab23958996556dabf232b22a4c",
-        "checks": "84tests+buildPASS attempt7, attempt6 intermittent process identity failure retained",
-        "next_action": "Protected delivery envelope published; finishqueue then idleinstallversionedbinary max_jobs8 resourcebounds and restoreadmission. Directsmallchecks ALREADYauthorizedoutside runner; do notholdlabs onthisrepair. G1agstopped14:16:47; inspectnewg2reservationwithoutcancel. Preserveallreceipts.",
-        "pr": 1543,
-        "production": "Old8e90aa33-release admissionsdisabled drain; runningempty at14:21; successor notyetinstalled",
-        "reviews": "Two independent finalAPPROVE v7",
-        "root_running_attempts": []
+        "checks": "84tests+buildPASS; actualinstalledCLIlaunchdverifyexit0; 3volumeUUIDs/sentinels/floorsverified",
+        "deployed_binary": "/Users/casey.allard/.local/share/uor-r4/bin/lab-runner-04981eb2-debug",
+        "evidence": "codex/lab-state:deployment/pr1543/",
+        "installed_pid": 41632,
+        "limitation": "Intermittent process-observation failclosed limitation retained fromattempt6, no productionoverlapclaim.",
+        "max_jobs": 8,
+        "merge_sha": "c2de9525d886a5d4e181d3219881668a0d857aab",
+        "next_action": "OwnerunblockingchildDELIVERED+DEPLOYED. SmallchecksrunDIRECTLY no runner/reservation. Kimiownscoordination. NextCodexwork existingTrackB/sourceconsumerintegration andfocusedchecks, no infrastructureexpansion. Broader1536acceptance notclosedbythischild.",
+        "pr": 1543
       }
     },
     "1541": {
