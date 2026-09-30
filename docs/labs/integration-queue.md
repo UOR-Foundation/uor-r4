@@ -50,7 +50,7 @@ PR head needs a fresh head-bound review/delivery receipt.
 | #1526, `99f6c039` | Antigravity / Codex | Fix current test API mismatches; restrict unsupported Metal dispatch or implement CPU Lorentz/null/age/RoPE semantics. Check views/offsets and actual small forward/backward behavior before model work. Earlier ten-test output does not cover the current eleven-test file. [Required review](https://github.com/UOR-Foundation/uor-r4/pull/1526#issuecomment-5903195122). |
 | #1528, `128df8a7` | Antigravity / OpenCode | Align the integer bridge with B0, fix private-field test access, cutoff ties, division and allocation claims. Separate or validate the unrelated blocked GEMV change. Source-only until focused checks and applicable instruction audit run. [Required review](https://github.com/UOR-Foundation/uor-r4/pull/1528#issuecomment-5903195571). |
 | #1518, `1b88c563` | Codex / OpenCode | Recover the existing parity path using the proven fresh proc-macro build route; keep the fixed reference gate and shared selector contract. Actual model execution waits for resource admission. No new conversion branch. |
-| #1522, merged `b3c32170` | Claude / two non-author council readers | Reconcile missing exact-head review, council activation and policy-migration receipts reported by its author. Review exact text and recorded owner authority before relying on changes. Do not retroactively describe the merge as a completed pre-merge gate. |
+| #1522, merged `b3c32170` | Claude / two non-author council readers | Apply D17’s direct transformer-free owner clarification and prospective parity/coordination correction through #1529, then adopt the reviewed policy. Preserve the missing-gate incident; do not retroactively call it a completed pre-merge gate. |
 
 These are partial tasks under #1508/#1509/#1510 and the lab boards, not permission
 to close their entire epics. The exporter fixes overlap and must share one
@@ -112,6 +112,9 @@ restore checks, and coordinated hold/checkpoint/flush/detach/eject sequence befo
 disconnect. Other labs consult its receipt instead of duplicating maintenance.
 The [operations contract](operations.md) retains all three filesystem floors,
 memory limits, checkpoint headroom and actual-before/after physical accounting.
+
+D17 documents the one-use, independently reviewed policy-migration repair for
+#1529; it does not waive GitHub protection or admit model work.
 
 Server-required delivery enforcement and automatic client adapters remain
 separate acceptance items. The coordinator checks receipts, but GitHub protection
