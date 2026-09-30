@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 359,
-  "observed_server_time": 1790798894,
+  "sequence": 360,
+  "observed_server_time": 1790798898,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -252,10 +252,10 @@
     },
     "1541": {
       "session": "claude-lab-20260930",
-      "epoch": 7,
+      "epoch": 8,
       "work_card": "sha256:005a20d94354b3d7d1cb2517a25648a814f515b75e87be2f080d6f4db256a393",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-      "base_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+      "base_sha": "3b7c2d54141336e5c2f46b9391bbef1f0014c182",
       "paths": [
         "crates/uor-r4-training/examples/m-world.rs",
         "crates/uor-r4-training/src/milestone_world_v2.rs",
@@ -267,7 +267,7 @@
         "crates/uor-r4-training/tests/d4_map_codec_adapter.rs",
         "crates/uor-r4-training/src/stack_dialogue.rs"
       ],
-      "expires": 1790795833,
+      "expires": 1790800098,
       "phase": "claimed",
       "checkpoint": null
     },
