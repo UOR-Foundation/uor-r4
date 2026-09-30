@@ -113,7 +113,7 @@
 //! weight map over `calibration_windows` evenly spaced windows of that token
 //! file, which should be training data. A model whose `config.json` records a
 //! served representation (a `qat=true` run's) exports only as that
-//! representation: by rounding to nearest, with the record in `export.json`
+//! representation using its restored codec, with the record in `export.json`
 //! and the artifact's source; `calibration=` is refused. `lut-evaluate` runs
 //! either engine position by position over the evenly spaced windows of
 //! `train`'s evaluation (`windows=512` is the final evaluation's 131,072

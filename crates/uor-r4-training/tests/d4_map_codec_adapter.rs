@@ -1287,6 +1287,10 @@ fn test_saved_model_export_restores_codec_not_rtn() -> Result<()> {
     let saved_rec =
         StackModel::saved_served_representation(&save_dir)?.expect("saved representation");
     check_export_representation(Some(&saved_rec), false)?;
+    assert!(
+        check_export_representation(Some(&saved_rec), true).is_err(),
+        "calibrated export must be refused for QAT saved model"
+    );
     let restored_codec = codec_by_name(&saved_rec.codec)?;
     reloaded.set_served_representation(Some(restored_codec))?;
     assert_eq!(reloaded.served_codec().unwrap().name(), codec.name());
