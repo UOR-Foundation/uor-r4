@@ -1,0 +1,35 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "5dd9ae6c-ea59-4466-847f-04bca3b03bc5",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "block11_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/block11-replay-356a9a24-20260930",
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "charges": "Tests/build58.69+50.29s, model5.51s, estimated360s preparation+120s reviews/delivery. Cumulative848785916ms /1130000000ms. No own job active.",
+      "checkpoint_sha": "f138f51731cba6ba39549173668e32730c9617c8",
+      "checks": "Candidate d87485a8:4focused model tests PASS;8token CPU/Metal window FAIL. CPU failures174745->189401 including2newfailingpositions, max .00701332->.00824356. Metal393216outputs byte-identical. Prior model.rs restored bitwise in f1cb000f; review approved negative/restoration. Current executable remains rejected candidate until rebuilt.",
+      "cleanup": "Inactive recovery deps/build/fingerprint caches removed after locks and open-handle checks; df +606864KiB. Source, sibling executables, models, reports and warm active cache preserved.",
+      "down_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/down-replay-93085dd5-20260930",
+      "live_attempts": [],
+      "main_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+      "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
+      "mlp_roots": [
+        "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-3c6007ec-20260930",
+        "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-0db94dbf-20260930"
+      ],
+      "next_action": "End local arithmetic trial; request Kimi/council numerical comparator/implementation decision without changing oldgate. Continue existing source integration: refresh main and PR1518 divergence/consumer interfaces; review meaningful PR1548 successor to a2311a7 missingselect/pointer fixture finding, no broad reruns or B2 fit.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "rms_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/rms-window-d87485a8-20260930",
+      "status": "ACTIVE",
+      "trace_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/layer-trace-34371f15-20260930",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790788911,
+  "previous_head": "786a00459af7016792d64c590078c2ee10911d6f"
+}
