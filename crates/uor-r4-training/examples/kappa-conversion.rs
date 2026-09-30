@@ -40,7 +40,9 @@
 //! `probe flock=K` runs the dense baseline plus exactly one training-free flock
 //! arm on the same windows: sink (position 0) + the 64 nearest causal positions
 //! + the exact top-`K` of the rest by Lorentz rank, weighting the support either
-//! by the checkpoint's own softmax (`weights=softmax`) or by the fixed normalized
+//! by the checkpoint's scaled-dot softmax (`weights=softmax`; the learned
+//! per-head `log_beta` is not applied, so this matches the checkpoint's own
+//! softmax only at `log_beta == 0`) or by the fixed normalized
 //! rank table `w_i = 1/(i+1)` (`weights=rank`, no exponentials). Ranking lifts
 //! each head's post-RoPE q/k as `x_L = (sqrt(1+|x|^2), x)` and orders by
 //! `-q0 k0 + q . k` (monotone; no `arcosh`). No weights change. With
@@ -500,7 +502,7 @@ fn probe_flock(settings: &ProbeSettings, k: usize, out: &Path) -> Result<()> {
             "k": k,
             "window": spec.window,
             "weights": settings.flock_weights,
-            "weight_rule": "arm R: w_i = 1/(i+1) normalized over the selected support, i the Lorentz-rank position; arm S: the checkpoint softmax over the same support",
+            "weight_rule": "arm R: w_i = 1/(i+1) normalized over the selected support, i the Lorentz-rank position; arm S: the checkpoint's scaled-dot softmax over the same support, without the learned per-head log_beta (matches the model's own softmax only at log_beta == 0)",
             "weight_table": table,
             "weight_table_sha256": table_sha256,
             "weight_table_scope": "nominal maximum support (1 + window + k); per-row support is shorter at short prefixes and at top-k-short rows",

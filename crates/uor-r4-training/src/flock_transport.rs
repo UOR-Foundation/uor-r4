@@ -521,6 +521,10 @@ mod tests {
             .parse()
             .expect("UOR_B0_HELD_OUT is a token count");
         let time = env_usize("UOR_B0_TIME", 512);
+        assert!(
+            time <= 2048,
+            "the pinned G1a draw uses 2048-token windows; keep UOR_B0_TIME <= 2048"
+        );
         let windows = env_usize("UOR_B0_WINDOWS", 4);
         let seed = env_usize("UOR_B0_SEED", 9001) as u64;
         let ks: Vec<usize> = env_csv("UOR_B0_K", "7,64")
@@ -721,7 +725,7 @@ mod tests {
             },
             "arms": arm_summary,
             "windows": window_reports,
-            "status": "executed",
+            "status": "this-run",
         });
         match &root {
             Some(root) => {

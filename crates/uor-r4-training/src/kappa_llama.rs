@@ -133,7 +133,9 @@ pub fn flock_probabilities(
     let k0_t = k0.transpose(2, 3)?.contiguous()?;
     // -q0 k0 + q . k
     let lorentz = dot.sub(&q0.matmul(&k0_t)?)?;
-    // Arm S scores: the checkpoint's own scaled dot product.
+    // Arm S scores: the checkpoint's scaled dot product. The learned per-head
+    // log_beta (applied on the dense path below) is deliberately not applied
+    // here, so this equals the checkpoint's own softmax only when log_beta == 0.
     let scaled = dot.affine(1.0 / (head_dim as f64).sqrt(), 0.0)?;
     let cpu = Device::Cpu;
     let lorentz = lorentz.to_device(&cpu)?.flatten_all()?.to_vec1::<f32>()?;

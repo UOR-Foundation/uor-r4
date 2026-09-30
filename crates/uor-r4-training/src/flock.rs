@@ -6,7 +6,8 @@
 //!
 //! - the B0 training-free probe over a checkpoint's own scores (the candle
 //!   adapter in [`crate::kappa_llama`]);
-//! - Claude/Lab 1's A1 retrieval read/support semantics;
+//! - Claude/Lab 1's A1 retrieval read/support semantics: the general
+//!   [`flock_select`] rule and the sinkless pointer path [`top_k_select`];
 //! - the Codex B2 harmonic + flock hybrid, which needs the deduplicated causal
 //!   support in descending Lorentz rank with explicit **unnormalized** weights;
 //! - the model-source `score_and_normalize` seam and the later D11 port.
@@ -25,8 +26,10 @@
 //! - **Deterministic order.** Selection entries are ordered by descending rank
 //!   score with ties broken to the **lowest position**. The same inputs always
 //!   produce the same selection.
-//! - **Arms stay distinct.** [`FlockWeights::Softmax`] is the checkpoint's own
-//!   softmax restricted to the kept set (arm S). [`FlockWeights::Rank`] is the
+//! - **Arms stay distinct.** [`FlockWeights::Softmax`] is the checkpoint's
+//!   scaled-dot softmax restricted to the kept set (arm S); it does **not**
+//!   apply the per-head learned inverse temperature `log_beta`, so it equals the
+//!   model's own softmax only where `log_beta == 0`. [`FlockWeights::Rank`] is the
 //!   normalized rank table `w_i ∝ 1/(i + 1)` (arm R, no exponentials). The
 //!   **raw, unnormalized** scale `a_i = 1/(i + 1)` is exported separately by
 //!   [`raw_rank_weights`] / [`FlockSelection::raw_rank_weights`] for the B2
@@ -56,7 +59,10 @@ pub const FLOCK_SELECTOR_VERSION: &str = "flock-selector-v1";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FlockWeights {
-    /// Arm S: the checkpoint's own softmax, restricted to the selected support.
+    /// Arm S: the checkpoint's scaled-dot softmax restricted to the selected
+    /// support. The per-head learned inverse temperature (`log_beta`) is not
+    /// applied, so this equals the model's own softmax only when
+    /// `log_beta == 0` (true for the training-free probe's fresh scalars).
     Softmax,
     /// Arm R: normalized fixed rank-indexed weights `w_i = 1 / (i + 1)`, where
     /// `i` is the rank position inside the selection. No exponentials.
@@ -152,9 +158,9 @@ pub struct FlockScan {
     /// Fewer than `k` rest candidates existed.
     pub top_k_short: bool,
     /// The k-th and (k+1)-th rest candidates have equal rank scores under
-    /// IEEE `==`, so the top-k boundary is a tie (resolved deterministically
-    /// by position; note `-0.0 == +0.0` counts as a tie while `total_cmp`
-    /// orders them apart).
+    /// IEEE `==`, so the top-k boundary is a tie. Ordering is resolved by
+    /// `total_cmp`; equal exact scores break to the lowest position, while
+    /// `-0.0` and `+0.0` compare equal under `==` but are ordered by sign.
     pub cutoff_ties: bool,
 }
 
@@ -310,7 +316,7 @@ pub fn flock_select(
     query: usize,
     select: FlockSelect,
 ) -> Result<FlockSelection> {
-    if rank_scores.len() != query + 1 {
+    if query.checked_add(1) != Some(rank_scores.len()) {
         return Err(invalid(format!(
             "flock row has {} scores for query {query}",
             rank_scores.len()
@@ -386,21 +392,25 @@ pub fn flock_select(
 
 /// Top-k only selection over `rank_scores[0..=query]`.
 ///
-/// Mirrors the integer `top_k_select_integer` entry point used for pointer
-/// retrieval: no sink and no window; entries are returned in descending rank
-/// order with lowest-position ties. The full row is sorted, so the cutoff-tie
-/// flag is computed against the true k-th candidate.
+/// Mirrors the integer top-k bridge used for pointer retrieval. Like that
+/// sibling it accepts a full row: only `rank_scores.len() <= query` is refused,
+/// and selection runs over the `0..=query` prefix. There is no sink and no
+/// window; entries are returned in descending rank order with lowest-position
+/// ties. The whole prefix is sorted, so the cutoff-tie flag is computed against
+/// the true k-th candidate. This float selector is a semantic — not
+/// algorithmic — mirror: it uses an exact full sort, while the integer path
+/// partially selects; `candidates_scanned` records the true scan either way.
 pub fn top_k_select(rank_scores: &[f32], query: usize, k: usize) -> Result<FlockSelection> {
-    if rank_scores.len() != query + 1 {
+    if rank_scores.len() <= query {
         return Err(invalid(format!(
-            "flock row has {} scores for query {query}",
+            "flock scores length {} is too short for query {query}",
             rank_scores.len()
         )));
     }
     if k == 0 {
         return Err(invalid("flock k must be positive"));
     }
-    if rank_scores.iter().any(|score| !score.is_finite()) {
+    if rank_scores[..=query].iter().any(|score| !score.is_finite()) {
         return Err(invalid("flock rank scores must be finite"));
     }
     let mut rest: Vec<usize> = (0..=query).collect();
@@ -840,5 +850,17 @@ mod tests {
         assert!(top_k_select(&scores, 3, 0).is_err());
         assert!(top_k_select(&scores[..2], 3, 1).is_err());
         assert!(top_k_select(&[f32::NAN, 1.0], 1, 1).is_err());
+
+        let full_row = [9.0f32, 1.0, 7.0, 2.0];
+        let relaxed = top_k_select(&full_row, 1, 1).expect("a full row is accepted");
+        assert_eq!(relaxed.positions().collect::<Vec<_>>(), vec![0]);
+        assert_eq!(
+            relaxed.scan.candidates_scanned, 2,
+            "only the 0..=query prefix is scanned"
+        );
+        assert!(
+            top_k_select(&[1.0, f32::NAN], 0, 1).is_ok(),
+            "non-finite scores outside the prefix are ignored"
+        );
     }
 }
