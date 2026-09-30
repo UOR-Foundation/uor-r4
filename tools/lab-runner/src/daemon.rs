@@ -1,499 +1,859 @@
-//! Foreground daemon loop. launchd owns restarts (KeepAlive); this loop
-//! polls the queue, admits jobs under the shared limits, enforces kill
-//! criteria, and finalizes finished jobs. It is crash-consistent: on startup
-//! a `running/<id>` whose pid is dead is finalized as `error`.
-
+//! Singleton host daemon. Launch is gated until durable process identity
+//! exists; restart never treats a bare PID or absent exit code as success.
+use crate::admission::{admit, Load};
+use crate::host::{self, HostPolicy};
+use crate::jobs::{self, Attempt, Finalization};
+use crate::process::{self, Identity};
+use crate::spec::{JobSpec, KillKind};
+use crate::{invalid, Result};
+use serde_json::json;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::admission::{admit, Load};
-use crate::jobs::{self, ensure_layout, Finalization};
-use crate::spec::{JobSpec, KillKind};
-use crate::{utc_now_iso, Result};
-
 pub struct DaemonConfig {
     pub root: PathBuf,
     pub ledger_dir: PathBuf,
-    /// Queue poll interval, about 1 s in production.
     pub poll_interval: Duration,
-    /// RSS/criterion sample interval, about 2 s in production.
     pub monitor_interval: Duration,
-    /// When this path exists the loop exits cleanly (test hook).
     pub stop_file: Option<PathBuf>,
+    /// Production always true. False is an explicit temporary test harness.
+    pub require_host_policy: bool,
 }
-
 struct RunningJob {
     spec: JobSpec,
     child: Option<Child>,
-    pid: u32,
+    identity: Identity,
+    attempt: Attempt,
     started: Instant,
-    started_utc: String,
+    elapsed_before_ms: u64,
     peak_rss_kib: u64,
     log_offsets: [u64; 2],
     log_carry: String,
 }
-
 impl RunningJob {
     fn elapsed_ms(&self) -> u64 {
-        self.started.elapsed().as_millis() as u64
+        self.elapsed_before_ms
+            .saturating_add(self.started.elapsed().as_millis() as u64)
     }
-
     fn dir(&self, root: &Path) -> PathBuf {
         jobs::running_dir(root).join(&self.spec.id)
     }
 }
 
-fn minimal_env() -> Vec<(String, String)> {
-    let mut env = Vec::new();
-    for key in ["PATH", "HOME", "TMPDIR", "USER", "LANG"] {
-        if let Some(value) = std::env::var_os(key) {
-            env.push((key.to_string(), value.to_string_lossy().into_owned()));
-        }
-    }
-    if !env.iter().any(|(key, _)| key == "PATH") {
-        env.push((
-            "PATH".to_string(),
-            "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin".to_string(),
-        ));
-    }
-    env
-}
-
-fn spawn_job(root: &Path, spec: &JobSpec) -> Result<RunningJob> {
+fn spawn_job(
+    root: &Path,
+    spec: &JobSpec,
+    test_mode: bool,
+    ledger_dir: &Path,
+) -> Result<RunningJob> {
+    let started = Instant::now();
     let dir = jobs::running_dir(root).join(&spec.id);
+    let attempt = jobs::prepare_reserved_attempt(
+        &dir,
+        &spec.id,
+        spec.coordination.as_ref().map(|c| c.attempt_id.as_str()),
+    )?;
+    if !test_mode {
+        if let Err(error) = spec.verify_provenance() {
+            crate::write_json_atomic(
+                &dir.join("preflight-failure.json"),
+                &json!({
+                    "attempt_id":attempt.attempt_id,"elapsed_ms":started.elapsed().as_millis(),
+                    "outcome":"never_started","reason":error.to_string(),"at":crate::utc_now_iso()
+                }),
+            )?;
+            return Err(error);
+        }
+        // Hashing may outlive a lease. Re-read live policy, GitHub ownership,
+        // attempt/root binding and resources after the expensive read, then
+        // consume the one-shot attempt immediately before any child is born.
+        let policy = HostPolicy::load(root)?;
+        host::check_admission(root, &policy, spec, &[])?;
+        crate::ledger::check_budget(ledger_dir, spec.reserved_ms()?)?;
+        if started.elapsed() >= Duration::from_secs(spec.wall_s) {
+            return Err(invalid("preflight exhausted the reserved job wall time"));
+        }
+        jobs::consume_attempt(ledger_dir, root, spec)?;
+    }
     let stdout = fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .open(dir.join("stdout.log"))?;
     let stderr = fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .open(dir.join("stderr.log"))?;
-    let mut command = Command::new(&spec.argv[0]);
-    command
-        .args(&spec.argv[1..])
-        .current_dir(&spec.cwd)
-        .env_clear()
-        .envs(minimal_env());
-    if let Some(extra) = &spec.env {
-        command.envs(extra);
+    let hold_fifo = dir.join("supervisor-hold.fifo");
+    let fifo = Command::new("/usr/bin/mkfifo").arg(&hold_fifo).status()?;
+    if !fifo.success() {
+        return Err(invalid("could not create supervisor hold FIFO"));
     }
-    let child = command
+    // Positional arguments avoid shell interpolation of job input. Before
+    // launch.go exists this wrapper cannot execute the requested workload.
+    let script="shift; gate=$1; result=$2; hold=$3; shift 3; n=0; while [ ! -f \"$gate\" ]; do n=$((n+1)); [ \"$n\" -lt 200 ] || exit 125; /bin/sleep 0.05; done; \"$@\" & child=$!; wait \"$child\"; status=$?; printf '%s\\n' \"$status\" > \"$result\"; exec 3<> \"$hold\"; IFS= read -r ack <&3; exit \"$status\"";
+    let mut argv = spec.argv.clone();
+    if test_mode {
+        argv[0] = match Path::new(&argv[0]).file_name().and_then(|s| s.to_str()) {
+            Some("sh") => "/bin/sh",
+            Some("sleep") => "/bin/sleep",
+            Some("true") => "/usr/bin/true",
+            Some("false") => "/usr/bin/false",
+            _ => return Err(invalid("non-fixture test executable")),
+        }
+        .to_string();
+    }
+    let mut command = Command::new("/bin/sh");
+    command
+        .args(["-c", script, process::SUPERVISOR_MARKER])
+        .arg(&attempt.process_token)
+        .arg(dir.join("launch.go"))
+        .arg(dir.join("payload.exit"))
+        .arg(&hold_fifo)
+        .args(&argv)
+        .current_dir(&spec.cwd)
+        .env_clear();
+    for key in ["PATH", "HOME", "TMPDIR", "USER", "LANG"] {
+        if let Some(value) = std::env::var_os(key) {
+            command.env(key, value);
+        }
+    }
+    if let Some(env) = &spec.env {
+        command.envs(env);
+    }
+    command.env("UOR_RUNNER_PROCESS_TOKEN", &attempt.process_token);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn()?;
-    let pid = child.id();
-    fs::write(dir.join("pid"), format!("{pid}\n"))?;
-    let started_utc = utc_now_iso();
-    fs::write(dir.join("started_utc"), format!("{started_utc}\n"))?;
-    let started_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-    fs::write(dir.join("started_ms"), format!("{started_ms}\n"))?;
+    let capture = process::capture(child.id(), &attempt.process_token);
+    let identity = match capture {
+        Ok(i) => i,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
+    let persist = (|| -> Result<()> {
+        crate::atomic_write(
+            &dir.join("process.json"),
+            &serde_json::to_vec_pretty(&identity)?,
+        )?;
+        crate::atomic_write(&dir.join("pid"), child.id().to_string().as_bytes())?;
+        crate::atomic_write(&dir.join("launch.go"), attempt.attempt_id.as_bytes())?;
+        Ok(())
+    })();
+    if let Err(error) = persist {
+        let _ = process::terminate(&identity, Duration::from_millis(spec.stop_grace_ms));
+        let _ = child.wait();
+        return Err(error);
+    }
     Ok(RunningJob {
         spec: spec.clone(),
         child: Some(child),
-        pid,
-        started: Instant::now(),
-        started_utc,
+        identity,
+        attempt,
+        started,
+        elapsed_before_ms: 0,
         peak_rss_kib: 0,
         log_offsets: [0, 0],
         log_carry: String::new(),
     })
 }
-
 fn finalize_job(
     root: &Path,
-    ledger_dir: &Path,
-    job: &mut RunningJob,
+    ledger: &Path,
+    job: &RunningJob,
     outcome: &str,
-    exit_status: Option<i64>,
+    code: Option<i64>,
     reason: String,
 ) -> Result<()> {
     jobs::finalize(
         root,
         &job.spec,
         &Finalization {
-            outcome: outcome.to_string(),
-            exit_status,
+            outcome: outcome.into(),
+            exit_status: code,
             reason,
             peak_rss_kib: job.peak_rss_kib,
-            started_utc: job.started_utc.clone(),
+            started_utc: job.attempt.started_utc.clone(),
             elapsed_ms: job.elapsed_ms(),
         },
-        ledger_dir,
+        ledger,
     )
 }
-
-fn exit_status_code(status: &std::process::ExitStatus) -> i64 {
-    match status.code() {
-        Some(code) => code as i64,
-        None => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                -(status.signal().unwrap_or(0) as i64)
-            }
-            #[cfg(not(unix))]
-            {
-                -1
-            }
-        }
+fn code(status: std::process::ExitStatus) -> i64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        status
+            .code()
+            .map(i64::from)
+            .unwrap_or_else(|| -i64::from(status.signal().unwrap_or(0)))
+    }
+    #[cfg(not(unix))]
+    {
+        status.code().map(i64::from).unwrap_or(-1)
     }
 }
-
-/// Kill the process tree, reap, and finalize.
-fn enforce_kill(
+fn stop_job(
     root: &Path,
-    ledger_dir: &Path,
+    ledger: &Path,
     job: &mut RunningJob,
     outcome: &str,
     reason: String,
 ) -> Result<()> {
-    jobs::kill_tree(job.pid, Duration::from_secs(1));
-    let exit_status = match job.child.as_mut() {
-        Some(child) => child.wait().ok().map(|s| exit_status_code(&s)),
-        None => None,
-    };
-    finalize_job(root, ledger_dir, job, outcome, exit_status, reason)
-}
-
-/// Startup recovery: any `running/<id>` with a dead pid is finalized as
-/// `error`; a live pid is adopted and monitored to completion.
-fn recover_or_adopt(root: &Path, ledger_dir: &Path) -> Result<Vec<RunningJob>> {
-    let mut running = Vec::new();
-    let dir = jobs::running_dir(root);
-    if !dir.is_dir() {
-        return Ok(running);
+    if process::matches(&job.identity) {
+        jobs::record_stop_request(&job.dir(root), job.spec.stop_grace_ms, &reason)?;
+        process::terminate(&job.identity, Duration::from_millis(job.spec.stop_grace_ms))?;
+    } else if jobs::pid_alive(job.identity.pid) {
+        host::hold(
+            root,
+            "process identity mismatch during stop; manual reconciliation required",
+        )?;
+        return finalize_job(
+            root,
+            ledger,
+            job,
+            "unknown",
+            None,
+            "identity mismatch; no signal sent".into(),
+        );
     }
-    for entry in fs::read_dir(&dir)? {
+    let status = job
+        .child
+        .as_mut()
+        .and_then(|c| c.try_wait().ok().flatten())
+        .map(code);
+    finalize_job(root, ledger, job, outcome, status, reason)
+}
+fn recovery_required(root: &Path, dir: &Path, reason: &str) -> Result<()> {
+    crate::write_json_atomic(
+        &dir.join("recovery-required.json"),
+        &json!({"schema":"uor-r4.job-recovery/1","outcome":"unknown","reason":reason,"at":crate::utc_now_iso()}),
+    )?;
+    host::hold(root, reason)
+}
+fn recover(root: &Path, ledger: &Path, production: bool) -> Result<Vec<RunningJob>> {
+    let mut running = vec![];
+    for entry in fs::read_dir(jobs::running_dir(root))? {
         let entry = entry?;
         if !entry.file_type()?.is_dir() {
             continue;
         }
-        let job_dir = entry.path();
-        let Some(spec) = fs::read(job_dir.join("spec.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<JobSpec>(&bytes).ok())
-        else {
+        let dir = entry.path();
+        if dir.join("exit.json").is_file() {
+            jobs::replay_finalization(root, &dir, ledger)?;
             continue;
+        }
+        let spec = match jobs::read_spec(&dir) {
+            Ok(s) => s,
+            Err(_) => {
+                recovery_required(root, &dir, "unreadable running spec")?;
+                continue;
+            }
         };
-        let pid: Option<u32> = fs::read_to_string(job_dir.join("pid"))
-            .ok()
-            .and_then(|text| text.trim().parse().ok());
-        let started_utc = fs::read_to_string(job_dir.join("started_utc"))
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|_| utc_now_iso());
-        let started_ms: Option<u64> = fs::read_to_string(job_dir.join("started_ms"))
-            .ok()
-            .and_then(|s| s.trim().parse().ok());
-        let elapsed_so_far = started_ms
-            .map(|start| {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
-                now.saturating_sub(start)
-            })
-            .unwrap_or(0);
-        match pid {
-            Some(pid) if jobs::pid_alive(pid) => {
-                running.push(RunningJob {
-                    spec,
-                    child: None,
-                    pid,
-                    started: Instant::now()
-                        - Duration::from_millis(elapsed_so_far.min(u32::MAX as u64)),
-                    started_utc,
-                    peak_rss_kib: 0,
-                    log_offsets: [0, 0],
-                    log_carry: String::new(),
-                });
-            }
-            _ => {
-                let mut job = RunningJob {
-                    spec,
-                    child: None,
-                    pid: pid.unwrap_or(0),
-                    started: Instant::now()
-                        - Duration::from_millis(elapsed_so_far.min(u32::MAX as u64)),
-                    started_utc,
-                    peak_rss_kib: 0,
-                    log_offsets: [0, 0],
-                    log_carry: String::new(),
-                };
-                finalize_job(
+        let attempt = match jobs::read_attempt(&dir) {
+            Ok(a) => a,
+            Err(_) => {
+                recovery_required(
                     root,
-                    ledger_dir,
-                    &mut job,
-                    "error",
-                    None,
-                    "daemon restart found the job's pid dead".to_string(),
+                    &dir,
+                    "legacy running job lacks launch receipt; no automatic retry or signal",
                 )?;
+                continue;
             }
+        };
+        let identity = match jobs::read_identity(&dir) {
+            Ok(i) => i,
+            Err(_) => {
+                recovery_required(root,&dir,"launch receipt has no durable process identity; gated process expires without executing")?;
+                continue;
+            }
+        };
+        let elapsed = jobs::now_ms().saturating_sub(attempt.started_ms);
+        let mut job = RunningJob {
+            spec,
+            child: None,
+            identity,
+            attempt,
+            started: Instant::now(),
+            elapsed_before_ms: elapsed,
+            peak_rss_kib: 0,
+            log_offsets: [0, 0],
+            log_carry: String::new(),
+        };
+        if !process::matches(&job.identity) {
+            if process::owned_members(&job.identity).is_ok_and(|members| !members.is_empty()) {
+                jobs::record_stop_request(&job.dir(root), job.spec.stop_grace_ms, "recovery stop")?;
+                process::terminate(&job.identity, Duration::from_millis(job.spec.stop_grace_ms))?;
+            }
+            host::hold(
+                root,
+                "recovered job lost process identity; review unknown outcome",
+            )?;
+            finalize_job(
+                root,
+                ledger,
+                &job,
+                "unknown",
+                None,
+                "process absent or identity changed; no exit status available".into(),
+            )?;
+        } else if production {
+            host::hold(root, "supervisor restart requires checkpoint/process reconciliation; no wall-clock adoption")?;
+            stop_job(
+                root,
+                ledger,
+                &mut job,
+                "interrupted",
+                "supervisor restarted; verified process stopped without resetting wall budget"
+                    .into(),
+            )?;
+        } else if host::validate_test_job(root, &job.spec).is_err() {
+            host::hold(
+                root,
+                "non-fixture running job cannot be adopted in test mode",
+            )?;
+            stop_job(
+                root,
+                ledger,
+                &mut job,
+                "interrupted",
+                "test mode refuses non-fixture recovery".into(),
+            )?;
+        } else if !dir.join("launch.go").is_file() {
+            stop_job(
+                root,
+                ledger,
+                &mut job,
+                "interrupted",
+                "launch gate was never released".into(),
+            )?;
+        } else {
+            running.push(job);
         }
     }
     Ok(running)
 }
-
-fn scan_new_log_bytes(job: &mut RunningJob, root: &Path) -> String {
-    let dir = job.dir(root);
+fn new_log_bytes(job: &mut RunningJob, root: &Path) -> String {
     let mut fresh = std::mem::take(&mut job.log_carry);
     for (index, name) in ["stdout.log", "stderr.log"].iter().enumerate() {
-        let path = dir.join(name);
-        let Ok(mut file) = fs::File::open(&path) else {
+        let Ok(mut file) = fs::File::open(job.dir(root).join(name)) else {
             continue;
         };
-        let len = file.metadata().map(|m| m.len()).unwrap_or(0);
-        if len < job.log_offsets[index] {
+        let Ok(meta) = file.metadata() else {
+            continue;
+        };
+        if meta.len() < job.log_offsets[index] {
             job.log_offsets[index] = 0;
         }
         if file.seek(SeekFrom::Start(job.log_offsets[index])).is_err() {
             continue;
         }
-        let mut buf = String::new();
-        if file.read_to_string(&mut buf).is_err() {
+        let mut bytes = Vec::new();
+        if file.take(65536).read_to_end(&mut bytes).is_err() {
             continue;
         }
-        job.log_offsets[index] = len;
-        fresh.push_str(&buf);
+        job.log_offsets[index] = job.log_offsets[index].saturating_add(bytes.len() as u64);
+        fresh.push_str(&String::from_utf8_lossy(&bytes));
     }
     fresh
 }
-
-fn monitor_job(
+fn monitor(
     root: &Path,
-    ledger_dir: &Path,
+    ledger: &Path,
     job: &mut RunningJob,
-    sample_resources: bool,
+    sample: bool,
+    host_failure: Option<&str>,
 ) -> Result<bool> {
-    // Returns Ok(true) while the job is still running.
     if !job.dir(root).is_dir() {
-        // Finalized externally (e.g. `lab-runner cancel`).
-        return Ok(false);
-    }
-    let cancel_marker = job.dir(root).join("cancel.json");
-    if cancel_marker.is_file() {
-        let reason = fs::read_to_string(&cancel_marker)
-            .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-            .and_then(|v| v.get("reason").and_then(|r| r.as_str().map(String::from)))
-            .unwrap_or_else(|| "cancelled (marker present)".to_string());
-        enforce_kill(root, ledger_dir, job, "cancelled", reason)?;
-        return Ok(false);
-    }
-    if let Some(child) = job.child.as_mut() {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let code = exit_status_code(&status);
-                finalize_job(
-                    root,
-                    ledger_dir,
-                    job,
-                    "completed",
-                    Some(code),
-                    format!("process exited with status {code}"),
-                )?;
-                return Ok(false);
+        // A CLI finalizer can move the directory while the daemon still owns
+        // the Child handle; reap it before forgetting the job.
+        if let Some(child) = job.child.as_mut() {
+            if child.try_wait()?.is_none() {
+                return Ok(true);
             }
-            Ok(None) => {}
-            Err(error) => {
+        }
+        return Ok(false);
+    }
+    if job.dir(root).join("exit.json").is_file() {
+        jobs::replay_finalization(root, &job.dir(root), ledger)?;
+        return Ok(false);
+    }
+    if job.dir(root).join("cancel.json").is_file() {
+        stop_job(
+            root,
+            ledger,
+            job,
+            "cancelled",
+            "cancel marker received".into(),
+        )?;
+        return Ok(false);
+    }
+    if let Ok(bytes) = fs::read(job.dir(root).join("payload.exit")) {
+        // A complete short line is the shell wait result. The supervisor
+        // remains blocked on its private FIFO, anchoring all descendants.
+        if bytes.len() <= 5 && bytes.last() == Some(&b'\n') {
+            if let Ok(status) = String::from_utf8_lossy(&bytes).trim().parse::<u8>() {
+                let members = process::owned_members(&job.identity)?;
+                let background = members.iter().any(|member| member.pid != job.identity.pid);
+                if background {
+                    jobs::record_stop_request(
+                        &job.dir(root),
+                        job.spec.stop_grace_ms,
+                        "background descendant stop",
+                    )?;
+                }
+                process::terminate(&job.identity, Duration::from_millis(job.spec.stop_grace_ms))?;
+                if let Some(child) = job.child.as_mut() {
+                    let _ = child.try_wait()?;
+                }
                 finalize_job(
                     root,
-                    ledger_dir,
+                    ledger,
                     job,
-                    "error",
-                    None,
-                    format!("could not poll child process: {error}"),
+                    if status == 0 && !background {
+                        "completed"
+                    } else {
+                        "failed"
+                    },
+                    Some(i64::from(status)),
+                    if background {
+                        "payload exited with background descendants; verified descendants stopped"
+                            .into()
+                    } else {
+                        format!("payload exited with status {status}; supervisor stopped")
+                    },
                 )?;
                 return Ok(false);
             }
         }
-    } else if !jobs::pid_alive(job.pid) {
+    }
+    if let Some(child) = job.child.as_mut() {
+        if let Some(status) = child.try_wait()? {
+            let status = code(status);
+            if !process::owned_members(&job.identity)?.is_empty() {
+                jobs::record_stop_request(
+                    &job.dir(root),
+                    job.spec.stop_grace_ms,
+                    "background descendant stop",
+                )?;
+                process::terminate(&job.identity, Duration::from_millis(job.spec.stop_grace_ms))?;
+                finalize_job(
+                    root,
+                    ledger,
+                    job,
+                    "failed",
+                    Some(status),
+                    "job parent exited with live background children; children terminated".into(),
+                )?;
+                return Ok(false);
+            }
+            finalize_job(
+                root,
+                ledger,
+                job,
+                if status == 0 { "completed" } else { "failed" },
+                Some(status),
+                format!("process exited with status {status}"),
+            )?;
+            return Ok(false);
+        }
+    } else if !process::matches(&job.identity) {
+        if process::owned_members(&job.identity).is_ok_and(|members| !members.is_empty()) {
+            jobs::record_stop_request(
+                &job.dir(root),
+                job.spec.stop_grace_ms,
+                "adopted process identity lost",
+            )?;
+            process::terminate(&job.identity, Duration::from_millis(job.spec.stop_grace_ms))?;
+        }
+        host::hold(
+            root,
+            "adopted process ended without recoverable exit status",
+        )?;
         finalize_job(
             root,
-            ledger_dir,
+            ledger,
             job,
-            "completed",
+            "unknown",
             None,
-            "adopted process exited (exit status unavailable after restart)".to_string(),
+            "adopted process ended or identity changed; success unverified".into(),
         )?;
         return Ok(false);
     }
-
-    if job.elapsed_ms() >= job.spec.wall_s * 1000 {
-        enforce_kill(
+    if job.elapsed_ms() >= job.spec.wall_s.saturating_mul(1000) {
+        stop_job(
             root,
-            ledger_dir,
+            ledger,
             job,
             "wall_killed",
-            format!("wall clock limit of {} s reached", job.spec.wall_s),
+            "wall bound reached".into(),
         )?;
         return Ok(false);
     }
-
-    if !sample_resources {
+    if !sample {
         return Ok(true);
     }
-
-    if let Some(rss) = jobs::tree_rss_kib(job.pid) {
-        job.peak_rss_kib = job.peak_rss_kib.max(rss);
+    if let Some(reason) = host_failure {
+        stop_job(root, ledger, job, "resource_killed", reason.into())?;
+        return Ok(false);
     }
-
+    if !process::matches(&job.identity) {
+        host::hold(root, "running process lost identity")?;
+        finalize_job(
+            root,
+            ledger,
+            job,
+            "unknown",
+            None,
+            "identity lost; no signal sent".into(),
+        )?;
+        return Ok(false);
+    }
+    match jobs::tree_rss_kib(job.identity.pid) {
+        Some(rss) => {
+            job.peak_rss_kib = job.peak_rss_kib.max(rss);
+            if rss as f64 > job.spec.rss_gib * 1024.0 * 1024.0 {
+                stop_job(
+                    root,
+                    ledger,
+                    job,
+                    "resource_killed",
+                    format!("RSS {rss} KiB exceeded declared limit"),
+                )?;
+                return Ok(false);
+            }
+        }
+        None => {
+            stop_job(
+                root,
+                ledger,
+                job,
+                "resource_killed",
+                "RSS observation unavailable".into(),
+            )?;
+            return Ok(false);
+        }
+    }
     match job.spec.kill_criterion.kind {
         KillKind::Wall => {}
         KillKind::LogMatch => {
             let needle = job.spec.kill_criterion.value.clone();
-            let fresh = scan_new_log_bytes(job, root);
+            let fresh = new_log_bytes(job, root);
             if fresh.contains(&needle) {
-                enforce_kill(
+                stop_job(
                     root,
-                    ledger_dir,
+                    ledger,
                     job,
                     "criterion_killed",
-                    format!("log_match criterion {:?} observed", needle),
+                    "literal log criterion observed".into(),
                 )?;
                 return Ok(false);
             }
-            let keep = needle.len().saturating_sub(1);
-            let total = fresh.chars().count();
-            job.log_carry = fresh.chars().skip(total.saturating_sub(keep)).collect();
+            let keep = needle.chars().count().saturating_sub(1);
+            let n = fresh.chars().count();
+            job.log_carry = fresh.chars().skip(n.saturating_sub(keep)).collect();
         }
         KillKind::Command => {
-            let check = job.spec.kill_criterion.value.clone();
-            let status = Command::new("sh")
-                .arg("-c")
-                .arg(&check)
+            // Bounded monitor child; an unbounded shell would stall all wall limits.
+            let mut check = Command::new("/bin/sh")
+                .args(["-c", &job.spec.kill_criterion.value])
+                .env("UOR_RUNNER_PROCESS_TOKEN", &job.attempt.process_token)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
-                .status();
-            match status {
-                Ok(status) if status.success() => {}
-                Ok(status) => {
-                    enforce_kill(
-                        root,
-                        ledger_dir,
-                        job,
-                        "criterion_killed",
-                        format!("command criterion exited with {status}"),
-                    )?;
-                    return Ok(false);
+                .spawn()?;
+            let identity = process::capture(check.id(), &job.attempt.process_token).ok();
+            let deadline = Instant::now() + Duration::from_secs(1);
+            let ok = loop {
+                if let Some(status) = check.try_wait()? {
+                    break status.success();
                 }
-                Err(error) => {
-                    enforce_kill(
-                        root,
-                        ledger_dir,
-                        job,
-                        "error",
-                        format!("command criterion could not run: {error}"),
-                    )?;
-                    return Ok(false);
+                if Instant::now() >= deadline {
+                    if let Some(identity) = &identity {
+                        let _ = process::terminate(identity, Duration::from_millis(50));
+                    } else {
+                        let _ = check.kill();
+                    }
+                    let _ = check.wait();
+                    break false;
                 }
+                std::thread::sleep(Duration::from_millis(20));
+            };
+            if !ok {
+                stop_job(
+                    root,
+                    ledger,
+                    job,
+                    "criterion_killed",
+                    "command criterion failed or exceeded one second".into(),
+                )?;
+                return Ok(false);
             }
         }
     }
     Ok(true)
 }
-
-fn admit_pending(root: &Path, ledger_dir: &Path, running: &mut Vec<RunningJob>) -> Result<()> {
-    let queue = jobs::queue_dir(root);
-    let mut entries: Vec<PathBuf> = Vec::new();
-    if queue.is_dir() {
-        for entry in fs::read_dir(&queue)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                entries.push(entry.path());
+fn blocked(root: &Path, reason: &str) -> Result<()> {
+    let path = root.join("admission-blocked.json");
+    if let Ok(bytes) = fs::read(&path) {
+        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            if value["reason"].as_str() == Some(reason) {
+                return Ok(());
             }
         }
     }
+    crate::write_json_atomic(&path, &json!({"reason":reason,"at":crate::utc_now_iso()}))
+}
+fn admit_pending(
+    config: &DaemonConfig,
+    policy: Option<&HostPolicy>,
+    running: &mut Vec<RunningJob>,
+) -> Result<()> {
+    let root = &config.root;
+    if root.join("admissions-held.json").exists() {
+        return Ok(());
+    }
+    if config.require_host_policy && policy.is_none() {
+        return blocked(root, "valid host policy required");
+    }
+    let mut entries = fs::read_dir(jobs::queue_dir(root))?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(|e| e.path())
+        .collect::<Vec<_>>();
     entries.sort();
     for dir in entries {
-        let spec: JobSpec = match fs::read(dir.join("spec.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        {
-            Some(spec) => spec,
-            None => continue,
-        };
-        let load = Load::of(
-            &running
-                .iter()
-                .map(|job| job.spec.clone())
-                .collect::<Vec<_>>(),
-        );
-        if admit(&load, &spec).is_err() {
-            continue;
-        }
-        let target = jobs::running_dir(root).join(&spec.id);
-        if fs::rename(&dir, &target).is_err() {
-            continue;
-        }
-        match spawn_job(root, &spec) {
-            Ok(job) => running.push(job),
+        let spec = match jobs::read_spec(&dir) {
+            Ok(s) => s,
             Err(error) => {
-                let mut stub = RunningJob {
-                    spec: spec.clone(),
-                    child: None,
-                    pid: 0,
-                    started: Instant::now(),
-                    started_utc: utc_now_iso(),
-                    peak_rss_kib: 0,
-                    log_offsets: [0, 0],
-                    log_carry: String::new(),
-                };
-                let _ = finalize_job(
-                    root,
-                    ledger_dir,
-                    &mut stub,
-                    "error",
-                    None,
-                    format!("spawn failed: {error}"),
-                );
+                blocked(root, &format!("invalid queued spec: {error}"))?;
+                continue;
+            }
+        };
+        if let Err(error) = spec.validate() {
+            blocked(root, &error.to_string())?;
+            continue;
+        }
+        let specs: Vec<_> = running.iter().map(|j| j.spec.clone()).collect();
+        if let Err(reason) = admit(&Load::of(&specs), &spec) {
+            blocked(root, &reason)?;
+            continue;
+        }
+        if !config.require_host_policy {
+            if let Err(error) = host::validate_test_job(root, &spec) {
+                blocked(root, &error.to_string())?;
+                continue;
+            }
+        }
+        if let Some(policy) = policy {
+            if let Err(error) = host::check_admission(root, policy, &spec, &specs) {
+                blocked(root, &error.to_string())?;
+                continue;
+            }
+        }
+        let reservation =
+            running
+                .iter()
+                .try_fold(spec.reserved_ms()?, |sum, j| -> Result<u64> {
+                    sum.checked_add(j.spec.reserved_ms()?)
+                        .ok_or_else(|| invalid("wall reservation overflow"))
+                })?;
+        if let Err(error) = crate::ledger::check_budget(&config.ledger_dir, reservation) {
+            blocked(root, &error.to_string())?;
+            continue;
+        }
+        let guard = match jobs::job_lock(root, &spec.id) {
+            Ok(g) => g,
+            Err(_) => continue,
+        };
+        if !dir.exists() {
+            continue;
+        }
+        jobs::durable_rename(&dir, &jobs::running_dir(root).join(&spec.id))?;
+        let launch_started = Instant::now();
+        let launched = spawn_job(root, &spec, !config.require_host_policy, &config.ledger_dir);
+        drop(guard);
+        match launched {
+            Ok(job) => {
+                running.push(job);
+                let _ = fs::remove_file(root.join("admission-blocked.json"));
+            }
+            Err(error) => {
+                let running_dir = jobs::running_dir(root).join(&spec.id);
+                if let Ok(attempt) = jobs::read_attempt(&running_dir) {
+                    // Hashing/preflight and interrupted launches consume real
+                    // time even when no payload ran. Charge their stable
+                    // attempt once; UNKNOWN retains the shared reservation.
+                    jobs::finalize(
+                        root,
+                        &spec,
+                        &Finalization {
+                            outcome: "unknown".into(),
+                            exit_status: None,
+                            reason: format!(
+                                "launch/preflight interrupted before successful admission: {error}"
+                            ),
+                            peak_rss_kib: 0,
+                            started_utc: attempt.started_utc,
+                            elapsed_ms: launch_started.elapsed().as_millis() as u64,
+                        },
+                        &config.ledger_dir,
+                    )?;
+                    host::hold(
+                        root,
+                        &format!(
+                            "launch interrupted; shared attempt requires reconciliation: {error}"
+                        ),
+                    )?;
+                } else {
+                    recovery_required(root, &running_dir, &format!("launch interrupted: {error}"))?;
+                }
+                break;
             }
         }
     }
     Ok(())
 }
 
-/// Run the daemon loop until `stop_file` appears (or forever).
+fn acquire_host_lock() -> Result<fs::File> {
+    let host_root = process::host_state_dir()?;
+    fs::create_dir_all(&host_root)?;
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(host_root.join("host-runner.lock"))?;
+    file.try_lock()
+        .map_err(|e| invalid(format!("host already has a production runner: {e}")))?;
+    Ok(file)
+}
+
 pub fn run(config: &DaemonConfig) -> Result<()> {
-    ensure_layout(&config.root)?;
-    let mut running = recover_or_adopt(&config.root, &config.ledger_dir)?;
-    let mut last_monitor = Instant::now() - config.monitor_interval;
+    jobs::ensure_layout(&config.root)?;
+    if !config.require_host_policy
+        && !fs::canonicalize(&config.root)?.starts_with(fs::canonicalize(std::env::temp_dir())?)
+    {
+        return Err(invalid(
+            "test mode requires a temporary isolated runner root",
+        ));
+    }
+    let singleton = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(config.root.join("daemon.lock"))?;
+    singleton
+        .try_lock()
+        .map_err(|e| invalid(format!("another daemon owns this host queue: {e}")))?;
+    // An empty held queue with no policy does not need or mutate the real
+    // host lock (also allows isolated missing-policy integration checks).
+    let needs_host_lock = config.require_host_policy
+        && (HostPolicy::load(&config.root).is_ok()
+            || fs::read_dir(jobs::running_dir(&config.root))?
+                .next()
+                .is_some());
+    let mut host_singleton = if needs_host_lock {
+        Some(acquire_host_lock()?)
+    } else {
+        None
+    };
+    crate::write_json_atomic(
+        &config.root.join("daemon.json"),
+        &json!({"pid":std::process::id(),"started":crate::utc_now_iso(),"production":config.require_host_policy}),
+    )?;
+    let mut running = recover(&config.root, &config.ledger_dir, config.require_host_policy)?;
+    let mut last_monitor = Instant::now()
+        .checked_sub(config.monitor_interval)
+        .unwrap_or_else(Instant::now);
     loop {
-        if let Some(stop) = &config.stop_file {
-            if stop.exists() {
-                return Ok(());
-            }
+        if config.stop_file.as_ref().is_some_and(|p| p.exists()) {
+            return Ok(());
         }
-        admit_pending(&config.root, &config.ledger_dir, &mut running)?;
+        let policy = if config.require_host_policy {
+            match HostPolicy::load(&config.root) {
+                Ok(p) => Some(p),
+                Err(error) => {
+                    blocked(&config.root, &error.to_string())?;
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        if config.require_host_policy && policy.is_some() && host_singleton.is_none() {
+            host_singleton = Some(acquire_host_lock()?);
+        }
         let sample = last_monitor.elapsed() >= config.monitor_interval;
         if sample {
             last_monitor = Instant::now();
         }
-        let mut still = Vec::with_capacity(running.len());
+        let specs: Vec<_> = running.iter().map(|j| j.spec.clone()).collect();
+        let host_failure = if sample && config.require_host_policy {
+            match &policy {
+                Some(p) => host::check_storage(p, &specs, false)
+                    .and_then(|()| {
+                        if host::memory_pressure()? >= 4 {
+                            Err(invalid("critical host memory pressure"))
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .and_then(|()| {
+                        let actual: u64 = running
+                            .iter()
+                            .map(|j| jobs::tree_rss_kib(j.identity.pid).unwrap_or(0))
+                            .sum();
+                        if actual as f64 > p.max_rss_gib * 1024.0 * 1024.0 {
+                            Err(invalid("aggregate observed RSS exceeds host ceiling"))
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .and_then(|()| crate::ledger::check_budget(&config.ledger_dir, 0).map(|_| ()))
+                    .err()
+                    .map(|e| e.to_string()),
+                None => Some("host policy unavailable during run".into()),
+            }
+        } else {
+            None
+        };
+        if let Some(reason) = &host_failure {
+            host::hold(&config.root, reason)?;
+        }
+        let mut still = vec![];
         for mut job in running {
-            match monitor_job(&config.root, &config.ledger_dir, &mut job, sample) {
+            match monitor(
+                &config.root,
+                &config.ledger_dir,
+                &mut job,
+                sample,
+                host_failure.as_deref(),
+            ) {
                 Ok(true) => still.push(job),
                 Ok(false) => {}
                 Err(error) => {
-                    eprintln!(
-                        "lab-runner daemon: monitor error for {}: {error}",
-                        job.spec.id
-                    );
+                    host::hold(
+                        &config.root,
+                        &format!("job finalization/monitor needs reconciliation: {error}"),
+                    )?;
                     still.push(job);
                 }
             }
         }
         running = still;
-        std::thread::sleep(config.poll_interval);
+        admit_pending(config, policy.as_ref(), &mut running)?;
+        std::thread::sleep(config.poll_interval.min(Duration::from_secs(1)));
     }
 }

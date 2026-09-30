@@ -10,7 +10,7 @@ pub const MAX_GPU_JOBS: u32 = 1;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Load {
     pub count: usize,
-    pub threads: u32,
+    pub threads: u64,
     /// Declared RSS; a gpu job's `rss_gib` counts as GPU unified memory.
     pub rss_gib: f64,
     pub gpu_jobs: u32,
@@ -22,7 +22,7 @@ impl Load {
         let mut load = Load::default();
         for spec in specs {
             load.count += 1;
-            load.threads += spec.threads;
+            load.threads += u64::from(spec.threads);
             load.rss_gib += spec.rss_gib;
             if spec.gpu {
                 load.gpu_jobs += 1;
@@ -44,7 +44,7 @@ pub fn admit(load: &Load, spec: &JobSpec) -> std::result::Result<(), String> {
     if load.exclusive_running {
         return Err("an exclusive job is running".to_string());
     }
-    if load.threads + spec.threads > MAX_THREADS {
+    if load.threads + u64::from(spec.threads) > u64::from(MAX_THREADS) {
         return Err(format!(
             "threads {} + {} would exceed {MAX_THREADS}",
             load.threads, spec.threads
@@ -80,11 +80,16 @@ mod tests {
             rss_gib,
             gpu,
             wall_s: 60,
+            stop_grace_ms: 250,
             kill_criterion: KillCriterion {
                 kind: KillKind::Wall,
                 value: String::new(),
             },
             exclusive,
+            cargo: false,
+            storage: vec![],
+            coordination: None,
+            provenance: None,
         }
     }
 

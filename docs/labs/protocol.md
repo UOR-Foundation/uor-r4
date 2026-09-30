@@ -176,3 +176,25 @@ the merge SHA and outcome, notify its GitHub consumers, and close only the scope
 whose full acceptance passed. Partial delivery references an issue. A ready PR
 gets a named reviewer promptly; if it is blocked, record why and who can resolve
 it. Timing targets are service expectations, not reasons to invent approvals.
+
+## Versioned authority in the coordinator
+
+A claim supplies `policy_sha` equal to the operational state's protected policy
+revision and a `work_card` of `sha256:<64 lowercase hex digits>` over retained
+immutable work-card bytes. Put the content location in the checkpoint/issue;
+a mutable issue URL alone is not an identity. Equivalent ownership spellings
+with empty, dot, parent or trailing path components are rejected.
+
+New claims, job admission and delivery compare the adopted revision with main.
+Changes to AGENTS, the decision register, execution policy or this protocol hold
+new admission until reviewed adoption; incomplete comparisons also hold.
+Previously admitted bounded work keeps its reservation and may finish.
+
+To adopt a protected policy change, checkpoint and release live task leases,
+reconcile every unresolved attempt, retain the exact Class C delivery receipt,
+and apply an `adopt_policy` event with `previous_policy_sha`, the new merged
+`policy_sha`, and `decision_receipt` (`path`, `sha256`). The coordinator verifies
+the council receipt and exact merged PR against current main before a normal
+fast-forward state transition. Old claims remain historical; a resumed client
+must acquire a new generation under the new revision. Never edit an old event
+or force-push operational history.

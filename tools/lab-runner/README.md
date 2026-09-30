@@ -1,106 +1,168 @@
-# lab-runner
+# UOR-R4 lab runner
 
-Detached local job runner for the UOR-R4 labs. It exists because agent
-harnesses kill their children after a few minutes: a long training or
-evaluation job must outlive the session that submitted it. A launchd
-LaunchAgent keeps a foreground daemon alive (`KeepAlive`); the daemon services
-a plain filesystem queue that every lab's CLI calls can use in seconds.
+The existing Rust runner now separates lab sessions, task ownership, job
+execution, scientific acceptance and protected delivery. A submitting client may
+run out of tokens while its bounded job continues under the local supervisor.
+The runner does not supply provider tokens or infer scientific success from an
+exit code. See [the lab contract](../../docs/labs/README.md).
 
-## Queue layout
+## Internal control state
 
-Default root `/Volumes/UOR-Workspace/runner` (override with `--root` or
-`UOR_RUNNER_ROOT`):
+Default queue: `~/.local/share/uor-r4/runner`. Default ledger:
+`~/.local/share/uor-r4/ledger`. `--root`, `UOR_RUNNER_ROOT`, and `--ledger-dir`
+override these explicitly. Control state beneath `/Volumes` is rejected. Keep
+binary, startup logs, journal, locks, attempt tombstones and outbox internally;
+external volumes contain verified payloads only.
 
 ```
 runner/
-  queue/<id>/spec.json     validated, waiting for admission
-  running/<id>/            admitted; pid, started_utc, started_ms, logs
-  done/<id>/               finished; exit.json, logs, peak RSS
+  host-policy.json
+  queue/<id>/spec.json
+  running/<id>/{spec,attempt,process,exit}.json
+  done/<id>/{spec,attempt,process,exit}.json
+  locks/
+  admission-blocked.json
   daemon.out.log / daemon.err.log
 ```
 
-## Job spec (`uor-r4.lab-runner-job/1`)
+A missing/invalid host policy holds admission. Production policy names verified
+volume UUIDs and sentinels, capacity reserves, the coordination store, memory
+pressure ceiling and thread/RSS bounds. This version requires `max_jobs: 1` so
+input hashing cannot delay another job's monitor.
+Missing, wrong or substituted storage fails before launch. No missing mount
+point is created by this runner. See `host::HostPolicy` for the versioned schema.
 
-```json
-{
-  "schema": "uor-r4.lab-runner-job/1",
-  "id": "keys-12",
-  "lab": "lab/kimi/aerm",
-  "cwd": "/path/to/worktree",
-  "argv": ["cargo", "run", "--release", "--example", "aerm-keys", "--", "keys"],
-  "env": {"CARGO_TARGET_DIR": "...", "RAYON_NUM_THREADS": "2"},
-  "threads": 2,
-  "rss_gib": 4.0,
-  "gpu": false,
-  "wall_s": 7200,
-  "kill_criterion": {"kind": "wall", "value": ""},
-  "exclusive": false
-}
-```
+## Job identity and resources
 
-`wall_s` and `kill_criterion` are mandatory; a spec without them is rejected
-with the missing field named. Kill kinds: `wall` (only the wall bound),
-`log_match` (also kill when `value` appears in the job's logs as a literal
-substring), `command` (also run `sh -c value` each monitor tick; a nonzero
-exit kills the job).
+The extended `uor-r4.lab-runner-job/1` retains argv arrays and adds `cargo`,
+`storage` reservations, `provenance`, bounded `stop_grace_ms` and `coordination` (issue, session, epoch, work-card
+version and immutable attempt ID). Production requires a matching shared
+reservation, host identity and spec digest. A global immutable start tombstone
+prevents replay of an admitted attempt through another local queue.
+Provenance binds a clean source commit, absolute executable path/SHA256, and
+input file/manifest SHA256 identities. Nonignored untracked source is rejected;
+ignored outputs may remain. Executable identity is not a reproducible-build
+attestation. Live ownership/reservation and the exact runner root are checked
+again after hashing and immediately before consuming the attempt and spawning.
 
-## Admission control
+The host starts with one heavy lane and one Cargo process, no more than eight
+threads and eleven GiB declared memory including GPU unified memory. Actual
+process-tree RSS and OS memory pressure are observed; GPU residency is not
+independently measured. Disk checks account for each volume and reservations.
+Job wall limits use a monotonic clock while the supervisor lives.
 
-Over the union of running jobs: total threads at most 8, total declared RSS
-at most 11 GiB (a GPU job's `rss_gib` counts as GPU unified memory), at most
-one GPU job, and `exclusive` jobs run alone (and block further admissions
-until they finish). Every admitted job is killed at `wall_s`.
+Launch intent is persisted before spawn. A gated process is identified by host,
+boot, PID, process start, process group and nonce before payload execution.
+The nonce-bearing supervisor remains alive after payload exit so background
+descendants cannot lose their ownership anchor. Signals require revalidated
+identity; verified descendants are stopped before that supervisor.
+`stop_grace_ms` defaults to 250 and may be 0–30000, permitting an existing TERM
+handler to save its own state before KILL. Admission reserves the payload wall
+limit, this grace and a 2000 ms enforcement margin; actual elapsed cost is
+charged. This is a scheduling bound, not an operating-system real-time guarantee.
+Receipts distinguish a recorded TERM request and confirmed process stop from
+a saved checkpoint. `checkpoint_status` remains
+`unavailable_no_verified_payload_protocol`: no versioned, attempt/spec-bound
+checkpoint manifest and reload acknowledgement is qualified yet. Do not admit
+a model job whose safe continuation requires that unsupported acknowledgement.
+After a
+supervisor crash, production conservatively stops verified surviving workers,
+records interrupted/unknown status and holds admission for reconciliation; it
+does not reset a wall limit. A lab's token exhaustion alone does not restart the
+supervisor and therefore does not interrupt its job.
 
-## CLI
+Execution receipt precedes an idempotent charge keyed by job and attempt; DONE
+follows both. Unknown exit status remains unknown. Restore/replay never turns
+an unknown result into success.
+`reconcile-stopped` can produce a separate immutable proof after verifying that
+the owned group is gone (including a verified prior boot) or stopping a live
+nonce supervisor. It retains the original UNKNOWN result and charge, and adds
+an idempotent, explicitly estimated supplemental charge for unaccounted time.
+A missing process record is recoverable only from an observed nonce supervisor;
+missing launch files alone do not prove journal integrity after a restore.
+Shared reservation finalization and release of the admission hold remain
+separate, evidence-checked actions.
 
-```
-lab-runner submit <spec.json>     validate + queue; prints the id
-lab-runner status [id]            JSON summary (works with the daemon down)
-lab-runner tail <id>              last ~50 lines of stdout/stderr
-lab-runner cancel <id>            drop a queued job; kill a running one
-lab-runner install-agent          write ~/Library/LaunchAgents/org.uor.lab-runner.plist
-                                  and print the `launchctl bootstrap` command
-lab-runner ledger rebuild         recompute model-time.json from records
+## Commands
+
+```text
+lab-runner submit SPEC_JSON
 lab-runner daemon [--poll-ms N] [--monitor-ms N] [--stop-file PATH]
+lab-runner status [ID]
+lab-runner tail ID
+lab-runner cancel ID
+lab-runner reconcile-stopped ID
+lab-runner reconcile-stopped ID
+lab-runner install-agent
+lab-runner ledger rebuild
+lab-runner ledger migrate BASELINE_JSON
+lab-runner ledger extend EXTENSION_JSON
+lab-runner ledger import-legacy IMPORT_JSON
+lab-runner coord init STORE REMOTE OWNER/REPO POLICY_SHA
+lab-runner coord status STORE
+lab-runner coord apply STORE EVENT_JSON
+lab-runner delivery check RECEIPT_JSON
+lab-runner delivery enqueue RECEIPT_JSON
+lab-runner github-sync OWNER/REPO OUTPUT_ROOT
+lab-runner outbox send STORE EVENT_JSON
+lab-runner outbox replay STORE
+lab-runner outbox retire STORE EVENT_ID REASON
+lab-runner maintenance check REQUEST_JSON COORD_STORE
 ```
 
-Every CLI call returns in seconds. `submit` only writes the queue; the daemon
-(launchd-managed) does the rest, so the job survives the submitting session.
+`install-agent` writes a plist and prints the bootstrap command; it does not
+silently launch jobs. Migrate the real programme ledger with an independently
+reviewed `uor-r4.ledger-baseline/1`, listing every covered historical record and
+its hash. A restored cumulative snapshot is not an automatic accounting anchor.
+Uncovered legacy records require explicit mappings. Never replace the real
+ledger with a smoke ledger.
 
-## Completion records and ledger charging
+New job charges include typed `accounting` metadata: `job_execution` and
+`measured`, except explicitly reconciled estimated charges, which record
+`estimated`. Older immutable receipts may lack this metadata and remain
+readable without rewriting them. `ledger::record_resource_charge` accepts
+immutable `uor-r4.resource-charge/1` records for preparation, review, storage
+work, build and delivery elapsed time. Each has a unique event ID, measurement
+status, authority and rationale. A correction is a signed `adjustment_ms` with
+`accounting.correction_of` naming the exact prior charge filename and SHA-256;
+it appends history and never replaces a receipt. Rebuild rejects changed
+targets, cycles, event conflicts, category changes and negative corrected
+original totals. Storage byte reservations remain a separate host-policy
+quantity; a storage-work time charge does not claim freed or reserved bytes.
 
-On completion the daemon writes `exit.json`
-(`uor-r4.lab-runner-exit/1`: outcome `completed|wall_killed|criterion_killed|
-cancelled|error`, exit status, elapsed ms, peak RSS in KiB) under
-`done/<id>/` and appends a ledger charge `charge-{utc}-{lab}-{id}.json`
-(`uor-r4.model-time-charge/1`, canonical `charged_ms`) to the ledger
-directory (default `~/.uor-models/native-joint-learning-2026-09-04/`,
-override with `--ledger-dir`). Charges and rebuilds rewrite
-`model-time.json` under an exclusive `File::lock` on `model-time.json.lock`
-with a create-new-temp + atomic rename, so concurrent writers cannot lose
-each other's records.
+Coordination uses a dedicated bare Git store and normal fast-forward pushes to
+`codex/lab-state`. Events are immutable and idempotent by ID. A rejected race is
+recomputed against fresh state; conflicting claims are never merged. Expired
+ownership leaves unknown job reservations intact. Live GitHub is required for
+new admission; an outage does not cancel a previously admitted bounded job.
 
-`ledger rebuild` folds the `charge-*.json` / `extension-*.json` records alone:
-records are ordered by `recorded_utc`; the fold anchors at the last record
-carrying an explicit cumulative anchor (a charge with
-`base_read_cumulative_ms`, or an extension with `after.cumulative_ms`), adds
-each later charge's additive `*_ms` fields and each later extension's
-`increment_ms` to the limit. Without any anchor it refuses and says a genesis
-record is needed. The crate's tests fold fixture copies of the live records
-to the committed totals (782,538,181 of 1,130,000,000 ms as of
-2026-09-29 20:05–20:08 UTC) and prove two concurrent charges both land.
+Delivery checks real command/log receipts, independent review, applicable
+council evidence, current task generation, exact PR head/base, dependencies and
+live required statuses. Queue acknowledgement statuses do not count as local
+tests. The checker enqueues only the reviewed head. Shared GitHub credentials
+make reviewer independence procedural. The new server workflow and repository
+rules require the separate [administrator setup](../../docs/labs/admin-enforcement.md);
+shipping this binary does not install that protection.
 
-## Concurrency note
+GitHub sync produces immutable, source-pinned Markdown/JSONL snapshots with
+explicit coverage/freshness receipts. It paginates issue/PR bodies, conversation
+comments, submitted reviews and inline review comments. Review retrieval covers
+every changed/all-state PR candidate, including closed PRs, plus PRs discovered
+by the updated inline-comment feed. Review records retain source/supersession
+identities and content-bound revisions in their JSON body without changing the
+knowledge index's ten-field record interface. Server start/finish times bound
+collection freshness; a five-minute overlap protects incremental cursors, and
+future/legacy cursors trigger full reconciliation. Coverage remains explicitly
+incomplete: pending/deleted or unobserved revisions, GraphQL thread resolution,
+timeline events, check logs, binary artifacts and full Git history need direct
+inspection. Periodic full reconciliation remains necessary when discovery
+timestamps do not reflect a review update. This is a rebuildable retrieval aid.
 
-`cancel` writes `cancel.json` into the job directory before signalling the
-process tree; the daemon honors the marker, so the two finalizers always
-converge on outcome `cancelled`. Finalization writes are idempotent: a
-finalizer that loses the directory rename treats the rename's `NotFound` as
-"the other finalizer completed first".
+## Focused verification
 
-## Testing
-
-`cargo test -p lab-runner` exercises only temporary queue roots, ledgers and
-plist paths; nothing touches the real runner root, the real ledger, or
-launchd. The live smoke (a >10-minute job outliving its session) is run
-deliberately by an operator after `install-agent`, not by the test suite.
+`cargo test -p lab-runner --offline` uses exclusive temporary queues and ledgers
+for failure/race tests. The explicit `daemon --test-mode` accepts only bounded
+inert fixtures under temporary roots; it is not a production bypass. Production
+smokes must have real task/attempt reservations and a verified host policy.
+Test execution, daemon installation, client continuation handshakes and recovery
+receipts are reported separately. No model qualification follows from them.

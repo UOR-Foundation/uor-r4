@@ -10,9 +10,16 @@
 
 pub mod admission;
 pub mod agent;
+pub mod coord;
 pub mod daemon;
+pub mod delivery;
+pub mod github_sync;
+pub mod host;
 pub mod jobs;
 pub mod ledger;
+pub mod maintenance;
+pub mod outbox;
+pub mod process;
 pub mod spec;
 
 use std::fmt;
@@ -59,9 +66,13 @@ pub(crate) fn invalid(message: impl Into<String>) -> RunnerError {
 }
 
 /// Default queue root when neither `--root` nor `UOR_RUNNER_ROOT` is given.
-pub const DEFAULT_ROOT: &str = "/Volumes/UOR-Workspace/runner";
+pub const DEFAULT_ROOT: &str = ".local/share/uor-r4/runner";
+pub fn default_root() -> Result<PathBuf> {
+    let home = std::env::var_os("HOME").ok_or_else(|| invalid("HOME not set; pass --root"))?;
+    Ok(PathBuf::from(home).join(DEFAULT_ROOT))
+}
 /// Default ledger directory, resolved against `$HOME` at runtime.
-pub const DEFAULT_LEDGER_SUFFIX: &str = ".uor-models/native-joint-learning-2026-09-04";
+pub const DEFAULT_LEDGER_SUFFIX: &str = ".local/share/uor-r4/ledger";
 
 pub fn default_ledger_dir() -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
@@ -151,7 +162,10 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
             return Err(error.into());
         }
         match fs::rename(&tmp, path) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                fs::File::open(dir)?.sync_all()?;
+                return Ok(());
+            }
             Err(error) => {
                 let _ = fs::remove_file(&tmp);
                 return Err(error.into());

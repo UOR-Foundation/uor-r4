@@ -117,19 +117,27 @@ recovery receipt and live #1510/#820 activity own that status.
 
 ## Control-plane and delivery rollout
 
-The implementation's CLI targets are `lab-runner coord init|apply|status|validate`,
-`delivery check <receipt.json>`, `delivery enqueue <receipt.json>`,
-`ledger migrate <manifest>`, `ledger rebuild`, and
-`github-sync OWNER/REPO DIR`; consult
-the runner README for exact arguments and supported schema versions. Do not
+The implemented control-plane commands are `lab-runner coord init STORE REMOTE OWNER/REPO POLICY_SHA`,
+`coord status STORE`, `coord apply STORE EVENT_JSON`, `outbox send STORE EVENT_JSON`,
+`outbox replay STORE`, and `host-id`. Delivery uses `delivery check RECEIPT_JSON`
+and `delivery enqueue RECEIPT_JSON`; accounting uses `ledger migrate RECORD_JSON`,
+`ledger extend RECORD_JSON`, `ledger import-legacy RECORD_JSON`, and `ledger rebuild`.
+GitHub import uses `github-sync OWNER/REPO OUTPUT_ROOT`. These are subcommands of
+`lab-runner`; consult the [runner README](../../tools/lab-runner/README.md) for
+queue/ledger global options and supported schema versions. Do not
 invent CLI options from this prose. GitHub snapshots include repository/revision
 and retrieval time and remain derived views. Incremental JSONL synchronization
-does not include every inline review thread, check log or full Git history;
-inspect those directly when a decision depends on them. Local events pending synchronization
+paginates submitted reviews and inline comments for changed PR candidates,
+including closed PRs, with source/supersession identities and server-time
+freshness bounds. It does not reconstruct pending/deleted or unobserved reviews,
+GraphQL thread resolution, check logs or full Git history; periodic full
+reconciliation and direct inspection remain necessary for decisions requiring
+those sources. Local events pending synchronization
 do not authorize stealing a remote claim during a network partition.
 
 Delivery receipts use `uor-r4.delivery-receipt/1` and bind repository, PR,
-`task_issue`, author session, exact 40-character head/base SHAs, `change_kind`
+`task_issue`, author session, `claim_session`, nonzero `claim_epoch`, `work_card`,
+exact 40-character head/base SHAs, `change_kind`
 (`docs`, `code`, `model`) and review class (`A`, `B`, `C`). Checks bind the same
 head/base, argv, exit code, outcome and an absolute regular nonempty log with
 SHA-256. Reviews identify the independent session, launcher, decision and zero
@@ -137,6 +145,38 @@ unresolved required fixes. B/model receipts additionally name result evidence
 and an independent reader; C receipts include the three distinct council
 sessions and votes. The types in
 [`delivery.rs`](../../tools/lab-runner/src/delivery.rs) are the executable schema.
+The current claimed session/epoch/work card and available, fresh lab heartbeat
+must agree with the live coordination state, and native GitHub blockers must
+be resolved. A stale lease or moved head cannot reuse an old approval.
+
+Task completion is a separate verified action. Its `delivery_receipt` object
+binds a local receipt path and SHA-256, the observed merge SHA, and an acceptance
+file path/SHA-256. The `uor-r4.task-acceptance/1` record names the issue, work card,
+head/merge identities, non-author reviewer, `APPROVE`, `full_scope: true`, and
+explicit acceptance criteria. The coordinator re-reads delivery checks and
+reviews, verifies the exact PR was merged, and verifies that merge remains in
+current main's ancestry. A partial PR cannot complete the task, and this action
+does not close the GitHub issue automatically. Shared-account evidence remains
+procedural; recording `full_scope` cannot replace the review it attests to.
+
+Initial coordination permits only one unresolved execution reservation per host,
+across all tasks and queues. An unknown or unreachable worker retains that slot
+until verified reconciliation; admission cannot create two reservations that
+wait on each other. Execution reservations bind the full typed job spec, its SHA-256, the local
+host and internal runner root. A changed resource projection/command requires a
+new reservation. Native `blockedBy` is checked independently of caller-supplied
+dependencies before claims and admission; missing/truncated API data holds work.
+Unresolved same-host reservations absent from the daemon's running set hold new
+admission until reconciled, rather than disappearing from capacity accounting.
+This is conservative cooperative coordination, not a cross-host physical resource
+manager. Reserve only the next admitted work; do not pre-reserve an entire queue.
+
+Finalizing a shared attempt requires a typed host/job/attempt receipt, verified
+SHA-256 at its bound internal `done/<id>/exit.json`, matching saved/reserved spec
+and claim identity, and confirmed stopped-process evidence. Unknown, unreachable,
+legacy-unbound and never-started cases remain reserved for explicit reconciliation;
+text saying “finished” is insufficient. Declaring a lab unavailable does not
+extend its task leases or release its live worker.
 
 The checker expects real `diff-check`/`claim-wording` evidence for docs;
 `diff-check`/`format`/`compile`/`focused-tests` for code; and `loaded-behavior` in
@@ -150,12 +190,14 @@ claim, lease expiry, concurrent ledger append, insufficient-space and exact-head
 delivery rejection; run each client adapter smoke; only then declare the
 corresponding component verified. Remaining manual client steps remain manual.
 
-Repository-administrator gate configuration is a separate deployment action:
+Repository-administrator gate configuration is a separate deployment action;
+the exact procedure and trust boundaries are in
+[administrative enforcement](admin-enforcement.md):
 
-1. Implement/install a reviewed workflow producing `mission-delivery-gate`, then run it on
+1. Install the reviewed workflow producing `mission-delivery-gate`, then run it on
    both a pull request and a merge-group event. Record its exact observed check
    name and GitHub App identity in the deployment receipt. This change's
-   coordinator receipt checker does not itself install a server workflow.
+   coordinator receipt checker alone does not enable a required server gate.
 2. In the ruleset protecting `main`, require that exact check and the merge
    queue. Retain existing protection, disable direct pushes and avoid bypass
    exceptions for lab credentials. Do not mark the five compatibility status

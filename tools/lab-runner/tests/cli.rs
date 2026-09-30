@@ -52,6 +52,9 @@ fn run_daemon_until(
     predicate: impl Fn() -> bool,
     timeout: Duration,
 ) -> bool {
+    if !ledger.join("ledger-baseline.json").is_file() {
+        ledger::initialize_empty(ledger, 10_000_000, "isolated runner test fixture").unwrap();
+    }
     let stop = root.join("STOP");
     let config = DaemonConfig {
         root: root.to_path_buf(),
@@ -59,6 +62,7 @@ fn run_daemon_until(
         poll_interval: Duration::from_millis(100),
         monitor_interval: Duration::from_millis(200),
         stop_file: Some(stop.clone()),
+        require_host_policy: false,
     };
     let handle = std::thread::spawn(move || daemon::run(&config));
     let deadline = Instant::now() + timeout;
@@ -99,13 +103,7 @@ fn cli_round_trip_submit_run_complete_and_charge() {
     let root = tempdir("roundtrip-root");
     let ledger_dir = tempdir("roundtrip-ledger");
     let work = tempdir("roundtrip-cwd");
-    // Genesis anchor so the ledger has a limit.
-    ledger::rebuild(&ledger_dir).unwrap_err(); // no records yet: errors clearly
-    fs::write(
-        ledger_dir.join("extension-20260101T000000Z-genesis.json"),
-        r#"{"schema":"uor-r4.model-time-extension/1","recorded_utc":"2026-01-01T00:00:00Z","increment_ms":1000000,"after":{"cumulative_ms":0,"limit_ms":1000000}}"#,
-    )
-    .unwrap();
+    ledger::initialize_empty(&ledger_dir, 10_000_000, "isolated runner test fixture").unwrap();
 
     let spec = base_spec(
         "roundtrip-1",
@@ -166,7 +164,7 @@ fn cli_round_trip_submit_run_complete_and_charge() {
     let charges = charge_files(&ledger_dir);
     assert_eq!(charges.len(), 1);
     let charge: Value = serde_json::from_slice(&fs::read(&charges[0]).unwrap()).unwrap();
-    assert_eq!(charge["schema"], "uor-r4.model-time-charge/1");
+    assert_eq!(charge["schema"], ledger::CHARGE_SCHEMA);
     assert_eq!(charge["job_id"], "roundtrip-1");
     assert_eq!(charge["runner"], "lab-runner");
     assert_eq!(charge["outcome"], "completed");
@@ -272,7 +270,7 @@ fn log_match_criterion_kills_on_literal_substring() {
 }
 
 #[test]
-fn daemon_restart_finalizes_a_dead_running_job_as_error() {
+fn daemon_restart_preserves_legacy_unknown_without_signalling() {
     let root = tempdir("crash-root");
     let ledger_dir = tempdir("crash-ledger");
     let work = tempdir("crash-cwd");
@@ -295,16 +293,16 @@ fn daemon_restart_finalizes_a_dead_running_job_as_error() {
     fs::write(running.join("started_utc"), "2026-01-01T00:00:00Z\n").unwrap();
     fs::write(running.join("started_ms"), b"1\n").unwrap();
 
-    let done = root.join("done/crash-1");
+    let unknown = root.join("running/crash-1/recovery-required.json");
     assert!(run_daemon_until(
         &root,
         &ledger_dir,
-        || done.is_dir(),
+        || unknown.is_file(),
         Duration::from_secs(15)
     ));
-    let exit = exit_json(&root, "crash-1");
-    assert_eq!(exit["outcome"], "error");
-    assert!(exit["reason"].as_str().unwrap().contains("pid dead"));
+    assert!(root.join("admissions-held.json").is_file());
+    assert!(root.join("running/crash-1/spec.json").is_file());
+    assert!(charge_files(&ledger_dir).is_empty());
 
     fs::remove_dir_all(&root).unwrap();
     fs::remove_dir_all(&ledger_dir).unwrap();
@@ -320,6 +318,7 @@ fn cancel_finalizes_a_running_job() {
     let spec_path = write_spec(&work, &spec);
     jobs::submit(&root, &spec_path).unwrap();
 
+    ledger::initialize_empty(&ledger_dir, 10_000_000, "isolated runner test fixture").unwrap();
     let running = root.join("running/cancel-1");
     let stop = root.join("STOP");
     let config = DaemonConfig {
@@ -328,6 +327,7 @@ fn cancel_finalizes_a_running_job() {
         poll_interval: Duration::from_millis(100),
         monitor_interval: Duration::from_millis(200),
         stop_file: Some(stop.clone()),
+        require_host_policy: false,
     };
     let handle = std::thread::spawn(move || daemon::run(&config));
     let deadline = Instant::now() + Duration::from_secs(15);
