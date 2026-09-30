@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
-  "sequence": 20,
-  "observed_server_time": 1790737079,
+  "sequence": 21,
+  "observed_server_time": 1790737167,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -33,18 +33,17 @@
   "tasks": {
     "1520": {
       "session": "codex-durable-20260929-root",
-      "epoch": 3,
-      "work_card": "sha256:a527af51dfe737971a18333a49c12f05875c95976294f525e6599e085c569083",
-      "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-      "base_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+      "epoch": 4,
+      "work_card": "sha256:20b5c440ba12e496f47146d844476c601447edf5c5015dd05bd10b56cbe34889",
+      "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
+      "base_sha": "0dcdb6e970fc94d2c47f5ea879b1e7a2db620abd",
       "paths": [
-        "tools/lab-runner",
         "docs/labs",
-        ".github/workflows/lab-delivery.yml",
-        "AGENTS.md"
+        "docs/integration/project-track.md",
+        "docs/plans/2026-09-29-path-to-chat.md"
       ],
-      "expires": 1790737076,
-      "phase": "released",
+      "expires": 1790738367,
+      "phase": "claimed",
       "checkpoint": {
         "charge_count": 1,
         "claim_after_exit_seconds": 5,

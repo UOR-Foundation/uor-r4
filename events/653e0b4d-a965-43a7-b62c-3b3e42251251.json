@@ -1,0 +1,20 @@
+{
+  "event": {
+    "base_sha": "0dcdb6e970fc94d2c47f5ea879b1e7a2db620abd",
+    "dependencies": [],
+    "event_id": "653e0b4d-a965-43a7-b62c-3b3e42251251",
+    "issue": 1520,
+    "op": "claim",
+    "paths": [
+      "docs/labs",
+      "docs/integration/project-track.md",
+      "docs/plans/2026-09-29-path-to-chat.md"
+    ],
+    "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
+    "recovery_receipt": "PR1521 merged7895501d exact reviewed tree; previous claim released, no unresolved jobs; integration-first owner request and immutable integration-backlog/work-card.md",
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:20b5c440ba12e496f47146d844476c601447edf5c5015dd05bd10b56cbe34889"
+  },
+  "observed_server_time": 1790737167,
+  "previous_head": "679796b530dafc410b1448d4b4e6c632624c5314"
+}
