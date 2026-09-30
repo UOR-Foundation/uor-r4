@@ -6578,8 +6578,9 @@ mod tests {
     fn a_served_and_snapped_model_saves_both_records_for_explicit_reapplication() -> Result<()> {
         // The combined-mode save/metadata/reapply contract: a model saved
         // with the served representation and a transport snap records both;
-        // `load` re-applies neither (raw float); reading the recorded modes
-        // and reapplying them restores the saved forward bit for bit.
+        // `load` restores the recorded snap but not the served representation,
+        // and free transport stays available explicitly; reading the recorded
+        // modes and reapplying them restores the saved forward bit for bit.
         let mut model = StackModel::new(exportable("rar", ReadScore::Lorentz, true), &cpu())?;
         spread(&model, 139)?;
         for (name, var) in model.variables() {
@@ -6619,7 +6620,7 @@ mod tests {
         assert!(loaded.served_codec().is_none());
         assert_eq!(loaded.transport_snap(), Some(TransportSnap::Icosian));
         assert_eq!(
-            bits(&loaded.with_unsnapped_transport(|m| m.forward(&ids, 1, time)?))?,
+            bits(&loaded.with_unsnapped_transport(|m| m.forward(&ids, 1, time))?)?,
             float_free
         );
         assert_ne!(bits(&loaded.forward(&ids, 1, time)?)?, both_logits);
