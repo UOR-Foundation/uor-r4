@@ -707,6 +707,7 @@ pub(crate) fn stack_gemv_pairs(
 /// For matrices where `m.rows` is a multiple of 4 (all standard stack layers and heads),
 /// groups 4 adjacent rows to reuse each 1 KB pair table across 4 row activations,
 /// cutting pair table cache fetch traffic by 75% while producing bit-for-bit identical outputs.
+#[allow(dead_code)]
 #[inline(never)]
 pub(crate) fn stack_gemv_pairs_blocked4(
     m: &PackedMatrix,

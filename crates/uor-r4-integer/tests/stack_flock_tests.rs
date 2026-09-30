@@ -108,8 +108,9 @@ fn test_flock_scratch_allocation_free() {
     let max_context = 512;
     let mut scratch = FlockScratch::new(max_context);
 
-    let initial_slots_cap = scratch.slots.capacity();
-    let initial_rest_cap = scratch.rest.capacity();
+    let initial_slots_cap = scratch.slots_capacity();
+    let initial_rest_cap = scratch.rest_capacity();
+    let initial_entries_cap = scratch.entries_capacity();
 
     let scores: Vec<i64> = (0..max_context).map(|i| (i as i64 * 17) % 200).collect();
 
@@ -121,14 +122,19 @@ fn test_flock_scratch_allocation_free() {
 
         // Capacities must never grow during inference
         assert_eq!(
-            scratch.slots.capacity(),
+            scratch.slots_capacity(),
             initial_slots_cap,
             "Slots reallocated at query {query}"
         );
         assert_eq!(
-            scratch.rest.capacity(),
+            scratch.rest_capacity(),
             initial_rest_cap,
             "Rest buffer reallocated at query {query}"
+        );
+        assert_eq!(
+            scratch.entries_capacity(),
+            initial_entries_cap,
+            "Entries buffer reallocated at query {query}"
         );
     }
 }
@@ -237,4 +243,57 @@ fn test_raw_rank_weights_q16() {
     assert_eq!(raw[1], 32768);
     assert_eq!(raw[2], 21845);
     assert_eq!(raw[3], 16384);
+}
+
+#[test]
+fn test_flock_max_context_enforced() {
+    let mut scratch = FlockScratch::new(128);
+    let scores = vec![0i64; MAX_FLOCK_CONTEXT + 2];
+
+    let select = FlockSelect::b0(7);
+    let res = flock_select_integer(&scores, MAX_FLOCK_CONTEXT, select, &mut scratch);
+    assert!(res.is_err(), "query = MAX_FLOCK_CONTEXT must exceed bound");
+
+    let res_top_k = top_k_select_integer(&scores, MAX_FLOCK_CONTEXT, 1, &mut scratch);
+    assert!(
+        res_top_k.is_err(),
+        "query = MAX_FLOCK_CONTEXT must exceed bound in top_k"
+    );
+}
+
+#[test]
+fn test_ensure_capacity_no_underflow_when_capacity_exceeds_needed() {
+    let mut scratch = FlockScratch::new(256);
+    // Capacity is initially at least 256. Call ensure_capacity with needed < capacity.
+    scratch.ensure_capacity(64);
+    assert!(scratch.slots_capacity() >= 256);
+    assert!(scratch.rest_capacity() >= 256);
+    assert!(scratch.entries_capacity() >= 256);
+}
+
+#[test]
+fn test_flock_cutoff_ties_after_prefix_sort() {
+    let mut scratch = FlockScratch::new(256);
+    // Query 100, window 20: rest is 1..81.
+    // k = 4. Construct scores such that elements 0..k in rest are unsorted
+    // by select_nth_unstable_by, and elements at boundary k-1 and k are tested.
+    let mut scores = vec![0i64; 101];
+    // Put highest score at pos 10, next highest at pos 20, 30, 40.
+    scores[10] = 100;
+    scores[20] = 90;
+    scores[30] = 80;
+    scores[40] = 70; // 4th element (rank 3, 0-indexed)
+    scores[50] = 70; // 5th element (rank 4, 0-indexed) -> exact tie with 4th!
+    scores[60] = 50;
+
+    let select = FlockSelect::new(0, 20, 4);
+    let scan = flock_select_integer(&scores, 100, select, &mut scratch).unwrap();
+    assert!(
+        scan.cutoff_ties,
+        "Must detect tie between 4th and 5th element"
+    );
+
+    let (ref_entries, ref_scan) = reference_flock_select(&scores, 100, select);
+    assert_eq!(scan, ref_scan);
+    assert_eq!(scratch.entries, ref_entries);
 }

@@ -57,6 +57,7 @@ use std::fmt;
 pub use flock::{
     flock_select_integer, rank_table_q31, raw_rank_weights_q16, top_k_select_integer, FlockEntry,
     FlockScan, FlockScratch, FlockSelect, FlockSlot, FLOCK_INTEGER_SELECTOR_VERSION,
+    MAX_FLOCK_CONTEXT, RAW_RANK_WEIGHTS_Q16, RECIPROCAL_Q32,
 };
 pub use format::{
     Fixed, StackNumerics, StackShape, StackTransportSnap, GROUP, MAGIC, STACK_SCHEMA,

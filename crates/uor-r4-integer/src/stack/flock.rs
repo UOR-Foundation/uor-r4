@@ -20,7 +20,7 @@
 //! - Top-k-only entrypoint (`top_k_select_integer`) for single-pointer (k=1) retrieval.
 
 use crate::stack::kernels::stack_div_u128;
-use crate::{invalid, IntegerError, Result};
+use crate::{invalid, Result};
 
 /// Version tag binding the integer flock selector contract.
 pub const FLOCK_INTEGER_SELECTOR_VERSION: &str = "flock-integer-selector-v1";
@@ -110,19 +110,43 @@ pub struct FlockScratch {
 impl FlockScratch {
     /// Create a scratch workspace with capacity for at least `capacity` context positions.
     pub fn new(capacity: usize) -> Self {
-        let cap = capacity.max(64);
+        let cap = capacity.max(129).min(MAX_FLOCK_CONTEXT);
         Self {
             slots: vec![None; cap],
             rest: Vec::with_capacity(cap),
-            entries: Vec::with_capacity(129.min(cap)),
+            entries: Vec::with_capacity(cap),
         }
+    }
+
+    /// Internal capacity of the slots buffer.
+    #[inline(always)]
+    pub fn slots_capacity(&self) -> usize {
+        self.slots.capacity()
+    }
+
+    /// Internal capacity of the rest candidate buffer.
+    #[inline(always)]
+    pub fn rest_capacity(&self) -> usize {
+        self.rest.capacity()
+    }
+
+    /// Internal capacity of the selected entries buffer.
+    #[inline(always)]
+    pub fn entries_capacity(&self) -> usize {
+        self.entries.capacity()
     }
 
     /// Ensure capacity for at least `needed` positions.
     pub fn ensure_capacity(&mut self, needed: usize) {
-        if self.slots.len() < needed {
-            self.slots.resize(needed, None);
-            self.rest.reserve(needed - self.rest.capacity());
+        let bound = needed.min(MAX_FLOCK_CONTEXT);
+        if self.slots.len() < bound {
+            self.slots.resize(bound, None);
+        }
+        if self.rest.capacity() < bound {
+            self.rest.reserve(bound - self.rest.capacity());
+        }
+        if self.entries.capacity() < bound {
+            self.entries.reserve(bound - self.entries.capacity());
         }
     }
 
@@ -157,6 +181,11 @@ pub fn flock_select_integer(
     select: FlockSelect,
     scratch: &mut FlockScratch,
 ) -> Result<FlockScan> {
+    if query + 1 > MAX_FLOCK_CONTEXT {
+        return Err(invalid(format!(
+            "flock query position {query} exceeds MAX_FLOCK_CONTEXT {MAX_FLOCK_CONTEXT}"
+        )));
+    }
     if scores.len() <= query {
         return Err(invalid(format!(
             "flock scores length {} is too short for query {query}",
@@ -196,30 +225,22 @@ pub fn flock_select_integer(
     // Partition top-k in O(n + k log k)
     let (top_k_count, cutoff_ties) = if candidates_scanned <= select.k {
         // All rest candidates are selected; sort all of them
-        scratch.rest.sort_by(|&a, &b| {
-            scores[b as usize]
-                .cmp(&scores[a as usize])
-                .then_with(|| a.cmp(&b))
-        });
+        scratch
+            .rest
+            .sort_unstable_by(|&a, &b| scores[b].cmp(&scores[a]).then_with(|| a.cmp(&b)));
         (candidates_scanned, false)
     } else {
         // More than k candidates: select_nth_unstable_by puts the k best at 0..k
         scratch.rest.select_nth_unstable_by(select.k, |&a, &b| {
-            scores[b as usize]
-                .cmp(&scores[a as usize])
-                .then_with(|| a.cmp(&b))
+            scores[b].cmp(&scores[a]).then_with(|| a.cmp(&b))
         });
 
-        // Check if cutoff is a tie with (k+1)-th element
-        let cutoff_ties =
-            scores[scratch.rest[select.k - 1] as usize] == scores[scratch.rest[select.k] as usize];
+        // Sort the k selected elements so rest[select.k - 1] is the true k-th element
+        scratch.rest[..select.k]
+            .sort_unstable_by(|&a, &b| scores[b].cmp(&scores[a]).then_with(|| a.cmp(&b)));
 
-        // Sort only the k selected elements
-        scratch.rest[..select.k].sort_by(|&a, &b| {
-            scores[b as usize]
-                .cmp(&scores[a as usize])
-                .then_with(|| a.cmp(&b))
-        });
+        // Check if cutoff is a tie with (k+1)-th element (which is at index select.k)
+        let cutoff_ties = scores[scratch.rest[select.k - 1]] == scores[scratch.rest[select.k]];
 
         (select.k, cutoff_ties)
     };
@@ -248,7 +269,7 @@ pub fn flock_select_integer(
     }
 
     // Sort final kept support in descending rank order with lowest position on ties
-    scratch.entries.sort_by(|a, b| {
+    scratch.entries.sort_unstable_by(|a, b| {
         scores[b.position]
             .cmp(&scores[a.position])
             .then_with(|| a.position.cmp(&b.position))
@@ -276,6 +297,11 @@ pub fn top_k_select_integer(
     k: usize,
     scratch: &mut FlockScratch,
 ) -> Result<FlockScan> {
+    if query + 1 > MAX_FLOCK_CONTEXT {
+        return Err(invalid(format!(
+            "flock query position {query} exceeds MAX_FLOCK_CONTEXT {MAX_FLOCK_CONTEXT}"
+        )));
+    }
     if scores.len() <= query {
         return Err(invalid("scores length is too short for query"));
     }
@@ -292,24 +318,17 @@ pub fn top_k_select_integer(
     let top_k_short = candidates_scanned < k;
 
     let (top_k_count, cutoff_ties) = if candidates_scanned <= k {
-        scratch.rest.sort_by(|&a, &b| {
-            scores[b as usize]
-                .cmp(&scores[a as usize])
-                .then_with(|| a.cmp(&b))
-        });
+        scratch
+            .rest
+            .sort_unstable_by(|&a, &b| scores[b].cmp(&scores[a]).then_with(|| a.cmp(&b)));
         (candidates_scanned, false)
     } else {
         scratch.rest.select_nth_unstable_by(k, |&a, &b| {
-            scores[b as usize]
-                .cmp(&scores[a as usize])
-                .then_with(|| a.cmp(&b))
+            scores[b].cmp(&scores[a]).then_with(|| a.cmp(&b))
         });
-        let cutoff_ties = scores[scratch.rest[k - 1] as usize] == scores[scratch.rest[k] as usize];
-        scratch.rest[..k].sort_by(|&a, &b| {
-            scores[b as usize]
-                .cmp(&scores[a as usize])
-                .then_with(|| a.cmp(&b))
-        });
+        scratch.rest[..k]
+            .sort_unstable_by(|&a, &b| scores[b].cmp(&scores[a]).then_with(|| a.cmp(&b)));
+        let cutoff_ties = scores[scratch.rest[k - 1]] == scores[scratch.rest[k]];
         (k, cutoff_ties)
     };
 
@@ -332,10 +351,46 @@ pub fn top_k_select_integer(
     })
 }
 
+/// Precomputed raw unnormalized rank weights `1 / (i + 1)` in Q16 for support up to 129 entries.
+///
+/// Guaranteed zero hardware multiplier, divider, or floating-point instructions.
+pub const RAW_RANK_WEIGHTS_Q16: [u16; 129] = [
+    65535, 32768, 21845, 16384, 13107, 10922, 9362, 8192, 7281, 6553, 5957, 5461, 5041, 4681, 4369,
+    4096, 3855, 3640, 3449, 3276, 3120, 2978, 2849, 2730, 2621, 2520, 2427, 2340, 2259, 2184, 2114,
+    2048, 1985, 1927, 1872, 1820, 1771, 1724, 1680, 1638, 1598, 1560, 1524, 1489, 1456, 1424, 1394,
+    1365, 1337, 1310, 1285, 1260, 1236, 1213, 1191, 1170, 1149, 1129, 1110, 1092, 1074, 1057, 1040,
+    1024, 1008, 992, 978, 963, 949, 936, 923, 910, 897, 885, 873, 862, 851, 840, 829, 819, 809,
+    799, 789, 780, 771, 762, 753, 744, 736, 728, 720, 712, 704, 697, 689, 682, 675, 668, 661, 655,
+    648, 642, 636, 630, 624, 618, 612, 606, 601, 595, 590, 585, 579, 574, 569, 564, 560, 555, 550,
+    546, 541, 537, 532, 528, 524, 520, 516, 512, 508,
+];
+
+/// Precomputed Q32 reciprocals `2^32 / (i + 1)` for harmonic sums up to 129 entries.
+///
+/// Guaranteed zero hardware multiplier, divider, or floating-point instructions.
+pub const RECIPROCAL_Q32: [u64; 129] = [
+    4294967296, 2147483648, 1431655765, 1073741824, 858993459, 715827882, 613566756, 536870912,
+    477218588, 429496729, 390451572, 357913941, 330382099, 306783378, 286331153, 268435456,
+    252645135, 238609294, 226050910, 214748364, 204522252, 195225786, 186737708, 178956970,
+    171798691, 165191049, 159072862, 153391689, 148102320, 143165576, 138547332, 134217728,
+    130150524, 126322567, 122713351, 119304647, 116080197, 113025455, 110127366, 107374182,
+    104755299, 102261126, 99882960, 97612893, 95443717, 93368854, 91382282, 89478485, 87652393,
+    85899345, 84215045, 82595524, 81037118, 79536431, 78090314, 76695844, 75350303, 74051160,
+    72796055, 71582788, 70409299, 69273666, 68174084, 67108864, 66076419, 65075262, 64103989,
+    63161283, 62245902, 61356675, 60492497, 59652323, 58835168, 58040098, 57266230, 56512727,
+    55778796, 55063683, 54366674, 53687091, 53024287, 52377649, 51746593, 51130563, 50529027,
+    49941480, 49367440, 48806446, 48258059, 47721858, 47197442, 46684427, 46182444, 45691141,
+    45210182, 44739242, 44278013, 43826196, 43383508, 42949672, 42524428, 42107522, 41698711,
+    41297762, 40904450, 40518559, 40139881, 39768215, 39403369, 39045157, 38693399, 38347922,
+    38008560, 37675151, 37347541, 37025580, 36709122, 36398027, 36092162, 35791394, 35495597,
+    35204649, 34918433, 34636833, 34359738, 34087042, 33818640, 33554432, 33294320,
+];
+
 /// Normalized fixed rank table weights: `w_i ∝ 1 / (i + 1)` in Q31.
 ///
-/// Sums to `(1 << 31) - 1` (within roundoff). Multiplier-free, uses exact restoring
-/// long division (`stack_div_u128`).
+/// Sums to `(1 << 31) - 1` (within roundoff). Multiplier-free and divider-free,
+/// uses precomputed reciprocal tables for support up to 129 and exact restoring
+/// long division (`stack_div_u128`) for normalization.
 #[inline(never)]
 pub fn rank_table_q31(count: usize, out: &mut [u32]) -> Result<()> {
     if out.len() < count {
@@ -349,18 +404,25 @@ pub fn rank_table_q31(count: usize, out: &mut [u32]) -> Result<()> {
         return Ok(());
     }
 
-    // Compute harmonic sum in Q32
-    // 1 / (i + 1) in Q32: 2^32 / (i + 1)
+    // Compute harmonic sum in Q32 without hardware division instructions
     let mut sum_q32 = 0u128;
     for i in 0..count {
-        let term = (1u128 << 32) / (i as u128 + 1);
+        let term = if i < RECIPROCAL_Q32.len() {
+            RECIPROCAL_Q32[i] as u128
+        } else {
+            stack_div_u128(1u128 << 32, (i as u128) + 1)
+        };
         sum_q32 += term;
     }
 
     // Normalize each term to Q31: w_i = (term / sum_q32) * 2^31
-    // (term * 2^63) / sum_q32 gives Q31
+    // (term * 2^63) / sum_q32 via restoring division (shift and subtract, no hardware divider)
     for (i, slot) in out[..count].iter_mut().enumerate() {
-        let term = (1u128 << 32) / (i as u128 + 1);
+        let term = if i < RECIPROCAL_Q32.len() {
+            RECIPROCAL_Q32[i] as u128
+        } else {
+            stack_div_u128(1u128 << 32, (i as u128) + 1)
+        };
         let num = term << 31;
         let w = stack_div_u128(num, sum_q32);
         *slot = (w as u32).min(0x7FFF_FFFF);
@@ -371,15 +433,19 @@ pub fn rank_table_q31(count: usize, out: &mut [u32]) -> Result<()> {
 
 /// Raw unnormalized rank weights: `a_i = 1 / (i + 1)` in Q16.
 ///
-/// Unnormalized B2 hybrid scale. Multiplier-free.
+/// Unnormalized B2 hybrid scale. Multiplier-free and hardware-divider-free.
 #[inline(never)]
 pub fn raw_rank_weights_q16(count: usize, out: &mut [u16]) -> Result<()> {
     if out.len() < count {
         return Err(invalid("output slice is smaller than count"));
     }
     for (i, slot) in out[..count].iter_mut().enumerate() {
-        let term = (1u32 << 16) / (i as u32 + 1);
-        *slot = term.min(0xFFFF) as u16;
+        if i < RAW_RANK_WEIGHTS_Q16.len() {
+            *slot = RAW_RANK_WEIGHTS_Q16[i];
+        } else {
+            let term = stack_div_u128(1u128 << 16, (i as u128) + 1);
+            *slot = term.min(0xFFFF) as u16;
+        }
     }
     Ok(())
 }

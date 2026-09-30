@@ -499,7 +499,10 @@ fn test_gemv_pairs_blocked4_bit_identical_to_scalar() {
     let scales: Vec<u8> = (0..rows * cols / 32)
         .map(|_| (rng.next() & 0x3F) as u8)
         .collect();
-    let min_de: Vec<u8> = (0..rows).map(|_| (rng.next() & 0x03) as u8).collect();
+    let min_de: Vec<u8> = scales
+        .chunks_exact(cols / 32)
+        .map(|row_scales| row_scales.iter().map(|&s| s >> 4).min().unwrap_or(0))
+        .collect();
 
     let matrix = PackedMatrix {
         rows,
@@ -528,4 +531,3 @@ fn test_gemv_pairs_blocked4_bit_identical_to_scalar() {
         "stack_gemv_pairs_blocked4 must produce bit-for-bit identical outputs to stack_gemv_pairs"
     );
 }
-
