@@ -1,0 +1,24 @@
+{
+  "event": {
+    "epoch": 6,
+    "event_id": "pilot-c-checkpoint-live-successor-15adfa7e-f79b-46a2-b323-caf4dae50ede",
+    "issue": 1520,
+    "op": "checkpoint",
+    "packet": {
+      "attempt": "continuity-pilot-20260930-c",
+      "handoff": {
+        "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/handoff.json",
+        "sha256": "28141b5f4b8e3984c9141382622ab3f7cbb65889100f5b7eeb1e0e14b89bd7b0"
+      },
+      "live_observation": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/after-successor-claim.json",
+      "next_action": "Monitor same live worker to bounded completion, verify single charge/confirmed stop, finalize original attempt, release successor and mark both sessions unavailable.",
+      "original_claim": {
+        "epoch": 5,
+        "session": "codex-review1-pilot-c-origin-20260930"
+      }
+    },
+    "session": "codex-review1-pilot-c-successor-20260930"
+  },
+  "observed_server_time": 1790739479,
+  "previous_head": "beb9fb262b13c3eb76216fbd9cf4dd2cf763b02b"
+}
