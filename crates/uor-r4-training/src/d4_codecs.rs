@@ -142,13 +142,18 @@ impl MapCodec for E8MatchedBitMapCodec {
     }
 }
 
-/// Lab 3 codec applying minimum-MSE scale optimization to recurrence output projections
-/// (`rec_out`) or specified square matrices within the <= 4.25 bpw D4 gate.
+/// Codec applying minimum-MSE scale optimization to matrices matching a specified shape
+/// (e.g. `(width, width)`).
+///
+/// Note: in architecture configurations where read/attention maps share dimensions with
+/// recurrence output (e.g. 288x288), `for_shape(288, 288)` matches all square maps of that
+/// dimension (including read `query`, `key`, `value`, `out`), not exclusively recurrence
+/// output sites.
 #[derive(Clone, Debug)]
 pub struct RecurrenceOutMinMseMapCodec {
-    /// Target shape for recurrence output projections (e.g. `(width, width)`).
-    /// If specified, only matrices matching `(rows, cols) == (width, width)` receive
-    /// Minimum-MSE quantization, while others use standard RTN.
+    /// Target shape for matrices receiving Minimum-MSE quantization (e.g. `(width, width)`).
+    /// If specified, only matrices matching `(rows, cols) == (target_rows, target_cols)`
+    /// receive Minimum-MSE quantization, while others use standard RTN.
     pub target_shape: Option<(usize, usize)>,
     name: String,
 }

@@ -12,6 +12,7 @@ pub mod baseline_counts;
 pub mod baseline_protocol;
 pub mod cache_memory;
 pub mod d4_codecs;
+pub use d4_codecs::{codec_by_name, HeadCompensatedMapCodec, RecurrenceOutMinMseMapCodec};
 pub mod dialogue_artifact;
 pub mod dialogue_child_artifact;
 pub mod dialogue_development;

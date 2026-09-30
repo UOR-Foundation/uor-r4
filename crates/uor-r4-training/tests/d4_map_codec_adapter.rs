@@ -212,7 +212,8 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
 
     // 6. Export stack artifact without calibration (using QAT weights)
     check_export_representation(record.as_ref(), false)?;
-    let (lut_bytes, summary) = export_stack(&model, "head-compensated-qat-test".into(), None)?;
+    let (lut_bytes, summary) =
+        export_stack(&model, "head-compensated-qat-test".into(), None, None)?;
     assert!(!lut_bytes.is_empty());
     assert_eq!(
         summary["method"]["quantizer"],
@@ -352,7 +353,7 @@ fn qat_min_mse_end_to_end_export_and_exactness() -> Result<()> {
 
     // 6. Export stack artifact without calibration (using QAT weights)
     check_export_representation(record.as_ref(), false)?;
-    let (lut_bytes, summary) = export_stack(&model, "qat-min-mse-test".into(), None)?;
+    let (lut_bytes, summary) = export_stack(&model, "qat-min-mse-test".into(), None, None)?;
     assert!(!lut_bytes.is_empty());
     assert_eq!(
         summary["method"]["quantizer"],
@@ -588,7 +589,7 @@ fn test_exported_artifact_dequantized_weights_equal_served_view_element_by_eleme
         model.set_served_representation(Some(codec.clone()))?;
 
         let (lut_bytes, _summary) =
-            export_stack(&model, serde_json::json!({"test": "parity"}), None)?;
+            export_stack(&model, serde_json::json!({"test": "parity"}), None, None)?;
         let artifact = StackArtifact::parse(lut_bytes)
             .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
 
@@ -778,7 +779,7 @@ fn qat_rec_out_min_mse_end_to_end_export_and_exactness() -> Result<()> {
     // 6. Export stack artifact without calibration (using QAT weights)
     check_export_representation(record.as_ref(), false)?;
     assert!(check_export_representation(record.as_ref(), true).is_err());
-    let (lut_bytes, summary) = export_stack(&model, "rec-out-min-mse-qat-test".into(), None)?;
+    let (lut_bytes, summary) = export_stack(&model, "rec-out-min-mse-qat-test".into(), None, None)?;
     assert!(!lut_bytes.is_empty());
     assert_eq!(
         summary["method"]["quantizer"],
@@ -1007,7 +1008,7 @@ fn test_export_stack_directly_refuses_e8_matched_bit() -> Result<()> {
     let mut model = StackModel::new(config, &device)?;
     model.set_served_representation(Some(Arc::new(E8MatchedBitMapCodec::default())))?;
 
-    let err = export_stack(&model, "e8-direct-refusal-test".into(), None).unwrap_err();
+    let err = export_stack(&model, "e8-direct-refusal-test".into(), None, None).unwrap_err();
     assert!(
         err.to_string().contains("stack export does not write"),
         "expected export refusal for E8 served codec, got: {err}"
@@ -1042,8 +1043,8 @@ fn test_s2_real_proportions_exported_artifact_dequantized_weights_equal_served_v
         let mut model = StackModel::new(config.clone(), &device)?;
         model.set_served_representation(Some(codec.clone()))?;
 
-        let (lut_bytes, summary) =
-            export_stack(&model, serde_json::json!({"test": "s2_parity"}), None)?;
+        let provenance = serde_json::json!({"test": "s2_reload_parity"});
+        let (lut_bytes, summary) = export_stack(&model, provenance.clone(), None, None)?;
         assert_eq!(summary["method"]["quantizer"], codec.name());
 
         let artifact = StackArtifact::parse(lut_bytes.clone())
@@ -1160,18 +1161,180 @@ fn test_s2_real_proportions_exported_artifact_dequantized_weights_equal_served_v
         reloaded.set_served_representation(Some(recovered_codec.clone()))?;
         assert_eq!(reloaded.served_codec().unwrap().name(), codec.name());
 
-        let (reloaded_bytes, reloaded_summary) =
-            export_stack(&reloaded, serde_json::json!({"test": "s2_reloaded"}), None)?;
+        // Export reloaded model with identical provenance metadata
+        let (reloaded_bytes, reloaded_summary) = export_stack(&reloaded, provenance, None, None)?;
         assert_eq!(reloaded_summary["method"]["quantizer"], codec.name());
+
+        // Verify bitwise byte identity between initial and reloaded exports under identical provenance
         assert_eq!(
             reloaded_bytes,
             lut_bytes,
-            "codec {}: reloaded model export must be bit-identical to original export",
+            "codec {}: reloaded model export must be bit-identical to original export under identical provenance",
             codec.name()
         );
+
+        // Verify payload-level structural and matrix equality
+        let reloaded_artifact = StackArtifact::parse(reloaded_bytes)
+            .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+        assert_eq!(
+            reloaded_artifact.header.matrices.len(),
+            artifact.header.matrices.len()
+        );
+        for (orig_spec, rel_spec) in artifact
+            .header
+            .matrices
+            .iter()
+            .zip(&reloaded_artifact.header.matrices)
+        {
+            assert_eq!(orig_spec.name, rel_spec.name);
+            assert_eq!(orig_spec.rows, rel_spec.rows);
+            assert_eq!(orig_spec.cols, rel_spec.cols);
+            assert_eq!(orig_spec.exp_base, rel_spec.exp_base);
+            assert_eq!(
+                artifact.section(orig_spec.nibbles),
+                reloaded_artifact.section(rel_spec.nibbles)
+            );
+            assert_eq!(
+                artifact.section(orig_spec.scales),
+                reloaded_artifact.section(rel_spec.scales)
+            );
+        }
 
         let _ = std::fs::remove_dir_all(&tmp_root);
     }
 
+    Ok(())
+}
+
+#[test]
+fn test_check_export_representation_refuses_bare_shape_names() -> Result<()> {
+    use uor_r4_training::geometric_stack::SavedServedRepresentation;
+    use uor_r4_training::stack_export::check_export_representation;
+
+    // Bare shape names must be refused
+    let bare_names = [
+        "native-d4-head-compensated-head-only",
+        "native-d4-rec-out-min-mse",
+        "native-d4-s2-rec-out-min-mse",
+    ];
+    for name in bare_names {
+        let saved = SavedServedRepresentation {
+            codec: name.to_string(),
+        };
+        let err = check_export_representation(Some(&saved), false).unwrap_err();
+        assert!(
+            err.to_string().contains("requires explicit target shape"),
+            "expected explicit target shape requirement for bare name {name}, got: {err}"
+        );
+    }
+
+    // Shape-qualified names must be accepted
+    let valid_names = [
+        "native-d4-head-compensated-head-only-4096x288",
+        "native-d4-rec-out-min-mse-288x288",
+        "native-d4-s2-rec-out-min-mse-288x288",
+        "native-d4-head-compensated-all-maps",
+        "native-d11-grouped-4bit-g32-rtn",
+        "native-d11-grouped-4bit-g32-min-mse",
+    ];
+    for name in valid_names {
+        let saved = SavedServedRepresentation {
+            codec: name.to_string(),
+        };
+        check_export_representation(Some(&saved), false)?;
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_saved_model_export_restores_codec_not_rtn() -> Result<()> {
+    let config = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 4096,
+        width: 288,
+        heads: 4,
+        mlp_hidden: 768,
+        context: 16,
+        pattern: "r".into(),
+        read: ReadScore::Dot,
+        rotation: false,
+        seed: 42,
+        memory: None,
+    };
+    let device = Device::Cpu;
+    let mut model = StackModel::new(config, &device)?;
+
+    // Attach min-mse codec
+    let codec = Arc::new(D4Grouped4BitAdapter::min_mse());
+    model.set_served_representation(Some(codec.clone()))?;
+
+    let tmp_root = std::env::temp_dir().join(format!("d4-saved-export-{}", std::process::id()));
+    let save_dir = tmp_root.join("saved");
+    model.save(&save_dir)?;
+
+    // Load without codec restored: served_codec is None
+    let mut reloaded = StackModel::load(&save_dir, &device)?;
+    assert!(reloaded.served_codec().is_none());
+
+    // Export without restoring codec writes standard RTN
+    let (rtn_bytes, rtn_summary) =
+        export_stack(&reloaded, serde_json::json!({"test": "rtn"}), None, None)?;
+    assert_eq!(rtn_summary["method"]["quantizer"], "round_to_nearest");
+
+    // Restore codec as geometric-stack.rs does
+    let saved_rec =
+        StackModel::saved_served_representation(&save_dir)?.expect("saved representation");
+    let restored_codec = codec_by_name(&saved_rec.codec)?;
+    reloaded.set_served_representation(Some(restored_codec))?;
+    assert_eq!(reloaded.served_codec().unwrap().name(), codec.name());
+
+    // Export with restored codec writes min-mse quantization
+    let (comp_bytes, comp_summary) = export_stack(
+        &reloaded,
+        serde_json::json!({"test": "min_mse"}),
+        None,
+        None,
+    )?;
+    assert_eq!(comp_summary["method"]["quantizer"], codec.name());
+
+    let rtn_artifact = StackArtifact::parse(rtn_bytes).unwrap();
+    let comp_artifact = StackArtifact::parse(comp_bytes).unwrap();
+
+    let rtn_head = rtn_artifact
+        .header
+        .matrices
+        .iter()
+        .find(|m| m.name == "head")
+        .unwrap();
+    let comp_head = comp_artifact
+        .header
+        .matrices
+        .iter()
+        .find(|m| m.name == "head")
+        .unwrap();
+
+    let rtn_head_deq = uor_r4_training::lut_export::dequantize_matrix(
+        rtn_head.rows,
+        rtn_head.cols,
+        rtn_head.exp_base,
+        rtn_artifact.section(rtn_head.nibbles),
+        rtn_artifact.section(rtn_head.scales),
+    )?;
+    let comp_head_deq = uor_r4_training::lut_export::dequantize_matrix(
+        comp_head.rows,
+        comp_head.cols,
+        comp_head.exp_base,
+        comp_artifact.section(comp_head.nibbles),
+        comp_artifact.section(comp_head.scales),
+    )?;
+
+    // The head matrix dequantized values must differ because min-MSE codec was restored rather than falling back to RTN
+    assert_ne!(
+        rtn_head_deq, comp_head_deq,
+        "restored codec must apply min-MSE quantization rather than falling back to uncompensated RTN"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp_root);
     Ok(())
 }

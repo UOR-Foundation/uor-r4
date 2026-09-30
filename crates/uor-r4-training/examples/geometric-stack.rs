@@ -177,7 +177,7 @@ use uor_r4_training::stack_export::{
     stack_grid_reference, StackCalibration,
 };
 use uor_r4_training::stack_memory::{Codebook, MemoryConfig, MemoryScore};
-use uor_r4_training::{sha256_file, Result, TrainingError};
+use uor_r4_training::{codec_by_name, sha256_file, Result, TrainingError};
 
 fn invalid(message: impl Into<String>) -> TrainingError {
     TrainingError::Invalid(message.into())
@@ -1810,7 +1810,13 @@ fn export_mode(arguments: &[String]) -> Result<()> {
         // run's) exports only as that representation.
         let served = StackModel::saved_served_representation(&model_dir)?;
         check_export_representation(served.as_ref(), calibration_tokens.is_some())?;
-        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let mut model = StackModel::load(&model_dir, &Device::Cpu)?;
+        if let Some(saved_served) = &served {
+            if model.config.arch == StackArch::Geometric {
+                let codec = codec_by_name(&saved_served.codec)?;
+                model.set_served_representation(Some(codec))?;
+            }
+        }
         let time: usize = args.number("calibration_time", model.config.context)?;
         if time == 0 || time > model.config.context {
             return Err(invalid("calibration_time must be within the context"));

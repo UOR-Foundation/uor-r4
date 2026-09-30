@@ -291,6 +291,15 @@ pub fn export_stack(
                 codec.name()
             )));
         }
+        if codec.name() == "native-d4-head-compensated-head-only"
+            || codec.name() == "native-d4-rec-out-min-mse"
+            || codec.name() == "native-d4-s2-rec-out-min-mse"
+        {
+            return Err(invalid(format!(
+                "refusing to export stack with bare shape-dependent codec {}: explicit target shape required",
+                codec.name()
+            )));
+        }
     }
     let (d, heads) = (c.width, c.heads);
     let mlp = c.mlp_hidden.div_ceil(GROUP) * GROUP;
@@ -665,18 +674,24 @@ pub fn check_export_representation(
     let Some(saved) = saved else {
         return Ok(());
     };
+    if saved.codec == "native-d4-head-compensated-head-only"
+        || saved.codec == "native-d4-rec-out-min-mse"
+        || saved.codec == "native-d4-s2-rec-out-min-mse"
+    {
+        return Err(invalid(format!(
+            "saved representation '{}' requires explicit target shape; bare shape-dependent names cannot be exported",
+            saved.codec
+        )));
+    }
     let interim = D11Interim.name();
     let is_export_compatible = saved.codec == interim
         || saved.codec == "native-d11-grouped-4bit-g32-rtn"
         || saved.codec == "native-d11-grouped-4bit-g32-min-mse"
-        || saved.codec == "native-d4-head-compensated-head-only"
+        || saved.codec == "native-d4-head-compensated-all-maps"
         || saved
             .codec
             .starts_with("native-d4-head-compensated-head-only-")
-        || saved.codec == "native-d4-head-compensated-all-maps"
-        || saved.codec == "native-d4-rec-out-min-mse"
         || saved.codec.starts_with("native-d4-rec-out-min-mse-")
-        || saved.codec == "native-d4-s2-rec-out-min-mse"
         || saved.codec.starts_with("native-d4-s2-rec-out-min-mse-");
     if !is_export_compatible {
         return Err(invalid(format!(
@@ -693,6 +708,7 @@ pub fn check_export_representation(
             saved.codec
         )));
     }
+    let _ = crate::d4_codecs::codec_by_name(&saved.codec)?;
     Ok(())
 }
 
