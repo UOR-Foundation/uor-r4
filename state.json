@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 236,
-  "observed_server_time": 1790781146,
+  "sequence": 237,
+  "observed_server_time": 1790781149,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -243,10 +243,10 @@
     },
     "1541": {
       "session": "claude-lab-20260930",
-      "epoch": 5,
-      "work_card": "sha256:e3d982d3c4ef4cc24748e5c16bb4b4d8f6eaccd44ab9b5b1829dde7b4da72cdf",
+      "epoch": 6,
+      "work_card": "sha256:d5803036b6b0ce656246e02942261b91f28bf9e7cfd61302eb6d4d26a4b9fa5c",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-      "base_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+      "base_sha": "32e6dab360c10b4fde6ba2a82b0b6257ebe3c973",
       "paths": [
         "crates/uor-r4-training/examples/m-world.rs",
         "crates/uor-r4-training/src/milestone_world_v2.rs",
@@ -254,10 +254,11 @@
         "crates/uor-r4-training/src/milestone_world_v2_probe.rs",
         "crates/uor-r4-training/src/geometric_stack.rs",
         "crates/uor-r4-training/examples/geometric-stack.rs",
-        "crates/uor-r4-training/src/stack_export.rs"
+        "crates/uor-r4-training/src/stack_export.rs",
+        "crates/uor-r4-training/tests/d4_map_codec_adapter.rs"
       ],
-      "expires": 1790781146,
-      "phase": "released",
+      "expires": 1790782349,
+      "phase": "claimed",
       "checkpoint": null
     },
     "1544": {
