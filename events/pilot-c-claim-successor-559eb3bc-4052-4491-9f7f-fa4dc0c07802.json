@@ -1,0 +1,16 @@
+{
+  "event": {
+    "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "dependencies": [],
+    "event_id": "pilot-c-claim-successor-559eb3bc-4052-4491-9f7f-fa4dc0c07802",
+    "issue": 1520,
+    "op": "claim",
+    "paths": [],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/handoff.json sha256:28141b5f4b8e3984c9141382622ab3f7cbb65889100f5b7eeb1e0e14b89bd7b0",
+    "session": "codex-review1-pilot-c-successor-20260930",
+    "work_card": "sha256:1c522eb02cc7c3f8488c996aeece9410cb871a77c0b767b98cfa9e231c0675fd"
+  },
+  "observed_server_time": 1790739476,
+  "previous_head": "7f7ae2ed0ceb3aebcb26e58f89d1ec3430cae91a"
+}
