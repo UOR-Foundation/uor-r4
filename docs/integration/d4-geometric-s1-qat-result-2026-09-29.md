@@ -31,37 +31,46 @@ September 29, 2026. References #973 under #820.
 
 ## 2. Measured Results Summary
 
-| Metric | Original Float Reference | Arm 2: Float Continuation Control | Arm 1: QAT Served Forward | Arm 1: Exported Integer Engine (LUT / D11) | Gate Requirement | Status |
-|:---|---:|---:|---:|---:|:---:|:---:|
-| **NLL (512 windows, 131,072 targets)** | 1.998113 | 1.955115 | 1.973126 | **1.973127** | $\le \text{Arm 2} + 0.02$ (1.975115) | Reported; Lab 1 re-run pending (+0.018012 nats) |
-| **NLL vs Original Float** | 0.000000 | −0.042998 | −0.024987 | **−0.024986** | $\le 2.018113$ ($+0.02$ nats) | Reported; Lab 1 re-run pending (−0.024986 nats) |
-| **Integer Arithmetic Gap ($\Delta$ vs Served)** | — | — | — | **$7.79 \times 10^{-7}$ nats** | $\le 1.0 \times 10^{-5}$ nats | Reported; Lab 1 re-run pending |
-| **D11 vs D10 NEON Discrepancy** | — | — | — | **0** (`max_abs_logit_diff`) | 0 | Bit-identical |
-| **Top-1 Agreement (vs QAT Own Float Model)** | — | — | 90.28% | **90.28%** | — | Measured (vs Arm 1 own float `f4caf562`, not Arm 2) |
-| **Bits Per Weight (Raw Parameter)** | 32.0000 | 32.0000 | — | **4.2500** | $\le 4.25$ bpw | Standard 4-bit |
-| **Bits Per Weight (Total Container)** | — | — | — | **4.7234** | — | 4,969,988 bytes / 8,417,664 weights |
+| Metric | Original Float Reference | Arm 2: Float Continuation Control | Arm 1: QAT Own Float Reference (`f4caf562...`) | Arm 1: QAT Served Forward | Arm 1: Exported Integer Engine (LUT / D11) | Gate Requirement | Status |
+|:---|---:|---:|---:|---:|---:|:---:|:---:|
+| **NLL (512 windows, 131,072 targets)** | 1.998113 | 1.955115 | 1.962490 | 1.973126 | **1.973127** | $\le \text{Arm 2} + 0.02$ (1.975115) | Reported; Lab 1 re-run pending (+0.018012 nats vs Arm 2) |
+| **Quantization Gap vs Own Float** | — | — | 0.000000 | +0.010636 | **+0.010637** | $\le +0.020000$ nats | Reported; Lab 1 re-run pending (+0.010637 nats vs own float) |
+| **NLL vs Original Pre-Adaptation Float** | 0.000000 | −0.042998 | −0.035623 | −0.024987 | **−0.024986** | $\le 2.018113$ ($+0.02$ nats) | Reported; Lab 1 re-run pending (−0.024986 nats) |
+| **Integer Arithmetic Gap ($\Delta$ vs Served)** | — | — | — | — | **$7.79 \times 10^{-7}$ nats** | $\le 1.0 \times 10^{-5}$ nats | Reported; Lab 1 re-run pending ($7.7924 \times 10^{-7}$ nats) |
+| **D11 vs D10 NEON Discrepancy** | — | — | — | — | **0** (`max_abs_logit_diff`) | 0 | Bit-identical |
+| **Top-1 Agreement (vs QAT Own Float Model)** | — | — | 100.00% | 90.28% | **90.28%** | — | Measured (vs Arm 1 own float `f4caf562`, not Arm 2) |
+| **Bits Per Weight (Raw Parameter)** | 32.0000 | 32.0000 | 32.0000 | — | **4.2500** | $\le 4.25$ bpw | Standard 4-bit |
+| **Bits Per Weight (Total Container)** | — | — | — | — | **4.7234** | — | 4,969,988 bytes / 8,417,664 weights |
 
 ---
 
 ## 3. Fidelity Gate Evaluation
 
-1. **Gate 1: Exported Integer NLL $\le$ Float Continuation + 0.0200 nats**
+1. **Gate 1 (Primary D4 Representation Gate): Exported Integer NLL $\le$ Own Float + 0.0200 nats**
+   - Arm 1 QAT Own Float NLL (unquantized float forward on checkpoint `f4caf562...`): **1.962490** nats.
+   - Bound: $1.962490 + 0.020000 = 1.982490$ nats.
+   - Arm 1 Exported Integer NLL: **1.973127** nats.
+   - Quantization gap vs own float: **+0.010637 nats** ($\approx +0.0106$ nats), passing the representation gate with $0.009363$ nats margin.
+   - *Note on representation penalty:* The 4-bit integer engine is $+0.0106$ nats worse than its own unquantized float weights due to quantization loss, which is well within the pre-registered $\le 0.0200$ nats budget.
+   - **Verdict: Reported; Lab 1 re-run pending**.
+
+2. **Gate 2: Exported Integer NLL $\le$ Float Continuation Control + 0.0200 nats**
    - Arm 2 (Float continuation control): 1.955115 nats.
    - Bound: $1.955115 + 0.020000 = 1.975115$ nats.
    - Arm 1 Exported Integer NLL: **1.973127** nats.
-   - Gap: $+0.018012$ nats.
+   - Gap vs continuation control: $+0.018012$ nats.
    - **Verdict: Reported; Lab 1 re-run pending** (margin: $0.001988$ nats).
 
-2. **Gate 2: Exported Integer NLL $\le$ Original Float + 0.0200 nats (2.018113 nats)**
-   - Bound: 2.018113 nats.
+3. **Comparison vs Original Pre-Adaptation Float Reference (1.998113 nats)**
+   - Bound: $1.998113 + 0.020000 = 2.018113$ nats.
    - Arm 1 Exported Integer NLL: **1.973127** nats.
-   - Gap vs original float: **−0.024986 nats** (the 4-bit integer engine outperforms the original unquantized float checkpoint).
+   - Gap vs pre-adaptation float: **−0.024986 nats** (due to joint QAT adaptation, the 4-bit integer engine achieves lower NLL than the unquantized baseline checkpoint before adaptation).
    - **Verdict: Reported; Lab 1 re-run pending**.
 
-3. **Integer Serving Parity: Integer Engine equals Served Forward $\le 10^{-5}$ nats**
+4. **Integer Serving Parity: Integer Engine equals Served Forward $\le 10^{-5}$ nats**
    - Served forward NLL (training): 1.97312575 nats.
    - Exported integer engine NLL (D11 / LUT): 1.97312653 nats.
-   - Measured gap: $7.7924 \times 10^{-7}$ nats.
+   - Measured gap: $7.7924 \times 10^{-7}$ nats (`lut_eval_integer_arithmetic_nll`).
    - Multiplier-free D11 vs D10 NEON: `max_abs_logit_difference == 0`, `top1_agreement == 1.000000`.
    - **Verdict: Reported; Lab 1 re-run pending** (bitwise D11/D10 agreement verified).
 

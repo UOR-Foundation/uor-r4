@@ -161,6 +161,35 @@ fn sha256_file(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+fn current_binary_sha256() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| fs::read(p).ok())
+        .map(|b| {
+            let mut hasher = Sha256::new();
+            hasher.update(&b);
+            hex::encode(hasher.finalize())
+        })
+        .unwrap_or_else(|| "UNAVAILABLE".to_string())
+}
+
+fn current_git_commit() -> String {
+    std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|out| {
+            if out.status.success() {
+                String::from_utf8(out.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "UNAVAILABLE".to_string())
+}
+
 fn read_u16_tokens(path: &Path, vocab_size: usize) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
     let bytes = fs::read(path)?;
     if bytes.starts_with(b"UORT") {
@@ -333,9 +362,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let model_sha = sha256_file(&args.model_dir.join("model.safetensors"))?;
         let artifact_sha = sha256_file(&args.artifact_path)?;
         let requests_sha = sha256_file(&args.requests_path)?;
-        println!("Model SHA256:    {model_sha}");
-        println!("Artifact SHA256: {artifact_sha}");
-        println!("Requests SHA256: {requests_sha}");
+        let tokenizer_sha = sha256_file(&args.tokenizer_path)?;
+        println!("Model SHA256:     {model_sha}");
+        println!("Artifact SHA256:  {artifact_sha}");
+        println!("Requests SHA256:  {requests_sha}");
+        println!("Tokenizer SHA256: {tokenizer_sha}");
 
         // 2. Load model and artifact
         let float_model = StackModel::load(&args.model_dir, &Device::Cpu)?;
@@ -1005,11 +1036,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let report = json!({
             "schema": "uor-r4.s2-behavior-distortion/1",
+            "runtime_context": {
+                "git_commit_unverified": current_git_commit(),
+                "build_source_status": "unverified-source",
+                "note": "cwd git rev-parse HEAD is runtime execution context, not verified build-source provenance"
+            },
+            "binary_sha256": current_binary_sha256(),
             "model_dir": args.model_dir.display().to_string(),
             "model_sha256": model_sha,
             "artifact_path": args.artifact_path.display().to_string(),
             "artifact_sha256": artifact_sha,
+            "requests_path": args.requests_path.display().to_string(),
             "requests_sha256": requests_sha,
+            "tokenizer_path": args.tokenizer_path.display().to_string(),
+            "tokenizer_sha256": tokenizer_sha,
+            "heldout_path": args.heldout_path.display().to_string(),
             "total_turns": total_turns,
             "baselines": {
                 "float_matches": float_matches,

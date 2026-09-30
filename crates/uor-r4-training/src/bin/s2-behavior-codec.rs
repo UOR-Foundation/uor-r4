@@ -418,10 +418,17 @@ fn main() -> Result<()> {
         let tokenizer_sha = sha256_file(&tokenizer_path)?;
         let heldout_tokens_sha = sha256_file(&heldout_path.join("tokens.u16"))
             .unwrap_or_else(|_| "UNAVAILABLE".to_string());
+        let heldout_mask_sha = sha256_file(&heldout_path.join("response_mask.u8"))
+            .unwrap_or_else(|_| "UNAVAILABLE".to_string());
+        let heldout_manifest_sha = sha256_file(&heldout_path.join("manifest.json"))
+            .unwrap_or_else(|_| "UNAVAILABLE".to_string());
         println!("Verified Model SHA-256:        {model_sha}");
         println!("Verified Baseline LUT SHA-256: {baseline_lut_sha}");
         println!("Verified Requests SHA-256:     {requests_sha}");
         println!("Verified Tokenizer SHA-256:    {tokenizer_sha}");
+        println!("Verified Heldout Tokens SHA:   {heldout_tokens_sha}");
+        println!("Verified Heldout Mask SHA:     {heldout_mask_sha}");
+        println!("Verified Heldout Manifest SHA: {heldout_manifest_sha}");
 
         // Load model, tokenizer, and requests
         let float_model = StackModel::load(&model_dir, &Device::Cpu)?;
@@ -1222,7 +1229,8 @@ fn main() -> Result<()> {
             "schema": "uor-r4.s2-turn-optimization/1",
             "runtime_context": {
                 "git_commit_unverified": current_git_commit(),
-                "note": "cwd git rev-parse HEAD is runtime execution context, not build-source provenance"
+                "build_source_status": "unverified-source",
+                "note": "cwd git rev-parse HEAD is runtime execution context, not verified build-source provenance"
             },
             "binary_sha256": current_binary_sha256(),
             "model_dir": model_dir.display().to_string(),
@@ -1233,6 +1241,12 @@ fn main() -> Result<()> {
             "tokenizer_sha256": tokenizer_sha,
             "heldout_path": heldout_path.display().to_string(),
             "heldout_tokens_sha256": heldout_tokens_sha,
+            "heldout_data": {
+                "path": heldout_path.display().to_string(),
+                "tokens_sha256": heldout_tokens_sha,
+                "response_mask_sha256": heldout_mask_sha,
+                "manifest_sha256": heldout_manifest_sha
+            },
             "baseline": {
                 "artifact": baseline_lut.display().to_string(),
                 "artifact_sha256": baseline_lut_sha,

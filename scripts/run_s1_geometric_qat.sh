@@ -55,6 +55,15 @@ cargo run --release --example geometric-stack -- \
   out="$OUT_ROOT/geometric_s1_qat_d11_1000_lut_eval" \
   windows=512
 
+# Arm 1 D11 / D10 Integer Evaluation & Parity
+echo "Evaluating Arm 1 D11/D10 Integer Parity..."
+cargo run --release --bin uor-r4-stack -- \
+  d11-evaluate \
+  artifact="$OUT_ROOT/geometric_s1_qat_d11_1000_export/model.lut" \
+  valid="$VALID_DATA" \
+  out="$OUT_ROOT/geometric_s1_qat_d11_1000_d11_eval" \
+  windows=512
+
 # Arm 2: Float Continuation Control
 echo "Running Arm 2 (Float Continuation Control)..."
 cargo run --release --example geometric-stack -- \
