@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 60,
-  "observed_server_time": 1790742978,
+  "sequence": 61,
+  "observed_server_time": 1790743088,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -62,6 +62,21 @@
       ],
       "available": false,
       "heartbeat": 1790736512
+    },
+    "opencode-deepseek-20260930": {
+      "lab": "OpenCode-DeepSeek",
+      "adapter": "OpenCode desktop; MANUAL client; deepseek-flash lead; no heartbeat automation; quota-bounded",
+      "capabilities": [
+        "Rust",
+        "GitHub",
+        "independent-subagents",
+        "source-and-evidence-review",
+        "flock-selector",
+        "model-source-transport",
+        "runner-coordinated-jobs"
+      ],
+      "available": true,
+      "heartbeat": 1790743088
     }
   },
   "tasks": {

@@ -1,0 +1,20 @@
+{
+  "event": {
+    "adapter": "OpenCode desktop; MANUAL client; deepseek-flash lead; no heartbeat automation; quota-bounded",
+    "capabilities": [
+      "Rust",
+      "GitHub",
+      "independent-subagents",
+      "source-and-evidence-review",
+      "flock-selector",
+      "model-source-transport",
+      "runner-coordinated-jobs"
+    ],
+    "event_id": "opencode-20260930-register-b0check",
+    "lab": "OpenCode-DeepSeek",
+    "op": "register",
+    "session": "opencode-deepseek-20260930"
+  },
+  "observed_server_time": 1790743088,
+  "previous_head": "72f6321fd2e5a2961c54102c37466827e92218ad"
+}
