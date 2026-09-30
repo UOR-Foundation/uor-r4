@@ -5,7 +5,7 @@
 **Governing Directive**: Lab 1 Board [#1513](https://github.com/UOR-Foundation/uor-r4/issues/1513), Epics [#1509](https://github.com/UOR-Foundation/uor-r4/issues/1509) (Track B) and [#1510](https://github.com/UOR-Foundation/uor-r4/issues/1510) (Infra)  
 **Evidence Artifact**: `docs/evidence/b3-e8-smollm2-360m-2026-09-29.json`  
 **Sealed Report Root**: `/Volumes/UOR-Workspace/uor-r4-lab/b3-e8-smollm2-mlp/attempt-full-32layers-rht-e8p`  
-**Execution Binary**: `/tmp/uor-target/release/b3-e8-smollm2` (`3e304bfc693ccbf653422c1e2b35fdf5f7de0ebc5caa80a3b80a125e4a8290e3`)
+**Execution Binary**: `/tmp/uor-target/release/b3-e8-smollm2` (`3e304bfc693ccbf653422c1e2b35fdf5f7de0ebc5caa80a3b80a125e4a8290e3`) (declared-not-verified; source/executable binding unavailable (historical run))
 
 ---
 
@@ -29,7 +29,7 @@ Per [D12](DECISIONS.md#d12--negative-evidence-retention-and-promotion-gates) and
 
 - **Target Model**: SmolLM2-360M-Instruct
   - Path: `/Volumes/UOR-Workspace/uor-r4-models/sources/smollm2-360m-instruct`
-  - Weight SHA-256: `e6bffe7435d7ddc10fd3b9a9efd429dafbacb1cb17015fb5562664e7532bf86e`
+  - Weight SHA-256: `e6bffe7435d7ddc10fd3b9a9efd429dafbacb1cb17015fb5562664e7532bf86e` (declared-not-verified)
   - Architecture: `LlamaForCausalLM` ($L=32, d_{\text{model}}=960, d_{\text{ffn}}=2560, V=49152$)
 - **Quantization Scope**:
   - Layers: $0..32$ (all 32 layers)
@@ -88,7 +88,7 @@ All metrics were computed across all 32,768 tokens and 235.9M weights, with refe
    - In contrast, $E_8$ lattice vector quantization packages 8 dimensions into a single codeword normalized by a single row-level or coarse-block scale. Even though $E_8$ offers optimal 8D sphere packing density in $\mathbb{R}^8$, the uncompensated residual orientation error across 8 coupled dimensions propagates nonlinearly through the SwiGLU activation ($\text{Swish}(x W_{\text{gate}}) \odot (x W_{\text{up}})$) and across 32 transformer layers.
    - Without second-order Hessian feedback (such as GPTQ or QuIP#'s LDQ rounding) or Quantization-Aware Training (QAT), uncompensated post-training vector quantization struggles to preserve deep language model behavior.
 4. **Implementation Scope & Encoder Suboptimality**:
-   The experimental encoder (`quantize_e8p_block`) used a fast heuristic sign-candidate search (fixing sign patterns per parity coset based on `target[i] < 0`), which restricts sign candidates to 2 patterns out of 256 (512 candidate codewords evaluated out of 65,536). As demonstrated by the counterexample regression in `test_e8p_encoder_counterexample_and_oracle`, codeword 256 is encoded as codeword 128 with squared error 4.0 despite codeword 256 having zero error. An exact oracle search over all 65,536 codewords is provided in `oracle_nearest_e8p_codeword`. While this suboptimality contributes to reconstruction error, the absence of second-order Hessian compensation or training adaptation remains a dominant factor in offline uncompensated vector quantization.
+   The experimental encoder (`quantize_e8p_block`) used a fast heuristic sign-candidate search (fixing sign patterns per parity coset based on `target[i] < 0`), which evaluates at most two distinct sign patterns (evaluating at most 512 candidate codewords out of 65,536). As demonstrated by the counterexample regression in `test_e8p_encoder_counterexample_and_oracle`, codeword 256 is encoded as codeword 128 with squared error 4.0 despite codeword 256 having zero error. A reference oracle search over all 65,536 codewords via exhaustive enumeration under declared f32 arithmetic is provided in `oracle_nearest_e8p_codeword`. Both the heuristic encoder suboptimality and the absence of second-order Hessian compensation or training adaptation are possible contributors, with their relative effects unisolated in this evaluation.
 5. **Definitive Decision Scope**:
    This experiment preserves the measured negative result for uncompensated offline $E_8$ lattice vector quantization on SmolLM2-360M without QAT. Per directive B3, this specific offline arm is halted without parameter sweeps. No positive conversion claims are asserted.
 

@@ -2,7 +2,7 @@
   "arms": [
     {
       "arm_id": 0,
-      "codec_roundtrip_gate_passed": true,
+      "codec_roundtrip_gate_passed": null,
       "delta_nll": 0.0,
       "mean_kl": 0.0,
       "mean_nll": 2.122188575565815,
@@ -338,6 +338,7 @@
     }
   ],
   "corpus": {
+    "binding_status": "declared-not-verified",
     "cid": "blake3:194db0eebf2d49823ece01ee935447a0cc9edeaf018454ceea480ce7590132cf",
     "path": "/Volumes/UOR-Workspace/uor-r4-models/corpora/simple-wiki-20231101/articles.jsonl",
     "sha256": "19e39820b4b367aca30ad8d1b2314727c858f6a0d4595fd1f0a68e505f654b01"
@@ -349,12 +350,14 @@
   },
   "directive": "B3",
   "evaluation_tokens": {
+    "binding_status": "declared-not-verified",
     "path": "/Volumes/UOR-Workspace/uor-r4-models/corpora/simple-wiki-20231101/simplewiki_32x1024.u16",
     "sha256": "9bf6a8334cfe86d0e07ceceb8436002c6c0671a12f79f2e356b233c7a63f2bbd",
     "total_tokens": 32768,
     "window_len": 1024,
     "windows": 32
   },
+  "execution_provenance_note": "source/executable binding unavailable (historical run)",
   "kill_criterion": {
     "excess_nats": 4.891288541257381,
     "rule": "RHT + E8P 3-bit delta NLL > RTN 4-bit delta NLL + 0.05 nats",
@@ -370,6 +373,7 @@
     "vocab_size": 49152
   },
   "tokenizer": {
+    "binding_status": "declared-not-verified",
     "path": "/Volumes/UOR-Workspace/uor-r4-models/sources/smollm2-360m-instruct/tokenizer.json",
     "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
   }

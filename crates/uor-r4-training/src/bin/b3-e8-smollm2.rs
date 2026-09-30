@@ -202,7 +202,7 @@ struct ArmMetrics {
     mean_kl: f64,
     top1_agreement_pct: f64,
     window_nlls: Vec<f64>,
-    codec_roundtrip_gate_passed: bool,
+    codec_roundtrip_gate_passed: Option<bool>,
 }
 
 fn main() -> GenericResult<()> {
@@ -293,7 +293,7 @@ fn main() -> GenericResult<()> {
         mean_kl: 0.0,
         top1_agreement_pct: 100.0,
         window_nlls: ref_nlls.clone(),
-        codec_roundtrip_gate_passed: true,
+        codec_roundtrip_gate_passed: None,
     };
 
     // Helper closure to evaluate an arm
@@ -390,7 +390,7 @@ fn main() -> GenericResult<()> {
         mean_kl: rtn_kl,
         top1_agreement_pct: rtn_agr,
         window_nlls: rtn_nlls,
-        codec_roundtrip_gate_passed: rtn_roundtrip_ok,
+        codec_roundtrip_gate_passed: Some(rtn_roundtrip_ok),
     };
 
     // -----------------------------------------------------------------------
@@ -456,7 +456,7 @@ fn main() -> GenericResult<()> {
         mean_kl: rht_rtn4_kl,
         top1_agreement_pct: rht_rtn4_agr,
         window_nlls: rht_rtn4_nlls,
-        codec_roundtrip_gate_passed: rht_rtn4_roundtrip_ok,
+        codec_roundtrip_gate_passed: Some(rht_rtn4_roundtrip_ok),
     };
 
     // -----------------------------------------------------------------------
@@ -522,7 +522,7 @@ fn main() -> GenericResult<()> {
         mean_kl: rht_rtn3_kl,
         top1_agreement_pct: rht_rtn3_agr,
         window_nlls: rht_rtn3_nlls,
-        codec_roundtrip_gate_passed: rht_rtn3_roundtrip_ok,
+        codec_roundtrip_gate_passed: Some(rht_rtn3_roundtrip_ok),
     };
 
     // -----------------------------------------------------------------------
@@ -588,7 +588,7 @@ fn main() -> GenericResult<()> {
         mean_kl: e8p_2bit_kl,
         top1_agreement_pct: e8p_2bit_agr,
         window_nlls: e8p_2bit_nlls,
-        codec_roundtrip_gate_passed: e8p_2bit_roundtrip_ok,
+        codec_roundtrip_gate_passed: Some(e8p_2bit_roundtrip_ok),
     };
 
     // -----------------------------------------------------------------------
@@ -654,7 +654,7 @@ fn main() -> GenericResult<()> {
         mean_kl: e8p_3bit_kl,
         top1_agreement_pct: e8p_3bit_agr,
         window_nlls: e8p_3bit_nlls,
-        codec_roundtrip_gate_passed: e8p_3bit_roundtrip_ok,
+        codec_roundtrip_gate_passed: Some(e8p_3bit_roundtrip_ok),
     };
 
     // -----------------------------------------------------------------------
@@ -720,7 +720,7 @@ fn main() -> GenericResult<()> {
         mean_kl: e8p_4bit_kl,
         top1_agreement_pct: e8p_4bit_agr,
         window_nlls: e8p_4bit_nlls,
-        codec_roundtrip_gate_passed: e8p_4bit_roundtrip_ok,
+        codec_roundtrip_gate_passed: Some(e8p_4bit_roundtrip_ok),
     };
 
     // -----------------------------------------------------------------------
@@ -808,19 +808,23 @@ fn main() -> GenericResult<()> {
         "corpus": {
             "path": "/Volumes/UOR-Workspace/uor-r4-models/corpora/simple-wiki-20231101/articles.jsonl",
             "cid": "blake3:194db0eebf2d49823ece01ee935447a0cc9edeaf018454ceea480ce7590132cf",
-            "sha256": "19e39820b4b367aca30ad8d1b2314727c858f6a0d4595fd1f0a68e505f654b01"
+            "sha256": "19e39820b4b367aca30ad8d1b2314727c858f6a0d4595fd1f0a68e505f654b01",
+            "binding_status": "declared-not-verified"
         },
         "tokenizer": {
             "path": "/Volumes/UOR-Workspace/uor-r4-models/sources/smollm2-360m-instruct/tokenizer.json",
-            "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+            "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+            "binding_status": "declared-not-verified"
         },
         "evaluation_tokens": {
             "path": args.tokens_path.to_string_lossy(),
             "sha256": "9bf6a8334cfe86d0e07ceceb8436002c6c0671a12f79f2e356b233c7a63f2bbd",
+            "binding_status": "declared-not-verified",
             "windows": args.windows,
             "window_len": args.time,
             "total_tokens": args.windows * args.time
         },
+        "execution_provenance_note": "source/executable binding unavailable (historical run)",
         "model_architecture": {
             "layers": checkpoint.shape.layers,
             "quantized_layers": args.layers,

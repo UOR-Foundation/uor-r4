@@ -1,8 +1,9 @@
 //! B3: E8 Lattice Weight Codecs for Track B Conversion (SmolLM2 MLP layers).
 //!
-//! Provides geometric weight coding at 2, 3, and 4 bits per weight using the canonical
-//! E8 lattice codebook with Conway–Sloane O(1) nearest-point decoding, incoherence
-//! processing via Randomized Hadamard Transform (RHT), and scalar controls (RTN 4-bit, RTN 3-bit).
+//! Provides geometric weight coding at 2, 3, and 4 bits per weight using canonical
+//! E8 lattice codebook decoding helpers, an approximate heuristic encoder for the QuIP#
+//! E8P codebook, incoherence processing via Randomized Hadamard Transform (RHT), and
+//! scalar controls (RTN 4-bit, RTN 3-bit).
 //!
 //! Bits per weight are derived strictly from serialized bytes:
 //! - Plain RTN 4-bit: 16 code bytes + 1 scale byte per 32 weights = 17 bytes / 32 = 4.2500 bpw.
@@ -139,11 +140,17 @@ pub fn decode_e8p_codeword(c: u16) -> [f32; E8_DIM] {
     out
 }
 
-/// Reference finite oracle that performs an exact nearest-codeword search over all 65,536 E8P codewords.
+/// Reference finite oracle that performs an exhaustive enumeration under declared f32 arithmetic
+/// over all 65,536 E8P codewords to find the nearest codeword.
 /// O(65,536) search; intended for verification, small-scale diagnostics, and test regressions.
-pub fn oracle_nearest_e8p_codeword(y: &[f32; E8_DIM], scale: f32) -> ([f32; E8_DIM], u16) {
-    if scale <= 1e-9 {
-        return ([0.0; E8_DIM], 0);
+pub fn oracle_nearest_e8p_codeword(y: &[f32; E8_DIM], scale: f32) -> Result<([f32; E8_DIM], u16)> {
+    if !scale.is_finite() || scale <= 1e-9 {
+        return Err(invalid("oracle scale must be finite and positive"));
+    }
+    for (i, &val) in y.iter().enumerate() {
+        if !val.is_finite() {
+            return Err(invalid(format!("oracle input y[{i}] is not finite")));
+        }
     }
     let mut norm_y = [0.0f32; E8_DIM];
     for i in 0..E8_DIM {
@@ -151,7 +158,6 @@ pub fn oracle_nearest_e8p_codeword(y: &[f32; E8_DIM], scale: f32) -> ([f32; E8_D
     }
     let mut best_err = f32::INFINITY;
     let mut best_c = 0u16;
-    let mut best_out = [0.0f32; E8_DIM];
     for c in 0..=u16::MAX {
         let dec = decode_e8p_codeword(c);
         let mut err = 0.0f32;
@@ -162,28 +168,28 @@ pub fn oracle_nearest_e8p_codeword(y: &[f32; E8_DIM], scale: f32) -> ([f32; E8_D
         if err < best_err {
             best_err = err;
             best_c = c;
-            best_out = dec;
             if err == 0.0 {
                 break;
             }
         }
     }
+    let best_dec = decode_e8p_codeword(best_c);
     let mut out = [0.0f32; E8_DIM];
     for i in 0..E8_DIM {
-        out[i] = best_out[i] * scale;
+        out[i] = best_dec[i] * scale;
     }
-    (out, best_c)
+    Ok((out, best_c))
 }
 
 /// Quantizes an 8-vector to the QuIP# E8P codebook using a fast heuristic sign/abs search.
 /// Returns (quantized_vector, code_u16).
 ///
 /// NOTE (Scoped Implementation Limitation): This heuristic fixes sign bits per parity
-/// based on the sign of `target[i] = norm_y[i] - shift`, which restricts sign candidates to
-/// 2 patterns out of 256 (512 candidate codewords evaluated out of 65,536). Consequently,
+/// based on the sign of `target[i] = norm_y[i] - shift`, which evaluates at most two distinct sign patterns
+/// (evaluating at most 512 candidate codewords out of 65,536). Consequently,
 /// it is NOT guaranteed to find the true nearest codeword. For example, codeword 256 is
 /// encoded as codeword 128 with squared error 4.0 (see `test_e8p_encoder_counterexample_and_oracle`).
-/// For exact nearest-codeword search, see [`oracle_nearest_e8p_codeword`].
+/// For nearest-codeword search under exhaustive enumeration, see [`oracle_nearest_e8p_codeword`].
 pub fn quantize_e8p_block(y: &[f32; E8_DIM], scale: f32) -> ([f32; E8_DIM], u16) {
     if scale <= 1e-9 {
         return ([0.0; E8_DIM], 0);
@@ -1544,10 +1550,18 @@ mod tests {
         let v = decode_e8p_codeword(c_true);
         assert_eq!(v, [0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, -1.25]);
 
-        // Oracle finds exact codeword 256 with 0 error
-        let (oracle_v, oracle_c) = oracle_nearest_e8p_codeword(&v, 1.0);
+        // Oracle finds exact codeword 256 with 0 error under exhaustive enumeration
+        let (oracle_v, oracle_c) =
+            oracle_nearest_e8p_codeword(&v, 1.0).expect("oracle search must succeed");
         assert_eq!(oracle_c, 256);
         assert_eq!(oracle_v, v);
+
+        // Oracle rejects non-finite scale and vector inputs
+        assert!(oracle_nearest_e8p_codeword(&v, f32::NAN).is_err());
+        assert!(oracle_nearest_e8p_codeword(&v, 0.0).is_err());
+        let mut nan_v = v;
+        nan_v[3] = f32::NAN;
+        assert!(oracle_nearest_e8p_codeword(&nan_v, 1.0).is_err());
 
         // Documented heuristic encoder limitation: returns code 128 with squared error 4.0
         let (heur_v, heur_c) = quantize_e8p_block(&v, 1.0);
