@@ -1,0 +1,21 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "3729a673-d8e5-4eba-a89c-d8f8d8599fe3",
+    "issue": 1536,
+    "op": "checkpoint",
+    "packet": {
+      "branch": "codex/runner-small-validation",
+      "checkpoint_sha": "04981eb211a39cab23958996556dabf232b22a4c",
+      "checks": "84tests+buildPASS attempt7, attempt6 intermittent process identity failure retained",
+      "next_action": "Protected delivery envelope published; finishqueue then idleinstallversionedbinary max_jobs8 resourcebounds and restoreadmission. Directsmallchecks ALREADYauthorizedoutside runner; do notholdlabs onthisrepair. G1agstopped14:16:47; inspectnewg2reservationwithoutcancel. Preserveallreceipts.",
+      "pr": 1543,
+      "production": "Old8e90aa33-release admissionsdisabled drain; runningempty at14:21; successor notyetinstalled",
+      "reviews": "Two independent finalAPPROVE v7",
+      "root_running_attempts": []
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790778120,
+  "previous_head": "a8364b4ab627cb1fe7e5459e8cf10f3d6bd26822"
+}
