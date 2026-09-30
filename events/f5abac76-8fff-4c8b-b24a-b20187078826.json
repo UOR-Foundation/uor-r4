@@ -1,0 +1,21 @@
+{
+  "event": {
+    "base_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+    "dependencies": [],
+    "event_id": "f5abac76-8fff-4c8b-b24a-b20187078826",
+    "issue": 1520,
+    "op": "claim",
+    "paths": [
+      "tools/lab-runner",
+      "docs/labs",
+      ".github/workflows/lab-delivery.yml",
+      "AGENTS.md"
+    ],
+    "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+    "recovery_receipt": null,
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:a527af51dfe737971a18333a49c12f05875c95976294f525e6599e085c569083"
+  },
+  "observed_server_time": 1790735362,
+  "previous_head": "419e08021bd0a979484a1138e4216645962390b6"
+}

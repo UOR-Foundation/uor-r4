@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-  "sequence": 1,
-  "observed_server_time": 1790735359,
+  "sequence": 2,
+  "observed_server_time": 1790735362,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -18,6 +18,23 @@
       "heartbeat": 1790735359
     }
   },
-  "tasks": {},
+  "tasks": {
+    "1520": {
+      "session": "codex-durable-20260929-root",
+      "epoch": 1,
+      "work_card": "sha256:a527af51dfe737971a18333a49c12f05875c95976294f525e6599e085c569083",
+      "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+      "base_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+      "paths": [
+        "tools/lab-runner",
+        "docs/labs",
+        ".github/workflows/lab-delivery.yml",
+        "AGENTS.md"
+      ],
+      "expires": 1790736562,
+      "phase": "claimed",
+      "checkpoint": null
+    }
+  },
   "attempts": {}
 }
