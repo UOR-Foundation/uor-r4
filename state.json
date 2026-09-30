@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 115,
-  "observed_server_time": 1790755001,
+  "sequence": 116,
+  "observed_server_time": 1790755054,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -223,6 +223,21 @@
         "next_action": "Kimi singleexecutor:verify prior deploymentreceipt and exactpacketv2 council; reserve suppliedsleep30pilot beforeholdarchive; preserve newholds; finishreceipt/charge before regularadmission",
         "production": "Kimi held-startedmatchingbinarypid74632; originalhold retained; no pilot yet"
       }
+    },
+    "1541": {
+      "session": "claude-lab-20260930",
+      "epoch": 1,
+      "work_card": "sha256:d84f06e3a611513e1efdc606f45ea2d948396c7f2c7887cf3d1ea0d0eb4b585d",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+      "paths": [
+        "crates/uor-r4-training/examples/m-world.rs",
+        "crates/uor-r4-training/src/milestone_world_v2.rs",
+        "crates/uor-r4-training/data/a1-english-probe.json"
+      ],
+      "expires": 1790756254,
+      "phase": "claimed",
+      "checkpoint": null
     }
   },
   "attempts": {
