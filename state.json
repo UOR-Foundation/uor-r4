@@ -1,0 +1,10 @@
+{
+  "schema": "uor-r4.lab-state/1",
+  "repository": "UOR-Foundation/uor-r4",
+  "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
+  "sequence": 0,
+  "observed_server_time": 0,
+  "labs": {},
+  "tasks": {},
+  "attempts": {}
+}
