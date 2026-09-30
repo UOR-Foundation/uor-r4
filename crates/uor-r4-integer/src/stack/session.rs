@@ -543,9 +543,13 @@ pub(super) fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
                 } else {
                     0
                 };
-                (2 * ctx * d + lifts).checked_mul(24).unwrap_or(u64::MAX / 2)
+                (2 * ctx * d + lifts)
+                    .checked_mul(24)
+                    .unwrap_or(u64::MAX / 2)
             } else {
-                (CONVOLUTION_WIDTH as u64 * d).checked_mul(24).unwrap_or(u64::MAX / 2)
+                (CONVOLUTION_WIDTH as u64 * d)
+                    .checked_mul(24)
+                    .unwrap_or(u64::MAX / 2)
             }
         })
         .sum();
@@ -787,9 +791,7 @@ impl IntegerStackSession<'_> {
         }
         let d = self.model.shape.width;
         let heads = self.model.shape.heads;
-        let expected_cache_at = position
-            .checked_mul(d)
-            .ok_or(StackError::SessionState)?;
+        let expected_cache_at = position.checked_mul(d).ok_or(StackError::SessionState)?;
         let expected_lift_at = position
             .checked_mul(heads)
             .ok_or(StackError::SessionState)?;
@@ -996,9 +998,8 @@ impl IntegerStackSession<'_> {
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("session");
-        let temp_path = temp_override.unwrap_or_else(|| {
-            parent.join(format!(".{file_name}.tmp-{pid}-{count}"))
-        });
+        let temp_path =
+            temp_override.unwrap_or_else(|| parent.join(format!(".{file_name}.tmp-{pid}-{count}")));
 
         let mut temp_created = false;
         let write_res = (|| -> Result<(), std::io::Error> {
@@ -1036,7 +1037,7 @@ impl IntegerStackSession<'_> {
     /// to prevent memory exhaustion from oversized or malformed payloads.
     pub fn restore_session_from_file(&mut self, path: &Path) -> Result<(), StackError> {
         use std::io::Read;
-        let mut file = std::fs::File::open(path).map_err(StackError::Io)?;
+        let file = std::fs::File::open(path).map_err(StackError::Io)?;
         let max_len = max_serialized_session_bytes(self.model);
         if let Ok(meta) = file.metadata() {
             if meta.len() > max_len {
