@@ -1,0 +1,35 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "ec8cd3d9-ec7e-4da2-aa73-10212a2a3621",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "block11_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/block11-replay-356a9a24-20260930",
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "charges": "Merged-head build/tests217560ms measured; preparation300000ms and review180000ms estimated, charged once. Cumulative849483476ms/1130000000ms. No own job active.",
+      "checkpoint_sha": "22a1b4c49352a782473681b7b4dc0632f35cc1b5",
+      "checks": "Main18e4bd89 cleanly integrated; independent preservation review approved. Four focused Track B model tests with Metal enabled PASS,217.56s,max RSS3175809024 bytes. Historical numerical failures and rejected RMS candidate preserved. Diagnostic executable still rejected d87485a8 until rebuilt; test executable is current.",
+      "cleanup": "Warm internal Track B cache retained for continued work; no cache deletion this integration.",
+      "down_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/down-replay-93085dd5-20260930",
+      "live_attempts": [],
+      "main_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+      "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
+      "mlp_roots": [
+        "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-3c6007ec-20260930",
+        "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-0db94dbf-20260930"
+      ],
+      "next_action": "Numerical arithmetic/comparator council decision pending #1509 comment5916224104; no new ad-hoc RMS tuning or unchanged parity/B2 fit. PR1549 exact513026e7 source review APPROVE posted5916447636 with actual Linux1098pass/4fail/60ignored disclosed; author can protected-deliver. PR1548 stilla2311a7 missing config fields; review only changed successor. Continue eligible consumer integration/review.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "rms_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/rms-window-d87485a8-20260930",
+      "status": "ACTIVE",
+      "trace_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/layer-trace-34371f15-20260930",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790789829,
+  "previous_head": "37c215a2545cad0851bf915073f5e6f9d50e299b"
+}
