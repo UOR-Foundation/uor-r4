@@ -243,6 +243,93 @@ mod tests {
     }
 
     #[test]
+    fn dense_and_recurrent_reads_preserve_prescribed_rank_mass() -> Result<()> {
+        // A realizable fixed-interface construction: q=e0; selected keys=e0;
+        // unselected keys=e1. Scores use delta + ((1 + q.k) / 2)^3.
+        // This fixture checks replacement/normalization, not feature projection,
+        // learned retrieval, the external selector, or full-model capability.
+        let selected = 8usize;
+        let delta = 1e-6f64;
+        let aligned = (1.0 + delta) as f32;
+        let orthogonal = (0.125 + delta) as f32;
+        let harmonic_number = (1..=selected).map(|rank| 1.0 / rank as f64).sum::<f64>();
+        let mut previous_selected_mass = None;
+
+        for causal_prefix in [8usize, 32, 128] {
+            // Three value lanes expose the selected mass, first selected weight,
+            // and unselected mass independently of the implementation's sums.
+            let mut values = Vec::with_capacity(causal_prefix * 3);
+            for position in 0..causal_prefix {
+                let value = [
+                    if position < selected { 1.0 } else { 0.0 },
+                    if position == 0 { 1.0 } else { 0.0 },
+                    if position >= selected { 1.0 } else { 0.0 },
+                ];
+                values.extend_from_slice(&value);
+            }
+            // Supply once-rounded aggregate inputs to isolate row correction.
+            // Serial F32 recurrence accumulation is a separate diagnostic.
+            let selected_base = selected as f64 * f64::from(aligned);
+            let background_base = (causal_prefix - selected) as f64 * f64::from(orthogonal);
+            let base_numerator = [selected_base as f32, aligned, background_base as f32];
+            let base_mass = (selected_base + background_base) as f32;
+            let recurrent = correct_recurrent_rank_row(
+                &base_numerator,
+                base_mass,
+                &vec![aligned; selected],
+                &values[..selected * 3],
+                selected,
+            )?;
+
+            let mut scores = Vec::with_capacity(causal_prefix * causal_prefix);
+            for _ in 0..causal_prefix {
+                scores.extend((0..causal_prefix).map(|position| {
+                    if position < selected {
+                        aligned
+                    } else {
+                        orthogonal
+                    }
+                }));
+            }
+            let mut rows = vec![Vec::new(); causal_prefix];
+            rows[causal_prefix - 1] = (0..selected).collect();
+            let support = RankedSupport::new(1, 1, causal_prefix, rows, selected)?;
+            let scores =
+                Tensor::from_vec(scores, (1, 1, causal_prefix, causal_prefix), &Device::Cpu)?;
+            let values = Tensor::from_vec(values, (1, 1, causal_prefix, 3), &Device::Cpu)?;
+            let dense = quadratic_rank_hybrid(
+                &scores,
+                &values,
+                &support,
+                causal_prefix * causal_prefix,
+                causal_prefix * 3,
+            )?
+            .attended
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+            let dense_row = &dense[(causal_prefix - 1) * 3..];
+
+            // Closed-form F64 oracle, not another overlap-correction algorithm.
+            let background = (causal_prefix - selected) as f64 * (0.125 + delta);
+            let mass = harmonic_number + background;
+            let expected = [harmonic_number / mass, 1.0 / mass, background / mass];
+            let tolerance = 2e-5;
+            for lane in 0..3 {
+                assert!((f64::from(dense_row[lane]) - expected[lane]).abs() < tolerance);
+                assert!((f64::from(recurrent.attended[lane]) - expected[lane]).abs() < tolerance);
+                assert!((dense_row[lane] - recurrent.attended[lane]).abs() < tolerance as f32);
+            }
+            assert!((f64::from(recurrent.mass) - mass).abs() < tolerance);
+            assert!(f64::from(dense_row[1]) <= 1.0 / harmonic_number + tolerance);
+            if let Some(previous) = previous_selected_mass {
+                assert!(dense_row[0] < previous);
+            }
+            previous_selected_mass = Some(dense_row[0]);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn support_rejects_future_duplicate_and_over_budget_rows() {
         assert!(RankedSupport::new(1, 1, 2, vec![vec![1], vec![]], 2).is_err());
         assert!(RankedSupport::new(1, 1, 2, vec![vec![], vec![0, 0]], 2).is_err());

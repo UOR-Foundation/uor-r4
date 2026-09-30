@@ -23,6 +23,18 @@ mean predictor baselines and fixed norm-bin diagnostics are not yet implemented;
 they do not add owner acceptance gates. All-layer hybrid NLL/KL and the matched
 dense comparison remain separate work.
 
+The hybrid draft also retains a source-only regression for prescribed reciprocal
+rank mass. Three value lanes isolate selected mass, first-selected weight and
+background mass at causal prefix lengths 8, 32 and 128, with fixed support size 8.
+It compares dense replacement and recurrent correction with a closed-form F64
+oracle under a declared F32 tolerance. The correction input is aggregated in F64
+and rounded once to F32; long-prefix F32 recurrence accumulation error remains a
+separate diagnostic. The fixture remains **UNCOMPILED / NOT_RUN**;
+it does not exercise feature projection, the external selector or learned model
+behavior, and it changes no arm or acceptance gate. The independently reviewed
+[information/mass analysis](https://github.com/UOR-Foundation/uor-r4/blob/e259ec6e0bd5793a1c134b4c7b41095b8e340bdf/research-reviews/20260930-track-b-information-mass/track-b-information-mass-audit.md)
+records its mathematical motivation and scope.
+
 The source-data and transfer drafts were recovered internally after the owner's
 September 29 workspace-image restoration. The data draft's original recovered
 hash was `93458b4718be3919848567ca4ff1379fa9929ae64c838efe453617d8766c9866`;
