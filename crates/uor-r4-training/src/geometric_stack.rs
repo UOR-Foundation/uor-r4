@@ -59,9 +59,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use candle_core::backend::BackendStorage;
+use candle_core::{CpuStorage, CustomOp2, CustomOp3, DType, Device, Layout, Shape, Tensor, Var};
 #[cfg(feature = "metal")]
 use candle_core::{MetalStorage, Storage};
-use candle_core::{CpuStorage, CustomOp2, CustomOp3, DType, Device, Layout, Shape, Tensor, Var};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
