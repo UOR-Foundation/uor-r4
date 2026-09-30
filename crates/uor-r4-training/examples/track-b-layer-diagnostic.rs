@@ -227,7 +227,7 @@ fn run(model_path: &Path, parent: &Path, out: &Path) -> Result<Value> {
             "reference_logit_difference":compare(&reference_logits,&logits)?,"rows":rows}));
     }
     Ok(
-        json!({"schema":"uor-r4.track-b-layer-diagnostic/1","status":"DIAGNOSTIC_COMPLETE",
+        json!({"schema":"uor-r4.track-b-layer-diagnostic/1","status":if anchors_match {"DIAGNOSTIC_COMPLETE"} else {"ANCHOR_MISMATCH"},
         "anchors_match_bitwise":anchors_match,"reference_anchor":reference_anchor,"backends":results,
         "elapsed_seconds":start.elapsed().as_secs_f64(),"parity_pass":false,
         "scope":"layer QKV divergence; no isolated-operator causal attribution or parity qualification"}),
@@ -252,7 +252,14 @@ fn main() -> Result<()> {
     });
     let result = run(Path::new(&args[0]), Path::new(&args[1]), out);
     let (value, code) = match result {
-        Ok(v) => (v, 0),
+        Ok(v) => {
+            let code = if v["anchors_match_bitwise"] == true {
+                0
+            } else {
+                2
+            };
+            (v, code)
+        }
         Err(e) => (
             json!({"status":"UNAVAILABLE","error":e.to_string(),"parity_pass":false}),
             1,

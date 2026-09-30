@@ -41,6 +41,12 @@ sealed and verified. See the [executed result](../evidence/track-b-parity-2026-0
 B2 fitting remains unqualified. Next localize the first divergent operator on
 the smallest failing prefixes, preserving outputs and the unchanged tolerance;
 do not rerun the full comparison without a causal correction.
+The [shape-preserving trace](../evidence/track-b-layer-trace-2026-09-30.md)
+reproduced the failed eight-token reference/CPU/Metal logits bit for bit. For
+the worst shared token, Q/K/V error amplifies between layers 11 and 12. Next
+replay layer-12 normalization/projection on identical saved reference residuals
+to distinguish local arithmetic from propagated input error; no MLP attribution
+or numerical repair has yet been established.
 
 Earlier interrupted attempts and the restored external compiler-cache failure
 remain historical execution evidence in the [September 29 record](track-b-conversion-result-2026-09-29.md)

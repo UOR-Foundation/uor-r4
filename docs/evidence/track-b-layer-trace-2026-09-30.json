@@ -1,0 +1,285 @@
+{
+  "source_revision": "34371f15de2176a237a913a6944a95be07baec08",
+  "executable_sha256": "aa042ae74e6e7ab5554d18e7d141db0a9d5717b69ad6cf070f667ea03eb9e42b",
+  "report_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/layer-trace-34371f15-20260930",
+  "manifest_sha256": "3ea6feb8ebc63d30e9f5b3031a8276c74869ac89b47df1968c19072bd20b3862",
+  "anchors_match_bitwise": true,
+  "reference_anchor": {
+    "different_bits": 0,
+    "elements": 393216,
+    "max_abs": 0.0,
+    "reference_rms": 13.178014851724365,
+    "rms": 0.0
+  },
+  "elapsed_seconds": 84.667575917,
+  "comparison_rows_per_backend": 720,
+  "backends": [
+    {
+      "backend": "cpu",
+      "saved_logits_anchor": {
+        "different_bits": 0,
+        "elements": 393216,
+        "max_abs": 0.0,
+        "reference_rms": 13.178075711375708,
+        "rms": 0.0
+      },
+      "reference_logit_difference": {
+        "different_bits": 391238,
+        "elements": 393216,
+        "max_abs": 0.0070133209228515625,
+        "reference_rms": 13.178014851724365,
+        "rms": 0.0012667158439106446
+      },
+      "position5_layers10_to12": [
+        {
+          "difference": {
+            "different_bits": 574,
+            "elements": 576,
+            "max_abs": 2.9087066650390625e-05,
+            "reference_rms": 1.862683692668815,
+            "rms": 6.572746345664659e-06
+          },
+          "kind": "q",
+          "layer": 10,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 190,
+            "elements": 192,
+            "max_abs": 1.3589859008789062e-05,
+            "reference_rms": 1.314018715050124,
+            "rms": 3.513968812074382e-06
+          },
+          "kind": "k",
+          "layer": 10,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 190,
+            "elements": 192,
+            "max_abs": 4.887580871582031e-06,
+            "reference_rms": 0.6123360337597018,
+            "rms": 1.8087571435180469e-06
+          },
+          "kind": "v",
+          "layer": 10,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 572,
+            "elements": 576,
+            "max_abs": 5.6743621826171875e-05,
+            "reference_rms": 1.9274522959804152,
+            "rms": 1.640338827001122e-05
+          },
+          "kind": "q",
+          "layer": 11,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 191,
+            "elements": 192,
+            "max_abs": 6.67572021484375e-05,
+            "reference_rms": 2.63586841237196,
+            "rms": 1.4708087963355587e-05
+          },
+          "kind": "k",
+          "layer": 11,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 191,
+            "elements": 192,
+            "max_abs": 7.510185241699219e-05,
+            "reference_rms": 0.8963466110134147,
+            "rms": 1.4354522335416102e-05
+          },
+          "kind": "v",
+          "layer": 11,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 576,
+            "elements": 576,
+            "max_abs": 0.0022444725036621094,
+            "reference_rms": 1.0232268840148089,
+            "rms": 0.00035583532989626166
+          },
+          "kind": "q",
+          "layer": 12,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 192,
+            "elements": 192,
+            "max_abs": 0.0033278465270996094,
+            "reference_rms": 1.3350316333424823,
+            "rms": 0.0005045516353813783
+          },
+          "kind": "k",
+          "layer": 12,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 192,
+            "elements": 192,
+            "max_abs": 0.0005416274070739746,
+            "reference_rms": 0.3480822017524029,
+            "rms": 0.00013840837078563298
+          },
+          "kind": "v",
+          "layer": 12,
+          "position": 5
+        }
+      ]
+    },
+    {
+      "backend": "metal",
+      "saved_logits_anchor": {
+        "different_bits": 0,
+        "elements": 393216,
+        "max_abs": 0.0,
+        "reference_rms": 13.178080882073726,
+        "rms": 0.0
+      },
+      "reference_logit_difference": {
+        "different_bits": 391631,
+        "elements": 393216,
+        "max_abs": 0.0067539215087890625,
+        "reference_rms": 13.178014851724365,
+        "rms": 0.0012201111982180475
+      },
+      "position5_layers10_to12": [
+        {
+          "difference": {
+            "different_bits": 570,
+            "elements": 576,
+            "max_abs": 2.193450927734375e-05,
+            "reference_rms": 1.862683692668815,
+            "rms": 5.285060480937404e-06
+          },
+          "kind": "q",
+          "layer": 10,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 191,
+            "elements": 192,
+            "max_abs": 1.1205673217773438e-05,
+            "reference_rms": 1.314018715050124,
+            "rms": 3.119708478809345e-06
+          },
+          "kind": "k",
+          "layer": 10,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 191,
+            "elements": 192,
+            "max_abs": 4.347413778305054e-06,
+            "reference_rms": 0.6123360337597018,
+            "rms": 1.5737342443521152e-06
+          },
+          "kind": "v",
+          "layer": 10,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 572,
+            "elements": 576,
+            "max_abs": 5.14984130859375e-05,
+            "reference_rms": 1.9274522959804152,
+            "rms": 1.4817240223895408e-05
+          },
+          "kind": "q",
+          "layer": 11,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 190,
+            "elements": 192,
+            "max_abs": 6.29425048828125e-05,
+            "reference_rms": 2.63586841237196,
+            "rms": 1.377006289058886e-05
+          },
+          "kind": "k",
+          "layer": 11,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 192,
+            "elements": 192,
+            "max_abs": 6.67572021484375e-05,
+            "reference_rms": 0.8963466110134147,
+            "rms": 1.27688875963729e-05
+          },
+          "kind": "v",
+          "layer": 11,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 576,
+            "elements": 576,
+            "max_abs": 0.0021758079528808594,
+            "reference_rms": 1.0232268840148089,
+            "rms": 0.0003454191503930023
+          },
+          "kind": "q",
+          "layer": 12,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 192,
+            "elements": 192,
+            "max_abs": 0.003231525421142578,
+            "reference_rms": 1.3350316333424823,
+            "rms": 0.0004897575485054736
+          },
+          "kind": "k",
+          "layer": 12,
+          "position": 5
+        },
+        {
+          "difference": {
+            "different_bits": 192,
+            "elements": 192,
+            "max_abs": 0.0005251765251159668,
+            "reference_rms": 0.3480822017524029,
+            "rms": 0.00013424261075730968
+          },
+          "kind": "v",
+          "layer": 12,
+          "position": 5
+        }
+      ]
+    }
+  ],
+  "complete_file_sha256": {
+    "reference-qkv.f32le": "94db3cfa276d656f38e0200814df54a7b039c0aee84cbfee4b2ddf505da8af7e",
+    "result.json": "c16bf2f1aeb13dc85de493bc8c0d1a03c0c45641d05170c9a62c129f81f871bb",
+    "metal-qkv.f32le": "f349b339ccc7dc1dfc5e5453cf9fe8ea3e840aae3dbeb7748bdb624717693c17",
+    "cpu-logits.f32le": "6d3847bb8634aa6812fcd490b1d44f50e213986488eda3d1f3c1aa1f37aa4501",
+    "metal-logits.f32le": "a3628170c94c9b7290b9894a6be9686aa2c70d12dfeda0ea7d54b490c6d3e1e0",
+    "cpu-qkv.f32le": "348361d254184349c5b1b5619274292609ade03120795b3ec231276af5ad71b0",
+    "reference-logits.f32le": "a207951a0a62e61d9ed4e59dd0396b48199df05438a28357b7599185ef225c18",
+    "inputs.json": "d6c9427e4486a6f04d74cdc95763d170176cfa1c20d08d6b34f2d18e96f3dfc1",
+    "manifest.json": "3ea6feb8ebc63d30e9f5b3031a8276c74869ac89b47df1968c19072bd20b3862",
+    "attempt.json": "ea6a9a0eee832da55c483ec6551f852cb0f49497c4afa9d5f29a05b43e181b5f",
+    "reference-residual.f32le": "cb79c079505bd32773fd8386a5217fdff92414a9650684219af2105be3666ded"
+  }
+}
