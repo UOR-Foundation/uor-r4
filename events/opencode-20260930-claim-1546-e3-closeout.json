@@ -1,0 +1,16 @@
+{
+  "event": {
+    "base_sha": "3b7c2d54141336e5c2f46b9391bbef1f0014c182",
+    "dependencies": [],
+    "event_id": "opencode-20260930-claim-1546-e3-closeout",
+    "issue": 1546,
+    "op": "claim",
+    "paths": [],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "closeout: epoch-2 lease lapsed after #1549 merged (a7b0779d); re-claiming only to release cleanly; deliverable complete, four historical assertions remain a recorded owner/council item",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:e2adc0f78adb937f8971cf1e839992f0ec67a979e19917edb0accaf2208dc559"
+  },
+  "observed_server_time": 1790794559,
+  "previous_head": "726076751484aa90df99f8c59d4a491442c422e4"
+}
