@@ -1,0 +1,101 @@
+{
+  "event": {
+    "attempt": "opencode-b0-flock-unit-20260930-d",
+    "epoch": 3,
+    "event_id": "opencode-20260930-reserve-b0check-d",
+    "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+    "issue": 1512,
+    "op": "reserve",
+    "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner",
+    "session": "opencode-deepseek-20260930",
+    "spec": {
+      "argv": [
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "-p",
+        "uor-r4-training",
+        "--offline",
+        "--lib",
+        "flock"
+      ],
+      "cargo": true,
+      "coordination": {
+        "attempt_id": "opencode-b0-flock-unit-20260930-d",
+        "epoch": 3,
+        "issue": 1512,
+        "session": "opencode-deepseek-20260930",
+        "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9"
+      },
+      "cwd": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929",
+      "env": {
+        "CARGO_BUILD_JOBS": "4",
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/target",
+        "RUST_BACKTRACE": "1",
+        "UOR_BUILD_SOURCE_COMMIT": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd"
+      },
+      "exclusive": true,
+      "gpu": false,
+      "id": "opencode-b0-flock-unit-20260930-d",
+      "kill_criterion": {
+        "kind": "wall",
+        "value": ""
+      },
+      "lab": "OpenCode-DeepSeek",
+      "provenance": {
+        "executable": {
+          "path": "/Users/casey.allard/.cargo/bin/cargo",
+          "sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1"
+        },
+        "inputs": [
+          {
+            "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/Cargo.lock",
+            "sha256": "e11b98bf00374dbc6b9e42da56647c51fc8c5e782eddf3ed031c855997146c32"
+          },
+          {
+            "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/rust-toolchain.toml",
+            "sha256": "0a4b55522951f5475fcdd9ebcbfbbe650bfac272e8baff599585f0e8a120d5ee"
+          },
+          {
+            "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/crates/uor-r4-training/Cargo.toml",
+            "sha256": "80690a62e40a6de289439b09327b8b5cf6aaf00f7853fa08323a420ad0461293"
+          },
+          {
+            "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/crates/uor-r4-training/src/flock.rs",
+            "sha256": "4fce6d14d27146fa1f0073dffbf8e36195f4034a8325673dcbede68bc087119c"
+          },
+          {
+            "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/crates/uor-r4-training/src/flock_transport.rs",
+            "sha256": "f9ba8abc2e8cc53acdd584ec2fe2f2ae152a730e81e037b8c06156787d988a51"
+          }
+        ],
+        "source_sha": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd"
+      },
+      "rss_gib": 6.0,
+      "schema": "uor-r4.lab-runner-job/1",
+      "stop_grace_ms": 250,
+      "storage": [
+        {
+          "additional_bytes": 6442450944,
+          "checkpoint_bytes": 0,
+          "volume": "internal"
+        },
+        {
+          "additional_bytes": 0,
+          "checkpoint_bytes": 0,
+          "volume": "workspace"
+        },
+        {
+          "additional_bytes": 0,
+          "checkpoint_bytes": 0,
+          "volume": "backing"
+        }
+      ],
+      "threads": 4,
+      "wall_s": 3600
+    }
+  },
+  "observed_server_time": 1790746864,
+  "previous_head": "aedba8202809519be3c9a58f162d2f6667737c6e"
+}
