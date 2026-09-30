@@ -299,8 +299,8 @@ impl JobSpec {
             .ok_or_else(|| invalid("wall plus stop reservation overflow"))
     }
 
-    /// Expensive hashing happens only at an otherwise idle production host,
-    /// immediately before opening the launch gate. Paths remain cooperative
+    /// Before opening the payload gate, hash on an idle host or in the owned
+    /// verifier child while the daemon keeps monitoring peers. Paths remain cooperative
     /// immutable inputs; this is not isolation against a hostile same-user writer.
     pub fn verify_provenance(&self) -> Result<()> {
         use std::process::Command;

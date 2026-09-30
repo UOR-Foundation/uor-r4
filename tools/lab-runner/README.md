@@ -271,3 +271,11 @@ that exceeds its envelope stops with its own receipt. The scheduler transition
 must preserve any already running job's identity and immutable specification.
 The owner's one-use monitored bootstrap repair is separately recorded on #1536;
 it is not a permanent manual bypass for ordinary lab jobs.
+
+For a second job, source/input hashing runs inside its owned supervisor before
+`payload.go` is opened. The same job wall/RSS/identity monitor remains active
+for both attempts during verification. Verification failures never execute the
+payload; verification output has separate logs, and late ownership/resources/
+budget are checked again before the payload gate opens. An uncertain restart
+keeps the existing fail-closed reconciliation behavior; this change does not
+claim live production-worker adoption across daemon replacement.
