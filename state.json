@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 379,
-  "observed_server_time": 1790802312,
+  "sequence": 380,
+  "observed_server_time": 1790802466,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -313,6 +313,24 @@
         "crates/uor-r4-training/src/milestone_world_v2.rs"
       ],
       "expires": 1790803061,
+      "phase": "claimed",
+      "checkpoint": null
+    },
+    "1552": {
+      "session": "claude-lab-20260930",
+      "epoch": 1,
+      "work_card": "sha256:6f868525c3760ae6b6680fb5f588a62fba17286e2f90cef4081b8f50acc6668e",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "302e0ad77680383dd2cc50f401dd57ee49796bf4",
+      "paths": [
+        "docs/integration/DECISIONS.md",
+        "docs/integration/direction-review-2026-09-30.md",
+        "STATUS.md",
+        "docs/integration/current-state.md",
+        "crates/uor-r4-core/src/native_geometric/learner/geometric_attention.rs",
+        "crates/uor-r4-core/src/native_geometric/learner/lowbit_attention.rs"
+      ],
+      "expires": 1790803666,
       "phase": "claimed",
       "checkpoint": null
     }

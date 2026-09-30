@@ -1,0 +1,23 @@
+{
+  "event": {
+    "base_sha": "302e0ad77680383dd2cc50f401dd57ee49796bf4",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-d18-1",
+    "issue": 1552,
+    "op": "claim",
+    "paths": [
+      "docs/integration/DECISIONS.md",
+      "docs/integration/direction-review-2026-09-30.md",
+      "STATUS.md",
+      "docs/integration/current-state.md",
+      "crates/uor-r4-core/src/native_geometric/learner/geometric_attention.rs",
+      "crates/uor-r4-core/src/native_geometric/learner/lowbit_attention.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:6f868525c3760ae6b6680fb5f588a62fba17286e2f90cef4081b8f50acc6668e"
+  },
+  "observed_server_time": 1790802466,
+  "previous_head": "de204b7648698b7827e952d729b062ef789b7251"
+}
