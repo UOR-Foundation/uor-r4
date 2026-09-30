@@ -45,6 +45,7 @@
 //! checks the step and every kernel for multiply, divide and floating-point
 //! instructions.
 
+pub mod flock;
 mod format;
 mod kernels;
 mod session;
@@ -53,11 +54,19 @@ mod tests;
 
 use std::fmt;
 
+pub use flock::{
+    flock_select_integer, rank_table_q31, raw_rank_weights_q16, top_k_select_integer, FlockEntry,
+    FlockScan, FlockScratch, FlockSelect, FlockSlot, FLOCK_INTEGER_SELECTOR_VERSION,
+    MAX_FLOCK_CONTEXT, RAW_RANK_WEIGHTS_Q16, RECIPROCAL_Q32,
+};
 pub use format::{
     Fixed, StackNumerics, StackShape, StackTransportSnap, GROUP, MAGIC, STACK_SCHEMA,
 };
 pub use kernels::{stack_argmax, stack_snap_select};
-pub use session::{IntegerStackModel, IntegerStackSession, SnapTraceEntry, CONVOLUTION_WIDTH};
+pub use session::{
+    IntegerStackModel, IntegerStackSession, SerializedStackLayerState, SerializedStackSession,
+    SnapTraceEntry, CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
+};
 
 /// SHA-256 of the 120 unit icosians of 2I (the transport snap's roots) as
 /// little-endian f32 bytes row by row, in `canonical_h4_roots` order. Equals
