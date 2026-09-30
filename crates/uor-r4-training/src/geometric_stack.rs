@@ -1040,8 +1040,10 @@ impl StackModel {
     /// record existed. With a transport snap set, [`TRANSPORT_RECORD`]
     /// beside them records it ([`Self::saved_transport_snap`]); a save
     /// without one removes a stale record, so the directory never claims a
-    /// snap its weights were not saved with. [`Self::load`] ignores both
-    /// records and loads in float.
+    /// snap its weights were not saved with. [`Self::load`] restores the
+    /// transport snap from its record, so a loaded model's forward pass is the
+    /// one that was trained. It does not restore the served representation;
+    /// its callers read [`Self::saved_served_representation`].
     pub fn save(&self, directory: &Path) -> Result<()> {
         fs::create_dir_all(directory)?;
         let tensors: std::collections::HashMap<String, Tensor> = self
@@ -1113,6 +1115,13 @@ impl StackModel {
         Ok(Some(snap))
     }
 
+    /// Load a saved model. A directory whose [`TRANSPORT_RECORD`] records a
+    /// transport snap loads with it set ([`Self::saved_transport_snap`] checks
+    /// its roots; [`Self::set_transport_snap`] checks the configuration), so
+    /// evaluation and export see the model that was trained. Training modes
+    /// then set the snap their arguments ask for; [`Self::with_unsnapped_transport`]
+    /// gives the free-transport view explicitly. The served representation is
+    /// not restored.
     pub fn load(directory: &Path, device: &Device) -> Result<Self> {
         let config: StackConfig =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
@@ -1132,13 +1141,15 @@ impl StackModel {
             }
             variables.insert(name, Var::from_tensor(tensor)?);
         }
-        Ok(Self {
+        let mut model = Self {
             config,
             variables,
             device: device.clone(),
             served: None,
             transport: None,
-        })
+        };
+        model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
+        Ok(model)
     }
 }
 
@@ -6452,30 +6463,40 @@ mod tests {
             fs::read(free_dir.join("config.json"))?,
             fs::read(snapped_dir.join("config.json"))?
         );
-        // Both load, without the snap, with the saved weights.
+        // Each loads the model that was saved: the free save without a snap,
+        // the snapped save with its snap, and the same forward pass.
         let ids = token_ids(12, 37, 137);
         let free = bits(&model.with_unsnapped_transport(|m| m.forward(&ids, 1, 12))?)?;
-        for directory in [&free_dir, &snapped_dir] {
-            let loaded = StackModel::load(directory, &cpu())?;
-            assert_eq!(loaded.transport_snap(), None);
-            assert_eq!(bits(&loaded.forward(&ids, 1, 12)?)?, free);
-        }
-        // Setting the recorded snap restores the snapped forward.
+        let snapped = bits(&model.forward(&ids, 1, 12)?)?;
+        let loaded_free = StackModel::load(&free_dir, &cpu())?;
+        assert_eq!(loaded_free.transport_snap(), None);
+        assert_eq!(bits(&loaded_free.forward(&ids, 1, 12)?)?, free);
         let mut loaded = StackModel::load(&snapped_dir, &cpu())?;
-        loaded.set_transport_snap(StackModel::saved_transport_snap(&snapped_dir)?)?;
+        assert_eq!(loaded.transport_snap(), Some(TransportSnap::Icosian));
+        assert_eq!(bits(&loaded.forward(&ids, 1, 12)?)?, snapped);
+        // The free-transport view of the snapped save is explicit.
         assert_eq!(
-            bits(&loaded.forward(&ids, 1, 12)?)?,
-            bits(&model.forward(&ids, 1, 12)?)?
+            bits(&loaded.with_unsnapped_transport(|m| m.forward(&ids, 1, 12))?)?,
+            free
         );
-        // A save without the snap over a snapped one removes the record.
-        StackModel::load(&snapped_dir, &cpu())?.save(&snapped_dir)?;
+        // A load and save round trip keeps the record; dropping the snap is
+        // explicit, and a save without it removes the record.
+        loaded.save(&snapped_dir)?;
+        assert_eq!(
+            StackModel::saved_transport_snap(&snapped_dir)?,
+            Some(TransportSnap::Icosian)
+        );
+        loaded.set_transport_snap(None)?;
+        loaded.save(&snapped_dir)?;
         assert_eq!(StackModel::saved_transport_snap(&snapped_dir)?, None);
-        // A record of other roots is refused.
+        assert_eq!(StackModel::load(&snapped_dir, &cpu())?.transport_snap(), None);
+        // A record of other roots is refused, by the reader and by the load.
         fs::write(
             free_dir.join(TRANSPORT_RECORD),
             br#"{"schema":"uor-r4.stack-transport/1","snap":"icosian","roots":120,"roots_sha256":"00","scope":""}"#,
         )?;
         assert!(StackModel::saved_transport_snap(&free_dir).is_err());
+        assert!(StackModel::load(&free_dir, &cpu()).is_err());
         fs::remove_dir_all(&root)?;
         Ok(())
     }
