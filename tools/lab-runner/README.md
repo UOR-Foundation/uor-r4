@@ -27,8 +27,8 @@ runner/
 
 A missing/invalid host policy holds admission. Production policy names verified
 volume UUIDs and sentinels, capacity reserves, the coordination store, memory
-pressure ceiling and thread/RSS bounds. This version requires `max_jobs: 1` so
-input hashing cannot delay another job's monitor.
+pressure ceiling and thread/RSS bounds. Concurrent admission uses combined
+resource reservations; input verification preserves monitoring of other jobs.
 Missing, wrong or substituted storage fails before launch. No missing mount
 point is created by this runner. See `host::HostPolicy` for the versioned schema.
 
