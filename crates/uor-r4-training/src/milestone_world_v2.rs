@@ -2971,21 +2971,15 @@ mod tests {
         assert_eq!(MWorld::digest(), V1_DIGEST);
     }
 
-    /// PENDING (#1541, phase 1): the SHA-256 of the fixed-seed revision-2.1
-    /// episode stream [`stream_digest`] draws. The corrected relation
-    /// generator could not be run when it was written (runner admission held),
-    /// so this is not filled in and the test below fails until it is.
-    ///
-    /// `TODO` (lead lab): after the first successful build, run
-    /// `cargo test -p uor-r4-training --lib the_revision_2_1_episode_stream_is_pinned`,
-    /// copy the digest its assertion prints into this constant, run it again,
-    /// and post the digest on issue 1511 beside the table digest. Any later
-    /// change of this constant is a change of the instrument: say why on the
-    /// issue before any treatment run.
+    /// The SHA-256 of the fixed-seed revision-2.1 episode stream that
+    /// [`stream_digest`] draws. It was taken from the first build that compiled
+    /// this test: GitHub run 36730688569 at `f4b0c5da` (#1541). Any later change
+    /// of this constant is a change of the instrument: say why on issue 1511
+    /// before any treatment run.
     ///
     /// [`MWorld2::digest`] hashes the tables and constants only, so it does
     /// not move with the relation generator; this digest is what does.
-    const STREAM_DIGEST: &str = "PENDING";
+    const STREAM_DIGEST: &str = "0167c1a06d0df94b6e7ee8662298099190b94ab5186bdcba81842b1466dc70ea";
 
     /// SHA-256 over the JSON of a fixed-seed stream of revision-2.1 episodes
     /// under the toy meter: for each of the four cells, 150 episodes of the

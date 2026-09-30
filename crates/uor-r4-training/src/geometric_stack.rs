@@ -8718,15 +8718,17 @@ mod tests {
 
     /// The mixture loss of every row by plain f64 loops and direct
     /// probabilities (no floor), from the model's current variables and its
-    /// final states `hidden`, and the smallest gap of the pointer's selection
-    /// over the scored rows (the finite-difference steps must not move it).
+    /// final states `hidden`, the smallest gap of the pointer's selection over
+    /// the scored rows (the finite-difference steps must not move it), and
+    /// whether some scored row keeps both a source holding its target and one
+    /// that does not: only such a row lets the pointer's scores move the loss.
     /// Rows of weight zero read 0.
     fn reference_mixture(
         model: &StackModel,
         hidden: &[Vec<f32>],
         (ids, targets, weights): (&[u32], &[u32], &[f32]),
         (batch, time): (usize, usize),
-    ) -> Result<(Vec<f64>, f64)> {
+    ) -> Result<(Vec<f64>, f64, bool)> {
         let pointer = model
             .config
             .pointer
@@ -8757,6 +8759,7 @@ mod tests {
         };
         let dim = wq.len();
         let mut gap = f64::INFINITY;
+        let mut contested = false;
         let mut rows = vec![0.0; batch * time];
         for n in 0..batch * time {
             if weights[n] == 0.0 {
@@ -8817,6 +8820,9 @@ mod tests {
                 .filter(|&j| ids[first + j] == targets[n])
                 .map(|j| exps[j] / normal)
                 .sum();
+            let holds = |j: usize| ids[first + j] == targets[n];
+            contested |=
+                (0..=t).any(|j| keep[j] && holds(j)) && (0..=t).any(|j| keep[j] && !holds(j));
             let gate = 1.0 / (1.0 + (-(project(&wg, &hidden[n])[0] + bias)).exp());
             let logits: Vec<f64> = embedding
                 .iter()
@@ -8832,7 +8838,7 @@ mod tests {
             let generate = (logits[targets[n] as usize] - lse).exp();
             rows[n] = -((1.0 - gate) * generate + gate * copy).ln();
         }
-        Ok((rows, gap))
+        Ok((rows, gap, contested))
     }
 
     /// The weighted mean of per-row losses.
@@ -8860,7 +8866,7 @@ mod tests {
         let original = var.as_tensor().flatten_all()?.to_vec1::<f32>()?;
         let loss_at = |values: &[f32]| -> Result<f64> {
             var.set(&Tensor::from_vec(values.to_vec(), var.dims(), &cpu())?)?;
-            let (rows, _) = reference_mixture(model, hidden, data, shape)?;
+            let (rows, _, _) = reference_mixture(model, hidden, data, shape)?;
             Ok(weighted_mean(&rows, data.2))
         };
         let mut derivative = Vec::with_capacity(original.len());
@@ -8893,21 +8899,28 @@ mod tests {
         let (ids, targets, weights) = pointer_batch();
         let data = (&ids[..], &targets[..], &weights[..]);
         for (score, select) in arms {
+            // A single kept source has weight 1 whatever its score, so the
+            // pointer's scoring parameters cannot move the loss and their
+            // gradient is exactly 0 (why the pre-registered arm trains soft and
+            // applies `top:1` post hoc); only the gate learns.
+            let single_source = select == Some(PointerSelect::TopK(1));
             // Draw until every row's selection is clear, so the finite-difference
-            // steps cannot move it.
+            // steps cannot move it, and (for a pointer with more than one kept
+            // source) some row keeps both a source holding its target and one
+            // that does not, so the scores can move the loss at all.
             let mut found = None;
             for seed in 0..200u64 {
                 let model = pointer_model(score, select, seed)?;
                 let hidden = model.hidden(&ids, 2, 12)?.to_vec2::<f32>()?;
-                let (rows, gap) = reference_mixture(&model, &hidden, data, (2, 12))?;
-                if gap > 0.01 {
+                let (rows, gap, contested) = reference_mixture(&model, &hidden, data, (2, 12))?;
+                if gap > 0.01 && (single_source || contested) {
                     found = Some((model, hidden, rows));
                     break;
                 }
             }
             let (model, hidden, rows) = found.ok_or_else(|| {
                 invalid(format!(
-                    "{score:?} {select:?}: no draw with a clear selection"
+                    "{score:?} {select:?}: no draw with a clear selection and a contested row"
                 ))
             })?;
             // The loss and every scored row are the unfloored mixture.
@@ -8931,11 +8944,6 @@ mod tests {
             // f64 finite difference of the reference.
             let names = pointer_names(score);
             let grads = loss.backward()?;
-            // A single kept source has weight 1 whatever its score, so the
-            // pointer's scoring parameters cannot move the loss and their
-            // gradient is exactly 0 (why the pre-registered arm trains soft and
-            // applies `top:1` post hoc); only the gate learns.
-            let single_source = select == Some(PointerSelect::TopK(1));
             let mut moving = Vec::new();
             for name in &names {
                 let numeric = reference_derivative(&model, name, &hidden, data, (2, 12))?;
