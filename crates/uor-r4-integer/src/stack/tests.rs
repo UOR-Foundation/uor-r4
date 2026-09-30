@@ -482,3 +482,862 @@ fn the_snap_trace_records_every_selection() {
     let without_trace = run(&model, &ids);
     assert_eq!(with_trace, without_trace);
 }
+
+#[test]
+fn test_gemv_pairs_blocked4_bit_identical_to_scalar() {
+    use super::kernels::{
+        stack_activation_tables, stack_gemv_pairs, stack_gemv_pairs_blocked4, stack_pair_tables,
+        PackedMatrix,
+    };
+
+    let (rows, cols) = (16usize, 32usize);
+    let mut rng = Lcg(12345);
+
+    let nibbles: Vec<u8> = (0..rows * cols / 2)
+        .map(|_| (rng.next() & 0xFF) as u8)
+        .collect();
+    let scales: Vec<u8> = (0..rows * cols / 32)
+        .map(|_| (rng.next() & 0x3F) as u8)
+        .collect();
+    let min_de: Vec<u8> = scales
+        .chunks_exact(cols / 32)
+        .map(|row_scales| row_scales.iter().map(|&s| s >> 4).min().unwrap_or(0))
+        .collect();
+
+    let matrix = PackedMatrix {
+        rows,
+        cols,
+        exp_base: -9,
+        nibbles,
+        scales,
+        min_de,
+    };
+
+    let x: Vec<i16> = (0..cols).map(|_| (rng.next() as i16) >> 4).collect();
+    let mut act_tables = vec![[0i32; 16]; cols];
+    stack_activation_tables(&x, &mut act_tables);
+
+    let mut pair_tables = vec![[0i32; 256]; cols / 2];
+    stack_pair_tables(&act_tables, &mut pair_tables);
+
+    let mut out_scalar = vec![0i32; rows];
+    let mut out_blocked = vec![0i32; rows];
+
+    stack_gemv_pairs(&matrix, &pair_tables, -14, &mut out_scalar);
+    stack_gemv_pairs_blocked4(&matrix, &pair_tables, -14, &mut out_blocked);
+
+    assert_eq!(
+        out_scalar, out_blocked,
+        "stack_gemv_pairs_blocked4 must produce bit-for-bit identical outputs to stack_gemv_pairs"
+    );
+}
+
+#[test]
+fn test_gemv_pairs_blocked4_multiple_groups_and_remainder_rows() {
+    use super::kernels::{
+        stack_activation_tables, stack_gemv_pairs, stack_gemv_pairs_blocked4, stack_pair_tables,
+        PackedMatrix,
+    };
+
+    // Width 64 (2 groups of 32), 19 rows (4 full blocks of 4 + 3 remainder rows)
+    let (rows, cols) = (19usize, 64usize);
+    let mut rng = Lcg(54321);
+
+    let nibbles: Vec<u8> = (0..rows * cols / 2)
+        .map(|_| (rng.next() & 0xFF) as u8)
+        .collect();
+    // Heterogeneous scales across groups (cols / 32 = 2 groups per row)
+    let scales: Vec<u8> = (0..rows * cols / 32)
+        .map(|_| ((rng.next() & 0x3F) as u8).max(1))
+        .collect();
+    let min_de: Vec<u8> = scales
+        .chunks_exact(cols / 32)
+        .map(|row_scales| row_scales.iter().map(|&s| s >> 4).min().unwrap_or(0))
+        .collect();
+
+    let matrix = PackedMatrix {
+        rows,
+        cols,
+        exp_base: -10,
+        nibbles,
+        scales,
+        min_de,
+    };
+
+    let x: Vec<i16> = (0..cols).map(|_| (rng.next() as i16) >> 4).collect();
+    let mut act_tables = vec![[0i32; 16]; cols];
+    stack_activation_tables(&x, &mut act_tables);
+
+    let mut pair_tables = vec![[0i32; 256]; cols / 2];
+    stack_pair_tables(&act_tables, &mut pair_tables);
+
+    let mut out_scalar = vec![0i32; rows];
+    let mut out_blocked = vec![0i32; rows];
+
+    stack_gemv_pairs(&matrix, &pair_tables, -14, &mut out_scalar);
+    stack_gemv_pairs_blocked4(&matrix, &pair_tables, -14, &mut out_blocked);
+
+    assert_eq!(
+        out_scalar, out_blocked,
+        "blocked4 must match scalar across multiple groups and remainder rows"
+    );
+}
+
+#[test]
+fn session_save_and_restore_produces_bit_identical_logits() {
+    use super::{SerializedStackSession, STACK_SESSION_SCHEMA};
+
+    let bytes = artifact(7);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+
+    // Ingest first 3 tokens
+    let initial_tokens = [1u32, 3u32, 2u32];
+    for &tok in &initial_tokens {
+        session.step(tok).expect("step");
+    }
+    assert_eq!(session.position(), 3);
+    assert_eq!(session.cache_at(), 3 * WIDTH);
+    assert_eq!(session.lift_at(), 3 * HEADS);
+
+    // Save session state
+    let saved = session.save_state();
+    assert_eq!(saved.schema, STACK_SESSION_SCHEMA);
+    assert_eq!(saved.version, 1);
+    assert_eq!(saved.artifact_sha256, model.artifact_sha256());
+    assert_eq!(saved.position, 3);
+    assert_eq!(saved.cache_at, (3 * WIDTH) as u64);
+    assert_eq!(saved.lift_at, (3 * HEADS) as u64);
+    assert_eq!(saved.layers.len(), 2);
+
+    // Continue stepping original session for 2 more tokens
+    let next_tokens = [4u32, 0u32];
+    let mut expected_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = session.step(tok).expect("step").to_vec();
+        expected_logits.push(logits);
+    }
+    assert_eq!(session.position(), 5);
+
+    // 1. Restore into the same session and step the same next tokens
+    session.restore_state(&saved).expect("restore");
+    assert_eq!(session.position(), 3);
+    assert_eq!(session.cache_at(), 3 * WIDTH);
+    assert_eq!(session.lift_at(), 3 * HEADS);
+    assert_eq!(session.tokens(), &initial_tokens);
+    assert_eq!(
+        session.logits(),
+        saved.logits.as_slice(),
+        "restored session logits must match saved session logits before next step"
+    );
+
+    let mut restored_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = session.step(tok).expect("step").to_vec();
+        restored_logits.push(logits);
+    }
+    assert_eq!(
+        restored_logits, expected_logits,
+        "restored session must produce bit-for-bit identical logits to uninterrupted stepping"
+    );
+
+    // 2. Restore into a brand-new session
+    let mut fresh_session = model.session();
+    fresh_session.restore_state(&saved).expect("restore fresh");
+    assert_eq!(fresh_session.position(), 3);
+    assert_eq!(fresh_session.cache_at(), 3 * WIDTH);
+    assert_eq!(fresh_session.tokens(), &initial_tokens);
+    // Next-token logits immediately after restore must match saved position 3 logits
+    assert_eq!(
+        fresh_session.logits(),
+        saved.logits.as_slice(),
+        "fresh restored session logits must match saved session logits before next step"
+    );
+
+    let mut fresh_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = fresh_session.step(tok).expect("step").to_vec();
+        fresh_logits.push(logits);
+    }
+    assert_eq!(
+        fresh_logits, expected_logits,
+        "fresh restored session must produce bit-for-bit identical logits"
+    );
+
+    // 3. Serde JSON serialization round-trip
+    let json_str = serde_json::to_string_pretty(&saved).expect("serialize");
+    let deserialized: SerializedStackSession =
+        serde_json::from_str(&json_str).expect("deserialize");
+    assert_eq!(deserialized, saved);
+
+    let mut json_restored_session = model.session();
+    json_restored_session
+        .restore_state(&deserialized)
+        .expect("restore from deserialized");
+    assert_eq!(json_restored_session.tokens(), &initial_tokens);
+    let mut json_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = json_restored_session.step(tok).expect("step").to_vec();
+        json_logits.push(logits);
+    }
+    assert_eq!(
+        json_logits, expected_logits,
+        "deserialized session must produce bit-for-bit identical logits"
+    );
+}
+
+#[test]
+fn session_restore_strictly_validates_checksums_and_dimensions() {
+    use super::SerializedStackLayerState;
+
+    let bytes = artifact(9);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+    session.step(1).expect("step");
+    session.step(2).expect("step");
+    let saved = session.save_state();
+
+    // 1. Mismatched artifact checksum
+    let mut bad_sha = saved.clone();
+    bad_sha.artifact_sha256 =
+        "0000000000000000000000000000000000000000000000000000000000000000".into();
+    assert!(matches!(
+        session.restore_state(&bad_sha),
+        Err(StackError::Numerics(_))
+    ));
+
+    // 2. Mismatched schema
+    let mut bad_schema = saved.clone();
+    bad_schema.schema = "uor-r4.wrong-schema/1".into();
+    assert!(matches!(
+        session.restore_state(&bad_schema),
+        Err(StackError::Schema(_))
+    ));
+
+    // 3. Mismatched version
+    let mut bad_version = saved.clone();
+    bad_version.version = 2;
+    assert!(matches!(
+        session.restore_state(&bad_version),
+        Err(StackError::Schema(_))
+    ));
+
+    // 4. Position exceeding context
+    let mut bad_pos = saved.clone();
+    bad_pos.position = (CONTEXT + 1) as u64;
+    assert!(matches!(
+        session.restore_state(&bad_pos),
+        Err(StackError::ContextFull { .. })
+    ));
+
+    // 5. Inconsistent cache_at
+    let mut bad_cache = saved.clone();
+    bad_cache.cache_at = bad_cache.cache_at + 1;
+    assert!(matches!(
+        session.restore_state(&bad_cache),
+        Err(StackError::SessionState)
+    ));
+
+    // 6. Inconsistent layer count
+    let mut bad_layers = saved.clone();
+    bad_layers.layers.pop();
+    assert!(matches!(
+        session.restore_state(&bad_layers),
+        Err(StackError::SessionState)
+    ));
+
+    // 7. Corrupted layer dimensions inside Recurrence
+    let mut bad_rec = saved.clone();
+    if let SerializedStackLayerState::Recurrence { state, .. } = &mut bad_rec.layers[0] {
+        state.pop();
+    }
+    assert!(matches!(
+        session.restore_state(&bad_rec),
+        Err(StackError::SessionState)
+    ));
+
+    // 8. Inconsistent logits length
+    let mut bad_logits = saved.clone();
+    bad_logits.logits.pop();
+    assert!(matches!(
+        session.restore_state(&bad_logits),
+        Err(StackError::SessionState)
+    ));
+
+    // 9. Inconsistent tokens length
+    let mut bad_tokens = saved.clone();
+    bad_tokens.tokens.pop();
+    assert!(matches!(
+        session.restore_state(&bad_tokens),
+        Err(StackError::SessionState)
+    ));
+
+    // 10. Out-of-vocab token in tokens
+    let mut bad_tok_val = saved.clone();
+    bad_tok_val.tokens[0] = VOCAB as u32 + 50;
+    assert!(matches!(
+        session.restore_state(&bad_tok_val),
+        Err(StackError::Token { .. })
+    ));
+
+    // 11. Non-empty snap trace on unsnapped model rejected
+    let mut bad_trace = saved.clone();
+    bad_trace.snap_trace = Some(vec![0u32; 1]);
+    assert!(matches!(
+        session.restore_state(&bad_trace),
+        Err(StackError::SessionState)
+    ));
+}
+
+#[test]
+fn session_pause_save_fresh_restore_greedy_continuation() {
+    use super::stack_argmax;
+
+    let bytes = artifact(13);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+
+    // Stream 1: Run uninterrupted generation
+    let mut continuous_session = model.session();
+    continuous_session.step(2).expect("prompt 1");
+    continuous_session.step(5).expect("prompt 2");
+
+    let mut uninterrupted_tokens = Vec::new();
+    let mut uninterrupted_logits = Vec::new();
+    for _ in 0..3 {
+        let logits = continuous_session.logits().to_vec();
+        uninterrupted_logits.push(logits.clone());
+        let next_tok = stack_argmax(&logits) as u32;
+        uninterrupted_tokens.push(next_tok);
+        continuous_session.step(next_tok).expect("step next");
+    }
+
+    // Stream 2: Run prompt, pause, save to file, restore into a brand-new session, continue
+    let mut pause_session = model.session();
+    pause_session.step(2).expect("prompt 1");
+    pause_session.step(5).expect("prompt 2");
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("uor-stack-test-greedy-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let ckpt_path = temp_dir.join("paused_session.json");
+    pause_session
+        .save_session_to_file(&ckpt_path)
+        .expect("save");
+
+    // Fresh session restore
+    let mut resumed_session = model.session();
+    resumed_session
+        .restore_session_from_file(&ckpt_path)
+        .expect("restore");
+
+    // Immediate logits must match
+    assert_eq!(
+        resumed_session.logits(),
+        pause_session.logits(),
+        "resumed session logits immediately after restore must match paused session"
+    );
+    assert_eq!(
+        resumed_session.tokens(),
+        pause_session.tokens(),
+        "resumed session tokens must match paused session"
+    );
+
+    // Continue greedy generation from resumed session
+    let mut resumed_tokens = Vec::new();
+    let mut resumed_logits = Vec::new();
+    for _ in 0..3 {
+        let logits = resumed_session.logits().to_vec();
+        resumed_logits.push(logits.clone());
+        let next_tok = stack_argmax(&logits) as u32;
+        resumed_tokens.push(next_tok);
+        resumed_session.step(next_tok).expect("step next");
+    }
+
+    assert_eq!(
+        resumed_tokens, uninterrupted_tokens,
+        "greedy generated token sequence must be bit-for-bit identical across save/restore boundary"
+    );
+    assert_eq!(
+        resumed_logits, uninterrupted_logits,
+        "greedy generated logits must be bit-for-bit identical across save/restore boundary"
+    );
+
+    let _ = std::fs::remove_file(&ckpt_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_save_to_file_is_atomic_and_preserves_existing_on_failure() {
+    let bytes = artifact(11);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+    session.step(1).expect("step");
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("uor-stack-test-atomic-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let save_path = temp_dir.join("checkpoint.json");
+
+    // 1. Initial valid save
+    session
+        .save_session_to_file(&save_path)
+        .expect("save initial");
+    let original_bytes = std::fs::read(&save_path).expect("read original");
+    assert!(!original_bytes.is_empty());
+
+    // 2. Preexisting colliding temporary file must NOT be deleted on creation collision
+    let colliding_temp = temp_dir.join(".checkpoint.json.injected-colliding-temp");
+    let sentinel_data = b"preexisting-colliding-sentinel-data";
+    std::fs::write(&colliding_temp, sentinel_data).expect("write colliding");
+
+    // Force save with the exact colliding temp file path
+    let res = session.save_session_to_file_internal(&save_path, Some(colliding_temp.clone()));
+    assert!(res.is_err(), "save must fail when temp file already exists");
+
+    // Both original checkpoint and colliding file remain intact
+    let current_ckpt = std::fs::read(&save_path).expect("read ckpt");
+    assert_eq!(
+        original_bytes, current_ckpt,
+        "original checkpoint must remain intact"
+    );
+    let current_temp = std::fs::read(&colliding_temp).expect("read colliding");
+    assert_eq!(
+        sentinel_data,
+        current_temp.as_slice(),
+        "colliding file must NOT be deleted"
+    );
+
+    let _ = std::fs::remove_file(&colliding_temp);
+    let _ = std::fs::remove_file(&save_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_restore_rejects_oversized_file_without_allocating() {
+    let bytes = artifact(17);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("uor-stack-test-oversized-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let oversized_path = temp_dir.join("oversized.json");
+
+    // Create a 100 MB sparse file, well above max expected bound
+    let file = std::fs::File::create(&oversized_path).expect("create");
+    file.set_len(100 * 1024 * 1024).expect("set_len");
+    drop(file);
+
+    let res = session.restore_session_from_file(&oversized_path);
+    assert!(
+        res.is_err(),
+        "restore_session_from_file must refuse oversized file before loading"
+    );
+
+    let _ = std::fs::remove_file(&oversized_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_restore_accepts_valid_edge_value_snapshot_within_bound() {
+    let bytes = artifact(11);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+
+    for tok in 0..CONTEXT as u32 {
+        session.step(tok % VOCAB as u32).expect("step");
+    }
+
+    let temp_dir = std::env::temp_dir().join(format!("uor-stack-test-edge-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let save_path = temp_dir.join("full_checkpoint.json");
+
+    session.save_session_to_file(&save_path).expect("save full");
+    let file_len = std::fs::metadata(&save_path).expect("metadata").len();
+    let max_len = super::session::max_serialized_session_bytes(&model);
+    assert!(
+        file_len > 0 && file_len <= max_len,
+        "valid serialized session size {file_len} must be <= max bound {max_len}"
+    );
+
+    let mut fresh_session = model.session();
+    fresh_session
+        .restore_session_from_file(&save_path)
+        .expect("restore full");
+    assert_eq!(fresh_session.position(), CONTEXT);
+    assert_eq!(fresh_session.tokens(), session.tokens());
+    assert_eq!(fresh_session.logits(), session.logits());
+
+    let _ = std::fs::remove_file(&save_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_restore_validates_and_restores_snap_trace() {
+    // 1. Snapped model with trace enabled
+    let snapped = with_header(&artifact(11), |header| {
+        header["transport_snap"] = snap_record();
+    });
+    let model = IntegerStackModel::parse(&snapped).expect("parse");
+
+    let mut session = model.session();
+    session.enable_snap_trace();
+    session.step(1).expect("step 1");
+    session.step(3).expect("step 2");
+
+    let original_trace = session.snap_trace().expect("trace");
+    assert!(!original_trace.is_empty());
+    for entry in &original_trace {
+        assert!(entry.root < 120);
+    }
+
+    let saved = session.save_state();
+    assert!(saved.snap_trace.is_some());
+
+    // Restore into fresh session with snap trace enabled
+    let mut fresh_session = model.session();
+    fresh_session.enable_snap_trace();
+    fresh_session.restore_state(&saved).expect("restore");
+    assert_eq!(
+        fresh_session.snap_trace().expect("restored trace"),
+        original_trace,
+        "restored snap trace must match original exactly"
+    );
+
+    // Restore into fresh session without snap trace initially enabled (model has snap)
+    let mut lazy_session = model.session();
+    lazy_session.restore_state(&saved).expect("restore lazy");
+    assert_eq!(
+        lazy_session.snap_trace().expect("restored trace"),
+        original_trace,
+        "snap trace should be populated from saved state when model has snap"
+    );
+
+    // Inconsistent snap trace length on snapped model rejected
+    let mut bad_len_trace = saved.clone();
+    bad_len_trace.snap_trace = Some(vec![0u32; 1]);
+    assert!(matches!(
+        model.session().restore_state(&bad_len_trace),
+        Err(StackError::SessionState)
+    ));
+
+    // Out-of-range root index (>= 120) in snap trace on snapped model rejected
+    let mut bad_root_trace = saved.clone();
+    let expected_len = bad_root_trace.snap_trace.as_ref().unwrap().len();
+    bad_root_trace.snap_trace = Some(vec![120u32; expected_len]);
+    assert!(matches!(
+        model.session().restore_state(&bad_root_trace),
+        Err(StackError::SessionState)
+    ));
+
+    // 2. Restore state without snap trace into session that had snap trace: disables trace to avoid stale/misaligned entries
+    let mut no_trace_session = model.session();
+    no_trace_session.step(1).expect("step 1");
+    let saved_no_trace = no_trace_session.save_state();
+    assert!(saved_no_trace.snap_trace.is_none());
+
+    let mut used_trace_session = model.session();
+    used_trace_session.enable_snap_trace();
+    used_trace_session.step(2).expect("step");
+    assert!(!used_trace_session.snap_trace().unwrap().is_empty());
+
+    used_trace_session
+        .restore_state(&saved_no_trace)
+        .expect("restore no trace");
+    // Should disable tracing so no stale trace entries from used session are exposed
+    assert!(used_trace_session.snap_trace().is_none());
+
+    // 3. Late enable_snap_trace records correct position
+    let mut late_session = model.session();
+    late_session.step(1).expect("step 1");
+    late_session.step(2).expect("step 2");
+    assert_eq!(late_session.position(), 2);
+    late_session.enable_snap_trace();
+    late_session.step(3).expect("step 3");
+    let late_trace = late_session.snap_trace().expect("late trace");
+    assert!(!late_trace.is_empty());
+    assert_eq!(late_trace[0].position, 2);
+
+    // 4. Unsnapped model: trace is None in save_state, records no roots
+    let unsnapped_model = IntegerStackModel::parse(&artifact(11)).expect("parse unsnapped");
+    let mut unsnapped_session = unsnapped_model.session();
+    unsnapped_session.enable_snap_trace();
+    unsnapped_session.step(1).expect("step unsnapped");
+    assert!(unsnapped_session.snap_trace().unwrap().is_empty());
+    let saved_unsnapped = unsnapped_session.save_state();
+    assert!(saved_unsnapped.snap_trace.is_none());
+    let mut fresh_unsnapped = unsnapped_model.session();
+    assert!(fresh_unsnapped.restore_state(&saved_unsnapped).is_ok());
+
+    // 5. Late enable -> reset -> full new stream -> save/restore without capacity panic
+    let mut late_reset_session = model.session();
+    late_reset_session.step(1).expect("step 1");
+    late_reset_session.step(2).expect("step 2");
+    assert_eq!(late_reset_session.position(), 2);
+    late_reset_session.enable_snap_trace();
+    late_reset_session.reset();
+    assert_eq!(late_reset_session.position(), 0);
+
+    for tok in 0..CONTEXT as u32 {
+        late_reset_session
+            .step(tok % VOCAB as u32)
+            .expect("step full");
+    }
+    assert_eq!(late_reset_session.position(), CONTEXT);
+    let saved_reset_stream = late_reset_session.save_state();
+    assert!(saved_reset_stream.snap_trace.is_some());
+    let full_trace_roots = saved_reset_stream.snap_trace.as_ref().unwrap();
+    let rec_layers = model.shape().pattern.bytes().filter(|&b| b == b'r').count();
+    assert_eq!(
+        full_trace_roots.len(),
+        CONTEXT * model.shape().lanes() * rec_layers
+    );
+
+    let mut restored_reset_session = model.session();
+    restored_reset_session
+        .restore_state(&saved_reset_stream)
+        .expect("restore reset full");
+    assert_eq!(
+        restored_reset_session.snap_trace().unwrap(),
+        late_reset_session.snap_trace().unwrap()
+    );
+}
+
+#[test]
+fn test_pointer_copy_boosts_prior_token_logits_and_preserves_across_save_restore() {
+    let model = IntegerStackModel::parse(&artifact(42)).expect("parse model");
+
+    // 1. Baseline stepping with copy_scale_q16 == 0
+    let mut baseline_session = model.session();
+    assert_eq!(baseline_session.copy_scale(), 0);
+    assert!(baseline_session.pointer_weights().is_empty());
+
+    let prompt = [3u32, 7u32, 11u32, 7u32];
+    let mut baseline_logits = Vec::new();
+    for &tok in &prompt {
+        let logits = baseline_session.step(tok).expect("step baseline").to_vec();
+        baseline_logits.push(logits);
+    }
+    assert_eq!(baseline_session.position(), prompt.len());
+    // When copy_scale is 0, capture is bypassed in stack_read, so weights remain 0
+    assert!(
+        baseline_session.pointer_weights().iter().all(|&w| w == 0),
+        "when copy_scale is 0, capture is bypassed and weights remain 0"
+    );
+
+    // 2. Stepping with pointer copy enabled (scale = 1.0 in Q16 = 1 << 16)
+    let mut copy_session = model.session();
+    copy_session.set_copy_scale(1 << 16);
+    assert_eq!(copy_session.copy_scale(), 1 << 16);
+
+    let mut copy_logits = Vec::new();
+    let mut step_weights_snapshots = Vec::new();
+    for &tok in &prompt {
+        let logits = copy_session.step(tok).expect("step copy").to_vec();
+        step_weights_snapshots.push(copy_session.pointer_weights().to_vec());
+        copy_logits.push(logits);
+    }
+    assert_eq!(copy_session.position(), prompt.len());
+    assert_eq!(copy_session.pointer_weights().len(), prompt.len());
+    assert!(
+        copy_session.pointer_weights().iter().any(|&w| w > 0),
+        "with copy_scale > 0, non-zero attention weights must be captured"
+    );
+
+    // Step 0: prompt[0] has no preceding context tokens, so logits must match baseline bit-for-bit
+    assert_eq!(
+        copy_logits[0], baseline_logits[0],
+        "step 0 has no preceding context, logits must match baseline exactly"
+    );
+
+    // Subsequent steps: tokens present in prompt[..step_idx] receive non-negative pointer copy boost;
+    // tokens NOT present in prompt[..step_idx] must remain strictly equal to baseline logits.
+    for step_idx in 1..prompt.len() {
+        let prefix = &prompt[..step_idx];
+        let prefix_set: std::collections::BTreeSet<u32> = prefix.iter().copied().collect();
+
+        // Any token not in prefix must have bit-identical logit to baseline
+        for v in 0..VOCAB as u32 {
+            if !prefix_set.contains(&v) {
+                assert_eq!(
+                    copy_logits[step_idx][v as usize], baseline_logits[step_idx][v as usize],
+                    "unseen token {v} at step {step_idx} must have unchanged logits"
+                );
+            }
+        }
+
+        // Pointer weights must be valid normalized values (sum <= Q31)
+        let weights = &step_weights_snapshots[step_idx][..step_idx];
+        for &w in weights {
+            assert!(
+                w <= (1u64 << 31),
+                "normalized pointer weight must be <= Q31"
+            );
+        }
+
+        // Any seen token with non-zero attention mass must receive a non-negative boost
+        for (pos, &tok) in prefix.iter().enumerate() {
+            let pw = step_weights_snapshots[step_idx][pos];
+            if pw > 0 {
+                assert!(
+                    copy_logits[step_idx][tok as usize] >= baseline_logits[step_idx][tok as usize],
+                    "seen token {tok} must receive non-negative boost"
+                );
+            }
+        }
+    }
+
+    // 3. Save / restore state roundtrip preserves copy_scale_q16 and produces bit-identical continuation
+    let saved = copy_session.save_state();
+    assert_eq!(saved.copy_scale_q16, 1 << 16);
+    assert_eq!(saved.position, prompt.len() as u64);
+
+    let mut restored_session = model.session();
+    restored_session
+        .restore_state(&saved)
+        .expect("restore state");
+    assert_eq!(restored_session.copy_scale(), 1 << 16);
+    assert_eq!(restored_session.position(), prompt.len());
+    // On restore, pointer_weights buffer is zeroed until the next step
+    assert!(
+        restored_session.pointer_weights().iter().all(|&w| w == 0),
+        "pointer_weights should be zeroed upon restore"
+    );
+    assert_eq!(
+        restored_session.logits(),
+        copy_session.logits(),
+        "restored logits must match saved session logits"
+    );
+
+    let continuation_token = 5u32;
+    let next_copy = copy_session
+        .step(continuation_token)
+        .expect("next copy")
+        .to_vec();
+    let next_rest = restored_session
+        .step(continuation_token)
+        .expect("next restored")
+        .to_vec();
+    assert_eq!(
+        next_copy, next_rest,
+        "continuation logits after restore must be bit-for-bit identical"
+    );
+
+    // 4. Disabling copy scale clears pointer weights buffer
+    assert!(copy_session.pointer_weights().iter().any(|&w| w > 0));
+    copy_session.set_copy_scale(0);
+    assert_eq!(copy_session.copy_scale(), 0);
+    assert!(
+        copy_session.pointer_weights().iter().all(|&w| w == 0),
+        "disabling copy scale must clear pointer weights buffer"
+    );
+
+    // 5. Session reset clears pointer weights and position but allows clean reuse
+    copy_session.reset();
+    assert_eq!(copy_session.position(), 0);
+    assert_eq!(copy_session.tokens().len(), 0);
+    assert!(copy_session.pointer_weights().is_empty());
+    let reset_step0 = copy_session
+        .step(prompt[0])
+        .expect("step after reset")
+        .to_vec();
+    assert_eq!(
+        reset_step0, baseline_logits[0],
+        "step 0 after reset must match baseline step 0"
+    );
+}
+
+#[test]
+fn test_pointer_copy_retrieval_boost_argmax_override_and_duplicate_accumulation() {
+    let model = IntegerStackModel::parse(&artifact(42)).expect("parse model");
+
+    // Stepping prompt with duplicate tokens: token 7 at pos 1 and pos 3
+    let prompt = [3u32, 7u32, 11u32, 7u32];
+
+    // Baseline stepping
+    let mut baseline = model.session();
+    for &tok in &prompt {
+        baseline.step(tok).expect("baseline step");
+    }
+    let baseline_continuation = baseline.step(5).expect("baseline step 5").to_vec();
+
+    // Copy session with scale = 1.0 (Q16 = 1 << 16)
+    let mut copy = model.session();
+    copy.set_copy_scale(1 << 16);
+    for &tok in &prompt {
+        copy.step(tok).expect("copy step");
+    }
+    let copy_continuation = copy.step(5).expect("copy step 5").to_vec();
+
+    // Verify duplicate token accumulation: token 7 was present at pos 1 and pos 3
+    let pw1 = i128::from(copy.pointer_weights()[1]);
+    let pw3 = i128::from(copy.pointer_weights()[3]);
+    assert!(
+        pw1 > 0,
+        "token 7 at pos 1 must have non-zero attention weight"
+    );
+    assert!(
+        pw3 > 0,
+        "token 7 at pos 3 must have non-zero attention weight"
+    );
+    let expected_boost_pos1 = (pw1 * (1i128 << 16)) >> 31;
+    let expected_boost_pos3 = (pw3 * (1i128 << 16)) >> 31;
+    assert!(
+        expected_boost_pos1 > 0,
+        "expected boost at pos 1 must be strictly positive"
+    );
+    assert!(
+        expected_boost_pos3 > 0,
+        "expected boost at pos 3 must be strictly positive"
+    );
+    let expected_total_boost = (expected_boost_pos1 + expected_boost_pos3) as i32;
+    assert!(
+        expected_total_boost < i32::MAX,
+        "expected total boost must be non-saturating"
+    );
+
+    let actual_diff = copy_continuation[7] - baseline_continuation[7];
+    assert_eq!(
+        actual_diff, expected_total_boost,
+        "duplicate token 7 must accumulate exact sum of pointer boosts from all prefix occurrences"
+    );
+
+    // Large scale: test retrieval override where pointer boost drives argmax
+    let mut strong_copy = model.session();
+    // Use large scale (Q16 = 1 << 30) to test argmax override
+    strong_copy.set_copy_scale(1 << 30);
+    for &tok in &prompt {
+        strong_copy.step(tok).expect("strong copy step");
+    }
+    let strong_continuation = strong_copy.step(5).expect("strong copy step 5").to_vec();
+    let winner = super::stack_argmax(&strong_continuation) as u32;
+    assert!(
+        prompt.contains(&winner),
+        "under strong copy scale, a prefix token ({winner}) must win argmax through pointer retrieval"
+    );
+
+    // Distance retrieval: token 3 at distance 4 still receives non-negative boost
+    let pw0 = i128::from(strong_copy.pointer_weights()[0]);
+    if pw0 > 0 {
+        assert!(
+            strong_continuation[3] > baseline_continuation[3],
+            "prefix token 3 at distance 4 must receive positive boost"
+        );
+    }
+
+    // Extremal scale test: i32::MAX scale saturates cleanly via saturating_add without overflow or panic
+    let mut max_scale_session = model.session();
+    max_scale_session.set_copy_scale(i32::MAX);
+    for &tok in &prompt {
+        max_scale_session
+            .step(tok)
+            .expect("step with i32::MAX scale");
+    }
+    let max_continuation = max_scale_session
+        .step(5)
+        .expect("step 5 with i32::MAX scale");
+    assert!(
+        max_continuation[7] > copy_continuation[7],
+        "under extremal i32::MAX scale, boosted logits must exceed unit-scale copy logits"
+    );
+}

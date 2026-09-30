@@ -2981,6 +2981,7 @@ dependencies = [
  "candle-core",
  "candle-metal-kernels",
  "candle-nn",
+ "half",
  "hex",
  "objc2-metal",
  "rayon",
