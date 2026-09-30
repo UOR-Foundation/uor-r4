@@ -21,7 +21,7 @@ Under Lab 1 directive B3 (Track B's second lever), Anti-Gravity evaluated geomet
   - Excess degradation over RTN 4-bit: $\mathbf{+4.891289 \text{ nats}}$
 - **Verdict**: **`KILL CRITERION TRIGGERED (+4.891289 > 0.0500 nats)`**.
 
-Per [D12](DECISIONS.md#d12--negative-evidence-retention-and-promotion-gates) and [D9](DECISIONS.md#d9--prevent-experiment-loops-and-preserve-the-context-contract), this negative result is preserved at its exact technical scope. Offline uncompensated $E_8$ lattice vector quantization of dense MLP weights—even when homogenized by a Randomized Hadamard Transform and searched via the canonical Conway–Sloane coset decoder over the $2^{16}$ QuIP# E8P codebook—suffers catastrophic compounding error across deep layers. Anti-Gravity halts the Track B second lever without parameter sweeps or ungrounded retries, and advances immediately to **Item 3: Metal Kernel Port** for 30M model training acceleration.
+Per [D12](DECISIONS.md#d12--negative-evidence-retention-and-promotion-gates) and [D9](DECISIONS.md#d9--prevent-experiment-loops-and-preserve-the-context-contract), this negative result is preserved at its exact technical scope. Offline uncompensated $E_8$ lattice vector quantization of dense MLP weights—as evaluated in this study using an uncompensated offline implementation with heuristic sign selection over the QuIP# E8P codebook and homogenized by a Randomized Hadamard Transform—suffers severe compounding error across deep layers. This negative result characterizes this specific offline uncompensated implementation on SmolLM2-360M MLP layers, without asserting broader claims about canonical QuIP# or disproving all $E_8$ lattice quantization as a family. No positive conversion claims are asserted. In accordance with directive B3, Anti-Gravity halts further offline sweeps on this arm and preserves the negative evidence.
 
 ---
 
@@ -77,7 +77,7 @@ All metrics were computed across all 32,768 tokens and 235.9M weights, with refe
 ## 4. Analysis of Findings
 
 1. **Exact Codec Round-Trip Verification**:
-   Every one of the 96 MLP weight matrices across all six quantization arms passed exact bit-for-bit serialization and deserialization checks before dequantization (`codec_roundtrip_gate_passed: true`), ensuring that serialization bugs are completely ruled out as a source of degradation.
+   Every one of the 96 MLP weight matrices across all six quantization arms passed exact bit-for-bit serialization and deserialization checks before dequantization (`codec_roundtrip_gate_passed: true`), ensuring that serialization bugs are completely ruled out as a source of degradation. Note that serialization round-trip (`to_bytes` / `from_bytes`) verifies storage fidelity, but does not establish that the encoder found the optimal nearest codeword in Euclidean distance.
 2. **Bits Per Weight Accounting**:
    Bitrates were derived strictly from stored file bytes:
    $$\text{bpw} = \frac{8 \times \text{serialized\_bytes}}{\text{quantized\_weights}}$$
@@ -86,9 +86,11 @@ All metrics were computed across all 32,768 tokens and 235.9M weights, with refe
    - Why does a scalar grid beat the $E_8$ lattice by 4.23 nats at 3 bits?
      Scalar quantization at group size 32 assigns an independent scale factor every 32 weights ($2560/32 = 80$ scales per row). This allows fine-grained local scale adaptation across different feature channels.
    - In contrast, $E_8$ lattice vector quantization packages 8 dimensions into a single codeword normalized by a single row-level or coarse-block scale. Even though $E_8$ offers optimal 8D sphere packing density in $\mathbb{R}^8$, the uncompensated residual orientation error across 8 coupled dimensions propagates nonlinearly through the SwiGLU activation ($\text{Swish}(x W_{\text{gate}}) \odot (x W_{\text{up}})$) and across 32 transformer layers.
-   - Without second-order Hessian feedback (such as GPTQ or QuIP#'s LDQ rounding) or Quantization-Aware Training (QAT), uncompensated post-training lattice vector quantization is mathematically incapable of preserving deep language model behavior.
-4. **Definitive Decision Scope**:
-   This experiment conclusively resolves the question of post-training $E_8$ lattice weight coding on SmolLM2-360M without QAT. Per directive B3, this arm is permanently stopped.
+   - Without second-order Hessian feedback (such as GPTQ or QuIP#'s LDQ rounding) or Quantization-Aware Training (QAT), uncompensated post-training vector quantization struggles to preserve deep language model behavior.
+4. **Implementation Scope & Encoder Suboptimality**:
+   The experimental encoder (`quantize_e8p_block`) used a fast heuristic sign-candidate search (fixing sign patterns per parity coset based on `target[i] < 0`), which restricts sign candidates to 2 patterns out of 256 (512 candidate codewords evaluated out of 65,536). As demonstrated by the counterexample regression in `test_e8p_encoder_counterexample_and_oracle`, codeword 256 is encoded as codeword 128 with squared error 4.0 despite codeword 256 having zero error. An exact oracle search over all 65,536 codewords is provided in `oracle_nearest_e8p_codeword`. While this suboptimality contributes to reconstruction error, the absence of second-order Hessian compensation or training adaptation remains a dominant factor in offline uncompensated vector quantization.
+5. **Definitive Decision Scope**:
+   This experiment preserves the measured negative result for uncompensated offline $E_8$ lattice vector quantization on SmolLM2-360M without QAT. Per directive B3, this specific offline arm is halted without parameter sweeps. No positive conversion claims are asserted.
 
 ---
 
