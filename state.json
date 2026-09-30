@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-  "sequence": 6,
-  "observed_server_time": 1790736237,
+  "sequence": 7,
+  "observed_server_time": 1790736239,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -54,8 +54,14 @@
       "session": "codex-durable-20260929-root",
       "task_epoch": 1,
       "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
-      "phase": "reserved",
-      "receipt": null,
+      "phase": "finalized",
+      "receipt": {
+        "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+        "job_id": "continuity-pilot-20260930-a",
+        "attempt_id": "continuity-pilot-20260930-a",
+        "path": "/Users/casey.allard/.local/share/uor-r4/runner/done/continuity-pilot-20260930-a/exit.json",
+        "sha256": "fb8c711977f5ed0910e2dde0e6de6c2d45149063e68bc4d88b1e1afc29d5f035"
+      },
       "spec": {
         "schema": "uor-r4.lab-runner-job/1",
         "id": "continuity-pilot-20260930-a",
