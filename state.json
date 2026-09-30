@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 92,
-  "observed_server_time": 1790748062,
+  "sequence": 93,
+  "observed_server_time": 1790748064,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -98,19 +98,17 @@
   "tasks": {
     "1512": {
       "session": "opencode-deepseek-20260930",
-      "epoch": 3,
-      "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9",
+      "epoch": 4,
+      "work_card": "sha256:0d273ff7af09f7456c1822d307c35c050771b3922611f05e3df73a8bad344175",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-      "base_sha": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd",
+      "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "paths": [
-        "crates/uor-r4-training/src/flock.rs",
-        "crates/uor-r4-training/src/flock_transport.rs",
-        "crates/uor-r4-training/src/kappa_llama.rs",
-        "crates/uor-r4-training/src/lib.rs",
-        "crates/uor-r4-training/examples/kappa-conversion.rs"
+        "docs/evidence/g2-key-probe-2026-09-29.md",
+        "docs/evidence/g2-key-probe-2026-09-29.json",
+        "docs/integration/council-verdict-2026-09-29.md"
       ],
-      "expires": 1790747493,
-      "phase": "released",
+      "expires": 1790749264,
+      "phase": "claimed",
       "checkpoint": null
     },
     "1520": {
