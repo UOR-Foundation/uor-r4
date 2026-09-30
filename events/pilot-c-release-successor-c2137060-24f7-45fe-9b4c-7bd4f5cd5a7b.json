@@ -1,0 +1,11 @@
+{
+  "event": {
+    "epoch": 6,
+    "event_id": "pilot-c-release-successor-c2137060-24f7-45fe-9b4c-7bd4f5cd5a7b",
+    "issue": 1520,
+    "op": "release",
+    "session": "codex-review1-pilot-c-successor-20260930"
+  },
+  "observed_server_time": 1790739634,
+  "previous_head": "e67b5bbe3a3478feed4c724be6e904b64f10d4e9"
+}
