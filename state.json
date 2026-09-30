@@ -1,9 +1,9 @@
 {
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
-  "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
-  "sequence": 26,
-  "observed_server_time": 1790739108,
+  "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+  "sequence": 27,
+  "observed_server_time": 1790739111,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",

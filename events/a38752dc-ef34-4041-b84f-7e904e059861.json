@@ -1,0 +1,14 @@
+{
+  "event": {
+    "decision_receipt": {
+      "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/integration-backlog/delivery-pr1529-c1063bf9.json",
+      "sha256": "9045bbc9528e92602f47fb948c261e0065e47ea29b624f70c6e598d3cc8b09a8"
+    },
+    "event_id": "a38752dc-ef34-4041-b84f-7e904e059861",
+    "op": "adopt_policy",
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "previous_policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2"
+  },
+  "observed_server_time": 1790739111,
+  "previous_head": "abab4ab5bb15ead75bbca08e726bb0c57b596c58"
+}
