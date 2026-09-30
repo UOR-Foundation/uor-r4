@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 52,
-  "observed_server_time": 1790740849,
+  "sequence": 53,
+  "observed_server_time": 1790740852,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -127,6 +127,75 @@
     }
   },
   "attempts": {
+    "claude-1533-checks-e2-a1": {
+      "issue": 1533,
+      "session": "claude-lab-20260930",
+      "task_epoch": 2,
+      "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+      "phase": "reserved",
+      "receipt": null,
+      "spec": {
+        "schema": "uor-r4.lab-runner-job/1",
+        "id": "claude-1533-checks-e2-a1",
+        "lab": "Claude",
+        "cwd": "/Users/casey.allard/uor-r4/.worktrees/lab-claude-director",
+        "argv": [
+          "/bin/zsh",
+          "/Users/casey.allard/uor-r4-checks/1533/run-checks-e2-a1.zsh"
+        ],
+        "env": {},
+        "threads": 2,
+        "rss_gib": 4.0,
+        "gpu": false,
+        "wall_s": 3600,
+        "stop_grace_ms": 5000,
+        "kill_criterion": {
+          "kind": "wall",
+          "value": ""
+        },
+        "exclusive": false,
+        "cargo": true,
+        "storage": [
+          {
+            "volume": "internal",
+            "additional_bytes": 10737418240,
+            "checkpoint_bytes": 0
+          },
+          {
+            "volume": "workspace",
+            "additional_bytes": 0,
+            "checkpoint_bytes": 0
+          },
+          {
+            "volume": "backing",
+            "additional_bytes": 0,
+            "checkpoint_bytes": 0
+          }
+        ],
+        "coordination": {
+          "issue": 1533,
+          "session": "claude-lab-20260930",
+          "epoch": 2,
+          "work_card": "sha256:5a8f6a807387cb6f92cbc98b15b6cdd67141afd7165493e096a82a73684fbe63",
+          "attempt_id": "claude-1533-checks-e2-a1"
+        },
+        "provenance": {
+          "source_sha": "9efa5f6ddda1d8f58c3aee1e7237a607a2ce731d",
+          "executable": {
+            "path": "/bin/zsh",
+            "sha256": "ca835f58545521f3e845c2ffcd3822a865df8ac2cde4ab5e686fb621369b9c99"
+          },
+          "inputs": [
+            {
+              "path": "/Users/casey.allard/uor-r4-checks/1533/run-checks-e2-a1.zsh",
+              "sha256": "ee8c3a211779e177d1d6aca5ff9e8d7622d7fc429be508ae9b34f7554ee70127"
+            }
+          ]
+        }
+      },
+      "spec_sha256": "59356d981b5248a11a822086d15ed57f49f5bd239d1881dc7cb5afbcfc867657",
+      "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner"
+    },
     "continuity-pilot-20260930-a": {
       "issue": 1520,
       "session": "codex-durable-20260929-root",
