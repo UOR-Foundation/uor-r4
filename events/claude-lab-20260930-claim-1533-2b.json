@@ -1,0 +1,25 @@
+{
+  "event": {
+    "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1533-2b",
+    "issue": 1533,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-lut/src/stack.rs",
+      "crates/uor-r4-training/src/geometric_stack.rs",
+      "crates/uor-r4-training/src/bin/d4-float-reference.rs",
+      "crates/uor-r4-training/tests/d4_map_codec_adapter.rs",
+      "crates/uor-r4-training/src/stack_snap_parity.rs",
+      "crates/uor-r4-training/examples/geometric-stack.rs",
+      "docs/evidence/s1-4-snap-parity-2026-09-29.json",
+      "docs/integration/current-state.md"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "same-session successor: work card v2 https://github.com/UOR-Foundation/uor-r4/issues/1533#issuecomment-5903717867 (sha256:5a8f6a807387cb6f92cbc98b15b6cdd67141afd7165493e096a82a73684fbe63); source checkpoint codex/s14-snap-safety@e8d9805d pushed; epoch 1 released by claude-lab-20260930 event claude-lab-20260930-release-1533-e1",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:5a8f6a807387cb6f92cbc98b15b6cdd67141afd7165493e096a82a73684fbe63"
+  },
+  "observed_server_time": 1790740504,
+  "previous_head": "1bec7eb48f5d2ff789381c5b85dbc91da354c14a"
+}
