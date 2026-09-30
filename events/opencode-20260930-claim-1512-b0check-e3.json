@@ -1,0 +1,22 @@
+{
+  "event": {
+    "base_sha": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd",
+    "dependencies": [],
+    "event_id": "opencode-20260930-claim-1512-b0check-e3",
+    "issue": 1512,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/flock.rs",
+      "crates/uor-r4-training/src/flock_transport.rs",
+      "crates/uor-r4-training/src/kappa_llama.rs",
+      "crates/uor-r4-training/src/lib.rs",
+      "crates/uor-r4-training/examples/kappa-conversion.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "reacquisition: epoch-2 claim released without execution; the single heavy lane remains held by claude-1533-checks-e2-a1 under reconciliation, and the #1520 quarantine requires an internal target dir with a space-appropriate reservation; attempt -c never launched; same immutable card sha256:c40a82c9...",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9"
+  },
+  "observed_server_time": 1790746571,
+  "previous_head": "65d25d02b39ad1f42b951475117a23bb0c795d67"
+}

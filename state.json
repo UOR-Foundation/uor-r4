@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 80,
-  "observed_server_time": 1790746568,
+  "sequence": 81,
+  "observed_server_time": 1790746571,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -98,7 +98,7 @@
   "tasks": {
     "1512": {
       "session": "opencode-deepseek-20260930",
-      "epoch": 2,
+      "epoch": 3,
       "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd",
@@ -109,8 +109,8 @@
         "crates/uor-r4-training/src/lib.rs",
         "crates/uor-r4-training/examples/kappa-conversion.rs"
       ],
-      "expires": 1790744644,
-      "phase": "released",
+      "expires": 1790747771,
+      "phase": "claimed",
       "checkpoint": null
     },
     "1520": {
