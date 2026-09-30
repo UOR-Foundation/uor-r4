@@ -207,3 +207,32 @@ inert fixtures under temporary roots; it is not a production bypass. Production
 smokes must have real task/attempt reservations and a verified host policy.
 Test execution, daemon installation, client continuation handshakes and recovery
 receipts are reported separately. No model qualification follows from them.
+
+## Small CPU validation under warning memory pressure
+
+Keep production `admission_pressure_max: 1`. A yellow/warning observation (2)
+may admit an independently reviewed small CPU validation attempt by adding its
+canonical reservation `spec_sha256` to host-policy `warning_validation_specs`.
+This optional list defaults empty; legacy policies retain their normal-only
+behavior. The exact spec must declare at most two threads, 2 GiB RSS and 600
+seconds, with no GPU. Changing the command, inputs, source, limits or attempt ID
+requires a new digest approval. Do not use this exception for model training or
+quality evaluation; reviewers check that scope before adding the digest.
+
+The deployment steward may approve qualifying checks from their work cards and
+independent review without another owner prompt. Record the reason, digest and
+policy before/after identities on the owning issue; atomically update the host
+policy. The daemon reloads it each cycle, so future approvals need no restart.
+Remove obsolete digests after finalization. The global warning override remains
+backward compatible but is not needed for this small-check policy.
+
+This exception skips only the warning-pressure rejection. Single-job/Cargo
+ownership, reservations, source/input provenance, cumulative budget, volume
+identities, physical storage floors and measured RSS/wall enforcement remain.
+Critical (4) and unknown pressure values block admission even with an override;
+critical pressure retains the existing runtime stop/hold behavior. Declared RSS
+is a monitored ceiling, not a guarantee of spare host RAM. If a check needs more,
+preserve the failed attempt and revise the projection rather than relabeling it.
+Rollback removes the new list (normal-pressure policy); it does not cancel an
+already admitted bounded job. Preserve the previous binary and policy when
+first deploying this additive runner change, and switch only after jobs drain.
