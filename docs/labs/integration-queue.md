@@ -30,7 +30,30 @@ action and limitations. All unmapped refs have a preservation reason and
 reactivation condition. This is an index for scoped review, not proof that every
 old branch is obsolete or every ignored file is disposable.
 
-## Next actions, in dependency order
+## Current routing — September 30, 18:12 UTC
+
+The live open-PR check at this time returned two PRs. This is a dated routing
+snapshot; refresh GitHub before claiming work or reporting delivery.
+
+| Existing work | Current disposition and next action |
+|---|---|
+| [#1548](https://github.com/UOR-Foundation/uor-r4/pull/1548), A1 retrieval | Open at `a2311a7f`. The two `StackConfig` test fixtures still lack `select` and `pointer`. Apply the scoped correction and execute the affected checks, then obtain review of the successor head. [Exact finding](https://github.com/UOR-Foundation/uor-r4/pull/1548#issuecomment-5916134817). |
+| [#1518](https://github.com/UOR-Foundation/uor-r4/pull/1518), Track B | Draft; main `3b7c2d54` is integrated at `97dcd0cf`. Four focused model tests and 14 Metal fixture tests passed; device/numerical outputs confirm actual Metal execution. Full dense reference parity remains failed at unchanged `1e-4`. The rejected RMS candidate was restored to the prior operator. [Numerical decision packet](https://github.com/UOR-Foundation/uor-r4/issues/1509#issuecomment-5916224104); no unchanged parity rerun or B2 fit. |
+
+Recent verified deliveries include #1549 (`a7b0779d`, core repairs), #1534
+(`e4004103`, saved-codec/export corrections), and #1526 (`3b7c2d54`, Metal
+training kernels). Do not repeat their completed reviews or merge their old
+branches again. Their merge does not qualify whole-model language or numerical
+parity. The four remaining historical trainer assertions stay tracked in
+[#1546](https://github.com/UOR-Foundation/uor-r4/issues/1546); they do not call the
+current geometric stack's separate optimizer and are not a global execution hold.
+
+The older table below preserves the initial reconciliation and review links.
+Its heads, assignments and required actions are **historical**, not current
+instructions. Live PR dispositions and linked successor records supersede them;
+retention of a branch never authorizes deletion of its unique material.
+
+## Historical routing at initial reconciliation
 
 Stewards and reviewers below are initial routing assignments, **not active
 claims or proof a client has started**. The first available lab may replace an
@@ -98,13 +121,25 @@ internal helper loaded the recovered S4 model. That verifies loading only, not
 generation, saved transport or integer serving. The same-SSD recovery copy is
 rollback protection, not an independent-device backup.
 
-The internal runner and real cumulative ledger are deployed. Normal admissions
-remain held while internal free space is below the 40 GiB heavy-work floor.
-Resource policy and live UUID/sentinel checks, not this snapshot, decide access.
-No cleanup has been performed. Exact incremental-cache candidates have a
-[two-hour notice](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5903080523)
-and still require a fresh complete eligibility check. Do not delete accepted
-models, unique ignored evidence, dirty worktrees or unpushed source.
+The internal runner and real cumulative ledger are deployed. The owner’s
+September 30 corrections supersede the initial blanket admission hold: small
+formatting, static checks, warm builds and focused tests run directly, without a
+runner reservation. Do not stop ordinary useful builds at a conservative 40 GiB
+watermark or repeatedly restart compilation at estimates. Observe actual resource
+use and reclaim verified disposable cache material afterward. Supervised model
+jobs retain their actual resource and artifact contracts.
+
+Every Cargo invocation and new/resubmitted runner specification explicitly sets
+an **internal per-lab `CARGO_TARGET_DIR`**. Never compile in
+`/Volumes/UOR-Workspace/BuildCaches`; its quarantine mount causes executable-library
+rejections. Do not change quarantine attributes or remount the image to bypass
+that boundary. Preserve historical immutable job specifications.
+
+Cleanup has occurred since the initial snapshot; use current receipts and actual
+`df` observations rather than the old “no cleanup” statement. Normal cleanup
+requires the applicable notice and a fresh eligibility check. Never delete
+accepted models, unique evidence, dirty worktrees, unpushed source or active
+caches. The owner's earlier one-time notice waiver was specific to that cleanup.
 
 Observe running jobs and host pressure at least once per minute. A designated
 storage steward performs the daily inventory/notice, weekly and post-storage
