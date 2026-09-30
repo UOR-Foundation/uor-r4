@@ -46,8 +46,13 @@ reproduced the failed eight-token reference/CPU/Metal logits bit for bit. For
 the worst shared token, Q/K/V error amplifies between layers 11 and 12. The [same-input layer-12 replay](../evidence/track-b-layer12-replay-2026-09-30.md)
 reduces the worst token's local errors to approximately 0.7–3.8e-6 versus
 0.0005–0.0033 in the original candidate. Incoming state dominates this
-discrepancy; no isolated MLP cause or repair is established. Next inspect
-block 11 using the common saved post-layer-10 state and unchanged shapes.
+discrepancy. The [block-11 common-input replay](../evidence/track-b-block11-replay-2026-09-30.md)
+shows small QKV perturbations growing through the gated product/down projection.
+Reference-QKV substitution improves position-5 residual error by about 4–5×,
+but source-attention substitution does not eliminate it and results are not
+uniform across positions. No incorrect MLP or repair is established. Next compare
+MLP/down projections on identical saved intermediates, including the pinned
+exact projection owner before attributing a kernel defect.
 
 Earlier interrupted attempts and the restored external compiler-cache failure
 remain historical execution evidence in the [September 29 record](track-b-conversion-result-2026-09-29.md)
