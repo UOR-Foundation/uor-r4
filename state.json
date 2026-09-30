@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 202,
-  "observed_server_time": 1790777910,
+  "sequence": 203,
+  "observed_server_time": 1790778118,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -33,7 +33,7 @@
         "S1.4 D11 snap safety"
       ],
       "available": true,
-      "heartbeat": 1790777875
+      "heartbeat": 1790778118
     },
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -254,7 +254,7 @@
         "crates/uor-r4-training/data/a1-english-probe.json",
         "crates/uor-r4-training/src/milestone_world_v2_probe.rs"
       ],
-      "expires": 1790779075,
+      "expires": 1790779318,
       "phase": "claimed",
       "checkpoint": null
     },
@@ -269,7 +269,7 @@
         "crates/uor-r4-workbench/src/host.rs",
         "crates/uor-r4-core/tests/conditioned_skip_engram_syntactic_tests.rs"
       ],
-      "expires": 1790779075,
+      "expires": 1790779318,
       "phase": "claimed",
       "checkpoint": null
     }
