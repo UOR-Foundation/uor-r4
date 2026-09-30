@@ -1,0 +1,21 @@
+{
+  "event": {
+    "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+    "dependencies": [],
+    "event_id": "opencode-20260930-claim-1512-e5",
+    "issue": 1512,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/flock.rs",
+      "crates/uor-r4-training/src/flock_transport.rs",
+      "crates/uor-r4-training/src/kappa_llama.rs",
+      "crates/uor-r4-training/examples/kappa-conversion.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "reacquisition: epoch-4 delivery released after the verified #1531 merge; claiming to run the focused flock tests at f99a0830 and take approved PR #1532 through the protected queue; no model execution",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:d65fe7ae8b123f746e29160c15e1a3c23727f68d16b967ab1fdde0de9895437e"
+  },
+  "observed_server_time": 1790773671,
+  "previous_head": "39c489ad46e71565226195071fde9b50ef5eed8b"
+}
