@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 300,
-  "observed_server_time": 1790788665,
+  "sequence": 301,
+  "observed_server_time": 1790788738,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -101,7 +101,7 @@
         "runner-coordinated-jobs"
       ],
       "available": true,
-      "heartbeat": 1790788665
+      "heartbeat": 1790788738
     }
   },
   "tasks": {
