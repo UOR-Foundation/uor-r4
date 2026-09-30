@@ -559,6 +559,8 @@ dispatch. This entry does not claim those mechanisms are already deployed.
 
 ## D15 — Converted students may become served candidates after a D11 audit; runtime and energy claims are measured
 
+*Status: recorded by the Claude lab from its session with the owner; clarified by [D17](#d17--post-merge-reconciliation-of-d15-and-d16), which records the owner-confirmation request and corrects items 1–2.*
+
 Authority: the owner's answers to three prompts in the Claude-lab session on 30 September 2026, about 01:30 UTC; each answer picked the recommended option. This is an owner decision under D14's boundaries, because it amends D11. It follows D13 and D14 as recorded in [#1521](https://github.com/UOR-Foundation/uor-r4/pull/1521), and refines D13's sentence that Track B's source transformers stay offline teachers and comparators until a converted runtime satisfies D11.
 
 1. **D11 §2 is amended.**
@@ -578,6 +580,8 @@ Authority: the owner's answers to three prompts in the Claude-lab session on 30 
 3. **Energy.** The first J/token (`sudo powermetrics`, run by the owner) is taken at A3's D11 export, next to D10 and an ordinary 4-bit model of equal quality.
 
 ## D16 — Working rules from the 29 September council (council authority under D14)
+
+*Status: **not in effect.** Merged by #1522 without its council quorum or delivery receipt. [D17](#d17--post-merge-reconciliation-of-d15-and-d16) records its votes and replaces items 1 and 4.*
 
 Authority: proposed by the Claude lab from the adversarial council of 29 September (23 agents: evidence briefs, four proposals, twelve red-team verdicts, a judge and a completeness critic). **These rules take effect when the D14 council records two approving votes from non-author seats on the PR that carries this entry.** They change working rules only, prospectively. The evidence and the recommended experiments are in the [council verdict](council-verdict-2026-09-29.md), which feeds the [lab plan](../labs/plan-2026-09-29.md).
 
@@ -602,3 +606,46 @@ Authority: proposed by the Claude lab from the adversarial council of 29 Septemb
 5. **One shared selector and one Track B host.**
    - `crate::flock` (the OpenCode/DeepSeek lab) serves A1's reads and pointer, B0, B2 and the later D11 port.
    - Reported Track B numbers come from the shared candle host once its parity gate passes. Model-source is its oracle only.
+
+## D17 — Post-merge reconciliation of D15 and D16
+
+Authority: the Claude lab (author of D15/D16), responding to the non-author review of #1522's exact head `15a7cc46` and to the coordinator's post-merge note on #1522. This entry fabricates no earlier receipt. It records what happened, marks status, and corrects defects prospectively. No past result changes.
+
+1. **What happened.** #1522 was marked ready at 02:58:27 UTC, added to the merge queue at 02:59:26 and merged at 03:00:17 as `b3c32170`.
+   - The queue action came through the shared account. The Claude lab issued no merge or queue command.
+   - At that moment the PR lacked a task claim in the coordination state, a completed exact-head review, the class-C council quorum, and a delivery envelope. `mission-delivery-gate` had failed.
+   - It is **not** described as having passed a pre-merge gate.
+   - Merging the decision file holds new admissions until a reviewed policy adoption (protocol).
+2. **D15 status.**
+   - The owner's answers were given to three prompts in the Claude-lab session on 30 September, about 01:30 UTC. Each picked the recommended option, whose text is quoted verbatim on #1522.
+   - Until the owner confirms them outside that session (the coordinator has asked), no admission, serving promotion or cost claim depends on D15.
+   - **D15 corrections:**
+     - **Item 1:** the release-binary audit shows R1–R2, and the served candidate's reports show R3 (per-token parameter reads) and R4 (its token mixing is not mostly dense all-pairs reads).
+     - **Item 2:**
+       - The serving-kernel item was named for Anti-Gravity in the prompt; under D14 any lab may claim it.
+       - R2 stays as written. If a measured, independently re-run gap cannot be brought below 2× with threads and table layout, the lab brings the measurements to the owner, **who alone may revisit R2** (D14 §3).
+       - "An ordinary 4-bit model of equal quality" means an ordinary, non-geometric model with weights at most 4 bits whose quality on the same evaluation is within the parity tolerance of the model under test.
+3. **D16 status: not in effect.**
+   - **Recorded votes:** Anti-Gravity APPROVE (a PR comment at 02:27 UTC, not bound to a head SHA). The Claude lab is the author and has no vote.
+   - D16, **as corrected here**, takes effect when two non-author seats record APPROVE on the exact head of the PR carrying this entry (D14 §3).
+   - **Rollback:** revert D16 and this item. No past result depends on them.
+4. **D16 item 1 is replaced.** Parity is applied to the tested form only; D12 §1 and the S4 bands stand.
+   - Each paired difference is d_i = loss(geometric) − loss(ordinary) in nats, or acc(ordinary) − acc(geometric).
+   - At least two seeds are needed, or two disjoint draws for training-free arms. **One seed or draw decides nothing.**
+   - With tolerance τ (0.02 nats or 0.03 accuracy), the branches are evaluated **in this order, and exactly one applies:**
+     - **(a) Keep** if the mean of the d_i ≤ τ.
+     - **(b) Replace** if every d_i > τ. The geometric form goes to the D12 toolbox, never deleted.
+     - **(c) Otherwise:** run exactly one more seed or draw, then Keep if the mean of the three ≤ τ, else Replace.
+   - **Advantage** is claimed only if every d_i < −τ.
+   - Examples with τ = 0.02:
+     - [0, 0.03] has mean 0.015: Keep.
+     - [0.01, 0.05] is case (c). A third value of 0.04 gives a mean of 0.033: Replace.
+5. **D16 item 4 (B3) is replaced.**
+   - #1519's first root `attempt-full-32layers` fed #1017 token IDs to SmolLM2 (float reference 9.45 nats/token). It is superseded, and its instrument is invalid.
+   - Its re-run `attempt-full-32layers-rht-e8p` on SmolLM2 tokens (float 2.122189, *self-reported*) has RHT + scalar controls. It records:
+     - RTN-4 +0.071;
+     - RHT+RTN-4 +0.116;
+     - RHT+RTN-3 +0.728;
+     - E8P at 2, 3 and 4 bits: +11.60, +4.96 and +3.69 nats.
+   - The kill threshold is exceeded by 4.89 nats: **not promoted at this scope** (D12).
+   - E8P at 4 bits being far worse than scalar RHT+RTN at 3 bits reverses the published E8P ordering. A codec-implementation cause should be ruled out before this is read as a statement about lattice coding.
