@@ -85,8 +85,9 @@ when blocked. Check peer activity at startup, before experiments, after results
 and before delivery. Update #1512 and dependent boards as work changes.
 
 Keep one Cargo process; check physical disk, actual volume UUID, memory pressure
-and projections before work. Initial targets: 40 GiB internal/120 GiB SSD free,
-including 30 GiB traces, plus 128 MiB protected stop margin. Charge preparation,
+and projections before work. Free-GiB target/warn/stop: internal 60/40/25,
+inner workspace 120/60/30, outer SSD 240/120/60; observe both filesystems and
+include 30 GiB traces plus 128 MiB stop margin. Charge preparation,
 build/model/evaluation/retry/orchestration cumulatively. Necessary local extensions
 are already authorized with prospective records. Cleanup requires a manifest,
 inactivity check and two-hour notice for regenerable caches/clean merged

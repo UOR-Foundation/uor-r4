@@ -85,8 +85,9 @@ record it and advance independent implementation or review.
 Runner deployment and client wakeup remain unverified until their actual smoke.
 Use the existing single-heavy-job reservation meanwhile. Budget all preparation,
 build, model, evaluation, retries and orchestration. Check memory pressure and
-physical free bytes before admission; initial planning targets are 40 GiB
-internal/120 GiB SSD, including 30 GiB traces, plus 128 MiB stop margin. Necessary
+physical free bytes before admission. Free-GiB target/warn/stop levels are
+internal 60/40/25, inner workspace 120/60/30 and outer SSD 240/120/60; observe
+both filesystems and include 30 GiB traces plus 128 MiB stop margin. Necessary
 local extensions need a prospective reason/increment/updated ledger, not another
 permission request. Cleanup only regenerable manifested inactive material after
 two-hour notice; retain all unique evidence and unpushed source. No paid compute.

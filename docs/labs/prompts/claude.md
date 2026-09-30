@@ -85,8 +85,9 @@ work. Use the runner only after deployment is verified; until then obey the
 single-heavy-job reservation. No unbounded direct workers.
 
 Check physical disk free space, volume identity, RAM pressure and projections
-before jobs. Initial targets are 40 GiB internal and 120 GiB SSD free, including
-30 GiB trace reserve, plus the protected 128 MiB absolute stop margin. Charge
+before jobs. Free-GiB target/warn/stop levels are internal 60/40/25,
+inner workspace 120/60/30 and outer SSD 240/120/60; observe both backing and
+inner filesystems. Include 30 GiB trace reserve and the 128 MiB stop margin. Charge
 all work cumulatively; necessary local extensions need prospective records,
 not renewed owner permission. Cleanup requires a manifest, inactivity checks
 and two-hour notice for regenerable caches/clean merged worktrees. Never delete
