@@ -241,7 +241,7 @@ pub fn validate_policy_comparison(value: &serde_json::Value) -> Result<()> {
                     p == "AGENTS.md"
                         || p == "docs/integration/DECISIONS.md"
                         || p.starts_with("docs/integration/agent-execution-policy.")
-                        || p == "docs/labs/protocol.md"
+                        || (p == "docs/labs/protocol.md" || p == "docs/labs/operations.md")
                 })
         })
     {
@@ -1065,10 +1065,24 @@ fn verify_exit_evidence(
         .path
         .parent()
         .ok_or_else(|| invalid("exit path has no directory"))?;
+    let saved = jobs::read_spec(dir)?;
+    if Some(spec_digest(&saved)?) != attempt.spec_sha256 {
+        return Err(invalid("durable job spec differs from reserved spec"));
+    }
     let exit: ConfirmedExit;
     if name == "reconciliation.json" {
         let proof: serde_json::Value = serde_json::from_slice(&bytes)?;
-        let original = fs::read(dir.join("exit.json"))?;
+        let original_path = dir.join("exit.json");
+        let original_meta = fs::symlink_metadata(&original_path)?;
+        if !original_meta.file_type().is_file()
+            || original_meta.len() == 0
+            || original_meta.len() > 1024 * 1024
+        {
+            return Err(invalid(
+                "original UNKNOWN receipt must be a bounded regular file",
+            ));
+        }
+        let original = fs::read(original_path)?;
         exit = serde_json::from_slice(&original)?;
         validate_exit_identity(&exit, attempt_id, attempt)?;
         if proof["schema"] != "uor-r4.stopped-reconciliation/1"
@@ -1078,8 +1092,6 @@ fn verify_exit_evidence(
             || proof["spec_sha256"].as_str() != attempt.spec_sha256.as_deref()
             || proof["coordination"] != serde_json::to_value(&exit.coordination)?
             || proof["original_exit_sha256"] != digest(&original)
-            || proof["process_identity_sha256"] != digest(&fs::read(dir.join("process.json"))?)
-            || proof["process_state"] != "confirmed_stopped"
             || proof["scientific_outcome"] != "unknown"
             || proof["outcome"] != "interrupted"
             || exit.outcome != "unknown"
@@ -1089,13 +1101,52 @@ fn verify_exit_evidence(
                 "stopped reconciliation does not bind the preserved UNKNOWN result",
             ));
         }
+        let local_attempt = jobs::read_attempt(dir)?;
+        if local_attempt.attempt_id != attempt_id {
+            return Err(invalid("durable attempt identity differs"));
+        }
+        match proof["evidence_kind"].as_str() {
+            Some("pre_spawn_failure") => {
+                // The immutable producer marker is positive control-flow
+                // evidence. Missing process/gate files alone prove nothing.
+                let marker =
+                    jobs::validate_pre_spawn_failure(&canonical_root, dir, &saved, &local_attempt)?;
+                let marker_hash = digest(&fs::read(dir.join("preflight-failure.json"))?);
+                let original_value: serde_json::Value = serde_json::from_slice(&original)?;
+                if proof["process_state"] != "confirmed_not_started"
+                    || proof["additional_charged_ms"].as_u64() != Some(0)
+                    || proof["measurement"] != "measured"
+                    || original_value["measurement"] != "measured"
+                    || exit.elapsed_ms < marker.elapsed_ms
+                    || !proof["process_identity_sha256"].is_null()
+                    || proof["pre_spawn_failure_sha256"] != marker_hash
+                    || jobs::queue_dir(&canonical_root).join(attempt_id).exists()
+                    || jobs::running_dir(&canonical_root).join(attempt_id).exists()
+                {
+                    return Err(invalid("pre-spawn reconciliation conflicts with positive proof, cost or launch state"));
+                }
+                return Ok(());
+            }
+            Some("owned_process") => {
+                if proof["process_identity_sha256"] != digest(&fs::read(dir.join("process.json"))?)
+                    || proof["process_state"] != "confirmed_stopped"
+                    || !proof["pre_spawn_failure_sha256"].is_null()
+                {
+                    return Err(invalid(
+                        "owned-process reconciliation lacks its exact process identity",
+                    ));
+                }
+                // Continue to revalidate the token and absence of live members.
+            }
+            _ => {
+                return Err(invalid(
+                    "reconciliation lacks a supported positive evidence kind",
+                ))
+            }
+        }
     } else {
         exit = serde_json::from_slice(&bytes)?;
         validate_exit_contents(&exit, attempt_id, attempt)?;
-    }
-    let saved = jobs::read_spec(dir)?;
-    if Some(spec_digest(&saved)?) != attempt.spec_sha256 {
-        return Err(invalid("durable job spec differs from reserved spec"));
     }
     if exit.process_state == "never_started" {
         // A queued cancellation can release its reservation only while the
@@ -1908,6 +1959,7 @@ mod tests {
         for value in [
             serde_json::json!({"status":"diverged","files":[]}),
             serde_json::json!({"status":"ahead","files":[{"filename":"docs/labs/protocol.md"}]}),
+            serde_json::json!({"status":"ahead","files":[{"filename":"docs/labs/operations.md"}]}),
         ] {
             assert!(validate_policy_comparison(&value).is_err());
         }
@@ -1995,6 +2047,109 @@ mod tests {
         verify_exit_evidence(&id, &attempt, &evidence).unwrap();
         fs::write(path.parent().unwrap().join("attempt.json"), b"{}").unwrap();
         assert!(verify_exit_evidence(&id, &attempt, &evidence).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pre_spawn_reconciliation_requires_positive_bound_proof_and_zero_extra_cost() {
+        let id = format!(
+            "pre-spawn-bound-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(&id);
+        jobs::ensure_layout(&root).unwrap();
+        let root = fs::canonicalize(root).unwrap();
+        let ledger = root.join("ledger");
+        fs::create_dir(&ledger).unwrap();
+        crate::ledger::initialize_empty(&ledger, 100_000, "test").unwrap();
+        let mut attempt = reserved_state().attempts["job-one"].clone();
+        let mut job = attempt.spec.clone().unwrap();
+        job.id = id.clone();
+        job.cwd = root.clone();
+        job.coordination.as_mut().unwrap().attempt_id = id.clone();
+        attempt.host = process::host_id().unwrap();
+        attempt.runner_root = Some(root.clone());
+        attempt.spec_sha256 = Some(spec_digest(&job).unwrap());
+        attempt.spec = Some(job.clone());
+        let input = root.join("input.json");
+        fs::write(&input, serde_json::to_vec(&job).unwrap()).unwrap();
+        jobs::submit(&root, &input).unwrap();
+        let running = jobs::running_dir(&root).join(&id);
+        let guard = jobs::job_lock(&root, &id).unwrap();
+        jobs::durable_rename(&jobs::queue_dir(&root).join(&id), &running).unwrap();
+        let local = jobs::prepare_reserved_attempt(&running, &id, Some(&id)).unwrap();
+        jobs::record_pre_spawn_failure(
+            &root,
+            &job,
+            &local,
+            12,
+            "fixture hash mismatch before spawn".into(),
+        )
+        .unwrap();
+        drop(guard);
+        jobs::finalize(
+            &root,
+            &job,
+            &jobs::Finalization {
+                outcome: "unknown".into(),
+                exit_status: None,
+                reason: "preflight failed".into(),
+                peak_rss_kib: 0,
+                started_utc: local.started_utc,
+                elapsed_ms: 12,
+                measurement: crate::ledger::Measurement::Measured,
+            },
+            &ledger,
+        )
+        .unwrap();
+        let path = jobs::reconcile_stopped(&root, &id, &ledger).unwrap();
+        let dir = path.parent().unwrap();
+        let original_exit = fs::read(dir.join("exit.json")).unwrap();
+        let proof_bytes = fs::read(&path).unwrap();
+        let mut evidence = ExitEvidence {
+            host: attempt.host.clone(),
+            job_id: id.clone(),
+            attempt_id: id.clone(),
+            path: path.clone(),
+            sha256: digest(&proof_bytes),
+        };
+        verify_exit_evidence(&id, &attempt, &evidence).unwrap();
+        let proof: serde_json::Value = serde_json::from_slice(&proof_bytes).unwrap();
+        for (field, value) in [
+            ("evidence_kind", serde_json::json!(null)),
+            ("evidence_kind", serde_json::json!("owned_process")),
+            ("process_state", serde_json::json!("confirmed_stopped")),
+            ("additional_charged_ms", serde_json::json!(1)),
+            (
+                "pre_spawn_failure_sha256",
+                serde_json::json!("0".repeat(64)),
+            ),
+            ("original_exit_sha256", serde_json::json!("0".repeat(64))),
+        ] {
+            let mut bad = proof.clone();
+            bad[field] = value;
+            let bytes = serde_json::to_vec(&bad).unwrap();
+            fs::write(&path, &bytes).unwrap();
+            evidence.sha256 = digest(&bytes);
+            assert!(
+                verify_exit_evidence(&id, &attempt, &evidence).is_err(),
+                "accepted changed {field}"
+            );
+        }
+        fs::write(&path, &proof_bytes).unwrap();
+        evidence.sha256 = digest(&proof_bytes);
+        fs::write(dir.join("launch.go"), b"contradictory launch state").unwrap();
+        assert!(verify_exit_evidence(&id, &attempt, &evidence).is_err());
+        fs::remove_file(dir.join("launch.go")).unwrap();
+        verify_exit_evidence(&id, &attempt, &evidence).unwrap();
+        fs::remove_file(dir.join("preflight-failure.json")).unwrap();
+        assert!(verify_exit_evidence(&id, &attempt, &evidence).is_err());
+        assert_eq!(fs::read(dir.join("exit.json")).unwrap(), original_exit);
+        assert_eq!(crate::ledger::rebuild(&ledger).unwrap().cumulative_ms, 12);
         fs::remove_dir_all(root).unwrap();
     }
 

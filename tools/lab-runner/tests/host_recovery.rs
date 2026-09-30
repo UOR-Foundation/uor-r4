@@ -194,6 +194,7 @@ fn stopped_reconciliation_preserves_unknown_and_charges_supplement_once() {
             peak_rss_kib: 0,
             started_utc: attempt.started_utc,
             elapsed_ms: 12,
+            measurement: ledger::Measurement::Measured,
         },
         &ledger,
     )
@@ -211,5 +212,54 @@ fn stopped_reconciliation_preserves_unknown_and_charges_supplement_once() {
     jobs::reconcile_stopped(&root, "reconcile", &ledger).unwrap();
     assert_eq!(ledger::rebuild(&ledger).unwrap().cumulative_ms, charged);
     assert_eq!(fs::read(receipt).unwrap(), bytes);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn running_reconciliation_preserves_estimated_measurement_in_charge() {
+    let root = fixture("running-reconcile-estimate");
+    let ledger = root.join("ledger");
+    fs::create_dir(&ledger).unwrap();
+    ledger::initialize_empty(&ledger, 100_000, "test").unwrap();
+    jobs::submit(&root, &spec(&root, "running-estimate", 0.25)).unwrap();
+    let dir = root.join("running/running-estimate");
+    jobs::durable_rename(&root.join("queue/running-estimate"), &dir).unwrap();
+    let attempt = jobs::prepare_attempt(&dir, "running-estimate").unwrap();
+    let identity = lab_runner::process::Identity {
+        pid: 2,
+        pgid: 2,
+        started: "fixture".into(),
+        boot: "fixture-prior-boot".into(),
+        token: attempt.process_token,
+        supervisor_started: "fixture".into(),
+    };
+    fs::write(
+        dir.join("process.json"),
+        serde_json::to_vec(&identity).unwrap(),
+    )
+    .unwrap();
+    jobs::reconcile_stopped(&root, "running-estimate", &ledger).unwrap();
+    let exit: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("done/running-estimate/exit.json")).unwrap())
+            .unwrap();
+    assert_eq!(exit["outcome"], "unknown");
+    assert_eq!(exit["measurement"], "estimated");
+    let mut charges = 0;
+    for entry in fs::read_dir(&ledger).unwrap().map(|e| e.unwrap()) {
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("charge-v2-")
+        {
+            let charge: ledger::ChargeRecord =
+                serde_json::from_slice(&fs::read(entry.path()).unwrap()).unwrap();
+            assert_eq!(
+                charge.accounting.unwrap().measurement,
+                ledger::Measurement::Estimated
+            );
+            charges += 1;
+        }
+    }
+    assert_eq!(charges, 2);
     fs::remove_dir_all(root).unwrap();
 }

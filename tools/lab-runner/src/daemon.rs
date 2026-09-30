@@ -29,9 +29,32 @@ struct RunningJob {
     attempt: Attempt,
     started: Instant,
     elapsed_before_ms: u64,
+    measurement: crate::ledger::Measurement,
     peak_rss_kib: u64,
     log_offsets: [u64; 2],
     log_carry: String,
+}
+
+fn preflight_or_record_failure(
+    root: &Path,
+    spec: &JobSpec,
+    attempt: &Attempt,
+    started: Instant,
+    preflight: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    match preflight() {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            jobs::record_pre_spawn_failure(
+                root,
+                spec,
+                attempt,
+                started.elapsed().as_millis() as u64,
+                error.to_string(),
+            )?;
+            Err(error)
+        }
+    }
 }
 impl RunningJob {
     fn elapsed_ms(&self) -> u64 {
@@ -51,31 +74,30 @@ fn spawn_job(
 ) -> Result<RunningJob> {
     let started = Instant::now();
     let dir = jobs::running_dir(root).join(&spec.id);
+    if fs::symlink_metadata(dir.join("preflight-failure.json")).is_ok() {
+        return Err(invalid(
+            "terminal preflight proof forbids relaunch of this job",
+        ));
+    }
     let attempt = jobs::prepare_reserved_attempt(
         &dir,
         &spec.id,
         spec.coordination.as_ref().map(|c| c.attempt_id.as_str()),
     )?;
     if !test_mode {
-        if let Err(error) = spec.verify_provenance() {
-            crate::write_json_atomic(
-                &dir.join("preflight-failure.json"),
-                &json!({
-                    "attempt_id":attempt.attempt_id,"elapsed_ms":started.elapsed().as_millis(),
-                    "outcome":"never_started","reason":error.to_string(),"at":crate::utc_now_iso()
-                }),
-            )?;
-            return Err(error);
-        }
-        // Hashing may outlive a lease. Re-read live policy, GitHub ownership,
-        // attempt/root binding and resources after the expensive read, then
-        // consume the one-shot attempt immediately before any child is born.
-        let policy = HostPolicy::load(root)?;
-        host::check_admission(root, &policy, spec, &[])?;
-        crate::ledger::check_budget(ledger_dir, spec.reserved_ms()?)?;
-        if started.elapsed() >= Duration::from_secs(spec.wall_s) {
-            return Err(invalid("preflight exhausted the reserved job wall time"));
-        }
+        preflight_or_record_failure(root, spec, &attempt, started, || {
+            spec.verify_provenance()?;
+            // Hashing can outlive ownership. Refresh authority/resources here.
+            let policy = HostPolicy::load(root)?;
+            host::check_admission(root, &policy, spec, &[])?;
+            crate::ledger::check_budget(ledger_dir, spec.reserved_ms()?)?;
+            if started.elapsed() >= Duration::from_secs(spec.wall_s) {
+                return Err(invalid("preflight exhausted the reserved job wall time"));
+            }
+            Ok(())
+        })?;
+        // A failure while consuming an existing/uncertain tombstone cannot
+        // assert globally that this attempt never ran; retain the normal hold.
         jobs::consume_attempt(ledger_dir, root, spec)?;
     }
     let stdout = fs::OpenOptions::new()
@@ -164,6 +186,7 @@ fn spawn_job(
         attempt,
         started,
         elapsed_before_ms: 0,
+        measurement: crate::ledger::Measurement::Measured,
         peak_rss_kib: 0,
         log_offsets: [0, 0],
         log_carry: String::new(),
@@ -187,6 +210,7 @@ fn finalize_job(
             peak_rss_kib: job.peak_rss_kib,
             started_utc: job.attempt.started_utc.clone(),
             elapsed_ms: job.elapsed_ms(),
+            measurement: job.measurement,
         },
         ledger,
     )
@@ -288,6 +312,7 @@ fn recover(root: &Path, ledger: &Path, production: bool) -> Result<Vec<RunningJo
             attempt,
             started: Instant::now(),
             elapsed_before_ms: elapsed,
+            measurement: crate::ledger::Measurement::Estimated,
             peak_rss_kib: 0,
             log_offsets: [0, 0],
             log_carry: String::new(),
@@ -708,6 +733,7 @@ fn admit_pending(
                             peak_rss_kib: 0,
                             started_utc: attempt.started_utc,
                             elapsed_ms: launch_started.elapsed().as_millis() as u64,
+                            measurement: crate::ledger::Measurement::Measured,
                         },
                         &config.ledger_dir,
                     )?;
@@ -855,5 +881,145 @@ pub fn run(config: &DaemonConfig) -> Result<()> {
         running = still;
         admit_pending(config, policy.as_ref(), &mut running)?;
         std::thread::sleep(config.poll_interval.min(Duration::from_secs(1)));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ledger::{self, Measurement};
+
+    fn fixture(label: &str) -> (PathBuf, PathBuf, JobSpec, Attempt) {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-preflight-{}-{unique}-{label}",
+            std::process::id()
+        ));
+        jobs::ensure_layout(&root).unwrap();
+        let ledger = root.join("ledger");
+        fs::create_dir(&ledger).unwrap();
+        ledger::initialize_empty(
+            &ledger,
+            if label == "budget" { 1 } else { 100_000 },
+            "fixture",
+        )
+        .unwrap();
+        let input = root.join("input.json");
+        fs::write(&input,serde_json::to_vec(&json!({"id":format!("preflight-{unique}-{label}"),"lab":"test",
+            "cwd":root,"argv":["/usr/bin/true"],"threads":1,"rss_gib":0.1,"wall_s":5,"kill_criterion":{"kind":"wall"}})).unwrap()).unwrap();
+        let id = jobs::submit(&root, &input).unwrap();
+        let dir = jobs::running_dir(&root).join(&id);
+        jobs::durable_rename(&jobs::queue_dir(&root).join(&id), &dir).unwrap();
+        let spec = jobs::read_spec(&dir).unwrap();
+        let _guard = jobs::job_lock(&root, &id).unwrap();
+        let attempt = jobs::prepare_attempt(&dir, &id).unwrap();
+        (root, ledger, spec, attempt)
+    }
+
+    #[test]
+    fn failed_hash_late_policy_and_budget_have_positive_unstarted_proofs() {
+        for failure in ["hash", "policy", "budget"] {
+            let (root, ledger, spec, attempt) = fixture(failure);
+            let dir = jobs::running_dir(&root).join(&spec.id);
+            let guard = jobs::job_lock(&root, &spec.id).unwrap();
+            let data = root.join("data");
+            fs::write(&data, b"changed").unwrap();
+            let result = preflight_or_record_failure(
+                &root,
+                &spec,
+                &attempt,
+                Instant::now(),
+                || match failure {
+                    "hash" => crate::spec::FileIdentity {
+                        path: data.clone(),
+                        sha256: crate::coord::digest(b"original"),
+                    }
+                    .verify(),
+                    "policy" => HostPolicy::load(&root).map(|_| ()),
+                    _ => ledger::check_budget(&ledger, spec.reserved_ms()?).map(|_| ()),
+                },
+            );
+            assert!(result.is_err());
+            let proof = jobs::validate_pre_spawn_failure(&root, &dir, &spec, &attempt).unwrap();
+            assert!(!dir.join("process.json").exists());
+            drop(guard);
+            jobs::finalize(
+                &root,
+                &spec,
+                &Finalization {
+                    outcome: "unknown".into(),
+                    exit_status: None,
+                    reason: "failed preflight fixture".into(),
+                    peak_rss_kib: 0,
+                    started_utc: attempt.started_utc,
+                    elapsed_ms: proof.elapsed_ms,
+                    measurement: Measurement::Measured,
+                },
+                &ledger,
+            )
+            .unwrap();
+            let done = jobs::done_dir(&root).join(&spec.id);
+            let original = fs::read(done.join("exit.json")).unwrap();
+            // A marker does not override contradictory launch evidence.
+            fs::write(done.join("launch.go"), b"contradiction").unwrap();
+            assert!(jobs::reconcile_stopped(&root, &spec.id, &ledger).is_err());
+            fs::remove_file(done.join("launch.go")).unwrap();
+            let before = ledger::rebuild(&ledger).unwrap().cumulative_ms;
+            let receipt = jobs::reconcile_stopped(&root, &spec.id, &ledger).unwrap();
+            let value: serde_json::Value =
+                serde_json::from_slice(&fs::read(receipt).unwrap()).unwrap();
+            assert_eq!(value["process_state"], "confirmed_not_started");
+            assert_eq!(value["additional_charged_ms"], 0);
+            assert_eq!(value["measurement"], "measured");
+            assert_eq!(fs::read(done.join("exit.json")).unwrap(), original);
+            assert_eq!(ledger::rebuild(&ledger).unwrap().cumulative_ms, before);
+            jobs::reconcile_stopped(&root, &spec.id, &ledger).unwrap();
+            fs::remove_file(done.join("preflight-failure.json")).unwrap();
+            assert!(jobs::reconcile_stopped(&root, &spec.id, &ledger).is_err());
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn recovered_wall_clock_is_estimated_in_both_exit_and_charge() {
+        let (root, ledger, spec, attempt) = fixture("recover-estimate");
+        let dir = jobs::running_dir(&root).join(&spec.id);
+        let identity = Identity {
+            pid: 2,
+            pgid: 2,
+            started: "fixture".into(),
+            boot: "prior-boot-fixture".into(),
+            token: attempt.process_token,
+            supervisor_started: "fixture".into(),
+        };
+        fs::write(
+            dir.join("process.json"),
+            serde_json::to_vec(&identity).unwrap(),
+        )
+        .unwrap();
+        assert!(recover(&root, &ledger, true).unwrap().is_empty());
+        let receipt: serde_json::Value = serde_json::from_slice(
+            &fs::read(jobs::done_dir(&root).join(&spec.id).join("exit.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(receipt["measurement"], "estimated");
+        for entry in fs::read_dir(&ledger).unwrap().map(|e| e.unwrap()) {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("charge-v2-")
+            {
+                let charge: ledger::ChargeRecord =
+                    serde_json::from_slice(&fs::read(entry.path()).unwrap()).unwrap();
+                assert_eq!(
+                    charge.accounting.unwrap().measurement,
+                    Measurement::Estimated
+                );
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -22,7 +22,7 @@ const USAGE: &str = "usage: lab-runner [--root PATH] [--ledger-dir PATH] <comman
   reconcile-stopped <id>    preserve UNKNOWN result and prove stopped ownership
   install-agent             write the LaunchAgent plist and print the bootstrap command
   ledger rebuild            recompute from immutable charges and explicit baseline
-  ledger migrate|extend|import-legacy|charge-resource RECORD_JSON
+  ledger migrate|extend|import-legacy|charge-resource|observe-legacy-snapshot RECORD_JSON
   coord init STORE REMOTE OWNER/REPO POLICY_SHA
   coord status STORE | apply STORE EVENT_JSON
   delivery check|enqueue RECEIPT_JSON
@@ -243,9 +243,15 @@ fn run() -> Result<(), RunnerError> {
                 "import-legacy" => {
                     ledger::import_legacy(&globals.ledger_dir, &serde_json::from_slice(&bytes)?)?;
                 }
+                "observe-legacy-snapshot" => {
+                    ledger::record_legacy_snapshot_observation(
+                        &globals.ledger_dir,
+                        &serde_json::from_slice(&bytes)?,
+                    )?;
+                }
                 _ => {
                     return Err(invalid(
-                        "ledger migrate|extend|import-legacy|charge-resource RECORD_JSON",
+                        "ledger migrate|extend|import-legacy|charge-resource|observe-legacy-snapshot RECORD_JSON",
                     ))
                 }
             }

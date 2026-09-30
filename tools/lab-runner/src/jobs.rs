@@ -272,6 +272,106 @@ pub struct Finalization {
     pub peak_rss_kib: u64,
     pub started_utc: String,
     pub elapsed_ms: u64,
+    pub measurement: ledger::Measurement,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreSpawnFailure {
+    pub schema: String,
+    pub id: String,
+    pub attempt_id: String,
+    pub host: String,
+    pub runner_root: PathBuf,
+    pub spec_sha256: String,
+    pub attempt_sha256: String,
+    pub process_token_sha256: String,
+    pub phase: String,
+    pub elapsed_ms: u64,
+    pub measurement: ledger::Measurement,
+    pub reason: String,
+    pub recorded_utc: String,
+}
+
+/// Called only under the launch lock on an error branch that returns before
+/// any supervisor/payload spawn or consumed-attempt tombstone. It records
+/// positive control-flow evidence, not an inference from absent launch files.
+pub(crate) fn record_pre_spawn_failure(
+    root: &Path,
+    spec: &JobSpec,
+    attempt: &Attempt,
+    elapsed_ms: u64,
+    reason: String,
+) -> Result<()> {
+    let dir = running_dir(root).join(&spec.id);
+    let path = dir.join("preflight-failure.json");
+    if fs::symlink_metadata(&path).is_ok()
+        || fs::symlink_metadata(consumed_attempt_path(&spec.id)?).is_ok()
+    {
+        return Err(invalid(
+            "cannot certify pre-spawn failure over prior launch evidence",
+        ));
+    }
+    let proof = PreSpawnFailure {
+        schema: "uor-r4.pre-spawn-failure/1".into(),
+        id: spec.id.clone(),
+        attempt_id: attempt.attempt_id.clone(),
+        host: process::host_id()?,
+        runner_root: fs::canonicalize(root)?,
+        spec_sha256: crate::coord::digest(&serde_json::to_vec(spec)?),
+        attempt_sha256: crate::coord::digest(&fs::read(dir.join("attempt.json"))?),
+        process_token_sha256: crate::coord::digest(attempt.process_token.as_bytes()),
+        phase: "preflight_aborted_before_supervisor_spawn".into(),
+        elapsed_ms,
+        measurement: ledger::Measurement::Measured,
+        reason,
+        recorded_utc: utc_now_iso(),
+    };
+    // create_new makes this terminal proof immutable across retries.
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
+    file.sync_all()?;
+    fs::File::open(&dir)?.sync_all()?;
+    Ok(())
+}
+
+pub fn validate_pre_spawn_failure(
+    root: &Path,
+    dir: &Path,
+    spec: &JobSpec,
+    attempt: &Attempt,
+) -> Result<PreSpawnFailure> {
+    let path = dir.join("preflight-failure.json");
+    if !fs::symlink_metadata(&path)?.file_type().is_file() {
+        return Err(invalid("pre-spawn proof must be a regular file"));
+    }
+    let proof: PreSpawnFailure = serde_json::from_slice(&fs::read(path)?)?;
+    if proof.schema != "uor-r4.pre-spawn-failure/1"
+        || proof.id != spec.id
+        || proof.attempt_id != attempt.attempt_id
+        || proof.host != process::host_id()?
+        || proof.runner_root != fs::canonicalize(root)?
+        || proof.spec_sha256 != crate::coord::digest(&serde_json::to_vec(spec)?)
+        || proof.attempt_sha256 != crate::coord::digest(&fs::read(dir.join("attempt.json"))?)
+        || proof.process_token_sha256 != crate::coord::digest(attempt.process_token.as_bytes())
+        || proof.phase != "preflight_aborted_before_supervisor_spawn"
+        || proof.measurement != ledger::Measurement::Measured
+        || proof.reason.is_empty()
+        || ["process.json", "launch.go", "payload.exit", "pid"]
+            .iter()
+            .any(|name| fs::symlink_metadata(dir.join(name)).is_ok())
+        || fs::symlink_metadata(consumed_attempt_path(&spec.id)?).is_ok()
+        || process::find_supervisor(&attempt.process_token)?.is_some()
+    {
+        return Err(invalid(
+            "pre-spawn proof identity or launch journal contradiction",
+        ));
+    }
+    Ok(proof)
 }
 
 pub fn record_stop_request(dir: &Path, grace_ms: u64, reason: &str) -> Result<()> {
@@ -299,26 +399,37 @@ pub fn reconcile_stopped(root: &Path, id: &str, ledger_dir: &Path) -> Result<Pat
     let spec = read_spec(&dir)?;
     spec.validate()?;
     let attempt = read_attempt(&dir)?;
-    let identity = match read_identity(&dir) {
-        Ok(identity) => identity,
-        Err(_) if !dir.join("process.json").exists() => {
-            let identity = process::find_supervisor(&attempt.process_token)?
-                .ok_or_else(|| invalid("no durable identity or nonce supervisor; missing launch files do not prove an intact restored journal"))?;
-            crate::atomic_write(
-                &dir.join("process.json"),
-                &serde_json::to_vec_pretty(&identity)?,
-            )?;
-            crate::write_json_atomic(
-                &dir.join("process-recovery.json"),
-                &json!({
-                    "method":"live_nonce_supervisor","at":utc_now_iso(),"attempt_id":attempt.attempt_id
-                }),
-            )?;
-            identity
-        }
-        Err(error) => return Err(error),
+    let pre_spawn = if dir.join("preflight-failure.json").exists() {
+        Some(validate_pre_spawn_failure(root, &dir, &spec, &attempt)?)
+    } else {
+        None
     };
-    if identity.token != attempt.process_token
+    let identity = if pre_spawn.is_some() {
+        None
+    } else {
+        Some(match read_identity(&dir) {
+            Ok(identity) => identity,
+            Err(_) if !dir.join("process.json").exists() => {
+                let identity = process::find_supervisor(&attempt.process_token)?
+                .ok_or_else(|| invalid("no durable identity or nonce supervisor; missing launch files do not prove an intact restored journal"))?;
+                crate::atomic_write(
+                    &dir.join("process.json"),
+                    &serde_json::to_vec_pretty(&identity)?,
+                )?;
+                crate::write_json_atomic(
+                    &dir.join("process-recovery.json"),
+                    &json!({
+                        "method":"live_nonce_supervisor","at":utc_now_iso(),"attempt_id":attempt.attempt_id
+                    }),
+                )?;
+                identity
+            }
+            Err(error) => return Err(error),
+        })
+    };
+    if identity
+        .as_ref()
+        .is_some_and(|identity| identity.token != attempt.process_token)
         || spec
             .coordination
             .as_ref()
@@ -328,23 +439,48 @@ pub fn reconcile_stopped(root: &Path, id: &str, ledger_dir: &Path) -> Result<Pat
             "process/attempt/spec identity mismatch during reconciliation",
         ));
     }
-    if !process::owned_members(&identity)?.is_empty() {
-        record_stop_request(&dir, spec.stop_grace_ms, "explicit stopped reconciliation")?;
-        process::terminate(&identity, Duration::from_millis(spec.stop_grace_ms))?;
-    }
-    if !process::owned_members(&identity)?.is_empty() {
-        return Err(invalid(
-            "owned processes still present; reservation remains held",
-        ));
+    if let Some(identity) = &identity {
+        if !process::owned_members(identity)?.is_empty() {
+            record_stop_request(&dir, spec.stop_grace_ms, "explicit stopped reconciliation")?;
+            process::terminate(identity, Duration::from_millis(spec.stop_grace_ms))?;
+        }
+        if !process::owned_members(identity)?.is_empty() {
+            return Err(invalid(
+                "owned processes still present; reservation remains held",
+            ));
+        }
     }
     if stage == "running" {
+        let elapsed_ms = if let Some(proof) = &pre_spawn {
+            proof.elapsed_ms
+        } else {
+            now_ms()
+                .saturating_sub(attempt.started_ms)
+                .max(spec.reserved_ms()?)
+        };
         drop(guard);
-        finalize(root, &spec, &Finalization {
-            outcome:"unknown".into(), exit_status:None,
-            reason:"explicit reconciliation stopped owned execution; payload outcome unavailable; elapsed uses wall-clock estimate".into(),
-            peak_rss_kib:0, started_utc:attempt.started_utc,
-            elapsed_ms:now_ms().saturating_sub(attempt.started_ms).max(spec.reserved_ms()?),
-        }, ledger_dir)?;
+        finalize(
+            root,
+            &spec,
+            &Finalization {
+                outcome: "unknown".into(),
+                exit_status: None,
+                reason: if pre_spawn.is_some() {
+                    "positive pre-spawn failure; retain measured preflight cost".into()
+                } else {
+                    "explicit reconciliation stopped owned execution; payload outcome unavailable; elapsed uses wall-clock estimate".into()
+                },
+                peak_rss_kib: 0,
+                started_utc: attempt.started_utc,
+                elapsed_ms,
+                measurement: if pre_spawn.is_some() {
+                    ledger::Measurement::Measured
+                } else {
+                    ledger::Measurement::Estimated
+                },
+            },
+            ledger_dir,
+        )?;
         return reconcile_stopped(root, id, ledger_dir);
     }
     let original = fs::read(dir.join("exit.json"))?;
@@ -364,7 +500,28 @@ pub fn reconcile_stopped(root: &Path, id: &str, ledger_dir: &Path) -> Result<Pat
     // Confirm the original charge is present or replay it before adding cost.
     charge_exit(ledger_dir, &spec, &exit)?;
     let original_hash = crate::coord::digest(&original);
-    let identity_hash = crate::coord::digest(&fs::read(dir.join("process.json"))?);
+    let identity_hash = if identity.is_some() {
+        Some(crate::coord::digest(&fs::read(dir.join("process.json"))?))
+    } else {
+        None
+    };
+    let pre_spawn_hash = if pre_spawn.is_some() {
+        Some(crate::coord::digest(&fs::read(
+            dir.join("preflight-failure.json"),
+        )?))
+    } else {
+        None
+    };
+    let process_state = if pre_spawn.is_some() {
+        "confirmed_not_started"
+    } else {
+        "confirmed_stopped"
+    };
+    let measurement = if pre_spawn.is_some() {
+        ledger::Measurement::Measured
+    } else {
+        ledger::Measurement::Estimated
+    };
     let path = dir.join("reconciliation.json");
     let intent = dir.join("reconciliation-intent.json");
     let existing = if path.exists() {
@@ -380,17 +537,22 @@ pub fn reconcile_stopped(root: &Path, id: &str, ledger_dir: &Path) -> Result<Pat
         let original_ms = exit["elapsed_ms"]
             .as_u64()
             .ok_or_else(|| invalid("original charge lacks elapsed time"))?;
-        let estimate = now_ms()
-            .saturating_sub(attempt.started_ms)
-            .max(spec.reserved_ms()?)
-            .max(original_ms);
+        let estimate = if pre_spawn.is_some() {
+            original_ms
+        } else {
+            now_ms()
+                .saturating_sub(attempt.started_ms)
+                .max(spec.reserved_ms()?)
+                .max(original_ms)
+        };
         let receipt = json!({"schema":"uor-r4.stopped-reconciliation/1","id":spec.id,"lab":spec.lab,
             "attempt_id":attempt.attempt_id,"host":process::host_id()?,"spec_sha256":spec_hash,"coordination":spec.coordination,
             "original_exit_sha256":original_hash,"process_identity_sha256":identity_hash,
-            "process_state":"confirmed_stopped","scientific_outcome":"unknown","outcome":"interrupted",
+            "pre_spawn_failure_sha256":pre_spawn_hash,"evidence_kind":if pre_spawn.is_some(){"pre_spawn_failure"}else{"owned_process"},
+            "process_state":process_state,"scientific_outcome":"unknown","outcome":"interrupted","measurement":measurement,
             "checkpoint_status":"unavailable_no_verified_payload_protocol","recorded_utc":utc_now_iso(),
             "additional_charged_ms":estimate-original_ms,
-            "accounting":"conservative wall-clock estimate with reserved-cost floor; no monotonic cross-restart measurement",
+            "accounting":if pre_spawn.is_some(){"no additional execution cost: positive pre-spawn failure; original measured preflight charge retained"}else{"conservative wall-clock estimate with reserved-cost floor; no monotonic cross-restart measurement"},
             "charge_attempt_id":format!("reconcile-{}",crate::coord::digest(attempt.attempt_id.as_bytes()))});
         crate::write_json_atomic(&intent, &receipt)?;
         receipt
@@ -400,14 +562,15 @@ pub fn reconcile_stopped(root: &Path, id: &str, ledger_dir: &Path) -> Result<Pat
         || receipt["attempt_id"] != attempt.attempt_id
         || receipt["spec_sha256"] != spec_hash
         || receipt["original_exit_sha256"] != original_hash
-        || receipt["process_identity_sha256"] != identity_hash
+        || receipt["process_identity_sha256"] != json!(identity_hash)
+        || receipt["pre_spawn_failure_sha256"] != json!(pre_spawn_hash)
         || receipt["host"] != process::host_id()?
-        || receipt["process_state"] != "confirmed_stopped"
+        || receipt["process_state"] != process_state
         || receipt["scientific_outcome"] != "unknown"
     {
         return Err(invalid("reconciliation replay identity mismatch"));
     }
-    ledger::record_attempt_charge(
+    ledger::record_attempt_charge_with_measurement(
         ledger_dir,
         &spec.lab,
         &spec.id,
@@ -418,7 +581,12 @@ pub fn reconcile_stopped(root: &Path, id: &str, ledger_dir: &Path) -> Result<Pat
             .as_u64()
             .ok_or_else(|| invalid("reconciliation lacks additional cost"))?,
         spec.wall_s,
-        "reconciled_stopped_estimated_charge",
+        if pre_spawn.is_some() {
+            "reconciled_not_started"
+        } else {
+            "reconciled_stopped_estimated_charge"
+        },
+        measurement,
     )?;
     if !path.exists() {
         durable_rename(&intent, &path)?;
@@ -447,7 +615,13 @@ fn charge_exit(ledger_dir: &Path, spec: &JobSpec, exit: &Value) -> Result<()> {
     let outcome = exit["outcome"]
         .as_str()
         .ok_or_else(|| invalid("receipt lacks outcome"))?;
-    ledger::record_attempt_charge(
+    let measurement = match exit.get("measurement") {
+        Some(value) => serde_json::from_value(value.clone())?,
+        // Existing receipts keep the original API's retry classification;
+        // this does not manufacture a new historical monotonic measurement.
+        None => ledger::Measurement::Measured,
+    };
+    ledger::record_attempt_charge_with_measurement(
         ledger_dir,
         &spec.lab,
         &spec.id,
@@ -455,6 +629,7 @@ fn charge_exit(ledger_dir: &Path, spec: &JobSpec, exit: &Value) -> Result<()> {
         ms,
         spec.wall_s,
         outcome,
+        measurement,
     )?;
     Ok(())
 }
@@ -483,6 +658,7 @@ pub fn finalize(root: &Path, spec: &JobSpec, fin: &Finalization, ledger_dir: &Pa
             "host":process::host_id()?,"spec_sha256":crate::coord::digest(&serde_json::to_vec(spec)?),
             "coordination":spec.coordination,"process_state":if stopped {"confirmed_stopped"}else{"unknown"},
             "argv":spec.argv,"started_utc":fin.started_utc,"ended_utc":utc_now_iso(),"elapsed_ms":fin.elapsed_ms,
+            "measurement":fin.measurement,
             "checkpoint_requested":false,"checkpoint_status":"unavailable_no_verified_payload_protocol",
             "stop_grace_ms":spec.stop_grace_ms,"stop_request":stop_request,
             "wall_s":spec.wall_s,"outcome":if cancelled && fin.outcome != "unknown" {"cancelled"}else{&fin.outcome},"exit_status":fin.exit_status,
@@ -512,6 +688,7 @@ pub fn replay_finalization(root: &Path, dir: &Path, ledger_dir: &Path) -> Result
             peak_rss_kib: 0,
             started_utc: String::new(),
             elapsed_ms: 0,
+            measurement: ledger::Measurement::Estimated,
         },
         ledger_dir,
     )
@@ -615,6 +792,7 @@ pub fn cancel(root: &Path, id: &str, ledger_dir: &Path) -> Result<()> {
             peak_rss_kib: peak,
             started_utc: attempt.started_utc,
             elapsed_ms: now_ms().saturating_sub(attempt.started_ms),
+            measurement: ledger::Measurement::Estimated,
         },
         ledger_dir,
     )

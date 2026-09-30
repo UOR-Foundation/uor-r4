@@ -173,9 +173,13 @@ manager. Reserve only the next admitted work; do not pre-reserve an entire queue
 
 Finalizing a shared attempt requires a typed host/job/attempt receipt, verified
 SHA-256 at its bound internal `done/<id>/exit.json`, matching saved/reserved spec
-and claim identity, and confirmed stopped-process evidence. Unknown, unreachable,
-legacy-unbound and never-started cases remain reserved for explicit reconciliation;
-text saying “finished” is insufficient. Declaring a lab unavailable does not
+and claim identity, and confirmed stopped-process evidence. A queued cancellation
+may instead prove that no launch intent existed. A failed preflight may retain
+a positive, immutable proof written before supervisor spawn; reconciliation
+verifies its source/spec/attempt binding and rejects contradictory launch evidence.
+Missing launch files alone never prove that a restored job did not run. Unknown,
+unreachable and legacy-unbound cases retain their reservations until explicit
+reconciliation; text saying “finished” is insufficient. Declaring a lab unavailable does not
 extend its task leases or release its live worker.
 
 The checker expects real `diff-check`/`claim-wording` evidence for docs;

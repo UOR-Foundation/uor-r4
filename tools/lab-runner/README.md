@@ -58,8 +58,10 @@ descendants cannot lose their ownership anchor. Signals require revalidated
 identity; verified descendants are stopped before that supervisor.
 `stop_grace_ms` defaults to 250 and may be 0–30000, permitting an existing TERM
 handler to save its own state before KILL. Admission reserves the payload wall
-limit, this grace and a 2000 ms enforcement margin; actual elapsed cost is
-charged. This is a scheduling bound, not an operating-system real-time guarantee.
+limit, this grace and a 2000 ms enforcement margin. Normal supervisor lifetime
+charges use measured monotonic elapsed time; recovery charges identify their
+wall-clock estimates explicitly. This is a scheduling bound, not an
+operating-system real-time guarantee.
 Receipts distinguish a recorded TERM request and confirmed process stop from
 a saved checkpoint. `checkpoint_status` remains
 `unavailable_no_verified_payload_protocol`: no versioned, attempt/spec-bound
@@ -76,10 +78,24 @@ follows both. Unknown exit status remains unknown. Restore/replay never turns
 an unknown result into success.
 `reconcile-stopped` can produce a separate immutable proof after verifying that
 the owned group is gone (including a verified prior boot) or stopping a live
-nonce supervisor. It retains the original UNKNOWN result and charge, and adds
-an idempotent, explicitly estimated supplemental charge for unaccounted time.
-A missing process record is recoverable only from an observed nonce supervisor;
-missing launch files alone do not prove journal integrity after a restore.
+nonce supervisor. It retains the original UNKNOWN result and charge. For
+recovered execution, it records a conservative wall-clock estimate with a
+reserved-cost floor and adds any unaccounted time as an idempotent, explicitly
+estimated supplemental charge. It does not claim a monotonic measurement across
+a supervisor restart.
+
+A separate positive `preflight-failure.json` proof uses schema
+`uor-r4.pre-spawn-failure/1`. The runner writes it under the launch lock only on
+a control-flow path that returns before supervisor/payload spawn and before
+the consumed-attempt tombstone. It binds host, canonical runner root, job and
+attempt IDs, spec/attempt/nonce hashes, phase
+`preflight_aborted_before_supervisor_spawn`, reason and measured preflight
+elapsed time. Reconciliation validates those bindings and rejects contradictory
+launch files, a tombstone or a live nonce supervisor. This proves
+`confirmed_not_started`, retains measured preflight cost and adds no execution
+cost; the scientific result remains unknown. Without this positive proof, a
+missing process record requires an observed nonce supervisor. Missing launch
+files alone never prove that a restored attempt did not run.
 Shared reservation finalization and release of the admission hold remain
 separate, evidence-checked actions.
 
@@ -92,12 +108,13 @@ lab-runner status [ID]
 lab-runner tail ID
 lab-runner cancel ID
 lab-runner reconcile-stopped ID
-lab-runner reconcile-stopped ID
 lab-runner install-agent
 lab-runner ledger rebuild
 lab-runner ledger migrate BASELINE_JSON
 lab-runner ledger extend EXTENSION_JSON
 lab-runner ledger import-legacy IMPORT_JSON
+lab-runner ledger charge-resource RECORD_JSON
+lab-runner ledger observe-legacy-snapshot RECORD_JSON
 lab-runner coord init STORE REMOTE OWNER/REPO POLICY_SHA
 lab-runner coord status STORE
 lab-runner coord apply STORE EVENT_JSON
@@ -117,9 +134,33 @@ its hash. A restored cumulative snapshot is not an automatic accounting anchor.
 Uncovered legacy records require explicit mappings. Never replace the real
 ledger with a smoke ledger.
 
-New job charges include typed `accounting` metadata: `job_execution` and
-`measured`, except explicitly reconciled estimated charges, which record
-`estimated`. Older immutable receipts may lack this metadata and remain
+A migration from a still-known legacy ledger should bind `legacy_source` and
+`legacy_snapshot_sha256` in the baseline. Preserve the original counter bytes
+internally as `legacy-snapshot-<sha256>.json` before migration. Positive-budget
+admission checks compare the old source's complete `charge-`/`extension-` file
+set and hashes, plus its `model-time.json` hash, against reviewed coverage.
+New, changed, missing or unreadable legacy data blocks new admission. Internal
+rebuilds, job finalization and zero-budget monitoring remain usable while that
+volume is absent; this watch does not cancel admitted work.
+
+Import new legacy receipts normally. Preserve a changed same-name receipt
+under a new internal filename and use optional `LegacyImport.legacy_observed`
+(`file`, `sha256`, `previous_sha256`) to advance the watched external identity
+without altering originals. Counter-only drift needs explicit accounting
+review followed by `lab-runner ledger observe-legacy-snapshot RECORD_JSON` with schema
+`uor-r4.legacy-snapshot-observation/1`, prior/new hashes, the reviewed internal
+`LedgerState`, authority and rationale. The API preserves the actual snapshot
+and appends a watch-only record; it adds no charge or allowance. Ambiguous,
+disconnected or repeated historical hash chains remain blocked for manual
+reconciliation. Double reads detect concurrent drift during inspection; they
+are not a cross-client lock, so retire old writers as part of migration.
+
+New job charges include typed `accounting` metadata with category `job_execution`.
+Normal supervisor-lifetime execution and positive pre-spawn failure costs are
+`measured`; cross-restart recovered execution and its reconciliation supplements
+are `estimated`. Their measurement status follows the retained execution
+evidence, not whether a process is now stopped. Older immutable receipts may
+lack this metadata and remain
 readable without rewriting them. `ledger::record_resource_charge` accepts
 immutable `uor-r4.resource-charge/1` records for preparation, review, storage
 work, build and delivery elapsed time. Each has a unique event ID, measurement

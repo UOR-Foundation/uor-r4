@@ -49,6 +49,12 @@ pub struct MigrationBaseline {
     pub covered_records: Vec<CoveredRecord>,
     pub authority: String,
     pub rationale: String,
+    /// Watch only at NEW admission. Internal accounting never requires this
+    /// legacy volume to remain mounted after migration.
+    #[serde(default)]
+    pub legacy_source: Option<PathBuf>,
+    #[serde(default)]
+    pub legacy_snapshot_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +142,32 @@ pub struct LegacyImport {
     pub source: CoveredRecord,
     pub charged_ms: u64,
     pub increment_ms: u64,
+    pub authority: String,
+    pub rationale: String,
+    /// A changed same-name external receipt is copied under a new internal
+    /// filename; this hash-linked observation updates the watched external name.
+    #[serde(default)]
+    pub legacy_observed: Option<LegacyObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LegacyObservation {
+    pub file: String,
+    pub sha256: String,
+    /// None adds a newly observed filename; Some advances an exact prior hash.
+    pub previous_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LegacySnapshotObservation {
+    pub schema: String,
+    pub event_id: String,
+    pub recorded_utc: String,
+    pub previous_sha256: String,
+    pub sha256: String,
+    pub reviewed_internal_state: LedgerState,
     pub authority: String,
     pub rationale: String,
 }
@@ -281,6 +313,14 @@ pub fn migrate(dir: &Path, baseline: &MigrationBaseline) -> Result<LedgerState> 
     nonempty(&baseline.authority, "authority")?;
     nonempty(&baseline.rationale, "rationale")?;
     nonempty(&baseline.recorded_utc, "recorded_utc")?;
+    validate_legacy_source(dir, baseline.legacy_source.as_deref())?;
+    if baseline.legacy_source.is_some() {
+        let hash = baseline
+            .legacy_snapshot_sha256
+            .as_deref()
+            .ok_or_else(|| invalid("legacy watch requires original model-time snapshot hash"))?;
+        verify_snapshot_copy(dir, hash)?;
+    }
     let mut covered = BTreeSet::new();
     for item in &baseline.covered_records {
         verify_covered(dir, item)?;
@@ -328,6 +368,8 @@ pub fn initialize_empty(dir: &Path, limit_ms: u64, reason: &str) -> Result<Ledge
             covered_records: Vec::new(),
             authority: reason.into(),
             rationale: reason.into(),
+            legacy_source: None,
+            legacy_snapshot_sha256: None,
         },
     )
 }
@@ -387,6 +429,7 @@ fn fold_with_resource(dir: &Path, proposed: Option<&ResourceChargeRecord>) -> Re
         nonempty(&record.event_id, "event_id")?;
         nonempty(&record.authority, "authority")?;
         nonempty(&record.rationale, "rationale")?;
+        validate_legacy_observation(&record)?;
         if let Some(old) = events.insert(record.event_id.clone(), value.clone()) {
             if old != value {
                 return Err(invalid("conflicting ledger event ID"));
@@ -659,6 +702,33 @@ pub fn record_attempt_charge(
     wall_s: u64,
     outcome: &str,
 ) -> Result<LedgerState> {
+    let measurement = if outcome == "reconciled_stopped_estimated_charge" {
+        Measurement::Estimated
+    } else {
+        Measurement::Measured
+    };
+    record_attempt_charge_with_measurement(
+        dir,
+        lab,
+        job_id,
+        attempt_id,
+        charged_ms,
+        wall_s,
+        outcome,
+        measurement,
+    )
+}
+
+pub fn record_attempt_charge_with_measurement(
+    dir: &Path,
+    lab: &str,
+    job_id: &str,
+    attempt_id: &str,
+    charged_ms: u64,
+    wall_s: u64,
+    outcome: &str,
+    measurement: Measurement,
+) -> Result<LedgerState> {
     fs::create_dir_all(dir)?;
     let _lock = acquire_lock(dir)?;
     // Fail before mutation if migration is missing or existing history is inconsistent.
@@ -676,11 +746,7 @@ pub fn record_attempt_charge(
         runner: "lab-runner".into(),
         accounting: Some(CostMetadata {
             category: CostCategory::JobExecution,
-            measurement: if outcome == "reconciled_stopped_estimated_charge" {
-                Measurement::Estimated
-            } else {
-                Measurement::Measured
-            },
+            measurement,
             correction_of: None,
         }),
     };
@@ -757,6 +823,7 @@ pub fn import_legacy(dir: &Path, record: &LegacyImport) -> Result<LedgerState> {
     nonempty(&record.event_id, "event_id")?;
     nonempty(&record.authority, "authority")?;
     nonempty(&record.rationale, "rationale")?;
+    validate_legacy_observation(record)?;
     verify_covered(dir, &record.source)?;
     let source: serde_json::Value =
         serde_json::from_slice(&fs::read(dir.join(&record.source.file))?)?;
@@ -789,6 +856,9 @@ pub fn import_legacy(dir: &Path, record: &LegacyImport) -> Result<LedgerState> {
             return Err(invalid("legacy source already covered by another import"));
         }
     }
+    if baseline.legacy_source.is_some() {
+        legacy_watch_coverage(dir, &baseline, Some(record))?;
+    }
     immutable_write(&destination, &serde_json::to_vec_pretty(record)?)?;
     let state = fold_records(dir)?;
     write_view(dir, state)?;
@@ -799,11 +869,372 @@ pub fn import_legacy(dir: &Path, record: &LegacyImport) -> Result<LedgerState> {
 pub fn check_budget(dir: &Path, requested_ms: u64) -> Result<LedgerState> {
     let _lock = acquire_lock(dir)?;
     let state = fold_records(dir)?;
+    // Zero is used by control/monitor paths to inspect already admitted work.
+    // They retain internal budget enforcement without depending on old media.
+    if requested_ms > 0 {
+        check_legacy_watch(dir)?;
+    }
     if add(state.cumulative_ms, requested_ms)? > state.limit_ms {
         return Err(invalid(
             "cumulative ledger plus reservations exceeds allowance",
         ));
     }
+    Ok(state)
+}
+
+fn validate_legacy_source(dir: &Path, source: Option<&Path>) -> Result<()> {
+    if let Some(source) = source {
+        if !source.is_absolute()
+            || source
+                .components()
+                .any(|p| matches!(p, std::path::Component::ParentDir))
+            || source == dir
+        {
+            return Err(invalid(
+                "legacy watch must name a distinct absolute source ledger path",
+            ));
+        }
+        // Do not canonicalize/read the external path here: rebuild and durable
+        // job charging must work during removal or restoration of that volume.
+    }
+    Ok(())
+}
+fn validate_legacy_observation(record: &LegacyImport) -> Result<()> {
+    if let Some(observed) = &record.legacy_observed {
+        valid_covered(&CoveredRecord {
+            file: observed.file.clone(),
+            sha256: observed.sha256.clone(),
+        })?;
+        if observed.sha256 != record.source.sha256 {
+            return Err(invalid(
+                "legacy observation must match the preserved imported bytes",
+            ));
+        }
+        if let Some(previous) = &observed.previous_sha256 {
+            valid_covered(&CoveredRecord {
+                file: observed.file.clone(),
+                sha256: previous.clone(),
+            })?;
+            if previous == &observed.sha256 {
+                return Err(invalid(
+                    "legacy observation update must identify changed bytes",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+fn legacy_watch_coverage(
+    dir: &Path,
+    baseline: &MigrationBaseline,
+    proposed: Option<&LegacyImport>,
+) -> Result<BTreeMap<String, String>> {
+    let mut known = BTreeMap::new();
+    for source in &baseline.covered_records {
+        if known
+            .insert(source.file.clone(), source.sha256.clone())
+            .is_some()
+        {
+            return Err(invalid("duplicate original legacy coverage"));
+        }
+    }
+    let mut imports = BTreeMap::<String, LegacyImport>::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("import-") && name.ends_with(".json") {
+            let record: LegacyImport = serde_json::from_slice(&fs::read(entry.path())?)?;
+            if let Some(old) = imports.insert(record.event_id.clone(), record.clone()) {
+                if old != record {
+                    return Err(invalid("conflicting imported legacy observation"));
+                }
+            }
+        }
+    }
+    if let Some(record) = proposed {
+        if let Some(old) = imports.insert(record.event_id.clone(), record.clone()) {
+            if old != *record {
+                return Err(invalid("conflicting proposed legacy observation"));
+            }
+        }
+    }
+    let mut pending = Vec::new();
+    let mut edges = BTreeMap::new();
+    for record in imports.values() {
+        validate_legacy_observation(record)?;
+        let observation = record.legacy_observed.clone().unwrap_or(LegacyObservation {
+            file: record.source.file.clone(),
+            sha256: record.source.sha256.clone(),
+            previous_sha256: None,
+        });
+        let key = (
+            observation.file.clone(),
+            observation.previous_sha256.clone(),
+        );
+        if let Some(old) = edges.insert(key, observation.sha256.clone()) {
+            if old != observation.sha256 {
+                return Err(invalid(
+                    "ambiguous legacy observation branches require explicit reconciliation",
+                ));
+            }
+        }
+        pending.push(observation);
+    }
+    // Replay the hash chain, never filename or timestamp order. A later import
+    // cannot silently overwrite a previously reviewed source observation.
+    let mut seen: BTreeSet<_> = known
+        .iter()
+        .map(|(name, hash)| (name.clone(), hash.clone()))
+        .collect();
+    while !pending.is_empty() {
+        let mut progressed = false;
+        let mut remaining = Vec::new();
+        for item in pending {
+            let ready = match &item.previous_sha256 {
+                None => !known.contains_key(&item.file),
+                Some(previous) => known.get(&item.file) == Some(previous),
+            };
+            if ready {
+                if !seen.insert((item.file.clone(), item.sha256.clone())) {
+                    return Err(invalid(
+                        "legacy observation repeats prior bytes; manual reconciliation required",
+                    ));
+                }
+                known.insert(item.file.clone(), item.sha256.clone());
+                progressed = true;
+            } else {
+                remaining.push(item);
+            }
+        }
+        pending = remaining;
+        if !progressed {
+            return Err(invalid(
+                "legacy observation chain is unresolved or duplicates accounted coverage",
+            ));
+        }
+    }
+    Ok(known)
+}
+fn external_receipt_snapshot(source: &Path) -> Result<BTreeMap<String, String>> {
+    let mut observed = BTreeMap::new();
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let name = entry
+            .file_name()
+            .to_str()
+            .ok_or_else(|| invalid("non-UTF8 legacy receipt filename"))?
+            .to_string();
+        if !(name.starts_with("charge-") || name.starts_with("extension-"))
+            || !name.ends_with(".json")
+        {
+            continue;
+        }
+        let before = fs::symlink_metadata(entry.path())?;
+        if !before.is_file() || before.file_type().is_symlink() || before.len() > 1024 * 1024 {
+            return Err(invalid(
+                "legacy watch receipt is unreadable, linked, special or oversized",
+            ));
+        }
+        let bytes = fs::read(entry.path())?;
+        let after = fs::symlink_metadata(entry.path())?;
+        if before.len() != bytes.len() as u64
+            || before.len() != after.len()
+            || before.modified()? != after.modified()?
+            || !after.is_file()
+            || after.file_type().is_symlink()
+        {
+            return Err(invalid("legacy ledger changed while observing it"));
+        }
+        let _: serde_json::Value = serde_json::from_slice(&bytes)?;
+        observed.insert(name, sha256(&bytes));
+    }
+    Ok(observed)
+}
+fn check_legacy_watch(dir: &Path) -> Result<()> {
+    let baseline: MigrationBaseline = serde_json::from_slice(&fs::read(dir.join(BASELINE_FILE))?)?;
+    let Some(source) = baseline.legacy_source.as_deref() else {
+        return Ok(());
+    };
+    validate_legacy_source(dir, Some(source))?;
+    if fs::canonicalize(source)? == fs::canonicalize(dir)? {
+        return Err(invalid(
+            "legacy watch resolves to the internal ledger itself",
+        ));
+    }
+    let expected = legacy_watch_coverage(dir, &baseline, None)?;
+    let snapshot_expected = legacy_snapshot_head(dir, &baseline)?;
+    let snapshot_first = read_snapshot_bytes(source)?;
+    let first = external_receipt_snapshot(source)?;
+    let second = external_receipt_snapshot(source)?;
+    let snapshot_second = read_snapshot_bytes(source)?;
+    if first != second || second != expected {
+        return Err(invalid("legacy ledger has new, changed or missing receipts; stop new admission for explicit import/review"));
+    }
+    if snapshot_first != snapshot_second || sha256(&snapshot_second) != snapshot_expected {
+        return Err(invalid("legacy model-time snapshot drifted; explicit accounting review and immutable snapshot observation required"));
+    }
+    Ok(())
+}
+fn snapshot_copy_name(hash: &str) -> Result<String> {
+    if hash.len() != 64
+        || !hash
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    {
+        return Err(invalid("snapshot identity needs lowercase SHA-256"));
+    }
+    Ok(format!("legacy-snapshot-{hash}.json"))
+}
+fn verify_snapshot_copy(dir: &Path, hash: &str) -> Result<()> {
+    let path = dir.join(snapshot_copy_name(hash)?);
+    let meta = fs::symlink_metadata(&path)?;
+    if !meta.is_file() || meta.file_type().is_symlink() || sha256(&fs::read(path)?) != hash {
+        return Err(invalid(
+            "preserved legacy snapshot bytes unavailable or changed",
+        ));
+    }
+    Ok(())
+}
+fn read_snapshot_bytes(source: &Path) -> Result<Vec<u8>> {
+    let path = source.join(MODEL_TIME_FILE);
+    let before = fs::symlink_metadata(&path)?;
+    if !before.is_file() || before.file_type().is_symlink() || before.len() > 1024 * 1024 {
+        return Err(invalid(
+            "legacy counter snapshot is unavailable or ambiguous",
+        ));
+    }
+    let bytes = fs::read(&path)?;
+    let after = fs::symlink_metadata(path)?;
+    if before.len() != bytes.len() as u64
+        || before.len() != after.len()
+        || before.modified()? != after.modified()?
+        || !after.is_file()
+        || after.file_type().is_symlink()
+    {
+        return Err(invalid("legacy counter snapshot changed while observed"));
+    }
+    let _: serde_json::Value = serde_json::from_slice(&bytes)?;
+    Ok(bytes)
+}
+fn legacy_snapshot_head(dir: &Path, baseline: &MigrationBaseline) -> Result<String> {
+    let mut head = baseline
+        .legacy_snapshot_sha256
+        .clone()
+        .ok_or_else(|| invalid("legacy watch lacks original snapshot identity"))?;
+    verify_snapshot_copy(dir, &head)?;
+    let mut records = BTreeMap::<String, LegacySnapshotObservation>::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("watch-snapshot-") && name.ends_with(".json") {
+            let value: LegacySnapshotObservation =
+                serde_json::from_slice(&fs::read(entry.path())?)?;
+            validate_snapshot_observation(&value)?;
+            verify_snapshot_copy(dir, &value.sha256)?;
+            if let Some(old) = records.insert(value.event_id.clone(), value.clone()) {
+                if old != value {
+                    return Err(invalid("snapshot observation ID conflict"));
+                }
+            }
+        }
+    }
+    let mut edges = BTreeMap::new();
+    for record in records.values() {
+        if let Some(old) = edges.insert(record.previous_sha256.clone(), record.sha256.clone()) {
+            if old != record.sha256 {
+                return Err(invalid("ambiguous snapshot observation branches"));
+            }
+        }
+    }
+    let mut visited = BTreeSet::new();
+    while let Some(next) = edges.remove(&head) {
+        if !visited.insert(head.clone()) {
+            return Err(invalid("cyclic snapshot observation chain"));
+        }
+        head = next;
+    }
+    if !edges.is_empty() || visited.contains(&head) {
+        return Err(invalid("snapshot observation chain is disconnected"));
+    }
+    Ok(head)
+}
+fn validate_snapshot_observation(record: &LegacySnapshotObservation) -> Result<()> {
+    if record.schema != "uor-r4.legacy-snapshot-observation/1" {
+        return Err(invalid("unsupported legacy snapshot observation"));
+    }
+    for (value, name) in [
+        (&record.event_id, "event_id"),
+        (&record.recorded_utc, "recorded_utc"),
+        (&record.authority, "authority"),
+        (&record.rationale, "rationale"),
+    ] {
+        nonempty(value, name)?;
+    }
+    snapshot_copy_name(&record.previous_sha256)?;
+    snapshot_copy_name(&record.sha256)?;
+    if record.previous_sha256 == record.sha256 {
+        return Err(invalid("snapshot observation must record changed bytes"));
+    }
+    Ok(())
+}
+/// Watch-only reconciliation after accounting review; this never charges or
+/// resets totals. Preserve the actual snapshot, then append its reviewed link.
+pub fn record_legacy_snapshot_observation(
+    dir: &Path,
+    record: &LegacySnapshotObservation,
+) -> Result<LedgerState> {
+    let _lock = acquire_lock(dir)?;
+    let state = fold_records(dir)?;
+    validate_snapshot_observation(record)?;
+    let path = dir.join(format!(
+        "watch-snapshot-{}.json",
+        sha256(record.event_id.as_bytes())
+    ));
+    let bytes = serde_json::to_vec_pretty(record)?;
+    if path.exists() {
+        if fs::read(&path)? == bytes {
+            return Ok(state);
+        }
+        return Err(invalid("snapshot observation identity reused"));
+    }
+    if state != record.reviewed_internal_state {
+        return Err(invalid("internal accounting changed since snapshot review"));
+    }
+    let baseline: MigrationBaseline = serde_json::from_slice(&fs::read(dir.join(BASELINE_FILE))?)?;
+    let source = baseline
+        .legacy_source
+        .as_deref()
+        .ok_or_else(|| invalid("no configured legacy source watch"))?;
+    if legacy_snapshot_head(dir, &baseline)? != record.previous_sha256 {
+        return Err(invalid(
+            "snapshot observation does not advance current reviewed hash",
+        ));
+    }
+    if baseline.legacy_snapshot_sha256.as_ref() == Some(&record.sha256) {
+        return Err(invalid(
+            "snapshot repeats original bytes; manual reconciliation required",
+        ));
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("watch-snapshot-") && name.ends_with(".json") {
+            let old: LegacySnapshotObservation = serde_json::from_slice(&fs::read(entry.path())?)?;
+            if old.previous_sha256 == record.sha256 {
+                return Err(invalid(
+                    "snapshot repeats historical bytes; manual reconciliation required",
+                ));
+            }
+        }
+    }
+    let observed = read_snapshot_bytes(source)?;
+    if sha256(&observed) != record.sha256 {
+        return Err(invalid(
+            "external snapshot differs from reviewed observation",
+        ));
+    }
+    immutable_write(&dir.join(snapshot_copy_name(&record.sha256)?), &observed)?;
+    immutable_write(&path, &bytes)?;
     Ok(state)
 }
 pub fn rebuild(dir: &Path) -> Result<LedgerState> {
@@ -828,6 +1259,126 @@ mod tests {
         ));
         fs::create_dir(&path).unwrap();
         path
+    }
+    #[test]
+    fn external_legacy_drift_blocks_only_admission_until_reviewed_import() {
+        let dir = temp("watched-internal");
+        let external = temp("watched-legacy");
+        let old = br#"{"schema":"legacy","charged_ms":100}"#;
+        fs::write(dir.join("charge-original.json"), old).unwrap();
+        fs::write(external.join("charge-original.json"), old).unwrap();
+        let snapshot = br#"{"cumulative_ms":100,"limit_ms":1000}"#;
+        fs::write(external.join(MODEL_TIME_FILE), snapshot).unwrap();
+        fs::write(
+            dir.join(snapshot_copy_name(&sha256(snapshot)).unwrap()),
+            snapshot,
+        )
+        .unwrap();
+        migrate(
+            &dir,
+            &MigrationBaseline {
+                schema: BASELINE_SCHEMA.into(),
+                baseline_id: "watched".into(),
+                recorded_utc: utc_now_iso(),
+                cumulative_ms: 100,
+                limit_ms: 1000,
+                covered_records: vec![CoveredRecord {
+                    file: "charge-original.json".into(),
+                    sha256: sha256(old),
+                }],
+                authority: "fixture".into(),
+                rationale: "reviewed copied legacy records".into(),
+                legacy_source: Some(external.clone()),
+                legacy_snapshot_sha256: Some(sha256(snapshot)),
+            },
+        )
+        .unwrap();
+        assert!(check_budget(&dir, 1).is_ok());
+        let late = br#"{"schema":"legacy","charged_ms":10}"#;
+        fs::write(external.join("charge-late.json"), late).unwrap();
+        assert!(check_budget(&dir, 1).is_err());
+        assert_eq!(rebuild(&dir).unwrap().cumulative_ms, 100);
+        fs::write(dir.join("charge-late.json"), late).unwrap();
+        import_legacy(
+            &dir,
+            &LegacyImport {
+                schema: IMPORT_SCHEMA.into(),
+                event_id: "late".into(),
+                recorded_utc: utc_now_iso(),
+                source: CoveredRecord {
+                    file: "charge-late.json".into(),
+                    sha256: sha256(late),
+                },
+                charged_ms: 10,
+                increment_ms: 0,
+                authority: "fixture".into(),
+                rationale: "new legacy work".into(),
+                legacy_observed: None,
+            },
+        )
+        .unwrap();
+        assert!(check_budget(&dir, 1).is_ok());
+        let updated = br#"{"cumulative_ms":110,"limit_ms":1000}"#;
+        fs::write(external.join(MODEL_TIME_FILE), updated).unwrap();
+        assert!(check_budget(&dir, 1).is_err());
+        assert_eq!(rebuild(&dir).unwrap().cumulative_ms, 110);
+        record_legacy_snapshot_observation(
+            &dir,
+            &LegacySnapshotObservation {
+                schema: "uor-r4.legacy-snapshot-observation/1".into(),
+                event_id: "counter-reviewed".into(),
+                recorded_utc: utc_now_iso(),
+                previous_sha256: sha256(snapshot),
+                sha256: sha256(updated),
+                reviewed_internal_state: rebuild(&dir).unwrap(),
+                authority: "fixture review".into(),
+                rationale: "counter increase accounted by the late import".into(),
+            },
+        )
+        .unwrap();
+        assert!(check_budget(&dir, 1).is_ok());
+        let changed = br#"{"schema":"legacy","charged_ms":120}"#;
+        fs::write(external.join("charge-original.json"), changed).unwrap();
+        assert!(check_budget(&dir, 1).is_err());
+        fs::write(dir.join("charge-original-revision.json"), changed).unwrap();
+        import_legacy(
+            &dir,
+            &LegacyImport {
+                schema: IMPORT_SCHEMA.into(),
+                event_id: "revision".into(),
+                recorded_utc: utc_now_iso(),
+                source: CoveredRecord {
+                    file: "charge-original-revision.json".into(),
+                    sha256: sha256(changed),
+                },
+                charged_ms: 20,
+                increment_ms: 0,
+                authority: "fixture".into(),
+                rationale: "preserved changed source; charge only the reviewed delta".into(),
+                legacy_observed: Some(LegacyObservation {
+                    file: "charge-original.json".into(),
+                    sha256: sha256(changed),
+                    previous_sha256: Some(sha256(old)),
+                }),
+            },
+        )
+        .unwrap();
+        assert!(check_budget(&dir, 1).is_ok());
+        assert_eq!(rebuild(&dir).unwrap().cumulative_ms, 130);
+        let offline = external.with_extension("offline");
+        fs::rename(&external, &offline).unwrap();
+        assert!(check_budget(&dir, 1).is_err());
+        assert_eq!(rebuild(&dir).unwrap().cumulative_ms, 130);
+        assert!(check_budget(&dir, 0).is_ok());
+        assert_eq!(
+            record_attempt_charge(&dir, "lab", "already-running", "attempt", 1, 1, "completed")
+                .unwrap()
+                .cumulative_ms,
+            131
+        );
+        assert_eq!(fs::read(dir.join("charge-original.json")).unwrap(), old);
+        fs::remove_dir_all(dir).unwrap();
+        fs::remove_dir_all(offline).unwrap();
     }
     #[test]
     fn execution_metadata_distinguishes_estimate_and_old_bytes_remain_retryable() {
@@ -960,6 +1511,8 @@ mod tests {
                 covered_records: covered,
                 authority: "fixture reconciliation".into(),
                 rationale: "known historical total, each covered receipt mapped".into(),
+                legacy_source: None,
+                legacy_snapshot_sha256: None,
             },
         )
         .unwrap();
@@ -983,6 +1536,7 @@ mod tests {
                 increment_ms: 0,
                 authority: "test review".into(),
                 rationale: "late omitted receipt".into(),
+                legacy_observed: None,
             },
         )
         .unwrap();

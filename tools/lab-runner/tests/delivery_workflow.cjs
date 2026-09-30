@@ -39,7 +39,7 @@ function setup(isGroup = false) {
     state: {schema: 'uor-r4.lab-state/1', repository: 'owner/repo',
       labs: {author: {available: true, heartbeat: 100}},
       policy_sha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', tasks: {'2': {policy_sha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', session: 'author', epoch: 1, work_card: 'sha256:1111111111111111111111111111111111111111111111111111111111111111', phase: 'claimed', expires: 1300}}},
-    missing: false, log, tree, groupSize: 1
+    missing: false, log, tree, groupSize: 1, policyChanges: []
   };
 }
 
@@ -67,7 +67,7 @@ async function test(name, modify, expected, isGroup = false) {
     },
     paginate: async () => fixture.files.map(filename => ({filename})),
     graphql: async () => ({repository: {issue: {state: 'OPEN', blockedBy: {nodes: [], pageInfo: {hasNextPage: false}}}}}),
-    request: async route => route.includes('/compare/') ? {data: {status: 'identical', files: []}} : ({data: [{type: 'merge_queue', parameters: {max_entries_to_build: fixture.groupSize, max_entries_to_merge: fixture.groupSize}}]})
+    request: async route => route.includes('/compare/') ? {data: {status: fixture.policyChanges.length ? 'ahead' : 'identical', files: fixture.policyChanges.map(filename => ({filename}))}} : ({data: [{type: 'merge_queue', parameters: {max_entries_to_build: fixture.groupSize, max_entries_to_merge: fixture.groupSize}}]})
   };
   const context = {repo: {owner: 'owner', repo: 'repo'}, runId: 1, eventName: 'workflow_dispatch',
     payload: {inputs: {pull_request: '1', merge_group_sha: isGroup ? group : ''}}};
@@ -89,6 +89,7 @@ async function main() {
   await test('stale task epoch', f => {f.state.tasks['2'].epoch = 2;}, false);
   await test('expired task', f => {f.state.tasks['2'].expires = 100;}, false);
   await test('unavailable steward', f => {f.state.labs.author.available = false;}, false);
+  await test('unadopted operations policy', f => {f.policyChanges = ['docs/labs/operations.md'];}, false);
   for (const file of ['AGENTS.md', 'docs/labs/operations.md', 'tools/lab-runner/src/coord.rs',
     'tools/lab-runner/src/admission.rs', 'tools/lab-runner/src/delivery.rs']) {
     await test(`class A rejected: ${file}`, f => {f.files = [file];}, false);

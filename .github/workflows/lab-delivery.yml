@@ -235,7 +235,7 @@ jobs:
               const steward = state.labs?.[r.claim_session];
               requireThat(claim && claim.session === r.claim_session && claim.epoch === r.claim_epoch && claim.work_card === r.work_card && hex40.test(claim.policy_sha) && claim.policy_sha === state.policy_sha && claim.phase === 'claimed' && Number.isSafeInteger(claim.expires) && claim.expires > serverNow, 'Task claim expired or changed');
               const policyComparison = (await github.request('GET /repos/{owner}/{repo}/compare/{basehead}', {owner, repo, basehead: `${state.policy_sha}...main`})).data;
-              const policyPaths = p => p === 'AGENTS.md' || p === 'docs/integration/DECISIONS.md' || p.startsWith('docs/integration/agent-execution-policy.') || p === 'docs/labs/protocol.md';
+              const policyPaths = p => p === 'AGENTS.md' || p === 'docs/integration/DECISIONS.md' || p.startsWith('docs/integration/agent-execution-policy.') || (p === 'docs/labs/protocol.md' || p === 'docs/labs/operations.md');
               requireThat(['ahead','identical'].includes(policyComparison.status) && Array.isArray(policyComparison.files) && policyComparison.files.length < 300 && !policyComparison.files.some(f => [f.filename,f.previous_filename].filter(Boolean).some(policyPaths)), 'Policy changed or comparison unavailable; hold delivery for reviewed migration');
               requireThat(steward && steward.available === true && Number.isSafeInteger(steward.heartbeat) && steward.heartbeat <= serverNow && steward.heartbeat + 1200 > serverNow, 'Delivery steward is unavailable or stale');
               const latest = (await github.rest.pulls.get({owner, repo, pull_number: prNumber})).data;

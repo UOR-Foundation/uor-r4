@@ -186,7 +186,8 @@ a mutable issue URL alone is not an identity. Equivalent ownership spellings
 with empty, dot, parent or trailing path components are rejected.
 
 New claims, job admission and delivery compare the adopted revision with main.
-Changes to AGENTS, the decision register, execution policy or this protocol hold
+Changes to AGENTS, the decision register, execution policy, this protocol or
+the host operations contract hold
 new admission until reviewed adoption; incomplete comparisons also hold.
 Previously admitted bounded work keeps its reservation and may finish.
 
