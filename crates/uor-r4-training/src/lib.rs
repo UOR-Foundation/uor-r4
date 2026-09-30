@@ -11,6 +11,7 @@ pub mod addressing_arms;
 pub mod baseline_counts;
 pub mod baseline_protocol;
 pub mod cache_memory;
+pub mod d4_codecs;
 pub mod dialogue_artifact;
 pub mod dialogue_child_artifact;
 pub mod dialogue_development;
@@ -53,6 +54,7 @@ pub mod stack_export;
 pub mod stack_memory;
 pub mod stack_memory_replies;
 pub mod stack_prime_route;
+pub mod stack_snap_parity;
 pub mod stack_store;
 pub mod stack_tracking;
 
