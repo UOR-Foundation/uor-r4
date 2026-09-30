@@ -173,8 +173,8 @@ use uor_r4_training::stack_dialogue::{
     DialogueSplit, Reply, MAX_NEW_TOKENS,
 };
 use uor_r4_training::stack_export::{
-    check_export_representation, control_checkpoint, control_grid_reference, export_stack,
-    stack_grid_reference, StackCalibration,
+    check_export_representation, control_checkpoint, control_grid_reference,
+    export_quantizer_method, export_stack, stack_grid_reference, StackCalibration,
 };
 use uor_r4_training::stack_memory::{Codebook, MemoryConfig, MemoryScore};
 use uor_r4_training::{codec_by_name, sha256_file, Result, TrainingError};
@@ -1838,7 +1838,10 @@ fn export_mode(arguments: &[String]) -> Result<()> {
                 "calibration_time": time,
                 "damp": damp,
             }),
-            None => json!({"method": "round_to_nearest"}),
+            None => {
+                let method_name = export_quantizer_method(&model);
+                json!({"method": method_name})
+            }
         };
         let mut source = json!({
             "exporter": "geometric-stack export",
@@ -1850,7 +1853,10 @@ fn export_mode(arguments: &[String]) -> Result<()> {
         if let Some(served) = &served {
             source["served_representation"] = json!({
                 "codec": served.codec,
-                "scope": "recorded in the model's config.json: the model was trained against this representation (quantization-aware training), which this round-to-nearest export writes",
+                "scope": format!(
+                    "recorded in the model's config.json: the model was trained against this representation (quantization-aware training), which this export writes using codec '{}'",
+                    served.codec
+                ),
             });
         }
         let (bytes, report) = match model.config.arch {

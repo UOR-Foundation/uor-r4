@@ -10,7 +10,7 @@ use uor_r4_training::geometric_stack::{
     D11Interim, MapCodec, ReadScore, StackAdamW, StackArch, StackConfig, StackModel,
 };
 use uor_r4_training::stack_export::{
-    check_export_representation, export_stack, stack_grid_reference,
+    check_export_representation, export_quantizer_method, export_stack, stack_grid_reference,
 };
 use uor_r4_training::Result;
 
@@ -1276,6 +1276,7 @@ fn test_saved_model_export_restores_codec_not_rtn() -> Result<()> {
     // Load without codec restored: served_codec is None
     let mut reloaded = StackModel::load(&save_dir, &device)?;
     assert!(reloaded.served_codec().is_none());
+    assert_eq!(export_quantizer_method(&reloaded), "round_to_nearest");
 
     // Export without restoring codec writes standard RTN
     let (rtn_bytes, rtn_summary) =
@@ -1285,21 +1286,62 @@ fn test_saved_model_export_restores_codec_not_rtn() -> Result<()> {
     // Restore codec as geometric-stack.rs does
     let saved_rec =
         StackModel::saved_served_representation(&save_dir)?.expect("saved representation");
+    check_export_representation(Some(&saved_rec), false)?;
     let restored_codec = codec_by_name(&saved_rec.codec)?;
     reloaded.set_served_representation(Some(restored_codec))?;
     assert_eq!(reloaded.served_codec().unwrap().name(), codec.name());
+    assert_eq!(export_quantizer_method(&reloaded), codec.name());
+
+    // Construct production CLI export source provenance using export_quantizer_method
+    let quantizer = serde_json::json!({
+        "method": export_quantizer_method(&reloaded),
+    });
+    let mut prod_source = serde_json::json!({
+        "exporter": "geometric-stack export",
+        "quantizer": quantizer,
+    });
+    prod_source["served_representation"] = serde_json::json!({
+        "codec": saved_rec.codec,
+        "scope": format!(
+            "recorded in the model's config.json: the model was trained against this representation (quantization-aware training), which this export writes using codec '{}'",
+            saved_rec.codec
+        ),
+    });
 
     // Export with restored codec writes min-mse quantization
-    let (comp_bytes, comp_summary) = export_stack(
-        &reloaded,
-        serde_json::json!({"test": "min_mse"}),
-        None,
-        None,
-    )?;
+    let (comp_bytes, comp_summary) = export_stack(&reloaded, prod_source.clone(), None, None)?;
     assert_eq!(comp_summary["method"]["quantizer"], codec.name());
+    assert_eq!(prod_source["quantizer"]["method"], codec.name());
 
     let rtn_artifact = StackArtifact::parse(rtn_bytes).unwrap();
     let comp_artifact = StackArtifact::parse(comp_bytes).unwrap();
+
+    // Verify bit-for-bit agreement across artifact header, source JSON, and export report
+    assert_eq!(comp_artifact.header.source, prod_source);
+    assert_eq!(
+        comp_artifact.header.source["quantizer"]["method"],
+        codec.name()
+    );
+    let export_json = serde_json::json!({
+        "schema": "uor-r4.geometric-stack-export/1",
+        "source": prod_source,
+        "quantization": comp_summary,
+    });
+    assert_eq!(
+        export_json["source"]["quantizer"]["method"],
+        export_json["quantization"]["method"]["quantizer"]
+    );
+    let scope_str = export_json["source"]["served_representation"]["scope"]
+        .as_str()
+        .unwrap();
+    assert!(
+        !scope_str.contains("round-to-nearest"),
+        "non-RTN export scope must not claim round-to-nearest"
+    );
+    assert!(
+        scope_str.contains(codec.name()),
+        "export scope must record restored codec name"
+    );
 
     let rtn_head = rtn_artifact
         .header

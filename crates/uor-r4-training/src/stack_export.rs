@@ -638,10 +638,7 @@ pub fn export_stack(
             "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp,
         }),
         None => {
-            let quantizer_name = match model.served_codec().map(|c| c.name()) {
-                Some(name) => name,
-                None => "round_to_nearest",
-            };
+            let quantizer_name = export_quantizer_method(model);
             json!({
                 "quantizer": quantizer_name,
                 "mlp_padded_from": c.mlp_hidden, "mlp_padded_to": mlp,
@@ -657,6 +654,14 @@ pub fn export_stack(
             "grid_code_worst_relative_error": code_errors,
         }),
     ))
+}
+
+/// Determine the quantizer method name for uncalibrated export from the model's served codec.
+pub fn export_quantizer_method(model: &StackModel) -> &str {
+    match model.served_codec().map(|c| c.name()) {
+        Some(name) => name,
+        None => "round_to_nearest",
+    }
 }
 
 /// Whether a saved model may be exported, `calibrated` (GPTQ) or not, given

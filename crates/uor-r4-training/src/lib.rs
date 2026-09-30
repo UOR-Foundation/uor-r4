@@ -50,6 +50,7 @@ pub mod stack_aerm;
 pub mod stack_checkpoint;
 pub mod stack_dialogue;
 pub mod stack_export;
+pub use stack_export::export_quantizer_method;
 pub mod stack_memory;
 pub mod stack_memory_replies;
 pub mod stack_prime_route;
