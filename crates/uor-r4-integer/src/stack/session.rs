@@ -394,6 +394,52 @@ enum LayerState {
     },
 }
 
+/// Canonical schema identifier for serialized integer stack session state snapshots.
+pub const STACK_SESSION_SCHEMA: &str = "uor-r4.stack-session/1";
+
+/// Serialized state of a single layer within an [`IntegerStackSession`].
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SerializedStackLayerState {
+    /// Recurrence layer state: internal state vector and causal convolution history.
+    Recurrence {
+        /// Recurrence state vector `[width]` at exponent -32.
+        state: Vec<i64>,
+        /// Causal convolution history `[(CONVOLUTION_WIDTH - 1) * width]` at exponent -16.
+        history: Vec<i32>,
+    },
+    /// Read layer cache: keys, values, and optional Lorentz lifts up to the active context position.
+    Read {
+        /// Populated key cache entries `[position * width]` at exponent -16.
+        keys: Vec<i32>,
+        /// Populated value cache entries `[position * width]` at exponent -16.
+        values: Vec<i32>,
+        /// Populated Lorentz key lifts `[position * heads]` at exponent -32 (empty for dot read).
+        lifts: Vec<u64>,
+    },
+}
+
+/// Durable, reloadable snapshot of an [`IntegerStackSession`].
+///
+/// Binds strictly to the model's `artifact_sha256`, context bounds, and layer dimensions,
+/// enabling exact bit-identical state recovery across persistent sessions.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SerializedStackSession {
+    /// Schema identifier, strictly matching [`STACK_SESSION_SCHEMA`].
+    pub schema: String,
+    /// Schema version (must be 1).
+    pub version: u32,
+    /// SHA-256 of the model artifact this session was created from.
+    pub artifact_sha256: String,
+    /// Current sequence position (number of tokens ingested / stepped).
+    pub position: usize,
+    /// Keys/values cache length (`position * width`).
+    pub cache_at: usize,
+    /// Lifts cache length (`position * heads`).
+    pub lift_at: usize,
+    /// Per-layer state snapshots.
+    pub layers: Vec<SerializedStackLayerState>,
+}
+
 /// One entry of the opt-in snap trace ([`IntegerStackSession::enable_snap_trace`]):
 /// the root index the snapped transport selected at (layer, position, lane).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -541,6 +587,219 @@ impl IntegerStackSession<'_> {
                 }
             }
         }
+    }
+
+    /// The active keys/values cache length (`position * width`).
+    pub fn cache_at(&self) -> usize {
+        self.cache_at
+    }
+
+    /// The active Lorentz lifts cache length (`position * heads`).
+    pub fn lift_at(&self) -> usize {
+        self.lift_at
+    }
+
+    /// Snapshot the active session state into a [`SerializedStackSession`].
+    ///
+    /// Preserves exact recurrence vectors, causal convolution histories, and
+    /// populated read caches up to the current position (`cache_at` / `lift_at`).
+    pub fn save_state(&self) -> SerializedStackSession {
+        let layers = self
+            .states
+            .iter()
+            .map(|st| match st.as_ref() {
+                LayerState::Recurrence { state, history } => {
+                    SerializedStackLayerState::Recurrence {
+                        state: state.clone(),
+                        history: history.clone(),
+                    }
+                }
+                LayerState::Read {
+                    keys,
+                    values,
+                    lifts,
+                } => SerializedStackLayerState::Read {
+                    keys: keys[..self.cache_at].to_vec(),
+                    values: values[..self.cache_at].to_vec(),
+                    lifts: if self.model.lorentz {
+                        lifts[..self.lift_at].to_vec()
+                    } else {
+                        Vec::new()
+                    },
+                },
+            })
+            .collect();
+
+        SerializedStackSession {
+            schema: STACK_SESSION_SCHEMA.to_string(),
+            version: 1,
+            artifact_sha256: self.model.sha256.clone(),
+            position: self.position,
+            cache_at: self.cache_at,
+            lift_at: self.lift_at,
+            layers,
+        }
+    }
+
+    /// Restore session state from a [`SerializedStackSession`].
+    ///
+    /// Validates schema, version, artifact SHA-256, context bounds, and layer dimensions
+    /// before applying state. After restoration, subsequent step calls produce bit-for-bit
+    /// identical outputs to continuing the original session.
+    pub fn restore_state(&mut self, saved: &SerializedStackSession) -> Result<(), StackError> {
+        if saved.schema != STACK_SESSION_SCHEMA {
+            return Err(StackError::Schema(format!(
+                "expected {STACK_SESSION_SCHEMA}, found {}",
+                saved.schema
+            )));
+        }
+        if saved.version != 1 {
+            return Err(StackError::Numerics(format!(
+                "unsupported session version {}",
+                saved.version
+            )));
+        }
+        if saved.artifact_sha256 != self.model.sha256 {
+            return Err(StackError::Numerics(format!(
+                "session artifact SHA-256 mismatch: session has '{}', model has '{}'",
+                saved.artifact_sha256, self.model.sha256
+            )));
+        }
+        if saved.position > self.model.shape.context {
+            return Err(StackError::ContextFull {
+                context: self.model.shape.context,
+            });
+        }
+        let d = self.model.shape.width;
+        let heads = self.model.shape.heads;
+        let expected_cache_at = saved
+            .position
+            .checked_mul(d)
+            .ok_or(StackError::SessionState)?;
+        let expected_lift_at = saved
+            .position
+            .checked_mul(heads)
+            .ok_or(StackError::SessionState)?;
+        if saved.cache_at != expected_cache_at || saved.lift_at != expected_lift_at {
+            return Err(StackError::SessionState);
+        }
+        if saved.layers.len() != self.states.len() {
+            return Err(StackError::SessionState);
+        }
+
+        // Validate all layers before mutating session
+        for (saved_layer, state) in saved.layers.iter().zip(&self.states) {
+            match (saved_layer, state.as_ref()) {
+                (
+                    SerializedStackLayerState::Recurrence {
+                        state: s,
+                        history: h,
+                    },
+                    LayerState::Recurrence { .. },
+                ) => {
+                    if s.len() != d || h.len() != (CONVOLUTION_WIDTH - 1) * d {
+                        return Err(StackError::SessionState);
+                    }
+                }
+                (
+                    SerializedStackLayerState::Read {
+                        keys: k,
+                        values: v,
+                        lifts: l,
+                    },
+                    LayerState::Read { .. },
+                ) => {
+                    if k.len() != saved.cache_at || v.len() != saved.cache_at {
+                        return Err(StackError::SessionState);
+                    }
+                    if self.model.lorentz {
+                        if l.len() != saved.lift_at {
+                            return Err(StackError::SessionState);
+                        }
+                    } else if !l.is_empty() {
+                        return Err(StackError::SessionState);
+                    }
+                }
+                _ => return Err(StackError::SessionState),
+            }
+        }
+
+        // Apply state
+        for (saved_layer, state) in saved.layers.iter().zip(self.states.iter_mut()) {
+            match (saved_layer, state.as_mut()) {
+                (
+                    SerializedStackLayerState::Recurrence {
+                        state: s,
+                        history: h,
+                    },
+                    LayerState::Recurrence {
+                        state: cur_s,
+                        history: cur_h,
+                    },
+                ) => {
+                    cur_s.copy_from_slice(s);
+                    cur_h.copy_from_slice(h);
+                }
+                (
+                    SerializedStackLayerState::Read {
+                        keys: k,
+                        values: v,
+                        lifts: l,
+                    },
+                    LayerState::Read {
+                        keys: cur_k,
+                        values: cur_v,
+                        lifts: cur_l,
+                    },
+                ) => {
+                    cur_k[..saved.cache_at].copy_from_slice(k);
+                    cur_v[..saved.cache_at].copy_from_slice(v);
+                    if self.model.lorentz {
+                        cur_l[..saved.lift_at].copy_from_slice(l);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        self.position = saved.position;
+        self.cache_at = saved.cache_at;
+        self.lift_at = saved.lift_at;
+
+        if let Some(trace) = &mut self.b.snap_trace {
+            let rec_layers = self
+                .model
+                .shape
+                .pattern
+                .bytes()
+                .filter(|&b| b == b'r')
+                .count();
+            trace.written = self.position * self.model.shape.lanes() * rec_layers;
+        }
+
+        Ok(())
+    }
+
+    /// Save session state to a JSON file at `path`.
+    pub fn save_session_to_file(&self, path: &Path) -> Result<(), StackError> {
+        let serialized = self.save_state();
+        let bytes = serde_json::to_vec_pretty(&serialized)
+            .map_err(|e| StackError::Numerics(e.to_string()))?;
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(StackError::Io)?;
+            }
+        }
+        std::fs::write(path, bytes).map_err(StackError::Io)?;
+        Ok(())
+    }
+
+    /// Load and restore session state from a JSON file at `path`.
+    pub fn restore_session_from_file(&mut self, path: &Path) -> Result<(), StackError> {
+        let bytes = std::fs::read(path).map_err(StackError::Io)?;
+        let serialized: SerializedStackSession = serde_json::from_slice(&bytes)
+            .map_err(|e| StackError::Numerics(format!("invalid session JSON: {e}")))?;
+        self.restore_state(&serialized)
     }
 
     /// The logits of the last step (value `v` means `v * 2^-16`).

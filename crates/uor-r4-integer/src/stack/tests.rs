@@ -482,3 +482,163 @@ fn the_snap_trace_records_every_selection() {
     let without_trace = run(&model, &ids);
     assert_eq!(with_trace, without_trace);
 }
+
+#[test]
+fn session_save_and_restore_produces_bit_identical_logits() {
+    use super::{SerializedStackSession, STACK_SESSION_SCHEMA};
+
+    let bytes = artifact(7);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+
+    // Ingest first 3 tokens
+    let initial_tokens = [1u32, 3u32, 2u32];
+    for &tok in &initial_tokens {
+        session.step(tok).expect("step");
+    }
+    assert_eq!(session.position(), 3);
+    assert_eq!(session.cache_at(), 3 * WIDTH);
+    assert_eq!(session.lift_at(), 3 * HEADS);
+
+    // Save session state
+    let saved = session.save_state();
+    assert_eq!(saved.schema, STACK_SESSION_SCHEMA);
+    assert_eq!(saved.version, 1);
+    assert_eq!(saved.artifact_sha256, model.artifact_sha256());
+    assert_eq!(saved.position, 3);
+    assert_eq!(saved.cache_at, 3 * WIDTH);
+    assert_eq!(saved.lift_at, 3 * HEADS);
+    assert_eq!(saved.layers.len(), 2);
+
+    // Continue stepping original session for 2 more tokens
+    let next_tokens = [4u32, 0u32];
+    let mut expected_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = session.step(tok).expect("step").to_vec();
+        expected_logits.push(logits);
+    }
+    assert_eq!(session.position(), 5);
+
+    // 1. Restore into the same session and step the same next tokens
+    session.restore_state(&saved).expect("restore");
+    assert_eq!(session.position(), 3);
+    assert_eq!(session.cache_at(), 3 * WIDTH);
+    assert_eq!(session.lift_at(), 3 * HEADS);
+
+    let mut restored_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = session.step(tok).expect("step").to_vec();
+        restored_logits.push(logits);
+    }
+    assert_eq!(
+        restored_logits, expected_logits,
+        "restored session must produce bit-for-bit identical logits to uninterrupted stepping"
+    );
+
+    // 2. Restore into a brand-new session
+    let mut fresh_session = model.session();
+    fresh_session.restore_state(&saved).expect("restore fresh");
+    assert_eq!(fresh_session.position(), 3);
+    assert_eq!(fresh_session.cache_at(), 3 * WIDTH);
+
+    let mut fresh_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = fresh_session.step(tok).expect("step").to_vec();
+        fresh_logits.push(logits);
+    }
+    assert_eq!(
+        fresh_logits, expected_logits,
+        "fresh restored session must produce bit-for-bit identical logits"
+    );
+
+    // 3. Serde JSON serialization round-trip
+    let json_str = serde_json::to_string_pretty(&saved).expect("serialize");
+    let deserialized: SerializedStackSession =
+        serde_json::from_str(&json_str).expect("deserialize");
+    assert_eq!(deserialized, saved);
+
+    let mut json_restored_session = model.session();
+    json_restored_session
+        .restore_state(&deserialized)
+        .expect("restore from deserialized");
+    let mut json_logits = Vec::new();
+    for &tok in &next_tokens {
+        let logits = json_restored_session.step(tok).expect("step").to_vec();
+        json_logits.push(logits);
+    }
+    assert_eq!(
+        json_logits, expected_logits,
+        "deserialized session must produce bit-for-bit identical logits"
+    );
+}
+
+#[test]
+fn session_restore_strictly_validates_checksums_and_dimensions() {
+    use super::SerializedStackLayerState;
+
+    let bytes = artifact(9);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+    session.step(1).expect("step");
+    session.step(2).expect("step");
+    let saved = session.save_state();
+
+    // 1. Mismatched artifact checksum
+    let mut bad_sha = saved.clone();
+    bad_sha.artifact_sha256 =
+        "0000000000000000000000000000000000000000000000000000000000000000".into();
+    assert!(matches!(
+        session.restore_state(&bad_sha),
+        Err(StackError::Numerics(_))
+    ));
+
+    // 2. Mismatched schema
+    let mut bad_schema = saved.clone();
+    bad_schema.schema = "uor-r4.wrong-schema/1".into();
+    assert!(matches!(
+        session.restore_state(&bad_schema),
+        Err(StackError::Schema(_))
+    ));
+
+    // 3. Mismatched version
+    let mut bad_version = saved.clone();
+    bad_version.version = 2;
+    assert!(matches!(
+        session.restore_state(&bad_version),
+        Err(StackError::Numerics(_))
+    ));
+
+    // 4. Position exceeding context
+    let mut bad_pos = saved.clone();
+    bad_pos.position = CONTEXT + 1;
+    assert!(matches!(
+        session.restore_state(&bad_pos),
+        Err(StackError::ContextFull { .. })
+    ));
+
+    // 5. Inconsistent cache_at
+    let mut bad_cache = saved.clone();
+    bad_cache.cache_at = bad_cache.cache_at + 1;
+    assert!(matches!(
+        session.restore_state(&bad_cache),
+        Err(StackError::SessionState)
+    ));
+
+    // 6. Inconsistent layer count
+    let mut bad_layers = saved.clone();
+    bad_layers.layers.pop();
+    assert!(matches!(
+        session.restore_state(&bad_layers),
+        Err(StackError::SessionState)
+    ));
+
+    // 7. Corrupted layer dimensions inside Recurrence
+    let mut bad_rec = saved.clone();
+    if let SerializedStackLayerState::Recurrence { state, .. } = &mut bad_rec.layers[0] {
+        state.pop();
+    }
+    assert!(matches!(
+        session.restore_state(&bad_rec),
+        Err(StackError::SessionState)
+    ));
+}
