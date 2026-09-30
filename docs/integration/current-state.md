@@ -50,9 +50,13 @@ discrepancy. The [block-11 common-input replay](../evidence/track-b-block11-repl
 shows small QKV perturbations growing through the gated product/down projection.
 Reference-QKV substitution improves position-5 residual error by about 4–5×,
 but source-attention substitution does not eliminate it and results are not
-uniform across positions. No incorrect MLP or repair is established. Next compare
-MLP/down projections on identical saved intermediates, including the pinned
-exact projection owner before attributing a kernel defect.
+uniform across positions. No incorrect MLP or repair is established. The
+[common-input down-projection comparison](../evidence/track-b-down-replay-2026-09-30.md)
+then reproduced both saved outputs and showed CPU/Metal bitwise equality for
+each fixed input. At position 5, exact arithmetic retains most of the gap between
+the two candidate inputs; local rounding is smaller. Next isolate gate/up
+projections and SiLU operation order on common saved inputs, retaining exact down
+arithmetic as a control. No full-reference gated state was captured here.
 
 Earlier interrupted attempts and the restored external compiler-cache failure
 remain historical execution evidence in the [September 29 record](track-b-conversion-result-2026-09-29.md)
