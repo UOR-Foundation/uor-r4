@@ -1,0 +1,20 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "25278b31-741b-4652-ac58-b7176aa8e208",
+    "issue": 1525,
+    "op": "checkpoint",
+    "packet": {
+      "independent_review": "review-persistent-3ed9f73d.md",
+      "merged_sha": "61bbd85a0a49e1bb72c71b4e02752d575e3bee4b",
+      "next_action": "Persistent mission docs delivered; actual client continuation qualification remains open. Repair runner #1536 before releasing holds.",
+      "pr": 1535,
+      "reviewed_sha": "3ed9f73d206d016679251697954db29bdadce6d2",
+      "same_tree": true,
+      "tree": "16c905dd3ee633d942ac1192282e6c54804e70ad"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790743510,
+  "previous_head": "892d1b9df51f0caa3277d141d20d7e10690d1805"
+}
