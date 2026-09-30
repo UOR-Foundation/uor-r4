@@ -1,0 +1,14 @@
+{
+  "event": {
+    "decision_receipt": {
+      "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/delivery-pr1521-a345e766.json",
+      "sha256": "2020fbba275c763865181be6abbedce2448d5d6a935637f216244e3cd03297f9"
+    },
+    "event_id": "b4f1b630-09af-4ffd-9c95-9ba58a314345",
+    "op": "adopt_policy",
+    "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
+    "previous_policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06"
+  },
+  "observed_server_time": 1790737079,
+  "previous_head": "9c718f317dddc86f7a716e05200b52164f0f2ac2"
+}
