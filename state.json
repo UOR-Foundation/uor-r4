@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 270,
-  "observed_server_time": 1790785110,
+  "sequence": 271,
+  "observed_server_time": 1790785222,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -45,7 +45,7 @@
         "independent-subagents"
       ],
       "available": true,
-      "heartbeat": 1790784485
+      "heartbeat": 1790785222
     },
     "codex-review1-pilot-c-origin-20260930": {
       "lab": "Codex independent reviewer continuity drill",
@@ -132,7 +132,7 @@
         "crates/uor-r4-training/drafts",
         "crates/uor-r4-training/examples/track-b-parity.rs"
       ],
-      "expires": 1790785685,
+      "expires": 1790786422,
       "phase": "claimed",
       "checkpoint": {
         "blockers": [],
