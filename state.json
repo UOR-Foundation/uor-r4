@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 219,
-  "observed_server_time": 1790779581,
+  "sequence": 220,
+  "observed_server_time": 1790779750,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -101,7 +101,7 @@
         "runner-coordinated-jobs"
       ],
       "available": true,
-      "heartbeat": 1790778745
+      "heartbeat": 1790779750
     }
   },
   "tasks": {
@@ -117,7 +117,7 @@
         "crates/uor-r4-training/src/kappa_llama.rs",
         "crates/uor-r4-training/examples/kappa-conversion.rs"
       ],
-      "expires": 1790779945,
+      "expires": 1790780950,
       "phase": "claimed",
       "checkpoint": null
     },
