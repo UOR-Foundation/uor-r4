@@ -1,0 +1,11 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "f738984d-00f4-4438-a4f6-aae08ce56c8b",
+    "issue": 1536,
+    "op": "release",
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790775641,
+  "previous_head": "42ac7fb4b68854d8855f5fab407ac5fb1e7f8299"
+}
