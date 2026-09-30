@@ -608,3 +608,5 @@ pub fn uuid_placeholder(seed: i32) -> String {
     }
     output
 }
+
+// Diagnostic touch to force code=true for the --keep-going enumeration (throwaway).

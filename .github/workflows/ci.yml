@@ -96,7 +96,7 @@ jobs:
 
       - name: cargo check --workspace --all-targets
         if: steps.scope.outputs.code == 'true'
-        run: cargo check --workspace --all-targets
+        run: cargo check --workspace --all-targets --keep-going
 
       - name: cargo test --workspace --lib
         if: steps.scope.outputs.code == 'true'
