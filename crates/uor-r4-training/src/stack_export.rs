@@ -1383,7 +1383,8 @@ mod tests {
         let head_comp = SavedServedRepresentation {
             codec: "native-d4-head-compensated-head-only".to_owned(),
         };
-        assert!(check_export_representation(Some(&head_comp), false).is_ok());
+        // Restoring bare shape-dependent codec on export requires explicit target shape
+        assert!(check_export_representation(Some(&head_comp), false).is_err());
         assert!(check_export_representation(Some(&head_comp), true).is_err());
 
         let head_comp_shape = SavedServedRepresentation {
@@ -1401,7 +1402,8 @@ mod tests {
         let rec_out_min_mse = SavedServedRepresentation {
             codec: "native-d4-rec-out-min-mse".to_owned(),
         };
-        assert!(check_export_representation(Some(&rec_out_min_mse), false).is_ok());
+        // Restoring bare shape-dependent codec on export requires explicit target shape
+        assert!(check_export_representation(Some(&rec_out_min_mse), false).is_err());
         assert!(check_export_representation(Some(&rec_out_min_mse), true).is_err());
 
         let rec_out_shape = SavedServedRepresentation {

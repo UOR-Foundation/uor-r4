@@ -194,9 +194,10 @@ impl MapCodec for RecurrenceOutMinMseMapCodec {
 /// Look up a codec by name.
 pub fn codec_by_name(name: &str) -> Result<Arc<dyn MapCodec>> {
     match name {
-        "native-d11-grouped-4bit-g32-rtn" | "native-d11-grouped-4bit-g32" => {
-            Ok(Arc::new(D11Interim))
-        }
+        "d11-interim"
+        | "d11-interim-4bit-g32-round-to-nearest"
+        | "native-d11-grouped-4bit-g32-rtn"
+        | "native-d11-grouped-4bit-g32" => Ok(Arc::new(D11Interim)),
         "native-d11-grouped-4bit-g32-min-mse" => Ok(Arc::new(D4Grouped4BitAdapter::min_mse())),
         "native-d4-head-compensated-all-maps" => Ok(Arc::new(HeadCompensatedMapCodec::all_maps())),
         "native-d4-e8-matched-bit" => Ok(Arc::new(E8MatchedBitMapCodec::default())),
