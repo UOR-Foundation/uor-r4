@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 48,
-  "observed_server_time": 1790740318,
+  "sequence": 49,
+  "observed_server_time": 1790740486,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -120,8 +120,8 @@
         "docs/evidence/s1-4-snap-parity-2026-09-29.json",
         "docs/integration/current-state.md"
       ],
-      "expires": 1790741518,
-      "phase": "claimed",
+      "expires": 1790740486,
+      "phase": "released",
       "checkpoint": null
     }
   },
