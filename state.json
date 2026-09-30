@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 78,
-  "observed_server_time": 1790746550,
+  "sequence": 79,
+  "observed_server_time": 1790746554,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -208,8 +208,14 @@
       "session": "claude-lab-20260930",
       "task_epoch": 2,
       "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
-      "phase": "reserved",
-      "receipt": null,
+      "phase": "finalized",
+      "receipt": {
+        "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+        "job_id": "claude-1533-checks-e2-a1",
+        "attempt_id": "claude-1533-checks-e2-a1",
+        "path": "/Users/casey.allard/.local/share/uor-r4/runner/done/claude-1533-checks-e2-a1/reconciliation.json",
+        "sha256": "f5b8eeabc260d6f6de325d92c8683582afbe31cbd9e5e1afb105921903c09b78"
+      },
       "spec": {
         "schema": "uor-r4.lab-runner-job/1",
         "id": "claude-1533-checks-e2-a1",
