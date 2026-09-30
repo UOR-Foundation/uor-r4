@@ -1,0 +1,19 @@
+{
+  "event": {
+    "base_sha": "302e0ad77680383dd2cc50f401dd57ee49796bf4",
+    "dependencies": [],
+    "event_id": "opencode-20260930-claim-1551-e1",
+    "issue": 1551,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/examples/m-world.rs",
+      "crates/uor-r4-training/src/milestone_world_v2.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": null,
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:3bca278a93efc741d073a71bc4894148e22615b87eb3dc8931c3486bb1267764"
+  },
+  "observed_server_time": 1790801861,
+  "previous_head": "4d0a63670e0f5aba6ba68ebb1700e7d6d7789634"
+}

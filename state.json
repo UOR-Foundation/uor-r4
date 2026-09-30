@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 376,
-  "observed_server_time": 1790801858,
+  "sequence": 377,
+  "observed_server_time": 1790801861,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -300,6 +300,20 @@
       "paths": [],
       "expires": 1790794562,
       "phase": "released",
+      "checkpoint": null
+    },
+    "1551": {
+      "session": "opencode-deepseek-20260930",
+      "epoch": 1,
+      "work_card": "sha256:3bca278a93efc741d073a71bc4894148e22615b87eb3dc8931c3486bb1267764",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "302e0ad77680383dd2cc50f401dd57ee49796bf4",
+      "paths": [
+        "crates/uor-r4-training/examples/m-world.rs",
+        "crates/uor-r4-training/src/milestone_world_v2.rs"
+      ],
+      "expires": 1790803061,
+      "phase": "claimed",
       "checkpoint": null
     }
   },
