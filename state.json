@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 32,
-  "observed_server_time": 1790739460,
+  "sequence": 33,
+  "observed_server_time": 1790739472,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -61,18 +61,38 @@
       "expires": 1790740568,
       "phase": "claimed",
       "checkpoint": {
-        "next_action": "Reserve and submit exactly one inert C attempt, verify live worker, release origin and acquire successor while same worker lives.",
+        "attempt": "continuity-pilot-20260930-c",
+        "ledger_dir": "/Users/casey.allard/.local/share/uor-r4/ledger",
+        "next_action": "Successor claims released task and adopts same live attempt; verify exact process identity, do not submit another job. Finalize original reservation from DONE after confirmed stop.",
+        "origin_epoch": 5,
+        "origin_session": "codex-review1-pilot-c-origin-20260930",
         "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-        "preflight": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/preflight.json",
-        "source_sha": "c1063bf921057e498c7429c0a4302afc7aae0368",
-        "spec": {
-          "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/spec.json",
-          "sha256": "5c8fac3d350f3d8e9b1ba4f989c58945c996275b0e702cfb4b4d5f44116a0a44"
+        "prior_outcomes_preserved": true,
+        "process_observation": {
+          "at": "2026-09-30T03:37:51.491047+00:00",
+          "done_exists": false,
+          "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+          "identity": {
+            "boot": "{ sec = 1790723628, usec = 114456 } Tue Sep 29 19:13:48 2026",
+            "pgid": 5539,
+            "pid": 5539,
+            "started": "Tue Sep 29 23:37:51 2026",
+            "supervisor_started": "Tue Sep 29 23:37:51 2026",
+            "token": "job-24197-1790739467893177000"
+          },
+          "members": [
+            "5539  5539 /bin/sh",
+            "5552  5539 /bin/sleep"
+          ],
+          "sleep_payload_count": 1,
+          "supervisor_command": "/bin/sh -c shift; gate=$1; result=$2; hold=$3; shift 3; n=0; while [ ! -f \"$gate\" ]; do n=$((n+1)); [ \"$n\" -lt 200 ] || exit 125; /bin/sleep 0.05; done; \"$@\" & child=$!; wait \"$child\"; status=$?; printf '%s\\n' \"$status\" > \"$result\"; exec 3<> \"$hold\"; IFS= read -r ack <&3; exit \"$status\" uor-owned-supervisor-v1 job-24197-1790739467893177000 /Users/casey.allard/.local/share/uor-r4/runner/running/continuity-pilot-20260930-c/launch.go /Users/casey.allard/.local/share/uor-r4/runner/running/continuity-pilot-20260930-c/payload.exit /Users/casey.allard/.local/share/uor-r4/runner/running/continuity-pilot-20260930-c/supervisor-hold.fifo /bin/sleep 90"
         },
-        "work_card": {
-          "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/work-card.md",
-          "sha256": "1c522eb02cc7c3f8488c996aeece9410cb871a77c0b767b98cfa9e231c0675fd"
-        }
+        "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner",
+        "source_sha": "c1063bf921057e498c7429c0a4302afc7aae0368",
+        "spec_path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/spec.json",
+        "spec_sha256": "5c8fac3d350f3d8e9b1ba4f989c58945c996275b0e702cfb4b4d5f44116a0a44",
+        "successor_session": "codex-review1-pilot-c-successor-20260930",
+        "work_card": "sha256:1c522eb02cc7c3f8488c996aeece9410cb871a77c0b767b98cfa9e231c0675fd"
       }
     }
   },
