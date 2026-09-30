@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 57,
-  "observed_server_time": 1790742436,
+  "sequence": 58,
+  "observed_server_time": 1790742498,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -96,12 +96,16 @@
     },
     "1525": {
       "session": "codex-durable-20260929-root",
-      "epoch": 1,
-      "work_card": "sha256:6f991716192278511a22caf7a9058806effe85d02748f5e7e7e0247455619272",
+      "epoch": 2,
+      "work_card": "sha256:799fafdefd766d831853c06148cfc2c52486afd48aa791e4058e0b1c63ee1500",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-      "paths": [],
-      "expires": 1790742382,
+      "paths": [
+        "docs/labs/prompts",
+        "docs/labs/README.md",
+        "docs/labs/client-continuation.md"
+      ],
+      "expires": 1790743698,
       "phase": "claimed",
       "checkpoint": {
         "artifact_root": "https://github.com/UOR-Foundation/uor-r4/tree/codex/lab-state/activation/20260930",

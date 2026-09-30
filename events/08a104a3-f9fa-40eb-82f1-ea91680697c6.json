@@ -1,0 +1,20 @@
+{
+  "event": {
+    "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "dependencies": [],
+    "event_id": "08a104a3-f9fa-40eb-82f1-ea91680697c6",
+    "issue": 1525,
+    "op": "claim",
+    "paths": [
+      "docs/labs/prompts",
+      "docs/labs/README.md",
+      "docs/labs/client-continuation.md"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuation-20260930/persistent-recovery-receipt.md",
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:799fafdefd766d831853c06148cfc2c52486afd48aa791e4058e0b1c63ee1500"
+  },
+  "observed_server_time": 1790742498,
+  "previous_head": "496b653ffbf0e4e40dc347f7e8fda7b9ae3d8735"
+}
