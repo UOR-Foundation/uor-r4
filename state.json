@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 153,
-  "observed_server_time": 1790761570,
+  "sequence": 154,
+  "observed_server_time": 1790761573,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -226,8 +226,8 @@
       "paths": [
         "tools/lab-runner"
       ],
-      "expires": 1790761798,
-      "phase": "claimed",
+      "expires": 1790761573,
+      "phase": "released",
       "checkpoint": {
         "blockers": [
           "08:47 owner removable-volume-consent admission hold",
