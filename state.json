@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 261,
-  "observed_server_time": 1790783728,
+  "sequence": 262,
+  "observed_server_time": 1790783863,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -279,6 +279,22 @@
       ],
       "expires": 1790781331,
       "phase": "released",
+      "checkpoint": null
+    },
+    "1546": {
+      "session": "opencode-deepseek-20260930",
+      "epoch": 1,
+      "work_card": "sha256:9a797864a6dae7f0ecde24dd7cd909a1a4a658d26cf1fe391fb59d372bad1686",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+      "paths": [
+        "crates/uor-r4-core/src/native_geometric/learner/lowbit.rs",
+        "crates/uor-r4-core/src/native_geometric/learner/lowbit_core.rs",
+        "crates/uor-r4-core/src/native_geometric/workspace_coding.rs",
+        "crates/uor-r4-core/src/native_geometric/workspace_coding_tests.rs"
+      ],
+      "expires": 1790785063,
+      "phase": "claimed",
       "checkpoint": null
     }
   },
