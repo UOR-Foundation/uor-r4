@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 333,
-  "observed_server_time": 1790792196,
+  "sequence": 334,
+  "observed_server_time": 1790792270,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -138,9 +138,9 @@
         "block11_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/block11-replay-356a9a24-20260930",
         "blockers": [],
         "branch": "codex/track-b-conversion",
-        "charges": "Measured279270ms plus estimated240000preparation/90000review charged once; cumulative850392746ms/1130000000ms.",
+        "charges": "Cumulative850632746ms/1130000000ms; 240000ms estimated review/reconciliation this turn. No Cargo or model jobs.",
         "checkpoint_sha": "2cec24948991b36afdcdb3972afecca9c6c4fe82",
-        "checks": "Metal14testsPASS; 13 nonbenchmark fixtures rerun0.06s with actual device/numeric outputs. FourTrackB modeltestsPASS. Build219.74+59.47s, peakRSS2846801920 bytes. Independent exactmerge reviewAPPROVE. Ops56f69719 validation/track-b/97dcd0cf-metal-integration. Docs-only queue refresh: git diff --check and claim-wording checker PASS; independent review pending. No new model/build.",
+        "checks": "Metal14testsPASS; 13 nonbenchmark fixtures rerun0.06s with actual device/numeric outputs. FourTrackB modeltestsPASS. Build219.74+59.47s, peakRSS2846801920 bytes. Independent exactmerge reviewAPPROVE. Ops56f69719 validation/track-b/97dcd0cf-metal-integration. Docs-only queue refresh: git diff --check and claim-wording checker PASS; independent exact-head docs review APPROVE. No new model/build.",
         "cleanup": "Warm internal Track B cache retained for continued work; no cache deletion this integration.",
         "down_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/down-replay-93085dd5-20260930",
         "live_attempts": [],
