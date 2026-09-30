@@ -1,0 +1,11 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "claude-lab-20260930-release-1544-e2",
+    "issue": 1544,
+    "op": "release",
+    "session": "claude-lab-20260930"
+  },
+  "observed_server_time": 1790778844,
+  "previous_head": "1d55924091f595107cd7c0bb38d8edf446212cda"
+}
