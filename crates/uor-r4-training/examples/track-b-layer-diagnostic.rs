@@ -414,12 +414,261 @@ fn replay_layer12(model_path: &Path, parent: &Path, out: &Path) -> Result<Value>
     )
 }
 
+// A local replay, not a replacement reference executor. Only the final residual
+// and QKV have saved reference anchors; other stages report substitution effects.
+fn replay_block11(model_path: &Path, parent: &Path, out: &Path) -> Result<Value> {
+    use candle_core::DType;
+    use uor_r4_model_source::attention::{
+        head_attention_value_aggregate, standard_head_attention_weights,
+    };
+    use uor_r4_training::{
+        kappa_llama::{load_checkpoint, rope},
+        track_b::model::{dense_attention, AttentionPositions, AttentionQkv},
+    };
+    if std::env::var("TLESS_CANONICAL_DETERMINISTIC").as_deref() != Ok("0")
+        || std::env::var_os("TLESS_EXACT_SCALAR").is_some()
+    {
+        return Err("requires native math matching the trace".into());
+    }
+    report_output::verify(parent)?;
+    let inputs: Value = serde_json::from_slice(&fs::read(parent.join("inputs.json"))?)?;
+    let prior: Value = serde_json::from_slice(&fs::read(parent.join("result.json"))?)?;
+    if prior["anchors_match_bitwise"] != true
+        || inputs["tokens"] != json!([1, 2, 3, 4, 5, 6, 7, 8])
+        || inputs["batch"] != 1
+        || inputs["time"] != 8
+    {
+        return Err("requires the bitwise-anchored eight-token trace".into());
+    }
+    for name in [
+        "config.json",
+        "model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ] {
+        if inputs["parent_inputs"]["sha256"][name] != sha256_file(&model_path.join(name))? {
+            return Err(format!("trace input mismatch: {name}").into());
+        }
+    }
+    fs::write(
+        out.join("inputs.json"),
+        serde_json::to_vec_pretty(&json!({
+            "source_revision":option_env!("TRACK_B_SOURCE_REVISION").ok_or("missing source")?,
+            "source_diff_sha256":option_env!("TRACK_B_SOURCE_DIFF_SHA256").ok_or("missing diff")?,
+            "executable_sha256":sha256_file(&std::env::current_exe()?)?,
+            "parent_manifest_sha256":sha256_file(&parent.join("manifest.json"))?,
+            "parent_inputs":inputs,"layer":11,"input_residual_after_layer":10,"batch":1,"time":8,
+            "scope":"common reference input; native, reference QKV, reference QKV and source attention; no full forward"
+        }))?,
+    )?;
+    let residual = floats(&parent.join("reference-residual.f32le"))?;
+    let reference = floats(&parent.join("reference-qkv.f32le"))?;
+    const W: usize = 576;
+    const KV: usize = 192;
+    const STRIDE: usize = W + 2 * KV;
+    if residual.len() != 30 * T * W || reference.len() != 30 * T * STRIDE {
+        return Err("incomplete fixed trace arrays".into());
+    }
+    let x = &residual[10 * T * W..11 * T * W];
+    let target = &residual[11 * T * W..12 * T * W];
+    let ref_qkv = &reference[11 * T * STRIDE..12 * T * STRIDE];
+    let rq: Vec<f32> = ref_qkv
+        .chunks_exact(STRIDE)
+        .flat_map(|r| r[..W].iter().copied())
+        .collect();
+    let rk: Vec<f32> = ref_qkv
+        .chunks_exact(STRIDE)
+        .flat_map(|r| r[W..W + KV].iter().copied())
+        .collect();
+    let rv: Vec<f32> = ref_qkv
+        .chunks_exact(STRIDE)
+        .flat_map(|r| r[W + KV..].iter().copied())
+        .collect();
+    let mut source_attended = vec![0f32; T * W];
+    for pos in 0..T {
+        for head in 0..9 {
+            let mut att = vec![0f32; pos + 1];
+            standard_head_attention_weights(
+                &mut att,
+                &rq[pos * W + head * 64..pos * W + (head + 1) * 64],
+                &rk,
+                (head / 3) * 64,
+                KV,
+                false,
+            );
+            head_attention_value_aggregate(
+                &mut source_attended[pos * W + head * 64..pos * W + (head + 1) * 64],
+                &att,
+                &rv,
+                (head / 3) * 64,
+                KV,
+            );
+        }
+    }
+    write_floats(&out.join("source-attended.f32le"), &source_attended)?;
+    let mut backends = Vec::new();
+    for name in ["cpu", "metal"] {
+        let device = if name == "cpu" {
+            Device::Cpu
+        } else {
+            Device::new_metal(0)?
+        };
+        let checkpoint = load_checkpoint(model_path, &device)?;
+        let shape = &checkpoint.shape;
+        if shape.layers != 30
+            || shape.width != W
+            || shape.heads != 9
+            || shape.kv_heads != 3
+            || shape.head_dim != 64
+            || shape.rms_eps != 1e-5
+        {
+            return Err("unexpected fixed replay geometry".into());
+        }
+        let weight = |suffix: &str| -> Result<&Tensor> {
+            checkpoint
+                .tensors
+                .get(&format!("model.layers.11.{suffix}.weight"))
+                .ok_or_else(|| format!("missing weight {suffix}").into())
+        };
+        let rms = |input: &Tensor, gain: &Tensor| -> Result<Tensor> {
+            let denominator = input
+                .sqr()?
+                .mean_keepdim(1)?
+                .affine(1.0, shape.rms_eps)?
+                .sqrt()?;
+            Ok(input.broadcast_div(&denominator)?.broadcast_mul(gain)?)
+        };
+        let xt = Tensor::from_slice(x, (T, W), &device)?;
+        let norm = rms(&xt, weight("input_layernorm")?)?;
+        let frequencies: Vec<f32> = (0..64)
+            .step_by(2)
+            .map(|i| 1f32 / (shape.rope_theta as f32).powf(i as f32 / 64f32))
+            .collect();
+        let frequency = Tensor::from_vec(frequencies, (1, 32), &device)?;
+        let positions = Tensor::arange(0u32, T as u32, &device)?
+            .to_dtype(DType::F32)?
+            .reshape((T, 1))?;
+        let phase = positions.matmul(&frequency)?;
+        let cosine = phase.cos()?.reshape((1, 1, T, 32))?;
+        let sine = phase.sin()?.reshape((1, 1, T, 32))?;
+        let project = |suffix: &str, heads: usize| -> Result<Tensor> {
+            Ok(norm
+                .matmul(&weight(suffix)?.t()?)?
+                .reshape((1, T, heads, 64))?
+                .transpose(1, 2)?
+                .contiguous()?)
+        };
+        let nq = rope(&project("self_attn.q_proj", 9)?, &cosine, &sine)?;
+        let nk = rope(&project("self_attn.k_proj", 3)?, &cosine, &sine)?;
+        let nv = project("self_attn.v_proj", 3)?;
+        let saved = |values: &[f32], heads: usize| -> Result<Tensor> {
+            Ok(Tensor::from_slice(values, (1, T, heads, 64), &device)?
+                .transpose(1, 2)?
+                .contiguous()?)
+        };
+        let mut qkv_rows = Vec::new();
+        for (kind, expected, actual, width) in
+            [("q", &rq, &nq, W), ("k", &rk, &nk, KV), ("v", &rv, &nv, KV)]
+        {
+            let actual = time_major(actual)?;
+            for pos in 0..T {
+                qkv_rows.push(json!({"kind":kind,"position":pos,"difference":compare(&expected[pos*width..(pos+1)*width],&actual[pos*width..(pos+1)*width])?}));
+            }
+        }
+        let mask: Vec<u8> = (0..T)
+            .flat_map(|i| (0..T).map(move |j| u8::from(j > i)))
+            .collect();
+        let excluded = Tensor::from_vec(mask, (1, 1, T, T), &device)?;
+        let attend = |query: Tensor, key: Tensor, value: Tensor| -> Result<Tensor> {
+            let qkv = AttentionQkv {
+                query,
+                key,
+                value,
+                excluded: excluded.clone(),
+                normalized_input: norm.reshape((1, T, W))?,
+                cosine: cosine.clone(),
+                sine: sine.clone(),
+            };
+            Ok(dense_attention(
+                &qkv,
+                &AttentionPositions {
+                    query: 0..T,
+                    key: 0..T,
+                },
+            )?
+            .transpose(1, 2)?
+            .contiguous()?
+            .reshape((T, W))?)
+        };
+        let native_attended = attend(nq, nk, nv)?;
+        let saved_attended = attend(saved(&rq, 9)?, saved(&rk, 3)?, saved(&rv, 3)?)?;
+        let mut baseline: Vec<Vec<f32>> = Vec::new();
+        let mut arms = Vec::new();
+        for (arm, attended) in [
+            ("native", native_attended),
+            ("reference_qkv", saved_attended),
+            (
+                "reference_qkv_source_attention",
+                Tensor::from_slice(&source_attended, (T, W), &device)?,
+            ),
+        ] {
+            let mapped = attended.matmul(&weight("self_attn.o_proj")?.t()?)?;
+            let after_attention = xt.add(&mapped)?;
+            let post_norm = rms(&after_attention, weight("post_attention_layernorm")?)?;
+            let gate_pre = post_norm.matmul(&weight("mlp.gate_proj")?.t()?)?;
+            let gate = gate_pre.silu()?;
+            let up = post_norm.matmul(&weight("mlp.up_proj")?.t()?)?;
+            let gated = gate.mul(&up)?;
+            let down = gated.matmul(&weight("mlp.down_proj")?.t()?)?;
+            let output = after_attention.add(&down)?;
+            let mut stages = Vec::new();
+            for (index, (stage, tensor)) in [
+                ("attended", &attended),
+                ("attention_output", &mapped),
+                ("after_attention", &after_attention),
+                ("post_norm", &post_norm),
+                ("gate_pre", &gate_pre),
+                ("gate", &gate),
+                ("up", &up),
+                ("gated", &gated),
+                ("down", &down),
+                ("output", &output),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let values = tensor.flatten_all()?.to_vec1::<f32>()?;
+                let stage_width = values.len() / T;
+                write_floats(&out.join(format!("{name}-{arm}-{stage}.f32le")), &values)?;
+                if arm == "native" {
+                    baseline.push(values.clone());
+                }
+                let mut rows = Vec::new();
+                for pos in 0..T {
+                    let range = pos * stage_width..(pos + 1) * stage_width;
+                    rows.push(json!({"position":pos,"vs_native_arm":compare(&baseline[index][range.clone()],&values[range.clone()])?,
+                        "vs_saved_reference":if stage=="output" {compare(&target[range.clone()],&values[range])?} else {Value::Null}}));
+                }
+                stages.push(json!({"stage":stage,"width":stage_width,"rows":rows}));
+            }
+            arms.push(json!({"arm":arm,"stages":stages}));
+        }
+        backends.push(json!({"backend":name,"common_input_qkv":qkv_rows,"arms":arms}));
+    }
+    Ok(
+        json!({"schema":"uor-r4.track-b-block11-replay/1","status":"DIAGNOSTIC_COMPLETE","parent_anchors_verified":true,
+        "parity_pass":false,"backends":backends,"scope":"common-input block and attention substitutions; only QKV and final residual have saved reference anchors"}),
+    )
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let replay = args.len() == 4 && args[3] == "replay-layer12";
+    let layer12 = args.len() == 4 && args[3] == "replay-layer12";
+    let block11 = args.len() == 4 && args[3] == "replay-block11";
+    let replay = layer12 || block11;
     if args.len() != 3 && !replay {
         return Err(
-            "usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT [replay-layer12]"
+            "usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT [replay-layer12|replay-block11]"
                 .into(),
         );
     }
@@ -436,7 +685,9 @@ fn main() -> Result<()> {
             std::process::exit(124);
         }
     });
-    let result = if replay {
+    let result = if block11 {
+        replay_block11(Path::new(&args[0]), Path::new(&args[1]), out)
+    } else if layer12 {
         replay_layer12(Path::new(&args[0]), Path::new(&args[1]), out)
     } else {
         run(Path::new(&args[0]), Path::new(&args[1]), out)
