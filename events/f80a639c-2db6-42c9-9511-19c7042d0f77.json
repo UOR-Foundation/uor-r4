@@ -1,0 +1,30 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "f80a639c-2db6-42c9-9511-19c7042d0f77",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "block11_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/block11-replay-356a9a24-20260930",
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "charges": "Build194.62s RSS3187933184 (above2GiB estimate), direct replay3.18s RSS821411840; estimated300s preparation+60s review/delivery. Cumulative847649406ms /1130000000ms. No own job active.",
+      "checkpoint_sha": "b2cf9744fb68a7718aec296c6e9070e6b66ede49",
+      "checks": "Measured93085dd5: matching original outputs bitwise4608values each; CPU/Metal outputs byte-identical on each common input. 32 local rows+8input-effect rows, independent review approved. Pos5 local down error vs exact8.77e-5/1.22e-4; exact input effect6.71e-4. No full-reference gated state or parity pass.",
+      "cleanup": "Inactive recovery deps/build/fingerprint caches removed after locks and open-handle checks; df +606864KiB. Source, sibling executables, models, reports and warm active cache preserved.",
+      "down_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/down-replay-93085dd5-20260930",
+      "live_attempts": [],
+      "main_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+      "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
+      "next_action": "Common saved post-normalized inputs through gate/up CPU/Metal/exact; compare native versus reference SiLU operation order on common gate preactivation, use exact down as common control. Do not repeat completed down diagnostic or full reference unchanged.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "status": "ACTIVE",
+      "trace_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/layer-trace-34371f15-20260930",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790787070,
+  "previous_head": "4a088edb6c04e7b7c83b97b4b1ca9c021d738150"
+}
