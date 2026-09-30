@@ -2054,6 +2054,9 @@ impl CustomOp2 for StraightThrough {
         }
         let device = s2.device();
         let total = l2.shape().elem_count();
+        if total == 0 {
+            candle_core::bail!("Metal straight-through requires non-empty tensors");
+        }
         let out_buf = device.new_buffer(total, DType::F32, "straight_through_out")?;
         crate::metal_stack_kernels::metal::call_straight_through(
             device,
@@ -2085,6 +2088,9 @@ pub fn straight_through(continuous: &Tensor, quantized: &Tensor) -> Result<Tenso
     }
     if continuous.shape() != quantized.shape() {
         return Err(invalid("straight-through inputs must have one shape"));
+    }
+    if continuous.elem_count() == 0 {
+        return Err(invalid("straight_through requires non-empty tensors"));
     }
     Ok(continuous
         .contiguous()?

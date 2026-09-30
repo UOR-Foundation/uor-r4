@@ -73,9 +73,18 @@ All MSL shaders and dispatch mechanisms are contained in `crates/uor-r4-training
 
 ---
 
-## 3. Empirical Numerical Parity Verification
+## 3. Empirical Numerical Parity Verification (Historical Prototype Run & Current Scope)
 
-The full test suite in `crates/uor-r4-training/tests/metal_stack_ops_parity.rs` was executed on physical Apple Silicon hardware (`MetalDevice(DeviceId(1))`):
+> **Execution Provenance & Hold Status Notice**:
+> The execution output and throughput numbers below represent a historical small-fixture run executed on prototype commit `b7e20b8b` prior to the runner repair hold #1536 / PR #1537.
+> Subsequent commits (`af8dd175`, `59fe14f3`, and successors) introduced strict dtype validation, non-empty tensor guards, layout/dimension validation, and NaN-safe finite parity checks.
+> In compliance with the production hold, **exact-head physical GPU execution has NOT been rerun and remains UNVERIFIED**.
+> Furthermore, test passes that skip on devices lacking Metal hardware do NOT constitute executed GPU evidence; executed evidence requires positive verification of Metal device allocation and kernel dispatch under shared runner admission.
+>
+> **Partial Acceleration Scope**:
+> Acceleration applies to individual forward/backward kernel operations (Dot mode without null/age/RoPE; unsnapped recurrence). It is not a complete GPU-resident model training loop (recurrence and fused-read parameter preparation and cross-entropy loss reduction retain host memory boundaries).
+
+Historical prototype run on physical Apple Silicon hardware (`MetalDevice(DeviceId(1))`):
 
 ```text
 running 13 tests

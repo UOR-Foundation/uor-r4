@@ -22,7 +22,8 @@ pub mod metal {
     #[inline]
     fn linear_split(pipeline: &ComputePipeline, length: usize) -> (MTLSize, MTLSize) {
         let size = length;
-        let width = std::cmp::min(pipeline.max_total_threads_per_threadgroup(), size);
+        let max_threads = pipeline.max_total_threads_per_threadgroup();
+        let width = std::cmp::max(1, std::cmp::min(max_threads, size));
         let count = size.div_ceil(width);
         let thread_group_count = MTLSize {
             width: count,
@@ -590,6 +591,9 @@ kernel void fused_read_fwd(
         dst: &Buffer,
         length: usize,
     ) -> Result<()> {
+        if length == 0 {
+            candle_core::bail!("call_straight_through requires non-empty buffer (length > 0)");
+        }
         let pipeline = get_cache().get_or_compile(device, "straight_through_fwd")?;
         let encoder = device.command_encoder()?;
         encoder.set_compute_pipeline_state(&pipeline);

@@ -812,12 +812,17 @@ fn test_recurrence_core_parity() -> uor_r4_training::Result<()> {
 fn test_metal_stack_ops_rejections() -> uor_r4_training::Result<()> {
     let cpu_dev = candle_core::Device::Cpu;
 
-    // 1. StraightThrough rejects non-F32 tensors
+    // 1. StraightThrough rejects non-F32 tensors and empty tensors
     let ct_u32 = candle_core::Tensor::zeros((2, 4), candle_core::DType::U32, &cpu_dev)?;
     let q_u32 = candle_core::Tensor::zeros((2, 4), candle_core::DType::U32, &cpu_dev)?;
     assert!(
         uor_r4_training::geometric_stack::straight_through(&ct_u32, &q_u32).is_err(),
         "straight_through must reject non-F32"
+    );
+    let empty_st = candle_core::Tensor::zeros((0, 4), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::straight_through(&empty_st, &empty_st).is_err(),
+        "straight_through must reject empty tensors"
     );
 
     // 2. SwiGLU rejects non-F32, shape mismatch, empty
