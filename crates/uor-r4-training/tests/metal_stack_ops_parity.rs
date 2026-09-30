@@ -529,3 +529,136 @@ fn test_quaternion_scan_backward_parity() -> uor_r4_training::Result<()> {
     assert!(max_dd_diff < 1e-4, "dd diff too large: {max_dd_diff}");
     Ok(())
 }
+
+#[cfg(feature = "metal")]
+#[test]
+fn test_metal_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> {
+    use std::time::Instant;
+
+    let metal_dev = match candle_core::Device::new_metal(0) {
+        Ok(dev) => dev,
+        Err(_) => return Ok(()),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+
+    println!("\n=== Metal GPU vs CPU Stack Ops Throughput & Speedup Benchmark ===");
+
+    // Benchmark SwiGLU: batch=16, seq=256 -> 4,096 tokens, dim=768
+    let tokens = 4096;
+    let dim = 768;
+    let total = tokens * dim;
+    let g_data: Vec<f32> = (0..total).map(|i| (i as f32 * 0.001).sin()).collect();
+    let u_data: Vec<f32> = (0..total).map(|i| (i as f32 * 0.002).cos()).collect();
+
+    let g_cpu = candle_core::Tensor::from_vec(g_data.clone(), (tokens, dim), &cpu_dev)?;
+    let u_cpu = candle_core::Tensor::from_vec(u_data.clone(), (tokens, dim), &cpu_dev)?;
+    let g_metal = candle_core::Tensor::from_vec(g_data, (tokens, dim), &metal_dev)?;
+    let u_metal = candle_core::Tensor::from_vec(u_data, (tokens, dim), &metal_dev)?;
+
+    // Warmup
+    let _ = uor_r4_training::geometric_stack::swiglu(&g_cpu, &u_cpu)?;
+    let _ = uor_r4_training::geometric_stack::swiglu(&g_metal, &u_metal)?;
+
+    let iters = 30;
+    let start_cpu = Instant::now();
+    for _ in 0..iters {
+        let _ = uor_r4_training::geometric_stack::swiglu(&g_cpu, &u_cpu)?;
+    }
+    let cpu_dur = start_cpu.elapsed().as_secs_f64();
+    let cpu_tok_s = (tokens * iters) as f64 / cpu_dur;
+
+    let start_metal = Instant::now();
+    for _ in 0..iters {
+        let _ = uor_r4_training::geometric_stack::swiglu(&g_metal, &u_metal)?;
+    }
+    let metal_dur = start_metal.elapsed().as_secs_f64();
+    let metal_tok_s = (tokens * iters) as f64 / metal_dur;
+    let speedup_swiglu = metal_tok_s / cpu_tok_s;
+
+    println!(
+        "SwiGLU (tokens={tokens}, dim={dim}): CPU = {cpu_tok_s:.0} tok/s ({cpu_dur:.4}s), Metal = {metal_tok_s:.0} tok/s ({metal_dur:.4}s) -> Speedup: {speedup_swiglu:.2}x"
+    );
+
+    // Benchmark RMSNorm: batch=16, seq=256 -> 4,096 tokens, dim=288
+    let dim_norm = 288;
+    let total_norm = tokens * dim_norm;
+    let x_data: Vec<f32> = (0..total_norm).map(|i| (i as f32 * 0.003).sin()).collect();
+    let w_data: Vec<f32> = (0..dim_norm)
+        .map(|i| 1.0 + (i as f32 * 0.01).cos() * 0.1)
+        .collect();
+
+    let x_cpu = candle_core::Tensor::from_vec(x_data.clone(), (tokens, dim_norm), &cpu_dev)?;
+    let w_cpu = candle_core::Tensor::from_vec(w_data.clone(), (dim_norm,), &cpu_dev)?;
+    let x_metal = candle_core::Tensor::from_vec(x_data, (tokens, dim_norm), &metal_dev)?;
+    let w_metal = candle_core::Tensor::from_vec(w_data, (dim_norm,), &metal_dev)?;
+
+    let _ = uor_r4_training::geometric_stack::rms_norm(&x_cpu, &w_cpu, 1e-5)?;
+    let _ = uor_r4_training::geometric_stack::rms_norm(&x_metal, &w_metal, 1e-5)?;
+
+    let start_norm_cpu = Instant::now();
+    for _ in 0..iters {
+        let _ = uor_r4_training::geometric_stack::rms_norm(&x_cpu, &w_cpu, 1e-5)?;
+    }
+    let cpu_dur_norm = start_norm_cpu.elapsed().as_secs_f64();
+    let cpu_tok_s_norm = (tokens * iters) as f64 / cpu_dur_norm;
+
+    let start_norm_metal = Instant::now();
+    for _ in 0..iters {
+        let _ = uor_r4_training::geometric_stack::rms_norm(&x_metal, &w_metal, 1e-5)?;
+    }
+    let metal_dur_norm = start_norm_metal.elapsed().as_secs_f64();
+    let metal_tok_s_norm = (tokens * iters) as f64 / metal_dur_norm;
+    let speedup_norm = metal_tok_s_norm / cpu_tok_s_norm;
+
+    println!(
+        "RMSNorm (tokens={tokens}, dim={dim_norm}): CPU = {cpu_tok_s_norm:.0} tok/s ({cpu_dur_norm:.4}s), Metal = {metal_tok_s_norm:.0} tok/s ({metal_dur_norm:.4}s) -> Speedup: {speedup_norm:.2}x"
+    );
+
+    // Benchmark CrossEntropy: batch=16, seq=256 -> 4,096 tokens, vocab=4096
+    let vocab = 4096;
+    let total_ce = tokens * vocab;
+    let l_data: Vec<f32> = (0..total_ce).map(|i| (i as f32 * 0.001).sin()).collect();
+    let t_data: Vec<u32> = (0..tokens).map(|i| (i % vocab) as u32).collect();
+
+    let l_cpu = candle_core::Tensor::from_vec(l_data.clone(), (tokens, vocab), &cpu_dev)?;
+    let t_cpu = candle_core::Tensor::from_vec(t_data.clone(), (tokens,), &cpu_dev)?;
+    let l_metal = candle_core::Tensor::from_vec(l_data, (tokens, vocab), &metal_dev)?;
+    let t_metal = candle_core::Tensor::from_vec(t_data, (tokens,), &metal_dev)?;
+
+    let _ = uor_r4_training::geometric_stack::cross_entropy(&l_cpu, &t_cpu)?;
+    let _ = uor_r4_training::geometric_stack::cross_entropy(&l_metal, &t_metal)?;
+
+    let start_ce_cpu = Instant::now();
+    for _ in 0..iters {
+        let _ = uor_r4_training::geometric_stack::cross_entropy(&l_cpu, &t_cpu)?;
+    }
+    let cpu_dur_ce = start_ce_cpu.elapsed().as_secs_f64();
+    let cpu_tok_s_ce = (tokens * iters) as f64 / cpu_dur_ce;
+
+    let start_ce_metal = Instant::now();
+    for _ in 0..iters {
+        let _ = uor_r4_training::geometric_stack::cross_entropy(&l_metal, &t_metal)?;
+    }
+    let metal_dur_ce = start_ce_metal.elapsed().as_secs_f64();
+    let metal_tok_s_ce = (tokens * iters) as f64 / metal_dur_ce;
+    let speedup_ce = metal_tok_s_ce / cpu_tok_s_ce;
+
+    println!(
+        "CrossEntropy (tokens={tokens}, vocab={vocab}): CPU = {cpu_tok_s_ce:.0} tok/s ({cpu_dur_ce:.4}s), Metal = {metal_tok_s_ce:.0} tok/s ({metal_dur_ce:.4}s) -> Speedup: {speedup_ce:.2}x"
+    );
+
+    assert!(
+        speedup_swiglu > 0.5,
+        "SwiGLU GPU kernel unexpectedly degraded"
+    );
+    assert!(
+        speedup_norm > 0.5,
+        "RMSNorm GPU kernel unexpectedly degraded"
+    );
+    assert!(
+        speedup_ce > 0.5,
+        "CrossEntropy GPU kernel unexpectedly degraded"
+    );
+
+    Ok(())
+}
