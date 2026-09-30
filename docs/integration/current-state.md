@@ -59,9 +59,14 @@ now reproduces all 4,608 reference residual values exactly and supplies referenc
 MLP intermediates for this window. Its interventions identify incoming
 after-attention differences as the largest selected-position effect, with
 normalization arithmetic significant across the window. This diagnostic scope is
-complete; next prepare a coherent source-order normalization/activation correction
-that preserves differentiation, then compare against saved full parity outputs.
-No single-kernel defect or full-model repair has been demonstrated.
+complete. The [RMS scalar-order candidate](../evidence/track-b-rms-candidate-2026-09-30.md)
+then passed four focused model tests but regressed CPU parity (including two
+previously passing positions); Metal outputs were unchanged. The candidate was
+rejected and the previous RMS source restored exactly. No broader run is
+justified. The research council must select a coherent numerical-contract or
+implementation successor before more arithmetic variants; existing source
+integration and peer reviews continue. No single-kernel defect or full-model
+repair has been demonstrated, and the original acceptance gate is unchanged.
 
 Earlier interrupted attempts and the restored external compiler-cache failure
 remain historical execution evidence in the [September 29 record](track-b-conversion-result-2026-09-29.md)
