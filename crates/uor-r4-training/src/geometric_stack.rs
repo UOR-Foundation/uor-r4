@@ -6510,10 +6510,9 @@ mod tests {
     /// the same bytes.
     #[test]
     fn the_d10_engine_refuses_a_snapped_export_read_for_reference() -> Result<()> {
-        let mut model = spread_transport(
-            tiny(StackArch::Geometric, "rrarra", ReadScore::Lorentz, true),
-            149,
-        )?;
+        // A LUT-format-valid width (multiple of GROUP=32) so the artifact
+        // parses and the D10 snap refusal is the path exercised.
+        let mut model = spread_transport(exportable("rrarra", ReadScore::Lorentz, true), 149)?;
         model.set_transport_snap(Some(TransportSnap::Icosian))?;
         let (bytes, _) = crate::stack_export::export_stack(
             &model,
@@ -6614,10 +6613,15 @@ mod tests {
                 codec: D11Interim.name().to_owned()
             })
         );
-        // A raw load enables neither mode: the float forward is restored.
+        // A raw load restores the recorded snap but not the served
+        // representation; the free-transport view is requested explicitly.
         let mut loaded = StackModel::load(&dir, &cpu())?;
-        assert!(loaded.served_codec().is_none() && loaded.transport_snap().is_none());
-        assert_eq!(bits(&loaded.forward(&ids, 1, time)?)?, float_free);
+        assert!(loaded.served_codec().is_none());
+        assert_eq!(loaded.transport_snap(), Some(TransportSnap::Icosian));
+        assert_eq!(
+            bits(&loaded.with_unsnapped_transport(|m| m.forward(&ids, 1, time)?))?,
+            float_free
+        );
         assert_ne!(bits(&loaded.forward(&ids, 1, time)?)?, both_logits);
         // Reapplying the recorded modes restores the saved forward exactly.
         loaded.set_served_representation(Some(Arc::new(D11Interim)))?;
