@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 51,
-  "observed_server_time": 1790740690,
+  "sequence": 52,
+  "observed_server_time": 1790740849,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -17,7 +17,7 @@
         "S1.4 D11 snap safety"
       ],
       "available": true,
-      "heartbeat": 1790740690
+      "heartbeat": 1790740849
     },
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -121,7 +121,7 @@
         "docs/evidence/s1-4-snap-parity-2026-09-29.json",
         "docs/integration/current-state.md"
       ],
-      "expires": 1790741890,
+      "expires": 1790742049,
       "phase": "claimed",
       "checkpoint": null
     }
