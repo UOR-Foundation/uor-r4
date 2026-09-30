@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 324,
-  "observed_server_time": 1790791283,
+  "sequence": 325,
+  "observed_server_time": 1790791360,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -139,18 +139,20 @@
         "blockers": [],
         "branch": "codex/track-b-conversion",
         "charges": "Merged-head build/tests217560ms measured; preparation300000ms and review180000ms estimated, charged once. Cumulative849483476ms/1130000000ms. No own job active.",
-        "checkpoint_sha": "22a1b4c49352a782473681b7b4dc0632f35cc1b5",
-        "checks": "Main18e4bd89 cleanly integrated; independent preservation review approved. Four focused Track B model tests with Metal enabled PASS,217.56s,max RSS3175809024 bytes. Historical numerical failures and rejected RMS candidate preserved. Diagnostic executable still rejected d87485a8 until rebuilt; test executable is current.",
+        "checkpoint_sha": "97dcd0cfab1e08e0e8bf4a32ba2f70ff4ab7b457",
+        "checks": "Independent merge source review APPROVE. Metal14testsPASS219.74s; direct13nonbenchmark testsPASS0.06s with actual device and numeric output. Four Track B model tests compiling in session90024; do not duplicate. No checkpoint model forward or full parity.",
         "cleanup": "Warm internal Track B cache retained for continued work; no cache deletion this integration.",
         "down_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/down-replay-93085dd5-20260930",
-        "live_attempts": [],
-        "main_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+        "live_attempts": [
+          "direct Cargo session90024, four Track B model tests build"
+        ],
+        "main_sha": "3b7c2d54141336e5c2f46b9391bbef1f0014c182",
         "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
         "mlp_roots": [
           "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-3c6007ec-20260930",
           "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-0db94dbf-20260930"
         ],
-        "next_action": "Numerical arithmetic/comparator council decision pending #1509 comment5916224104; no new ad-hoc RMS tuning or unchanged parity/B2 fit. PR1549 exact513026e7 source review APPROVE posted5916447636 with actual Linux1098pass/4fail/60ignored disclosed; author can protected-deliver. PR1548 stilla2311a7 missing config fields; review only changed successor. Continue eligible consumer integration/review.",
+        "next_action": "Finish current session56521 build/test, capture actual device/fixture values to distinguish skips, run focused Track B tests for feature-union integration, publish exact-head evidence and push existing PR. No new checkpoint model run.",
         "pr": 1518,
         "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
         "rms_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/rms-window-d87485a8-20260930",
