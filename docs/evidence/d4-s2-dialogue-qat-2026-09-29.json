@@ -67,7 +67,7 @@
       "arm2_float_control": 2.564863236113388,
       "arm1_vs_arm2_float_delta": -0.0000546572736676,
       "arm1_served_vs_arm2_float_delta": 0.003183323149472,
-      "gate_status": "reported; Lab 1 re-run pending (relative delta +0.003183 nats vs matched float control; absolute served NLL 2.5680 vs registered bound <= 2.5255 nats missed due to base float drift)"
+      "gate_status": "reported; Lab 1 re-run pending (relative delta +0.003183 nats vs matched float control; absolute served NLL 2.5680 vs literal registered bound <= 2.5255 nats missed by +0.0425 nats and vs corrected parent bound <= 2.5509 nats missed by +0.0171 nats due to base float drift; greedy float agreement 5/58 turns missed registered >= 29/58 gate)"
     },
     "greedy_turn_agreement_58_turns": {
       "kernel_parity_arm1_qat_integer_vs_training_served_forward": {

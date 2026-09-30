@@ -48,11 +48,12 @@ September 29, 2026. References #973 under programme tracker #820.
 | Dimension | Baseline S2 (PTQ 4-bit) | Arm 2: Float Control (qat=false) | Arm 1: QAT Result (qat=true) | Target Gate | Outcome |
 |:---|:---:|:---:|:---:|:---:|:---:|
 | **161-Response NLL (Float)** | 2.5209 nats (parent) | **2.5649 nats** | **2.5648 nats** | — | Paired match |
-| **161-Response NLL (Served)** | 2.5415 nats (PTQ) | 2.5883 nats (PTQ) | **2.5680 nats** | $\le 2.5255$ nats ($+0.0300$ nats of parent float) | Reported; Lab 1 re-run pending (relative $\Delta = \mathbf{+0.0032\text{ nats}}$ vs Arm 2 float; missed $\le 2.5255$ by $+0.0425$ due to base float drift) |
-| **Quantization Gap ($\Delta$ NLL vs Float)** | $+0.0206$ nats (initial)<br>$+0.0674$ nats (unadapted PTQ) | $+0.0234$ nats (PTQ) | **$+0.0032$ nats** | $\le +0.0300$ nats | Reported; Lab 1 re-run pending ($9\times$ margin vs matched float) |
-| **Kernel Agreement (Integer vs Served Forward)** | 14 / 58 turns (24.14%)<br>(44 diverging turns under PTQ) | 5 / 58 turns (8.62%)<br>(53 diverging turns under PTQ) | **56 / 58 turns (96.55%)**<br>(only 2 diverging turns) | $\ge \mathbf{29 / 58}$ turns (50.0%+) | **Reported; Lab 1 re-run pending** (Kernel Agreement) |
-| **Greedy Agreement vs Float Baseline** | 14 / 58 turns (24.14%) | 7 / 58 turns (12.07%)<br>(Float fine-tuning drift) | 5 / 58 turns (8.62%)<br>(Drift over 1,024 updates) | — | Documented policy drift |
-| **Greedy Agreement vs Matched Float Control** | — | — | 6 / 58 turns (10.34%) | — | Characterized |
+| **161-Response NLL (Served)** | 2.5415 nats (PTQ) | 2.5883 nats (PTQ) | **2.5680 nats** | **Literal target:** $\le 2.5255$ nats ($+0.0300$ nats of cited parent $2.4955$ nats)<br>**Corrected parent target:** $\le 2.5509$ nats ($2.5209 + 0.0300$ nats) | **Reported; Lab 1 re-run pending**<br>Relative $\Delta = \mathbf{+0.0032\text{ nats}}$ vs Arm 2 float control.<br>Absolute served NLL misses both targets ($+0.0425$ nats over literal $2.5255$; $+0.0171$ nats over corrected $2.5509$) due to base float drift. |
+| **Quantization Gap ($\Delta$ NLL vs Matched Float)** | $+0.0206$ nats (initial PTQ vs parent)<br>$+0.0674$ nats (unadapted PTQ vs baseline) | $+0.0234$ nats (PTQ vs Arm 2 float) | **$+0.0032$ nats** | $\le +0.0300$ nats | **Reported; Lab 1 re-run pending** ($9\times$ margin vs matched float control) |
+| **Kernel Agreement (Integer vs Served Forward)** | 47 / 58 turns (81.03%)<br>(prior independent reader, PR #1470) | N/A (float control has no integer kernel; PTQ export diverged to 5 / 58) | **56 / 58 turns (96.55%)**<br>(only 2 diverging turns) | Diagnostic | **Reported; Lab 1 re-run pending** (Kernel Agreement: integer engine matches served forward simulation) |
+| **Greedy Agreement vs Pre-Adaptation Float Baseline** | 14 / 58 turns (24.14%)<br>(initial PTQ integer vs initial float parent) | 7 / 58 turns (12.07%)<br>(unquantized float control vs initial float parent) | 5 / 58 turns (8.62%)<br>(QAT integer vs initial float parent) | $\ge \mathbf{29 / 58}$ turns (50.0%+) | **MISSED** (5 / 58 turns vs pre-registered $\ge 29/58$ target; unquantized float control itself drifted to 7 / 58 turns) |
+| **Greedy Agreement vs Matched Float Control** | — | — | 6 / 58 turns (10.34%) | — | Characterized (QAT integer vs Arm 2 float control) |
+| **QAT Integer vs Own Float Weights (`with_float_forward`)** | — | — | **MISSING / UNAVAILABLE** | — | Unresolved: QAT integer vs own unquantized float was not evaluated |
 | **D11 vs D10 Discrepancy** | `diff = 0` | `diff = 0` | `diff = 0` | Bit-identical | **PASS** (Bit-identical) |
 | **Held-out Window NLL (valid.u16)** | 2.9805 nats | 2.9718 nats | **2.9717 nats** | — | Improved |
 | **Raw Parameter Bit Budget** | 4.2500 bpw | 4.2500 bpw | **4.2500 bpw** | $\le 4.2500$ bpw | **PASS** |
@@ -61,15 +62,20 @@ September 29, 2026. References #973 under programme tracker #820.
 
 ## 4. Decisive Empirical Conclusions
 
-1. **Kernel Agreement Between Integer Engine and Training Served Forward:**
-   The **56 of 58 turns (96.55%)** metric measures **kernel agreement** between the exported native D11 integer serving engine (`lut-chat`) and the training served forward pass (`dialogue-train` with straight-through quantization). Only 2 turns diverge between the served engine and its training forward pass.
+1. **Kernel Agreement Between Integer Engine and Training Served Forward (56/58 turns):**
+   The **56 of 58 turns (96.55%)** metric measures **kernel agreement** between the exported native D11 integer serving engine (`lut-chat`) and the training served forward pass (`dialogue-train` with straight-through quantization). Only 2 turns diverge between the served engine and its training forward pass (compared to 47/58 turns in the pre-adaptation S2 baseline measured by the independent reader in PR #1470).
 2. **Failure of Standard Post-Training Quantization (PTQ):**
    In Arm 2 (standard float fine-tuning without QAT), exporting the trained float model to 4-bit integer weights causes catastrophic greedy generation collapse: **53 of 58 turns (91.38%) diverge** from the model's own forward pass.
-3. **Greedy Agreement with Float Baseline (Policy Drift):**
-   Comparing generated replies against the pre-adaptation float parent (`8cb11d8f…`), Arm 1 integer replies match on **5 of 58 turns** (8.62%), while comparing against the matched fine-tuned float control (Arm 2) yields **6 of 58 turns** (10.34%). This reflects policy drift during 1,024 steps of fine-tuning (the unquantized float control itself drifted to 7/58 turns vs the pre-adaptation baseline), rather than integer quantization error.
-4. **Quantization Representation Gap Minimized Relative to Drifted Float Model; Pre-Registered Bound Missed Due to Base Float Drift:**
-   The served representation penalty drops to $\mathbf{+0.0032\text{ nats}}$ relative to the fine-tuned float control ($2.5680$ vs $2.5648$ nats). However, against the pre-registered baseline target bound of $\le 2.5255$ nats ($+0.0300$ nats of initial parent float $2.4955$ / $2.5209$ nats), the absolute served NLL of $2.5680$ missed by $+0.0425$ nats because the unquantized float model drifted upward to $2.5649$ nats during the 1,024 update adaptation schedule.
-5. **Ledger & Invariant Reconciliation:**
+3. **Greedy Agreement with Float Baseline (Pre-Registered Gate MISSED):**
+   Comparing generated replies against the pre-adaptation float parent (`8cb11d8f…`), Arm 1 integer replies match on **5 of 58 turns** (8.62%), while comparing against the matched fine-tuned float control (Arm 2) yields **6 of 58 turns** (10.34%). Both miss the pre-registered float agreement gate of $\ge 29 / 58$ turns (50.0%+), which was not achieved (**MISSED**). While the unquantized float control itself drifted to 7/58 turns over 1,024 updates, indicating significant policy drift during adaptation, the pre-registered gate outcome remains missed.
+4. **Quantization Representation Gap and Target Bound Accounting:**
+   The served representation penalty drops to $\mathbf{+0.0032\text{ nats}}$ relative to the fine-tuned float control ($2.5680$ vs $2.5648$ nats). However, against the pre-registered baseline target bound:
+   - Literal pre-registration target: $\le 2.5255$ nats (based on cited $2.4955 + 0.0300$ nats).
+   - Corrected parent target: $\le 2.5509$ nats ($2.5209156608 + 0.0300$ nats).
+   The absolute served NLL of $2.5680$ misses both targets ($+0.0425$ nats above the literal target and $+0.0171$ nats above the corrected parent target) because the base float model drifted upward to $2.5649$ nats during the 1,024 update adaptation schedule.
+5. **QAT Integer vs Own Float Weights Remains Missing:**
+   The comparison of Arm 1 QAT integer output directly against its *own* unquantized float weights (`with_float_forward`) was not evaluated during the run and remains missing. Current comparisons against the pre-adaptation parent (5/58) and the separate float control (6/58) cannot substitute for an own-float evaluation. Consequently, we cannot infer that all difference from float is fine-tuning drift; some part may represent integer-vs-float divergence within the adapted checkpoint.
+6. **Ledger & Invariant Reconciliation:**
    - Both Arm 1 ($2,180\text{ s}$) and Arm 2 ($1,401\text{ s}$) were executed within budget under model slot exclusive locks.
    - Cumulative ledger charged $3,581,000\text{ ms}$ total ($768,447,701 / 780,000,000\text{ ms}$).
    - All D11 serving invariants preserved: 0 multipliers, 0 dividers, 0 floats in serving path.
