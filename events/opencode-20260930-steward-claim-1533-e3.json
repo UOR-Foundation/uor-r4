@@ -1,0 +1,16 @@
+{
+  "event": {
+    "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "dependencies": [],
+    "event_id": "opencode-20260930-steward-claim-1533-e3",
+    "issue": 1533,
+    "op": "claim",
+    "paths": [],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "stewardship: Claude session quota-unavailable; its completed UNKNOWN job claude-1533-checks-e2-a1 held the single heavy lane; reconcile-stopped produced the confirmed_stopped receipt; claim solely to FinishAttempt then Release; all Claude work preserved; card sha256:b37fdce0...",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:b37fdce05c361cbd742a20d36479f97bbc1f306932a586104d07df76d5d1772c"
+  },
+  "observed_server_time": 1790746550,
+  "previous_head": "6ac1a590219b74cbe28a03e38b6c8fcf12b7284b"
+}
