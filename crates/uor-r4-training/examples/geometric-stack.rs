@@ -164,7 +164,10 @@
 //! (`pointer_score=`: `dot`, the default, or `lorentz`, the fused read's
 //! hyperboloid form with a learned scale) and its own selection
 //! (`pointer_select=`, default none, which keeps every source; `top:K` keeps
-//! the K best alone, so `top:1` is the single-source pointer). The reads'
+//! the K best alone, so `top:1` is the single-source pointer). `dialogue-train`
+//! refuses `top:1`, given or carried by an `init=` head: its one kept source
+//! gives the query, key and scale no gradient, so the single-source pointer is
+//! soft-trained weights with `top:1` applied by `m-world evaluate`. The reads'
 //! `select=` never applies to the pointer. A gate mixes the copied token's
 //! distribution with the ordinary one; the loss, the development scores and
 //! the greedy replies are the mixture's. All go into the saved `config.json`
@@ -199,8 +202,8 @@ use uor_r4_training::dialogue_episodes::{EpisodeIndex, PrefixPolicy, EPISODE_CON
 use uor_r4_training::flock::FlockSelect;
 use uor_r4_training::geometric_stack::{
     logits_cross_entropy, parse_flock_select, parse_pointer_select, D11Interim, MapCodec,
-    PointerConfig, PointerSelect, ReadScore, ServedStatistics, StackAdamW, StackArch,
-    StackConfig, StackModel, TransportSnap, TransportUsage,
+    PointerConfig, PointerSelect, ReadScore, ServedStatistics, StackAdamW, StackArch, StackConfig,
+    StackModel, TransportSnap, TransportUsage,
 };
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
@@ -209,8 +212,8 @@ use uor_r4_training::stack_dialogue::{
 };
 use uor_r4_training::stack_export::{
     check_export_config, check_export_representation, check_raw_logit_evaluation,
-    control_checkpoint, control_grid_reference, export_stack,
-    stack_grid_reference, StackCalibration,
+    control_checkpoint, control_grid_reference, export_stack, stack_grid_reference,
+    StackCalibration,
 };
 use uor_r4_training::stack_memory::{Codebook, MemoryConfig, MemoryScore};
 use uor_r4_training::{sha256_file, Result, TrainingError};
@@ -746,6 +749,24 @@ fn pointer_qat_refusal() -> TrainingError {
         "qat=true with a pointer head: the pointer has no served representation yet (no D11 \
          port); train it without qat=true",
     )
+}
+
+/// `top:1` is not a training setting. Its one kept source has attention 1 and
+/// `p_copy` is that source's match, so the pointer's query, key and scale get
+/// no gradient (weight decay only shrinks them) and the gate alone learns.
+/// The single-source pointer is soft-trained weights with `top:1` applied
+/// afterwards (`m-world evaluate pointer_select=top:1`). A wider `top:K` and a
+/// flock train the scores of the sources they keep.
+fn refuse_trained_single_source(select: Option<PointerSelect>) -> Result<()> {
+    if select == Some(PointerSelect::TopK(1)) {
+        return Err(invalid(
+            "pointer_select=top:1 is not a training setting: its one kept source has attention \
+             1, so the pointer's query, key and scale get no gradient (weight decay only shrinks \
+             them); train soft (pointer_select=none) or with a wider selection, and apply top:1 \
+             to the trained weights with m-world evaluate pointer_select=top:1",
+        ));
+    }
+    Ok(())
 }
 
 /// The stacks `qat=true` can train: those the geometric stack export writes.
@@ -3330,6 +3351,20 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             return Err(pointer_qat_refusal());
         }
     }
+    // The selection the pointer trains with: the run's `pointer_select=`, or
+    // else an `init=` head's own (a resume shares the run's configuration).
+    let trained_select = match pointer_requested.select {
+        Some(select) => select,
+        None => match &settings.init {
+            Some(directory) => {
+                serde_json::from_slice::<StackConfig>(&fs::read(directory.join("config.json"))?)?
+                    .pointer
+                    .and_then(|pointer| pointer.select)
+            }
+            None => None,
+        },
+    };
+    refuse_trained_single_source(trained_select)?;
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
     let result = dialogue_train(&settings, &args, &out);
@@ -4136,8 +4171,10 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
   pointer_select=...     the sources the pointer softmaxes over (default none: all): the flock
                          WINDOW:K, or top:K (the K best alone; top:1 is the single-source
                          pointer). Its own selection, not select=. Training stays soft unless
-                         given; m-world evaluate applies one to saved weights afterwards. With
-                         init=, replaces the saved head's selection (the weights do not change).
+                         given, and refuses top:1 (its one kept source gives the query, key and
+                         scale no gradient); m-world evaluate applies any selection, top:1
+                         included, to saved weights afterwards. With init=, replaces the saved
+                         head's selection (the weights do not change).
   reports                each eval adds dev_pointer_mean_gate / dev_pointer_hit_rate /
                          dev_pointer_reachable_rate to the curve; all settings are in the saved
                          config.json and the report's config and flock_and_pointer.
@@ -4232,7 +4269,13 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
 
-    const KEYS: [&str; 5] = ["select", "pointer", "pointer_score", "pointer_select", "seed"];
+    const KEYS: [&str; 5] = [
+        "select",
+        "pointer",
+        "pointer_score",
+        "pointer_select",
+        "seed",
+    ];
 
     fn args(pairs: &[&str]) -> Args {
         let arguments: Vec<String> = pairs.iter().map(|pair| (*pair).to_owned()).collect();
@@ -4289,6 +4332,46 @@ mod tests {
     }
 
     #[test]
+    fn a_single_source_pointer_is_not_a_training_setting() {
+        let refusal = refuse_trained_single_source(parse_pointer_select("top:1").expect("valid"))
+            .expect_err("top:1 is refused");
+        assert!(
+            refusal
+                .to_string()
+                .contains("m-world evaluate pointer_select=top:1"),
+            "{refusal}"
+        );
+        // The scores of the sources a wider selection keeps get gradient.
+        for text in ["none", "top:2", "flock:8:2"] {
+            let select = parse_pointer_select(text).expect("valid");
+            assert!(refuse_trained_single_source(select).is_ok(), "{text}");
+        }
+    }
+
+    #[test]
+    fn dialogue_train_refuses_top_one_before_claiming_its_report() {
+        let out = std::env::temp_dir().join(format!("uor-r4-top1-refusal-{}", std::process::id()));
+        let arguments: Vec<String> = vec![
+            format!("out={}", out.display()),
+            "tokenizer=unused".to_owned(),
+            "train_tokens=unused".to_owned(),
+            "train_mask=unused".to_owned(),
+            "train_manifest=unused".to_owned(),
+            "dev_tokens=unused".to_owned(),
+            "dev_mask=unused".to_owned(),
+            "dev_manifest=unused".to_owned(),
+            "pointer=8".to_owned(),
+            "pointer_select=top:1".to_owned(),
+        ];
+        let refusal = dialogue_train_mode(&arguments).expect_err("top:1 is refused");
+        assert!(
+            refusal.to_string().contains("not a training setting"),
+            "{refusal}"
+        );
+        assert!(!out.exists(), "the refusal claimed {}", out.display());
+    }
+
+    #[test]
     fn a_head_added_to_init_records_the_seed_its_weights_come_from() {
         let (config, added) = init_extended_config(
             &args(&[
@@ -4314,10 +4397,13 @@ mod tests {
         let (config, added) =
             init_extended_config(&args(&["pointer=8"]), &saved()).expect("a new head");
         assert!(added);
-        assert_eq!(config.pointer, Some(PointerConfig {
-            init_seed: Some(5),
-            ..PointerConfig::new(8)
-        }));
+        assert_eq!(
+            config.pointer,
+            Some(PointerConfig {
+                init_seed: Some(5),
+                ..PointerConfig::new(8)
+            })
+        );
         // A head is what pointer_score= and pointer_select= configure.
         for dangling in [["pointer_select=top:1"], ["pointer_score=dot"]] {
             assert!(init_extended_config(&args(&dangling), &saved()).is_err());
@@ -4350,11 +4436,7 @@ mod tests {
             .expect("a cleared selection");
         assert_eq!(config.pointer, saved.pointer);
         // Its width and score are its weights' shape; it cannot be removed.
-        for conflict in [
-            ["pointer=16"],
-            ["pointer_score=lorentz"],
-            ["pointer=none"],
-        ] {
+        for conflict in [["pointer=16"], ["pointer_score=lorentz"], ["pointer=none"]] {
             assert!(
                 init_extended_config(&args(&conflict), &saved).is_err(),
                 "{conflict:?}"

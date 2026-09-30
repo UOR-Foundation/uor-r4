@@ -1566,7 +1566,7 @@ mod tests {
         check_raw_logit_evaluation(&flocked, "snap-evaluate")
             .expect("a flocked model's logits are its own");
         // The grid reference of an artifact reads raw float logits too.
-        let (bytes, _) = export_stack(&plain, json!({}), None).expect("export");
+        let (bytes, _) = export_stack(&plain, json!({}), None, None).expect("export");
         let artifact = StackArtifact::parse(bytes).expect("artifact");
         for score in [ReadScore::Dot, ReadScore::Lorentz] {
             let mut config = plain.config.clone();

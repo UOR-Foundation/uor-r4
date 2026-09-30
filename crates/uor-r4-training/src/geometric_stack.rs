@@ -4133,9 +4133,8 @@ impl CustomOp3 for FusedRead {
         let (time, value) = (self.time, self.value);
         let tables = self.rope.then(|| rope_tables(time, self.key));
         let mut out = vec![0f32; self.batch * self.heads * time * value];
-        out.par_chunks_mut(time * value)
-            .enumerate()
-            .try_for_each(|(index, out)| -> candle_core::Result<()> {
+        out.par_chunks_mut(time * value).enumerate().try_for_each(
+            |(index, out)| -> candle_core::Result<()> {
                 let block = self.block(query, kv, aux, tables.as_ref(), index);
                 let mut scratch = Scratch::new(time);
                 let mut probabilities = vec![0f32; TILE * time];
@@ -4154,7 +4153,8 @@ impl CustomOp3 for FusedRead {
                     );
                 }
                 Ok(())
-            })?;
+            },
+        )?;
         Ok((
             CpuStorage::F32(out),
             Shape::from((self.batch, self.heads, time, value)),
@@ -5035,12 +5035,8 @@ impl CustomOp3 for PointerMixture {
                 if self.weight(n) == 0.0 {
                     return Ok(0.0);
                 }
-                let row = self.evaluate(
-                    &logits[n * vocabulary..(n + 1) * vocabulary],
-                    side,
-                    beta,
-                    n,
-                )?;
+                let row =
+                    self.evaluate(&logits[n * vocabulary..(n + 1) * vocabulary], side, beta, n)?;
                 Ok(-self.weight(n) * row.log_mixture)
             })
             .collect::<candle_core::Result<_>>()?;
@@ -5107,20 +5103,29 @@ impl CustomOp3 for PointerMixture {
                     d_row[2 * dim] = (c
                         * (row.generate_share * row.gate - row.copy_share * (1.0 - row.gate)))
                         as f32;
-                    // d NLL / d p_copy = -g / mixture. It is not written as
-                    // copy_share / p_copy: there is no floor and no division by
-                    // a copy mass that may be 0.
-                    let d_copy = -c * row.gate * (-row.log_mixture).exp();
+                    // d loss / d score_j = -(g / mixture) a_j (m_j - p_copy).
+                    // g / mixture overflows once the mixture is below about
+                    // exp(-709.78), so the product is taken through the copy
+                    // share g p_copy / mixture (at most 1): -copy_share
+                    // (a_j / p_copy) (1 - p_copy) for a source holding the
+                    // target (a_j / p_copy is at most 1 there) and copy_share
+                    // a_j for the others. When no source holds the target,
+                    // p_copy is 0 whatever the scores are, so this row gives
+                    // them no gradient (and none is formed: zero times the
+                    // overflow would be NaN).
+                    let sources: &[f64] = if row.copy > 0.0 { &row.attention } else { &[] };
                     let query = pointer_query(&s, dim, n);
                     let mut d_query = vec![0f64; dim];
                     let mut d_beta_sum = 0.0;
-                    for (j, &a) in row.attention.iter().enumerate() {
+                    for (j, &a) in sources.iter().enumerate() {
                         if a == 0.0 {
                             continue;
                         }
-                        let matched = f64::from(u8::from(self.ids[first + j] == target));
-                        // d loss / d score_j = d_copy a_j (m_j - p_copy).
-                        let d_source = a * d_copy * (matched - row.copy);
+                        let d_source = if self.ids[first + j] == target {
+                            -c * row.copy_share * (a / row.copy) * (1.0 - row.copy)
+                        } else {
+                            c * row.copy_share * a
+                        };
                         let key = pointer_key(&s, dim, first + j);
                         if lorentz {
                             let terms = lorentz_terms(query, key);
@@ -8030,15 +8035,8 @@ mod tests {
                     let kept_by_mask: Vec<usize> = (0..=t)
                         .filter(|&j| legacy[j] != f32::NEG_INFINITY)
                         .collect();
-                    let selection = flock::flock_select(
-                        &scores[..=t],
-                        t,
-                        FlockSelect {
-                            sink: 0,
-                            window,
-                            k,
-                        },
-                    )?;
+                    let selection =
+                        flock::flock_select(&scores[..=t], t, FlockSelect { sink: 0, window, k })?;
                     let mut kept: Vec<usize> = selection.positions().collect();
                     kept.sort_unstable();
                     assert_eq!(kept, kept_by_mask, "window {window} k {k} row {t}");
@@ -8908,7 +8906,9 @@ mod tests {
                 }
             }
             let (model, hidden, rows) = found.ok_or_else(|| {
-                invalid(format!("{score:?} {select:?}: no draw with a clear selection"))
+                invalid(format!(
+                    "{score:?} {select:?}: no draw with a clear selection"
+                ))
             })?;
             // The loss and every scored row are the unfloored mixture.
             let loss = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
@@ -9001,9 +9001,7 @@ mod tests {
         let targets = vec![3u32; time];
         // Under the plain softmax the target is 60 nats below the rest: the
         // generated probability is about 3e-27, far below a 1e-8 floor.
-        let logit_rows: Vec<f32> = (0..time)
-            .flat_map(|_| [0.0f32, 0.0, 0.0, -60.0])
-            .collect();
+        let logit_rows: Vec<f32> = (0..time).flat_map(|_| [0.0f32, 0.0, 0.0, -60.0]).collect();
         let gate_logit = 0.5f32;
         let side_values: Vec<f32> = (0..time)
             .flat_map(|n| [0.3 + n as f32, -0.2, 0.5, 0.1 * n as f32, gate_logit])
@@ -9063,6 +9061,109 @@ mod tests {
                 row[..2 * dim].iter().all(|&v| v == 0.0),
                 "row {n}: the copy branch received gradient"
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn the_mixture_backward_stays_finite_past_the_f64_exponent_range() -> Result<()> {
+        // g / mixture overflows f64 once a row's NLL passes about 709.78 nats.
+        // Rows that no source serves, 747 nats down: the scores and the scale
+        // get exactly no gradient, the gate its `g` (the mean over 3 rows).
+        let (vocabulary, time, dim) = (4usize, 3usize, 2usize);
+        let stride = 2 * dim + 1;
+        let ids = vec![1u32, 2, 1];
+        let targets = vec![3u32; time];
+        let logit_rows: Vec<f32> = (0..time).flat_map(|_| [0.0f32, 0.0, 0.0, -745.0]).collect();
+        let gate_logit = 0.5f32;
+        let side_values: Vec<f32> = (0..time)
+            .flat_map(|n| [0.3 + n as f32, -0.2, 0.5, 0.1 * n as f32, gate_logit])
+            .collect();
+        let g = 1.0 / (1.0 + (-f64::from(gate_logit)).exp());
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let op = PointerMixture {
+                time,
+                dim,
+                score,
+                select: None,
+                ids: ids.clone(),
+                targets: targets.clone(),
+                weights: None,
+            };
+            let logits = Var::from_vec(logit_rows.clone(), (time, vocabulary), &cpu())?;
+            let side = Var::from_vec(side_values.clone(), (time, stride), &cpu())?;
+            let beta = Var::from_vec(vec![1.0f32], 1, &cpu())?;
+            let loss = logits
+                .as_tensor()
+                .apply_op3(side.as_tensor(), beta.as_tensor(), op)?;
+            let value = f64::from(loss.to_scalar::<f32>()?);
+            assert!(
+                value.is_finite() && value > 709.78,
+                "{score:?}: loss {value}"
+            );
+            let grads = loss.backward()?;
+            let d_side = grads
+                .get(side.as_tensor())
+                .ok_or_else(|| invalid("no side gradient"))?
+                .to_vec2::<f32>()?;
+            for (n, row) in d_side.iter().enumerate() {
+                assert!(
+                    (f64::from(row[2 * dim]) - g / 3.0).abs() < 1e-7,
+                    "{score:?} row {n}: gate gradient {}",
+                    row[2 * dim]
+                );
+                assert!(
+                    row[..2 * dim].iter().all(|&v| v == 0.0),
+                    "{score:?} row {n}: the query or key received {row:?}"
+                );
+            }
+            let d_beta = grads
+                .get(beta.as_tensor())
+                .ok_or_else(|| invalid("no scale gradient"))?
+                .to_vec1::<f32>()?;
+            assert_eq!(d_beta, vec![0.0], "{score:?}");
+            let d_logits = grads
+                .get(logits.as_tensor())
+                .ok_or_else(|| invalid("no logit gradient"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            assert!(d_logits.iter().all(|v| v.is_finite()), "{score:?}");
+        }
+        // A copy mass below f64's normal range at a moderate NLL: row 1's query
+        // scores source 0, which holds the target, 713 below source 1, so
+        // source 0's attention is about 2e-310.
+        let ids = vec![3u32, 1];
+        let targets = vec![3u32, 3];
+        let side_values = vec![1.0f32, -713.0, gate_logit, 1.0, 0.0, gate_logit];
+        let op = || PointerMixture {
+            time: 2,
+            dim: 1,
+            score: ReadScore::Dot,
+            select: None,
+            ids: ids.clone(),
+            targets: targets.clone(),
+            weights: None,
+        };
+        let row = op().evaluate(&[0.0; 4], &side_values, 1.0, 1)?;
+        assert!(
+            row.copy > 0.0 && row.copy < f64::MIN_POSITIVE,
+            "copy mass {}",
+            row.copy
+        );
+        let logits = Var::from_vec(vec![0.0f32; 2 * vocabulary], (2, vocabulary), &cpu())?;
+        let side = Var::from_vec(side_values, (2, 3), &cpu())?;
+        let beta = Var::from_vec(vec![1.0f32], 1, &cpu())?;
+        let loss = logits
+            .as_tensor()
+            .apply_op3(side.as_tensor(), beta.as_tensor(), op())?;
+        let grads = loss.backward()?;
+        for (name, var) in [("logits", &logits), ("side", &side), ("beta", &beta)] {
+            let values = grads
+                .get(var.as_tensor())
+                .ok_or_else(|| invalid(format!("no {name} gradient")))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            assert!(values.iter().all(|v| v.is_finite()), "{name}: {values:?}");
         }
         Ok(())
     }
@@ -9149,11 +9250,7 @@ mod tests {
             }
         })?)?;
         toy.variables()["pointer.gate.weight"].set(&Tensor::zeros((1, 16), DType::F32, &cpu())?)?;
-        toy.variables()["pointer.gate.bias"].set(&Tensor::from_vec(
-            vec![gate_bias],
-            1,
-            &cpu(),
-        )?)?;
+        toy.variables()["pointer.gate.bias"].set(&Tensor::from_vec(vec![gate_bias], 1, &cpu())?)?;
         Ok(toy)
     }
 
@@ -9480,10 +9577,7 @@ mod tests {
             assert!(parse_flock_select(bad).is_err(), "{bad}");
         }
         assert_eq!(parse_pointer_select("none")?, None);
-        assert_eq!(
-            parse_pointer_select("top:1")?,
-            Some(PointerSelect::TopK(1))
-        );
+        assert_eq!(parse_pointer_select("top:1")?, Some(PointerSelect::TopK(1)));
         assert_eq!(
             parse_pointer_select("flock:32:16")?,
             Some(PointerSelect::Flock(FlockSelect {
@@ -9647,8 +9741,9 @@ mod tests {
                 .set_served_representation(Some(Arc::new(D11Interim)))
                 .expect_err("qat with a pointer is refused");
             assert!(refusal.to_string().contains("pointer"), "{refusal}");
-            let refusal = crate::stack_export::export_stack(&model, serde_json::json!({}), None)
-                .expect_err("a pointer model is not exported");
+            let refusal =
+                crate::stack_export::export_stack(&model, serde_json::json!({}), None, None)
+                    .expect_err("a pointer model is not exported");
             assert!(refusal.to_string().contains("no D11 port"), "{refusal}");
         }
         // A flock is refused by the exports too, but trains in QAT.
@@ -9659,7 +9754,7 @@ mod tests {
             k: 2,
         });
         let mut model = StackModel::new(config, &cpu())?;
-        let refusal = crate::stack_export::export_stack(&model, serde_json::json!({}), None)
+        let refusal = crate::stack_export::export_stack(&model, serde_json::json!({}), None, None)
             .expect_err("a flock model is not exported");
         assert!(refusal.to_string().contains("flock"), "{refusal}");
         model.set_served_representation(Some(Arc::new(D11Interim)))?;
