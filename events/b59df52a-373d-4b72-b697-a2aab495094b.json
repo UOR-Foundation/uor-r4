@@ -1,0 +1,25 @@
+{
+  "event": {
+    "epoch": 4,
+    "event_id": "b59df52a-373d-4b72-b697-a2aab495094b",
+    "issue": 1520,
+    "op": "checkpoint",
+    "packet": {
+      "active_attempts": [],
+      "branch": "codex/lab-integration-goals-20260930",
+      "host_admission": "held normal40GiB",
+      "next_action": "Commit exact D17 and goals head, executed docs checks, two nonauthor reviews, recorded three-seat repair vote; protectedqueue only thenAdoptPolicy. Cleanup agents read-only.",
+      "old_head": "38962b26ab09acf79436af7239bcf2ac42605efe",
+      "owner_clarification": "Keep the transformer-free requirement; conversion must remove the transformer architecture.",
+      "policy_adoption": "HELD: unreviewed1522 merged; D17 council recovery prepared",
+      "pull_request": 1529,
+      "successor_card": {
+        "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/integration-backlog/work-card-successor-policy.md",
+        "sha256": "07ea1917ed584251a160c51bdc79618b62478e639e7464304c422962b6ab4464"
+      }
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790737993,
+  "previous_head": "4ab2ab6e18a2bdcfd4edfe1a66c183e01e5618ff"
+}

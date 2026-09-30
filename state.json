@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "7895501d4e08ed50d8f716a494427a03d9020ca2",
-  "sequence": 23,
-  "observed_server_time": 1790737991,
+  "sequence": 24,
+  "observed_server_time": 1790737993,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -45,18 +45,18 @@
       "expires": 1790739191,
       "phase": "claimed",
       "checkpoint": {
-        "charge_count": 1,
-        "claim_after_exit_seconds": 5,
-        "evidence": {
-          "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-b-successor-evidence.json",
-          "sha256": "2f9b06ea00ad188ee8b9ac332584e51bc9f6f164b168a58ed05b2ab733616a09"
-        },
-        "internal_reserve_bytes": 42949672960,
-        "next_action": "Root may reacquire issue1520 for protected source delivery; normal admissions remain held. Live successor-lease acquisition remains unqualified because epoch2 claim landed five seconds after B exit; decide if a longer inert drill is warranted. Preserve failed A and completed B; do not resubmit either attempt.",
-        "outcome": "completed",
-        "pilot_attempt": "continuity-pilot-20260930-b",
-        "policy_admission_enabled": false,
-        "source_sha": "a345e766816403cb3eec888fb4cf694665e82e5d"
+        "active_attempts": [],
+        "branch": "codex/lab-integration-goals-20260930",
+        "host_admission": "held normal40GiB",
+        "next_action": "Commit exact D17 and goals head, executed docs checks, two nonauthor reviews, recorded three-seat repair vote; protectedqueue only thenAdoptPolicy. Cleanup agents read-only.",
+        "old_head": "38962b26ab09acf79436af7239bcf2ac42605efe",
+        "owner_clarification": "Keep the transformer-free requirement; conversion must remove the transformer architecture.",
+        "policy_adoption": "HELD: unreviewed1522 merged; D17 council recovery prepared",
+        "pull_request": 1529,
+        "successor_card": {
+          "path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/integration-backlog/work-card-successor-policy.md",
+          "sha256": "07ea1917ed584251a160c51bdc79618b62478e639e7464304c422962b6ab4464"
+        }
       }
     }
   },
