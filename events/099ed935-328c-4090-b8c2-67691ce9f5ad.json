@@ -1,0 +1,34 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "099ed935-328c-4090-b8c2-67691ce9f5ad",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "block11_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/block11-replay-356a9a24-20260930",
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "charges": "Builds5.17+5.04s, replays7.59+14.22s, estimated420s preparation+90s review/delivery; cumulative848191426ms /1130000000ms. No own job active.",
+      "checkpoint_sha": "9e3b4eaefcaf23fc5b7a8263cd82d36def1074b1",
+      "checks": "Reference-tail reconstruction sources3c6007ec/0db94dbf both match all4608original residuals bitwise. Successor160stage/48local/88effect rows reviewed; all23old rawpayloads unchanged. Pos5 incoming-attention effect .00152588 CPU/.00109863 Metal; RMS .000366211 both. Global RMS effects .017578125/.021484375. No kernel defect or full parity pass.",
+      "cleanup": "Inactive recovery deps/build/fingerprint caches removed after locks and open-handle checks; df +606864KiB. Source, sibling executables, models, reports and warm active cache preserved.",
+      "down_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/down-replay-93085dd5-20260930",
+      "live_attempts": [],
+      "main_sha": "18e4bd893a76ba516a6537437fc7613b14d48741",
+      "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
+      "mlp_roots": [
+        "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-3c6007ec-20260930",
+        "/Volumes/UOR-Workspace/uor-r4-models/track-b/mlp-replay-0db94dbf-20260930"
+      ],
+      "next_action": "Implement bounded differentiable RMS scalar-order correction: explicit sum then division by width, reciprocal sqrt, input-times-reciprocal before gain. Preserve native backend reduction/epsilon/shapes/gate; remaining reduction differences acknowledged. Compare shared CPU+Metal all-position/all-logit fixed8token window against retained exact reference and unchanged parent. Broaden only if outcome justifies; no unchanged fullreference or unrestricted local diagnosis.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "status": "ACTIVE",
+      "trace_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/layer-trace-34371f15-20260930",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790788057,
+  "previous_head": "da6d37228264a20bd9b4be2cfa742c776921c0a4"
+}
