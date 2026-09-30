@@ -1,0 +1,29 @@
+{
+  "event": {
+    "epoch": 1,
+    "event_id": "d3d2b9aa-05f1-4014-8d88-4a0189e09930",
+    "issue": 1520,
+    "op": "checkpoint",
+    "packet": {
+      "branch": "codex/durable-lab-system-20260929",
+      "live_attempt": "continuity-pilot-20260930-b",
+      "next_action": "Successor adopts SAME attempt without launch. After durable DONE restore held normal host policy BEFORE finish_attempt; verify one execution and charge; checkpoint and release for root protected source delivery.",
+      "policy_restore_path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/deployed-host-policy-held.json",
+      "process_identity": {
+        "boot": "{ sec = 1790723628, usec = 114456 } Tue Sep 29 19:13:48 2026",
+        "pgid": 32418,
+        "pid": 32418,
+        "started": "Tue Sep 29 22:45:03 2026",
+        "supervisor_started": "Tue Sep 29 22:45:03 2026",
+        "token": "job-24197-1790736300216616000"
+      },
+      "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner",
+      "scope": "Explicit voluntary handoff; predecessor A remains resource_killed.",
+      "source_sha": "a345e766816403cb3eec888fb4cf694665e82e5d",
+      "spec_path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-b-spec.json"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790736304,
+  "previous_head": "4a178079bcc044e62ff069a797e4e05b6ad3230d"
+}

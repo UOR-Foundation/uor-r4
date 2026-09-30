@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-  "sequence": 8,
-  "observed_server_time": 1790736242,
+  "sequence": 9,
+  "observed_server_time": 1790736304,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -45,7 +45,24 @@
       ],
       "expires": 1790737437,
       "phase": "claimed",
-      "checkpoint": null
+      "checkpoint": {
+        "branch": "codex/durable-lab-system-20260929",
+        "live_attempt": "continuity-pilot-20260930-b",
+        "next_action": "Successor adopts SAME attempt without launch. After durable DONE restore held normal host policy BEFORE finish_attempt; verify one execution and charge; checkpoint and release for root protected source delivery.",
+        "policy_restore_path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/deployed-host-policy-held.json",
+        "process_identity": {
+          "boot": "{ sec = 1790723628, usec = 114456 } Tue Sep 29 19:13:48 2026",
+          "pgid": 32418,
+          "pid": 32418,
+          "started": "Tue Sep 29 22:45:03 2026",
+          "supervisor_started": "Tue Sep 29 22:45:03 2026",
+          "token": "job-24197-1790736300216616000"
+        },
+        "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner",
+        "scope": "Explicit voluntary handoff; predecessor A remains resource_killed.",
+        "source_sha": "a345e766816403cb3eec888fb4cf694665e82e5d",
+        "spec_path": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-b-spec.json"
+      }
     }
   },
   "attempts": {
