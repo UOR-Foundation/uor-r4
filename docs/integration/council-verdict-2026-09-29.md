@@ -1,13 +1,17 @@
-# Path to chat: the council verdict and the ordered work
+# The 29 September council: verdict, evidence and recommended experiments
 
-*Council held 29 September 2026; reconciled with the recovery hold and the peer-lab charter on 30 September. Drafted by the Claude lab.*
+*Council held 29 September 2026; reconciled on 30 September with the recovery hold (#1520) and the durable-lab charter (D14). Drafted by the Claude lab.*
+
+**How to read this.**
+- This record is **evidence and recommendations**. The operational order and the task claims belong to the [lab plan](../labs/plan-2026-09-29.md) and the lab boards under D14.
+- The working rules it proposes are [D16](DECISIONS.md#d16--working-rules-from-the-29-september-council-council-authority-under-d14), which take effect by council vote.
+- The owner decisions it prompted are [D15](DECISIONS.md#d15--converted-students-may-become-served-candidates-after-a-d11-audit-runtime-and-energy-claims-are-measured).
 
 - **Sources:**
   - five evidence briefs, four proposals and twelve red-team verdicts;
   - a judge and a completeness critic;
   - lab boards #1511–#1515, #1520, and the sealed roots.
 - **Wording:** "derived" means arithmetic, not measurement, and *self-reported* means not yet re-run by a non-author.
-- **Status:** owner decisions and proposed working rules are recorded in [D13](DECISIONS.md#d13--the-29-september-plan-of-record-the-owners-answers-on-converted-models-cost-and-energy-and-the-councils-proposed-working-rules).
 
 ## 1. Honest answers
 
@@ -18,7 +22,7 @@
   - In the 7M stack no geometric read has beaten a matched ordinary control.
   - Lorentz against Dot changes sign with configuration (−0.076 to +0.046 nats), and one arm's seed spread (0.040) exceeds the 0.02 tolerance, so the stack comparison is unresolved.
   - At smaller scope the native model's Lorentz read beat Dot at width 128 in 3 of 4 seeds (by 0.018 nats at context 128, 0.051–0.061 at 256), and a learned Lorentz cache beat equal dot and Euclidean caches.
-  - 2I codes used as addresses have lost so far (#1505: 2I 0.327 against softmax 0.491, at the scope in D13 item 6).
+  - 2I codes used as addresses have lost so far (#1505: 2I 0.327 against softmax 0.491, at the scope in D16).
 - **Runtime saving: not established; the one same-artifact figure points the other way.**
   - On the S2 model, D11 takes about 5.40 ms/token and D10 NEON about 1.11 (*self-reported*, not re-run).
   - At 7M parameters or fewer the engine is instruction-bound (derived), so byte savings do not become latency.
@@ -29,7 +33,7 @@
   - QAT on `geometric_s1` (+0.018, *self-reported*).
 - **Track B: no result yet.**
   - Candle parity is NOT_RUN (it stopped after 25 of 45 oracle rows).
-  - The B3 root's instrument is disputed (D13 item 6).
+  - The B3 root's instrument is disputed (D16).
 
 ## 2. Red-team tally
 
@@ -38,9 +42,9 @@ Four proposals were each attacked through three lenses: generalization, serving 
 ## 3. Direction
 
 1. **Track A is the main line toward §8:** retrieval first, then data. R1-X decides which of the two limits Relation.
-2. **Track B is a fixed-teacher measurement instrument and teacher source.** Each pillar is measured training-free as the share of the window-to-dense (W→D) gap it recovers, plus a bound retrieval probe. Under D13 item 2 a converted student becomes a served candidate only after an R1–R4 audit.
-3. **Cost is measured, not derived** (D13 item 3).
-4. **Parity decides in at most three seeds** (D13 item 4). A kill rests on the ordinary arm.
+2. **Track B is a fixed-teacher measurement instrument and teacher source.** Each pillar is measured training-free as the share of the window-to-dense (W→D) gap it recovers, plus a bound retrieval probe. Under D15 a converted student becomes a served candidate only after an R1–R4 audit.
+3. **Cost is measured, not derived** (D15).
+4. **Parity decides in at most three seeds** (D16). A kill rests on the ordinary arm.
 
 ## 4. Coordination
 
@@ -55,9 +59,9 @@ Four proposals were each attacked through three lenses: generalization, serving 
   - Builds use the single cargo slot that Codex reserves and releases.
   - Every build directory is one per lab, on the internal drive or the recovered volume.
 
-## 5. Ordered work
+## 5. Recommended experiments
 
-- **Claiming.** Owners are the labs that claimed each item on their boards. Items without an owner are claimable.
+- **Claiming.** These feed the lab plan's stages 1–4. Under D14 each item is claimed on a lab board; the named lab is the natural owner, not an assignment. Unowned items are claimable.
 - **Admission.** The runner admits in this order: B0, then A1, then B3.
 - **Walls** are compute bounds, not deadlines.
 
@@ -94,7 +98,7 @@ Four proposals were each attacked through three lenses: generalization, serving 
   - B2's 0.15 kill and its "−50%" smoke (item 11);
   - B0's Lorentz-only kill (item 3);
   - A1's middle band (item 6);
-  - the "unresolved" parity band (D13 item 4).
+  - the "unresolved" parity band (D16).
 - **Parked in the D12 toolbox:**
   - 2I and E8 codes as addresses;
   - B1 as a cost claim below 8k.
