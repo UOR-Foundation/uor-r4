@@ -19,18 +19,22 @@
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! m-world evaluate-cells [world=v2] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
-//!   [conversations=200] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
-//!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
+//!   [conversations=300] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
+//!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
+//!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world baselines world=v2 out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=2000] [seed=9101] [cells=true] \
 //!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
-//! m-world probe out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json [max_new_tokens=48]
+//! m-world probe out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json [max_new_tokens=48] \
+//!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world probe-static out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [context=256]
 //! ```
 //!
 //! `corpus` writes a prepared dialogue split (`uor-r4-chat-corpus/v1`: a UORT
 //! token store, its response mask and its manifest) under `OUT/train/`. With
-//! `chat=`, the whole chat-v0 training split comes first, unchanged, then
+//! `chat=`, the whole chat-v0 training split comes first, unchanged (v2: minus
+//! any document whose user turns share an 8-word n-gram with the sealed
+//! probe, counted in the manifest's `composition.chat_v0.probe_screen`), then
 //! `conversations` M-world training conversations as one more source. None of
 //! their user turns equals (ignoring case and punctuation) a user turn of the
 //! `exclude` panel. v1 requires `chat=` and `exclude=`; v2 makes both
@@ -59,15 +63,18 @@
 //! `rejudge` re-judges an evaluation's saved replies with this build's oracle;
 //! a v2 report needs `tokenizer=` (its MQAR distances depend on it).
 //!
-//! `select=` and `pointer_select=` (`evaluate` only) override the loaded
-//! model's selections without training: the reads' flock (sink at position 0,
-//! the last W positions and the K best of the rest) and the pointer head's own
-//! selection (`top:K` keeps the K best sources alone, so `top:1` is the
-//! single-source pointer; `none` keeps every source). The weights are
-//! unchanged, so a window x k sweep is one set of weights scored under several
-//! selections. `pointer_select=` needs a model with a pointer head (`none`
-//! excepted). The report's `selection_override` records what was given, what
-//! the saved model had and what applied; it is null without an override.
+//! `select=` and `pointer_select=` (`evaluate`, `evaluate-cells` and `probe`)
+//! override the loaded model's selections without training: the reads' flock
+//! (sink at position 0, the last W positions and the K best of the rest) and
+//! the pointer head's own selection (`top:K` keeps the K best sources alone, so
+//! `top:1` is the single-source pointer; `none` keeps every source). The
+//! weights are unchanged, so a window x k sweep is one set of weights scored
+//! under several selections. Both are parsed and validated with the other
+//! arguments, before the report root is claimed (a malformed one claims
+//! nothing); `pointer_select=` still needs a model with a pointer head (`none`
+//! excepted), which is known only once the model is loaded. The report's
+//! `selection_override` records what was given, what the saved model had and
+//! what applied; it is null without an override.
 //!
 //! The council's A1 amendments (issue 1511), all world=v2:
 //!
@@ -78,19 +85,22 @@
 //!   pointer mixture for a pointer model). The A1 gate is computed on
 //!   `dev_phrasing x dev_value` alone, exactly as `evaluate` computes it, and
 //!   `train_phrasing x dev_value` is reported as the pure-retrieval cell. It has
-//!   its own parser; `evaluate`'s is untouched.
+//!   its own parser; `evaluate`'s is untouched. It draws 300 conversations per
+//!   cell by default, as `evaluate` does.
 //! - `baselines` runs the untrained rules R-recency (the latest open value) and
 //!   R-nlet (the continuation of the latest earlier occurrence of the query's
 //!   last two words) on the same episodes and judges them with the v2 oracle.
 //!   `instrument_freeze_ok` is true only if both are below 0.6 on every gated
 //!   cell (MQAR per distance and open-relation recall on the development
-//!   cell); a leak names its query templates. No model is loaded.
+//!   cell); a leak names its query templates. No model is loaded. Only the
+//!   `reference` row (the world's own replies) carries an `a1_gate` verdict; a
+//!   rule row carries its scores and whether it is below the freeze limit.
 //! - `probe` answers the sealed 40-item English retrieval probe
 //!   (`data/a1-english-probe.json`, SHA-256 pinned in
 //!   `milestone_world_v2_probe`) greedily and teacher-forced; `probe-static`
 //!   reports its token counts, distances, fit and the two rules, without a model.
 //!   `corpus world=v2` redraws any conversation that shares an 8-word user-turn
-//!   n-gram with the probe.
+//!   n-gram with the probe, and drops any `chat=` document whose user turns do.
 //!
 //! A saved transport snap is restored; a saved served representation is
 //! refused. Every root is claimed before anything is loaded and sealed at the
@@ -107,7 +117,10 @@ use uor_r4_core::native_geometric::mmap_corpus::{CorpusWriter, MmapCorpusReader}
 use uor_r4_core::report_output;
 use uor_r4_tokenizer::dialogue::{DialogueEncoder, DialogueProtocol, Message};
 use uor_r4_tokenizer::ByteBpeTokenizer;
-use uor_r4_training::geometric_stack::{parse_flock_select, parse_pointer_select, StackModel};
+use uor_r4_training::flock::FlockSelect;
+use uor_r4_training::geometric_stack::{
+    parse_flock_select, parse_pointer_select, PointerSelect, StackModel,
+};
 use uor_r4_training::milestone_world::{judge, normalized, Category, MWorld, Split};
 use uor_r4_training::milestone_world_v2::{
     judge_v2, render, Conversation2, Kind, MWorld2, Mix, Pool, Scorecard, Turn2, CONTEXT,
@@ -122,20 +135,93 @@ use uor_r4_training::{sha256_file, Result, TrainingError};
 
 // The council's A1 amendments: cells, rule baselines, the sealed English probe.
 use uor_r4_training::milestone_world_v2::{
-    freeze_report, is_retrieval, run_rules, Cell, CellScores, Meter, RuleRun, REVISION,
+    freeze_report, is_retrieval, run_rules, Category2, Cell, CellScores, Meter, RuleRun, Tag,
+    FREEZE_LIMIT, REFERENCE, REVISION,
 };
 use uor_r4_training::milestone_world_v2_probe::{
     answer_layout, conversation_excluding_probe, history_messages, probe, probe_ngrams,
-    probe_sha256, static_report, teacher_forced, NllCard, ProbeGroup, Rejected, EXCLUSION_NGRAM,
+    probe_sha256, shares_ngram, static_report, teacher_forced, NllCard, ProbeGroup, Rejected,
+    EXCLUSION_NGRAM,
 };
 
 fn invalid(message: impl Into<String>) -> TrainingError {
     TrainingError::Invalid(message.into())
 }
 
-struct Args(BTreeMap<String, String>);
+/// `select=` and `pointer_select=` as given and as parsed: the post-hoc
+/// override of a loaded model's selections. Parsed and validated with the
+/// arguments (see [`Args::parse`]), before any report root is claimed or model
+/// is loaded, and applied to the model by [`Selection::apply`].
+#[derive(Clone, Debug, Default)]
+struct Selection {
+    /// The reads' flock: the text given and its parse (`none` parses to `None`).
+    select: Option<(String, Option<FlockSelect>)>,
+    /// The pointer head's own selection, likewise.
+    pointer_select: Option<(String, Option<PointerSelect>)>,
+}
+
+impl Selection {
+    fn parse(pairs: &BTreeMap<String, String>) -> Result<Self> {
+        let select = match pairs.get("select") {
+            Some(text) => Some((text.clone(), parse_flock_select(text)?)),
+            None => None,
+        };
+        let pointer_select = match pairs.get("pointer_select") {
+            Some(text) => Some((text.clone(), parse_pointer_select(text)?)),
+            None => None,
+        };
+        Ok(Self {
+            select,
+            pointer_select,
+        })
+    }
+
+    /// Apply the override to the loaded model, post hoc: the reads' flock and
+    /// the pointer head's own selection replace the saved ones (the weights do
+    /// not change). The record gives, for each one given, the text given, the
+    /// saved selection and the one that applies; it is `null` when neither was
+    /// given.
+    fn apply(&self, model: &mut StackModel) -> Result<Value> {
+        if self.select.is_none() && self.pointer_select.is_none() {
+            return Ok(Value::Null);
+        }
+        let mut record = serde_json::Map::new();
+        record.insert("weights_unchanged".into(), json!(true));
+        if let Some((text, parsed)) = &self.select {
+            let saved = model.config.select;
+            model.set_select(*parsed)?;
+            record.insert(
+                "select".into(),
+                json!({"given": text, "saved": saved, "effective": model.config.select}),
+            );
+        }
+        if let Some((text, parsed)) = &self.pointer_select {
+            let saved = model.config.pointer.and_then(|pointer| pointer.select);
+            model.set_pointer_select(*parsed)?;
+            record.insert(
+                "pointer_select".into(),
+                json!({
+                    "given": text, "saved": saved,
+                    "effective": model.config.pointer.and_then(|pointer| pointer.select),
+                }),
+            );
+        }
+        Ok(Value::Object(record))
+    }
+}
+
+struct Args {
+    pairs: BTreeMap<String, String>,
+    /// `select=` and `pointer_select=`, parsed with the arguments; empty when
+    /// neither was given (and always empty for a mode that does not allow them).
+    selection: Selection,
+}
 
 impl Args {
+    /// The `key=value` arguments, each key one of `allowed`, and the model
+    /// selection they give, parsed and validated here: this runs before a mode
+    /// claims its report root, so a malformed `select=` or `pointer_select=`
+    /// costs no root.
     fn parse(arguments: &[String], allowed: &[&str]) -> Result<Self> {
         let mut pairs = BTreeMap::new();
         for argument in arguments {
@@ -147,22 +233,23 @@ impl Args {
             }
             pairs.insert(key.to_owned(), value.to_owned());
         }
-        Ok(Self(pairs))
+        let selection = Selection::parse(&pairs)?;
+        Ok(Self { pairs, selection })
     }
 
     fn required(&self, key: &str) -> Result<String> {
-        self.0
+        self.pairs
             .get(key)
             .cloned()
             .ok_or_else(|| invalid(format!("missing {key}=")))
     }
 
     fn optional(&self, key: &str) -> Option<String> {
-        self.0.get(key).cloned()
+        self.pairs.get(key).cloned()
     }
 
     fn number<T: std::str::FromStr>(&self, key: &str, default: T) -> Result<T> {
-        match self.0.get(key) {
+        match self.pairs.get(key) {
             None => Ok(default),
             Some(value) => value
                 .parse()
@@ -185,7 +272,7 @@ fn world_of(args: &Args) -> Result<World> {
     match args.optional("world").as_deref() {
         None | Some("v1") => {
             for key in V2_ONLY {
-                if args.0.contains_key(key) {
+                if args.pairs.contains_key(key) {
                     return Err(invalid(format!("{key}= applies to world=v2 only")));
                 }
             }
@@ -476,6 +563,241 @@ fn messages_through(turns: &[Turn2], upto: usize) -> Vec<Message<'_>> {
     messages
 }
 
+/// The user turns of a decoded literal-role document ("User: ..." lines, with
+/// "Assistant: " and "System: " turns between them): a line that begins (after
+/// optional spaces) with a role marker opens a turn of that role, and any other
+/// line continues the turn before it.
+fn user_turns_of(text: &str) -> Vec<String> {
+    let mut turns: Vec<(bool, String)> = Vec::new();
+    for line in text.split('\n') {
+        let head = line.trim_start();
+        let opened = if let Some(rest) = head.strip_prefix("User:") {
+            Some((true, rest))
+        } else if let Some(rest) = head.strip_prefix("Assistant:") {
+            Some((false, rest))
+        } else {
+            head.strip_prefix("System:").map(|rest| (false, rest))
+        };
+        match opened {
+            Some((is_user, rest)) => turns.push((is_user, rest.to_owned())),
+            None => {
+                if let Some((_, content)) = turns.last_mut() {
+                    content.push('\n');
+                    content.push_str(line);
+                }
+            }
+        }
+    }
+    turns
+        .into_iter()
+        .filter_map(|(is_user, content)| is_user.then(|| content.trim().to_owned()))
+        .collect()
+}
+
+/// A chat user turn as a probe-exclusion candidate: [`shares_ngram`] reads the
+/// user text of a turn and nothing else.
+fn user_only(user: String) -> Turn2 {
+    Turn2 {
+        intent: "chat_user".to_owned(),
+        category: Category2::Responsive,
+        user,
+        reply: String::new(),
+        checks: Vec::new(),
+        tag: Tag::default(),
+    }
+}
+
+/// `object[key] -= by` for a count the chat manifest keeps per source; a key
+/// the manifest does not have is left out.
+fn reduce_count(object: &mut serde_json::Map<String, Value>, key: &str, by: usize) -> Result<()> {
+    if let Some(value) = object.get_mut(key) {
+        let current = value
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or_else(|| invalid(format!("chat source field {key} is not a count")))?;
+        let reduced = current.checked_sub(by).ok_or_else(|| {
+            invalid(format!(
+                "chat source field {key} is {current}, below the {by} the probe screen dropped"
+            ))
+        })?;
+        *value = json!(reduced);
+    }
+    Ok(())
+}
+
+/// The chat-v0 split after the probe screen: the documents none of whose user
+/// turns shares an 8-word n-gram with the probe, in store order, and what the
+/// screen dropped.
+struct ScreenedChat {
+    /// The retained documents' tokens and response mask.
+    tokens: Vec<u16>,
+    mask: Vec<u8>,
+    /// The chat manifest's `files`, each source's counts reduced by what was
+    /// dropped from it (unchanged for a source that lost nothing).
+    files: Vec<Value>,
+    /// The record for the corpus manifest (`composition.chat_v0.probe_screen`).
+    record: Value,
+    documents: usize,
+    excluded_documents: usize,
+    excluded_tokens: usize,
+}
+
+/// Screen the chat-v0 split against the sealed probe by the rule the world's
+/// conversations are redrawn by ([`shares_ngram`]: any user turn sharing an
+/// [`EXCLUSION_NGRAM`]-word n-gram with the probe's user turns); see
+/// [`screen_documents`].
+fn screen_chat(
+    chat: &Chat,
+    tokenizer: &ByteBpeTokenizer,
+    protocol: &DialogueProtocol,
+    grams: &BTreeSet<Vec<String>>,
+) -> Result<ScreenedChat> {
+    let files = chat.manifest["files"]
+        .as_array()
+        .cloned()
+        .ok_or_else(|| invalid("the chat manifest has no files"))?;
+    screen_documents(
+        chat.reader.as_slice(),
+        &chat.mask,
+        files,
+        (protocol.bos_id, protocol.eos_id, protocol.unk_id),
+        &|ids: &[u32]| tokenizer.decode(ids),
+        grams,
+    )
+}
+
+/// The screen itself, over a token store `tokens` with its response `mask` and
+/// the manifest's `files` (each source's count of tokens, in store order); the
+/// specials are the protocol's (BOS, EOS, UNK) ids and `decode` turns token ids
+/// into text. A document is the tokens from one BOS to the next; it is decoded
+/// without its specials, its user turns read off, and it is dropped whole when
+/// the rule fires. The counts of a source that lost a document (`tokens`,
+/// `response_tokens`, `rows_used`) are reduced by exactly what it lost; with no
+/// hit the tokens, mask and sources come back exactly as they went in.
+fn screen_documents(
+    tokens: &[u16],
+    mask: &[u8],
+    mut files: Vec<Value>,
+    specials: (u32, u32, u32),
+    decode: &dyn Fn(&[u32]) -> String,
+    grams: &BTreeSet<Vec<String>>,
+) -> Result<ScreenedChat> {
+    let (bos, eos, unk) = specials;
+    // Each source's span of the token store, in store order.
+    let mut spans: Vec<(usize, usize)> = Vec::with_capacity(files.len());
+    let mut start = 0usize;
+    for file in &files {
+        let length = file["tokens"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or_else(|| invalid("a chat source has no token count"))?;
+        let end = start
+            .checked_add(length)
+            .ok_or_else(|| invalid("the chat source lengths overflow"))?;
+        spans.push((start, end));
+        start = end;
+    }
+    if start != tokens.len() || mask.len() != tokens.len() {
+        return Err(invalid(
+            "the chat sources do not cover the chat token store",
+        ));
+    }
+    // Every BOS starts a document.
+    let mut starts: Vec<usize> = Vec::new();
+    for (at, &id) in tokens.iter().enumerate() {
+        if u32::from(id) == bos {
+            starts.push(at);
+        }
+    }
+    if !tokens.is_empty() && starts.first() != Some(&0) {
+        return Err(invalid("the chat split does not begin with a document"));
+    }
+    let mut kept_tokens: Vec<u16> = Vec::with_capacity(tokens.len());
+    let mut kept_mask: Vec<u8> = Vec::with_capacity(tokens.len());
+    // Per source: (documents, documents dropped, tokens dropped, response
+    // tokens dropped).
+    let mut per_source = vec![(0usize, 0usize, 0usize, 0usize); files.len()];
+    for (index, &from) in starts.iter().enumerate() {
+        let to = starts.get(index + 1).copied().unwrap_or(tokens.len());
+        let source = spans
+            .iter()
+            .position(|&(begin, end)| begin <= from && from < end)
+            .ok_or_else(|| invalid("a chat document lies outside every source"))?;
+        if to > spans[source].1 {
+            return Err(invalid("a chat document straddles two sources"));
+        }
+        let ids: Vec<u32> = tokens[from..to]
+            .iter()
+            .map(|&id| u32::from(id))
+            .filter(|&id| id != bos && id != eos && id != unk)
+            .collect();
+        let users: Vec<Turn2> = user_turns_of(&decode(ids.as_slice()))
+            .into_iter()
+            .map(user_only)
+            .collect();
+        let row = &mut per_source[source];
+        row.0 += 1;
+        if shares_ngram(&users, grams) {
+            row.1 += 1;
+            row.2 += to - from;
+            row.3 += mask[from..to].iter().filter(|&&m| m == 1).count();
+        } else {
+            kept_tokens.extend_from_slice(&tokens[from..to]);
+            kept_mask.extend_from_slice(&mask[from..to]);
+        }
+    }
+    let mut by_source: Vec<Value> = Vec::with_capacity(files.len());
+    let (mut documents, mut excluded_documents) = (0usize, 0usize);
+    let (mut excluded_tokens, mut excluded_response_tokens) = (0usize, 0usize);
+    for (file, &(seen, dropped, dropped_tokens, dropped_response)) in
+        files.iter_mut().zip(&per_source)
+    {
+        documents += seen;
+        excluded_documents += dropped;
+        excluded_tokens += dropped_tokens;
+        excluded_response_tokens += dropped_response;
+        by_source.push(json!({
+            "label": file["label"],
+            "documents": seen,
+            "excluded_documents": dropped,
+            "excluded_tokens": dropped_tokens,
+            "excluded_response_tokens": dropped_response,
+        }));
+        if dropped == 0 {
+            continue;
+        }
+        let object = file
+            .as_object_mut()
+            .ok_or_else(|| invalid("a chat source is not an object"))?;
+        reduce_count(object, "tokens", dropped_tokens)?;
+        reduce_count(object, "response_tokens", dropped_response)?;
+        reduce_count(object, "rows_used", dropped)?;
+        object.insert("probe_excluded_documents".into(), json!(dropped));
+    }
+    let record = json!({
+        "rule": "a chat document is dropped when any of its user turns shares an 8-word n-gram with the sealed probe's user turns",
+        "ngram_words": EXCLUSION_NGRAM,
+        "probe_sha256": probe_sha256(),
+        "probe_ngrams": grams.len(),
+        "documents": documents,
+        "excluded_documents": excluded_documents,
+        "excluded_tokens": excluded_tokens,
+        "excluded_response_tokens": excluded_response_tokens,
+        "tokens_source": tokens.len(),
+        "tokens_kept": kept_tokens.len(),
+        "by_source": by_source,
+    });
+    Ok(ScreenedChat {
+        tokens: kept_tokens,
+        mask: kept_mask,
+        files,
+        record,
+        documents,
+        excluded_documents,
+        excluded_tokens,
+    })
+}
+
 /// v2 corpus: M-world v2 training conversations, one document each, measured
 /// in this tokenizer's real tokens, optionally after the chat-v0 split.
 fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
@@ -511,6 +833,12 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     // an 8-word user-turn n-gram with it is drawn again.
     let probe_items = probe()?;
     let probe_grams = probe_ngrams(&probe_items);
+    // The chat-v0 split is screened by the same rule: the probe is never
+    // trained on, whichever source a document comes from.
+    let screened = match &chat {
+        Some(chat) => Some(screen_chat(chat, &tokenizer, &protocol, &probe_grams)?),
+        None => None,
+    };
     let mut rejections = Rejected::default();
     let (mut world_tokens, mut world_mask) = (Vec::new(), Vec::new());
     let mut responses = 0usize;
@@ -636,9 +964,9 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     let tokens_path = train.join("tokens.u16");
     let mut writer = CorpusWriter::create(&tokens_path, vocab)
         .map_err(|e| invalid(format!("token store: {e}")))?;
-    if let Some(chat) = &chat {
+    if let Some(screened) = &screened {
         writer
-            .write_tokens(chat.reader.as_slice())
+            .write_tokens(&screened.tokens)
             .map_err(|e| invalid(format!("token store: {e}")))?;
     }
     writer
@@ -647,7 +975,7 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     let total = writer
         .finish()
         .map_err(|e| invalid(format!("token store: {e}")))?;
-    let mut mask = chat.as_ref().map_or_else(Vec::new, |c| c.mask.clone());
+    let mut mask = screened.as_ref().map_or_else(Vec::new, |s| s.mask.clone());
     mask.extend(&world_mask);
     let mask_path = train.join("response_mask.u8");
     fs::write(&mask_path, &mask)?;
@@ -663,13 +991,9 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     });
     let world_input = json!({"label": "m-world-v2.train", "path": "generated"});
     let (mut files, mut inputs) = (Vec::new(), Vec::new());
-    if let Some(chat) = &chat {
-        files.extend(
-            chat.manifest["files"]
-                .as_array()
-                .cloned()
-                .ok_or_else(|| invalid("the chat manifest has no files"))?,
-        );
+    if let (Some(chat), Some(screened)) = (&chat, &screened) {
+        // The chat sources, their counts reduced by what the probe screen dropped.
+        files.extend(screened.files.iter().cloned());
         inputs.extend(
             chat.manifest["inputs"]
                 .as_array()
@@ -720,11 +1044,13 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
             .collect::<BTreeMap<_, _>>())
     };
     let composition = json!({
-        "chat_v0": chat.as_ref().map(|chat| json!({
+        "chat_v0": chat.as_ref().zip(screened.as_ref()).map(|(chat, screened)| json!({
             "manifest": chat.manifest_path.display().to_string(),
             "manifest_sha256": sha256_file(&chat.manifest_path).ok(),
             "tokens_sha256": chat.manifest["tokens_sha256"],
-            "tokens": chat.reader.as_slice().len(),
+            "tokens_source": chat.reader.as_slice().len(),
+            "tokens": screened.tokens.len(),
+            "probe_screen": screened.record,
         })),
         "m_world": {
             "version": "m-world-v2",
@@ -818,6 +1144,12 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
          {rejected} draws rejected), longest episode {longest} tokens",
         world_tokens.len()
     );
+    if let Some(screened) = &screened {
+        println!(
+            "chat-v0 probe screen: {} of {} documents dropped ({} tokens)",
+            screened.excluded_documents, screened.documents, screened.excluded_tokens
+        );
+    }
     println!("episodes per kind (episodes, tokens, response tokens): {per_kind:?}");
     println!("turns per category (turns, tokens, response tokens): {per_category:?}");
     println!(
@@ -835,11 +1167,13 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
 }
 
 /// The model of `directory`, its file identity, and the record of the
-/// selection overrides `args` give it ([`apply_selection_override`]).
+/// selection override `selection` gives it ([`Selection::apply`]). The
+/// selection was parsed with the arguments, before the report root was
+/// claimed; only its application to this model happens here.
 fn load_model(
     directory: &Path,
     device: &Device,
-    args: &Args,
+    selection: &Selection,
 ) -> Result<(StackModel, Value, Value)> {
     if StackModel::saved_served_representation(directory)?.is_some() {
         return Err(invalid(
@@ -857,47 +1191,12 @@ fn load_model(
         }
     }
     // The identity is of the saved files; the override changes no weight.
-    let selection_override = apply_selection_override(&mut model, args)?;
+    let selection_override = selection.apply(&mut model)?;
     Ok((
         model,
         json!({"files_sha256": files, "transport_snap": format!("{snap:?}")}),
         selection_override,
     ))
-}
-
-/// `select=` and `pointer_select=` applied to the loaded model, post hoc: the
-/// reads' flock and the pointer head's own selection replace the saved ones
-/// (the weights do not change). The record gives, for each one given, the text
-/// given, the saved selection and the one that applies; it is `null` when
-/// neither was given.
-fn apply_selection_override(model: &mut StackModel, args: &Args) -> Result<Value> {
-    let select = args.optional("select");
-    let pointer_select = args.optional("pointer_select");
-    if select.is_none() && pointer_select.is_none() {
-        return Ok(Value::Null);
-    }
-    let mut record = serde_json::Map::new();
-    record.insert("weights_unchanged".into(), json!(true));
-    if let Some(text) = select {
-        let saved = model.config.select;
-        model.set_select(parse_flock_select(&text)?)?;
-        record.insert(
-            "select".into(),
-            json!({"given": text, "saved": saved, "effective": model.config.select}),
-        );
-    }
-    if let Some(text) = pointer_select {
-        let saved = model.config.pointer.and_then(|pointer| pointer.select);
-        model.set_pointer_select(parse_pointer_select(&text)?)?;
-        record.insert(
-            "pointer_select".into(),
-            json!({
-                "given": text, "saved": saved,
-                "effective": model.config.pointer.and_then(|pointer| pointer.select),
-            }),
-        );
-    }
-    Ok(Value::Object(record))
 }
 
 fn split_of(args: &Args) -> Result<Split> {
@@ -966,7 +1265,7 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
         .bind(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let device = Device::Cpu;
-    let (model, identity, selection_override) = load_model(&model_dir, &device, args)?;
+    let (model, identity, selection_override) = load_model(&model_dir, &device, &args.selection)?;
     let context = model.config.context;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let mut reply =
@@ -1123,7 +1422,7 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
         .bind(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let device = Device::Cpu;
-    let (model, identity, selection_override) = load_model(&model_dir, &device, args)?;
+    let (model, identity, selection_override) = load_model(&model_dir, &device, &args.selection)?;
     let context = model.config.context;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let mut reply =
@@ -1466,10 +1765,15 @@ fn rejudge_v2(args: &Args, out: &Path, report_path: &Path, old: &Value) -> Resul
 // parser and claims its report root like the modes above.
 
 /// The stack under `model=`, as these modes load it (one place to follow
-/// `load_model`), with `select=` and `pointer_select=` applied post hoc and
+/// `load_model`), with the `select=` and `pointer_select=` the arguments gave
+/// (`selection`, parsed before the root was claimed) applied post hoc and
 /// recorded exactly as `evaluate` records them.
-fn open_model(directory: &Path, device: &Device, args: &Args) -> Result<(StackModel, Value, Value)> {
-    load_model(directory, device, args)
+fn open_model(
+    directory: &Path,
+    device: &Device,
+    selection: &Selection,
+) -> Result<(StackModel, Value, Value)> {
+    load_model(directory, device, selection)
 }
 
 /// These modes are world=v2 only; `world=v2` may be spelled out.
@@ -1530,7 +1834,7 @@ fn evaluate_cells(args: &Args, out: &Path) -> Result<()> {
     require_v2(args)?;
     let model_dir = PathBuf::from(args.required("model")?);
     let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
-    let conversations: usize = args.number("conversations", 200)?;
+    let conversations: usize = args.number("conversations", 300)?;
     let seed: u64 = args.number("seed", 9_101)?;
     let max_new_tokens: usize = args.number("max_new_tokens", 32)?;
     let forced: bool = args.number("teacher_forced", true)?;
@@ -1542,7 +1846,7 @@ fn evaluate_cells(args: &Args, out: &Path) -> Result<()> {
         .bind(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let device = Device::Cpu;
-    let (model, identity, selection_override) = open_model(&model_dir, &device, args)?;
+    let (model, identity, selection_override) = open_model(&model_dir, &device, &args.selection)?;
     let context = model.config.context;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let count = |text: &str| tokenizer.encode(text).len();
@@ -1682,6 +1986,31 @@ fn evaluate_cells(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// One row of the baselines report for one cell. The [`REFERENCE`] row (the
+/// world's own replies through the oracle) stands in for a model, so it keeps
+/// its scorecard's `a1_gate`. An untrained rule is not a model and takes no
+/// gate: its row is its scores, the freeze limit and whether it is below that
+/// limit on every gated key of this cell (the freeze itself is decided on the
+/// development cell alone, in `freeze` and `instrument_freeze_ok`).
+fn baseline_row(name: &str, run: &RuleRun) -> Value {
+    let mut row = run.card.to_json();
+    if name != REFERENCE {
+        if let Some(object) = row.as_object_mut() {
+            object.remove("a1_gate");
+            object.remove("a1_gate_rule");
+            object.insert(
+                "freeze_limit".into(),
+                json!(FREEZE_LIMIT.0 as f64 / FREEZE_LIMIT.1 as f64),
+            );
+            object.insert(
+                "below_freeze_limit".into(),
+                json!(run.card.below_freeze_limit()),
+            );
+        }
+    }
+    row
+}
+
 /// `baselines`: the two untrained rules (R-recency, R-nlet) and the reference
 /// replies over the same episodes, judged by the v2 oracle, per cell, category
 /// and distance. The instrument freezes only if both rules are below 0.6 on
@@ -1717,7 +2046,7 @@ fn baselines(args: &Args, out: &Path) -> Result<()> {
         .map(|(cell, runs)| {
             let rows: BTreeMap<&str, Value> = runs
                 .iter()
-                .map(|(name, run)| (*name, run.card.to_json()))
+                .map(|(name, run)| (*name, baseline_row(name, run)))
                 .collect();
             (cell.key(), json!(rows))
         })
@@ -1766,6 +2095,7 @@ fn baselines(args: &Args, out: &Path) -> Result<()> {
             "R-nlet": "the words after the latest earlier occurrence of the query's last two words, up to the clause end; otherwise \"I don't know.\"",
             "reference": "the world's own reference replies through the oracle: 1.0 unless the harness is broken",
         },
+        "row_fields": "the reference row is a model row and carries its a1_gate; a rule row is not a model and carries its scores, freeze_limit and below_freeze_limit (every gated key of that cell below the limit; the freeze itself is decided on the development cell, in freeze and instrument_freeze_ok) and no a1_gate",
         "instrument_freeze_ok": freeze.as_ref().map(|f| f["instrument_freeze_ok"].clone()),
         "freeze_scope": "decided on dev_phrasing x dev_value (the development split); null when that cell was not run",
         "freeze": freeze,
@@ -1794,7 +2124,7 @@ fn probe_evaluate(args: &Args, out: &Path) -> Result<()> {
         .bind(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let device = Device::Cpu;
-    let (model, identity, selection_override) = open_model(&model_dir, &device, args)?;
+    let (model, identity, selection_override) = open_model(&model_dir, &device, &args.selection)?;
     let context = model.config.context;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let count = |text: &str| tokenizer.encode(text).len();
@@ -2078,4 +2408,210 @@ fn main() -> Result<()> {
     report_output::seal(&out)?;
     report_output::verify(&out)?;
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MODEL_KEYS: &[&str] = &["out", "model", "tokenizer", "select", "pointer_select"];
+
+    fn parse(arguments: &[&str], allowed: &[&str]) -> Result<Args> {
+        let owned: Vec<String> = arguments.iter().map(|a| (*a).to_owned()).collect();
+        Args::parse(&owned, allowed)
+    }
+
+    /// `select=` and `pointer_select=` are read with the other arguments, which
+    /// every mode parses before it claims its report root: a malformed one
+    /// fails here and costs no root.
+    #[test]
+    fn a_selection_is_parsed_and_validated_with_the_arguments() {
+        let args = parse(
+            &["out=r", "select=flock:16:4", "pointer_select=top:3"],
+            MODEL_KEYS,
+        )
+        .expect("well-formed selections");
+        let (text, parsed) = args.selection.select.as_ref().expect("a select");
+        assert_eq!(text, "flock:16:4");
+        assert_eq!(parsed.map(|s| (s.sink, s.window, s.k)), Some((0, 16, 4)));
+        let (text, parsed) = args
+            .selection
+            .pointer_select
+            .as_ref()
+            .expect("a pointer select");
+        assert_eq!(text, "top:3");
+        assert_eq!(*parsed, Some(PointerSelect::TopK(3)));
+        // `none` is a selection (it clears the saved one); no argument is none.
+        let none = parse(&["out=r", "select=none"], MODEL_KEYS).expect("none parses");
+        let (text, parsed) = none.selection.select.as_ref().expect("a select");
+        assert_eq!((text.as_str(), parsed.is_none()), ("none", true));
+        let absent = parse(&["out=r"], MODEL_KEYS).expect("no selection");
+        assert!(absent.selection.select.is_none() && absent.selection.pointer_select.is_none());
+        // A malformed one is refused with the arguments.
+        for bad in [
+            "select=flock:0:4",
+            "select=flock:16:0",
+            "select=flock:16",
+            "select=top:3",
+            "pointer_select=top:0",
+            "pointer_select=flock:x:2",
+            "pointer_select=sideways",
+        ] {
+            assert!(parse(&["out=r", bad], MODEL_KEYS).is_err(), "{bad}");
+        }
+        // A mode that does not take them refuses them as unknown arguments.
+        assert!(parse(&["out=r", "select=none"], &["out", "tokenizer"]).is_err());
+    }
+
+    #[test]
+    fn only_the_reference_row_of_the_baselines_report_carries_a_gate() {
+        let run = RuleRun::default();
+        let rule = baseline_row("R-recency", &run);
+        assert!(rule.get("a1_gate").is_none() && rule.get("a1_gate_rule").is_none());
+        assert_eq!(rule["freeze_limit"], json!(0.6));
+        // An empty card has no item below the limit.
+        assert_eq!(rule["below_freeze_limit"], json!(false));
+        assert!(rule.get("by_category").is_some() && rule.get("mqar").is_some());
+        let reference = baseline_row(REFERENCE, &run);
+        assert_eq!(reference["a1_gate"], json!(false));
+        assert!(reference.get("a1_gate_rule").is_some());
+        assert!(reference.get("below_freeze_limit").is_none());
+    }
+
+    #[test]
+    fn user_turns_are_read_off_a_decoded_document() {
+        let text = "User: Hello there.\nAssistant: Hi!\nUser: Two\nlines here.\n\
+                    System: be brief\nAssistant: ok";
+        assert_eq!(
+            user_turns_of(text),
+            vec!["Hello there.".to_owned(), "Two\nlines here.".to_owned()]
+        );
+        assert!(user_turns_of("Assistant: only me").is_empty());
+        assert!(user_turns_of("").is_empty());
+        assert_eq!(user_turns_of("  User: indented"), vec!["indented".to_owned()]);
+    }
+
+    #[test]
+    fn a_source_count_is_reduced_by_exactly_what_was_dropped() {
+        let mut object = serde_json::Map::new();
+        object.insert("tokens".into(), json!(10));
+        reduce_count(&mut object, "tokens", 4).expect("reduces");
+        assert_eq!(object["tokens"], json!(6));
+        reduce_count(&mut object, "rows_used", 1).expect("a missing key is left out");
+        assert!(!object.contains_key("rows_used"));
+        assert!(reduce_count(&mut object, "tokens", 7).is_err());
+        assert_eq!(object["tokens"], json!(6));
+    }
+
+    /// A document as the literal-role protocol lays it out, with characters as
+    /// tokens (BOS 1, EOS 2): "User: {user}\nAssistant: {assistant}", the
+    /// response mask over the assistant text and its EOS.
+    fn document(user: &str, assistant: &str) -> (Vec<u16>, Vec<u8>) {
+        let mut tokens = vec![1u16];
+        let mut mask = vec![0u8];
+        for c in format!("User: {user}\nAssistant: ").chars() {
+            tokens.push(c as u16);
+            mask.push(0);
+        }
+        for c in assistant.chars() {
+            tokens.push(c as u16);
+            mask.push(1);
+        }
+        tokens.push(2);
+        mask.push(1);
+        (tokens, mask)
+    }
+
+    #[test]
+    fn the_probe_screen_drops_whole_documents_and_keeps_every_count_exact() {
+        let decode =
+            |ids: &[u32]| -> String { ids.iter().filter_map(|&id| char::from_u32(id)).collect() };
+        // One eight-word window of the probe's user turns.
+        let window: Vec<String> = "the quick brown fox jumps over the lazy"
+            .split(' ')
+            .map(str::to_owned)
+            .collect();
+        let grams: BTreeSet<Vec<String>> = [window].into_iter().collect();
+        let phrase = "the quick brown fox jumps over the lazy dog";
+        let docs = [
+            document("Hello there", "Hi"),
+            // Its user turn holds the window: dropped whole.
+            document(&format!("Tell me: {phrase}"), "No"),
+            // Only its assistant turn does: the rule reads user turns alone.
+            document("Say hello", phrase),
+            document("Bye", "See you"),
+        ];
+        let mut tokens: Vec<u16> = Vec::new();
+        let mut mask: Vec<u8> = Vec::new();
+        let mut sizes: Vec<(usize, usize)> = Vec::new();
+        for (t, m) in &docs {
+            sizes.push((t.len(), m.iter().filter(|&&x| x == 1).count()));
+            tokens.extend(t);
+            mask.extend(m);
+        }
+        // Two sources: the first two documents, then the last two.
+        let source = |label: &str, range: std::ops::Range<usize>| -> Value {
+            let part = &sizes[range];
+            json!({
+                "label": label,
+                "tokens": part.iter().map(|s| s.0).sum::<usize>(),
+                "response_tokens": part.iter().map(|s| s.1).sum::<usize>(),
+                "rows_used": part.len(),
+                "special_token_occurrences": 0,
+            })
+        };
+        let files = vec![source("a", 0..2), source("b", 2..4)];
+        let screened = screen_documents(&tokens, &mask, files.clone(), (1, 2, 0), &decode, &grams)
+            .expect("a screen");
+        assert_eq!((screened.documents, screened.excluded_documents), (4, 1));
+        assert_eq!(screened.excluded_tokens, sizes[1].0);
+        // The kept store is documents 0, 2 and 3, in order.
+        let mut kept_tokens: Vec<u16> = Vec::new();
+        let mut kept_mask: Vec<u8> = Vec::new();
+        for index in [0usize, 2, 3] {
+            kept_tokens.extend(&docs[index].0);
+            kept_mask.extend(&docs[index].1);
+        }
+        assert_eq!(screened.tokens, kept_tokens);
+        assert_eq!(screened.mask, kept_mask);
+        // The first source lost exactly that document; the second is untouched.
+        let first = &screened.files[0];
+        assert_eq!(first["tokens"], json!(sizes[0].0));
+        assert_eq!(first["response_tokens"], json!(sizes[0].1));
+        assert_eq!(first["rows_used"], json!(1));
+        assert_eq!(first["probe_excluded_documents"], json!(1));
+        assert_eq!(screened.files[1], files[1]);
+        // The sources still cover the kept store exactly, as the split loader requires.
+        let covered: u64 = screened
+            .files
+            .iter()
+            .map(|f| f["tokens"].as_u64().unwrap_or(0))
+            .sum();
+        assert_eq!(covered as usize, screened.tokens.len());
+        assert_eq!(screened.record["excluded_documents"], json!(1));
+        assert_eq!(screened.record["by_source"][0]["excluded_documents"], json!(1));
+        assert_eq!(screened.record["by_source"][1]["excluded_documents"], json!(0));
+        // With nothing to match, the store and the sources come back unchanged.
+        let clean = screen_documents(
+            &tokens,
+            &mask,
+            files.clone(),
+            (1, 2, 0),
+            &decode,
+            &BTreeSet::new(),
+        )
+        .expect("a screen");
+        assert_eq!(clean.excluded_documents, 0);
+        assert_eq!(clean.tokens, tokens);
+        assert_eq!(clean.mask, mask);
+        assert_eq!(clean.files, files);
+        // Sources that do not cover the store, and a store that does not begin
+        // with a document, are refused.
+        let mut short = files.clone();
+        short[1]["tokens"] = json!(1);
+        assert!(screen_documents(&tokens, &mask, short, (1, 2, 0), &decode, &grams).is_err());
+        let mut headless = tokens.clone();
+        headless[0] = u16::from(b'x');
+        assert!(screen_documents(&headless, &mask, files, (1, 2, 0), &decode, &grams).is_err());
+    }
 }

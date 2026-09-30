@@ -51,11 +51,28 @@
 //!   generator against the two rules found two leaks: a relation episode
 //!   stated one relation only, so the queried value was always the latest open
 //!   value (R-recency), and four MQAR query phrasings ended in "{k} is", the
-//!   two words that precede the value in the assertion (R-nlet). A relation
-//!   episode now states a second open relation after the queried one with
-//!   probability [`DISTRACTOR`], and no MQAR query phrasing ends in "{k} is".
+//!   two words that precede the value in the assertion (R-nlet). No MQAR query
+//!   phrasing ends in "{k} is" any more, and a relation episode states a second
+//!   relation (see the next item).
 //!   The rules were not run when this was written (the machine was on hold);
 //!   `m-world baselines` measures them on the revised world.
+//! - **Balanced relation queries (#1541, before any run).** In the first form
+//!   of revision 2.1 a relation episode stated a second relation after the
+//!   queried one (with probability [`DISTRACTOR`]) and never asked it, so the
+//!   answer was "the value stated before the last statement", found without
+//!   reading the query. Every relation episode now states a companion relation
+//!   of the queried relation's pool (open with open, closed with closed), and
+//!   the query asks either of the two on a fair coin drawn from the episode's
+//!   seeded stream, whatever order they were stated in. [`DISTRACTOR`] is now
+//!   only the order: the share of episodes with an update that state the
+//!   companion after it (otherwise the update comes last). A query-blind rule
+//!   over the stated values (the latest, the first, the k-th) is right on
+//!   about half of the items. The companion is always stated because a share
+//!   `s` of one-relation episodes, which every such rule answers, lets the best
+//!   of them score `s + (1 - s) / 2` however fair the coin: 0.625 at the former
+//!   `s = 1/4`, over the 0.6 [`FREEZE_LIMIT`]. The stream this generator draws
+//!   is pinned by a digest in the tests; [`MWorld2::digest`] hashes tables and
+//!   constants only and did not move.
 //! - **Recorded facts.** A [`Tag`] carries the phrasing template, the gold
 //!   value and the open values a turn states, for the rules, the per-template
 //!   leak report and the teacher-forced answer-span scores.
@@ -91,12 +108,17 @@ pub fn tolerance(distance: usize) -> usize {
 pub const CLOSED_SHARE: f64 = 0.2;
 
 /// The instrument's revision, part of [`MWorld2::digest`]. `2.0` is the world
-/// as first written (c5b84173); `2.1` adds the council's A1 amendments.
+/// as first written (c5b84173); `2.1` adds the council's A1 amendments, with
+/// the balanced relation queries of #1541 (made before any treatment run).
 pub const REVISION: &str = "2.1";
 
-/// The share (numerator, denominator) of relation episodes that state a second
-/// open relation after the queried one, so the queried value is not always the
-/// latest open value in the history.
+/// The share (numerator, denominator) of relation episodes that state the
+/// companion relation after the queried relation's last statement. In an
+/// episode that updates the queried relation, the update comes last otherwise
+/// (the companion falls between the assertion and the update); an episode with
+/// no update states the companion last either way. Every relation episode
+/// states a companion: which of the two relations is asked is a separate fair
+/// coin, so this share never tells the query.
 pub const DISTRACTOR: (usize, usize) = (3, 4);
 
 /// The (phrasing split x value split) cell an item is drawn from. The four
@@ -1449,12 +1471,19 @@ impl<'a> MWorld2<'a> {
         Ok(Some(turns))
     }
 
-    /// Assert, an optional filler and update, and (with probability
-    /// [`DISTRACTOR`]) the assertion of a second open relation, then the query
-    /// about the first (or an abstention about a relation never stated), with
-    /// open values for the open relations. The second relation comes after the
-    /// queried one's last statement, so the queried value is not always the
-    /// latest open value in the history.
+    /// Assert, an optional filler and update, and the assertion of a companion
+    /// relation of the same pool, then the query about one of the two (or an
+    /// abstention about a relation stated nowhere), with open values for the
+    /// open relations.
+    ///
+    /// Which of the two stated relations the query asks is a fair coin drawn
+    /// from the episode's own seeded stream: deterministic for the seed and
+    /// balanced, and independent of the order the statements come in, so the
+    /// stated values in themselves never tell the answer. With probability
+    /// [`DISTRACTOR`] the companion is stated after the queried relation's
+    /// update; otherwise (with an update) the update comes last. A closed
+    /// relation takes a closed companion and an open one an open companion, so
+    /// the pool of the asked relation is independent of which one was asked.
     fn relation(&self, rng: &mut Rng, cell: Cell) -> Result<Vec<Turn2>> {
         let table = relations();
         let wanted = if unit(rng) < self.mix.closed {
@@ -1478,13 +1507,13 @@ impl<'a> MWorld2<'a> {
             turns.push(lift(responsive(rng, cell.phrasing)));
         }
         let mut current = first.clone();
-        let updated = rng.below(2) == 0;
-        if updated {
+        let mut update: Option<Turn2> = None;
+        if rng.below(2) == 0 {
             let mut second = rel.draw(rng, cell.value)?;
             while second == first {
                 second = rel.draw(rng, cell.value)?;
             }
-            turns.push(rel_turn(
+            update = Some(rel_turn(
                 rng,
                 cell.phrasing,
                 rel,
@@ -1495,47 +1524,50 @@ impl<'a> MWorld2<'a> {
             ));
             current = second;
         }
-        // The distractor: another open relation, stated after the queried one.
-        let mut distractor: Option<(&Rel, String)> = None;
-        if rng.below(DISTRACTOR.1) < DISTRACTOR.0 {
-            let open: Vec<&Rel> = table
-                .iter()
-                .filter(|r| r.pool() == Pool::Open && r.name != rel.name)
-                .collect();
-            let other = *pick(rng, &open);
-            let mut value = other.draw(rng, cell.value)?;
-            while value.eq_ignore_ascii_case(&first) || value.eq_ignore_ascii_case(&current) {
-                value = other.draw(rng, cell.value)?;
+        let updated = update.is_some();
+        // The companion: another relation of the same pool, stated once.
+        let peers: Vec<&Rel> = table
+            .iter()
+            .filter(|r| r.pool() == wanted && r.name != rel.name)
+            .collect();
+        let companion = *pick(rng, &peers);
+        let mut companion_value = companion.draw(rng, cell.value)?;
+        while companion_value.eq_ignore_ascii_case(&first)
+            || companion_value.eq_ignore_ascii_case(&current)
+        {
+            companion_value = companion.draw(rng, cell.value)?;
+        }
+        let companion_turn = rel_turn(
+            rng,
+            cell.phrasing,
+            companion,
+            Act::Assert,
+            &companion_value,
+            ack_with(&companion_value),
+            companion.acks,
+        );
+        let companion_last = rng.below(DISTRACTOR.1) < DISTRACTOR.0;
+        match update {
+            Some(update) if companion_last => {
+                turns.push(update);
+                turns.push(companion_turn);
             }
-            turns.push(rel_turn(
-                rng,
-                cell.phrasing,
-                other,
-                Act::Assert,
-                &value,
-                ack_with(&value),
-                other.acks,
-            ));
-            distractor = Some((other, value));
+            Some(update) => {
+                turns.push(companion_turn);
+                turns.push(update);
+            }
+            None => turns.push(companion_turn),
         }
         if rng.below(4) == 0 {
             let others: Vec<&Rel> = table
                 .iter()
-                .filter(|r| {
-                    r.name != rel.name
-                        && distractor
-                            .as_ref()
-                            .map_or(true, |(stated, _)| r.name != stated.name)
-                })
+                .filter(|r| r.name != rel.name && r.name != companion.name)
                 .collect();
             let asked = *pick(rng, &others);
-            let mut rejected: BTreeSet<String> = [&first, &current]
+            let mut rejected: BTreeSet<String> = [&first, &current, &companion_value]
                 .into_iter()
                 .map(|v| v.to_lowercase())
                 .collect();
-            if let Some((_, value)) = &distractor {
-                rejected.insert(value.to_lowercase());
-            }
             if let Values::Closed(train, development) = asked.values {
                 rejected.extend(train.iter().chain(development).map(|v| v.to_lowercase()));
             }
@@ -1557,28 +1589,38 @@ impl<'a> MWorld2<'a> {
                 },
             });
         } else {
-            let mut checks = vec![Check2::V1(Check::AnyOf(vec![current.to_lowercase()]))];
-            let mut stale = Vec::new();
-            if updated {
-                stale.push(first.to_lowercase());
-            }
-            if let Some((_, value)) = &distractor {
-                stale.push(value.to_lowercase());
-            }
-            if !stale.is_empty() {
-                checks.push(Check2::V1(Check::NoneOf(stale)));
-            }
+            // The coin that decides which relation is asked; the values of the
+            // other relation (and the queried relation's replaced value) are
+            // the ones the reply must not state.
+            let ask_companion = rng.below(2) == 0;
+            let (asked, answer, stale) = if ask_companion {
+                let mut stale = vec![first.to_lowercase()];
+                if updated {
+                    stale.push(current.to_lowercase());
+                }
+                (companion, companion_value.clone(), stale)
+            } else {
+                let mut stale = vec![companion_value.to_lowercase()];
+                if updated {
+                    stale.push(first.to_lowercase());
+                }
+                (rel, current.clone(), stale)
+            };
+            let checks = vec![
+                Check2::V1(Check::AnyOf(vec![answer.to_lowercase()])),
+                Check2::V1(Check::NoneOf(stale)),
+            ];
             let mut query = rel_turn(
                 rng,
                 cell.phrasing,
-                rel,
+                asked,
                 Act::Query,
-                &current,
+                &answer,
                 checks,
-                rel.answers,
+                asked.answers,
             );
-            query.tag.pool = Some(rel.pool());
-            query.tag.answer = Some(current.clone());
+            query.tag.pool = Some(asked.pool());
+            query.tag.answer = Some(answer);
             turns.push(query);
         }
         for turn in &mut turns {
@@ -1610,8 +1652,10 @@ impl<'a> MWorld2<'a> {
     }
 
     /// SHA-256 of every table v2 draws from, the revision, the relation
-    /// distractor share, the cell names, the judge's version and v1's digest
-    /// (v2 reuses v1's responsive and instruction tables).
+    /// distractor share ([`DISTRACTOR`], under its original key), the cell
+    /// names, the judge's version and v1's digest (v2 reuses v1's responsive
+    /// and instruction tables). Generator code is not in it; see the tests'
+    /// `STREAM_DIGEST` for the stream a fixed seed draws.
     pub fn digest() -> String {
         let phrasings = |p: &Phrasings| json!([p.train, p.development]);
         let tables = json!({
@@ -2252,6 +2296,7 @@ pub fn freeze_report(runs: &BTreeMap<&'static str, RuleRun>) -> Value {
 mod tests {
     use super::*;
     use crate::milestone_world::judge;
+    use crate::milestone_world_v2_probe::{probe, static_report, ProbeGroup, ProbeItem, ProbeTurn};
 
     /// The digest and a rendering fingerprint of v1 as R1 sealed it (the same
     /// values on `origin/main` before v2 existed). v2 must never move them.
@@ -2910,7 +2955,9 @@ mod tests {
     /// `shasum -a 256`; the same procedure reproduces v1's pinned digest
     /// exactly. If this assertion fails, the tables or constants moved: read the
     /// value it prints, re-derive it, and post the new digest on issue 1511
-    /// before any treatment run.
+    /// before any treatment run. It hashes tables and constants, not generator
+    /// code: the balanced relation queries of #1541 changed no table, so it
+    /// did not move, and `STREAM_DIGEST` pins what the generator draws.
     const V2_DIGEST: &str = "04ad3bb0bf68d4213d90b41ffb886711ffa4c98043e5ac15f58719d7ce68ae4f";
     const V2_DIGEST_2_0: &str = "3a4ee743766492c221747373ffcdd43b249e65d049e28d264869af634d8ffc26";
 
@@ -2921,6 +2968,57 @@ mod tests {
         assert_eq!(REVISION, "2.1");
         // v1 is untouched by the revision.
         assert_eq!(MWorld::digest(), V1_DIGEST);
+    }
+
+    /// PENDING (#1541, phase 1): the SHA-256 of the fixed-seed revision-2.1
+    /// episode stream [`stream_digest`] draws. The corrected relation
+    /// generator could not be run when it was written (runner admission held),
+    /// so this is not filled in and the test below fails until it is.
+    ///
+    /// TODO(lead lab): after the first successful build, run
+    /// `cargo test -p uor-r4-training --lib the_revision_2_1_episode_stream_is_pinned`,
+    /// copy the digest its assertion prints into this constant, run it again,
+    /// and post the digest on issue 1511 beside the table digest. Any later
+    /// change of this constant is a change of the instrument: say why on the
+    /// issue before any treatment run.
+    ///
+    /// [`MWorld2::digest`] hashes the tables and constants only, so it does
+    /// not move with the relation generator; this digest is what does.
+    const STREAM_DIGEST: &str = "PENDING";
+
+    /// SHA-256 over the JSON of a fixed-seed stream of revision-2.1 episodes
+    /// under the toy meter: for each of the four cells, 150 episodes of the
+    /// default mix (seed 2101) and 150 relation-only episodes (seed 2102).
+    fn stream_digest() -> String {
+        let mut hasher = Sha256::new();
+        for cell in Cell::ALL {
+            for (mut generator, seed) in [(world(), 2_101u64), (only(0.0, 0.0, 1.0, 0.0), 2_102)] {
+                let mut rng = Rng::new(seed);
+                for _ in 0..150 {
+                    let conversation = generator
+                        .conversation_in(&mut rng, cell)
+                        .expect("an episode");
+                    hasher.update(serde_json::to_vec(&conversation).expect("serializable"));
+                    hasher.update([0u8]);
+                }
+            }
+        }
+        hex::encode(hasher.finalize())
+    }
+
+    #[test]
+    fn the_revision_2_1_episode_stream_is_pinned() {
+        let digest = stream_digest();
+        // The stream is a function of its seeds alone.
+        assert_eq!(digest, stream_digest());
+        assert_ne!(
+            STREAM_DIGEST, "PENDING",
+            "PENDING: the revision-2.1 episode stream is not pinned yet; its digest is {digest}"
+        );
+        assert_eq!(
+            digest, STREAM_DIGEST,
+            "the revision-2.1 episode stream moved: a generator or a table changed"
+        );
     }
 
     /// A hand-built turn; `values` are the open values its user text states.
@@ -3196,67 +3294,246 @@ mod tests {
         }
     }
 
+    /// The (relation, value) every assertion and update of `turns` states, in
+    /// reading order. The value is the last word the turn's acknowledgment
+    /// check accepts, which is the stated value lowercased.
+    fn statements(turns: &[Turn2]) -> Vec<(String, String)> {
+        turns
+            .iter()
+            .filter_map(|turn| {
+                let relation = turn
+                    .intent
+                    .strip_suffix("_assert")
+                    .or_else(|| turn.intent.strip_suffix("_update"))?;
+                let value = turn.checks.iter().find_map(|check| match check {
+                    Check2::V1(Check::AnyOf(list)) => list.last().cloned(),
+                    _ => None,
+                })?;
+                Some((relation.to_owned(), value))
+            })
+            .collect()
+    }
+
+    fn is_closed_relation(name: &str) -> bool {
+        relations()
+            .iter()
+            .any(|r| r.name == name && r.pool() == Pool::Closed)
+    }
+
     #[test]
-    fn a_relation_episode_states_a_second_relation_at_the_designed_share() {
+    fn a_relation_episode_states_a_companion_and_asks_either_relation_evenly() {
         let mut world = only(0.0, 0.0, 1.0, 0.0);
-        let all = episodes(&mut world, Split::Development, 61, 2_000);
-        let name_of = |intent: &str, suffix: &str| -> Option<String> {
-            intent.strip_suffix(suffix).map(str::to_owned)
-        };
-        let mut with_second = 0usize;
+        let all = episodes(&mut world, Split::Development, 61, 2_400);
+        let (mut recall, mut companion_asked) = (0usize, 0usize);
+        let (mut abstentions, mut closed) = (0usize, 0usize);
+        // Episodes that update the queried relation: how many state the
+        // companion last (index 0) or the update last (index 1), and under each
+        // order (recall items, items that ask the companion).
+        let mut order = [0usize; 2];
+        let mut asked_by_order = [(0usize, 0usize); 2];
         for conversation in &all {
-            let statements: Vec<&Turn2> = conversation
-                .turns
-                .iter()
-                .filter(|t| t.intent.ends_with("_assert") || t.intent.ends_with("_update"))
-                .collect();
-            let queried = statements
+            let stated = statements(&conversation.turns);
+            let queried = stated
                 .first()
-                .and_then(|t| name_of(&t.intent, "_assert"))
+                .map(|(name, _)| name.clone())
                 .expect("the queried relation is stated first");
-            let query = conversation.turns.last().expect("a query");
-            let second: Vec<&&Turn2> = statements
+            let companion = stated
                 .iter()
-                .filter(|t| name_of(&t.intent, "_assert").is_some_and(|n| n != queried))
-                .collect();
-            assert!(second.len() <= 1);
-            with_second += second.len();
-            // The second relation is stated after every statement of the
-            // queried one, is never the one asked, and its value is never
-            // the answer.
-            if let Some(stated) = second.first() {
-                let last_of_queried = statements
+                .map(|(name, _)| name.as_str())
+                .find(|name| *name != queried.as_str())
+                .expect("a companion relation is stated");
+            // Two relations: the companion stated once and never updated, of
+            // the queried relation's pool.
+            let in_pair = |name: &str| name == queried.as_str() || name == companion;
+            assert!(
+                stated.iter().all(|(name, _)| in_pair(name.as_str())),
+                "{:?}",
+                conversation.turns
+            );
+            let stated_of = |name: &str, suffix: &str| {
+                conversation
+                    .turns
                     .iter()
-                    .rposition(|t| {
-                        t.intent.starts_with(&format!("{queried}_"))
-                    })
-                    .expect("a statement of the queried relation");
-                let at = statements
-                    .iter()
-                    .position(|t| std::ptr::eq(*t, **stated))
-                    .expect("the second statement");
-                assert!(at > last_of_queried, "{:?}", conversation.turns);
-                if let Some(answer) = &query.tag.answer {
-                    assert!(!stated.tag.values.contains(answer));
-                    assert_eq!(
-                        query.intent.strip_suffix("_query"),
-                        Some(queried.as_str()),
-                        "the query asks the first relation"
-                    );
-                } else {
-                    // An abstention asks for a relation stated nowhere.
-                    let asked = name_of(&query.intent, "_absent").expect("an abstention");
-                    assert!(!statements
-                        .iter()
-                        .any(|t| t.intent.starts_with(&format!("{asked}_"))));
-                }
+                    .filter(|t| t.intent == format!("{name}_{suffix}"))
+                    .count()
+            };
+            assert_eq!(stated_of(companion, "assert"), 1);
+            assert_eq!(stated_of(companion, "update"), 0);
+            assert_eq!(stated_of(&queried, "assert"), 1);
+            assert!(stated_of(&queried, "update") <= 1);
+            assert_eq!(is_closed_relation(&queried), is_closed_relation(companion));
+            closed += usize::from(is_closed_relation(&queried));
+            let updated = stated_of(&queried, "update") == 1;
+            let order_index = if updated {
+                let last = stated.last().map(|(name, _)| name.as_str());
+                let index = usize::from(last != Some(companion));
+                order[index] += 1;
+                Some(index)
+            } else {
+                None
+            };
+            let query = conversation.turns.last().expect("a query");
+            if query.tag.abstain {
+                // An abstention asks for a relation stated nowhere.
+                abstentions += 1;
+                let asked = query
+                    .intent
+                    .strip_suffix("_absent")
+                    .expect("an abstention intent");
+                assert!(asked != queried.as_str() && asked != companion, "{asked}");
+                continue;
+            }
+            recall += 1;
+            let asked = query
+                .intent
+                .strip_suffix("_query")
+                .expect("a query intent");
+            assert!(asked == queried.as_str() || asked == companion, "{asked}");
+            let asks_companion = asked == companion;
+            companion_asked += usize::from(asks_companion);
+            if let Some(index) = order_index {
+                asked_by_order[index].0 += 1;
+                asked_by_order[index].1 += usize::from(asks_companion);
+            }
+            // The answer is the asked relation's current value, and the checks
+            // accept that value alone: not the other relation's, not the
+            // asked relation's replaced one.
+            let answer = stated
+                .iter()
+                .rev()
+                .find(|(name, _)| name.as_str() == asked)
+                .map(|(_, value)| value.clone())
+                .expect("the asked relation is stated");
+            assert_eq!(
+                query.tag.answer.as_ref().map(|a| a.to_lowercase()),
+                Some(answer.clone())
+            );
+            assert!(judge_v2(&query.checks, &query.user, &query.reply));
+            for (_, value) in &stated {
+                assert_eq!(
+                    judge_v2(&query.checks, &query.user, &format!("It is {value}.")),
+                    *value == answer,
+                    "{value} for {answer}: {:?}",
+                    conversation.turns
+                );
             }
         }
-        let share = with_second as f64 / all.len() as f64;
+        let episodes_drawn = all.len() as f64;
+        let closed_share = closed as f64 / episodes_drawn;
         assert!(
-            (share - 0.75).abs() < 0.04,
-            "a second relation in {share} of the episodes"
+            (closed_share - CLOSED_SHARE).abs() < 0.04,
+            "{closed_share} of the episodes state a closed relation"
         );
+        let abstain_share = abstentions as f64 / episodes_drawn;
+        assert!(
+            (abstain_share - 0.25).abs() < 0.04,
+            "{abstain_share} of the episodes abstain"
+        );
+        // The companion is asked on a fair half of the recall queries ...
+        let asked_share = companion_asked as f64 / recall as f64;
+        assert!(recall > 1_500, "{recall}");
+        assert!(
+            (asked_share - 0.5).abs() < 0.05,
+            "the companion is asked in {asked_share} of {recall} recall queries"
+        );
+        // ... whichever order the statements came in: the update comes last in
+        // the designed share of the episodes that update, and the order does
+        // not tell the query.
+        let updated_total = order[0] + order[1];
+        let (numerator, denominator) = DISTRACTOR;
+        let companion_last = order[0] as f64 / updated_total as f64;
+        assert!(
+            (companion_last - numerator as f64 / denominator as f64).abs() < 0.05,
+            "the companion is stated last in {companion_last} of {updated_total} updated episodes"
+        );
+        assert!(order[1] > 200, "{order:?}");
+        for (index, (items, asks)) in asked_by_order.iter().enumerate() {
+            let share = *asks as f64 / *items as f64;
+            assert!(
+                (share - 0.5).abs() < 0.12,
+                "order {index}: the companion is asked in {share} of {items} queries"
+            );
+        }
+    }
+
+    /// The replies of the query-blind rules over the values an episode states
+    /// before its query: the latest value, the one before it, the first, the
+    /// current value of the relation stated first and that of the other one.
+    fn blind_replies(stated: &[(String, String)]) -> Vec<(&'static str, String)> {
+        let value = |index: Option<usize>| -> String {
+            index
+                .and_then(|i| stated.get(i))
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default()
+        };
+        let last = stated.len().checked_sub(1);
+        let queried = stated.first().map(|(name, _)| name.as_str());
+        let current = |first_stated: bool| -> String {
+            stated
+                .iter()
+                .rev()
+                .find(|(name, _)| (Some(name.as_str()) == queried) == first_stated)
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default()
+        };
+        vec![
+            ("latest", value(last)),
+            ("second-latest", value(stated.len().checked_sub(2).or(last))),
+            ("first", value(Some(0))),
+            ("queried-relation", current(true)),
+            ("companion", current(false)),
+        ]
+    }
+
+    #[test]
+    fn no_query_blind_rule_over_the_stated_values_reaches_the_freeze_limit_on_relation_items() {
+        // R-recency, the untrained rule the freeze condition reads (the latest
+        // open value), on a fixed-seed sample of relation-only episodes.
+        let mut world = only(0.0, 0.0, 1.0, 0.0);
+        let mut rng = Rng::new(3_301);
+        let runs = run_rules(&mut world, &mut rng, Cell::GATED, 2_400).expect("rule runs");
+        let (pass, of) = runs[Rule::Recency.name()].card.cell("relation/open/recall");
+        assert!(of > 1_000, "{of}");
+        assert!(
+            below_limit(pass, of),
+            "R-recency passes {pass} of {of} open relation recall items"
+        );
+        // Balanced: the latest value is right about as often as it is wrong.
+        assert!(pass * 5 > of * 2, "R-recency passes only {pass} of {of}");
+        // Every rule over the stated values, on every recall item of both pools.
+        let mut world = only(0.0, 0.0, 1.0, 0.0);
+        let mut rng = Rng::new(3_302);
+        let mut tallies: BTreeMap<&'static str, (usize, usize)> = BTreeMap::new();
+        for _ in 0..2_400 {
+            let conversation = world
+                .conversation_in(&mut rng, Cell::GATED)
+                .expect("an episode");
+            let Some((query, history)) = conversation.turns.split_last() else {
+                continue;
+            };
+            if query.tag.abstain {
+                continue;
+            }
+            for (name, reply) in blind_replies(&statements(history)) {
+                let tally = tallies.entry(name).or_default();
+                tally.0 += usize::from(judge_v2(&query.checks, &query.user, &reply));
+                tally.1 += 1;
+            }
+        }
+        assert_eq!(tallies.len(), 5);
+        for (name, &(pass, of)) in &tallies {
+            assert!(of > 1_500, "{name}: {of}");
+            assert!(below_limit(pass, of), "{name} passes {pass} of {of}");
+        }
+        // The rules that name a relation, or the last statement, are each right
+        // on about half the items: the query is the only thing that tells.
+        for name in ["latest", "queried-relation", "companion"] {
+            let (pass, of) = tallies[name];
+            assert!(
+                pass * 100 > of * 42 && pass * 100 < of * 58,
+                "{name} passes {pass} of {of}"
+            );
+        }
     }
 
     #[test]
@@ -3366,21 +3643,65 @@ mod tests {
         }
     }
 
+    /// `Cell::same(split)` is the plain split, checked on two renderings built
+    /// apart: the plain path (a world from the default mix and the shared toy
+    /// meter, rendered by [`render`]) and the cell path (a world from an
+    /// explicit mix and its own token counter, drawn through
+    /// [`MWorld2::conversation_in`] and rendered by a formatter written here).
+    /// The texts, the document token counts and the SHA-256 of the whole
+    /// rendered stream must all agree.
     #[test]
     fn the_same_split_cell_is_the_plain_split() {
+        let by_cell_count = |text: &str| text.chars().count().div_ceil(3);
+        let explicit = Mix {
+            mqar: 0.35,
+            copy: 0.10,
+            relation: 0.30,
+            other: 0.25,
+            closed: CLOSED_SHARE,
+        };
+        let mut digests: BTreeMap<Split, String> = BTreeMap::new();
         for split in [Split::Train, Split::Development] {
             let plain = episodes(&mut world(), split, 91, 300);
-            let mut cells = world();
+            let plain_text: Vec<String> = plain.iter().map(|c| render(&c.turns)).collect();
+            let plain_tokens: Vec<usize> = plain.iter().map(|c| c.tokens).collect();
+            let mut cells = MWorld2::new(&by_cell_count, explicit).expect("a valid mix");
             let mut rng = Rng::new(91);
-            let cell: Vec<Conversation2> = (0..300)
-                .map(|_| {
-                    cells
-                        .conversation_in(&mut rng, Cell::same(split))
-                        .expect("an episode")
-                })
-                .collect();
-            assert_eq!(plain, cell);
+            let (mut cell_text, mut cell_tokens) = (Vec::new(), Vec::new());
+            for _ in 0..300 {
+                let conversation = cells
+                    .conversation_in(&mut rng, Cell::same(split))
+                    .expect("an episode");
+                let mut text = String::new();
+                for (index, turn) in conversation.turns.iter().enumerate() {
+                    if index != 0 {
+                        text.push('\n');
+                    }
+                    text.push_str("User: ");
+                    text.push_str(&turn.user);
+                    text.push_str("\nAssistant: ");
+                    text.push_str(&turn.reply);
+                }
+                cell_text.push(text);
+                cell_tokens.push(conversation.tokens);
+            }
+            assert_eq!(plain_text, cell_text, "{split:?}");
+            assert_eq!(plain_tokens, cell_tokens, "{split:?}");
+            let digest_of = |texts: &[String]| {
+                let mut hasher = Sha256::new();
+                for text in texts {
+                    hasher.update(text.as_bytes());
+                    hasher.update([0u8]);
+                }
+                hex::encode(hasher.finalize())
+            };
+            let digest = digest_of(&plain_text);
+            assert_eq!(digest, digest_of(&cell_text), "{split:?}");
+            digests.insert(split, digest);
         }
+        // The two splits render different streams, and the development split
+        // is the gated cell.
+        assert_ne!(digests[&Split::Train], digests[&Split::Development]);
         assert_eq!(Cell::same(Split::Development), Cell::GATED);
         assert_eq!(Cell::ALL.len(), 4);
         let keys: BTreeSet<&str> = Cell::ALL.iter().map(|c| c.key()).collect();
@@ -3506,6 +3827,280 @@ mod tests {
         }
         assert!(!is_syllable_word("", 3) && !is_syllable_word("kavu", 1));
         assert!(is_syllable_word("kavu", 2));
+    }
+
+    // -- The sealed probe and the position rules (#1541, item 2) -------------
+
+    /// The replies of the query-blind position rules over the values a probe
+    /// item's context states, in reading order: the first three and the last
+    /// three. With fewer values, the k-th from the start takes the last and
+    /// the k-th from the end the first.
+    fn probe_position_replies(item: &ProbeItem) -> Vec<(&'static str, String)> {
+        let context = &item.turns[..item.turns.len().saturating_sub(1)];
+        let stated: Vec<&str> = context
+            .iter()
+            .flat_map(|turn| turn.values.iter().map(String::as_str))
+            .collect();
+        let from_start = |k: usize| -> String {
+            stated
+                .get(k - 1)
+                .or(stated.last())
+                .copied()
+                .unwrap_or_default()
+                .to_owned()
+        };
+        let from_end = |k: usize| -> String {
+            stated
+                .len()
+                .checked_sub(k)
+                .and_then(|i| stated.get(i))
+                .or(stated.first())
+                .copied()
+                .unwrap_or_default()
+                .to_owned()
+        };
+        vec![
+            ("first", from_start(1)),
+            ("second", from_start(2)),
+            ("third", from_start(3)),
+            ("latest", from_end(1)),
+            ("second-latest", from_end(2)),
+            ("third-latest", from_end(3)),
+        ]
+    }
+
+    /// (pass, of) of each position rule over the recall items of `items`
+    /// (every item that is not a copy), judged by the item's own checks.
+    fn probe_position_rates(items: &[ProbeItem]) -> BTreeMap<&'static str, (usize, usize)> {
+        let mut tallies: BTreeMap<&'static str, (usize, usize)> = BTreeMap::new();
+        for item in items.iter().filter(|item| item.group != ProbeGroup::Copy) {
+            let checks = item.checks().expect("the item's checks");
+            let scored = item.turns.last().expect("a scored turn");
+            for (name, reply) in probe_position_replies(item) {
+                let tally = tallies.entry(name).or_default();
+                tally.0 += usize::from(judge_v2(&checks, &scored.user, &reply));
+                tally.1 += 1;
+            }
+        }
+        tallies
+    }
+
+    #[test]
+    fn the_position_rules_are_read_off_the_stated_values() {
+        let turn = |user: &str,
+                    reply: &str,
+                    values: &[&str],
+                    answer: Option<&str>,
+                    stale: &[&str]| ProbeTurn {
+            user: user.to_owned(),
+            reply: reply.to_owned(),
+            values: values.iter().map(|v| (*v).to_owned()).collect(),
+            answer: answer.map(str::to_owned),
+            stale: stale.iter().map(|v| (*v).to_owned()).collect(),
+            copy: None,
+        };
+        // Four values stated and the third asked: only the rules that land on
+        // the third value pass.
+        let four = ProbeItem {
+            id: "mqar-short-99".into(),
+            group: ProbeGroup::MqarShort,
+            turns: vec![
+                turn(
+                    "Notes: alpha is kavu, beta is nomu, gamma is tesa, delta is rilo.",
+                    "Noted.",
+                    &["kavu", "nomu", "tesa", "rilo"],
+                    None,
+                    &[],
+                ),
+                turn(
+                    "Which one goes with gamma?",
+                    "Gamma goes with tesa.",
+                    &[],
+                    Some("tesa"),
+                    &["kavu", "nomu", "rilo"],
+                ),
+            ],
+        };
+        // One value stated: every rule falls back to it.
+        let one = ProbeItem {
+            id: "relation-99".into(),
+            group: ProbeGroup::Relation,
+            turns: vec![
+                turn("My cafe is Halcyon.", "Nice.", &["Halcyon"], None, &[]),
+                turn(
+                    "Which cafe is mine?",
+                    "Your cafe is Halcyon.",
+                    &[],
+                    Some("Halcyon"),
+                    &[],
+                ),
+            ],
+        };
+        // A copy item has no recall rule to run.
+        let copy = ProbeItem {
+            id: "copy-99".into(),
+            group: ProbeGroup::Copy,
+            turns: vec![ProbeTurn {
+                user: "Repeat: alpha beta".into(),
+                reply: "alpha beta".into(),
+                values: Vec::new(),
+                answer: None,
+                stale: Vec::new(),
+                copy: Some("alpha beta".into()),
+            }],
+        };
+        let rates = probe_position_rates(&[four, one, copy]);
+        assert_eq!(rates.len(), 6);
+        for (name, &(pass, of)) in &rates {
+            assert_eq!(of, 2, "{name}");
+            let expected = match *name {
+                "third" | "second-latest" => 2,
+                _ => 1,
+            };
+            assert_eq!(pass, expected, "{name}");
+        }
+    }
+
+    /// No query-blind rule over the values the context states (the first
+    /// three, the last three) may reach [`FREEZE_LIMIT`] on the probe's recall
+    /// items: the item is answered by reading the query. The probe file as
+    /// first sealed (a query-blind second-latest rule scored 22 of 30) fails
+    /// this, and the rebalanced file must pass it.
+    ///
+    /// PENDING-REGEN (#1541, item 2): `data/a1-english-probe.json` is authored
+    /// data, not a generator's output, and its SHA-256 pin (`PROBE_SHA256`)
+    /// lives in `milestone_world_v2_probe`, outside the files this change
+    /// owns. So the sealed file is untouched, and this test fails on purpose
+    /// until the rebalanced file (the sealed one with [`REBALANCED_ROWS`]
+    /// applied) is installed and that pin is updated.
+    #[test]
+    fn no_query_blind_position_rule_reaches_the_freeze_limit_on_the_probe() {
+        let items = probe().expect("the probe loads and validates");
+        let rates = probe_position_rates(&items);
+        assert_eq!(rates.len(), 6);
+        let mut leaks = Vec::new();
+        for (name, &(pass, of)) in &rates {
+            assert_eq!(of, 30, "{name}: the probe has 30 recall items");
+            if !below_limit(pass, of) {
+                leaks.push(format!("{name} {pass}/{of}"));
+            }
+        }
+        assert!(
+            leaks.is_empty(),
+            "PENDING-REGEN: the sealed probe is position-biased ({leaks:?}); install the \
+             rebalanced data/a1-english-probe.json and re-pin PROBE_SHA256 in \
+             milestone_world_v2_probe.rs"
+        );
+    }
+
+    /// The seven scored turns that rebalance the sealed probe (#1541, item 2),
+    /// by item id: (id, user, reply, answer, stale). Each asks a different fact
+    /// of the context the item already has, so the answer moves along the
+    /// stated values (one asks the fourth of four, one the first of four, two
+    /// the third of three, one the second of two) and the context turns stay as
+    /// they were sealed. Applied in memory by the test below; installing them in
+    /// `data/a1-english-probe.json` (and re-pinning `PROBE_SHA256`) is the
+    /// PENDING-REGEN step, after which this table only repeats the file.
+    const REBALANCED_ROWS: [(&str, &str, &str, &str, &[&str]); 7] = [
+        (
+            "mqar-short-06",
+            "Who is bringing the folding tables?",
+            "Ottoline is bringing the folding tables.",
+            "Ottoline",
+            &["Wendell"],
+        ),
+        (
+            "mqar-short-07",
+            "What was the storage code again?",
+            "The storage code is 77120.",
+            "77120",
+            &["Savannah", "Zainab"],
+        ),
+        (
+            "mqar-long-03",
+            "Who runs registration?",
+            "Cormac runs registration.",
+            "Cormac",
+            &["Delphine", "Ottmar", "Isaac"],
+        ),
+        (
+            "mqar-long-04",
+            "Who was her manager again?",
+            "Her manager is Petrov.",
+            "Petrov",
+            &["Fairbanks", "47718"],
+        ),
+        (
+            "mqar-long-06",
+            "Where is the April book set?",
+            "The April book is set in Yakima.",
+            "Yakima",
+            &["Kyoto", "Nagoya", "Sapporo"],
+        ),
+        (
+            "relation-04",
+            "What was the building code again?",
+            "The building code is 66041.",
+            "66041",
+            &["20983", "54167"],
+        ),
+        (
+            "relation-11",
+            "Who runs the florist these days?",
+            "Gwen runs the florist.",
+            "Gwen",
+            &["Imogen", "Quentin"],
+        ),
+    ];
+
+    /// The probe with [`REBALANCED_ROWS`] applied in memory meets every bound
+    /// the sealed one misses: no position rule reaches the freeze limit, each
+    /// reference reply still passes its checks and names only stated values,
+    /// and neither untrained rule reaches one half in any group (the bound
+    /// `milestone_world_v2_probe` holds the file to).
+    #[test]
+    fn the_rebalanced_probe_rows_meet_the_position_bound() {
+        let mut items = probe().expect("the probe loads and validates");
+        for (id, user, reply, answer, stale) in REBALANCED_ROWS {
+            let item = items
+                .iter_mut()
+                .find(|item| item.id == id)
+                .expect("a probe item of that id");
+            let scored = item.turns.last_mut().expect("a scored turn");
+            scored.user = user.to_owned();
+            scored.reply = reply.to_owned();
+            scored.answer = Some(answer.to_owned());
+            scored.stale = stale.iter().map(|s| (*s).to_owned()).collect();
+        }
+        for item in items.iter().filter(|item| item.group != ProbeGroup::Copy) {
+            let checks = item.checks().expect("the item's checks");
+            let scored = item.turns.last().expect("a scored turn");
+            assert!(judge_v2(&checks, &scored.user, &scored.reply), "{}", item.id);
+            assert!(!judge_v2(&checks, &scored.user, &scored.user), "{}", item.id);
+            let stated: BTreeSet<&str> = item.turns[..item.turns.len() - 1]
+                .iter()
+                .flat_map(|turn| turn.values.iter().map(String::as_str))
+                .collect();
+            let mut named = scored.answer.iter().chain(&scored.stale);
+            assert!(
+                named.all(|value| stated.contains(value.as_str())),
+                "{}",
+                item.id
+            );
+        }
+        let rates = probe_position_rates(&items);
+        assert_eq!(rates.len(), 6);
+        for (name, &(pass, of)) in &rates {
+            assert_eq!(of, 30, "{name}");
+            assert!(below_limit(pass, of), "{name} passes {pass} of {of}");
+        }
+        let report = static_report(&items, &Meter::new(&toy), CONTEXT).expect("a report");
+        for (group, cell) in report["by_group"].as_object().expect("groups") {
+            for (rule, row) in cell["rules"].as_object().expect("rules") {
+                let rate = row["rate"].as_f64().expect("a rate");
+                assert!(rate < 0.5, "{rule} on {group}: {rate}");
+            }
+        }
     }
 
     /// The real tokenizer: every episode of every kind fits 256 tokens, the
