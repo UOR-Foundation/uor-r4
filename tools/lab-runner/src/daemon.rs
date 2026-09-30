@@ -66,11 +66,28 @@ impl RunningJob {
     }
 }
 
+// Carry the same running set through the late, post-hashing check. Passing an
+// empty set here would trigger the coordinator's missing-reservation fence.
+fn recheck_resources(
+    spec: &JobSpec,
+    running: &[JobSpec],
+    host_check: impl FnOnce(&[JobSpec]) -> Result<()>,
+    budget_check: impl FnOnce(u64) -> Result<()>,
+) -> Result<()> {
+    host_check(running)?;
+    let reserved = running.iter().try_fold(spec.reserved_ms()?, |sum, job| {
+        sum.checked_add(job.reserved_ms()?)
+            .ok_or_else(|| invalid("wall reservation overflow"))
+    })?;
+    budget_check(reserved)
+}
+
 fn spawn_job(
     root: &Path,
     spec: &JobSpec,
     test_mode: bool,
     ledger_dir: &Path,
+    running: &[JobSpec],
 ) -> Result<RunningJob> {
     let started = Instant::now();
     let dir = jobs::running_dir(root).join(&spec.id);
@@ -89,8 +106,12 @@ fn spawn_job(
             spec.verify_provenance()?;
             // Hashing can outlive ownership. Refresh authority/resources here.
             let policy = HostPolicy::load(root)?;
-            host::check_admission(root, &policy, spec, &[])?;
-            crate::ledger::check_budget(ledger_dir, spec.reserved_ms()?)?;
+            recheck_resources(
+                spec,
+                running,
+                |peers| host::check_admission(root, &policy, spec, peers),
+                |reserved| crate::ledger::check_budget(ledger_dir, reserved).map(|_| ()),
+            )?;
             if started.elapsed() >= Duration::from_secs(spec.wall_s) {
                 return Err(invalid("preflight exhausted the reserved job wall time"));
             }
@@ -736,7 +757,13 @@ fn admit_pending(
         }
         jobs::durable_rename(&dir, &jobs::running_dir(root).join(&spec.id))?;
         let launch_started = Instant::now();
-        let launched = spawn_job(root, &spec, !config.require_host_policy, &config.ledger_dir);
+        let launched = spawn_job(
+            root,
+            &spec,
+            !config.require_host_policy,
+            &config.ledger_dir,
+            &specs,
+        );
         drop(guard);
         match launched {
             Ok(job) => {
@@ -965,6 +992,31 @@ mod tests {
     }
 
     #[test]
+    fn late_admission_keeps_partner_and_combined_budget() {
+        let (root, _, spec, _) = fixture("two-lane-preflight");
+        let mut peer = spec.clone();
+        peer.id = "running-peer".into();
+        peer.wall_s = 17;
+        let expected = spec.reserved_ms().unwrap() + peer.reserved_ms().unwrap();
+        recheck_resources(
+            &spec,
+            &[peer],
+            |running| {
+                if running.len() != 1 || running[0].id != "running-peer" {
+                    return Err(invalid("running partner lost at late admission"));
+                }
+                Ok(())
+            },
+            |reserved| {
+                assert_eq!(reserved, expected);
+                Ok(())
+            },
+        )
+        .unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn failed_hash_late_policy_and_budget_have_positive_unstarted_proofs() {
         for failure in ["hash", "policy", "budget"] {
             let (root, ledger, spec, attempt) = fixture(failure);
@@ -1047,7 +1099,7 @@ mod tests {
             ];
             spec.stop_grace_ms = 20;
             fs::write(dir.join("spec.json"), serde_json::to_vec(&spec).unwrap()).unwrap();
-            let spawned = spawn_job(&root, &spec, true, &ledger).unwrap();
+            let spawned = spawn_job(&root, &spec, true, &ledger, &[]).unwrap();
             let mut fixture = RunningFixture {
                 identity: spawned.identity.clone(),
                 job: spawned,
