@@ -45,6 +45,7 @@
 //! checks the step and every kernel for multiply, divide and floating-point
 //! instructions.
 
+pub mod flock;
 mod format;
 mod kernels;
 mod session;
@@ -53,6 +54,10 @@ mod tests;
 
 use std::fmt;
 
+pub use flock::{
+    flock_select_integer, rank_table_q31, raw_rank_weights_q16, top_k_select_integer, FlockEntry,
+    FlockScan, FlockScratch, FlockSelect, FlockSlot, FLOCK_INTEGER_SELECTOR_VERSION,
+};
 pub use format::{
     Fixed, StackNumerics, StackShape, StackTransportSnap, GROUP, MAGIC, STACK_SCHEMA,
 };
