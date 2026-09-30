@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 149,
-  "observed_server_time": 1790761168,
+  "sequence": 150,
+  "observed_server_time": 1790761170,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -32,8 +32,8 @@
         "A1 retrieval source",
         "S1.4 D11 snap safety"
       ],
-      "available": true,
-      "heartbeat": 1790760971
+      "available": false,
+      "heartbeat": 1790761170
     },
     "codex-durable-20260929-root": {
       "lab": "Codex",
