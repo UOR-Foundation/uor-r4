@@ -1,6 +1,6 @@
-//! Allocation-free D11 integer flock selector for sparse causal attention.
+//! Standalone integer flock selector for sparse causal attention awaiting integration.
 //!
-//! Multiplier-free and allocation-free causal flock selection under owner decision
+//! Multiplier-free and allocation-free causal flock selection structure under owner decision
 //! D11 and Council D16 (Rule 5 & Item 16).
 //!
 //! Flock attention keeps for each query row:
@@ -10,13 +10,13 @@
 //!
 //! This module provides:
 //! - [`FlockScratch`]: Reusable workspace preallocated at session initialization,
-//!   ensuring strictly zero heap allocations per token step during live served inference.
-//! - In-place O(n + k log k) partial selection using `select_nth_unstable_by` over the
-//!   non-window past, eliminating full O(n log n) sorts.
+//!   ensuring strictly zero heap allocations per token step when prepared with sufficient capacity.
+//! - In-place partial selection using `select_nth_unstable_by` over the non-window past,
+//!   with total complexity O(n + k log k + s log s) including final support ordering (where s is support size).
 //! - Strict deduplicated support `{sink} ∪ window ∪ top_k` with deterministic lowest-position
 //!   tie breaking.
-//! - Integer rank scoring (Minkowski / dot product) and multiplier-free fixed-point
-//!   rank weights (Arm R) and integer softmax (Arm S).
+//! - Rank-weight conversion helpers using precomputed tables and restoring division. Score formation
+//!   (e.g. Minkowski / dot product) and softmax/weight application are external consumer responsibilities.
 //! - Top-k-only entrypoint (`top_k_select_integer`) for single-pointer (k=1) retrieval.
 
 use crate::stack::kernels::stack_div_u128;
@@ -143,10 +143,10 @@ impl FlockScratch {
             self.slots.resize(bound, None);
         }
         if self.rest.capacity() < bound {
-            self.rest.reserve(bound - self.rest.capacity());
+            self.rest.reserve(bound - self.rest.len());
         }
         if self.entries.capacity() < bound {
-            self.entries.reserve(bound - self.entries.capacity());
+            self.entries.reserve(bound - self.entries.len());
         }
     }
 
@@ -160,19 +160,21 @@ impl FlockScratch {
     }
 }
 
-/// Exact integer flock selection over `scores[0..=query]`.
+/// Exact integer flock selection over pre-formed integer `scores[0..=query]`.
 ///
-/// Scores are integer rank scores (such as integer Minkowski inner product or dot product).
-/// Higher scores rank nearer.
+/// Scores are external pre-formed integer rank scores. Higher scores rank nearer.
 ///
 /// Returns the selection accounting [`FlockScan`]. Selected entries are written into
 /// `scratch.entries` in descending rank order with ties broken to the lowest position.
 ///
+/// Complexity: O(n + k log k + s log s) where n is candidate count, k is top-k, and s is final support size.
+///
 /// Algorithm:
 /// - Deduplicated support `{sink} ∪ window ∪ top_k`.
 /// - Sink wins if inside window (deduplication).
-/// - Non-sink, non-window rest positions are partitioned in O(n + k log k) using
-///   `select_nth_unstable_by`, avoiding full O(n log n) sorting.
+/// - Non-sink, non-window rest positions are partitioned using
+///   `select_nth_unstable_by`.
+/// - Final support entries are sorted in descending rank order.
 /// - Strictly zero heap allocations when `scratch` has sufficient capacity.
 #[inline(never)]
 pub fn flock_select_integer(
@@ -181,7 +183,7 @@ pub fn flock_select_integer(
     select: FlockSelect,
     scratch: &mut FlockScratch,
 ) -> Result<FlockScan> {
-    if query + 1 > MAX_FLOCK_CONTEXT {
+    if query >= MAX_FLOCK_CONTEXT {
         return Err(invalid(format!(
             "flock query position {query} exceeds MAX_FLOCK_CONTEXT {MAX_FLOCK_CONTEXT}"
         )));
@@ -297,7 +299,7 @@ pub fn top_k_select_integer(
     k: usize,
     scratch: &mut FlockScratch,
 ) -> Result<FlockScan> {
-    if query + 1 > MAX_FLOCK_CONTEXT {
+    if query >= MAX_FLOCK_CONTEXT {
         return Err(invalid(format!(
             "flock query position {query} exceeds MAX_FLOCK_CONTEXT {MAX_FLOCK_CONTEXT}"
         )));

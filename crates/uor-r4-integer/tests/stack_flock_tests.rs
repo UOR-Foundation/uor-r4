@@ -259,16 +259,83 @@ fn test_flock_max_context_enforced() {
         res_top_k.is_err(),
         "query = MAX_FLOCK_CONTEXT must exceed bound in top_k"
     );
+
+    // query = usize::MAX must fail gracefully without query + 1 overflow panic
+    let empty_scores: [i64; 0] = [];
+    let res_max = flock_select_integer(&empty_scores, usize::MAX, select, &mut scratch);
+    assert!(res_max.is_err(), "query = usize::MAX must fail gracefully");
+
+    let res_top_k_max = top_k_select_integer(&empty_scores, usize::MAX, 1, &mut scratch);
+    assert!(
+        res_top_k_max.is_err(),
+        "query = usize::MAX must fail gracefully in top_k"
+    );
 }
 
 #[test]
-fn test_ensure_capacity_no_underflow_when_capacity_exceeds_needed() {
-    let mut scratch = FlockScratch::new(256);
-    // Capacity is initially at least 256. Call ensure_capacity with needed < capacity.
+fn test_ensure_capacity_growth_and_postcondition() {
+    let mut scratch = FlockScratch::new(129);
+    assert!(scratch.slots_capacity() >= 129);
+    assert!(scratch.rest_capacity() >= 129);
+    assert!(scratch.entries_capacity() >= 129);
+
+    // Growth on initially empty scratch: ensure_capacity(200)
+    scratch.ensure_capacity(200);
+    assert!(
+        scratch.slots_capacity() >= 200,
+        "slots_capacity {} < 200",
+        scratch.slots_capacity()
+    );
+    assert!(
+        scratch.rest_capacity() >= 200,
+        "rest_capacity {} < 200",
+        scratch.rest_capacity()
+    );
+    assert!(
+        scratch.entries_capacity() >= 200,
+        "entries_capacity {} < 200",
+        scratch.entries_capacity()
+    );
+
+    let slots_cap = scratch.slots_capacity();
+    let rest_cap = scratch.rest_capacity();
+    let entries_cap = scratch.entries_capacity();
+
+    // Prepare valid selection at query 150
+    let mut scores = vec![0i64; 160];
+    scores[10] = 50;
+    let select = FlockSelect::new(0, 20, 5);
+    let scan = flock_select_integer(&scores, 150, select, &mut scratch).unwrap();
+    assert_eq!(scan.visible, 151);
+
+    // Verify selection did not grow the preallocated buffers
+    assert_eq!(scratch.slots_capacity(), slots_cap);
+    assert_eq!(scratch.rest_capacity(), rest_cap);
+    assert_eq!(scratch.entries_capacity(), entries_cap);
+
+    // Growth on previously used scratch: ensure_capacity(300)
+    scratch.ensure_capacity(300);
+    assert!(
+        scratch.slots_capacity() >= 300,
+        "slots_capacity {} < 300",
+        scratch.slots_capacity()
+    );
+    assert!(
+        scratch.rest_capacity() >= 300,
+        "rest_capacity {} < 300",
+        scratch.rest_capacity()
+    );
+    assert!(
+        scratch.entries_capacity() >= 300,
+        "entries_capacity {} < 300",
+        scratch.entries_capacity()
+    );
+
+    // Capacity exceeds needed: ensure_capacity(64) does not underflow or shrink
     scratch.ensure_capacity(64);
-    assert!(scratch.slots_capacity() >= 256);
-    assert!(scratch.rest_capacity() >= 256);
-    assert!(scratch.entries_capacity() >= 256);
+    assert!(scratch.slots_capacity() >= 300);
+    assert!(scratch.rest_capacity() >= 300);
+    assert!(scratch.entries_capacity() >= 300);
 }
 
 #[test]
