@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 118,
-  "observed_server_time": 1790755433,
+  "sequence": 119,
+  "observed_server_time": 1790755951,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -78,6 +78,15 @@
       ],
       "available": false,
       "heartbeat": 1790736512
+    },
+    "kimi-coordinator-20260930": {
+      "lab": "coordination",
+      "adapter": "opencode-kimi",
+      "capabilities": [
+        "coordination"
+      ],
+      "available": true,
+      "heartbeat": 1790755951
     },
     "opencode-deepseek-20260930": {
       "lab": "OpenCode-DeepSeek",

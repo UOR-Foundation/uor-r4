@@ -1,0 +1,14 @@
+{
+  "event": {
+    "adapter": "opencode-kimi",
+    "capabilities": [
+      "coordination"
+    ],
+    "event_id": "kimi-1536-ceremony-1",
+    "lab": "coordination",
+    "op": "register",
+    "session": "kimi-coordinator-20260930"
+  },
+  "observed_server_time": 1790755951,
+  "previous_head": "209cf1cf72f34f2c47bbce8df514d83ddaa5a10f"
+}
