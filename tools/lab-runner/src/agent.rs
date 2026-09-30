@@ -92,6 +92,11 @@ pub fn plist_content(program: &Path, root: &Path, ledger_dir: &Path) -> String {
     <integer>30</integer>
     <key>RunAtLoad</key>
     <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>{stdout}</string>
     <key>StandardErrorPath</key>
@@ -179,6 +184,8 @@ mod tests {
             Path::new("/Volumes/UOR-Workspace/runner"),
             Path::new("/home/u/.uor-models/native-joint-learning-2026-09-04"),
         );
+        assert!(content.contains("<key>EnvironmentVariables</key>"));
+        assert!(content.contains("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"));
         assert!(content.contains("<string>org.uor.lab-runner</string>"));
         assert!(content.contains("<key>KeepAlive</key>"));
         assert!(content.contains("<key>RunAtLoad</key>"));
