@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": true,
+    "event_id": "82feeb2f-4a46-4919-aab8-4e0e4147f505",
+    "op": "heartbeat",
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790747524,
+  "previous_head": "9e4e02201965d4b692821b105818488d99b2751c"
+}
