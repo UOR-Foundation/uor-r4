@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 254,
-  "observed_server_time": 1790782954,
+  "sequence": 255,
+  "observed_server_time": 1790782957,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -143,15 +143,17 @@
         "cleanup": "Removed2 inactive incremental directories after successful checks; observed df +628384KiB. Working cache, binaries, source, models and reports retained.",
         "live_attempts": [
           {
-            "exec_session": 2595,
-            "kind": "direct release compile",
-            "log": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuation-20260930/track-b-648ba939-release-build.log",
-            "threads": 2
+            "binary_sha256": "f1892eb7281cd15007f894d0867b1daadc1ebc22e8b53b8f4057ed23e6983be4",
+            "exec_session": 63413,
+            "kind": "dense parity",
+            "log": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuation-20260930/track-b-648ba939-parity.log",
+            "report": "/Volumes/UOR-Workspace/uor-r4-models/track-b/parity-648ba939-20260930",
+            "wall_seconds": 600
           }
         ],
         "main_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
         "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
-        "next_action": "Release build running in INTERNAL cache, then unchanged CPU+Metal all-logit parity. Preserve recorded Metal harmonic floor failure; it is independent of dense model parity.",
+        "next_action": "Read live dense parity result; no duplicate launch. Release build passed372.42s. Keep numerical gate unchanged.",
         "pr": 1518,
         "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
         "status": "ACTIVE",
