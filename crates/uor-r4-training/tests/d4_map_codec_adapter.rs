@@ -1277,6 +1277,8 @@ fn test_saved_model_export_restores_codec_not_rtn() -> Result<()> {
         rotation: false,
         seed: 42,
         memory: None,
+        select: None,
+        pointer: None,
     };
     let device = Device::Cpu;
     let mut model = StackModel::new(config, &device)?;
