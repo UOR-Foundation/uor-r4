@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 46,
-  "observed_server_time": 1790740156,
+  "sequence": 47,
+  "observed_server_time": 1790740237,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -102,6 +102,25 @@
       "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "paths": [],
       "expires": 1790741356,
+      "phase": "claimed",
+      "checkpoint": null
+    },
+    "1533": {
+      "session": "claude-lab-20260930",
+      "epoch": 1,
+      "work_card": "sha256:e10493cc1b067e5f889000052ad99642bfb5f543a8b2caa2484644d026eefd58",
+      "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+      "paths": [
+        "crates/uor-r4-lut/src/stack.rs",
+        "crates/uor-r4-training/src/geometric_stack.rs",
+        "crates/uor-r4-training/src/bin/d4-float-reference.rs",
+        "crates/uor-r4-training/tests/d4_map_codec_adapter.rs",
+        "crates/uor-r4-training/src/stack_snap_parity.rs",
+        "docs/evidence/s1-4-snap-parity-2026-09-29.json",
+        "docs/integration/current-state.md"
+      ],
+      "expires": 1790741437,
       "phase": "claimed",
       "checkpoint": null
     }

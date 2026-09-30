@@ -1,0 +1,24 @@
+{
+  "event": {
+    "base_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1533-1",
+    "issue": 1533,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-lut/src/stack.rs",
+      "crates/uor-r4-training/src/geometric_stack.rs",
+      "crates/uor-r4-training/src/bin/d4-float-reference.rs",
+      "crates/uor-r4-training/tests/d4_map_codec_adapter.rs",
+      "crates/uor-r4-training/src/stack_snap_parity.rs",
+      "docs/evidence/s1-4-snap-parity-2026-09-29.json",
+      "docs/integration/current-state.md"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": null,
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:e10493cc1b067e5f889000052ad99642bfb5f543a8b2caa2484644d026eefd58"
+  },
+  "observed_server_time": 1790740237,
+  "previous_head": "4a75c48ea106c370d6b91a69b46d4b1aaf76aeee"
+}
