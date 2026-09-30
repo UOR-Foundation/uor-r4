@@ -1,0 +1,30 @@
+{
+  "event": {
+    "epoch": 6,
+    "event_id": "pilot-c-checkpoint-completed-successor-2d5492d6-0386-4d75-9d6c-aef9b4896fc8",
+    "issue": 1520,
+    "op": "checkpoint",
+    "packet": {
+      "attempt": "continuity-pilot-20260930-c",
+      "execution_elapsed_ms": 95226,
+      "live_transfer_evidence": [
+        "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/before-release.json",
+        "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/after-successor-claim.json"
+      ],
+      "model_checkpoint_qualified": false,
+      "next_action": "No resubmission. Root independently publishes C evidence and chooses next eligible work; normal host admission gates remain enforced. Memory pressure observed2 after completion requires normal1 for new admission.",
+      "result": {
+        "attempt_id": "continuity-pilot-20260930-c",
+        "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+        "job_id": "continuity-pilot-20260930-c",
+        "path": "/Users/casey.allard/.local/share/uor-r4/runner/done/continuity-pilot-20260930-c/exit.json",
+        "sha256": "451a78ad5ed5148bd09be385f51028bec0825de95859c25b009d7061fbe31461"
+      },
+      "same_operator_two_cli_sessions": true,
+      "single_charge_proof": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuity-pilot-c-20260930/single-charge-proof.json"
+    },
+    "session": "codex-review1-pilot-c-successor-20260930"
+  },
+  "observed_server_time": 1790739632,
+  "previous_head": "3206281fb7790c3f0aeec2a7b457123224b66fdd"
+}
