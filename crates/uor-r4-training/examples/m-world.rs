@@ -12,10 +12,11 @@
 //!   [mqar_share=0.35] [copy_share=0.10] [relation_share=0.30] [other_share=0.25]
 //! m-world evaluate [world=v1] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
-//!   [panel=REQUESTS.json]
+//!   [panel=REQUESTS.json] [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world evaluate world=v2 out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
-//!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
+//!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
+//!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! ```
 //!
@@ -50,6 +51,16 @@
 //! `rejudge` re-judges an evaluation's saved replies with this build's oracle;
 //! a v2 report needs `tokenizer=` (its MQAR distances depend on it).
 //!
+//! `select=` and `pointer_select=` (`evaluate` only) override the loaded
+//! model's selections without training: the reads' flock (sink at position 0,
+//! the last W positions and the K best of the rest) and the pointer head's own
+//! selection (`top:K` keeps the K best sources alone, so `top:1` is the
+//! single-source pointer; `none` keeps every source). The weights are
+//! unchanged, so a window x k sweep is one set of weights scored under several
+//! selections. `pointer_select=` needs a model with a pointer head (`none`
+//! excepted). The report's `selection_override` records what was given, what
+//! the saved model had and what applied; it is null without an override.
+//!
 //! A saved transport snap is restored; a saved served representation is
 //! refused. Every root is claimed before anything is loaded and sealed at the
 //! end. Set RAYON_NUM_THREADS to bound the threads.
@@ -65,7 +76,7 @@ use uor_r4_core::native_geometric::mmap_corpus::{CorpusWriter, MmapCorpusReader}
 use uor_r4_core::report_output;
 use uor_r4_tokenizer::dialogue::{DialogueEncoder, DialogueProtocol, Message};
 use uor_r4_tokenizer::ByteBpeTokenizer;
-use uor_r4_training::geometric_stack::StackModel;
+use uor_r4_training::geometric_stack::{parse_flock_select, parse_pointer_select, StackModel};
 use uor_r4_training::milestone_world::{judge, normalized, Category, MWorld, Split};
 use uor_r4_training::milestone_world_v2::{
     judge_v2, render, Conversation2, Kind, MWorld2, Mix, Pool, Scorecard, Turn2, CONTEXT,
@@ -764,7 +775,13 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_model(directory: &Path, device: &Device) -> Result<(StackModel, Value)> {
+/// The model of `directory`, its file identity, and the record of the
+/// selection overrides `args` give it ([`apply_selection_override`]).
+fn load_model(
+    directory: &Path,
+    device: &Device,
+    args: &Args,
+) -> Result<(StackModel, Value, Value)> {
     if StackModel::saved_served_representation(directory)?.is_some() {
         return Err(invalid(
             "the model was saved with a served representation, which this tool does not reapply",
@@ -780,10 +797,48 @@ fn load_model(directory: &Path, device: &Device) -> Result<(StackModel, Value)> 
             files.insert(name.into(), json!(sha256_file(&path)?));
         }
     }
+    // The identity is of the saved files; the override changes no weight.
+    let selection_override = apply_selection_override(&mut model, args)?;
     Ok((
         model,
         json!({"files_sha256": files, "transport_snap": format!("{snap:?}")}),
+        selection_override,
     ))
+}
+
+/// `select=` and `pointer_select=` applied to the loaded model, post hoc: the
+/// reads' flock and the pointer head's own selection replace the saved ones
+/// (the weights do not change). The record gives, for each one given, the text
+/// given, the saved selection and the one that applies; it is `null` when
+/// neither was given.
+fn apply_selection_override(model: &mut StackModel, args: &Args) -> Result<Value> {
+    let select = args.optional("select");
+    let pointer_select = args.optional("pointer_select");
+    if select.is_none() && pointer_select.is_none() {
+        return Ok(Value::Null);
+    }
+    let mut record = serde_json::Map::new();
+    record.insert("weights_unchanged".into(), json!(true));
+    if let Some(text) = select {
+        let saved = model.config.select;
+        model.set_select(parse_flock_select(&text)?)?;
+        record.insert(
+            "select".into(),
+            json!({"given": text, "saved": saved, "effective": model.config.select}),
+        );
+    }
+    if let Some(text) = pointer_select {
+        let saved = model.config.pointer.and_then(|pointer| pointer.select);
+        model.set_pointer_select(parse_pointer_select(&text)?)?;
+        record.insert(
+            "pointer_select".into(),
+            json!({
+                "given": text, "saved": saved,
+                "effective": model.config.pointer.and_then(|pointer| pointer.select),
+            }),
+        );
+    }
+    Ok(Value::Object(record))
 }
 
 fn split_of(args: &Args) -> Result<Split> {
@@ -852,7 +907,7 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
         .bind(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let device = Device::Cpu;
-    let (model, identity) = load_model(&model_dir, &device)?;
+    let (model, identity, selection_override) = load_model(&model_dir, &device, args)?;
     let context = model.config.context;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let mut reply =
@@ -954,6 +1009,7 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
         "world_digest": MWorld::digest(),
         "model": model_dir.display().to_string(),
         "model_identity": identity,
+        "selection_override": selection_override,
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
         "world": "m-world-v1",
@@ -1008,7 +1064,7 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
         .bind(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let device = Device::Cpu;
-    let (model, identity) = load_model(&model_dir, &device)?;
+    let (model, identity, selection_override) = load_model(&model_dir, &device, args)?;
     let context = model.config.context;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let mut reply =
@@ -1101,6 +1157,7 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
         "world_digest": MWorld2::digest(),
         "model": model_dir.display().to_string(),
         "model_identity": identity,
+        "selection_override": selection_override,
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
         "split": split,
@@ -1382,6 +1439,8 @@ fn main() -> Result<()> {
                 "copy_share",
                 "relation_share",
                 "other_share",
+                "select",
+                "pointer_select",
             ],
         )?,
         "rejudge" => Args::parse(rest, &["out", "report", "tokenizer"])?,

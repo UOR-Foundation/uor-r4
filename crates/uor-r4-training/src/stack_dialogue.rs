@@ -806,7 +806,8 @@ mod tests {
 
     #[test]
     fn a_pointer_stack_learns_the_split_and_reports_its_gate_and_hits() {
-        use crate::geometric_stack::{FlockSelect, PointerConfig};
+        use crate::flock::FlockSelect;
+        use crate::geometric_stack::PointerConfig;
         let directory = std::env::temp_dir().join(format!(
             "uor-r4-stack-dialogue-pointer-{}-{}",
             std::process::id(),
@@ -820,9 +821,19 @@ mod tests {
         let index = split.index(contract).unwrap();
         let panel = dialogue_development::select(&index, 7, 2).unwrap();
         let mut config = stack().config.clone();
-        config.pointer = Some(PointerConfig { dim: 8 });
-        config.select = Some(FlockSelect { window: 8, k: 2 });
-        let model = StackModel::new(config, &Device::Cpu).unwrap();
+        // A Lorentz pointer that softmaxes over every source (its own
+        // selection is none), beside a flock on the reads, which the pointer
+        // does not use.
+        config.pointer = Some(PointerConfig {
+            score: ReadScore::Lorentz,
+            ..PointerConfig::new(8)
+        });
+        config.select = Some(FlockSelect {
+            sink: 0,
+            window: 8,
+            k: 2,
+        });
+        let mut model = StackModel::new(config, &Device::Cpu).unwrap();
         let before = development(&model, &index, &panel, 4).unwrap();
         let pointer = &before["pointer"];
         // The head is scored on exactly the supervised targets, and its gate
@@ -857,6 +868,26 @@ mod tests {
             nll(&after)
         );
         assert!(after["pointer"]["mean_gate"].is_number());
+        // The same weights scored with the single-source pointer, post hoc: a
+        // single kept source copies with weight 1 or 0, so on every scored
+        // target the copy mass is the hit and the reachable indicator.
+        model
+            .set_pointer_select(Some(crate::geometric_stack::PointerSelect::TopK(1)))
+            .unwrap();
+        let single = development(&model, &index, &panel, 4).unwrap();
+        assert_eq!(
+            single["pointer"]["scored_targets"],
+            after["pointer"]["scored_targets"]
+        );
+        let rate = |key: &str| single["pointer"][key].as_f64().unwrap();
+        assert!(
+            (rate("mean_copy_mass") - rate("pointer_hit_rate")).abs() < 1e-9,
+            "copy mass {} against hit rate {}",
+            rate("mean_copy_mass"),
+            rate("pointer_hit_rate")
+        );
+        assert!((rate("target_reachable_rate") - rate("pointer_hit_rate")).abs() < 1e-9);
+        model.set_pointer_select(None).unwrap();
         // Greedy replies come from the mixture and stop at EOS.
         let requests = vec![Request {
             id: "r1".into(),

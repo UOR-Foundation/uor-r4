@@ -42,6 +42,7 @@
 //!   dev_tokens=DEV.uort dev_mask=DEV.mask dev_manifest=DEV/manifest.json \
 //!   (init=ROOT/model | arch=geometric|transformer [shape options as train]) [qat=false|true] \
 //!   [transport_snap=none|icosian] [select=none|flock:WINDOW:K] [pointer=none|DIM] \
+//!   [pointer_score=dot|lorentz] [pointer_select=none|flock:WINDOW:K|top:K] \
 //!   [policy=full_prefix|role_only] [data_seed=1] [steps=1024] [batch=16] [lr=0.001] [warmup=50] \
 //!   [min_lr=0.1] [weight_decay=0.1] [clip=1.0] [eval_every=128] [dev_seed=1] [dev_per_source=32] \
 //!   [checkpoint_every=128] [resume=OLD_ROOT/checkpoint] [max_seconds=inf] [requests=REQUESTS.json] \
@@ -151,24 +152,37 @@
 //! study's do: at EOS, at a terminal cycle of one to four ids repeated three
 //! times, or at `max_new_tokens`.
 //!
-//! `select=flock:WINDOW:K` and `pointer=DIM` (`dialogue-train`, for fresh shapes
-//! and after `init=` alike) are the A1 retrieval mechanisms of
-//! `uor_r4_training::geometric_stack`. A flock makes every read row (the
-//! geometric reads and the control's attention) softmax over the sink, the
-//! last WINDOW positions and the K best-scoring other sources only. A pointer
-//! adds a copy head after the final norm: a DIM-wide query and key attend the
-//! input tokens (through the flock, if set) and a gate mixes the copied
-//! token's distribution with the ordinary one; the loss, the development
-//! scores and the greedy replies are the mixture's. Both go into the saved
-//! `config.json` and the report. After `init=`, `select=` replaces the saved
-//! flock (the weights are unchanged), and `pointer=DIM` on a model saved
-//! without a pointer adds one with weights drawn fresh from `seed=` (default:
-//! the saved model's seed), recorded in the report (`flock_and_pointer`). Each
-//! evaluation reports the pointer's mean gate and hit rate on the scored
+//! `select=flock:WINDOW:K`, `pointer=DIM`, `pointer_score=dot|lorentz` and
+//! `pointer_select=none|flock:WINDOW:K|top:K` (`dialogue-train`, for fresh
+//! shapes and after `init=` alike) are the A1 retrieval mechanisms of
+//! `uor_r4_training::geometric_stack`, selecting with the shared
+//! `uor_r4_training::flock` selector. A flock (`select=`, its sink at position
+//! 0) makes every read row (the geometric reads and the control's attention)
+//! softmax over the sink, the last WINDOW positions and the K best-scoring
+//! other sources only. A pointer adds a copy head after the final norm: a
+//! DIM-wide query and key attend the input tokens by the pointer's own score
+//! (`pointer_score=`: `dot`, the default, or `lorentz`, the fused read's
+//! hyperboloid form with a learned scale) and its own selection
+//! (`pointer_select=`, default none, which keeps every source; `top:K` keeps
+//! the K best alone, so `top:1` is the single-source pointer). The reads'
+//! `select=` never applies to the pointer. A gate mixes the copied token's
+//! distribution with the ordinary one; the loss, the development scores and
+//! the greedy replies are the mixture's. All go into the saved `config.json`
+//! and the report. After `init=`, `select=` replaces the saved flock and
+//! `pointer_select=` the saved pointer's selection (the weights are unchanged
+//! by both), `pointer=DIM` and `pointer_score=` must agree with a saved head,
+//! and `pointer=DIM` on a model saved without a pointer adds one with weights
+//! drawn fresh from `seed=` (default: the saved model's seed). That seed is
+//! recorded in the head's `init_seed` and in the report (`flock_and_pointer`);
+//! a resume verifies it (a different one is refused) and carries it forward.
+//! Each evaluation reports the pointer's mean gate and hit rate on the scored
 //! targets (`dev_pointer_*` in the curve, `pointer` in the developments). The
 //! pointer has no served representation: `qat=true` and `export` refuse it,
-//! and `export` refuses a flock too until a D11 port exists. `--help` prints
-//! the usage.
+//! `export` refuses a flock too until a D11 port exists, and the evaluators
+//! that read raw logits (`snap-evaluate`, `rounding-attribution` and
+//! `lut-evaluate` with `model=`) refuse a pointer model, whose distribution is
+//! the mixture. `m-world evaluate` overrides a saved model's selections without
+//! training (`select=`, `pointer_select=`). `--help` prints the usage.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -182,10 +196,11 @@ use uor_r4_core::native_geometric::learner::embedding::canonical_h4_roots;
 use uor_r4_core::report_output;
 use uor_r4_training::dialogue_development;
 use uor_r4_training::dialogue_episodes::{EpisodeIndex, PrefixPolicy, EPISODE_CONTEXT};
+use uor_r4_training::flock::FlockSelect;
 use uor_r4_training::geometric_stack::{
-    logits_cross_entropy, D11Interim, FlockSelect, MapCodec, PointerConfig, ReadScore,
-    ServedStatistics, StackAdamW, StackArch, StackConfig, StackModel, TransportSnap,
-    TransportUsage,
+    logits_cross_entropy, parse_flock_select, parse_pointer_select, D11Interim, MapCodec,
+    PointerConfig, PointerSelect, ReadScore, ServedStatistics, StackAdamW, StackArch,
+    StackConfig, StackModel, TransportSnap, TransportUsage,
 };
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
@@ -193,8 +208,9 @@ use uor_r4_training::stack_dialogue::{
     DialogueSplit, Reply, MAX_NEW_TOKENS,
 };
 use uor_r4_training::stack_export::{
-    check_export_config, check_export_representation, check_export_transport, control_checkpoint,
-    control_grid_reference, export_stack, stack_grid_reference, StackCalibration,
+    check_export_config, check_export_representation, check_export_transport,
+    check_raw_logit_evaluation, control_checkpoint, control_grid_reference, export_stack,
+    stack_grid_reference, StackCalibration,
 };
 use uor_r4_training::stack_memory::{Codebook, MemoryConfig, MemoryScore};
 use uor_r4_training::{sha256_file, Result, TrainingError};
@@ -635,46 +651,92 @@ fn qat_flag(args: &Args) -> Result<bool> {
 }
 
 /// `select=none|flock:<window>:<k>`: `Some(None)` clears a saved flock, `None`
-/// is not given.
+/// is not given. The flock's sink is position 0.
 fn select_arg(args: &Args) -> Result<Option<Option<FlockSelect>>> {
-    let Some(text) = args.optional("select") else {
-        return Ok(None);
-    };
-    if text == "none" {
-        return Ok(Some(None));
+    args.optional("select")
+        .map(|text| parse_flock_select(&text))
+        .transpose()
+}
+
+/// The pointer options of a run as given: `pointer=none|<dim>`,
+/// `pointer_score=dot|lorentz` and `pointer_select=none|flock:<window>:<k>|top:<k>`.
+struct PointerArgs {
+    /// `pointer=`: `Some(None)` is `none`, `None` is not given.
+    head: Option<Option<usize>>,
+    /// `pointer_score=`; `None` is not given.
+    score: Option<ReadScore>,
+    /// `pointer_select=`: `Some(None)` is `none` (it clears a saved selection),
+    /// `None` is not given.
+    select: Option<Option<PointerSelect>>,
+}
+
+impl PointerArgs {
+    /// The options name a new head: `pointer=<dim>`, whose score defaults to
+    /// Dot and whose selection to none. `seed` is the seed an added head's
+    /// weights are drawn from (recorded in its `init_seed`), `None` for a head
+    /// built with a fresh model.
+    fn new_head(&self, seed: Option<u64>) -> Option<PointerConfig> {
+        let dim = self.head.flatten()?;
+        Some(PointerConfig {
+            dim,
+            score: self.score.unwrap_or(ReadScore::Dot),
+            select: self.select.flatten(),
+            init_seed: seed,
+        })
     }
-    let bad = || {
-        invalid(format!(
-            "invalid select={text} (none or flock:<window>:<k>)"
-        ))
-    };
-    let parts: Vec<&str> = text.split(':').collect();
-    match parts.as_slice() {
-        ["flock", window, k] => {
-            let select = FlockSelect {
-                window: window.parse().map_err(|_| bad())?,
-                k: k.parse().map_err(|_| bad())?,
-            };
-            select.validate()?;
-            Ok(Some(Some(select)))
+
+    /// `pointer_score=` and `pointer_select=` have nothing to configure
+    /// without a head, given or saved.
+    fn refuse_without_head(&self) -> Result<()> {
+        if self.score.is_some() || self.select.is_some() {
+            return Err(invalid(
+                "pointer_score= and pointer_select= configure a pointer head: give pointer=<dim> \
+                 (the model has none)",
+            ));
         }
-        _ => Err(bad()),
+        Ok(())
     }
 }
 
-/// `pointer=none|<dim>`: `Some(None)` is `none`, `None` is not given.
-fn pointer_arg(args: &Args) -> Result<Option<Option<PointerConfig>>> {
-    let Some(text) = args.optional("pointer") else {
-        return Ok(None);
+fn pointer_args(args: &Args) -> Result<PointerArgs> {
+    let head = match args.optional("pointer").as_deref() {
+        None => None,
+        Some("none") => Some(None),
+        Some(text) => match text.parse::<usize>() {
+            Ok(dim) if dim > 0 => Some(Some(dim)),
+            _ => {
+                return Err(invalid(format!(
+                    "invalid pointer={text} (none or a positive query width)"
+                )))
+            }
+        },
     };
-    if text == "none" {
-        return Ok(Some(None));
-    }
-    match text.parse::<usize>() {
-        Ok(dim) if dim > 0 => Ok(Some(Some(PointerConfig { dim }))),
-        _ => Err(invalid(format!(
-            "invalid pointer={text} (none or a positive query width)"
-        ))),
+    let score = match args.optional("pointer_score").as_deref() {
+        None => None,
+        Some("dot") => Some(ReadScore::Dot),
+        Some("lorentz") => Some(ReadScore::Lorentz),
+        Some(other) => {
+            return Err(invalid(format!(
+                "invalid pointer_score={other} (dot or lorentz)"
+            )))
+        }
+    };
+    let select = args
+        .optional("pointer_select")
+        .map(|text| parse_pointer_select(&text))
+        .transpose()?;
+    Ok(PointerArgs {
+        head,
+        score,
+        select,
+    })
+}
+
+/// A score's name as the command line and the reports give it.
+fn score_name(score: ReadScore) -> &'static str {
+    match score {
+        ReadScore::Dot => "dot",
+        ReadScore::Lorentz => "lorentz",
     }
 }
 
@@ -1065,8 +1127,11 @@ fn stack_config(args: &Args, vocab: Option<usize>) -> Result<StackConfig> {
     if let Some(select) = select_arg(args)? {
         config.select = select;
     }
-    if let Some(pointer) = pointer_arg(args)? {
-        config.pointer = pointer;
+    // A fresh shape's head is built with its model: no `init_seed`.
+    let pointer = pointer_args(args)?;
+    match pointer.new_head(None) {
+        Some(head) => config.pointer = Some(head),
+        None => pointer.refuse_without_head()?,
     }
     config.validate()?;
     Ok(config)
@@ -2145,6 +2210,9 @@ fn snap_evaluate_mode(arguments: &[String]) -> Result<()> {
     let result = (|| -> Result<()> {
         let started = Instant::now();
         let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        // This mode scores the raw logits, which are not a pointer model's
+        // distribution.
+        check_raw_logit_evaluation(&model.config, "snap-evaluate")?;
         let valid = read_tokens(&valid_path, model.config.vocab_size)?;
         let time = model.config.context;
         if valid.len() <= time + windows {
@@ -2245,6 +2313,9 @@ fn rounding_attribution_mode(arguments: &[String]) -> Result<()> {
     let result = (|| -> Result<()> {
         let started = Instant::now();
         let float = StackModel::load(&model_dir, &Device::Cpu)?;
+        // This mode scores the raw logits, which are not a pointer model's
+        // distribution.
+        check_raw_logit_evaluation(&float.config, "rounding-attribution")?;
         let artifact =
             uor_r4_lut::format::StackArtifact::parse(fs::read(&artifact_path)?).map_err(lut)?;
         let reference = stack_grid_reference(&float, &artifact)?;
@@ -2435,6 +2506,9 @@ fn lut_evaluate_mode(arguments: &[String]) -> Result<()> {
             .map(|dir| StackModel::load(dir, &Device::Cpu))
             .transpose()?;
         if let Some(model) = &float {
+            // The float side of this mode scores the raw logits, which are not
+            // a pointer model's distribution.
+            check_raw_logit_evaluation(&model.config, "lut-evaluate")?;
             if model.config.vocab_size != engine.vocabulary() || model.config.context != time {
                 return Err(invalid("the float model and the artifact differ in shape"));
             }
@@ -2832,9 +2906,12 @@ struct DialogueSettings {
     qat: bool,
     /// Train with the transport snapped (`transport_snap=`), as `train` does.
     transport_snap: Option<TransportSnap>,
-    /// `select=` and `pointer=` as given (the A1 read mechanisms).
+    /// `select=`, `pointer=`, `pointer_score=` and `pointer_select=` as given
+    /// (the A1 read mechanisms).
     select: Option<String>,
     pointer: Option<String>,
+    pointer_score: Option<String>,
+    pointer_select: Option<String>,
     policy: PrefixPolicy,
     data_seed: u64,
     steps: usize,
@@ -2875,6 +2952,12 @@ impl DialogueSettings {
         }
         if let Some(pointer) = &self.pointer {
             record["pointer"] = json!(pointer);
+        }
+        if let Some(score) = &self.pointer_score {
+            record["pointer_score"] = json!(score);
+        }
+        if let Some(select) = &self.pointer_select {
+            record["pointer_select"] = json!(select);
         }
         record
     }
@@ -2993,11 +3076,13 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "transport_snap",
             "select",
             "pointer",
+            "pointer_score",
+            "pointer_select",
         ],
     )?;
     // Validate the A1 options before anything is claimed or loaded.
     select_arg(&args)?;
-    let pointer_requested = pointer_arg(&args)?;
+    let pointer_requested = pointer_args(&args)?;
     let path = |key: &str| -> Result<PathBuf> { Ok(PathBuf::from(args.required(key)?)) };
     let settings = DialogueSettings {
         tokenizer: path("tokenizer")?,
@@ -3016,6 +3101,8 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         transport_snap: transport_snap_arg(&args)?,
         select: args.optional("select"),
         pointer: args.optional("pointer"),
+        pointer_score: args.optional("pointer_score"),
+        pointer_select: args.optional("pointer_select"),
         policy: match args.optional("policy").as_deref() {
             None | Some("full_prefix") => PrefixPolicy::FullPrefix,
             Some("role_only") => PrefixPolicy::RoleOnly,
@@ -3071,7 +3158,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             }
             None => None,
         };
-        if saved_pointer.is_some() || matches!(pointer_requested, Some(Some(_))) {
+        if saved_pointer.is_some() || matches!(pointer_requested.head, Some(Some(_))) {
             return Err(pointer_qat_refusal());
         }
     }
@@ -3082,36 +3169,79 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
 }
 
 /// The configuration of a `dialogue-train` run from `init=`'s saved model with
-/// the run's `select=` and `pointer=` applied: `select=` replaces the saved
-/// flock (no weights change); `pointer=DIM` keeps a saved head of that width,
-/// refuses another width, and on a model saved without one asks for a new head
-/// (the returned flag). A saved head cannot be removed.
+/// the run's options applied. `select=` replaces the saved flock and
+/// `pointer_select=` the saved pointer's own selection (no weights change by
+/// either). `pointer=DIM` and `pointer_score=` must agree with a saved head,
+/// which cannot be removed. On a model saved without one, `pointer=DIM` asks
+/// for a new head (the returned flag), scoring by `pointer_score=` (default
+/// dot), whose weights are drawn from `seed=` (default: the saved model's
+/// seed); that seed is recorded in the head's `init_seed`, so it belongs to
+/// the configuration a resume must share.
 fn init_extended_config(args: &Args, saved: &StackConfig) -> Result<(StackConfig, bool)> {
     let mut config = saved.clone();
     if let Some(select) = select_arg(args)? {
         config.select = select;
     }
+    let asked = pointer_args(args)?;
     let mut added = false;
-    match (pointer_arg(args)?, saved.pointer) {
-        (None, _) | (Some(None), None) => {}
-        (Some(None), Some(_)) => {
-            return Err(invalid(
-                "pointer=none cannot remove the saved model's pointer head",
-            ))
+    match saved.pointer {
+        Some(existing) => {
+            if asked.head == Some(None) {
+                return Err(invalid(
+                    "pointer=none cannot remove the saved model's pointer head",
+                ));
+            }
+            if let Some(Some(dim)) = asked.head {
+                if dim != existing.dim {
+                    return Err(invalid(format!(
+                        "pointer={dim} conflicts with the saved model's pointer head of width {}",
+                        existing.dim
+                    )));
+                }
+            }
+            if let Some(score) = asked.score {
+                if score != existing.score {
+                    return Err(invalid(format!(
+                        "pointer_score={} conflicts with the saved model's pointer head, which \
+                         scores {}",
+                        score_name(score),
+                        score_name(existing.score)
+                    )));
+                }
+            }
+            if let Some(select) = asked.select {
+                config.pointer = Some(PointerConfig { select, ..existing });
+            }
         }
-        (Some(Some(asked)), Some(saved)) if asked != saved => {
-            return Err(invalid(format!(
-                "pointer={} conflicts with the saved model's pointer head of width {}",
-                asked.dim, saved.dim
-            )))
-        }
-        (Some(Some(asked)), saved) => {
-            added = saved.is_none();
-            config.pointer = Some(asked);
-        }
+        None => match asked.new_head(Some(args.number("seed", saved.seed)?)) {
+            Some(head) => {
+                added = true;
+                config.pointer = Some(head);
+            }
+            None => asked.refuse_without_head()?,
+        },
     }
     config.validate()?;
     Ok((config, added))
+}
+
+/// A resume must carry the pointer head's init seed of the run it continues:
+/// the seed is in the lineage's configuration, and a different one is refused
+/// here with both seeds named (the general lineage check would name only the
+/// configuration). A checkpoint whose head was built with its model, or that
+/// has none, records no seed, and so must the resume.
+fn check_resume_pointer_seed(checkpoint: &Path, config: &StackConfig) -> Result<()> {
+    let state: Value = serde_json::from_slice(&fs::read(checkpoint.join("state.json"))?)?;
+    let saved = &state["lineage"]["config"]["pointer"]["init_seed"];
+    let asked = json!(config.pointer.and_then(|pointer| pointer.init_seed));
+    if *saved != asked {
+        return Err(invalid(format!(
+            "the resume's pointer init seed ({asked}) differs from the checkpoint's ({saved}): \
+             a head added to init= keeps the seed its weights were drawn from, so resume with the \
+             same seed= (or none, when the run used the saved model's)"
+        )));
+    }
+    Ok(())
 }
 
 /// The roots the snapped forward selects over the development panel, as
@@ -3174,9 +3304,9 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
     let dev = dev_split.index(contract)?;
     let panel = dialogue_development::select(&dev, s.dev_seed, s.dev_per_source)?;
     let requests = s.requests.as_deref().map(load_requests).transpose()?;
-    // After `init=`, `select=` and `pointer=` extend the saved model; a pointer
-    // added to a model saved without one draws its weights from `seed=` (the
-    // saved seed by default).
+    // After `init=`, `select=` and the pointer options extend the saved model; a
+    // pointer added to a model saved without one draws its weights from `seed=`
+    // (the saved seed by default), which its `init_seed` records.
     let (config, pointer_added) = match &s.init {
         Some(directory) => {
             check_init_tokenizer(directory, &s.tokenizer)?;
@@ -3186,7 +3316,10 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         None => (stack_config(args, Some(vocab))?, false),
     };
     let pointer_seed: u64 = if pointer_added {
-        args.number("seed", config.seed)?
+        config
+            .pointer
+            .and_then(|pointer| pointer.init_seed)
+            .ok_or_else(|| invalid("an added pointer head records its init seed"))?
     } else {
         config.seed
     };
@@ -3213,7 +3346,10 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                     let mut model = StackModel::load(directory, &device)?;
                     model.set_select(config.select)?;
                     if let Some(pointer) = config.pointer {
+                        // A saved head keeps its weights, its recorded seed and
+                        // (unless the run replaces it) its selection.
                         model.add_pointer(pointer, pointer_seed)?;
+                        model.set_pointer_select(pointer.select)?;
                     }
                     if model.config != config {
                         return Err(invalid(
@@ -3235,8 +3371,20 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
             (model, optimizer, progress, None)
         }
         Some(checkpoint) => {
+            // The pointer head's init seed is part of the lineage; a different
+            // one is refused, naming both.
+            check_resume_pointer_seed(checkpoint, &config)?;
             let (model, optimizer, progress, state) =
                 load_checkpoint(checkpoint, &lineage, &device)?;
+            // And the model it resumes carries it: the report gives the
+            // resumed head's seed, not the one this invocation was given.
+            if model.config.pointer.and_then(|pointer| pointer.init_seed)
+                != config.pointer.and_then(|pointer| pointer.init_seed)
+            {
+                return Err(invalid(
+                    "the checkpoint's model records a different pointer init seed than its lineage",
+                ));
+            }
             (model, optimizer, progress, Some(state))
         }
     };
@@ -3502,12 +3650,16 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         report["flock_and_pointer"] = json!({
             "select": model.config.select,
             "pointer": model.config.pointer,
+            "pointer_score": model.config.pointer.map(|pointer| score_name(pointer.score)),
+            "pointer_select": model.config.pointer.and_then(|pointer| pointer.select),
             "pointer_head_added_to_init": pointer_added,
-            "pointer_init_seed": pointer_added.then_some(pointer_seed),
+            // The seed the model itself records: a resumed run reports the
+            // head's seed, which the resume verified, not one it was given.
+            "pointer_init_seed": model.config.pointer.and_then(|pointer| pointer.init_seed),
             "pointer_init_seed_source": pointer_added.then_some(seed_source),
             "pointer_parameters": pointer_parameters,
             "final_pointer_diagnostics": final_pointer,
-            "scope": "Flock selection (sink, last WINDOW positions and the K best-scoring other sources per read row; unkept sources weigh and receive exactly 0) applies to every read of the model, the pointer's attention included. The pointer head copies the input token at the attended position and a gate g = sigmoid(w.h + b) (b starts at -2) mixes that with the ordinary distribution; `response_mean_nll`, the losses and the greedy replies are the mixture's. `pointer` diagnostics are over the scored dev targets. Neither mechanism has a D11 port, and `export` and `qat=true` refuse a pointer. Offline float training only; not a served or quality result.",
+            "scope": "Flock selection of the reads (sink at position 0, last WINDOW positions and the K best-scoring other sources per read row, by the shared crate::flock selector; unkept sources weigh and receive exactly 0; the NoRead slot stays outside the selection) applies to every read of the model and never to the pointer. The pointer head scores each source of the window with its own score (`pointer_score`: dot, or the fused read's Lorentz form with a learned scale) and softmaxes over the sources its own selection keeps (`pointer_select`: none keeps all, top:1 is the single-source pointer), copies the input tokens at the attended positions, and a gate g = sigmoid(w.h + b) (b starts at -2) mixes that with the ordinary distribution; when no kept source holds a target the mixture is (1 - g) softmax alone, with no floor. `response_mean_nll`, the losses and the greedy replies are the mixture's. `pointer` diagnostics are over the scored dev targets. Neither mechanism has a D11 port, and `export` and `qat=true` refuse a pointer. Offline float training only; not a served or quality result.",
         });
     }
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
@@ -3791,22 +3943,35 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
   dev_tokens=DEV.uort dev_mask=DEV.mask dev_manifest=DEV/manifest.json \\
   (init=ROOT/model | arch=geometric|transformer [width= heads= layers= pattern= read= rotation= \\
   stack_mlp= mlp=]) [qat=false|true] [transport_snap=none|icosian] \\
-  [select=none|flock:WINDOW:K] [pointer=none|DIM] [seed=] [policy=] [data_seed=] [steps=] \\
+  [select=none|flock:WINDOW:K] [pointer=none|DIM] [pointer_score=dot|lorentz] \\
+  [pointer_select=none|flock:WINDOW:K|top:K] [seed=] [policy=] [data_seed=] [steps=] \\
   [batch=] [lr=] [warmup=] [min_lr=] [weight_decay=] [clip=] [eval_every=] [dev_seed=] \\
   [dev_per_source=] [checkpoint_every=] [resume=] [max_seconds=] [requests=] [max_new_tokens=]
 
   select=flock:WINDOW:K  every read row (geometric reads and the control's attention) softmaxes
-                         over the sink, the last WINDOW positions and the K best-scoring other
-                         sources only; unkept sources weigh 0. With init=, replaces the saved
-                         flock (select=none clears it); the weights do not change.
+                         over the sink (position 0), the last WINDOW positions and the K
+                         best-scoring other sources only (the shared crate::flock selector);
+                         unkept sources weigh 0. It never applies to the pointer. With init=,
+                         replaces the saved flock (select=none clears it); the weights do not
+                         change.
   pointer=DIM            a pointer-copy head after the final norm (DIM-wide query and key over
-                         the input tokens, honouring select=, and a gate that starts at
-                         sigmoid(-2)); the loss, dev scores and greedy replies are the mixture's.
-                         With init= on a model saved without one, adds the head with weights
-                         drawn fresh from seed= (default: the saved seed), recorded in the report.
-                         Refused with qat=true and by export (no D11 port yet).
+                         the input tokens, and a gate that starts at sigmoid(-2)); the loss, dev
+                         scores and greedy replies are the mixture's. With init= on a model saved
+                         without one, adds the head with weights drawn fresh from seed= (default:
+                         the saved seed); the seed is recorded in the head's init_seed and the
+                         report, and a resume must carry the same one. Refused with qat=true and
+                         by export (no D11 port yet), and by the evaluators that read raw logits
+                         (snap-evaluate, rounding-attribution, lut-evaluate with model=).
+  pointer_score=...      the pointer's own score of a source: dot (default, q.k/sqrt(DIM)) or
+                         lorentz (the fused read's hyperboloid form, with a learned scale
+                         pointer.log_beta). With init=, must agree with a saved head.
+  pointer_select=...     the sources the pointer softmaxes over (default none: all): the flock
+                         WINDOW:K, or top:K (the K best alone; top:1 is the single-source
+                         pointer). Its own selection, not select=. Training stays soft unless
+                         given; m-world evaluate applies one to saved weights afterwards. With
+                         init=, replaces the saved head's selection (the weights do not change).
   reports                each eval adds dev_pointer_mean_gate / dev_pointer_hit_rate /
-                         dev_pointer_reachable_rate to the curve; both settings are in the saved
+                         dev_pointer_reachable_rate to the curve; all settings are in the saved
                          config.json and the report's config and flock_and_pointer.
 ";
 
@@ -3892,5 +4057,187 @@ fn main() -> Result<()> {
         "dialogue-train" => dialogue_train_mode(rest),
         "lut-chat" => lut_chat_mode(rest),
         other => Err(invalid(format!("unknown mode {other}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEYS: [&str; 5] = ["select", "pointer", "pointer_score", "pointer_select", "seed"];
+
+    fn args(pairs: &[&str]) -> Args {
+        let arguments: Vec<String> = pairs.iter().map(|pair| (*pair).to_owned()).collect();
+        Args::parse(&arguments, &KEYS).expect("arguments")
+    }
+
+    /// A configuration without a pointer head, seed 5.
+    fn saved() -> StackConfig {
+        StackConfig::transformer(16, 2, 2, 24, 12, 5).expect("a small control")
+    }
+
+    /// The same with a head of width 8 that was added from seed 3.
+    fn saved_with_head() -> StackConfig {
+        let mut config = saved();
+        config.pointer = Some(PointerConfig {
+            init_seed: Some(3),
+            ..PointerConfig::new(8)
+        });
+        config
+    }
+
+    #[test]
+    fn the_pointer_options_have_one_grammar() {
+        assert_eq!(pointer_args(&args(&[])).expect("none").head, None);
+        assert_eq!(
+            pointer_args(&args(&["pointer=none"])).expect("none").head,
+            Some(None)
+        );
+        let given = pointer_args(&args(&[
+            "pointer=8",
+            "pointer_score=lorentz",
+            "pointer_select=top:1",
+        ]))
+        .expect("all three");
+        assert_eq!(given.head, Some(Some(8)));
+        assert_eq!(given.score, Some(ReadScore::Lorentz));
+        assert_eq!(given.select, Some(Some(PointerSelect::TopK(1))));
+        assert_eq!(
+            pointer_args(&args(&["pointer_select=none"]))
+                .expect("cleared")
+                .select,
+            Some(None)
+        );
+        for bad in [
+            "pointer=0",
+            "pointer=x",
+            "pointer_score=hyperbolic",
+            "pointer_select=top:0",
+            "pointer_select=flock:0:1",
+            "pointer_select=window:3",
+        ] {
+            assert!(pointer_args(&args(&[bad])).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_head_added_to_init_records_the_seed_its_weights_come_from() {
+        let (config, added) = init_extended_config(
+            &args(&[
+                "pointer=8",
+                "pointer_score=lorentz",
+                "pointer_select=top:1",
+                "seed=9",
+            ]),
+            &saved(),
+        )
+        .expect("a new head");
+        assert!(added);
+        assert_eq!(
+            config.pointer,
+            Some(PointerConfig {
+                dim: 8,
+                score: ReadScore::Lorentz,
+                select: Some(PointerSelect::TopK(1)),
+                init_seed: Some(9),
+            })
+        );
+        // Without seed= it is the saved model's seed, as the weights are.
+        let (config, added) =
+            init_extended_config(&args(&["pointer=8"]), &saved()).expect("a new head");
+        assert!(added);
+        assert_eq!(config.pointer, Some(PointerConfig {
+            init_seed: Some(5),
+            ..PointerConfig::new(8)
+        }));
+        // A head is what pointer_score= and pointer_select= configure.
+        for dangling in [["pointer_select=top:1"], ["pointer_score=dot"]] {
+            assert!(init_extended_config(&args(&dangling), &saved()).is_err());
+        }
+        assert!(init_extended_config(&args(&["pointer=none"]), &saved()).is_ok());
+    }
+
+    #[test]
+    fn a_saved_head_keeps_its_shape_and_its_seed() {
+        let saved = saved_with_head();
+        let (config, added) = init_extended_config(&args(&[]), &saved).expect("unchanged");
+        assert!(!added && config == saved);
+        // The head's selection is not a weight: it may be replaced or cleared,
+        // and its recorded seed stays.
+        let (config, added) =
+            init_extended_config(&args(&["pointer=8", "pointer_select=top:1"]), &saved)
+                .expect("a new selection");
+        assert!(!added);
+        assert_eq!(
+            config.pointer,
+            Some(PointerConfig {
+                select: Some(PointerSelect::TopK(1)),
+                init_seed: Some(3),
+                ..PointerConfig::new(8)
+            })
+        );
+        let mut selected = saved.clone();
+        selected.pointer = config.pointer;
+        let (config, _) = init_extended_config(&args(&["pointer_select=none"]), &selected)
+            .expect("a cleared selection");
+        assert_eq!(config.pointer, saved.pointer);
+        // Its width and score are its weights' shape; it cannot be removed.
+        for conflict in [
+            ["pointer=16"],
+            ["pointer_score=lorentz"],
+            ["pointer=none"],
+        ] {
+            assert!(
+                init_extended_config(&args(&conflict), &saved).is_err(),
+                "{conflict:?}"
+            );
+        }
+        // A new seed= does not change a head that already has weights.
+        let (config, added) =
+            init_extended_config(&args(&["seed=77"]), &saved).expect("seed of the window");
+        assert!(!added);
+        assert_eq!(config.pointer, saved.pointer);
+    }
+
+    #[test]
+    fn a_resume_must_carry_the_seed_of_the_head_it_continues() -> Result<()> {
+        let directory =
+            std::env::temp_dir().join(format!("geometric-stack-lineage-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory)?;
+        let state = |config: &StackConfig| -> Result<()> {
+            Ok(fs::write(
+                directory.join("state.json"),
+                serde_json::to_vec(&json!({"lineage": {"config": config}}))?,
+            )?)
+        };
+        let seeded = |seed: Option<u64>| {
+            let mut config = saved();
+            config.pointer = Some(PointerConfig {
+                init_seed: seed,
+                ..PointerConfig::new(8)
+            });
+            config
+        };
+        // A checkpoint whose head was drawn from seed 9.
+        state(&seeded(Some(9)))?;
+        check_resume_pointer_seed(&directory, &seeded(Some(9)))?;
+        let error = check_resume_pointer_seed(&directory, &seeded(Some(10)))
+            .expect_err("another seed is refused");
+        let text = error.to_string();
+        assert!(text.contains("10") && text.contains('9'), "{text}");
+        assert!(check_resume_pointer_seed(&directory, &seeded(None)).is_err());
+        assert!(check_resume_pointer_seed(&directory, &saved()).is_err());
+        // A checkpoint whose head was built with its model records none, and a
+        // resume that names one is refused.
+        state(&seeded(None))?;
+        check_resume_pointer_seed(&directory, &seeded(None))?;
+        assert!(check_resume_pointer_seed(&directory, &seeded(Some(9))).is_err());
+        // A checkpoint without a head.
+        state(&saved())?;
+        check_resume_pointer_seed(&directory, &saved())?;
+        assert!(check_resume_pointer_seed(&directory, &seeded(Some(9))).is_err());
+        fs::remove_dir_all(&directory)?;
+        Ok(())
     }
 }

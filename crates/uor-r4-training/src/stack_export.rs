@@ -253,6 +253,26 @@ pub fn check_export_config(config: &StackConfig) -> Result<()> {
     Ok(())
 }
 
+/// Refuse a model whose raw logits are not its distribution, for an evaluator
+/// that reads them (`forward`, or the final states through the head): a
+/// pointer-copy head mixes a copy distribution into the prediction, so those
+/// logits are not what the model predicts, and an NLL or an agreement computed
+/// from them would score a different model. A pointer model is scored through
+/// its mixture ([`StackModel::target_nll`], [`StackModel::next_scores`], the
+/// `evaluate` and `dialogue-train` modes, `m-world evaluate`). A flock is no
+/// reason to refuse: it is inside the forward pass, so the logits are the
+/// flocked model's own. `mode` names the evaluator in the message.
+pub fn check_raw_logit_evaluation(config: &StackConfig, mode: &str) -> Result<()> {
+    if config.pointer.is_some() {
+        return Err(invalid(format!(
+            "{mode} reads the model's raw logits, which are not a pointer model's distribution \
+             (its head mixes a copy distribution in): score a pointer model with evaluate, \
+             dialogue-train's development or m-world evaluate, which use the mixture"
+        )));
+    }
+    Ok(())
+}
+
 /// Export a geometric stack; returns the artifact bytes and a report of the
 /// quantization errors (relative RMS per matrix, worst relative error per
 /// table of grid codes and, with a calibration, each calibrated matrix's
@@ -725,6 +745,9 @@ pub fn stack_grid_reference(
     artifact: &uor_r4_lut::format::StackArtifact,
 ) -> Result<GridReference> {
     let c = model.config.clone();
+    // The reference reads raw float logits, and no artifact is exported from a
+    // pointer or flock model (its float forward is not what the engine runs).
+    check_export_config(&c)?;
     if c.arch != StackArch::Geometric || c.memory.is_some() {
         return Err(invalid(
             "a stack grid reference needs a geometric stack without memories",
@@ -812,6 +835,9 @@ pub fn control_grid_reference(
     artifact: &uor_r4_lut::format::Artifact,
 ) -> Result<GridReference> {
     let c = model.config.clone();
+    // As for the stack's reference: no artifact comes from a pointer or flock
+    // model, and the reference reads raw float logits.
+    check_export_config(&c)?;
     if c.arch != StackArch::Transformer || c.memory.is_some() {
         return Err(invalid(
             "a control grid reference needs the transformer control without memories",
@@ -1306,5 +1332,54 @@ mod tests {
         model.set_transport_snap(None).expect("no snap");
         let (bytes, _) = export_stack(&model, json!({}), None).expect("export");
         assert!(!bytes.is_empty(), "the export wrote no artifact");
+    }
+
+    #[test]
+    fn raw_logit_evaluators_refuse_a_pointer_model_and_only_a_pointer_model() {
+        use crate::flock::FlockSelect;
+        use crate::geometric_stack::PointerConfig;
+        const MODES: [&str; 3] = ["snap-evaluate", "lut-evaluate", "rounding-attribution"];
+        let plain = small("ar", ReadScore::Lorentz, true);
+        for mode in MODES {
+            check_raw_logit_evaluation(&plain.config, mode)
+                .expect("a plain model's logits are its distribution");
+        }
+        // A flock is inside the forward pass: its logits are the model's own.
+        let mut flocked = plain.config.clone();
+        flocked.select = Some(FlockSelect {
+            sink: 0,
+            window: 4,
+            k: 2,
+        });
+        check_raw_logit_evaluation(&flocked, "snap-evaluate")
+            .expect("a flocked model's logits are its own");
+        // The grid reference of an artifact reads raw float logits too.
+        let (bytes, _) = export_stack(&plain, json!({}), None).expect("export");
+        let artifact = StackArtifact::parse(bytes).expect("artifact");
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let mut config = plain.config.clone();
+            config.pointer = Some(PointerConfig {
+                score,
+                ..PointerConfig::new(8)
+            });
+            for mode in MODES {
+                let refusal = check_raw_logit_evaluation(&config, mode)
+                    .expect_err("a pointer model's logits are not its distribution");
+                let text = refusal.to_string();
+                assert!(text.contains(mode) && text.contains("mixture"), "{text}");
+            }
+            let pointer_model = StackModel::new(config, &Device::Cpu).expect("pointer model");
+            let refusal = stack_grid_reference(&pointer_model, &artifact)
+                .err()
+                .expect("a pointer model has no grid reference");
+            assert!(refusal.to_string().contains("pointer"), "{refusal}");
+        }
+        let mut config = plain.config.clone();
+        config.select = flocked.select;
+        let flocked_model = StackModel::new(config, &Device::Cpu).expect("flocked model");
+        let refusal = stack_grid_reference(&flocked_model, &artifact)
+            .err()
+            .expect("a flocked model has no grid reference");
+        assert!(refusal.to_string().contains("flock"), "{refusal}");
     }
 }
