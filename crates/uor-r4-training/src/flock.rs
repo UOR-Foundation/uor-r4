@@ -145,14 +145,16 @@ pub struct FlockScan {
     /// scan of the non-window prefix; it is not evidence of `O(k)` search.
     pub candidates_scanned: usize,
     /// The whole visible prefix fits inside the nominal window
-    /// (`query + 1 <= window`), so the window already reaches the sequence
-    /// start; the sink is the only kept position outside it unless the prefix
-    /// is a single position.
+    /// (`query + 1 <= window`). With the B0 sink at position 0 this is exactly
+    /// the sink-in-window-span indicator; a general sink inside the window is
+    /// not separately counted.
     pub short_prefix: bool,
     /// Fewer than `k` rest candidates existed.
     pub top_k_short: bool,
-    /// The k-th and (k+1)-th rest candidates have equal rank scores, so the
-    /// top-k boundary is a tie (resolved deterministically by position).
+    /// The k-th and (k+1)-th rest candidates have equal rank scores under
+    /// IEEE `==`, so the top-k boundary is a tie (resolved deterministically
+    /// by position; note `-0.0 == +0.0` counts as a tie while `total_cmp`
+    /// orders them apart).
     pub cutoff_ties: bool,
 }
 
@@ -380,6 +382,58 @@ pub fn flock_select(
     }
 
     Ok(FlockSelection { entries, scan })
+}
+
+/// Top-k only selection over `rank_scores[0..=query]`.
+///
+/// Mirrors the integer `top_k_select_integer` entry point used for pointer
+/// retrieval: no sink and no window; entries are returned in descending rank
+/// order with lowest-position ties. The full row is sorted, so the cutoff-tie
+/// flag is computed against the true k-th candidate.
+pub fn top_k_select(rank_scores: &[f32], query: usize, k: usize) -> Result<FlockSelection> {
+    if rank_scores.len() != query + 1 {
+        return Err(invalid(format!(
+            "flock row has {} scores for query {query}",
+            rank_scores.len()
+        )));
+    }
+    if k == 0 {
+        return Err(invalid("flock k must be positive"));
+    }
+    if rank_scores.iter().any(|score| !score.is_finite()) {
+        return Err(invalid("flock rank scores must be finite"));
+    }
+    let mut rest: Vec<usize> = (0..=query).collect();
+    rest.sort_by(|&a, &b| {
+        rank_scores[b]
+            .total_cmp(&rank_scores[a])
+            .then_with(|| a.cmp(&b))
+    });
+    let candidates_scanned = rest.len();
+    let top_k_short = candidates_scanned < k;
+    let cutoff_ties = candidates_scanned > k && rank_scores[rest[k - 1]] == rank_scores[rest[k]];
+    let top_k_kept = k.min(candidates_scanned);
+    let entries: Vec<FlockEntry> = rest
+        .into_iter()
+        .take(k)
+        .map(|position| FlockEntry {
+            position,
+            slot: FlockSlot::TopK,
+        })
+        .collect();
+    Ok(FlockSelection {
+        entries,
+        scan: FlockScan {
+            visible: query + 1,
+            sink_kept: 0,
+            window_kept: 0,
+            top_k_kept,
+            candidates_scanned,
+            short_prefix: false,
+            top_k_short,
+            cutoff_ties,
+        },
+    })
 }
 
 /// Arm S: softmax over the kept set, as a dense row of length `scores.len()`.
@@ -754,5 +808,37 @@ mod tests {
         }
         let total: f64 = ranked.iter().map(|w| f64::from(*w)).sum();
         assert!((total - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn top_k_select_matches_the_pointer_use_case() {
+        let mut scores = [10.0f32; 20];
+        scores[7] = 999.0;
+        let selection = top_k_select(&scores, 19, 1).expect("top-k");
+        assert_eq!(selection.positions().collect::<Vec<_>>(), vec![7]);
+        assert_eq!(selection.entries[0].slot, FlockSlot::TopK);
+        assert_eq!(selection.scan.sink_kept, 0);
+        assert_eq!(selection.scan.window_kept, 0);
+        assert_eq!(selection.scan.top_k_kept, 1);
+        assert_eq!(selection.scan.candidates_scanned, 20);
+        assert!(!selection.scan.short_prefix);
+        assert!(!selection.scan.top_k_short);
+    }
+
+    #[test]
+    fn top_k_select_ties_short_rows_and_malformed_inputs() {
+        let scores = [1.0f32, 5.0, 5.0, 2.0];
+        let selection = top_k_select(&scores, 3, 1).expect("top-k");
+        assert_eq!(selection.positions().collect::<Vec<_>>(), vec![1]);
+        assert!(selection.scan.cutoff_ties, "5.0 at rank 0 ties rank 1");
+        let all = top_k_select(&scores, 3, 9).expect("top-k");
+        assert!(all.scan.top_k_short);
+        assert_eq!(all.scan.top_k_kept, 4);
+        assert_eq!(all.entries.len(), 4);
+        assert!(!all.scan.cutoff_ties, "no cutoff exists when all are kept");
+
+        assert!(top_k_select(&scores, 3, 0).is_err());
+        assert!(top_k_select(&scores[..2], 3, 1).is_err());
+        assert!(top_k_select(&[f32::NAN, 1.0], 1, 1).is_err());
     }
 }

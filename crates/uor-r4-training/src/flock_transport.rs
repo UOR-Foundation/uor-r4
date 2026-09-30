@@ -367,7 +367,7 @@ mod tests {
     fn rank_arm_matches_the_normalized_table_convention() {
         let query = query_row();
         let keys = key_rows(4);
-        let (rank_row, model_row) = flock_row_scores(&query, &keys, 3).expect("rows");
+        let (rank_row, _model_row) = flock_row_scores(&query, &keys, 3).expect("rows");
         let spec = FlockSpec {
             k: 2,
             window: 1,
