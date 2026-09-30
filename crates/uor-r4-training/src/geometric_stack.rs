@@ -6501,6 +6501,36 @@ mod tests {
         Ok(())
     }
 
+    /// The exact bypass #1506's review found: a snapped export read through
+    /// the offline `parse_for_reference` must not construct the D10 engine,
+    /// which computes the free transport. The multiplier-free engine serves
+    /// the same bytes.
+    #[test]
+    fn the_d10_engine_refuses_a_snapped_export_read_for_reference() -> Result<()> {
+        let mut model = spread_transport(
+            tiny(StackArch::Geometric, "rrarra", ReadScore::Lorentz, true),
+            149,
+        )?;
+        model.set_transport_snap(Some(TransportSnap::Icosian))?;
+        let (bytes, _) = crate::stack_export::export_stack(
+            &model,
+            serde_json::json!({"test": "d10-bypass"}),
+            None,
+            Some(TransportSnap::Icosian),
+        )?;
+        uor_r4_integer::stack::IntegerStackModel::parse(&bytes)
+            .map_err(|e| invalid(e.to_string()))?;
+        let reference = uor_r4_lut::format::StackArtifact::parse_for_reference(bytes)
+            .map_err(|e| invalid(e.to_string()))?;
+        assert!(reference.header.transport_snap.is_some());
+        let refusal = match uor_r4_lut::stack::StackModel::from_artifact(reference) {
+            Err(error) => error.to_string(),
+            Ok(_) => return Err(invalid("the D10 engine accepted a snapped artifact")),
+        };
+        assert!(refusal.contains("transport_snap=icosian"), "{refusal}");
+        Ok(())
+    }
+
     #[test]
     fn the_transport_snap_composes_with_the_served_representation() -> Result<()> {
         let roots = icosians();
