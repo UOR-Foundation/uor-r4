@@ -1,0 +1,80 @@
+{
+  "event": {
+    "attempt": "opencode-b0-flock-unit-20260930-c",
+    "epoch": 3,
+    "event_id": "opencode-20260930-reserve-b0check-c",
+    "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+    "issue": 1512,
+    "op": "reserve",
+    "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner",
+    "session": "opencode-deepseek-20260930",
+    "spec": {
+      "argv": [
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "-p",
+        "uor-r4-training",
+        "--offline",
+        "--lib",
+        "flock"
+      ],
+      "cargo": true,
+      "coordination": {
+        "attempt_id": "opencode-b0-flock-unit-20260930-c",
+        "epoch": 3,
+        "issue": 1512,
+        "session": "opencode-deepseek-20260930",
+        "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9"
+      },
+      "cwd": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929",
+      "env": {
+        "CARGO_BUILD_JOBS": "4",
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/target",
+        "RUST_BACKTRACE": "1",
+        "UOR_BUILD_SOURCE_COMMIT": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd"
+      },
+      "exclusive": true,
+      "gpu": false,
+      "id": "opencode-b0-flock-unit-20260930-c",
+      "kill_criterion": {
+        "kind": "wall",
+        "value": ""
+      },
+      "lab": "OpenCode-DeepSeek",
+      "provenance": {
+        "executable": {
+          "path": "/Users/casey.allard/.cargo/bin/cargo",
+          "sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1"
+        },
+        "inputs": [],
+        "source_sha": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd"
+      },
+      "rss_gib": 6.0,
+      "schema": "uor-r4.lab-runner-job/1",
+      "stop_grace_ms": 250,
+      "storage": [
+        {
+          "additional_bytes": 6442450944,
+          "checkpoint_bytes": 0,
+          "volume": "internal"
+        },
+        {
+          "additional_bytes": 0,
+          "checkpoint_bytes": 0,
+          "volume": "workspace"
+        },
+        {
+          "additional_bytes": 0,
+          "checkpoint_bytes": 0,
+          "volume": "backing"
+        }
+      ],
+      "threads": 4,
+      "wall_s": 3600
+    }
+  },
+  "observed_server_time": 1790746574,
+  "previous_head": "6182aa764496f2337b1e6eb70d2369e7393b86ab"
+}
