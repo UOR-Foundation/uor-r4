@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 86,
-  "observed_server_time": 1790747261,
+  "sequence": 87,
+  "observed_server_time": 1790747323,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -671,6 +671,107 @@
         }
       },
       "spec_sha256": "728685f476bf0118dd41692242dd4f194bcfa161c40ec490d9a7a12ad8bd3354",
+      "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner"
+    },
+    "opencode-b0-flock-unit-20260930-e": {
+      "issue": 1512,
+      "session": "opencode-deepseek-20260930",
+      "task_epoch": 3,
+      "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+      "phase": "reserved",
+      "receipt": null,
+      "spec": {
+        "schema": "uor-r4.lab-runner-job/1",
+        "id": "opencode-b0-flock-unit-20260930-e",
+        "lab": "OpenCode-DeepSeek",
+        "cwd": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929",
+        "argv": [
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "test",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--offline",
+          "--lib",
+          "flock"
+        ],
+        "env": {
+          "CARGO_BUILD_JOBS": "4",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/target",
+          "RUST_BACKTRACE": "1",
+          "UOR_BUILD_SOURCE_COMMIT": "4a3911be5de1cef94c1e0385b6b611bad6f16db1"
+        },
+        "threads": 4,
+        "rss_gib": 6.0,
+        "gpu": false,
+        "wall_s": 1800,
+        "stop_grace_ms": 250,
+        "kill_criterion": {
+          "kind": "wall",
+          "value": ""
+        },
+        "exclusive": true,
+        "cargo": true,
+        "storage": [
+          {
+            "volume": "internal",
+            "additional_bytes": 2147483648,
+            "checkpoint_bytes": 0
+          },
+          {
+            "volume": "workspace",
+            "additional_bytes": 0,
+            "checkpoint_bytes": 0
+          },
+          {
+            "volume": "backing",
+            "additional_bytes": 0,
+            "checkpoint_bytes": 0
+          }
+        ],
+        "coordination": {
+          "issue": 1512,
+          "session": "opencode-deepseek-20260930",
+          "epoch": 3,
+          "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9",
+          "attempt_id": "opencode-b0-flock-unit-20260930-e"
+        },
+        "provenance": {
+          "source_sha": "4a3911be5de1cef94c1e0385b6b611bad6f16db1",
+          "executable": {
+            "path": "/Users/casey.allard/.cargo/bin/cargo",
+            "sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1"
+          },
+          "inputs": [
+            {
+              "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/Cargo.lock",
+              "sha256": "e11b98bf00374dbc6b9e42da56647c51fc8c5e782eddf3ed031c855997146c32"
+            },
+            {
+              "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/rust-toolchain.toml",
+              "sha256": "0a4b55522951f5475fcdd9ebcbfbbe650bfac272e8baff599585f0e8a120d5ee"
+            },
+            {
+              "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/crates/uor-r4-training/Cargo.toml",
+              "sha256": "80690a62e40a6de289439b09327b8b5cf6aaf00f7853fa08323a420ad0461293"
+            },
+            {
+              "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/crates/uor-r4-training/src/flock.rs",
+              "sha256": "010a68cf815c3961ca97b04758105a9a4a99f18c909926e9e2bf0d8a418bcf3a"
+            },
+            {
+              "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/crates/uor-r4-training/src/flock_transport.rs",
+              "sha256": "74f3ab3407ce686db5cc6b98a9f158a0150c1d8f4158e4f6b57c0ccab79cb5f6"
+            },
+            {
+              "path": "/Users/casey.allard/uor-r4/.worktrees/b0-flock-20260929/crates/uor-r4-training/examples/kappa-conversion.rs",
+              "sha256": "d9ab9c775a7afca34a44f0c67f746b23b53df7eb3f0518a06ad5ebfa9a5bea0a"
+            }
+          ]
+        }
+      },
+      "spec_sha256": "ae3beaef11a3741776b7263f2fb1c1ee08855b0d01388ab8f804496f338e5617",
       "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner"
     }
   }
