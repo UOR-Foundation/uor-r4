@@ -2042,6 +2042,9 @@ impl CustomOp2 for StraightThrough {
         if l1.shape() != l2.shape() {
             candle_core::bail!("straight-through inputs must have one shape");
         }
+        if _s1.dtype() != DType::F32 || s2.dtype() != DType::F32 {
+            candle_core::bail!("Metal straight-through requires F32 dtype");
+        }
         if l1.start_offset() != 0
             || !l1.is_contiguous()
             || l2.start_offset() != 0
@@ -2077,6 +2080,12 @@ impl CustomOp2 for StraightThrough {
 
 /// Straight-through estimator: forward is `quantized`, backward gradient flows to `continuous`.
 pub fn straight_through(continuous: &Tensor, quantized: &Tensor) -> Result<Tensor> {
+    if continuous.dtype() != DType::F32 || quantized.dtype() != DType::F32 {
+        return Err(invalid("straight_through requires F32 tensors"));
+    }
+    if continuous.shape() != quantized.shape() {
+        return Err(invalid("straight-through inputs must have one shape"));
+    }
     Ok(continuous
         .contiguous()?
         .apply_op2(&quantized.contiguous()?, StraightThrough)?)
@@ -2661,9 +2670,15 @@ impl CustomOp2 for QuaternionScan {
         s2: &MetalStorage,
         l2: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 {
+            candle_core::bail!("Metal quaternion scan requires F32 dtype");
+        }
         let (batch, time, lanes, four) = l1.shape().dims4()?;
         if four != 4 || l2.shape() != l1.shape() {
             candle_core::bail!("quaternion scan needs matching [batch, time, lanes, 4] inputs");
+        }
+        if batch == 0 || time == 0 || lanes == 0 {
+            candle_core::bail!("quaternion scan requires positive dimensions");
         }
         if l1.start_offset() != 0
             || !l1.is_contiguous()
@@ -2701,7 +2716,24 @@ impl CustomOp2 for QuaternionScan {
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = transition.device() {
+            if transition.dtype() != DType::F32
+                || state.dtype() != DType::F32
+                || grad.dtype() != DType::F32
+            {
+                candle_core::bail!("Metal quaternion scan backward requires F32 dtype");
+            }
             let (batch, time, lanes, four) = transition.dims4()?;
+            if four != 4
+                || state.shape() != transition.shape()
+                || grad.shape() != transition.shape()
+            {
+                candle_core::bail!(
+                    "Metal quaternion scan backward inputs must match [batch, time, lanes, 4]"
+                );
+            }
+            if batch == 0 || time == 0 || lanes == 0 {
+                candle_core::bail!("Metal quaternion scan backward requires positive dimensions");
+            }
             if four == 4 {
                 let (t_storage, t_layout) = transition.storage_and_layout();
                 let (s_storage, s_layout) = state.storage_and_layout();
@@ -2807,6 +2839,18 @@ impl CustomOp2 for QuaternionScan {
 
 /// Runs the quaternion transport recurrence over whole windows.
 pub fn quaternion_scan(transition: &Tensor, drive: &Tensor) -> Result<Tensor> {
+    if transition.dtype() != DType::F32 || drive.dtype() != DType::F32 {
+        return Err(invalid("quaternion_scan requires F32 tensors"));
+    }
+    let (batch, time, lanes, four) = transition.dims4()?;
+    if four != 4 || drive.shape() != transition.shape() {
+        return Err(invalid(
+            "quaternion_scan needs matching [batch, time, lanes, 4] inputs",
+        ));
+    }
+    if batch == 0 || time == 0 || lanes == 0 {
+        return Err(invalid("quaternion_scan requires positive dimensions"));
+    }
     Ok(transition
         .contiguous()?
         .apply_op2(&drive.contiguous()?, QuaternionScan)?)
@@ -3021,6 +3065,26 @@ impl CustomOp3 for RecurrenceCore {
         if self.snap.is_some() {
             candle_core::bail!("Metal RecurrenceCore currently does not support transport snap");
         }
+        if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 || s3.dtype() != DType::F32 {
+            candle_core::bail!("Metal RecurrenceCore requires F32 dtype");
+        }
+        if self.batch == 0 || self.time == 0 || self.width == 0 || self.width % 4 != 0 {
+            candle_core::bail!(
+                "Metal RecurrenceCore requires positive dimensions with width divisible by 4"
+            );
+        }
+        let (time, width) = (self.time, self.width);
+        let expected_branches = self.batch * time * 2 * width;
+        let expected_gates = self.batch * time * self.gate_width();
+        let expected_params = self.parameter_len();
+        if l1.shape().elem_count() != expected_branches
+            || l2.shape().elem_count() != expected_gates
+            || l3.shape().elem_count() != expected_params
+        {
+            candle_core::bail!(
+                "Metal RecurrenceCore input buffer lengths do not match declared dimensions"
+            );
+        }
         if l1.start_offset() != 0
             || !l1.is_contiguous()
             || l2.start_offset() != 0
@@ -3030,7 +3094,6 @@ impl CustomOp3 for RecurrenceCore {
         {
             candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
         }
-        let (time, width) = (self.time, self.width);
         let device = s1.device();
         let total_state = self.batch * time * width;
 
@@ -3767,6 +3830,21 @@ impl CustomOp3 for FusedRead {
                 "Metal FusedRead currently supports only ReadScore::Dot without null, age, or rope"
             );
         }
+        if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 || s3.dtype() != DType::F32 {
+            candle_core::bail!("Metal FusedRead requires F32 dtype");
+        }
+        if self.batch == 0 || self.heads == 0 || self.time == 0 || self.key == 0 || self.value == 0
+        {
+            candle_core::bail!("Metal FusedRead requires positive dimensions");
+        }
+        let (time, value) = (self.time, self.value);
+        let expected_query = self.batch * self.heads * time * self.key;
+        let expected_kv = self.batch * self.heads * time * (self.key + value);
+        if l1.shape().elem_count() != expected_query || l2.shape().elem_count() != expected_kv {
+            candle_core::bail!(
+                "Metal FusedRead input element counts do not match declared dimensions"
+            );
+        }
         if l1.start_offset() != 0
             || !l1.is_contiguous()
             || l2.start_offset() != 0
@@ -3776,7 +3854,6 @@ impl CustomOp3 for FusedRead {
         {
             candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
         }
-        let (time, value) = (self.time, self.value);
         let device = s1.device();
         let total = self.batch * self.heads * time * value;
         let out_buf = device.new_buffer(total, DType::F32, "fused_read_out")?;
@@ -4007,6 +4084,13 @@ pub fn fused_read(
     age: bool,
     rope: bool,
 ) -> Result<Tensor> {
+    if query.dtype() != DType::F32
+        || key.dtype() != DType::F32
+        || value.dtype() != DType::F32
+        || aux.dtype() != DType::F32
+    {
+        return Err(invalid("fused_read requires F32 tensors"));
+    }
     let (batch, heads, time, key_width) = query.dims4()?;
     let (b2, h2, t2, k2) = key.dims4()?;
     let (b3, h3, t3, value_width) = value.dims4()?;
@@ -4014,6 +4098,9 @@ pub fn fused_read(
         return Err(invalid(
             "fused read needs matching query, key and value shapes",
         ));
+    }
+    if batch == 0 || heads == 0 || time == 0 || key_width == 0 || value_width == 0 {
+        return Err(invalid("fused read requires positive dimensions"));
     }
     let expected = fused_aux_len(batch, heads, time, score, null, age);
     if aux.rank() != 1 || aux.dim(0)? != expected.max(1) {
@@ -4048,6 +4135,33 @@ pub fn recurrence_core(
     rotation: bool,
     snap: Option<TransportSnap>,
 ) -> Result<Tensor> {
+    if batch == 0 || time == 0 || width == 0 || width % 4 != 0 {
+        return Err(invalid(
+            "recurrence_core requires positive dimensions with width divisible by 4",
+        ));
+    }
+    if branches.dtype() != DType::F32
+        || gates.dtype() != DType::F32
+        || parameters.dtype() != DType::F32
+    {
+        return Err(invalid("recurrence_core requires F32 tensors"));
+    }
+    let lanes = width / 4;
+    let gate_width = lanes + if rotation { 4 * lanes } else { 0 };
+    let expected_branches = batch * time * 2 * width;
+    let expected_gates = batch * time * gate_width;
+    let expected_params = (CONVOLUTION_WIDTH + 1) * width + lanes;
+    if branches.elem_count() != expected_branches
+        || gates.elem_count() != expected_gates
+        || parameters.elem_count() != expected_params
+    {
+        return Err(invalid(format!(
+            "recurrence_core input size mismatch: branches expected {expected_branches} got {}, gates expected {expected_gates} got {}, params expected {expected_params} got {}",
+            branches.elem_count(),
+            gates.elem_count(),
+            parameters.elem_count(),
+        )));
+    }
     Ok(branches.contiguous()?.apply_op3(
         &gates.contiguous()?,
         &parameters.contiguous()?,
@@ -4109,6 +4223,9 @@ impl CustomOp2 for RmsNorm {
         s2: &MetalStorage,
         l2: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 {
+            candle_core::bail!("Metal RMSNorm requires F32 dtype");
+        }
         if l1.start_offset() != 0
             || !l1.is_contiguous()
             || l2.start_offset() != 0
@@ -4117,7 +4234,16 @@ impl CustomOp2 for RmsNorm {
             candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
         }
         let width = l2.shape().elem_count();
+        if width == 0 {
+            candle_core::bail!("Metal RMSNorm weight must not be empty");
+        }
+        if l1.shape().dims().last() != Some(&width) {
+            candle_core::bail!("Metal RMSNorm weight must match the last dimension");
+        }
         let total = l1.shape().elem_count();
+        if total % width != 0 {
+            candle_core::bail!("Metal RMSNorm total element count must be divisible by width");
+        }
         let rows = total / width;
         let device = s1.device();
         let out_buf = device.new_buffer(total, DType::F32, "rms_norm_out")?;
@@ -4145,8 +4271,20 @@ impl CustomOp2 for RmsNorm {
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = x.device() {
+            if x.dtype() != DType::F32 || w.dtype() != DType::F32 || grad.dtype() != DType::F32 {
+                candle_core::bail!("Metal RMSNorm backward requires F32 dtype");
+            }
             let width = w.elem_count();
+            if width == 0 {
+                candle_core::bail!("Metal RMSNorm weight must not be empty");
+            }
+            if x.dims().last() != Some(&width) {
+                candle_core::bail!("Metal RMSNorm weight must match the last dimension");
+            }
             let total = x.elem_count();
+            if total % width != 0 {
+                candle_core::bail!("Metal RMSNorm total element count must be divisible by width");
+            }
             let rows = total / width;
 
             let (x_storage, x_layout) = x.storage_and_layout();
@@ -4249,6 +4387,18 @@ impl CustomOp2 for RmsNorm {
 
 /// Fused RMSNorm: `x * w / sqrt(mean(x^2) + eps)` over the last dimension.
 pub fn rms_norm(x: &Tensor, weight: &Tensor) -> Result<Tensor> {
+    if x.dtype() != DType::F32 || weight.dtype() != DType::F32 {
+        return Err(invalid("rms_norm requires F32 tensors"));
+    }
+    let width = weight.elem_count();
+    if width == 0 {
+        return Err(invalid("rms_norm weight must not be empty"));
+    }
+    if x.dims().last() != Some(&width) {
+        return Err(invalid(
+            "rms_norm weight must match last dimension of input",
+        ));
+    }
     Ok(x.contiguous()?.apply_op2(&weight.contiguous()?, RmsNorm)?)
 }
 
@@ -4295,8 +4445,14 @@ impl CustomOp2 for SwiGlu {
         s2: &MetalStorage,
         l2: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 {
+            candle_core::bail!("Metal SwiGLU requires F32 dtype");
+        }
         if l1.shape() != l2.shape() {
             candle_core::bail!("SwiGLU inputs must match");
+        }
+        if l1.shape().elem_count() == 0 {
+            candle_core::bail!("SwiGLU inputs must not be empty");
         }
         if l1.start_offset() != 0
             || !l1.is_contiguous()
@@ -4330,6 +4486,16 @@ impl CustomOp2 for SwiGlu {
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = gate.device() {
+            if gate.dtype() != DType::F32 || up.dtype() != DType::F32 || grad.dtype() != DType::F32
+            {
+                candle_core::bail!("Metal SwiGLU backward requires F32 dtype");
+            }
+            if gate.shape() != up.shape() || gate.shape() != grad.shape() {
+                candle_core::bail!("Metal SwiGLU backward inputs must match");
+            }
+            if gate.elem_count() == 0 {
+                candle_core::bail!("Metal SwiGLU backward inputs must not be empty");
+            }
             let total = gate.elem_count();
 
             let (g_storage, g_layout) = gate.storage_and_layout();
@@ -4407,6 +4573,15 @@ impl CustomOp2 for SwiGlu {
 
 /// Fused SwiGLU: `silu(gate) * up`.
 pub fn swiglu(gate: &Tensor, up: &Tensor) -> Result<Tensor> {
+    if gate.dtype() != DType::F32 || up.dtype() != DType::F32 {
+        return Err(invalid("swiglu requires F32 tensors"));
+    }
+    if gate.shape() != up.shape() {
+        return Err(invalid("swiglu gate and up shapes must match"));
+    }
+    if gate.elem_count() == 0 {
+        return Err(invalid("swiglu inputs must not be empty"));
+    }
     Ok(gate.contiguous()?.apply_op2(&up.contiguous()?, SwiGlu)?)
 }
 
@@ -4469,10 +4644,19 @@ impl candle_core::CustomOp1 for CrossEntropy {
         storage: &MetalStorage,
         layout: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if storage.dtype() != DType::F32 {
+            candle_core::bail!("Metal CrossEntropy requires F32 dtype");
+        }
         if layout.start_offset() != 0 || !layout.is_contiguous() {
             candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
         }
         let (rows, vocabulary) = layout.shape().dims2()?;
+        if rows == 0 || vocabulary == 0 {
+            candle_core::bail!("CrossEntropy requires positive rows and vocabulary");
+        }
+        if self.targets.len() != rows {
+            candle_core::bail!("CrossEntropy targets count must match rows");
+        }
         let device = storage.device();
         let target_buf = device.new_buffer_with_data(&self.targets)?;
         let loss_per_row = device.new_buffer(rows, DType::F32, "cross_entropy_row_loss")?;
@@ -4529,6 +4713,15 @@ impl candle_core::CustomOp1 for CrossEntropy {
         #[cfg(feature = "metal")]
         if self.weights.is_none() {
             if let Device::Metal(device) = logits.device() {
+                if logits.dtype() != DType::F32 || grad.dtype() != DType::F32 {
+                    candle_core::bail!("Metal CrossEntropy backward requires F32 dtype");
+                }
+                if rows == 0 || vocabulary == 0 {
+                    candle_core::bail!("CrossEntropy requires positive rows and vocabulary");
+                }
+                if self.targets.len() != rows {
+                    candle_core::bail!("CrossEntropy targets count must match rows");
+                }
                 let (l_storage, l_layout) = logits.storage_and_layout();
                 if l_layout.start_offset() != 0 || !l_layout.is_contiguous() {
                     candle_core::bail!(
@@ -4612,6 +4805,9 @@ pub fn logits_cross_entropy(
     targets: &[u32],
     weights: Option<&[f32]>,
 ) -> Result<Tensor> {
+    if logits.dtype() != DType::F32 {
+        return Err(invalid("logits_cross_entropy requires F32 logits"));
+    }
     let (rows, classes) = logits.dims2()?;
     if targets.len() != rows || weights.is_some_and(|w| w.len() != rows) {
         return Err(invalid("one target and one weight per logit row"));

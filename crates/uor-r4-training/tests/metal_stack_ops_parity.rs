@@ -19,6 +19,35 @@ fn test_metal_device_available() -> uor_r4_training::Result<()> {
 }
 
 #[cfg(feature = "metal")]
+fn assert_finite_and_close(cpu: &[f32], metal: &[f32], tol: f32, op_name: &str) -> f32 {
+    assert_eq!(cpu.len(), metal.len(), "{op_name}: length mismatch");
+    let mut max_diff = 0.0f32;
+    for (i, (&c, &m)) in cpu.iter().zip(metal.iter()).enumerate() {
+        assert!(
+            c.is_finite(),
+            "{op_name} at index {i}: CPU value is not finite ({c})"
+        );
+        assert!(
+            m.is_finite(),
+            "{op_name} at index {i}: Metal value is not finite ({m})"
+        );
+        let diff = (c - m).abs();
+        assert!(
+            diff.is_finite(),
+            "{op_name} at index {i}: diff is not finite ({diff})"
+        );
+        if diff > max_diff {
+            max_diff = diff;
+        }
+    }
+    assert!(
+        max_diff < tol,
+        "{op_name} diff too large: {max_diff} >= {tol}"
+    );
+    max_diff
+}
+
+#[cfg(feature = "metal")]
 #[test]
 fn test_straight_through_parity() -> uor_r4_training::Result<()> {
     let metal_dev = match candle_core::Device::new_metal(0) {
@@ -43,6 +72,9 @@ fn test_straight_through_parity() -> uor_r4_training::Result<()> {
     let v_cpu = out_cpu.flatten_all()?.to_vec1::<f32>()?;
     let v_metal = out_metal.flatten_all()?.to_vec1::<f32>()?;
 
+    for (c, m) in v_cpu.iter().zip(v_metal.iter()) {
+        assert!(c.is_finite() && m.is_finite());
+    }
     assert_eq!(v_cpu, v_metal);
     Ok(())
 }
@@ -72,16 +104,8 @@ fn test_swiglu_parity() -> uor_r4_training::Result<()> {
     let v_cpu = out_cpu.flatten_all()?.to_vec1::<f32>()?;
     let v_metal = out_metal.flatten_all()?.to_vec1::<f32>()?;
 
-    assert_eq!(v_cpu.len(), v_metal.len());
-    let mut max_diff = 0.0f32;
-    for (c, m) in v_cpu.iter().zip(v_metal.iter()) {
-        let diff = (c - m).abs();
-        if diff > max_diff {
-            max_diff = diff;
-        }
-    }
+    let max_diff = assert_finite_and_close(&v_cpu, &v_metal, 1e-5, "SwiGLU");
     println!("SwiGLU max diff CPU vs Metal: {max_diff}");
-    assert!(max_diff < 1e-5, "SwiGLU diff too large: {max_diff}");
     Ok(())
 }
 
@@ -112,16 +136,8 @@ fn test_rms_norm_parity() -> uor_r4_training::Result<()> {
     let v_cpu = out_cpu.flatten_all()?.to_vec1::<f32>()?;
     let v_metal = out_metal.flatten_all()?.to_vec1::<f32>()?;
 
-    assert_eq!(v_cpu.len(), v_metal.len());
-    let mut max_diff = 0.0f32;
-    for (c, m) in v_cpu.iter().zip(v_metal.iter()) {
-        let diff = (c - m).abs();
-        if diff > max_diff {
-            max_diff = diff;
-        }
-    }
+    let max_diff = assert_finite_and_close(&v_cpu, &v_metal, 1e-4, "RMSNorm");
     println!("RMSNorm max diff CPU vs Metal: {max_diff}");
-    assert!(max_diff < 1e-4, "RMSNorm diff too large: {max_diff}");
     Ok(())
 }
 
@@ -166,16 +182,8 @@ fn test_quaternion_scan_parity() -> uor_r4_training::Result<()> {
     let v_cpu = out_cpu.flatten_all()?.to_vec1::<f32>()?;
     let v_metal = out_metal.flatten_all()?.to_vec1::<f32>()?;
 
-    assert_eq!(v_cpu.len(), v_metal.len());
-    let mut max_diff = 0.0f32;
-    for (c, m) in v_cpu.iter().zip(v_metal.iter()) {
-        let diff = (c - m).abs();
-        if diff > max_diff {
-            max_diff = diff;
-        }
-    }
+    let max_diff = assert_finite_and_close(&v_cpu, &v_metal, 1e-4, "QuaternionScan");
     println!("QuaternionScan max diff CPU vs Metal: {max_diff}");
-    assert!(max_diff < 1e-4, "QuaternionScan diff too large: {max_diff}");
     Ok(())
 }
 
@@ -202,7 +210,16 @@ fn test_cross_entropy_parity() -> uor_r4_training::Result<()> {
     let c_val = loss_cpu.to_scalar::<f32>()?;
     let m_val = loss_metal.to_scalar::<f32>()?;
 
+    assert!(
+        c_val.is_finite(),
+        "CrossEntropy CPU value is not finite ({c_val})"
+    );
+    assert!(
+        m_val.is_finite(),
+        "CrossEntropy Metal value is not finite ({m_val})"
+    );
     let diff = (c_val - m_val).abs();
+    assert!(diff.is_finite(), "CrossEntropy diff is not finite ({diff})");
     println!("CrossEntropy CPU ({c_val}) vs Metal ({m_val}) diff: {diff}");
     assert!(diff < 1e-4, "CrossEntropy diff too large: {diff}");
     Ok(())
@@ -275,20 +292,10 @@ fn test_swiglu_backward_parity() -> uor_r4_training::Result<()> {
         .flatten_all()?
         .to_vec1::<f32>()?;
 
-    let max_dg_diff = dg_cpu
-        .iter()
-        .zip(dg_metal.iter())
-        .map(|(c, m)| (c - m).abs())
-        .fold(0.0f32, f32::max);
-    let max_du_diff = du_cpu
-        .iter()
-        .zip(du_metal.iter())
-        .map(|(c, m)| (c - m).abs())
-        .fold(0.0f32, f32::max);
+    let max_dg_diff = assert_finite_and_close(&dg_cpu, &dg_metal, 1e-4, "SwiGLU backward dg");
+    let max_du_diff = assert_finite_and_close(&du_cpu, &du_metal, 1e-4, "SwiGLU backward du");
 
     println!("SwiGLU backward max diff dg: {max_dg_diff}, du: {max_du_diff}");
-    assert!(max_dg_diff < 1e-4, "dg diff too large: {max_dg_diff}");
-    assert!(max_du_diff < 1e-4, "du diff too large: {max_du_diff}");
     Ok(())
 }
 
@@ -361,20 +368,10 @@ fn test_rms_norm_backward_parity() -> uor_r4_training::Result<()> {
         .flatten_all()?
         .to_vec1::<f32>()?;
 
-    let max_dx_diff = dx_cpu
-        .iter()
-        .zip(dx_metal.iter())
-        .map(|(c, m)| (c - m).abs())
-        .fold(0.0f32, f32::max);
-    let max_dw_diff = dw_cpu
-        .iter()
-        .zip(dw_metal.iter())
-        .map(|(c, m)| (c - m).abs())
-        .fold(0.0f32, f32::max);
+    let max_dx_diff = assert_finite_and_close(&dx_cpu, &dx_metal, 1e-4, "RMSNorm backward dx");
+    let max_dw_diff = assert_finite_and_close(&dw_cpu, &dw_metal, 1e-4, "RMSNorm backward dw");
 
     println!("RMSNorm backward max diff dx: {max_dx_diff}, dw: {max_dw_diff}");
-    assert!(max_dx_diff < 1e-4, "dx diff too large: {max_dx_diff}");
-    assert!(max_dw_diff < 1e-4, "dw diff too large: {max_dw_diff}");
     Ok(())
 }
 
@@ -419,14 +416,9 @@ fn test_cross_entropy_backward_parity() -> uor_r4_training::Result<()> {
         .flatten_all()?
         .to_vec1::<f32>()?;
 
-    let max_dl_diff = dl_cpu
-        .iter()
-        .zip(dl_metal.iter())
-        .map(|(c, m)| (c - m).abs())
-        .fold(0.0f32, f32::max);
+    let max_dl_diff = assert_finite_and_close(&dl_cpu, &dl_metal, 1e-4, "CrossEntropy backward dl");
 
     println!("CrossEntropy backward max diff dl: {max_dl_diff}");
-    assert!(max_dl_diff < 1e-4, "dl diff too large: {max_dl_diff}");
     Ok(())
 }
 
@@ -513,20 +505,12 @@ fn test_quaternion_scan_backward_parity() -> uor_r4_training::Result<()> {
         .flatten_all()?
         .to_vec1::<f32>()?;
 
-    let max_dt_diff = dt_cpu
-        .iter()
-        .zip(dt_metal.iter())
-        .map(|(c, m)| (c - m).abs())
-        .fold(0.0f32, f32::max);
-    let max_dd_diff = dd_cpu
-        .iter()
-        .zip(dd_metal.iter())
-        .map(|(c, m)| (c - m).abs())
-        .fold(0.0f32, f32::max);
+    let max_dt_diff =
+        assert_finite_and_close(&dt_cpu, &dt_metal, 1e-4, "QuaternionScan backward dt");
+    let max_dd_diff =
+        assert_finite_and_close(&dd_cpu, &dd_metal, 1e-4, "QuaternionScan backward dd");
 
     println!("QuaternionScan backward max diff dt: {max_dt_diff}, dd: {max_dd_diff}");
-    assert!(max_dt_diff < 1e-4, "dt diff too large: {max_dt_diff}");
-    assert!(max_dd_diff < 1e-4, "dd diff too large: {max_dd_diff}");
     Ok(())
 }
 
@@ -731,15 +715,8 @@ fn test_fused_read_parity() -> uor_r4_training::Result<()> {
     let m_vec = out_metal.flatten_all()?.to_vec1::<f32>()?;
     assert_eq!(c_vec.len(), m_vec.len());
 
-    let mut max_diff = 0.0f32;
-    for (c, m) in c_vec.iter().zip(m_vec.iter()) {
-        let diff = (c - m).abs();
-        if diff > max_diff {
-            max_diff = diff;
-        }
-    }
+    let max_diff = assert_finite_and_close(&c_vec, &m_vec, 1e-4, "FusedRead Dot");
     println!("FusedRead Dot max diff CPU vs Metal: {max_diff}");
-    assert!(max_diff < 1e-4, "FusedRead diff too large: {max_diff}");
 
     // Verify semantic gating: Metal must reject unsupported options (e.g. null=true)
     let null_gate = uor_r4_training::geometric_stack::fused_read(
@@ -812,15 +789,8 @@ fn test_recurrence_core_parity() -> uor_r4_training::Result<()> {
     let m_vec = out_metal.flatten_all()?.to_vec1::<f32>()?;
     assert_eq!(c_vec.len(), m_vec.len());
 
-    let mut max_diff = 0.0f32;
-    for (c, m) in c_vec.iter().zip(m_vec.iter()) {
-        let diff = (c - m).abs();
-        if diff > max_diff {
-            max_diff = diff;
-        }
-    }
+    let max_diff = assert_finite_and_close(&c_vec, &m_vec, 1e-4, "RecurrenceCore");
     println!("RecurrenceCore max diff CPU vs Metal: {max_diff}");
-    assert!(max_diff < 1e-4, "RecurrenceCore diff too large: {max_diff}");
 
     // Verify snap gating on Metal: snap must return Err
     let snap_gate = uor_r4_training::geometric_stack::recurrence_core(
@@ -834,6 +804,138 @@ fn test_recurrence_core_parity() -> uor_r4_training::Result<()> {
         Some(uor_r4_training::geometric_stack::TransportSnap::Icosian),
     );
     assert!(snap_gate.is_err(), "Metal RecurrenceCore must reject snap");
+
+    Ok(())
+}
+
+#[test]
+fn test_metal_stack_ops_rejections() -> uor_r4_training::Result<()> {
+    let cpu_dev = candle_core::Device::Cpu;
+
+    // 1. StraightThrough rejects non-F32 tensors
+    let ct_u32 = candle_core::Tensor::zeros((2, 4), candle_core::DType::U32, &cpu_dev)?;
+    let q_u32 = candle_core::Tensor::zeros((2, 4), candle_core::DType::U32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::straight_through(&ct_u32, &q_u32).is_err(),
+        "straight_through must reject non-F32"
+    );
+
+    // 2. SwiGLU rejects non-F32, shape mismatch, empty
+    let f32_4 = candle_core::Tensor::zeros((2, 4), candle_core::DType::F32, &cpu_dev)?;
+    let f32_6 = candle_core::Tensor::zeros((2, 6), candle_core::DType::F32, &cpu_dev)?;
+    let u32_4 = candle_core::Tensor::zeros((2, 4), candle_core::DType::U32, &cpu_dev)?;
+    let empty_f32 = candle_core::Tensor::zeros((0, 4), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::swiglu(&u32_4, &u32_4).is_err(),
+        "swiglu must reject non-F32"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::swiglu(&f32_4, &f32_6).is_err(),
+        "swiglu must reject shape mismatch"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::swiglu(&empty_f32, &empty_f32).is_err(),
+        "swiglu must reject empty tensor"
+    );
+
+    // 3. RMSNorm rejects non-F32, empty weight, last dimension mismatch
+    let empty_w = candle_core::Tensor::zeros((0,), candle_core::DType::F32, &cpu_dev)?;
+    let w_6 = candle_core::Tensor::zeros((6,), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::rms_norm(&f32_4, &empty_w).is_err(),
+        "rms_norm must reject empty weight"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::rms_norm(&f32_4, &w_6).is_err(),
+        "rms_norm must reject mismatched last dimension"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::rms_norm(&u32_4, &f32_4).is_err(),
+        "rms_norm must reject non-F32"
+    );
+
+    // 4. QuaternionScan rejects non-F32, shape mismatch, zero/invalid dims
+    let f32_scan = candle_core::Tensor::zeros((2, 4, 2, 4), candle_core::DType::F32, &cpu_dev)?;
+    let u32_scan = candle_core::Tensor::zeros((2, 4, 2, 4), candle_core::DType::U32, &cpu_dev)?;
+    let f32_scan_bad_dim =
+        candle_core::Tensor::zeros((2, 4, 2, 3), candle_core::DType::F32, &cpu_dev)?;
+    let f32_scan_zero =
+        candle_core::Tensor::zeros((0, 4, 2, 4), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::quaternion_scan(&u32_scan, &u32_scan).is_err(),
+        "quaternion_scan must reject non-F32"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::quaternion_scan(&f32_scan, &f32_scan_bad_dim).is_err(),
+        "quaternion_scan must reject shape mismatch / last dim != 4"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::quaternion_scan(&f32_scan_zero, &f32_scan_zero).is_err(),
+        "quaternion_scan must reject zero dimensions"
+    );
+
+    // 5. CrossEntropy rejects non-F32, targets count mismatch
+    let logits_f32 = candle_core::Tensor::zeros((4, 16), candle_core::DType::F32, &cpu_dev)?;
+    let logits_u32 = candle_core::Tensor::zeros((4, 16), candle_core::DType::U32, &cpu_dev)?;
+    let targets_3 = vec![1u32, 2, 3];
+    assert!(
+        uor_r4_training::geometric_stack::logits_cross_entropy(&logits_u32, &targets_3, None)
+            .is_err(),
+        "logits_cross_entropy must reject non-F32"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::logits_cross_entropy(&logits_f32, &targets_3, None)
+            .is_err(),
+        "logits_cross_entropy must reject targets len mismatch (3 != 4)"
+    );
+
+    // 6. RecurrenceCore rejects non-F32, zero dims, width not divisible by 4, buffer size mismatch
+    let b_f32 = candle_core::Tensor::zeros((2, 4, 2 * 16), candle_core::DType::F32, &cpu_dev)?;
+    let g_f32 = candle_core::Tensor::zeros((2, 4, 4 + 16), candle_core::DType::F32, &cpu_dev)?;
+    let p_f32 = candle_core::Tensor::zeros(((4 + 1) * 16 + 4,), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::recurrence_core(
+            &b_f32, &g_f32, &p_f32, 0, 4, 16, true, None
+        )
+        .is_err(),
+        "recurrence_core must reject batch=0"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::recurrence_core(
+            &b_f32, &g_f32, &p_f32, 2, 4, 15, true, None
+        )
+        .is_err(),
+        "recurrence_core must reject width % 4 != 0"
+    );
+    let p_bad = candle_core::Tensor::zeros((10,), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::recurrence_core(
+            &b_f32, &g_f32, &p_bad, 2, 4, 16, true, None
+        )
+        .is_err(),
+        "recurrence_core must reject buffer length mismatch"
+    );
+
+    // 7. FusedRead rejects non-F32, zero dims, buffer size mismatch
+    let q_f32 = candle_core::Tensor::zeros((2, 4, 8, 16), candle_core::DType::F32, &cpu_dev)?;
+    let k_f32 = candle_core::Tensor::zeros((2, 4, 8, 16), candle_core::DType::F32, &cpu_dev)?;
+    let v_f32 = candle_core::Tensor::zeros((2, 4, 8, 16), candle_core::DType::F32, &cpu_dev)?;
+    let aux_f32 = candle_core::Tensor::zeros((1,), candle_core::DType::F32, &cpu_dev)?;
+    let q_bad = candle_core::Tensor::zeros((2, 4, 8, 15), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::fused_read(
+            &q_bad,
+            &k_f32,
+            &v_f32,
+            &aux_f32,
+            uor_r4_training::geometric_stack::ReadScore::Dot,
+            false,
+            false,
+            false
+        )
+        .is_err(),
+        "fused_read must reject dimension mismatch"
+    );
 
     Ok(())
 }
