@@ -413,15 +413,22 @@ kernel void recurrence_core_fwd(
     uint b = lane_id / lanes;
     uint lane = lane_id % lanes;
 
+    device const float* taps = params;
+    device const float* bias = params + 4 * width;
+
     float4 held = float4(0.0f);
     for (uint t = 0; t < time; ++t) {
-        uint branch_base = (b * time + t) * (2 * width) + 4 * lane;
-        float4 d_val = float4(
-            branches[branch_base + 0],
-            branches[branch_base + 1],
-            branches[branch_base + 2],
-            branches[branch_base + 3]
-        );
+        float4 d_val = float4(0.0f);
+        for (uint k = 0; k < 4; ++k) {
+            uint ch = 4 * lane + k;
+            float c_val = bias[ch];
+            for (uint shift = 0; shift < 4 && shift <= t; ++shift) {
+                float w = taps[shift * width + ch];
+                float a = branches[(b * time + (t - shift)) * (2 * width) + ch];
+                c_val += w * a;
+            }
+            d_val[k] = c_val;
+        }
         uint drive_idx = (b * time + t) * width + 4 * lane;
         drive_out[drive_idx + 0] = d_val.x;
         drive_out[drive_idx + 1] = d_val.y;
@@ -431,7 +438,8 @@ kernel void recurrence_core_fwd(
         uint gate_base = (b * time + t) * gate_width;
         float r_val = 1.0f / (1.0f + exp(-gates[gate_base + lane]));
         float decay = exp(8.0f * r_val * log_a[lane]);
-        float keep = sqrt(1.0f - decay * decay);
+        float complement = 1.0f - decay * decay;
+        float keep = (complement < 1e-6f) ? 1e-3f : sqrt(complement);
 
         float4 q;
         if (rotation != 0) {
@@ -439,7 +447,7 @@ kernel void recurrence_core_fwd(
             float u1 = gates[gate_base + lanes + 4 * lane + 1];
             float u2 = gates[gate_base + lanes + 4 * lane + 2];
             float u3 = gates[gate_base + lanes + 4 * lane + 3];
-            float norm = sqrt(u0 * u0 + u1 * u1 + u2 * u2 + u3 * u3 + 1e-12f);
+            float norm = sqrt(u0 * u0 + u1 * u1 + u2 * u2 + u3 * u3 + 1e-6f);
             float s = decay / norm;
             q = float4(u0 * s, u1 * s, u2 * s, u3 * s);
         } else {
@@ -452,6 +460,7 @@ kernel void recurrence_core_fwd(
         state_out[drive_idx + 2] = held.z;
         state_out[drive_idx + 3] = held.w;
 
+        uint branch_base = (b * time + t) * (2 * width) + 4 * lane;
         float4 g_val = float4(
             branches[branch_base + width + 0],
             branches[branch_base + width + 1],

@@ -558,6 +558,7 @@ fn test_metal_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> 
     // Warmup
     let _ = uor_r4_training::geometric_stack::swiglu(&g_cpu, &u_cpu)?;
     let _ = uor_r4_training::geometric_stack::swiglu(&g_metal, &u_metal)?;
+    metal_dev.as_metal_device()?.wait_until_completed()?;
 
     let iters = 30;
     let start_cpu = Instant::now();
@@ -571,6 +572,7 @@ fn test_metal_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> 
     for _ in 0..iters {
         let _ = uor_r4_training::geometric_stack::swiglu(&g_metal, &u_metal)?;
     }
+    metal_dev.as_metal_device()?.wait_until_completed()?;
     let metal_dur = start_metal.elapsed().as_secs_f64();
     let metal_tok_s = (tokens * iters) as f64 / metal_dur;
     let speedup_swiglu = metal_tok_s / cpu_tok_s;
@@ -592,20 +594,22 @@ fn test_metal_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> 
     let x_metal = candle_core::Tensor::from_vec(x_data, (tokens, dim_norm), &metal_dev)?;
     let w_metal = candle_core::Tensor::from_vec(w_data, (dim_norm,), &metal_dev)?;
 
-    let _ = uor_r4_training::geometric_stack::rms_norm(&x_cpu, &w_cpu, 1e-5)?;
-    let _ = uor_r4_training::geometric_stack::rms_norm(&x_metal, &w_metal, 1e-5)?;
+    let _ = uor_r4_training::geometric_stack::rms_norm(&x_cpu, &w_cpu)?;
+    let _ = uor_r4_training::geometric_stack::rms_norm(&x_metal, &w_metal)?;
+    metal_dev.as_metal_device()?.wait_until_completed()?;
 
     let start_norm_cpu = Instant::now();
     for _ in 0..iters {
-        let _ = uor_r4_training::geometric_stack::rms_norm(&x_cpu, &w_cpu, 1e-5)?;
+        let _ = uor_r4_training::geometric_stack::rms_norm(&x_cpu, &w_cpu)?;
     }
     let cpu_dur_norm = start_norm_cpu.elapsed().as_secs_f64();
     let cpu_tok_s_norm = (tokens * iters) as f64 / cpu_dur_norm;
 
     let start_norm_metal = Instant::now();
     for _ in 0..iters {
-        let _ = uor_r4_training::geometric_stack::rms_norm(&x_metal, &w_metal, 1e-5)?;
+        let _ = uor_r4_training::geometric_stack::rms_norm(&x_metal, &w_metal)?;
     }
+    metal_dev.as_metal_device()?.wait_until_completed()?;
     let metal_dur_norm = start_norm_metal.elapsed().as_secs_f64();
     let metal_tok_s_norm = (tokens * iters) as f64 / metal_dur_norm;
     let speedup_norm = metal_tok_s_norm / cpu_tok_s_norm;
@@ -621,24 +625,24 @@ fn test_metal_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> 
     let t_data: Vec<u32> = (0..tokens).map(|i| (i % vocab) as u32).collect();
 
     let l_cpu = candle_core::Tensor::from_vec(l_data.clone(), (tokens, vocab), &cpu_dev)?;
-    let t_cpu = candle_core::Tensor::from_vec(t_data.clone(), (tokens,), &cpu_dev)?;
     let l_metal = candle_core::Tensor::from_vec(l_data, (tokens, vocab), &metal_dev)?;
-    let t_metal = candle_core::Tensor::from_vec(t_data, (tokens,), &metal_dev)?;
 
-    let _ = uor_r4_training::geometric_stack::cross_entropy(&l_cpu, &t_cpu)?;
-    let _ = uor_r4_training::geometric_stack::cross_entropy(&l_metal, &t_metal)?;
+    let _ = uor_r4_training::geometric_stack::cross_entropy(&l_cpu, &t_data)?;
+    let _ = uor_r4_training::geometric_stack::cross_entropy(&l_metal, &t_data)?;
+    metal_dev.as_metal_device()?.wait_until_completed()?;
 
     let start_ce_cpu = Instant::now();
     for _ in 0..iters {
-        let _ = uor_r4_training::geometric_stack::cross_entropy(&l_cpu, &t_cpu)?;
+        let _ = uor_r4_training::geometric_stack::cross_entropy(&l_cpu, &t_data)?;
     }
     let cpu_dur_ce = start_ce_cpu.elapsed().as_secs_f64();
     let cpu_tok_s_ce = (tokens * iters) as f64 / cpu_dur_ce;
 
     let start_ce_metal = Instant::now();
     for _ in 0..iters {
-        let _ = uor_r4_training::geometric_stack::cross_entropy(&l_metal, &t_metal)?;
+        let _ = uor_r4_training::geometric_stack::cross_entropy(&l_metal, &t_data)?;
     }
+    metal_dev.as_metal_device()?.wait_until_completed()?;
     let metal_dur_ce = start_ce_metal.elapsed().as_secs_f64();
     let metal_tok_s_ce = (tokens * iters) as f64 / metal_dur_ce;
     let speedup_ce = metal_tok_s_ce / cpu_tok_s_ce;
@@ -659,6 +663,177 @@ fn test_metal_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> 
         speedup_ce > 0.5,
         "CrossEntropy GPU kernel unexpectedly degraded"
     );
+
+    Ok(())
+}
+
+#[cfg(feature = "metal")]
+#[test]
+fn test_fused_read_parity() -> uor_r4_training::Result<()> {
+    let metal_dev = match candle_core::Device::new_metal(0) {
+        Ok(dev) => dev,
+        Err(_) => return Ok(()),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+
+    let batch = 2;
+    let heads = 4;
+    let time = 8;
+    let key_dim = 16;
+    let val_dim = 16;
+
+    let q_data: Vec<f32> = (0..batch * heads * time * key_dim)
+        .map(|i| (i as f32 * 0.05).sin())
+        .collect();
+    let k_data: Vec<f32> = (0..batch * heads * time * key_dim)
+        .map(|i| (i as f32 * 0.03).cos())
+        .collect();
+    let v_data: Vec<f32> = (0..batch * heads * time * val_dim)
+        .map(|i| (i as f32 * 0.02 + 0.1).sin())
+        .collect();
+    let aux_data = vec![0.0f32];
+
+    let q_cpu =
+        candle_core::Tensor::from_vec(q_data.clone(), (batch, heads, time, key_dim), &cpu_dev)?;
+    let k_cpu =
+        candle_core::Tensor::from_vec(k_data.clone(), (batch, heads, time, key_dim), &cpu_dev)?;
+    let v_cpu =
+        candle_core::Tensor::from_vec(v_data.clone(), (batch, heads, time, val_dim), &cpu_dev)?;
+    let aux_cpu = candle_core::Tensor::from_vec(aux_data.clone(), (1,), &cpu_dev)?;
+
+    let q_metal = candle_core::Tensor::from_vec(q_data, (batch, heads, time, key_dim), &metal_dev)?;
+    let k_metal = candle_core::Tensor::from_vec(k_data, (batch, heads, time, key_dim), &metal_dev)?;
+    let v_metal = candle_core::Tensor::from_vec(v_data, (batch, heads, time, val_dim), &metal_dev)?;
+    let aux_metal = candle_core::Tensor::from_vec(aux_data, (1,), &metal_dev)?;
+
+    let out_cpu = uor_r4_training::geometric_stack::fused_read(
+        &q_cpu,
+        &k_cpu,
+        &v_cpu,
+        &aux_cpu,
+        uor_r4_training::geometric_stack::ReadScore::Dot,
+        false,
+        false,
+        false,
+    )?;
+    let out_metal = uor_r4_training::geometric_stack::fused_read(
+        &q_metal,
+        &k_metal,
+        &v_metal,
+        &aux_metal,
+        uor_r4_training::geometric_stack::ReadScore::Dot,
+        false,
+        false,
+        false,
+    )?;
+
+    let c_vec = out_cpu.flatten_all()?.to_vec1::<f32>()?;
+    let m_vec = out_metal.flatten_all()?.to_vec1::<f32>()?;
+    assert_eq!(c_vec.len(), m_vec.len());
+
+    let mut max_diff = 0.0f32;
+    for (c, m) in c_vec.iter().zip(m_vec.iter()) {
+        let diff = (c - m).abs();
+        if diff > max_diff {
+            max_diff = diff;
+        }
+    }
+    println!("FusedRead Dot max diff CPU vs Metal: {max_diff}");
+    assert!(max_diff < 1e-4, "FusedRead diff too large: {max_diff}");
+
+    // Verify semantic gating: Metal must reject unsupported options (e.g. null=true)
+    let null_gate = uor_r4_training::geometric_stack::fused_read(
+        &q_metal,
+        &k_metal,
+        &v_metal,
+        &aux_metal,
+        uor_r4_training::geometric_stack::ReadScore::Dot,
+        true,
+        false,
+        false,
+    );
+    assert!(null_gate.is_err(), "Metal FusedRead must reject null=true");
+
+    let lorentz_gate = uor_r4_training::geometric_stack::fused_read(
+        &q_metal,
+        &k_metal,
+        &v_metal,
+        &aux_metal,
+        uor_r4_training::geometric_stack::ReadScore::Lorentz,
+        false,
+        false,
+        false,
+    );
+    assert!(lorentz_gate.is_err(), "Metal FusedRead must reject Lorentz");
+
+    Ok(())
+}
+
+#[cfg(feature = "metal")]
+#[test]
+fn test_recurrence_core_parity() -> uor_r4_training::Result<()> {
+    let metal_dev = match candle_core::Device::new_metal(0) {
+        Ok(dev) => dev,
+        Err(_) => return Ok(()),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+
+    let batch = 2;
+    let time = 8;
+    let width = 32;
+    let lanes = width / 4;
+    let gate_width = lanes + width;
+
+    let b_data: Vec<f32> = (0..batch * time * 2 * width)
+        .map(|i| (i as f32 * 0.01).sin() * 0.1)
+        .collect();
+    let g_data: Vec<f32> = (0..batch * time * gate_width)
+        .map(|i| (i as f32 * 0.02).cos() * 0.1)
+        .collect();
+    let p_len = (4 + 1) * width + lanes;
+    let p_data: Vec<f32> = (0..p_len).map(|i| (i as f32 * 0.03).sin() * 0.05).collect();
+
+    let b_cpu = candle_core::Tensor::from_vec(b_data.clone(), (batch, time, 2 * width), &cpu_dev)?;
+    let g_cpu = candle_core::Tensor::from_vec(g_data.clone(), (batch, time, gate_width), &cpu_dev)?;
+    let p_cpu = candle_core::Tensor::from_vec(p_data.clone(), (p_len,), &cpu_dev)?;
+
+    let b_metal = candle_core::Tensor::from_vec(b_data, (batch, time, 2 * width), &metal_dev)?;
+    let g_metal = candle_core::Tensor::from_vec(g_data, (batch, time, gate_width), &metal_dev)?;
+    let p_metal = candle_core::Tensor::from_vec(p_data, (p_len,), &metal_dev)?;
+
+    let out_cpu = uor_r4_training::geometric_stack::recurrence_core(
+        &b_cpu, &g_cpu, &p_cpu, batch, time, width, true, None,
+    )?;
+    let out_metal = uor_r4_training::geometric_stack::recurrence_core(
+        &b_metal, &g_metal, &p_metal, batch, time, width, true, None,
+    )?;
+
+    let c_vec = out_cpu.flatten_all()?.to_vec1::<f32>()?;
+    let m_vec = out_metal.flatten_all()?.to_vec1::<f32>()?;
+    assert_eq!(c_vec.len(), m_vec.len());
+
+    let mut max_diff = 0.0f32;
+    for (c, m) in c_vec.iter().zip(m_vec.iter()) {
+        let diff = (c - m).abs();
+        if diff > max_diff {
+            max_diff = diff;
+        }
+    }
+    println!("RecurrenceCore max diff CPU vs Metal: {max_diff}");
+    assert!(max_diff < 1e-4, "RecurrenceCore diff too large: {max_diff}");
+
+    // Verify snap gating on Metal: snap must return Err
+    let snap_gate = uor_r4_training::geometric_stack::recurrence_core(
+        &b_metal,
+        &g_metal,
+        &p_metal,
+        batch,
+        time,
+        width,
+        true,
+        Some(uor_r4_training::geometric_stack::TransportSnap::Icosian),
+    );
+    assert!(snap_gate.is_err(), "Metal RecurrenceCore must reject snap");
 
     Ok(())
 }

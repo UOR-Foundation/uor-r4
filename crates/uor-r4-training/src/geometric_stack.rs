@@ -2042,6 +2042,13 @@ impl CustomOp2 for StraightThrough {
         if l1.shape() != l2.shape() {
             candle_core::bail!("straight-through inputs must have one shape");
         }
+        if l1.start_offset() != 0
+            || !l1.is_contiguous()
+            || l2.start_offset() != 0
+            || !l2.is_contiguous()
+        {
+            candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
+        }
         let device = s2.device();
         let total = l2.shape().elem_count();
         let out_buf = device.new_buffer(total, DType::F32, "straight_through_out")?;
@@ -2658,6 +2665,13 @@ impl CustomOp2 for QuaternionScan {
         if four != 4 || l2.shape() != l1.shape() {
             candle_core::bail!("quaternion scan needs matching [batch, time, lanes, 4] inputs");
         }
+        if l1.start_offset() != 0
+            || !l1.is_contiguous()
+            || l2.start_offset() != 0
+            || !l2.is_contiguous()
+        {
+            candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
+        }
         let device = s1.device();
         let total = l1.shape().elem_count();
         let out_buf = device.new_buffer(total, DType::F32, "quaternion_scan_out")?;
@@ -2689,13 +2703,25 @@ impl CustomOp2 for QuaternionScan {
         if let Device::Metal(device) = transition.device() {
             let (batch, time, lanes, four) = transition.dims4()?;
             if four == 4 {
+                let (t_storage, t_layout) = transition.storage_and_layout();
+                let (s_storage, s_layout) = state.storage_and_layout();
+                let (g_storage, g_layout) = grad.storage_and_layout();
+
+                if t_layout.start_offset() != 0
+                    || !t_layout.is_contiguous()
+                    || s_layout.start_offset() != 0
+                    || !s_layout.is_contiguous()
+                    || g_layout.start_offset() != 0
+                    || !g_layout.is_contiguous()
+                {
+                    candle_core::bail!(
+                        "Metal kernel requires contiguous layout with zero start offset"
+                    );
+                }
+
                 let total = transition.shape().elem_count();
                 let dq_buf = device.new_buffer(total, DType::F32, "quaternion_scan_bwd_dq")?;
                 let db_buf = device.new_buffer(total, DType::F32, "quaternion_scan_bwd_db")?;
-
-                let (t_storage, _) = transition.storage_and_layout();
-                let (s_storage, _) = state.storage_and_layout();
-                let (g_storage, _) = grad.storage_and_layout();
 
                 if let (Storage::Metal(t_ms), Storage::Metal(s_ms), Storage::Metal(g_ms)) =
                     (&*t_storage, &*s_storage, &*g_storage)
@@ -2986,12 +3012,24 @@ impl CustomOp3 for RecurrenceCore {
     fn metal_fwd(
         &self,
         s1: &MetalStorage,
-        _l1: &Layout,
+        l1: &Layout,
         s2: &MetalStorage,
-        _l2: &Layout,
+        l2: &Layout,
         s3: &MetalStorage,
         l3: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if self.snap.is_some() {
+            candle_core::bail!("Metal RecurrenceCore currently does not support transport snap");
+        }
+        if l1.start_offset() != 0
+            || !l1.is_contiguous()
+            || l2.start_offset() != 0
+            || !l2.is_contiguous()
+            || l3.start_offset() != 0
+            || !l3.is_contiguous()
+        {
+            candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
+        }
         let (time, width) = (self.time, self.width);
         let device = s1.device();
         let total_state = self.batch * time * width;
@@ -3718,12 +3756,26 @@ impl CustomOp3 for FusedRead {
     fn metal_fwd(
         &self,
         s1: &MetalStorage,
-        _l1: &Layout,
+        l1: &Layout,
         s2: &MetalStorage,
-        _l2: &Layout,
+        l2: &Layout,
         s3: &MetalStorage,
-        _l3: &Layout,
+        l3: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if self.score != ReadScore::Dot || self.null || self.age || self.rope {
+            candle_core::bail!(
+                "Metal FusedRead currently supports only ReadScore::Dot without null, age, or rope"
+            );
+        }
+        if l1.start_offset() != 0
+            || !l1.is_contiguous()
+            || l2.start_offset() != 0
+            || !l2.is_contiguous()
+            || l3.start_offset() != 0
+            || !l3.is_contiguous()
+        {
+            candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
+        }
         let (time, value) = (self.time, self.value);
         let device = s1.device();
         let total = self.batch * self.heads * time * value;
@@ -3985,6 +4037,30 @@ pub fn fused_read(
     Ok(query.contiguous()?.apply_op3(&kv, &aux.contiguous()?, op)?)
 }
 
+/// Fused RecurrenceCore: branches, gates, and parameters -> out.
+pub fn recurrence_core(
+    branches: &Tensor,
+    gates: &Tensor,
+    parameters: &Tensor,
+    batch: usize,
+    time: usize,
+    width: usize,
+    rotation: bool,
+    snap: Option<TransportSnap>,
+) -> Result<Tensor> {
+    Ok(branches.contiguous()?.apply_op3(
+        &gates.contiguous()?,
+        &parameters.contiguous()?,
+        RecurrenceCore {
+            batch,
+            time,
+            width,
+            rotation,
+            snap,
+        },
+    )?)
+}
+
 // ---------------------------------------------------------------------------
 // Fused RMSNorm and SwiGLU, parallel over rows.
 
@@ -4033,6 +4109,13 @@ impl CustomOp2 for RmsNorm {
         s2: &MetalStorage,
         l2: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if l1.start_offset() != 0
+            || !l1.is_contiguous()
+            || l2.start_offset() != 0
+            || !l2.is_contiguous()
+        {
+            candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
+        }
         let width = l2.shape().elem_count();
         let total = l1.shape().elem_count();
         let rows = total / width;
@@ -4066,12 +4149,24 @@ impl CustomOp2 for RmsNorm {
             let total = x.elem_count();
             let rows = total / width;
 
+            let (x_storage, x_layout) = x.storage_and_layout();
+            let (w_storage, w_layout) = w.storage_and_layout();
+            let (g_storage, g_layout) = grad.storage_and_layout();
+
+            if x_layout.start_offset() != 0
+                || !x_layout.is_contiguous()
+                || w_layout.start_offset() != 0
+                || !w_layout.is_contiguous()
+                || g_layout.start_offset() != 0
+                || !g_layout.is_contiguous()
+            {
+                candle_core::bail!(
+                    "Metal kernel requires contiguous layout with zero start offset"
+                );
+            }
+
             let dx_buf = device.new_buffer(total, DType::F32, "rms_norm_dx")?;
             let dw_buf = device.new_buffer(width, DType::F32, "rms_norm_dw")?;
-
-            let (x_storage, _) = x.storage_and_layout();
-            let (w_storage, _) = w.storage_and_layout();
-            let (g_storage, _) = grad.storage_and_layout();
 
             if let (Storage::Metal(x_ms), Storage::Metal(w_ms), Storage::Metal(g_ms)) =
                 (&*x_storage, &*w_storage, &*g_storage)
@@ -4203,6 +4298,13 @@ impl CustomOp2 for SwiGlu {
         if l1.shape() != l2.shape() {
             candle_core::bail!("SwiGLU inputs must match");
         }
+        if l1.start_offset() != 0
+            || !l1.is_contiguous()
+            || l2.start_offset() != 0
+            || !l2.is_contiguous()
+        {
+            candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
+        }
         let total = l1.shape().elem_count();
         let device = s1.device();
         let out_buf = device.new_buffer(total, DType::F32, "swiglu_out")?;
@@ -4229,12 +4331,25 @@ impl CustomOp2 for SwiGlu {
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = gate.device() {
             let total = gate.elem_count();
+
+            let (g_storage, g_layout) = gate.storage_and_layout();
+            let (u_storage, u_layout) = up.storage_and_layout();
+            let (d_storage, d_layout) = grad.storage_and_layout();
+
+            if g_layout.start_offset() != 0
+                || !g_layout.is_contiguous()
+                || u_layout.start_offset() != 0
+                || !u_layout.is_contiguous()
+                || d_layout.start_offset() != 0
+                || !d_layout.is_contiguous()
+            {
+                candle_core::bail!(
+                    "Metal kernel requires contiguous layout with zero start offset"
+                );
+            }
+
             let dg_buf = device.new_buffer(total, DType::F32, "swiglu_dg")?;
             let du_buf = device.new_buffer(total, DType::F32, "swiglu_du")?;
-
-            let (g_storage, _) = gate.storage_and_layout();
-            let (u_storage, _) = up.storage_and_layout();
-            let (d_storage, _) = grad.storage_and_layout();
 
             if let (Storage::Metal(g_ms), Storage::Metal(u_ms), Storage::Metal(d_ms)) =
                 (&*g_storage, &*u_storage, &*d_storage)
@@ -4354,6 +4469,9 @@ impl candle_core::CustomOp1 for CrossEntropy {
         storage: &MetalStorage,
         layout: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
+        if layout.start_offset() != 0 || !layout.is_contiguous() {
+            candle_core::bail!("Metal kernel requires contiguous layout with zero start offset");
+        }
         let (rows, vocabulary) = layout.shape().dims2()?;
         let device = storage.device();
         let target_buf = device.new_buffer_with_data(&self.targets)?;
@@ -4411,11 +4529,16 @@ impl candle_core::CustomOp1 for CrossEntropy {
         #[cfg(feature = "metal")]
         if self.weights.is_none() {
             if let Device::Metal(device) = logits.device() {
+                let (l_storage, l_layout) = logits.storage_and_layout();
+                if l_layout.start_offset() != 0 || !l_layout.is_contiguous() {
+                    candle_core::bail!(
+                        "Metal kernel requires contiguous layout with zero start offset"
+                    );
+                }
                 let scale = (grad.to_scalar::<f32>()? / rows as f32) as f32;
                 let target_buf = device.new_buffer_with_data(&self.targets)?;
                 let total = rows * vocabulary;
                 let grad_buf = device.new_buffer(total, DType::F32, "ce_grad")?;
-                let (l_storage, _) = logits.storage_and_layout();
                 if let Storage::Metal(l_ms) = &*l_storage {
                     crate::metal_stack_kernels::metal::call_cross_entropy_bwd(
                         device,

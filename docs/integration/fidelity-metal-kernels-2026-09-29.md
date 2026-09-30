@@ -64,38 +64,52 @@ All MSL shaders and dispatch mechanisms are contained in `crates/uor-r4-training
   Executed entirely in GPU memory.
 
 ### 2.6 RecurrenceCore & FusedRead
-- **RecurrenceCore** (`recurrence_core_fwd`): Fused Griffin gating, quaternion rotation recurrence, and inline GELU mixing in a single shader invocation, avoiding intermediate activation spills to memory.
+- **RecurrenceCore** (`recurrence_core_fwd`): Fused temporal 1D convolution over 4 past time steps with learned taps and bias, Griffin decay/keep gating, quaternion rotation recurrence, and inline GELU mixing in a single shader invocation, avoiding intermediate activation spills to memory.
+  - *Semantic Gating & Transport Snap*: Transport snap requires discrete H4/icosian root nearest-neighbor lookup; Metal dispatch strictly asserts `snap.is_none()` and bails if snap is requested.
+  - *Layout & Offset Checks*: Dispatches strictly require contiguous layout and zero start offset (`start_offset() == 0 && is_contiguous()`).
 - **FusedRead** (`fused_read_fwd`): Tiled causal attention scoring and value accumulation.
+  - *Semantic Gating*: Currently supports `ReadScore::Dot` without `null`, `age`, or `rope`. Gated at dispatch with explicit error emission on unsupported modes.
+  - *Layout & Offset Checks*: Strictly asserts `start_offset() == 0 && is_contiguous()` across query, kv, and aux buffers.
 
 ---
 
 ## 3. Empirical Numerical Parity Verification
 
-The full test suite in `crates/uor-r4-training/tests/metal_stack_ops_parity.rs` was executed on physical Apple Silicon hardware (`MetalDevice(DeviceId(6))`).
+The full test suite in `crates/uor-r4-training/tests/metal_stack_ops_parity.rs` was executed on physical Apple Silicon hardware (`MetalDevice(DeviceId(1))`):
 
 ```text
-running 10 tests
-Metal device 0 initialized successfully: Metal(MetalDevice(DeviceId(6)))
+running 13 tests
+
+=== Metal GPU vs CPU Stack Ops Throughput & Speedup Benchmark ===
+Metal device 0 initialized successfully: Metal(MetalDevice(DeviceId(1)))
 test test_metal_device_available ... ok
 QuaternionScan max diff CPU vs Metal: 0.000000044703484
 test test_quaternion_scan_parity ... ok
-test test_straight_through_parity ... ok
-RMSNorm max diff CPU vs Metal: 0.00000047683716
-test test_rms_norm_parity ... ok
 CrossEntropy CPU (5.686271) vs Metal (5.6862707) diff: 0.00000047683716
-SwiGLU max diff CPU vs Metal: 0.00000011920929
 test test_cross_entropy_parity ... ok
-test test_swiglu_parity ... ok
+RecurrenceCore max diff CPU vs Metal: 0.00000000069849193
+RMSNorm max diff CPU vs Metal: 0.00000047683716
+test test_recurrence_core_parity ... ok
+test test_rms_norm_parity ... ok
+FusedRead Dot max diff CPU vs Metal: 0.00000023841858
+test test_straight_through_parity ... ok
 CrossEntropy backward max diff dl: 0.0000000009313226
-test test_cross_entropy_backward_parity ... ok
+test test_fused_read_parity ... ok
 QuaternionScan backward max diff dt: 0.000000014901161, dd: 0.000000059604645
-SwiGLU backward max diff dg: 0.00000011920929, du: 0.000000059604645
-RMSNorm backward max diff dx: 0.00000047683716, dw: 0.00000035762787
+test test_cross_entropy_backward_parity ... ok
 test test_quaternion_scan_backward_parity ... ok
-test test_swiglu_backward_parity ... ok
+RMSNorm backward max diff dx: 0.00000047683716, dw: 0.00000035762787
+SwiGLU max diff CPU vs Metal: 0.00000011920929
 test test_rms_norm_backward_parity ... ok
+test test_swiglu_parity ... ok
+SwiGLU backward max diff dg: 0.00000011920929, du: 0.000000059604645
+test test_swiglu_backward_parity ... ok
+SwiGLU (tokens=4096, dim=768): CPU = 304410 tok/s (0.4037s), Metal = 5838154 tok/s (0.0210s) -> Speedup: 19.18x
+RMSNorm (tokens=4096, dim=288): CPU = 633785 tok/s (0.1939s), Metal = 22254987 tok/s (0.0055s) -> Speedup: 35.11x
+CrossEntropy (tokens=4096, vocab=4096): CPU = 59419 tok/s (2.0680s), Metal = 1841447 tok/s (0.0667s) -> Speedup: 30.99x
+test test_metal_stack_ops_throughput_and_speedup ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.42s
 ```
 
 ### Numerical Tolerance Summary Table
@@ -114,14 +128,26 @@ test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 | `QuaternionScan` | Backward ($dd$) | $2 \times 8 \times 4 \times 4$ | $5.96 \times 10^{-8}$ | **PASS** |
 | `CrossEntropy` | Forward | $8 \times 256$ | $4.77 \times 10^{-7}$ | **PASS** |
 | `CrossEntropy` | Backward ($dl$) | $4 \times 128$ | $9.31 \times 10^{-10}$ | **PASS** |
+| `FusedRead` | Forward (Dot) | $2 \times 4 \times 8 \times 16$ | $2.38 \times 10^{-7}$ | **PASS** (Gating verified) |
+| `RecurrenceCore` | Forward (Rot) | $2 \times 8 \times 32$ | $6.98 \times 10^{-10}$ | **PASS** (Snap gating verified) |
+
+### Synchronized GPU Throughput & Speedup Table
+
+Timing loops explicitly synchronize GPU execution via `MetalDevice::wait_until_completed()` before reading elapsed duration:
+
+| Operation | Workload Parameters | CPU Throughput | Metal GPU Throughput | Measured Speedup |
+| :--- | :--- | :--- | :--- | :--- |
+| `SwiGLU` | 4,096 tokens, dim 768 | 304,410 tok/s | 5,838,154 tok/s | **19.18x** |
+| `RMSNorm` | 4,096 tokens, dim 288 | 633,785 tok/s | 22,254,987 tok/s | **35.11x** |
+| `CrossEntropy` | 4,096 tokens, vocab 4096 | 59,419 tok/s | 1,841,447 tok/s | **30.99x** |
 
 ---
 
 ## 4. Artifact & Environment Lineage
 
 - **Worktree**: `/Users/casey.allard/uor-r4/.worktrees/runtime-reconciled`
-- **Target Dir**: `/tmp/uor-target` (respecting quarantine isolation of external volume per recovery hold #1520)
+- **Target Dir**: `/Users/casey.allard/.cache/uor-antigravity-target` (respecting quarantine isolation of external volume per recovery hold #1520)
 - **Toolchain**: `rustc 1.83.0` (managed by rustup)
 - **Candle Core Version**: `0.9.2` with `candle-metal-kernels = 0.9.2` and `objc2-metal = 0.3.2`
-- **Internal Storage**: 38 GiB available on `/System/Volumes/Data` (above emergency stop threshold 25 GiB).
+- **Internal Storage**: 53 GiB available on `/System/Volumes/Data` (well above 40 GiB admission floor).
 - **Owner Primary Checkout**: `/Users/casey.allard/uor-r4` remains 100% untouched.
