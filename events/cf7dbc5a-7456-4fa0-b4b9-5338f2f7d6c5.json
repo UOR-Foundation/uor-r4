@@ -1,0 +1,27 @@
+{
+  "event": {
+    "epoch": 1,
+    "event_id": "cf7dbc5a-7456-4fa0-b4b9-5338f2f7d6c5",
+    "issue": 1536,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [
+        "Internal free about39.1GiB below40GiB floor before reserved growth; memory pressure2 observed",
+        "Repair tests/build remain NOT_RUN; deployment requires executed validation and protected delivery"
+      ],
+      "branch": "codex/runner-stable-boot-recovery-20260930",
+      "checkpoint_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b",
+      "checks": "standalone rustfmt and git diff --check passed; Cargo NOT RUN",
+      "council": "Root plus seat2 and seat3 conditionalapprovals obtained; no Cargo executed",
+      "execution_packet": "runner1536-execution-packet-v4.json",
+      "handoff": "51e893b846fbff7c840922bb70b239c35d159b9b/handoffs/20260930-coordinator-transition",
+      "next_action": "Use approved v4 repair packet only after fresh physical/resource/process/source checks all pass; do not repeat refusal-only attempts or lower thresholds. Independent source/review work may continue under Kimi priorities.",
+      "pr": 1537,
+      "production": "LaunchAgent stopped; original hold retained. OpenCode queued -e was canceled prelaunch by its owner; no duplicate execution authorized. Original UNKNOWN records retained alongside peer reconciliation.",
+      "source_review": "runner1536-source-review1-preexecution.md"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790749639,
+  "previous_head": "c432db6d25d2b85d406eb8c1cce0aedcbd007077"
+}

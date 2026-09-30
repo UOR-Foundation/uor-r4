@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 101,
-  "observed_server_time": 1790749572,
+  "sequence": 102,
+  "observed_server_time": 1790749639,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -214,8 +214,8 @@
       "phase": "claimed",
       "checkpoint": {
         "blockers": [
-          "macOS memory pressure2; repair requiresfreshpressure1/fullprojection/nopeer/serviceabsent",
-          "Production deployment remains unauthorized until executed repair validation and protected delivery"
+          "Internal free about39.1GiB below40GiB floor before reserved growth; memory pressure2 observed",
+          "Repair tests/build remain NOT_RUN; deployment requires executed validation and protected delivery"
         ],
         "branch": "codex/runner-stable-boot-recovery-20260930",
         "checkpoint_sha": "8e90aa33b8ef941d3ac5de57ad448859e20ad76b",
@@ -223,9 +223,9 @@
         "council": "Root plus seat2 and seat3 conditionalapprovals obtained; no Cargo executed",
         "execution_packet": "runner1536-execution-packet-v4.json",
         "handoff": "51e893b846fbff7c840922bb70b239c35d159b9b/handoffs/20260930-coordinator-transition",
-        "next_action": "Use approved v4 packetc552311c and unchanged observer795d only after freshpreflight. Run offline lab-runner tests/build; preservelogs/chargeonce, independent result review, protected delivery before anyproductionrestart.",
+        "next_action": "Use approved v4 repair packet only after fresh physical/resource/process/source checks all pass; do not repeat refusal-only attempts or lower thresholds. Independent source/review work may continue under Kimi priorities.",
         "pr": 1537,
-        "production": "LaunchAgent booted out05:49:52Z after no live payload. Old daemon and zombies absent; unchanged hold81bb7c6a retained. OpenCode queued -e and reservation preserved. Claude and OpenCode -d peer finalizations preserve UNKNOWN; old predicate not repaired by those receipts.",
+        "production": "LaunchAgent stopped; original hold retained. OpenCode queued -e was canceled prelaunch by its owner; no duplicate execution authorized. Original UNKNOWN records retained alongside peer reconciliation.",
         "source_review": "runner1536-source-review1-preexecution.md"
       }
     }
