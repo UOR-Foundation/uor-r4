@@ -3461,6 +3461,11 @@ impl AermModel {
         if split == 0 || split >= config.layers() {
             return Err(invalid("the split must leave layers on both sides"));
         }
+        if config.pointer.is_some() {
+            return Err(invalid(
+                "the AERM model does not carry the pointer-copy head",
+            ));
+        }
         let width = config.width;
         let stack = StackModel::new(config, device)?;
         let mut rng = Rng::new(seed ^ 0x6165_726D_2D64_3221);
@@ -3487,6 +3492,11 @@ impl AermModel {
     pub fn from_stack(stack: StackModel, split: usize, memory: bool, seed: u64) -> Result<Self> {
         if split == 0 || split >= stack.config.layers() {
             return Err(invalid("the split must leave layers on both sides"));
+        }
+        if stack.config.pointer.is_some() {
+            return Err(invalid(
+                "the AERM model does not carry the pointer-copy head",
+            ));
         }
         let width = stack.config.width;
         let device = stack.device().clone();
@@ -5100,6 +5110,8 @@ mod tests {
             rotation: true,
             seed: 3,
             memory: None,
+            select: None,
+            pointer: None,
         };
         let model = AermModel::new(config, 2, true, 3, &device)?;
         let ids: Vec<u32> = (0..32).map(|i| (i * 7 % 400) as u32).collect();
@@ -5131,6 +5143,8 @@ mod tests {
             rotation: true,
             seed: 17,
             memory: None,
+            select: None,
+            pointer: None,
         };
         let stack = StackModel::new(config.clone(), &device)?;
         let ids: Vec<u32> = (0..32).map(|i| (i * 11 % 400) as u32).collect();
@@ -5225,6 +5239,8 @@ mod tests {
             rotation: true,
             seed: 5,
             memory: None,
+            select: None,
+            pointer: None,
         };
         let model = AermModel::new(config, 2, true, 5, &device)?;
         let mut rng = Rng::new(3);
@@ -5272,6 +5288,8 @@ mod tests {
             rotation: true,
             seed: 19,
             memory: None,
+            select: None,
+            pointer: None,
         };
         let mut stack = StackModel::new(config.clone(), &device)?;
         stack.set_transport_snap(Some(TransportSnap::Icosian))?;
@@ -5340,6 +5358,8 @@ mod tests {
             rotation: true,
             seed: 11,
             memory: None,
+            select: None,
+            pointer: None,
         };
         let mut model = AermModel::new(config.clone(), 2, true, 11, &device)?;
         // Non-zero, deterministic head and memory values: an all-zero branch
