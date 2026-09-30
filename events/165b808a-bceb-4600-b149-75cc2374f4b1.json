@@ -1,0 +1,68 @@
+{
+  "event": {
+    "attempt": "continuity-pilot-20260930-b",
+    "epoch": 1,
+    "event_id": "165b808a-bceb-4600-b149-75cc2374f4b1",
+    "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+    "issue": 1520,
+    "op": "reserve",
+    "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner",
+    "session": "codex-durable-20260929-root",
+    "spec": {
+      "argv": [
+        "/bin/sleep",
+        "30"
+      ],
+      "cargo": false,
+      "coordination": {
+        "attempt_id": "continuity-pilot-20260930-b",
+        "epoch": 1,
+        "issue": 1520,
+        "session": "codex-durable-20260929-root",
+        "work_card": "sha256:a527af51dfe737971a18333a49c12f05875c95976294f525e6599e085c569083"
+      },
+      "cwd": "/Users/casey.allard/uor-r4/.worktrees/durable-lab-system-20260929",
+      "env": {},
+      "exclusive": true,
+      "gpu": false,
+      "id": "continuity-pilot-20260930-b",
+      "kill_criterion": {
+        "kind": "wall",
+        "value": ""
+      },
+      "lab": "Codex",
+      "provenance": {
+        "executable": {
+          "path": "/bin/sleep",
+          "sha256": "8e05389ad2b0c2c59b36cbd1488980b821ae12ce32c2db7c89af1c372355747e"
+        },
+        "inputs": [],
+        "source_sha": "a345e766816403cb3eec888fb4cf694665e82e5d"
+      },
+      "rss_gib": 0.25,
+      "schema": "uor-r4.lab-runner-job/1",
+      "stop_grace_ms": 250,
+      "storage": [
+        {
+          "additional_bytes": 1048576,
+          "checkpoint_bytes": 2097152,
+          "volume": "internal"
+        },
+        {
+          "additional_bytes": 0,
+          "checkpoint_bytes": 0,
+          "volume": "workspace"
+        },
+        {
+          "additional_bytes": 0,
+          "checkpoint_bytes": 0,
+          "volume": "backing"
+        }
+      ],
+      "threads": 1,
+      "wall_s": 60
+    }
+  },
+  "observed_server_time": 1790736242,
+  "previous_head": "108637b5a02b6086692f2d552e5930b6fade111e"
+}

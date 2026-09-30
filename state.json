@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-  "sequence": 7,
-  "observed_server_time": 1790736239,
+  "sequence": 8,
+  "observed_server_time": 1790736242,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -117,6 +117,70 @@
         }
       },
       "spec_sha256": "53d05aa3a2dcf1e3b0f096648866cdf9eb29919047a1c2a6efe0feeeec9da2cb",
+      "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner"
+    },
+    "continuity-pilot-20260930-b": {
+      "issue": 1520,
+      "session": "codex-durable-20260929-root",
+      "task_epoch": 1,
+      "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+      "phase": "reserved",
+      "receipt": null,
+      "spec": {
+        "schema": "uor-r4.lab-runner-job/1",
+        "id": "continuity-pilot-20260930-b",
+        "lab": "Codex",
+        "cwd": "/Users/casey.allard/uor-r4/.worktrees/durable-lab-system-20260929",
+        "argv": [
+          "/bin/sleep",
+          "30"
+        ],
+        "env": {},
+        "threads": 1,
+        "rss_gib": 0.25,
+        "gpu": false,
+        "wall_s": 60,
+        "stop_grace_ms": 250,
+        "kill_criterion": {
+          "kind": "wall",
+          "value": ""
+        },
+        "exclusive": true,
+        "cargo": false,
+        "storage": [
+          {
+            "volume": "internal",
+            "additional_bytes": 1048576,
+            "checkpoint_bytes": 2097152
+          },
+          {
+            "volume": "workspace",
+            "additional_bytes": 0,
+            "checkpoint_bytes": 0
+          },
+          {
+            "volume": "backing",
+            "additional_bytes": 0,
+            "checkpoint_bytes": 0
+          }
+        ],
+        "coordination": {
+          "issue": 1520,
+          "session": "codex-durable-20260929-root",
+          "epoch": 1,
+          "work_card": "sha256:a527af51dfe737971a18333a49c12f05875c95976294f525e6599e085c569083",
+          "attempt_id": "continuity-pilot-20260930-b"
+        },
+        "provenance": {
+          "source_sha": "a345e766816403cb3eec888fb4cf694665e82e5d",
+          "executable": {
+            "path": "/bin/sleep",
+            "sha256": "8e05389ad2b0c2c59b36cbd1488980b821ae12ce32c2db7c89af1c372355747e"
+          },
+          "inputs": []
+        }
+      },
+      "spec_sha256": "9e1a7b7bd0eb29e45ccdc0728370cfea70a108d4b3198df831c3e7d8d767f2b0",
       "runner_root": "/Users/casey.allard/.local/share/uor-r4/runner"
     }
   }
