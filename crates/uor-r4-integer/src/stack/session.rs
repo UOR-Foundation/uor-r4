@@ -645,10 +645,19 @@ impl IntegerStackSession<'_> {
 
     /// Set the pointer copy scale in Q16 (`scale * 2^-16`).
     ///
-    /// When greater than zero, attention weights from the final read layer directly
-    /// boost the output logits of previously stepped tokens without matrix multiplication.
+    /// When greater than zero, normalized attention weights from head 0 of the final
+    /// read layer directly boost the output logits of previously stepped prefix tokens
+    /// via integer shift-add operations (`shift_wide(mul_i128(pw, scale), 31)`).
+    ///
+    /// This operates as a dense soft-attention token-identity boost: every historical
+    /// token position contributes according to its soft attention mass without discrete
+    /// argmax/top-k selection. It provides an integer-serving precursor scaffold for
+    /// learned copy policies (such as the AERM `copy_boost` in `stack_aerm.rs`).
+    ///
+    /// When zero (the default), attention weight capture is bypassed in `stack_read` to
+    /// ensure zero overhead for default serving.
     pub fn set_copy_scale(&mut self, scale_q16: i32) {
-        self.copy_scale_q16 = scale_q16;
+        self.copy_scale_q16 = scale_q16.max(0);
     }
 
     /// The active pointer copy scale in Q16.
@@ -656,7 +665,11 @@ impl IntegerStackSession<'_> {
         self.copy_scale_q16
     }
 
-    /// Normalized Q31 attention weights from the final read layer across historical positions.
+    /// Normalized Q31 attention weights from head 0 of the final read layer across historical positions.
+    ///
+    /// Valid only immediately after a [`Self::step`] call where [`Self::copy_scale`] > 0.
+    /// When copy scale is 0 (the default), capture is bypassed and this buffer holds zeros.
+    /// After [`Self::restore_state`] or [`Self::reset`], this buffer is zeroed.
     pub fn pointer_weights(&self) -> &[u64] {
         &self.b.pointer_weights[..self.position]
     }
@@ -961,6 +974,7 @@ impl IntegerStackSession<'_> {
         self.cache_at = cache_at;
         self.lift_at = lift_at;
         self.copy_scale_q16 = saved.copy_scale_q16;
+        self.b.pointer_weights.fill(0);
 
         // Restore pending logits
         if position > 0 {
@@ -1148,7 +1162,7 @@ impl IntegerStackSession<'_> {
                     },
                     b,
                     norm_exp,
-                    Some(idx) == last_read_idx,
+                    Some(idx) == last_read_idx && self.copy_scale_q16 > 0,
                 ),
                 _ => {
                     // `session` builds every layer's state from the model's
@@ -1351,7 +1365,7 @@ fn stack_read(
     cache: Cache<'_>,
     b: &mut Buffers,
     norm_exp: i32,
-    is_final_read: bool,
+    capture_pointer: bool,
 ) {
     let (s, n) = (&model.shape, &model.numerics);
     let (d, heads, hd, context) = (s.width, s.heads, model.head_dim, s.context);
@@ -1436,7 +1450,7 @@ fn stack_read(
         }
         // Q31-weighted sum over the Q31 total, back to exponent -16.
         let reciprocal = i128::from(stack_div_u128(1u128 << 62, u128::from(total.max(1))) as u64);
-        if is_final_read && h == 0 {
+        if capture_pointer && h == 0 {
             for j in 0..positions {
                 let w = b.weights[j];
                 let norm_w = shift_wide(mul_i128(i128::from(w), reciprocal), 31) as u64;
