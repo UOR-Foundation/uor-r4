@@ -876,16 +876,23 @@ fn replay_mlp(model_path: &Path, parent: &Path, trace: &Path, out: &Path) -> Res
     let mapped = exact_projection(&attended, weight("self_attn.o_proj")?)?;
     let after: Vec<f32> = x.iter().zip(&mapped).map(|(a, b)| a + b).collect();
     let gain = weight("post_attention_layernorm")?.to_vec1::<f32>()?;
-    let mut norm = vec![0f32; T * W];
-    for (r, o) in after.chunks_exact(W).zip(norm.chunks_exact_mut(W)) {
-        let mut ss = r.iter().map(|v| v * v).sum::<f32>();
-        ss /= W as f32;
-        ss += 1e-5f32;
-        ss = 1f32 / ss.sqrt();
-        for ((v, x), g) in o.iter_mut().zip(r).zip(&gain) {
-            *v = *g * (ss * *x);
+    let reference_rms = |values: &[f32]| -> Result<Vec<f32>> {
+        if values.len() != T * W {
+            return Err("incomplete RMS input".into());
         }
-    }
+        let mut norm = vec![0f32; T * W];
+        for (r, o) in values.chunks_exact(W).zip(norm.chunks_exact_mut(W)) {
+            let mut ss = r.iter().map(|v| v * v).sum::<f32>();
+            ss /= W as f32;
+            ss += 1e-5f32;
+            ss = 1f32 / ss.sqrt();
+            for ((v, x), g) in o.iter_mut().zip(r).zip(&gain) {
+                *v = *g * (ss * *x);
+            }
+        }
+        Ok(norm)
+    };
+    let norm = reference_rms(&after)?;
     let gate_pre = exact_projection(&norm, weight("mlp.gate_proj")?)?;
     let up = exact_projection(&norm, weight("mlp.up_proj")?)?;
     let reference_silu = |x: &[f32]| -> Vec<f32> {
@@ -970,6 +977,23 @@ fn replay_mlp(model_path: &Path, parent: &Path, trace: &Path, out: &Path) -> Res
         ));
         arms.push((format!("{name}-up-projection-only"), gate.clone(), u));
         arms.push((format!("{name}-silu-only"), native_gate, up.clone()));
+        let at = Tensor::from_slice(&after, (T, W), &device)?;
+        let den = at.sqr()?.mean_keepdim(1)?.affine(1.0, 1e-5)?.sqrt()?;
+        let native_norm = at
+            .broadcast_div(&den)?
+            .broadcast_mul(&weight("post_attention_layernorm")?.to_device(&device)?)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let saved_after = floats(&parent.join(format!("{name}-native-after_attention.f32le")))?;
+        for (kind, n) in [
+            ("rms-only", native_norm),
+            ("incoming-attention-only", reference_rms(&saved_after)?),
+        ] {
+            write_floats(&out.join(format!("{name}-{kind}-norm.f32le")), &n)?;
+            let g = reference_silu(&exact_projection(&n, weight("mlp.gate_proj")?)?);
+            let u = exact_projection(&n, weight("mlp.up_proj")?)?;
+            arms.push((format!("{name}-{kind}"), g, u));
+        }
     }
     arms.push((
         "host-division-silu-only".into(),
