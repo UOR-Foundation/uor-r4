@@ -1,0 +1,21 @@
+{
+  "event": {
+    "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1541-4",
+    "issue": 1541,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/examples/m-world.rs",
+      "crates/uor-r4-training/src/milestone_world_v2.rs",
+      "crates/uor-r4-training/data/a1-english-probe.json",
+      "crates/uor-r4-training/src/milestone_world_v2_probe.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "same-session reacquisition after explicit release: checkpoint https://github.com/UOR-Foundation/uor-r4/issues/1541#issuecomment-5908522127; source codex/a1-retrieval-integration@7ebe3d8e pushed, clean; epoch 3 released by event claude-lab-20260930-release-1541-e3; blocker cleared: owner TCC RemovableVolumes consent for lab-runner-8e90aa33-release at 2026-09-30T12:42:09Z (tccd authValue=2), runner/admissions-held.json removed 13:04:11Z",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:2730062a8c11894e16b7b13e91d23309a08840edc3322c9bb9ee641d27af832b"
+  },
+  "observed_server_time": 1790773725,
+  "previous_head": "2d6e96baecb7b3c306bd772ef9397776874a719f"
+}
