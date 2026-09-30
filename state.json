@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 366,
-  "observed_server_time": 1790799887,
+  "sequence": 367,
+  "observed_server_time": 1790800082,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -268,8 +268,8 @@
         "crates/uor-r4-training/src/stack_dialogue.rs",
         "crates/uor-r4-training/examples/aerm-keys.rs"
       ],
-      "expires": 1790801087,
-      "phase": "claimed",
+      "expires": 1790800082,
+      "phase": "released",
       "checkpoint": null
     },
     "1544": {
