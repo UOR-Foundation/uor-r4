@@ -1,0 +1,379 @@
+{
+  "source_revision": "4ee0b88edb306ed17f983706187ea6a763fcbb1d",
+  "executable_sha256": "938f7f102a47630ff5cbd4884c78195c529dc822045d01c9914e572f94bc9050",
+  "report_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/layer12-replay-4ee0b88e-20260930",
+  "manifest_sha256": "838f8d5dd16b3f037219d38efba3addc99a9ceec5dbd3ef1f5fb082a1448879f",
+  "parent_manifest_sha256": "3ea6feb8ebc63d30e9f5b3031a8276c74869ac89b47df1968c19072bd20b3862",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "parity_pass": false,
+  "backends": [
+    {
+      "backend": "cpu",
+      "normalization_difference": {
+        "different_bits": 1552,
+        "elements": 4608,
+        "max_abs": 1.9073486328125e-06,
+        "reference_rms": 0.21285836133852606,
+        "rms": 4.445318107900501e-08
+      },
+      "arms": [
+        {
+          "arm": "native_rms",
+          "rows": 24,
+          "max_replay_error_all_rows": 1.52587890625e-05,
+          "max_original_error_all_rows": 0.0033278465270996094,
+          "position5": [
+            {
+              "kind": "q",
+              "original_candidate_vs_reference": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.0022444725036621094,
+                "reference_rms": 1.0232268840148089,
+                "rms": 0.00035583532989626166
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.002243518829345703,
+                "reference_rms": 1.0228770707182202,
+                "rms": 0.00035584024643088883
+              },
+              "replay_vs_reference": {
+                "different_bits": 534,
+                "elements": 576,
+                "max_abs": 1.6689300537109375e-06,
+                "reference_rms": 1.0232268840148089,
+                "rms": 3.184613860723101e-07
+              }
+            },
+            {
+              "kind": "k",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0033278465270996094,
+                "reference_rms": 1.3350316333424823,
+                "rms": 0.0005045516353813783
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0033249855041503906,
+                "reference_rms": 1.3345661487799356,
+                "rms": 0.0005043357238793283
+              },
+              "replay_vs_reference": {
+                "different_bits": 175,
+                "elements": 192,
+                "max_abs": 2.86102294921875e-06,
+                "reference_rms": 1.3350316333424823,
+                "rms": 3.795717134825421e-07
+              }
+            },
+            {
+              "kind": "v",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005416274070739746,
+                "reference_rms": 0.3480822017524029,
+                "rms": 0.00013840837078563298
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005417466163635254,
+                "reference_rms": 0.34796329945768095,
+                "rms": 0.000138395039185603
+              },
+              "replay_vs_reference": {
+                "different_bits": 179,
+                "elements": 192,
+                "max_abs": 7.152557373046875e-07,
+                "reference_rms": 0.3480822017524029,
+                "rms": 1.7225183564647223e-07
+              }
+            }
+          ]
+        },
+        {
+          "arm": "reference_scalar_rms",
+          "rows": 24,
+          "max_replay_error_all_rows": 1.52587890625e-05,
+          "max_original_error_all_rows": 0.0033278465270996094,
+          "position5": [
+            {
+              "kind": "q",
+              "original_candidate_vs_reference": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.0022444725036621094,
+                "reference_rms": 1.0232268840148089,
+                "rms": 0.00035583532989626166
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.0022430419921875,
+                "reference_rms": 1.0228770707182202,
+                "rms": 0.00035581965123806917
+              },
+              "replay_vs_reference": {
+                "different_bits": 525,
+                "elements": 576,
+                "max_abs": 1.6689300537109375e-06,
+                "reference_rms": 1.0232268840148089,
+                "rms": 3.2335899029204933e-07
+              }
+            },
+            {
+              "kind": "k",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0033278465270996094,
+                "reference_rms": 1.3350316333424823,
+                "rms": 0.0005045516353813783
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0033249855041503906,
+                "reference_rms": 1.3345661487799356,
+                "rms": 0.0005043216207731834
+              },
+              "replay_vs_reference": {
+                "different_bits": 175,
+                "elements": 192,
+                "max_abs": 2.86102294921875e-06,
+                "reference_rms": 1.3350316333424823,
+                "rms": 3.9960545159897303e-07
+              }
+            },
+            {
+              "kind": "v",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005416274070739746,
+                "reference_rms": 0.3480822017524029,
+                "rms": 0.00013840837078563298
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005416274070739746,
+                "reference_rms": 0.34796329945768095,
+                "rms": 0.0001383937732533103
+              },
+              "replay_vs_reference": {
+                "different_bits": 174,
+                "elements": 192,
+                "max_abs": 6.556510925292969e-07,
+                "reference_rms": 0.3480822017524029,
+                "rms": 1.7010337614885237e-07
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "backend": "metal",
+      "normalization_difference": {
+        "different_bits": 2500,
+        "elements": 4608,
+        "max_abs": 1.9073486328125e-06,
+        "reference_rms": 0.21285836133852606,
+        "rms": 4.472042316685982e-08
+      },
+      "arms": [
+        {
+          "arm": "native_rms",
+          "rows": 24,
+          "max_replay_error_all_rows": 1.9073486328125e-05,
+          "max_original_error_all_rows": 0.003231525421142578,
+          "position5": [
+            {
+              "kind": "q",
+              "original_candidate_vs_reference": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.0021758079528808594,
+                "reference_rms": 1.0232268840148089,
+                "rms": 0.0003454191503930023
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.00217437744140625,
+                "reference_rms": 1.0228873071266276,
+                "rms": 0.000345323033550595
+              },
+              "replay_vs_reference": {
+                "different_bits": 526,
+                "elements": 576,
+                "max_abs": 1.9073486328125e-06,
+                "reference_rms": 1.0232268840148089,
+                "rms": 3.3638551711837524e-07
+              }
+            },
+            {
+              "kind": "k",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.003231525421142578,
+                "reference_rms": 1.3350316333424823,
+                "rms": 0.0004897575485054736
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.003227710723876953,
+                "reference_rms": 1.3345797780825668,
+                "rms": 0.000489430240020461
+              },
+              "replay_vs_reference": {
+                "different_bits": 170,
+                "elements": 192,
+                "max_abs": 3.814697265625e-06,
+                "reference_rms": 1.3350316333424823,
+                "rms": 4.720089539118052e-07
+              }
+            },
+            {
+              "kind": "v",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005251765251159668,
+                "reference_rms": 0.3480822017524029,
+                "rms": 0.00013424261075730968
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005251765251159668,
+                "reference_rms": 0.34796685869525434,
+                "rms": 0.00013422795107964364
+              },
+              "replay_vs_reference": {
+                "different_bits": 174,
+                "elements": 192,
+                "max_abs": 6.556510925292969e-07,
+                "reference_rms": 0.3480822017524029,
+                "rms": 1.7010337614885237e-07
+              }
+            }
+          ]
+        },
+        {
+          "arm": "reference_scalar_rms",
+          "rows": 24,
+          "max_replay_error_all_rows": 1.71661376953125e-05,
+          "max_original_error_all_rows": 0.003231525421142578,
+          "position5": [
+            {
+              "kind": "q",
+              "original_candidate_vs_reference": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.0021758079528808594,
+                "reference_rms": 1.0232268840148089,
+                "rms": 0.0003454191503930023
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 576,
+                "elements": 576,
+                "max_abs": 0.00217437744140625,
+                "reference_rms": 1.0228873071266276,
+                "rms": 0.000345323033550595
+              },
+              "replay_vs_reference": {
+                "different_bits": 526,
+                "elements": 576,
+                "max_abs": 1.9073486328125e-06,
+                "reference_rms": 1.0232268840148089,
+                "rms": 3.3638551711837524e-07
+              }
+            },
+            {
+              "kind": "k",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.003231525421142578,
+                "reference_rms": 1.3350316333424823,
+                "rms": 0.0004897575485054736
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.003227710723876953,
+                "reference_rms": 1.3345797780825668,
+                "rms": 0.000489430240020461
+              },
+              "replay_vs_reference": {
+                "different_bits": 170,
+                "elements": 192,
+                "max_abs": 3.814697265625e-06,
+                "reference_rms": 1.3350316333424823,
+                "rms": 4.720089539118052e-07
+              }
+            },
+            {
+              "kind": "v",
+              "original_candidate_vs_reference": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005251765251159668,
+                "reference_rms": 0.3480822017524029,
+                "rms": 0.00013424261075730968
+              },
+              "position": 5,
+              "replay_vs_original_candidate": {
+                "different_bits": 192,
+                "elements": 192,
+                "max_abs": 0.0005251765251159668,
+                "reference_rms": 0.34796685869525434,
+                "rms": 0.00013422795107964364
+              },
+              "replay_vs_reference": {
+                "different_bits": 174,
+                "elements": 192,
+                "max_abs": 6.556510925292969e-07,
+                "reference_rms": 0.3480822017524029,
+                "rms": 1.7010337614885237e-07
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "complete_file_sha256": {
+    "metal-reference_scalar_rms-qkv.f32le": "ce105a685d4ca1496377020d9c83324f214adfd8eb7f203ec753c45f7426d056",
+    "result.json": "fedcb7550909a7e203716cb3fcbde88563cdee2206954b864ad96b811ab33f62",
+    "cpu-native_rms-qkv.f32le": "864b90036339a208531fc78f33e3dcb634cf4540edd78ca2fb006497f6511a21",
+    "cpu-reference_scalar_rms-qkv.f32le": "469539f331c7bd6496da43d24e6927a590c95bc8e1158598fa50ec3fc0254dbb",
+    "cpu-reference-normalized.f32le": "e1c0d8b3b3f269d13387a5d24bd4e231e96b34b6e1d25079456f022b5c90fc5a",
+    "inputs.json": "ac27dafed97d977eb19f0a8e29bce8faa2ee06a170c202a4db4534659f0fbd30",
+    "manifest.json": "838f8d5dd16b3f037219d38efba3addc99a9ceec5dbd3ef1f5fb082a1448879f",
+    "attempt.json": "4b7fe68a4934824c7959c80c6c1df12563fa1ce5d330f55ae84554c8b9fd3318",
+    "metal-reference-normalized.f32le": "e1c0d8b3b3f269d13387a5d24bd4e231e96b34b6e1d25079456f022b5c90fc5a",
+    "metal-native_rms-qkv.f32le": "d1cef2b9abfe314ae2fe6c3a2847288063e8af6cbd420b31b6c5140bf4c64188"
+  }
+}

@@ -43,10 +43,11 @@ the smallest failing prefixes, preserving outputs and the unchanged tolerance;
 do not rerun the full comparison without a causal correction.
 The [shape-preserving trace](../evidence/track-b-layer-trace-2026-09-30.md)
 reproduced the failed eight-token reference/CPU/Metal logits bit for bit. For
-the worst shared token, Q/K/V error amplifies between layers 11 and 12. Next
-replay layer-12 normalization/projection on identical saved reference residuals
-to distinguish local arithmetic from propagated input error; no MLP attribution
-or numerical repair has yet been established.
+the worst shared token, Q/K/V error amplifies between layers 11 and 12. The [same-input layer-12 replay](../evidence/track-b-layer12-replay-2026-09-30.md)
+reduces the worst token's local errors to approximately 0.7–3.8e-6 versus
+0.0005–0.0033 in the original candidate. Incoming state dominates this
+discrepancy; no isolated MLP cause or repair is established. Next inspect
+block 11 using the common saved post-layer-10 state and unchanged shapes.
 
 Earlier interrupted attempts and the restored external compiler-cache failure
 remain historical execution evidence in the [September 29 record](track-b-conversion-result-2026-09-29.md)
