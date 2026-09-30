@@ -1,0 +1,19 @@
+{
+  "event": {
+    "attempt": "opencode-b0-flock-g1a-20260930-g",
+    "epoch": 6,
+    "event_id": "opencode-20260930-finish-b0check-g",
+    "issue": 1512,
+    "op": "finish_attempt",
+    "receipt": {
+      "attempt_id": "opencode-b0-flock-g1a-20260930-g",
+      "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+      "job_id": "opencode-b0-flock-g1a-20260930-g",
+      "path": "/Users/casey.allard/.local/share/uor-r4/runner/done/opencode-b0-flock-g1a-20260930-g/exit.json",
+      "sha256": "f30ec8958b6d423f965ad4504eef3a40f8a87764656e578a71b7a27b8857bfd4"
+    },
+    "session": "opencode-deepseek-20260930"
+  },
+  "observed_server_time": 1790777907,
+  "previous_head": "fea3c1c843da57e16a34c62550bfbe4132cb8905"
+}
