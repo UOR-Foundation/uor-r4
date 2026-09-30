@@ -8,9 +8,11 @@
 #![forbid(unsafe_code)]
 
 pub mod addressing_arms;
+pub mod b3_e8_codecs;
 pub mod baseline_counts;
 pub mod baseline_protocol;
 pub mod cache_memory;
+pub mod d4_codecs;
 pub mod dialogue_artifact;
 pub mod dialogue_child_artifact;
 pub mod dialogue_development;
@@ -18,6 +20,8 @@ pub mod dialogue_episodes;
 pub mod dialogue_learning;
 pub mod dialogue_rounding;
 pub mod dialogue_rounding_artifact;
+pub mod flock;
+pub mod flock_transport;
 pub mod geometric_read;
 pub mod geometric_stack;
 pub mod joint_admission;
@@ -51,6 +55,7 @@ pub mod stack_export;
 pub mod stack_memory;
 pub mod stack_memory_replies;
 pub mod stack_prime_route;
+pub mod stack_snap_parity;
 pub mod stack_store;
 pub mod stack_tracking;
 pub mod track_b;
@@ -139,6 +144,12 @@ pub fn sha256_file(path: &Path) -> Result<String> {
         digest.update(&buffer[..bytes]);
     }
     Ok(hex::encode(digest.finalize()))
+}
+
+pub fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(bytes);
+    hex::encode(digest.finalize())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

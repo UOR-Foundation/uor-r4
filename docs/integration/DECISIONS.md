@@ -1,7 +1,10 @@
 # DECISIONS
 
-Append-only. Each entry is an owner decision with its rationale and scope.
-Agents may draft entries; only the owner ratifies them.
+Append-only. Each entry records its authority, rationale and scope. D0–D13
+record owner direction. Under D14 the owner delegates prospective working-policy
+decisions to the recorded council; immutable mission, evidence, unique-data and
+spending boundaries still require owner direction. Preserve original decisions
+and mark supersession explicitly rather than rewriting historical outcomes.
 
 ---
 
@@ -460,3 +463,217 @@ Context. Near misses on one configuration of mechanisms still under construction
    > leave closed mechanisms that demonstrated real geometric capabilities that are absent from the rest of our mechanisms so that we have their tools and pieces available to fix other problems later - use your context and project understanding synthesis to evaluate them and their novelty
 
    Lab 1 keeps such mechanisms' code building and documented, with their demonstrated capability, novelty and reuse points, in the [geometric toolbox](geometric-toolbox-2026-09-28.md).
+
+---
+
+## D13 — Record the September 29 two-track owner plan
+
+Authority: the owner's approval recorded in the
+[September 29 plan of record](../plans/2026-09-29-path-to-chat.md), delivered by
+[#1507](https://github.com/UOR-Foundation/uor-r4/pull/1507). This entry records that
+existing ratification; it does not assert that the planned council, experiments,
+runner, cleanup or integrations subsequently completed.
+
+The approved scientific programme has two tracks: native geometric chat with
+retrieval before scale, and offline geometric conversion/distillation of local
+open-weight teachers. Four candidate mechanisms are flock selection, harmonic
+features, quaternion/2I transport and lattice weight codes. Track B's source
+transformers remain offline teachers/comparators until an actual converted
+runtime satisfies D11. The exact persisted conversation log is the durable
+memory; learned/prime addresses index it. Context is malleable with separately
+declared learning, evaluation, access and state dimensions.
+
+The initial retention rule uses paired geometric/ordinary arms, at least two
+seeds, and 0.02 nats or 0.03 accuracy tolerance. Staged measured parity and later
+prospective amendments follow D14; prior one-seed evidence retains its original
+scope. Instruction qualification uses new wordings of trained instruction types.
+Local teacher work and local CPU/GPU compute are allowed within measured host
+and cumulative budgets; paid/external compute is not adopted.
+
+The plan authorized GitHub lab boards and two-hour notice for cleanup of
+validated regenerable caches/clean merged worktrees, while unique data remains
+protected. Its permanent lead, fixed roster, rigid working rules and provisional
+assignment order are superseded by D14. Its “kill” terminology terminates a
+declared run/advancement decision, not the existence of a mechanism family.
+Unfinished work and historical results remain recorded at their exact scope.
+
+## D14 — Durable autonomous labs and correctable governance
+
+Authority: direct owner instructions in the September 29 durable-lab planning
+and implementation session. The owner requested GitHub as source of truth,
+unlimited joining/returning labs, continuation after token loss, SSD/session
+repair, resource hygiene, extended standing goals, expert/adversarial research
+and broad council authority to correct working restrictions. Subsequent owner
+choices fixed the council and cadences below and authorized implementation and
+dispatch. This entry does not claim those mechanisms are already deployed.
+
+1. **GitHub and recoverability.** Protected main holds accepted source, decisions
+   and research. Issues/PRs hold live work and proposals; atomic coordination
+   records hold lab/task leases. Local memory/search indexes are derived views.
+   Every lab publishes completed work, source/evidence identities, limitations,
+   costs and the next dependency. No chat is indispensable project memory.
+2. **Unlimited peer labs.** Labs may join, disappear and return; Claude, Codex,
+   Anti-Gravity and OpenCode/DeepSeek are currently available. No permanent
+   provider director, fixed lab cap or special-provider review monopoly remains.
+   Task ownership is a renewable claim; machine admission bounds concurrent
+   jobs. Older lead/roster statements are preserved as historical instructions.
+3. **Council discretion.** Consequential shared architecture, interface,
+   promotion and policy changes use three seats, at least two non-author seats,
+   and two recorded votes on an identified proposal revision. The council may
+   prospectively change working constraints, research methods, schedules,
+   evaluation design and priority with evidence, explicit objections, impact,
+   budget and rollback. The mission and D11/D5 final-runtime target, honest
+   evidence, preservation of unique material and paid/external spending remain
+   owner boundaries. No vote retroactively converts a failed result to a pass.
+4. **Staged research.** Use source-bound smoke, measured development parity,
+   paired candidate gates and separate final qualification. Keep context/access
+   contracts explicit. Gates govern promotion at their tested scope; retries
+   need new causal evidence. Preserve useful geometric pieces and history.
+   Cheap agents handle routine work; independent experts address consequential
+   mathematics, learning, systems and evidence questions. No repeated broad
+   audit or ceremonial test/review campaign is a default requirement.
+5. **Cadence and failover.** Active heartbeats every five minutes, twenty-minute
+   claims, recoverable checkpoints every thirty minutes and before quota/context/
+   connection boundaries. Expired leases are suspect, not proof a worker died.
+   Verify process/job/source identity before adoption; preserve live jobs and
+   unique/unpushed work. Blocked labs advance independent ready dependencies.
+6. **Resource stewardship.** Use verified durable runner admission, an
+   append-only cumulative ledger and actual host/volume identity. Necessary
+   local budget extensions remain prospectively recordable under standing
+   authority. Two-hour notice plus revalidation precedes removal of manifested
+   regenerable caches or clean merged worktrees. Unique material is not routine
+   cleanup. Separate disk headroom, RAM/unified memory and paid compute.
+7. **Protected delivery.** Exact-head independent review and a delivery
+   coordinator precede the merge queue. Shared-policy changes use council
+   authority unless they cross an owner boundary. A required server check is
+   adopted as the target enforcement mechanism; until administrator setup and
+   a real smoke verify it, report procedural enforcement only. Shared-account
+   review provenance remains explicit. No direct main, admin bypass or shared
+   force-push. Verify delivered changes; close only completed acceptance.
+8. **Portable clients.** The [lab protocol](../labs/protocol.md),
+   [operations](../labs/operations.md), [plan](../labs/plan-2026-09-29.md) and
+   [extended goals](../labs/README.md) implement this charter. Adapters identify
+   manual/unavailable/unverified capabilities. A prompt cannot keep an offline
+   model reasoning; durable submitted jobs and recoverable records bridge that
+   gap. README remains a professional overview rather than an activity stream.
+
+## D15 — Converted students may become served candidates after a D11 audit; runtime and energy claims are measured
+
+**September 30 clarification:** read this historical decision with D17 below.
+The owner directly reaffirmed that conversion must remove the transformer
+architecture. A numerical/access audit alone does not authorize a transformer
+backbone. The original account and measurements below are preserved.
+
+Authority: the owner's answers to three prompts in the Claude-lab session on 30 September 2026, about 01:30 UTC; each answer picked the recommended option. This is an owner decision under D14's boundaries, because it amends D11. It follows D13 and D14 as recorded in [#1521](https://github.com/UOR-Foundation/uor-r4/pull/1521), and refines D13's sentence that Track B's source transformers stay offline teachers and comparators until a converted runtime satisfies D11.
+
+1. **D11 §2 is amended.**
+   - A converted open-weight student (Track B) may become a **served candidate** once an audit of its release binary shows D11's R1–R4:
+     - no floating point and no integer multiply or divide in served kernels;
+     - token mixing that is not mostly dense all-pairs reads;
+     - weights of at most 4 bits, read from tables;
+     - reported per-token parameter reads.
+   - Until that audit passes, it remains a comparator or offline teacher.
+   - The rest of D11 is unchanged, and the D10 exception stays withdrawn.
+2. **D11 R1–R2 are unchanged, and cost claims are measured.**
+   - A runtime claim needs measured ms/token on this M1, against the D10 NEON engine and an ordinary 4-bit model of equal quality. An energy claim needs measured J/token against the same.
+   - Analytic byte and operation tables are hypotheses.
+   - Closing the serving-kernel gap is a named item for the fidelity and cost lab (Anti-Gravity).
+   - R2 is revisited only if a measured, independently re-run gap cannot be brought below 2× with threads and table layout.
+   - The only same-artifact figure so far is *self-reported* until re-run: about 5.40 ms/token for D11 against 1.11 for D10 on the S2 model. The D10 figure and the identity of the logits have not been independently re-run.
+3. **Energy.** The first J/token (`sudo powermetrics`, run by the owner) is taken at A3's D11 export, next to D10 and an ordinary 4-bit model of equal quality.
+
+## D16 — Working rules from the 29 September council (council authority under D14)
+
+**September 30 correction:** D17 supplies the prospective, unambiguous parity
+decision function and coordination authority. The originally merged wording is
+retained below; its merge did not establish the missing council/delivery gates.
+
+Authority: proposed by the Claude lab from the adversarial council of 29 September (23 agents: evidence briefs, four proposals, twelve red-team verdicts, a judge and a completeness critic). **These rules take effect when the D14 council records two approving votes from non-author seats on the PR that carries this entry.** They change working rules only, prospectively. The evidence and the recommended experiments are in the [council verdict](council-verdict-2026-09-29.md), which feeds the [lab plan](../labs/plan-2026-09-29.md).
+
+1. **Applying the parity rule so that it always decides.**
+   - For each seed or disjoint draw i, **d_i** is the geometric arm's metric minus its paired ordinary arm's metric, with loss in nats or the accuracy drop.
+   - **Keep:** the geometric form stays if the mean of the d_i is at most the tolerance (0.02 nats or 0.03 accuracy).
+   - **Replace:** the ordinary form takes the main-line slot if every d_i exceeds the tolerance. The geometric form goes to the D12 toolbox, never deleted.
+   - **Mixed:** run exactly one more seed or draw, then the mean of the three decides.
+   - **Advantage:** a geometric advantage is claimed only if every d_i is below minus the tolerance.
+   - For training-free arms, disjoint window draws stand in for seeds.
+   - A kill rests on the ordinary arm (for example dot top-k), so that sparsity is never confounded with geometry.
+2. **Retrieval instruments must defeat fixed untrained rules before they freeze.** For A1 these are "the latest open value" and "the latest 2-word continuation", each below 0.6 on every gated cell.
+3. **Credit for geometry needs the matched ordinary arm.**
+   - E8 weight coding is credited only through E8P against RHT-plus-scalar codes at equal bits.
+   - Harmonic attention is compared with Taylor-2 at equal feature count, and it enters serving only on a measured win over a byte-matched window.
+   - The owner's Lie-group case is tested with an arm that can differ from Taylor-2: a RoPE-plane-aligned or SU(2)/Wigner-D basis.
+   - The quaternion pillar gets a decayed or gated recurrent Track B arm.
+4. **Records relabelled** (measurements unchanged):
+   - **B3 root:** the instrument of `b3-e8-smollm2-mlp/attempt-full-32layers` is disputed. Its float reference scored 9.45 nats/token on SmolLM2, consistent with #1017 token IDs (max 4095) fed to a 49,152-token model. It is not a verdict on E8 until a re-run with a float-NLL validity band.
+   - **#1505:** `keys-1` was the originally pre-registered, under-exposed probe, and `keys-9` is the full-exposure run under the amended pre-registration.
+   - **The R1 panel:** only its memory score (0/10) is stored.
+5. **One shared selector and one Track B host.**
+   - `crate::flock` (the OpenCode/DeepSeek lab) serves A1's reads and pointer, B0, B2 and the later D11 port.
+   - Reported Track B numbers come from the shared candle host once its parity gate passes. Model-source is its oracle only.
+
+## D17 — Transformer-free conversion, deterministic parity decisions and integration recovery
+
+Authority: the owner's direct September 30 answer in the Codex integration and
+storage session: **“Keep the transformer-free requirement; conversion must
+remove the transformer architecture.”** The owner also requested continuing
+goals for every lab, explicit integration of accumulated branches, and internal
+drive cleanup. The working-rule and migration corrections below require the
+three-seat, two-non-author D14 council on their exact delivery head. This entry
+does not retroactively claim that #1522 passed its pre-merge gates.
+
+1. **The serving architecture remains transformer-free.** A converted student
+   is eligible only after the conversion removes the transformer architecture
+   and the actual complete runtime satisfies D11/D5 at their adopted scopes.
+   Integer arithmetic, table-coded weights, sparse reads or passing a kernel
+   audit alone do not establish architectural compliance. D15 is read with this
+   explicit owner boundary. Offline teachers/comparators remain permitted;
+   capability, arithmetic, parameter-access cost and measured energy require
+   their separate evidence. The owner reply above establishes this boundary,
+   not every other claim attributed to an earlier conversation.
+2. **Parity rule v2 is prospective and has disjoint cases.** Define degradation
+   as `d = loss_geometric - loss_ordinary` for loss, or
+   `d = accuracy_ordinary - accuracy_geometric` for accuracy. Positive means the
+   geometric arm is worse. Freeze two paired seeds (or disjoint draws for a
+   training-free comparison), the metric and tolerance before observing them.
+   Use tolerance 0.02 nats or 0.03 accuracy unless a new reviewed design changes
+   it prospectively. Evaluate the first two differences as follows:
+   - Both `d <= tolerance`: retain the geometric candidate at this scope.
+   - Both `d > tolerance`: select the ordinary candidate for this scope and
+     preserve the geometric candidate in the toolbox with its diagnosed result.
+   - Exactly one exceeds tolerance: take one additional predeclared paired
+     seed/draw. Retain geometry if the mean of all three differences is
+     `<= tolerance`; otherwise select the ordinary candidate at this scope.
+   Equality belongs to retention. A nonfinite or unavailable observation is not
+   an automatic pass or replace decision; diagnose it under the work card.
+   Claim an advantage only when every evaluated paired difference is strictly
+   below `-tolerance`. Retention is not advantage or whole-model promotion.
+   This changes future decisions only; preserve old verdicts and measurements.
+   Examples at tolerance 0.02: `[0.02,0.02]` retains; `[0.021,0.03]` replaces;
+   `[0,0.03]` requires a third draw even though its two-draw mean is 0.015;
+   adding 0.03 gives mean 0.02 and retains, while adding 0.031 replaces.
+3. **Delivery and work ownership are transferable.** The
+   [integration queue](../labs/integration-queue.md) routes existing work before
+   expansion. Lab boards communicate claims; the deployed atomic state records
+   ownership. The currently leased steward manages a shared execution slot;
+   Codex is not a permanent allocator. The September 29 council's experiment
+   table is a historical recommendation. Live dependencies, causal work cards,
+   resource reservations and current reviewed policy determine admission.
+4. **One scoped repair of the policy-migration deadlock.** #1522 changed the
+   policy files before its required receipts were available. The deployed
+   coordinator correctly fences new claims and delivery against the older
+   policy. Its migration operation requires a reviewed merged policy, creating
+   a circular prerequisite for the corrective PR. For **#1529 only**, the D14
+   council may authorize the existing Codex claim for #1520, epoch 4, to deliver
+   this documentation correction and complete goals under a retained successor
+   work card. Preserve exact head/base, executed documentation checks, two
+   non-author reviews, three identified council votes and the incident record.
+   After recording those receipts, use GitHub's ordinary protected queue with
+   the reviewed head pinned. No direct main push, admin merge, fabricated status,
+   force push, source/model change or resource admission is included. Report
+   the standard coordinator's policy-currency rejection honestly; the manual
+   steward checks every other delivery requirement and records queue/result
+   identities. After merge, verify the delivered patch, release the old claim,
+   reconcile attempts, and adopt this exact policy merge using its genuine
+   Class C receipt before new claims or execution. This one-use exception ends
+   on successful migration; later changes use the normal coordinator.

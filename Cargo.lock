@@ -1413,6 +1413,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lab-runner"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "lazy-regex"
 version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3012,6 +3021,7 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "candle-transformers",
+ "half",
  "hex",
  "rayon",
  "safetensors 0.6.2",

@@ -45,6 +45,7 @@
 //! checks the step and every kernel for multiply, divide and floating-point
 //! instructions.
 
+pub mod flock;
 mod format;
 mod kernels;
 mod session;
@@ -53,9 +54,27 @@ mod tests;
 
 use std::fmt;
 
-pub use format::{Fixed, StackNumerics, StackShape, GROUP, MAGIC, STACK_SCHEMA};
-pub use kernels::stack_argmax;
-pub use session::{IntegerStackModel, IntegerStackSession, CONVOLUTION_WIDTH};
+pub use flock::{
+    flock_select_integer, rank_table_q31, raw_rank_weights_q16, top_k_select_integer, FlockEntry,
+    FlockScan, FlockScratch, FlockSelect, FlockSlot, FLOCK_INTEGER_SELECTOR_VERSION,
+    MAX_FLOCK_CONTEXT, RAW_RANK_WEIGHTS_Q16, RECIPROCAL_Q32,
+};
+pub use format::{
+    Fixed, StackNumerics, StackShape, StackTransportSnap, GROUP, MAGIC, STACK_SCHEMA,
+};
+pub use kernels::{stack_argmax, stack_snap_select};
+pub use session::{IntegerStackModel, IntegerStackSession, SnapTraceEntry, CONVOLUTION_WIDTH};
+
+/// SHA-256 of the 120 unit icosians of 2I (the transport snap's roots) as
+/// little-endian f32 bytes row by row, in `canonical_h4_roots` order. Equals
+/// `TransportSnap::Icosian.roots_sha256()` of the training crate (a
+/// cross-crate test there checks it); the loader refuses any other roots.
+pub const ICOSIAN_ROOTS_SHA256: &str =
+    "69c969ebc9cfcf8c56109eb9d6fc853d446361f1d0c80a7b805ecfa65bbbaa2d";
+
+/// `round(phi * 2^32)`, the golden ratio as a Q32 constant for the snapped
+/// transition's `lambda phi` (a `stack_mul_u128` table product).
+pub const PHI_Q32: u128 = 6_949_403_065;
 
 /// Why an artifact was rejected or a step refused.
 #[derive(Debug)]
@@ -109,6 +128,9 @@ pub enum StackError {
     GridCodes(String),
     /// The numerics or a sealed table are out of range.
     Numerics(String),
+    /// The header records a transport snap or roots this engine does not
+    /// know, or a snap on a stack without learned rotations.
+    TransportSnap(String),
     /// A token outside the vocabulary.
     Token { token: u32, vocab: usize },
     /// The session has served its whole context.
@@ -171,6 +193,10 @@ impl fmt::Display for StackError {
                 write!(f, "stack artifact: table {name} holds invalid grid codes")
             }
             Self::Numerics(reason) => write!(f, "stack artifact numerics: {reason}"),
+            Self::TransportSnap(reason) => write!(
+                f,
+                "the stack engine refuses a transport snap or roots it does not know: {reason}"
+            ),
             Self::Token { token, vocab } => {
                 write!(f, "token {token} is outside the vocabulary of {vocab}")
             }

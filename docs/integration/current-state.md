@@ -3,6 +3,32 @@
 Updated September 29, 2026. **Pre-alpha; no useful general-language, coding,
 frontier, geometric-advantage or full-path energy qualification.**
 
+## Active execution contract — durable labs, September 29
+
+The owner's current continuation is [the durable-lab plan](../labs/plan-2026-09-29.md)
+under [D14](DECISIONS.md#d14--durable-autonomous-labs-and-correctable-governance).
+Claude, Codex, Anti-Gravity and OpenCode/DeepSeek are available; any other lab may
+join. No provider is a permanent director. Live boards/claims own assignment and
+handoff; older leadership paragraphs below are historical. This documentation
+change makes no new model result or qualification claim.
+
+The immediate infrastructure dependency is restored-SSD recovery and verified
+admission ([#1520](https://github.com/UOR-Foundation/uor-r4/issues/1520), #1510).
+The runner/control-plane implementation and client adapters must be described
+by their execution receipt; their presence is not proof of deployment. Safe
+source engineering can continue in verified internal worktrees while affected
+heavy builds/model compute wait. Preserve live workers, unpushed source and all
+unique artifacts; recovery is not a license for blanket pruning or deletion.
+
+Scientific next work: finish A1/M-world v2 retrieval and the shared flock/copy
+interface; complete faithful S4/memory bundle integration; only then scale
+response learning. Track B #1518 awaits unchanged source-bound parity after the
+compiler/storage boundary is repaired; its uncompiled drafts and interrupted
+attempts establish no quality result. #1519 reports the completed E8 B3 negative
+and awaits review; do not repeat that run unchanged or treat it as family-wide
+disproof. [STATUS](../../STATUS.md) provides short navigation; GitHub carries the
+latest PR/incident state.
+
 ## Track B conversion, September 29
 
 The owner-returned Codex lab has a pinned Candle 0.9.2 Llama loader and
@@ -16,9 +42,9 @@ negative. See the [result](track-b-conversion-result-2026-09-29.md),
 [owning board](https://github.com/UOR-Foundation/uor-r4/issues/1515).
 The [prospective storage correction](../evidence/track-b-storage-correction-2026-09-29.json)
 distinguishes the plan's 30 GiB trace allocation from our stricter free-space
-interpretation. Next: under the new conservative 24 GiB guard plus 128 MiB
-margin, compile the changed path and complete the unchanged parity smoke in a
-new root before B2 fitting or the 360M ladder. The [shared differentiable
+interpretation. That dated guard is historical; current host policy supplies the physical floors.
+Compile the changed path and complete the unchanged parity smoke in a new root
+before B2 fitting or the 360M ladder. The [shared differentiable
 attention interface](track-b-shared-attention-2026-09-29.md), harmonic features
 and bounded seeded generation are now source-implemented in draft PR #1518;
 their first compilation attempt exited 101 after 22.97 seconds during the
@@ -27,8 +53,11 @@ cached procedural-macro dylib under the restored mount's `quarantine` policy;
 the dylib's code signature verifies on disk. New tests and checkpoint parity
 remain NOT_RUN. Model hashes and charge receipts survived; two missing B2
 drafts were recovered and pushed. See the [restoration record](../evidence/track-b-restoration-2026-09-29/README.md).
-Next: coordinate the shared mount with Lab 1, verify compiler access, then run
-the same focused checks and parity gate without clearing the cache.
+September 30 continuation: runner repair #1543 is deployed. Small focused
+checks run directly under the owner correction; no global Cargo lock applies.
+The existing branch is being reconciled with current main before those checks.
+The old restored compiler-cache failure remains historical evidence, not a
+claim that present compiler access has been tested.
 
 Independent B2 engineering is preserved in five unregistered drafts: source
 data, LoRA/operator transfer, isolated-layer fit/checkpointing, hybrid overlap
@@ -41,7 +70,7 @@ separate. These checks establish no NLL/KL gap, learned improvement or serving
 speed. The current recurrence still uses a full-prefix API, and the flock
 selector integration remains pending on the shared DeepSeek interface.
 
-## Current leadership, September 29
+## Historical leadership snapshot, September 29
 
 **Leadership.** Claude (Lab 1) resumed permanent project leadership on September 29 at 01:35 UTC, on the owner's direction.
 - Astra's temporary cover has ended and is [preserved as history](astra-temporary-cover-2026-09-28.md).
@@ -55,8 +84,25 @@ selector integration remains pending on the shared DeepSeek interface.
   - Lab 1's re-run into fresh roots agrees within 1e-6 nats.
   - Not promoted (D12).
 - **#1482, merged:** Lab 2's AERM probe checkpoint save/load and reload evaluation.
-- **S4, merged (#1483); the trained-in 2I transport is adopted (Lab 1, [05:34 UTC 09-29](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5884326637)) — the first geometric mechanism to pass its gate trained into the model.** The pre-registered fit (`/Volumes/UOR-Workspace/uor-r4-lab/kimi-s4-fit-20260929/`; manifests `2aabdc73…`, `e4926422…`, `56d29a49…`) scored arm A snapped **2.547953579954328** (model `2b3b5681…`, `transport.json` icosian) against arm B free **2.5373633745806394** (model `fcc3099b…`): a **+0.010590** gap, inside the ≤ 0.02 band (0.0094 from the threshold, more than 0.005), so no second seed. Both arms ran executable `fbeedde1…`; arm A's step-0 unsnapped score reproduces S2's 2.520916; the post-hoc snap costs +0.01770 on B, of which training recovers +0.00711. Root usage (A, final): 120/120 roots, identity share 7.50%, entropy 6.32 of 6.91 bits. Scope: one seed; the 161-response development panel; 512 updates after a schedule restart (the restart, not the snap, is why both arms end above S2); S2 `8cb11d8f…` stays the loss-level reference; replies differ in 36 of 38 requests. Later phases (memory port, then QAT) continue from arm A with the snap on; arm B is the matched control. The exact D11 icosian serving kernel (S1.4) is not yet built.
+- **S4, merged (#1483); the trained-in 2I transport is adopted (Lab 1, [05:34 UTC 09-29](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5884326637)) — the first geometric mechanism to pass its gate trained into the model.** The pre-registered fit (`/Volumes/UOR-Workspace/uor-r4-lab/kimi-s4-fit-20260929/`; manifests `2aabdc73…`, `e4926422…`, `56d29a49…`) scored arm A snapped **2.547953579954328** (model `2b3b5681…`, `transport.json` = icosian) against arm B free **2.5373633745806394** (model `fcc3099b…`): a **+0.010590** gap, inside the ≤ 0.02 band (0.0094 from the threshold, more than 0.005), so no second seed. Both arms ran executable `fbeedde1…`; arm A's step-0 unsnapped score reproduces S2's 2.520916; the post-hoc snap costs +0.01770 on B, of which training recovers +0.00711. Root usage (A, final): 120/120 roots, identity share 7.50%, entropy 6.32 of 6.91 bits. Scope: one seed; the 161-response development panel; 512 updates after a schedule restart (the restart, not the snap, is why both arms end above S2); S2 `8cb11d8f…` stays the loss-level reference; replies differ in 36 of 38 requests. Later phases (memory port, then QAT) continue from arm A with the snap on; arm B is the matched control. The exact D11 icosian serving kernel (S1.4) is not yet built.
+- **S1.4, merged (#1506, `0dcdb6e9`); safety successor #1533 in review.**
+  - The multiplier-free D11 engine serves the trained-in icosian snap.
+  - Against the artifact's own float reference, each window's first root divergence has a small reference margin: 14 of 16 are below the 1e-4 near-tie criterion and all ≤ 2.811e-4, at a snap boundary. The later 2,477 − 16 mismatches are unclassified, so broader parity stays open.
+  - Cost is +9.17% ms/token against free transport, from three interleaved pairs on a contended host.
+  - [Evidence extract](../evidence/s1-4-snap-parity-2026-09-29.json) (an unsealed root, bound by file SHA-256).
+  - The successor refuses snapped artifacts in the D10 comparator at construction, and `StackModel::load` restores a saved snap.
 - **#1479, open:** its cost numbers are unqualified until Lab 1's fresh-root re-run on a quiet machine.
+- **B3 E8 lattice weight coding on SmolLM2-360M MLP layers (Lab 3): negative result preserved; kill criterion triggered.**
+  All 32 layers of SmolLM2-360M's MLP weights (`gate_proj`, `up_proj`, `down_proj`, 235,929,600 weights) were evaluated across 7 arms under $E_8$ vector quantization (QuIP# E8P codebook with Randomized Hadamard Transform) at 2, 3, and 4 bpw against RTN 4-bit (~4.25 bpw) and matched-bit scalar controls on 32 windows $\times$ 1,024 tokens (32,768 tokens) of SimpleWiki.
+  - Float reference baseline: 2.122189 nats.
+  - Plain RTN 4-bit: 2.193682 nats (+0.071494 nats vs float, 4.2765 bpw, 85.61% top-1 agreement).
+  - RHT + RTN 4-bit: 2.237834 nats (+0.115645 nats vs float, 4.2766 bpw, 82.74% agreement).
+  - RHT + RTN 3-bit (Scalar Control): 2.850512 nats (+0.728323 nats vs float, 3.2766 bpw, 61.03% agreement).
+  - RHT + E8P 2-bit: 13.723733 nats (+11.601545 nats vs float, 2.0134 bpw, 0.03% agreement).
+  - RHT + E8P 3-bit: 7.084971 nats (+4.962782 nats vs float, +4.891289 nats excess over RTN 4-bit, 3.0134 bpw, 12.51% agreement).
+  - RHT + E8P 4-bit: 5.814762 nats (+3.692573 nats vs float, 4.0134 bpw, 24.57% agreement).
+  - Kill criterion triggered: RHT-E8P 3-bit is +4.891289 nats worse than RTN 4-bit (threshold +0.05 nats). Scalar uniform grid outperforms $E_8$ lattice by 4.23 nats at matched ~3 bpw budget under identical RHT incoherence transform.
+  - All matrices passed exact bit-for-bit codec round-trip gates. Preserved per D12/D9 without parameter sweeps; Track B second lever halted ([result](b3-e8-smollm2-result-2026-09-29.md), [evidence](../evidence/b3-e8-smollm2-360m-2026-09-29.json)).
 
 **The next deliverable is unchanged:** usable learned geometry and exact memory in the same saved dialogue stack, through its native learning and serving bridge. This handover asserts no new model result.
 
@@ -91,7 +137,7 @@ selector integration remains pending on the shared DeepSeek interface.
   - D6 is an evaluation-only audit of what the 2I read representation discards (Lab 2). It is evidence, not a veto; the geometric read/address operator G is on the main path (owner, 15:27 UTC).
   - **G v1 (Lab 2): the always-on, address-driven dual-register read is not yet promoted at this scope.** On D2's world it removes the trigger failure — reads fire (2,294–2,706 events) — but held-out-template Updated is 0.158/0.073/0.029 against the ≥ 0.90 gate and the surviving failures are store/key-side (`Unavailable`); the equal-parameter dense control answers 0.47–0.81. Next diagnosed step: separate a missed write, a wrong key and an eviction, then tag/address generalisation ([result](g1-always-on-read-result-2026-09-28.md), [evidence](../evidence/g1-always-on-read-2026-09-28.json)). D12 keeps the store and G active.
   - **G-binding (Lab 2): masking the ordinary-text tag/trigger losses is a major cause of the held-out role-binding failure.** Arm A (masking only, seed 1) lifts held-out-template Updated from 0.158 to **0.967** (264/273); tag accuracy rises 0.974 → 0.996 and `Unavailable` 460 → 0. The text-NLL guard fails (+0.119 nats) and name diversity (Arm B, 0.645) is a recorded negative; acceptance of the masking is Lab 1's call ([result](g-binding-result-2026-09-29.md), [evidence](../evidence/g-binding-2026-09-29.json)). Checkpoints for Lab 1's `prime-route-eval`: `opencode-g1-binding/checkpoints-{a,b}/aerm-s1`. `AermModel::from_stack` (merged #1491) starts the S2 integration from S2's weights.
-  - D4 is Lab 3's geometry-coded codecs with a fidelity objective, to be trained through Lab 1's QAT hook (#1466). It is still open.
+  - **D4 QAT on geometric_s1 (Lab 3): reported; Lab 1 re-run pending (+0.0180 nats).** Straight-through QAT (1,000 steps, lr 0.0005) achieves 1.973127 exported integer NLL vs 1.955115 float continuation control (+0.018012 nats, against the $\le 0.02$ nats gate), and −0.024986 nats below original float (1.998113). Multiplier-free D11 logit parity is bit-identical (`max_abs_diff == 0`) and integer NLL matches served forward within $7.79 \times 10^{-7}$ nats ($\le 10^{-5}$ nats gate). Exported artifact is 4.2500 raw parameter bpw (4.7234 total container bpw). ([result](d4-geometric-s1-qat-result-2026-09-29.md), [evidence](../evidence/d4-geometric-s1-qat-2026-09-29.json)).
 - **S1, the stack's D11 serving port (Lab 1): measured, not yet qualified** ([record](s1-stack-serving-measurements-2026-09-28.md)).
   - The 4-bit export misses the 0.02-nat fidelity gate: +0.0362 nats (round to nearest), +0.0257 (GPTQ). The integer arithmetic costs ≤ 10⁻⁶ nats.
   - The head is about half of the gap.
