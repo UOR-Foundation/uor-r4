@@ -24,7 +24,7 @@ cargo run --release -p uor-r4-training --example geometric-stack -- \
   train \
   init="$MODEL_DIR" \
   train="$C3_DATA,$C4_DATA" \
-  train_weights="0.67,0.33" \
+  train_weights="1.0,1.0" \
   valid="$VALID_DATA" \
   out="$RUN_DIR/geometric_s1_qat_d11_1000" \
   steps=1000 \
@@ -72,7 +72,7 @@ cargo run --release -p uor-r4-training --example geometric-stack -- \
   train \
   init="$MODEL_DIR" \
   train="$C3_DATA,$C4_DATA" \
-  train_weights="0.67,0.33" \
+  train_weights="1.0,1.0" \
   valid="$VALID_DATA" \
   out="$RUN_DIR/geometric_s1_float_ctrl_1000" \
   steps=1000 \

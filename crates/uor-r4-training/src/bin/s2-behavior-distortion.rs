@@ -921,12 +921,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Float Baseline:     {float_matches}/{total_turns} matches ({float_flips} flips)");
 
         // 2. Verify All-Quantized baseline: must match baseline (~14/58)
+        let mut intervention_replies: BTreeMap<String, Vec<Vec<u32>>> = BTreeMap::new();
         let all_names: Vec<&str> = map_specs.iter().map(|s| s.name.as_str()).collect();
         let (all_q_matches, all_q_flips, all_q_replies) =
             evaluate_quantized_subset_with_replies(&all_names)?;
         println!(
             "All-Quantized Baseline: {all_q_matches}/{total_turns} matches ({all_q_flips} flips)"
         );
+        intervention_replies.insert("all_quantized".to_string(), all_q_replies);
 
         // 3. Component Groups Attribution (quantize ONE component group at a time)
         println!("\n[3/3] Evaluating Component-wise Greedy-Flip Attribution...");
@@ -940,14 +942,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut component_results: Vec<Value> = Vec::new();
         for (comp_name, names) in &components {
-            let (m_only, f_only) = evaluate_quantized_subset(names)?;
+            let (m_only, f_only, r_only) = evaluate_quantized_subset_with_replies(names)?;
+            intervention_replies.insert(format!("component_only_{comp_name}"), r_only);
             // Leave-one-out: all quantized EXCEPT this group
             let leave_out_names: Vec<&str> = all_names
                 .iter()
                 .copied()
                 .filter(|n| !names.contains(n))
                 .collect();
-            let (m_loo, f_loo) = evaluate_quantized_subset(&leave_out_names)?;
+            let (m_loo, f_loo, r_loo) = evaluate_quantized_subset_with_replies(&leave_out_names)?;
+            intervention_replies.insert(format!("component_leave_out_{comp_name}"), r_loo);
 
             println!(
                 "  Component {:<12}: {:2} flips if only quantized ({:2}/58 matches) | {:2} matches if kept float ({:2} flips)",
@@ -979,13 +983,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut layer_results: Vec<Value> = Vec::new();
         for (layer_name, names) in &layer_groups {
-            let (m_only, f_only) = evaluate_quantized_subset(names)?;
+            let (m_only, f_only, r_only) = evaluate_quantized_subset_with_replies(names)?;
+            intervention_replies.insert(format!("layer_only_{layer_name}"), r_only);
             let leave_out_names: Vec<&str> = all_names
                 .iter()
                 .copied()
                 .filter(|n| !names.contains(n))
                 .collect();
-            let (m_loo, f_loo) = evaluate_quantized_subset(&leave_out_names)?;
+            let (m_loo, f_loo, r_loo) = evaluate_quantized_subset_with_replies(&leave_out_names)?;
+            intervention_replies.insert(format!("layer_leave_out_{layer_name}"), r_loo);
 
             println!(
                 "  Layer {:<12}: {:2} flips if only quantized ({:2}/58 matches) | {:2} matches if kept float ({:2} flips)",
@@ -1005,13 +1011,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nEvaluating Individual Map Greedy-Flip Attribution (42 maps)...");
         let mut map_rankings: Vec<Value> = Vec::new();
         for spec in &map_specs {
-            let (m_only, f_only) = evaluate_quantized_subset(&[&spec.name])?;
+            let (m_only, f_only, r_only) = evaluate_quantized_subset_with_replies(&[&spec.name])?;
+            intervention_replies.insert(format!("map_only_{}", spec.name), r_only);
             let leave_out_names: Vec<&str> = all_names
                 .iter()
                 .copied()
                 .filter(|&n| n != spec.name.as_str())
                 .collect();
-            let (m_loo, f_loo) = evaluate_quantized_subset(&leave_out_names)?;
+            let (m_loo, f_loo, r_loo) = evaluate_quantized_subset_with_replies(&leave_out_names)?;
+            intervention_replies.insert(format!("map_leave_out_{}", spec.name), r_loo);
 
             let (tr_err, rel_err, act_status) = match activation_errors.get(&spec.name) {
                 Some(v) => (
@@ -1051,13 +1059,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("\n=== TOP 10 SENSITIVE MAPS BY GREEDY FLIPS ===");
         for (i, row) in map_rankings.iter().take(10).enumerate() {
+            let rel_err_display = match row["relative_activation_error"].as_f64() {
+                Some(err) => format!("{err:.4}"),
+                None => "UNAVAILABLE".to_string(),
+            };
             println!(
-                "  {:2}. {:<16} | flips: {:2} | leave-out matches: {:2}/58 | rel act err: {:.4}",
+                "  {:2}. {:<16} | flips: {:2} | leave-out matches: {:2}/58 | rel act err: {}",
                 i + 1,
                 row["map"].as_str().unwrap_or(""),
                 row["flips_if_only_quantized"].as_u64().unwrap_or(0),
                 row["matches_if_kept_float"].as_u64().unwrap_or(0),
-                row["relative_activation_error"].as_f64().unwrap_or(0.0)
+                rel_err_display
             );
         }
 
@@ -1065,13 +1077,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nCompleted S2 behavior distortion study in {elapsed:.2}s.");
 
         let mut row_observations = Vec::with_capacity(teacher_turns.len());
-        for (turn, q_ids) in teacher_turns.iter().zip(&all_q_replies) {
+        for (i, turn) in teacher_turns.iter().enumerate() {
+            let mut turn_interventions = serde_json::Map::new();
+            for (interv_name, reps) in &intervention_replies {
+                let rep = &reps[i];
+                turn_interventions.insert(
+                    interv_name.clone(),
+                    json!({
+                        "reply_ids": rep,
+                        "matches_float": turn.float_reply_ids == *rep,
+                    }),
+                );
+            }
             row_observations.push(json!({
                 "turn_index": turn.turn_index,
                 "prefix_token_count": turn.prefix_ids.len(),
                 "float_reply_ids": turn.float_reply_ids,
-                "all_quantized_reply_ids": q_ids,
-                "matches_float": turn.float_reply_ids == *q_ids,
+                "all_quantized_reply_ids": intervention_replies["all_quantized"][i],
+                "matches_float": turn.float_reply_ids == intervention_replies["all_quantized"][i],
+                "interventions": turn_interventions,
             }));
         }
         fs::write(

@@ -1050,8 +1050,15 @@ impl StackModel {
         {
             return Err(invalid("target id outside the vocabulary"));
         }
+        let dims = head.dims();
+        if dims.len() != 2 || dims[0] != self.config.vocab_size || dims[1] != self.config.width {
+            return Err(invalid(format!(
+                "explicit head shape {:?} must match [vocab_size={}, width={}]",
+                dims, self.config.vocab_size, self.config.width
+            )));
+        }
         let hidden = self.hidden(ids, batch, time)?;
-        let logits = hidden.matmul(&head.t()?)?;
+        let logits = hidden.matmul(&head.t()?)?.detach();
         row_nll(&logits, targets)
     }
 
@@ -4138,11 +4145,17 @@ mod tests {
     fn target_nll_with_explicit_head_changes_when_head_modified_leaving_embeddings_fixed(
     ) -> Result<()> {
         let config = StackConfig {
+            arch: StackArch::Geometric,
+            vocab_size: 32,
             width: 16,
+            heads: 2,
+            mlp_hidden: 32,
             context: 16,
             pattern: "r".into(),
-            vocab_size: 32,
-            ..StackConfig::default()
+            read: ReadScore::Dot,
+            rotation: false,
+            seed: 42,
+            memory: None,
         };
         let model = StackModel::new(config, &Device::Cpu)?;
         let ids = vec![1, 2, 3, 4];
@@ -4168,6 +4181,37 @@ mod tests {
                 .to_vec1::<f32>()?,
             head1.flatten_all()?.to_vec1::<f32>()?
         );
+        Ok(())
+    }
+
+    #[test]
+    fn target_nll_with_head_rejects_malformed_head_shapes() -> Result<()> {
+        let config = StackConfig {
+            arch: StackArch::Geometric,
+            vocab_size: 32,
+            width: 16,
+            heads: 2,
+            mlp_hidden: 32,
+            context: 16,
+            pattern: "r".into(),
+            read: ReadScore::Dot,
+            rotation: false,
+            seed: 42,
+            memory: None,
+        };
+        let model = StackModel::new(config, &Device::Cpu)?;
+        let ids = vec![1, 2];
+        let targets = vec![2, 3];
+        // Malformed head: [1, 16] instead of [32, 16]
+        let bad_head = Tensor::zeros((1, 16), DType::F32, &Device::Cpu)?;
+        let res = model.target_nll_with_head(&ids, &targets, &bad_head, 1, 2);
+        assert!(res.is_err(), "target_nll_with_head must reject [1, 16] head shape");
+
+        // Malformed head: [32, 8] instead of [32, 16]
+        let bad_width_head = Tensor::zeros((32, 8), DType::F32, &Device::Cpu)?;
+        let res2 = model.target_nll_with_head(&ids, &targets, &bad_width_head, 1, 2);
+        assert!(res2.is_err(), "target_nll_with_head must reject [32, 8] head shape");
+
         Ok(())
     }
 
