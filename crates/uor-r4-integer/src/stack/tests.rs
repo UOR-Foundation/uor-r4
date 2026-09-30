@@ -624,7 +624,7 @@ fn session_restore_strictly_validates_checksums_and_dimensions() {
 
     // 4. Position exceeding context
     let mut bad_pos = saved.clone();
-    bad_pos.position = CONTEXT + 1;
+    bad_pos.position = (CONTEXT + 1) as u64;
     assert!(matches!(
         session.restore_state(&bad_pos),
         Err(StackError::ContextFull { .. })
