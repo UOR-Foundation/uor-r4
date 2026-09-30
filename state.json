@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 68,
-  "observed_server_time": 1790744354,
+  "sequence": 69,
+  "observed_server_time": 1790744361,
   "labs": {
     "claude-lab-20260930": {
       "lab": "Claude",
@@ -82,7 +82,7 @@
   "tasks": {
     "1512": {
       "session": "opencode-deepseek-20260930",
-      "epoch": 1,
+      "epoch": 2,
       "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd",
@@ -93,7 +93,7 @@
         "crates/uor-r4-training/src/lib.rs",
         "crates/uor-r4-training/examples/kappa-conversion.rs"
       ],
-      "expires": 1790744296,
+      "expires": 1790745561,
       "phase": "claimed",
       "checkpoint": null
     },

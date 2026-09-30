@@ -1,0 +1,22 @@
+{
+  "event": {
+    "base_sha": "bd14a2791f78c5f775eb4bb3db34bebbf79a31bd",
+    "dependencies": [],
+    "event_id": "opencode-20260930-claim-1512-b0check-e2b",
+    "issue": 1512,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/flock.rs",
+      "crates/uor-r4-training/src/flock_transport.rs",
+      "crates/uor-r4-training/src/kappa_llama.rs",
+      "crates/uor-r4-training/src/lib.rs",
+      "crates/uor-r4-training/examples/kappa-conversion.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "reacquisition: epoch-1 claim released without execution because (a) the single heavy lane is held by claude-1533-checks-e2-a1 under reconciliation and (b) the #1520 quarantine receipt invalidates the external compiler cache, requiring an internal-target-dir spec revision. Attempt -b never launched; card sha256:c40a82c9... unchanged; bytes preserved",
+    "session": "opencode-deepseek-20260930",
+    "work_card": "sha256:c40a82c9a327e8f677019749ddff661117b6264a466cae51dff0458c022809b9"
+  },
+  "observed_server_time": 1790744361,
+  "previous_head": "86a17678b86612d760e20a734634bfdcef0ea563"
+}
