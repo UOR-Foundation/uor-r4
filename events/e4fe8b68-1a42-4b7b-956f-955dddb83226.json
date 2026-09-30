@@ -1,0 +1,27 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "e4fe8b68-1a42-4b7b-956f-955dddb83226",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "charges": "All compiler attempts through successful build, focused tests, review and cleanup charged once under unique codex-track-b-dcb8b107-20260930 events.",
+      "checkpoint_sha": "dcb8b107f499395c65b86404d67e9e83916054fd",
+      "checks": "17 Track B CPU tests plus3 parity-gate tests PASS at dcb8b107. Full model CPU/Metal parity NOT_RUN. Immutable evidence c9d8b8ee/validation/track-b/dcb8b107.",
+      "cleanup": "Removed2 inactive incremental directories after successful checks; observed df +628384KiB. Working cache, binaries, source, models and reports retained.",
+      "live_attempts": [],
+      "main_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+      "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
+      "next_action": "Use retained INTERNAL warm cache; Metal feature build and tiny Metal harmonic check, then unchanged checkpoint CPU+Metal1e-4 parity. Do not repeat completed CPU tests without source change. Owner removed conservative40GiB cutoff: finish useful focused builds and reclaim verified disposable cache afterward. PR1547 exact-head source approval and disclosed CI limitations posted5914092767.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "status": "ACTIVE",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790781729,
+  "previous_head": "a3bd36c61c224e7fb4d1e52cb4fe4a7f92079376"
+}
