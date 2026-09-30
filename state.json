@@ -2,9 +2,25 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 75,
-  "observed_server_time": 1790746021,
+  "sequence": 76,
+  "observed_server_time": 1790746307,
   "labs": {
+    "antigravity-lab-20260930": {
+      "lab": "Antigravity",
+      "adapter": "Google Antigravity; MANUAL client; native_geometric_ai lead; no heartbeat automation; quota-bounded",
+      "capabilities": [
+        "Rust",
+        "GitHub",
+        "independent-subagents",
+        "source-and-evidence-review",
+        "fidelity-serving-metal",
+        "integer-selector",
+        "d4-map-codec",
+        "runner-coordinated-jobs"
+      ],
+      "available": true,
+      "heartbeat": 1790746307
+    },
     "claude-lab-20260930": {
       "lab": "Claude",
       "adapter": "Claude Code desktop (Code tab); MANUAL client; Agent/Workflow subagents; no heartbeat automation; quota-bounded",

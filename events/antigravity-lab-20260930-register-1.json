@@ -1,0 +1,21 @@
+{
+  "event": {
+    "adapter": "Google Antigravity; MANUAL client; native_geometric_ai lead; no heartbeat automation; quota-bounded",
+    "capabilities": [
+      "Rust",
+      "GitHub",
+      "independent-subagents",
+      "source-and-evidence-review",
+      "fidelity-serving-metal",
+      "integer-selector",
+      "d4-map-codec",
+      "runner-coordinated-jobs"
+    ],
+    "event_id": "antigravity-lab-20260930-register-1",
+    "lab": "Antigravity",
+    "op": "register",
+    "session": "antigravity-lab-20260930"
+  },
+  "observed_server_time": 1790746307,
+  "previous_head": "a859487ddac439bbf6984eb63fa2bc7c70237b97"
+}
