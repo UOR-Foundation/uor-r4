@@ -134,10 +134,18 @@ fn parse_cli_args() -> Result<ParsedArgs, Box<dyn std::error::Error>> {
         ],
         "tokenizer.json",
     );
-    let windows: usize = map
-        .get("windows")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(32);
+    let windows: usize = match map.get("windows") {
+        Some(s) => {
+            let w = s
+                .parse::<usize>()
+                .map_err(|e| format!("invalid windows '{}': {}", s, e))?;
+            if w == 0 {
+                return Err("windows must be positive (> 0)".into());
+            }
+            w
+        }
+        None => 32,
+    };
     let out = PathBuf::from(
         map.get("out")
             .ok_or("missing required argument 'out' (e.g. out=/path/to/report-dir)")?,
@@ -360,13 +368,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 1. Verify files & identities
         let model_sha = sha256_file(&args.model_dir.join("model.safetensors"))?;
+        let model_config_sha = sha256_file(&args.model_dir.join("config.json"))?;
         let artifact_sha = sha256_file(&args.artifact_path)?;
         let requests_sha = sha256_file(&args.requests_path)?;
         let tokenizer_sha = sha256_file(&args.tokenizer_path)?;
-        println!("Model SHA256:     {model_sha}");
-        println!("Artifact SHA256:  {artifact_sha}");
-        println!("Requests SHA256:  {requests_sha}");
-        println!("Tokenizer SHA256: {tokenizer_sha}");
+        let heldout_sha = sha256_file(&args.heldout_path)?;
+        println!("Model SHA256:        {model_sha}");
+        println!("Model Config SHA256: {model_config_sha}");
+        println!("Artifact SHA256:     {artifact_sha}");
+        println!("Requests SHA256:     {requests_sha}");
+        println!("Tokenizer SHA256:    {tokenizer_sha}");
+        println!("Heldout SHA256:      {heldout_sha}");
 
         // 2. Load model and artifact
         let float_model = StackModel::load(&args.model_dir, &Device::Cpu)?;
@@ -631,6 +643,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // -------------------------------------------------------------------
         println!("\n[1/3] Computing Activation Second Moments tr(E \\Sigma_x E^T) via hidden_with_capture...");
         let heldout_tokens = read_u16_tokens(&args.heldout_path, vocab_size)?;
+        if heldout_tokens.len() < WINDOW_TIME {
+            return Err(format!(
+                "heldout token stream too short: {} tokens < WINDOW_TIME ({})",
+                heldout_tokens.len(),
+                WINDOW_TIME
+            )
+            .into());
+        }
         let mut moments: BTreeMap<StackSite, (usize, Vec<f64>)> = BTreeMap::new();
         let total_windows = args.windows;
         let span = heldout_tokens.len() - WINDOW_TIME;
@@ -847,44 +867,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Constructed {total_turns} teacher-forced turns (expected 58).");
 
         // Helper: evaluate model with specified quantized subset
+        let evaluate_quantized_subset_with_replies = |quantized_names: &[&str]| -> Result<
+            (usize, usize, Vec<Vec<u32>>),
+            Box<dyn std::error::Error>,
+        > {
+            // Set variables
+            for spec in &map_specs {
+                let use_quantized = quantized_names.contains(&spec.name.as_str());
+                let source_vals = if use_quantized {
+                    &dequantized[&spec.name]
+                } else {
+                    &float_folded[&spec.name]
+                };
+                if let Some(var_name) = &spec.var_name {
+                    set_model_var(&ref_model, var_name, source_vals)?;
+                }
+            }
+
+            let head_vals = if quantized_names.contains(&"head") {
+                &dequantized["head"]
+            } else {
+                &float_folded["head"]
+            };
+            let head_tensor = Tensor::from_vec(head_vals.clone(), (vocab_size, d), &Device::Cpu)?;
+
+            let mut matches = 0usize;
+            let mut replies = Vec::with_capacity(teacher_turns.len());
+            for turn in &teacher_turns {
+                let reply = greedy_reply_with_head(
+                    &ref_model,
+                    &head_tensor,
+                    &turn.prefix_ids,
+                    MAX_NEW_TOKENS,
+                    eos,
+                )?;
+                if reply.ids == turn.float_reply_ids {
+                    matches += 1;
+                }
+                replies.push(reply.ids);
+            }
+            let flips = total_turns - matches;
+            Ok((matches, flips, replies))
+        };
+
         let evaluate_quantized_subset =
             |quantized_names: &[&str]| -> Result<(usize, usize), Box<dyn std::error::Error>> {
-                // Set variables
-                for spec in &map_specs {
-                    let use_quantized = quantized_names.contains(&spec.name.as_str());
-                    let source_vals = if use_quantized {
-                        &dequantized[&spec.name]
-                    } else {
-                        &float_folded[&spec.name]
-                    };
-                    if let Some(var_name) = &spec.var_name {
-                        set_model_var(&ref_model, var_name, source_vals)?;
-                    }
-                }
-
-                let head_vals = if quantized_names.contains(&"head") {
-                    &dequantized["head"]
-                } else {
-                    &float_folded["head"]
-                };
-                let head_tensor =
-                    Tensor::from_vec(head_vals.clone(), (vocab_size, d), &Device::Cpu)?;
-
-                let mut matches = 0usize;
-                for turn in &teacher_turns {
-                    let reply = greedy_reply_with_head(
-                        &ref_model,
-                        &head_tensor,
-                        &turn.prefix_ids,
-                        MAX_NEW_TOKENS,
-                        eos,
-                    )?;
-                    if reply.ids == turn.float_reply_ids {
-                        matches += 1;
-                    }
-                }
-                let flips = total_turns - matches;
-                Ok((matches, flips))
+                let (m, f, _) = evaluate_quantized_subset_with_replies(quantized_names)?;
+                Ok((m, f))
             };
 
         // 1. Verify Float baseline: must be 58/58
@@ -893,7 +922,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 2. Verify All-Quantized baseline: must match baseline (~14/58)
         let all_names: Vec<&str> = map_specs.iter().map(|s| s.name.as_str()).collect();
-        let (all_q_matches, all_q_flips) = evaluate_quantized_subset(&all_names)?;
+        let (all_q_matches, all_q_flips, all_q_replies) =
+            evaluate_quantized_subset_with_replies(&all_names)?;
         println!(
             "All-Quantized Baseline: {all_q_matches}/{total_turns} matches ({all_q_flips} flips)"
         );
@@ -983,15 +1013,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
             let (m_loo, f_loo) = evaluate_quantized_subset(&leave_out_names)?;
 
-            let act_err = activation_errors.get(&spec.name);
-            let tr_err = act_err
-                .and_then(|v| v.get("tr_e_sigma_e_t"))
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
-            let rel_err = act_err
-                .and_then(|v| v.get("relative_error"))
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
+            let (tr_err, rel_err, act_status) = match activation_errors.get(&spec.name) {
+                Some(v) => (
+                    v.get("tr_e_sigma_e_t").and_then(|x| x.as_f64()),
+                    v.get("relative_error").and_then(|x| x.as_f64()),
+                    "measured",
+                ),
+                None => (None, None, "UNAVAILABLE_NO_CAPTURE_SITE"),
+            };
 
             map_rankings.push(json!({
                 "map": spec.name,
@@ -1003,6 +1032,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "matches_if_kept_float": m_loo,
                 "tr_e_sigma_e_t": tr_err,
                 "relative_activation_error": rel_err,
+                "activation_status": act_status,
             }));
         }
 
@@ -1034,6 +1064,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let elapsed = run_started.elapsed().as_secs_f64();
         println!("\nCompleted S2 behavior distortion study in {elapsed:.2}s.");
 
+        let mut row_observations = Vec::with_capacity(teacher_turns.len());
+        for (turn, q_ids) in teacher_turns.iter().zip(&all_q_replies) {
+            row_observations.push(json!({
+                "turn_index": turn.turn_index,
+                "prefix_token_count": turn.prefix_ids.len(),
+                "float_reply_ids": turn.float_reply_ids,
+                "all_quantized_reply_ids": q_ids,
+                "matches_float": turn.float_reply_ids == *q_ids,
+            }));
+        }
+        fs::write(
+            args.out.join("row_observations.json"),
+            serde_json::to_vec_pretty(&row_observations)?,
+        )?;
+
         let report = json!({
             "schema": "uor-r4.s2-behavior-distortion/1",
             "runtime_context": {
@@ -1044,6 +1089,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "binary_sha256": current_binary_sha256(),
             "model_dir": args.model_dir.display().to_string(),
             "model_sha256": model_sha,
+            "model_config_sha256": model_config_sha,
             "artifact_path": args.artifact_path.display().to_string(),
             "artifact_sha256": artifact_sha,
             "requests_path": args.requests_path.display().to_string(),
@@ -1051,6 +1097,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "tokenizer_path": args.tokenizer_path.display().to_string(),
             "tokenizer_sha256": tokenizer_sha,
             "heldout_path": args.heldout_path.display().to_string(),
+            "heldout_sha256": heldout_sha,
+            "window_selection": {
+                "windows": args.windows,
+                "window_time": WINDOW_TIME,
+                "selection_rule": "uniform_stride_span_over_tokens"
+            },
             "total_turns": total_turns,
             "baselines": {
                 "float_matches": float_matches,
@@ -1062,6 +1114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "component_attribution": component_results,
             "layer_attribution": layer_results,
             "map_rankings": map_rankings,
+            "row_observations_file": "row_observations.json",
             "elapsed_seconds": elapsed,
         });
 

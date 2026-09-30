@@ -1031,6 +1031,30 @@ impl StackModel {
         row_nll(&self.forward(ids, batch, time)?.detach(), targets)
     }
 
+    /// Per-target negative log-likelihoods (nats), using an explicit output head tensor
+    /// without mutating or tying the model's input embeddings.
+    pub fn target_nll_with_head(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        head: &Tensor,
+        batch: usize,
+        time: usize,
+    ) -> Result<Vec<f64>> {
+        if targets.len() != ids.len() {
+            return Err(invalid("one target per input id"));
+        }
+        if targets
+            .iter()
+            .any(|&id| id as usize >= self.config.vocab_size)
+        {
+            return Err(invalid("target id outside the vocabulary"));
+        }
+        let hidden = self.hidden(ids, batch, time)?;
+        let logits = hidden.matmul(&head.t()?)?;
+        row_nll(&logits, targets)
+    }
+
     /// Save the float variables (`model.safetensors`) and the configuration
     /// (`config.json`). In served mode `config.json` also records the served
     /// representation (`served_representation`, [`SavedServedRepresentation`]):
@@ -4108,6 +4132,43 @@ mod tests {
         let count: usize = shape.iter().product();
         let values: Vec<f32> = (0..count).map(|_| (rng.normal() * scale) as f32).collect();
         Tensor::from_vec(values, shape, &cpu()).expect("test tensor")
+    }
+
+    #[test]
+    fn target_nll_with_explicit_head_changes_when_head_modified_leaving_embeddings_fixed(
+    ) -> Result<()> {
+        let config = StackConfig {
+            width: 16,
+            context: 16,
+            pattern: "r".into(),
+            vocab_size: 32,
+            ..StackConfig::default()
+        };
+        let model = StackModel::new(config, &Device::Cpu)?;
+        let ids = vec![1, 2, 3, 4];
+        let targets = vec![2, 3, 4, 5];
+        let head1 = model.variables()["embedding.weight"].as_tensor().clone();
+        let nll1 = model.target_nll_with_head(&ids, &targets, &head1, 1, 4)?;
+
+        // Perturb only target row 5 in head2
+        let mut head2_vec = head1.flatten_all()?.to_vec1::<f32>()?;
+        for j in 0..16 {
+            head2_vec[5 * 16 + j] += 2.0;
+        }
+        let head2 = Tensor::from_vec(head2_vec, (32, 16), &Device::Cpu)?;
+        let nll2 = model.target_nll_with_head(&ids, &targets, &head2, 1, 4)?;
+
+        // Target index 3 (target 5) must change
+        assert_ne!(nll1[3], nll2[3]);
+        // Embedding variables must remain completely identical
+        assert_eq!(
+            model.variables()["embedding.weight"]
+                .as_tensor()
+                .flatten_all()?
+                .to_vec1::<f32>()?,
+            head1.flatten_all()?.to_vec1::<f32>()?
+        );
+        Ok(())
     }
 
     #[test]

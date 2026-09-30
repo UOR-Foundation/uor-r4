@@ -25,7 +25,8 @@ use uor_r4_training::dialogue_development;
 use uor_r4_training::geometric_stack::StackModel;
 use uor_r4_training::lut_export::dequantize_matrix;
 use uor_r4_training::stack_dialogue::{
-    development, episode_contract, greedy_reply, load_requests, reply_panel, DialogueSplit, Reply,
+    development, development_with_head, episode_contract, greedy_reply, load_requests, reply_panel,
+    DialogueSplit, Reply,
 };
 use uor_r4_training::{Result, TrainingError};
 
@@ -413,6 +414,7 @@ fn main() -> Result<()> {
     let execution_result = (|| -> Result<()> {
         let clock = Instant::now();
         let model_sha = sha256_file(&model_dir.join("model.safetensors"))?;
+        let model_config_sha = sha256_file(&model_dir.join("config.json"))?;
         let baseline_lut_sha = sha256_file(&baseline_lut)?;
         let requests_sha = sha256_file(&requests_path)?;
         let tokenizer_sha = sha256_file(&tokenizer_path)?;
@@ -423,6 +425,7 @@ fn main() -> Result<()> {
         let heldout_manifest_sha = sha256_file(&heldout_path.join("manifest.json"))
             .unwrap_or_else(|_| "UNAVAILABLE".to_string());
         println!("Verified Model SHA-256:        {model_sha}");
+        println!("Verified Model Config SHA-256: {model_config_sha}");
         println!("Verified Baseline LUT SHA-256: {baseline_lut_sha}");
         println!("Verified Requests SHA-256:     {requests_sha}");
         println!("Verified Tokenizer SHA-256:    {tokenizer_sha}");
@@ -711,18 +714,18 @@ fn main() -> Result<()> {
             &mut diag_reply_fn,
         )?;
         let (diag_matches, _) = count_turn_matches(&diag_panel, &float_panel);
-        let (base_survived_matches, base_survived_total) =
+        let (base_surrogate_matches, base_surrogate_total) =
             count_turn_matches(&baseline_int_panel, &diag_panel);
-        let base_survives_export = base_survived_matches == base_survived_total;
+        let base_integer_vs_surrogate_match = base_surrogate_matches == base_surrogate_total;
         println!(
-            "Diagnostic dequantized baseline in float forward: {}/58 turns match float baseline",
+            "Diagnostic dequantized baseline in surrogate float forward: {}/58 turns match float baseline",
             diag_matches
         );
         println!(
-            "Baseline survives export (integer engine == served float forward): {}/{} turns match ({:.2}%)",
-            base_survived_matches,
-            base_survived_total,
-            (base_survived_matches as f64) / (base_survived_total as f64) * 100.0
+            "Baseline integer vs surrogate agreement (integer engine == surrogate float forward): {}/{} turns match ({:.2}%)",
+            base_surrogate_matches,
+            base_surrogate_total,
+            (base_surrogate_matches as f64) / (base_surrogate_total as f64) * 100.0
         );
 
         let c_opt = uor_r4_integer::codec::Grouped4BitCodec::new(
@@ -1094,14 +1097,16 @@ fn main() -> Result<()> {
             .map(|m| m.rows * m.cols)
             .sum();
 
-        let base_dev_score = development(&diag_model, &index, &dev_panel_ids, 16)?;
+        let base_dev_score =
+            development_with_head(&diag_model, &diag_base_head, &index, &dev_panel_ids, 16)?;
         let base_dev_nll = base_dev_score["response_mean_nll"].as_f64().unwrap_or(0.0);
 
         let mut best_arm_name = "baseline".to_string();
         let mut best_matches = base_matches;
         let mut best_lut_bytes = Vec::new();
         let mut best_dev_nll = base_dev_nll;
-        let mut best_survives_export = base_survives_export;
+        let mut best_integer_vs_surrogate_match = base_integer_vs_surrogate_match;
+        let mut arm_panels: BTreeMap<String, Value> = BTreeMap::new();
 
         for arm in &candidate_arms {
             if let Some(ref selected) = selected_arms {
@@ -1148,14 +1153,14 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            let dev_score = development(&diag_model, &index, &dev_panel_ids, 16)?;
-            let dev_nll = dev_score["response_mean_nll"].as_f64().unwrap_or(0.0);
-
             let head_t = if arm.replacements.contains_key("head") {
                 &head_comp_tensor
             } else {
                 &diag_base_head
             };
+            let dev_score = development_with_head(&diag_model, head_t, &index, &dev_panel_ids, 16)?;
+            let dev_nll = dev_score["response_mean_nll"].as_f64().unwrap_or(0.0);
+
             let mut served_float_reply_fn = |h: &[u32], cap: usize| {
                 greedy_reply_with_head(&diag_model, head_t, h, cap, protocol.eos_id)
             };
@@ -1168,9 +1173,9 @@ fn main() -> Result<()> {
                 &decode,
                 &mut served_float_reply_fn,
             )?;
-            let (survived_matches, survived_total) =
+            let (surrogate_matches, surrogate_total) =
                 count_turn_matches(&cand_panel, &served_float_panel);
-            let survives_export = survived_matches == survived_total;
+            let integer_vs_surrogate_match = surrogate_matches == surrogate_total;
 
             // restore diag_model
             for (name, _) in &arm.replacements {
@@ -1182,15 +1187,15 @@ fn main() -> Result<()> {
             }
 
             println!(
-                "Candidate [{}] ({}): {}/{} turns match float ({:.2}%), survives export: {}/{} ({:.2}%), 161-dev NLL = {:.6}, param bpw = {:.4}, container bpw = {:.4}",
+                "Candidate [{}] ({}): {}/{} turns match float ({:.2}%), int vs surrogate: {}/{} ({:.2}%), 161-dev NLL = {:.6}, param bpw = {:.4}, container bpw = {:.4}",
                 arm.name,
                 arm.label,
                 matches,
                 turns,
                 (matches as f64) / (turns as f64) * 100.0,
-                survived_matches,
-                survived_total,
-                (survived_matches as f64) / (survived_total as f64) * 100.0,
+                surrogate_matches,
+                surrogate_total,
+                (surrogate_matches as f64) / (surrogate_total as f64) * 100.0,
                 dev_nll,
                 param_bpw,
                 container_bpw
@@ -1204,11 +1209,16 @@ fn main() -> Result<()> {
                     "matching_turns": matches,
                     "total_turns": turns,
                     "delta_turns": matches as isize - base_matches as isize,
-                    "survives_export": survives_export,
-                    "survived_matches": survived_matches,
-                    "survived_total": survived_total,
-                    "survived_turns": format!("{survived_matches}/{survived_total}"),
+                    "integer_vs_surrogate_turns": format!("{surrogate_matches}/{surrogate_total}"),
+                    "surrogate_agreement_turns": surrogate_matches,
+                    "integer_vs_surrogate_match": integer_vs_surrogate_match,
+                    "comparison_scope": "integer_vs_surrogate_agreement (integer artifact vs matrix-dequantized/original-scalar surrogate forward, isolating weight-map quantization effects from whole-export/kernel effects)",
+                    "survives_export": integer_vs_surrogate_match,
+                    "survived_matches": surrogate_matches,
+                    "survived_total": surrogate_total,
+                    "survived_turns": format!("{surrogate_matches}/{surrogate_total}"),
                     "response_nll_161": dev_nll,
+                    "delta_nll_161": dev_nll - base_dev_nll,
                     "parameter_bits_per_weight": param_bpw,
                     "container_bits_per_weight": container_bpw,
                     "bits_per_weight": param_bpw,
@@ -1220,9 +1230,75 @@ fn main() -> Result<()> {
                 best_arm_name = arm.name.to_string();
                 best_lut_bytes = lut_bytes;
                 best_dev_nll = dev_nll;
-                best_survives_export = survives_export;
+                best_integer_vs_surrogate_match = integer_vs_surrogate_match;
+            }
+            arm_panels.insert(arm.name.to_string(), cand_panel);
+        }
+
+        // Save row_observations.json preserving computed per-turn outcomes
+        let mut row_observations = Vec::new();
+        if let (Some(rows_fl), Some(rows_base), Some(rows_diag)) = (
+            float_panel["rows"].as_array(),
+            baseline_int_panel["rows"].as_array(),
+            diag_panel["rows"].as_array(),
+        ) {
+            for (r_fl, (r_base, r_diag)) in
+                rows_fl.iter().zip(rows_base.iter().zip(rows_diag.iter()))
+            {
+                let req_id = r_fl["id"].as_str().unwrap_or("");
+                let turns_fl = r_fl["turns"].as_array();
+                let turns_base = r_base["turns"].as_array();
+                let turns_diag = r_diag["turns"].as_array();
+                if let (Some(t_fl), Some(t_base), Some(t_diag)) = (turns_fl, turns_base, turns_diag)
+                {
+                    for (turn_idx, (turn_fl, (turn_base, turn_diag))) in t_fl
+                        .iter()
+                        .zip(t_base.iter().zip(t_diag.iter()))
+                        .enumerate()
+                    {
+                        let fl_ids = &turn_fl["reply_ids"];
+                        let base_ids = &turn_base["reply_ids"];
+                        let diag_ids = &turn_diag["reply_ids"];
+                        let mut cand_matches = serde_json::Map::new();
+                        for (arm_name, panel) in &arm_panels {
+                            if let Some(r_c) = panel["rows"]
+                                .as_array()
+                                .and_then(|rows| rows.iter().find(|r| r["id"] == req_id))
+                            {
+                                if let Some(t_c) = r_c["turns"]
+                                    .as_array()
+                                    .and_then(|turns| turns.get(turn_idx))
+                                {
+                                    let c_ids = &t_c["reply_ids"];
+                                    cand_matches.insert(
+                                        arm_name.clone(),
+                                        serde_json::json!({
+                                            "reply_ids": c_ids,
+                                            "matches_float": c_ids == fl_ids,
+                                            "matches_baseline_int": c_ids == base_ids,
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                        row_observations.push(serde_json::json!({
+                            "request_id": req_id,
+                            "turn_index": turn_idx,
+                            "float_reply_ids": fl_ids,
+                            "baseline_int_reply_ids": base_ids,
+                            "surrogate_float_reply_ids": diag_ids,
+                            "baseline_matches_float": base_ids == fl_ids,
+                            "baseline_matches_surrogate": base_ids == diag_ids,
+                            "candidates": cand_matches,
+                        }));
+                    }
+                }
             }
         }
+        fs::write(
+            out.join("row_observations.json"),
+            serde_json::to_string_pretty(&row_observations).map_err(|e| invalid(e.to_string()))?,
+        )?;
 
         // Save report.json and optimized.lut
         let report = serde_json::json!({
@@ -1235,6 +1311,7 @@ fn main() -> Result<()> {
             "binary_sha256": current_binary_sha256(),
             "model_dir": model_dir.display().to_string(),
             "model_sha256": model_sha,
+            "model_config_sha256": model_config_sha,
             "requests_path": requests_path.display().to_string(),
             "requests_sha256": requests_sha,
             "tokenizer_path": tokenizer_path.display().to_string(),
@@ -1251,13 +1328,16 @@ fn main() -> Result<()> {
                 "artifact": baseline_lut.display().to_string(),
                 "artifact_sha256": baseline_lut_sha,
                 "float_baseline_greedy_matching_turns": format!("{base_matches}/{base_turns}"),
-                "kernel_agreement_turns": format!("{base_survived_matches}/{base_survived_total}"),
+                "integer_vs_surrogate_turns": format!("{base_surrogate_matches}/{base_surrogate_total}"),
+                "surrogate_agreement_turns": base_surrogate_matches,
                 "matching_turns": base_matches,
                 "total_turns": base_turns,
-                "survives_export": base_survives_export,
-                "survived_matches": base_survived_matches,
-                "survived_total": base_survived_total,
-                "survived_turns": format!("{base_survived_matches}/{base_survived_total}"),
+                "integer_vs_surrogate_match": base_integer_vs_surrogate_match,
+                "comparison_scope": "integer_vs_surrogate_agreement (integer artifact vs matrix-dequantized/original-scalar surrogate forward, isolating weight-map quantization effects from whole-export/kernel effects)",
+                "survives_export": base_integer_vs_surrogate_match,
+                "survived_matches": base_surrogate_matches,
+                "survived_total": base_surrogate_total,
+                "survived_turns": format!("{base_surrogate_matches}/{base_surrogate_total}"),
                 "response_nll_161": base_dev_nll,
                 "parameter_bits_per_weight": 4.2500,
                 "container_bits_per_weight": (fs::metadata(&baseline_lut)?.len() as f64 * 8.0) / (total_weights as f64),
@@ -1268,10 +1348,12 @@ fn main() -> Result<()> {
                 "name": best_arm_name,
                 "matching_turns": best_matches,
                 "delta_turns": best_matches as isize - base_matches as isize,
-                "survives_export": best_survives_export,
+                "integer_vs_surrogate_match": best_integer_vs_surrogate_match,
+                "survives_export": best_integer_vs_surrogate_match,
                 "parameter_bits_per_weight": 4.2500,
                 "response_nll_161": best_dev_nll,
             },
+            "row_observations_file": "row_observations.json",
             "elapsed_seconds": clock.elapsed().as_secs_f64(),
         });
         fs::write(

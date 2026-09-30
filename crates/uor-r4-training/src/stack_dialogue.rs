@@ -208,8 +208,12 @@ impl Totals {
 /// four targets, pooled and per source. The fields are those of the retained
 /// study's panel report (`dialogue_development::evaluate`); here every
 /// target's NLL is computed in f64 and summed in f64.
-pub fn development(
+/// Score a stack on the development responses `ids` under their full original
+/// prefixes using an explicit output head tensor: the token-mean response NLL
+/// and the NLL of each response's first four targets, pooled and per source.
+pub fn development_with_head(
     model: &StackModel,
+    head: &Tensor,
     index: &EpisodeIndex<'_>,
     ids: &[usize],
     batch: usize,
@@ -234,7 +238,13 @@ pub fn development(
         let episodes = index.materialize(chunk, PrefixPolicy::FullPrefix)?;
         let trimmed = trim(&episodes);
         let time = trimmed.time;
-        let nll = model.target_nll(&trimmed.inputs, &trimmed.targets, episodes.batch, time)?;
+        let nll = model.target_nll_with_head(
+            &trimmed.inputs,
+            &trimmed.targets,
+            head,
+            episodes.batch,
+            time,
+        )?;
         for (lane, row) in episodes.rows.iter().enumerate() {
             let total = &mut totals[row.source_index];
             selected[row.source_index].push(row.response_id);
@@ -276,9 +286,24 @@ pub fn development(
     report["per_source"] = json!(sources);
     report["conditioning"] = json!("full_original_prefix");
     report["scope"] = json!(
-        "Token means over the selected development responses, not the full corpus or an equal-source mean."
+        "Token means over the selected development responses using an explicit output head, not the full corpus or an equal-source mean."
     );
     Ok(report)
+}
+
+/// Score a stack on the development responses `ids` under their full original
+/// prefixes: the token-mean response NLL and the NLL of each response's first
+/// four targets, pooled and per source. The fields are those of the retained
+/// study's panel report (`dialogue_development::evaluate`); here every
+/// target's NLL is computed in f64 and summed in f64.
+pub fn development(
+    model: &StackModel,
+    index: &EpisodeIndex<'_>,
+    ids: &[usize],
+    batch: usize,
+) -> Result<Value> {
+    let head = model.variables()["embedding.weight"].as_tensor();
+    development_with_head(model, head, index, ids, batch)
 }
 
 /// One request of a reply panel: user turns answered in order, the format of
