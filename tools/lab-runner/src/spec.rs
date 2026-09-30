@@ -8,6 +8,10 @@ use crate::{invalid, Result};
 
 pub const JOB_SCHEMA: &str = "uor-r4.lab-runner-job/1";
 pub const STOP_ENFORCEMENT_MARGIN_MS: u64 = 2_000;
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 fn default_stop_grace_ms() -> u64 {
     250
 }
@@ -93,6 +97,10 @@ pub struct JobSpec {
     pub exclusive: bool,
     #[serde(default)]
     pub cargo: bool,
+    /// Bounded CPU build/unit checks, never training or model evaluation.
+    /// Omission when false preserves existing canonical reservation digests.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub validation_lane: bool,
     #[serde(default)]
     pub storage: Vec<StorageReservation>,
     #[serde(default)]
@@ -209,6 +217,15 @@ impl JobSpec {
         }
         if self.stop_grace_ms > 30_000 {
             return Err(invalid("stop_grace_ms must be at most 30000"));
+        }
+        if self.validation_lane
+            && (self.threads > 2
+                || self.rss_gib > 2.0
+                || self.wall_s > 600
+                || self.gpu
+                || self.exclusive)
+        {
+            return Err(invalid("validation lane requires <=2 threads, <=2 GiB, <=600 seconds, CPU and nonexclusive execution"));
         }
         self.reserved_ms()?;
         if self.lab.is_empty() || !self.cwd.is_absolute() {

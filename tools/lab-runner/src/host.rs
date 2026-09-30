@@ -53,7 +53,7 @@ impl HostPolicy {
             || policy.max_rss_gib <= 0.0
             || policy.max_rss_gib > 11.0
             || !matches!(policy.admission_pressure_max, 1 | 2)
-            || policy.max_jobs != 1
+            || !(1..=2).contains(&policy.max_jobs)
             || policy.volumes.is_empty()
         {
             return Err(invalid("host policy schema or resource ceilings invalid"));
@@ -233,6 +233,50 @@ pub fn memory_pressure() -> Result<u32> {
     }
 }
 
+/// Two jobs may share the host only as one ordinary job plus one bounded
+/// validation, never two model jobs or two opportunistic validation jobs.
+fn check_concurrent_jobs(specs: &[JobSpec]) -> Result<()> {
+    if specs.len() <= 1 {
+        return Ok(());
+    }
+    if specs.len() != 2
+        || specs.iter().filter(|s| s.validation_lane).count() != 1
+        || specs.iter().any(|s| s.exclusive)
+    {
+        return Err(invalid(
+            "concurrency requires one nonexclusive work job and one validation job",
+        ));
+    }
+    for spec in specs {
+        spec.validate()?;
+    }
+    let cargo: Vec<_> = specs.iter().filter(|s| s.cargo).collect();
+    if cargo.len() == 2 {
+        let target = |s: &JobSpec| -> Result<PathBuf> {
+            let value = s
+                .env
+                .as_ref()
+                .and_then(|e| e.get("CARGO_TARGET_DIR"))
+                .ok_or_else(|| {
+                    invalid("concurrent Cargo requires explicit separate target directories")
+                })?;
+            let path = Path::new(value);
+            if !path.is_absolute() || !path.is_dir() {
+                return Err(invalid(
+                    "concurrent Cargo target must be an existing absolute directory",
+                ));
+            }
+            Ok(fs::canonicalize(path)?)
+        };
+        let a = target(cargo[0])?;
+        let b = target(cargo[1])?;
+        if a.starts_with(&b) || b.starts_with(&a) {
+            return Err(invalid("concurrent Cargo target directories overlap"));
+        }
+    }
+    Ok(())
+}
+
 /// Warning pressure alone need not stall a reviewed, bounded CPU check.
 /// This only decides pressure eligibility; all other admission checks still run.
 fn check_pressure(policy: &HostPolicy, spec: &JobSpec, pressure: u32) -> Result<()> {
@@ -288,9 +332,7 @@ pub fn check_admission(
     if threads > u64::from(policy.max_threads) || rss > policy.max_rss_gib {
         return Err(invalid("host resources reserved"));
     }
-    if specs.iter().filter(|s| s.cargo).count() > 1 {
-        return Err(invalid("one Cargo process permitted"));
-    }
+    check_concurrent_jobs(&specs)?;
     let claim = spec
         .coordination
         .as_ref()
@@ -494,6 +536,72 @@ mod tests {
         let error = check_admission(&std::env::temp_dir(), &policy, &spec, &[]).unwrap_err();
         // Host pressure may independently reject on a stressed test host.
         assert!(error.to_string().contains("disabled") || error.to_string().contains("pressure"));
+    }
+
+    #[test]
+    fn concurrency_requires_distinct_lanes_and_preserves_exclusivity() {
+        let (_, work) = pressure_fixture();
+        let mut validation = work.clone();
+        validation.id = "validation".into();
+        validation.validation_lane = true;
+        assert!(check_concurrent_jobs(&[work.clone(), validation.clone()]).is_ok());
+        assert!(check_concurrent_jobs(&[work.clone(), work.clone()]).is_err());
+        assert!(check_concurrent_jobs(&[validation.clone(), validation.clone()]).is_err());
+        let mut exclusive = work;
+        exclusive.exclusive = true;
+        assert!(check_concurrent_jobs(&[exclusive, validation]).is_err());
+    }
+
+    #[test]
+    fn concurrent_cargo_requires_disjoint_real_caches() {
+        let (_, mut work) = pressure_fixture();
+        let mut validation = work.clone();
+        validation.validation_lane = true;
+        work.cargo = true;
+        validation.cargo = true;
+        assert!(check_concurrent_jobs(&[work.clone(), validation.clone()]).is_err());
+        let root = std::env::temp_dir().join(format!("uor-cache-lanes-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let a = root.join("a");
+        let b = root.join("b");
+        fs::create_dir(&a).unwrap();
+        fs::create_dir(&b).unwrap();
+        work.env = Some(std::collections::BTreeMap::from([(
+            "CARGO_TARGET_DIR".into(),
+            a.to_string_lossy().into_owned(),
+        )]));
+        validation.env = Some(std::collections::BTreeMap::from([(
+            "CARGO_TARGET_DIR".into(),
+            b.to_string_lossy().into_owned(),
+        )]));
+        assert!(check_concurrent_jobs(&[work.clone(), validation.clone()]).is_ok());
+        validation.env = work.env.clone();
+        assert!(check_concurrent_jobs(&[work.clone(), validation.clone()]).is_err());
+        #[cfg(unix)]
+        {
+            let alias = root.join("alias");
+            std::os::unix::fs::symlink(&a, &alias).unwrap();
+            validation.env.as_mut().unwrap().insert(
+                "CARGO_TARGET_DIR".into(),
+                alias.to_string_lossy().into_owned(),
+            );
+            assert!(check_concurrent_jobs(&[work, validation]).is_err());
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn legacy_serialization_omits_lane_and_new_lane_enforces_limits() {
+        let (_, mut spec) = pressure_fixture();
+        assert!(!serde_json::to_value(&spec)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("validation_lane"));
+        spec.validation_lane = true;
+        assert!(spec.validate().is_ok());
+        spec.wall_s = 601;
+        assert!(spec.validate().is_err());
     }
 
     #[test]

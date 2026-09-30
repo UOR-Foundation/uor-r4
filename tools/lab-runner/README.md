@@ -226,7 +226,7 @@ policy. The daemon reloads it each cycle, so future approvals need no restart.
 Remove obsolete digests after finalization. The global warning override remains
 backward compatible but is not needed for this small-check policy.
 
-This exception skips only the warning-pressure rejection. Single-job/Cargo
+This exception skips only the warning-pressure rejection. Lane/Cargo-cache
 ownership, reservations, source/input provenance, cumulative budget, volume
 identities, physical storage floors and measured RSS/wall enforcement remain.
 Critical (4) and unknown pressure values block admission even with an override;
@@ -236,3 +236,38 @@ preserve the failed attempt and revise the projection rather than relabeling it.
 Rollback removes the new list (normal-pressure policy); it does not cancel an
 already admitted bounded job. Preserve the previous binary and policy when
 first deploying this additive runner change, and switch only after jobs drain.
+
+## Work and validation lanes (owner correction, September 30)
+
+A host may set `max_jobs: 2` to run one ordinary work attempt and one
+`validation_lane: true` attempt together. Validation is for CPU builds and unit
+checks, capped at two declared workers, 2 GiB and 600 seconds, with no GPU and
+`exclusive: false`. The default lane is ordinary and omission preserves old
+canonical spec digests. Two ordinary jobs or two validation jobs cannot reserve
+the host together. The aggregate ceiling remains eight declared workers and
+11 GiB including GPU unified memory; actual RSS and critical pressure monitoring
+continue. Set build thread environment variables to the declared limits.
+
+Reserve and start the first attempt before reserving its partner in the same
+canonical runner root. Unknown or queued reservations absent from the daemon's
+running set remain a reconciliation fence; do not create two waiting reservations.
+Legacy clients must use the delivered runner binary to submit the additive lane
+field. Each attempt retains its own task, generation, provenance, receipt and
+charge. One failed validation does not turn another job's result into a pass.
+
+Concurrent Cargo jobs require explicit existing absolute `CARGO_TARGET_DIR`
+paths resolving to disjoint directories, including symlink resolution. This
+allows a long model test wrapped by Cargo to coexist with a short build in a
+different cache. Cargo's registry locks may still serialize short dependency
+operations. Source checkouts remain separately owned. Do not set `exclusive`
+for ordinary functional checks merely to obtain the old single slot. Reserve
+it for actual performance/energy measurements or a documented shared-resource
+need; true exclusive jobs still block all concurrent admission.
+
+Warning-memory admission remains the separately reviewed exact-spec policy
+above; concurrency is not permission to ignore pressure or storage. Preserve
+physical floors and new-storage projections, including both jobs. A validation
+that exceeds its envelope stops with its own receipt. The scheduler transition
+must preserve any already running job's identity and immutable specification.
+The owner's one-use monitored bootstrap repair is separately recorded on #1536;
+it is not a permanent manual bypass for ordinary lab jobs.

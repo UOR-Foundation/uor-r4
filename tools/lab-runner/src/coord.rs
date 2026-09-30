@@ -616,12 +616,42 @@ impl State {
                         "prior attempt still reserved; adopt or reconcile it",
                     ));
                 }
-                if self
+                let outstanding: Vec<_> = self
                     .attempts
                     .values()
-                    .any(|a| a.host == *host && a.phase != "finalized")
-                {
-                    return Err(invalid("host already has an unresolved reservation; initial policy admits one heavy lane"));
+                    .filter(|a| a.host == *host && a.phase != "finalized")
+                    .collect();
+                if outstanding.len() >= 2 {
+                    return Err(invalid("host already has two unresolved reservations"));
+                }
+                if let Some(other) = outstanding.first() {
+                    let other_spec = other.spec.as_ref().ok_or_else(|| {
+                        invalid("legacy host reservation lacks an exact spec; reconcile it")
+                    })?;
+                    if Some(spec_digest(other_spec)?) != other.spec_sha256
+                        || other.phase != "reserved"
+                        || other.receipt.is_some()
+                    {
+                        return Err(invalid("unverified host reservation; reconcile it"));
+                    }
+                    if other.runner_root.as_ref() != Some(runner_root) {
+                        return Err(invalid(
+                            "concurrent host reservations require the same canonical runner root",
+                        ));
+                    }
+                    if spec.validation_lane == other_spec.validation_lane {
+                        return Err(invalid(
+                            "host permits only one ordinary and one validation reservation",
+                        ));
+                    }
+                    // Admission still requires the first reservation to be in
+                    // the local running set. Reserving two queued jobs does not
+                    // bypass validate_specs' omission fence.
+                    crate::admission::admit(
+                        &crate::admission::Load::of(std::slice::from_ref(other_spec)),
+                        spec,
+                    )
+                    .map_err(invalid)?;
                 }
                 self.attempts.insert(
                     attempt.clone(),
@@ -1388,9 +1418,14 @@ fn preflight_event(state: &State, event: &Event) -> Result<()> {
             if host != &process::host_id()? {
                 return Err(invalid("reserve only on the observed local host"));
             }
-            if !runner_root.is_absolute() || fs::canonicalize(runner_root)?.starts_with("/Volumes")
+            let canonical_root = fs::canonicalize(runner_root)?;
+            if !runner_root.is_absolute()
+                || canonical_root.starts_with("/Volumes")
+                || canonical_root != *runner_root
             {
-                return Err(invalid("runner root must be a verified internal directory"));
+                return Err(invalid(
+                    "runner root must be a canonical verified internal directory",
+                ));
             }
             spec.validate()
         }
@@ -1899,6 +1934,138 @@ mod tests {
         s.attempts.insert("job-other".into(), other);
         assert!(validate_specs(&s, &current, &[], "mac").is_err());
         validate_specs(&s, &current, &[other_spec], "mac").unwrap();
+    }
+
+    fn reserve_second_issue(s: &mut State, validation_lane: bool) -> Event {
+        let mut second_claim = claim("one", None);
+        if let Action::Claim { issue, paths, .. } = &mut second_claim.action {
+            *issue = 2;
+            *paths = vec!["src/validation".into()];
+        }
+        s.transition(&second_claim, 4).unwrap();
+        let mut second = reserve("one", 1, "job-two");
+        if let Action::Reserve { issue, spec, .. } = &mut second.action {
+            *issue = 2;
+            spec.coordination.as_mut().unwrap().issue = 2;
+            spec.validation_lane = validation_lane;
+        }
+        second
+    }
+
+    #[test]
+    fn ordinary_and_validation_share_only_one_runner_and_keep_queue_fence() {
+        let mut s = reserved_state();
+        let second = reserve_second_issue(&mut s, true);
+        s.transition(&second, 5).unwrap();
+        let ordinary = s.attempts["job-one"].spec.clone().unwrap();
+        let validation = s.attempts["job-two"].spec.clone().unwrap();
+        // Both queued remains fail-closed; first start the ordinary job before
+        // reserving/submitting validation, or reconcile one unstarted attempt.
+        assert!(validate_specs(&s, &ordinary, &[], "mac").is_err());
+        assert!(validate_specs(&s, &validation, &[], "mac").is_err());
+        validate_specs(&s, &validation, &[ordinary], "mac").unwrap();
+        validate_specs(
+            &s,
+            &s.attempts["job-one"].spec.clone().unwrap(),
+            &[validation],
+            "mac",
+        )
+        .unwrap();
+
+        let mut validation_first = reserved_state();
+        let first = validation_first.attempts.get_mut("job-one").unwrap();
+        first.spec.as_mut().unwrap().validation_lane = true;
+        first.spec_sha256 = Some(spec_digest(first.spec.as_ref().unwrap()).unwrap());
+        let second = reserve_second_issue(&mut validation_first, false);
+        validation_first.transition(&second, 5).unwrap();
+    }
+
+    #[test]
+    fn second_ordinary_or_second_validation_reservation_is_rejected() {
+        for lane in [false, true] {
+            let mut s = reserved_state();
+            let first = s.attempts.get_mut("job-one").unwrap();
+            first.spec.as_mut().unwrap().validation_lane = lane;
+            first.spec_sha256 = Some(spec_digest(first.spec.as_ref().unwrap()).unwrap());
+            let second = reserve_second_issue(&mut s, lane);
+            assert!(s.transition(&second, 5).is_err());
+            assert_eq!(s.attempts.len(), 1);
+        }
+    }
+
+    #[test]
+    fn validation_pair_rejects_different_roots_unbound_specs_and_exclusive_jobs() {
+        for scenario in [
+            "root",
+            "legacy",
+            "digest",
+            "exclusive-first",
+            "exclusive-new",
+        ] {
+            let mut s = reserved_state();
+            let mut second = reserve_second_issue(&mut s, true);
+            let first = s.attempts.get_mut("job-one").unwrap();
+            match scenario {
+                "root" => first.runner_root = Some(std::env::temp_dir().join("other-runner")),
+                "legacy" => first.spec = None,
+                "digest" => first.spec_sha256 = Some("0".repeat(64)),
+                "exclusive-first" => {
+                    first.spec.as_mut().unwrap().exclusive = true;
+                    first.spec_sha256 = Some(spec_digest(first.spec.as_ref().unwrap()).unwrap());
+                }
+                "exclusive-new" => {
+                    if let Action::Reserve { spec, .. } = &mut second.action {
+                        spec.exclusive = true;
+                    }
+                }
+                _ => unreachable!(),
+            }
+            assert!(s.transition(&second, 5).is_err(), "{scenario}");
+        }
+    }
+
+    #[test]
+    fn validation_pair_accounts_threads_and_memory_before_reserving() {
+        for (threads, rss_gib, accepted) in [(6, 9.0, true), (7, 9.0, false), (6, 9.5, false)] {
+            let mut s = reserved_state();
+            let first = s.attempts.get_mut("job-one").unwrap();
+            let ordinary = first.spec.as_mut().unwrap();
+            ordinary.threads = threads;
+            ordinary.rss_gib = rss_gib;
+            first.spec_sha256 = Some(spec_digest(ordinary).unwrap());
+            let mut second = reserve_second_issue(&mut s, true);
+            if let Action::Reserve { spec, .. } = &mut second.action {
+                spec.threads = 2;
+                spec.rss_gib = 2.0;
+            }
+            assert_eq!(s.transition(&second, 5).is_ok(), accepted);
+        }
+    }
+
+    #[test]
+    fn host_pair_does_not_relax_per_issue_or_attempt_identity_fences() {
+        let mut s = reserved_state();
+        let mut same_issue = reserve("one", 1, "same-issue");
+        if let Action::Reserve { spec, .. } = &mut same_issue.action {
+            spec.validation_lane = true;
+        }
+        assert!(s.transition(&same_issue, 4).is_err());
+        let second = reserve_second_issue(&mut s, true);
+        s.transition(&second, 5).unwrap();
+        assert!(s.transition(&second, 6).is_err());
+        let mut third = reserve("one", 1, "job-three");
+        let mut third_claim = claim("one", None);
+        if let Action::Claim { issue, paths, .. } = &mut third_claim.action {
+            *issue = 3;
+            *paths = vec!["src/third".into()];
+        }
+        s.transition(&third_claim, 6).unwrap();
+        if let Action::Reserve { issue, spec, .. } = &mut third.action {
+            *issue = 3;
+            spec.coordination.as_mut().unwrap().issue = 3;
+            spec.validation_lane = true;
+        }
+        assert!(s.transition(&third, 7).is_err());
     }
 
     #[test]
