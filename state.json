@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 150,
-  "observed_server_time": 1790761170,
+  "sequence": 151,
+  "observed_server_time": 1790761565,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -134,15 +134,22 @@
       "phase": "claimed",
       "checkpoint": {
         "blockers": [
-          "runner repair and admission hold",
-          "internal free below40GiB and memory pressure2 observed"
+          "08:47 owner removable-volume-consent admission hold",
+          "memory pressure2; heavy admission requires<=1"
         ],
         "branch": "codex/track-b-conversion",
+        "charges": "Shared cumulative ledger retained; no reserved or running Codex job",
         "checkpoint_sha": "1074399db87a2dda54602c661142a499bfb618a0",
-        "checks": "Direct rustfmt, diff check and claim-wording passed. Independent source review approved corrected delta. Cargo NOT_RUN; unregistered draft.",
-        "next_action": "Register/compile draft and run fixture only after valid admission and existing shared reference-parity dependency; do not alter frozen arms.",
+        "checks": "Existing scoped source/rustfmt/diff review retained; current loaded CPU+Metal reference parity NOT_RUN",
+        "live_attempts": [],
+        "main_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+        "next_action": "Fresh claim citing this checkpoint; coordinate single Cargo slot after verified consent release and pressure<=1. Reuse retained reference-parity work card and verified internal cache; complete unchanged all-logit1e-4 CPU+Metal gate before B2/hybrid continuation. Do not start a new mechanism branch.",
+        "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
         "pr": 1518,
-        "preserved": ".local-recovery untracked unchanged"
+        "preserve": "Unique untracked .local-recovery/; tracked tree clean",
+        "review_index": "https://github.com/UOR-Foundation/uor-r4/tree/codex/lab-state/integration/20260930",
+        "status": "WAITING_EXTERNAL_DEPENDENCY",
+        "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
       }
     },
     "1520": {
