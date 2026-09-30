@@ -4,6 +4,8 @@ set -euo pipefail
 # Reproduction script for S2 Dialogue Quantization-Aware Training (QAT) & Behavior Analysis
 # References #973 under #820.
 # Laboratory: Anti-Gravity (Lab 3)
+#
+# EXECUTION STATUS: REPRODUCTION NOT_RUN UNDER HOST PRODUCTION HOLD (#1536 / PR #1537) — PENDING FORMAL RUNNER ADMISSION
 
 MODE="${1:-train-and-eval}"
 
@@ -13,7 +15,7 @@ TRAIN_DIR="${TRAIN_DIR:-/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepa
 HELDOUT="${HELDOUT:-/Volumes/UOR-Workspace/uor-r4-lab/chat-v0-20260925/prepared/heldout}"
 REQUESTS="${REQUESTS:-tests/fixtures/development-requests.json}"
 TOKENIZER="${TOKENIZER:-tests/fixtures/tokenizer.json}"
-OUT_ROOT="${OUT_ROOT:-/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-d4}"
+OUT_ROOT="${OUT_ROOT:-/Volumes/UOR-Workspace/uor-r4-lab/anti-gravity-d4-reproduction-$(date +%Y%m%d%H%M%S)}"
 
 echo "=== S2 Dialogue QAT & Behavior Replication ==="
 echo "Mode:         $MODE"
@@ -33,8 +35,12 @@ if [ "$MODE" = "train-and-eval" ]; then
   cargo run --release --example geometric-stack -- \
     dialogue-train \
     init="$MODEL_DIR" \
-    train="$TRAIN_DIR/tokens.u16,$TRAIN_DIR/response_mask.u8,$TRAIN_DIR/manifest.json" \
-    dev="$HELDOUT/tokens.u16,$HELDOUT/response_mask.u8,$HELDOUT/manifest.json" \
+    train_tokens="$TRAIN_DIR/tokens.u16" \
+    train_mask="$TRAIN_DIR/response_mask.u8" \
+    train_manifest="$TRAIN_DIR/manifest.json" \
+    dev_tokens="$HELDOUT/tokens.u16" \
+    dev_mask="$HELDOUT/response_mask.u8" \
+    dev_manifest="$HELDOUT/manifest.json" \
     requests="$REQUESTS" \
     tokenizer="$TOKENIZER" \
     out="$OUT_ROOT/s2_dialogue_qat_1/train" \
@@ -51,20 +57,20 @@ if [ "$MODE" = "train-and-eval" ]; then
 
   echo "--- Exporting Arm 1 QAT checkpoint to LUT ---"
   cargo run --release --example geometric-stack -- \
-    dialogue-export \
-    model="$OUT_ROOT/s2_dialogue_qat_1/train/checkpoint-1024" \
+    export \
+    model="$OUT_ROOT/s2_dialogue_qat_1/train/model" \
     out="$OUT_ROOT/s2_dialogue_qat_1/export"
 
   echo "--- Evaluating Arm 1 QAT greedy dialogue panel (58 turns) ---"
   cargo run --release --example geometric-stack -- \
-    dialogue-chat \
+    lut-chat \
     artifact="$OUT_ROOT/s2_dialogue_qat_1/export/model.lut" \
     requests="$REQUESTS" \
     tokenizer="$TOKENIZER" \
     out="$OUT_ROOT/s2_dialogue_qat_1/chat"
 
   echo "--- Evaluating Arm 1 QAT D11 integer serving parity ---"
-  cargo run --release --bin uor-r4-stack -- \
+  cargo run --release --example geometric-stack -- \
     d11-evaluate \
     artifact="$OUT_ROOT/s2_dialogue_qat_1/export/model.lut" \
     valid="$HELDOUT/tokens.u16" \
@@ -78,8 +84,12 @@ if [ "$MODE" = "train-and-eval" ]; then
   cargo run --release --example geometric-stack -- \
     dialogue-train \
     init="$MODEL_DIR" \
-    train="$TRAIN_DIR/tokens.u16,$TRAIN_DIR/response_mask.u8,$TRAIN_DIR/manifest.json" \
-    dev="$HELDOUT/tokens.u16,$HELDOUT/response_mask.u8,$HELDOUT/manifest.json" \
+    train_tokens="$TRAIN_DIR/tokens.u16" \
+    train_mask="$TRAIN_DIR/response_mask.u8" \
+    train_manifest="$TRAIN_DIR/manifest.json" \
+    dev_tokens="$HELDOUT/tokens.u16" \
+    dev_mask="$HELDOUT/response_mask.u8" \
+    dev_manifest="$HELDOUT/manifest.json" \
     requests="$REQUESTS" \
     tokenizer="$TOKENIZER" \
     out="$OUT_ROOT/s2_dialogue_float_ctrl_1/train" \
@@ -96,20 +106,20 @@ if [ "$MODE" = "train-and-eval" ]; then
 
   echo "--- Exporting Arm 2 checkpoint to LUT ---"
   cargo run --release --example geometric-stack -- \
-    dialogue-export \
-    model="$OUT_ROOT/s2_dialogue_float_ctrl_1/train/checkpoint-1024" \
+    export \
+    model="$OUT_ROOT/s2_dialogue_float_ctrl_1/train/model" \
     out="$OUT_ROOT/s2_dialogue_float_ctrl_1/export"
 
   echo "--- Evaluating Arm 2 greedy dialogue panel (58 turns) ---"
   cargo run --release --example geometric-stack -- \
-    dialogue-chat \
+    lut-chat \
     artifact="$OUT_ROOT/s2_dialogue_float_ctrl_1/export/model.lut" \
     requests="$REQUESTS" \
     tokenizer="$TOKENIZER" \
     out="$OUT_ROOT/s2_dialogue_float_ctrl_1/chat"
 
   echo "--- Evaluating Arm 2 D11 integer serving parity ---"
-  cargo run --release --bin uor-r4-stack -- \
+  cargo run --release --example geometric-stack -- \
     d11-evaluate \
     artifact="$OUT_ROOT/s2_dialogue_float_ctrl_1/export/model.lut" \
     valid="$HELDOUT/tokens.u16" \

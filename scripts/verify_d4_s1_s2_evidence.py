@@ -29,7 +29,11 @@ def sha256_file(path: str) -> str:
     return h.hexdigest()
 
 def verify_manifest_and_payloads(label: str, root_path: str, expected_manifest_hash: str):
-    """Verifies that root_path exists, manifest.json matches expected SHA-256, and payload files exist."""
+    """Verifies that root_path exists, manifest.json matches expected SHA-256, and recorded payload files exist with matching file sizes.
+
+    Scope note: This helper verifies manifest identity and payload file existence/size only; full cryptographic BLAKE3 content
+    verification across the complete file set is performed separately by report_output::verify.
+    """
     if not os.path.exists(root_path):
         print(f"  [UNAVAILABLE/INCOMPLETE] {label}: root directory missing: {root_path}")
         return False, "missing_root"
@@ -44,7 +48,7 @@ def verify_manifest_and_payloads(label: str, root_path: str, expected_manifest_h
         print(f"  [FAIL] {label}: manifest SHA256 mismatch! Expected {expected_manifest_hash}, got {actual_manifest_hash}")
         return False, "manifest_mismatch"
 
-    # Check payload files listed in manifest
+    # Check payload files listed in manifest (existence and size)
     try:
         with open(manifest_file) as f:
             manifest_data = json.load(f)
@@ -62,7 +66,7 @@ def verify_manifest_and_payloads(label: str, root_path: str, expected_manifest_h
         print(f"  [FAIL] {label}: error reading manifest payloads: {e}")
         return False, "manifest_read_error"
 
-    print(f"  [PASS] {label}: {root_path} manifest & payloads verified ({actual_manifest_hash[:16]}...)")
+    print(f"  [PASS] {label}: {root_path} manifest identity & payload existence/sizes verified ({actual_manifest_hash[:16]}...) [presence/size check; full BLAKE3 verification separate]")
     return True, "ok"
 
 def main():
@@ -249,7 +253,10 @@ def main():
     # 3. Markdown Document & Scope Concordance
     # ---------------------------------------------------------
     print("\n--- 3. Markdown Document & Scope Concordance ---")
-    if os.path.exists(s2_md_path):
+    if not os.path.exists(s2_md_path):
+        print(f"  [FAIL] Missing required S2 markdown document at {s2_md_path}")
+        failures += 1
+    else:
         with open(s2_md_path) as f:
             md_content = f.read()
 
@@ -274,7 +281,10 @@ def main():
                 print(f"  [FAIL] S2 Markdown missing required scope marker: '{req}'")
                 failures += 1
 
-    if os.path.exists(s1_md_path):
+    if not os.path.exists(s1_md_path):
+        print(f"  [FAIL] Missing required S1 markdown document at {s1_md_path}")
+        failures += 1
+    else:
         with open(s1_md_path) as f:
             s1_md_content = f.read()
 
