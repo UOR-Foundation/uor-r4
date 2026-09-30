@@ -1868,7 +1868,8 @@ impl Scorecard {
 }
 
 /// The frozen A1 criterion, as every report words it.
-const A1_GATE_RULE: &str = "MQAR recall >= 0.9 at every distance (16, 64, 200) AND open-relation recall >= 0.9; an empty cell fails";
+const A1_GATE_RULE: &str =
+    "MQAR recall >= 0.9 at every distance (16, 64, 200) AND open-relation recall >= 0.9; an empty cell fails";
 
 // ---------------------------------------------------------------------------
 // Cross cells.

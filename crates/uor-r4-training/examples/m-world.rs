@@ -1550,11 +1550,33 @@ fn evaluate_cells(args: &Args, out: &Path) -> Result<()> {
             }
         }
     }
-    let scores_json = scores.to_json();
-    for (cell, row) in scores_json["matrix"].as_object().into_iter().flatten() {
+    // The teacher-forced scores sit beside each cell's accuracy.
+    let mut scores_json = scores.to_json();
+    for (cell, card) in &nll {
+        scores_json["cells"][cell.key()]["teacher_forced"] = card.to_json();
+    }
+    scores_json["pure_retrieval"]["teacher_forced"] =
+        json!(nll.get(&Cell::PURE_RETRIEVAL).map(NllCard::to_json));
+    // The pure-retrieval cell first, then the development cell the gate reads.
+    let order = [
+        Cell::PURE_RETRIEVAL,
+        Cell::GATED,
+        Cell::new(Split::Train, Split::Train),
+        Cell::new(Split::Development, Split::Train),
+    ];
+    for cell in order {
+        let row = &scores_json["matrix"][cell.key()];
         let rate = |key: &str| row[key]["rate"].as_f64().unwrap_or(0.0);
+        let note = if cell == Cell::PURE_RETRIEVAL {
+            "  <- pure retrieval"
+        } else if cell == Cell::GATED {
+            "  <- the A1 gate is decided here"
+        } else {
+            ""
+        };
         println!(
-            "{cell}: MQAR D16 {:.3} D64 {:.3} D200 {:.3}; open relation {:.3}, closed {:.3}; copy {:.3}",
+            "{}: MQAR D16 {:.3} D64 {:.3} D200 {:.3}; open relation {:.3}, closed {:.3}; copy {:.3}{note}",
+            cell.key(),
             rate("mqar/distance/16"),
             rate("mqar/distance/64"),
             rate("mqar/distance/200"),
@@ -1568,10 +1590,6 @@ fn evaluate_cells(args: &Args, out: &Path) -> Result<()> {
         Cell::GATED.key(),
         scores_json["a1_gate"]
     );
-    let teacher_forced_by_cell: BTreeMap<&str, Value> = nll
-        .iter()
-        .map(|(cell, card)| (cell.key(), card.to_json()))
-        .collect();
     let executable = std::env::current_exe()?;
     let mut report = json!({
         "schema": "uor-r4.m-world-cells/1",
@@ -1592,7 +1610,6 @@ fn evaluate_cells(args: &Args, out: &Path) -> Result<()> {
         "max_new_tokens": max_new_tokens,
         "teacher_forced": forced,
         "teacher_forced_unscored": unscored,
-        "teacher_forced_by_cell": teacher_forced_by_cell,
         "items": items,
         "wall_seconds": started.elapsed().as_secs_f64(),
     });
