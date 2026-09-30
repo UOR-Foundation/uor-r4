@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": false,
+    "event_id": "pilot-c-successor-unavailable-98300b3f-3838-4403-b1f7-452a7fa9f71c",
+    "op": "heartbeat",
+    "session": "codex-review1-pilot-c-successor-20260930"
+  },
+  "observed_server_time": 1790739636,
+  "previous_head": "e2f6248197f6c2e7edadf0d96819a9c2f6592a6c"
+}
