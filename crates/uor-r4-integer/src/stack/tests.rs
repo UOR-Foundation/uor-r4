@@ -506,8 +506,8 @@ fn session_save_and_restore_produces_bit_identical_logits() {
     assert_eq!(saved.version, 1);
     assert_eq!(saved.artifact_sha256, model.artifact_sha256());
     assert_eq!(saved.position, 3);
-    assert_eq!(saved.cache_at, 3 * WIDTH);
-    assert_eq!(saved.lift_at, 3 * HEADS);
+    assert_eq!(saved.cache_at, (3 * WIDTH) as u64);
+    assert_eq!(saved.lift_at, (3 * HEADS) as u64);
     assert_eq!(saved.layers.len(), 2);
 
     // Continue stepping original session for 2 more tokens
@@ -619,7 +619,7 @@ fn session_restore_strictly_validates_checksums_and_dimensions() {
     bad_version.version = 2;
     assert!(matches!(
         session.restore_state(&bad_version),
-        Err(StackError::Numerics(_))
+        Err(StackError::Schema(_))
     ));
 
     // 4. Position exceeding context
@@ -680,21 +680,11 @@ fn session_restore_strictly_validates_checksums_and_dimensions() {
         Err(StackError::Token { .. })
     ));
 
-    // 11. Inconsistent snap trace length
+    // 11. Non-empty snap trace on unsnapped model rejected
     let mut bad_trace = saved.clone();
     bad_trace.snap_trace = Some(vec![0u32; 1]);
     assert!(matches!(
         session.restore_state(&bad_trace),
-        Err(StackError::SessionState)
-    ));
-
-    // 12. Out-of-range root in snap trace
-    let mut bad_trace_root = saved.clone();
-    let rec_layers = model.shape().pattern.bytes().filter(|&b| b == b'r').count();
-    let expected_entries = saved.position * model.shape().lanes() * rec_layers;
-    bad_trace_root.snap_trace = Some(vec![120u32; expected_entries]);
-    assert!(matches!(
-        session.restore_state(&bad_trace_root),
         Err(StackError::SessionState)
     ));
 }
@@ -916,6 +906,23 @@ fn session_restore_validates_and_restores_snap_trace() {
         "snap trace should be populated from saved state when model has snap"
     );
 
+    // Inconsistent snap trace length on snapped model rejected
+    let mut bad_len_trace = saved.clone();
+    bad_len_trace.snap_trace = Some(vec![0u32; 1]);
+    assert!(matches!(
+        model.session().restore_state(&bad_len_trace),
+        Err(StackError::SessionState)
+    ));
+
+    // Out-of-range root index (>= 120) in snap trace on snapped model rejected
+    let mut bad_root_trace = saved.clone();
+    let expected_len = bad_root_trace.snap_trace.as_ref().unwrap().len();
+    bad_root_trace.snap_trace = Some(vec![120u32; expected_len]);
+    assert!(matches!(
+        model.session().restore_state(&bad_root_trace),
+        Err(StackError::SessionState)
+    ));
+
     // 2. Restore state without snap trace into session that had snap trace: disables trace to avoid stale/misaligned entries
     let mut no_trace_session = model.session();
     no_trace_session.step(1).expect("step 1");
@@ -971,10 +978,10 @@ fn session_restore_validates_and_restores_snap_trace() {
     let saved_reset_stream = late_reset_session.save_state();
     assert!(saved_reset_stream.snap_trace.is_some());
     let full_trace_roots = saved_reset_stream.snap_trace.as_ref().unwrap();
-    let rec_layers = model.shape.pattern.bytes().filter(|&b| b == b'r').count();
+    let rec_layers = model.shape().pattern.bytes().filter(|&b| b == b'r').count();
     assert_eq!(
         full_trace_roots.len(),
-        CONTEXT * model.shape.lanes() * rec_layers
+        CONTEXT * model.shape().lanes() * rec_layers
     );
 
     let mut restored_reset_session = model.session();

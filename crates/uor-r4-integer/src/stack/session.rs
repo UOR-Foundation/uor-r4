@@ -3,7 +3,7 @@
 //! numerical path: they use the kernels of [`super::kernels`], running offsets
 //! for every index, and buffers allocated when the session is created.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::format::{Container, Fixed, MatrixView, StackNumerics, StackShape, StackTransportSnap};
 use super::kernels::{
@@ -432,11 +432,11 @@ pub struct SerializedStackSession {
     /// SHA-256 of the model artifact this session was created from.
     pub artifact_sha256: String,
     /// Current sequence position (number of tokens ingested / stepped).
-    pub position: usize,
+    pub position: u64,
     /// Keys/values cache length (`position * width`).
-    pub cache_at: usize,
+    pub cache_at: u64,
     /// Lifts cache length (`position * heads`).
-    pub lift_at: usize,
+    pub lift_at: u64,
     /// Pending next-token logits produced by the last step (length equals vocab when position > 0).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub logits: Vec<i32>,
@@ -742,9 +742,9 @@ impl IntegerStackSession<'_> {
             schema: STACK_SESSION_SCHEMA.to_string(),
             version: 1,
             artifact_sha256: self.model.sha256.clone(),
-            position: self.position,
-            cache_at: self.cache_at,
-            lift_at: self.lift_at,
+            position: self.position as u64,
+            cache_at: self.cache_at as u64,
+            lift_at: self.lift_at as u64,
             logits,
             tokens: self.tokens.clone(),
             snap_trace,
@@ -755,9 +755,9 @@ impl IntegerStackSession<'_> {
     /// Restore session state from a [`SerializedStackSession`].
     ///
     /// Validates schema, version, artifact SHA-256, context bounds, layer dimensions,
-    /// pending logits, ingested tokens, and snap trace before applying state. After
-    /// restoration, subsequent step calls produce bit-for-bit identical outputs to
-    /// continuing the original session.
+    /// pending logits, ingested tokens, and snap trace before applying state. Designed
+    /// so that after restoration, subsequent step calls produce bit-for-bit identical
+    /// outputs to continuing the original session.
     pub fn restore_state(&mut self, saved: &SerializedStackSession) -> Result<(), StackError> {
         if saved.schema != STACK_SESSION_SCHEMA {
             return Err(StackError::Schema(format!(
@@ -766,7 +766,7 @@ impl IntegerStackSession<'_> {
             )));
         }
         if saved.version != 1 {
-            return Err(StackError::Numerics(format!(
+            return Err(StackError::Schema(format!(
                 "unsupported session version {}",
                 saved.version
             )));
@@ -777,22 +777,23 @@ impl IntegerStackSession<'_> {
                 saved.artifact_sha256, self.model.sha256
             )));
         }
-        if saved.position > self.model.shape.context {
+        let position = usize::try_from(saved.position).map_err(|_| StackError::SessionState)?;
+        let cache_at = usize::try_from(saved.cache_at).map_err(|_| StackError::SessionState)?;
+        let lift_at = usize::try_from(saved.lift_at).map_err(|_| StackError::SessionState)?;
+        if position > self.model.shape.context {
             return Err(StackError::ContextFull {
                 context: self.model.shape.context,
             });
         }
         let d = self.model.shape.width;
         let heads = self.model.shape.heads;
-        let expected_cache_at = saved
-            .position
+        let expected_cache_at = position
             .checked_mul(d)
             .ok_or(StackError::SessionState)?;
-        let expected_lift_at = saved
-            .position
+        let expected_lift_at = position
             .checked_mul(heads)
             .ok_or(StackError::SessionState)?;
-        if saved.cache_at != expected_cache_at || saved.lift_at != expected_lift_at {
+        if cache_at != expected_cache_at || lift_at != expected_lift_at {
             return Err(StackError::SessionState);
         }
         if saved.layers.len() != self.states.len() {
@@ -800,7 +801,7 @@ impl IntegerStackSession<'_> {
         }
 
         // Validate pending logits
-        if saved.position == 0 {
+        if position == 0 {
             if !saved.logits.is_empty() {
                 return Err(StackError::SessionState);
             }
@@ -809,7 +810,7 @@ impl IntegerStackSession<'_> {
         }
 
         // Validate tokens
-        if saved.tokens.len() != saved.position {
+        if saved.tokens.len() != position {
             return Err(StackError::SessionState);
         }
         for &tok in &saved.tokens {
@@ -829,8 +830,7 @@ impl IntegerStackSession<'_> {
             .bytes()
             .filter(|&b| b == b'r')
             .count();
-        let expected_snap_entries = saved
-            .position
+        let expected_snap_entries = position
             .checked_mul(self.model.shape.lanes())
             .and_then(|x| x.checked_mul(rec_layers))
             .ok_or(StackError::SessionState)?;
@@ -873,11 +873,11 @@ impl IntegerStackSession<'_> {
                     },
                     LayerState::Read { .. },
                 ) => {
-                    if k.len() != saved.cache_at || v.len() != saved.cache_at {
+                    if k.len() != cache_at || v.len() != cache_at {
                         return Err(StackError::SessionState);
                     }
                     if self.model.lorentz {
-                        if l.len() != saved.lift_at {
+                        if l.len() != lift_at {
                             return Err(StackError::SessionState);
                         }
                     } else if !l.is_empty() {
@@ -916,22 +916,22 @@ impl IntegerStackSession<'_> {
                         lifts: cur_l,
                     },
                 ) => {
-                    cur_k[..saved.cache_at].copy_from_slice(k);
-                    cur_v[..saved.cache_at].copy_from_slice(v);
+                    cur_k[..cache_at].copy_from_slice(k);
+                    cur_v[..cache_at].copy_from_slice(v);
                     if self.model.lorentz {
-                        cur_l[..saved.lift_at].copy_from_slice(l);
+                        cur_l[..lift_at].copy_from_slice(l);
                     }
                 }
                 _ => unreachable!(),
             }
         }
 
-        self.position = saved.position;
-        self.cache_at = saved.cache_at;
-        self.lift_at = saved.lift_at;
+        self.position = position;
+        self.cache_at = cache_at;
+        self.lift_at = lift_at;
 
         // Restore pending logits
-        if saved.position > 0 {
+        if position > 0 {
             self.b.logits.copy_from_slice(&saved.logits);
         } else {
             self.b.logits.fill(0);
