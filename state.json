@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 280,
-  "observed_server_time": 1790786543,
+  "sequence": 281,
+  "observed_server_time": 1790786565,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -33,7 +33,7 @@
         "S1.4 D11 snap safety"
       ],
       "available": true,
-      "heartbeat": 1790786323
+      "heartbeat": 1790786565
     },
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -260,7 +260,7 @@
         "crates/uor-r4-training/src/stack_export.rs",
         "crates/uor-r4-training/tests/d4_map_codec_adapter.rs"
       ],
-      "expires": 1790787523,
+      "expires": 1790787765,
       "phase": "claimed",
       "checkpoint": null
     },
