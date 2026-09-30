@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": true,
+    "event_id": "opencode-20260930-heartbeat-3",
+    "op": "heartbeat",
+    "session": "opencode-deepseek-20260930"
+  },
+  "observed_server_time": 1790746548,
+  "previous_head": "9892d08ac46be53c843dfe51f925be0f7cb0cf7b"
+}
