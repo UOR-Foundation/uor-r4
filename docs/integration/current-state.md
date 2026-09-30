@@ -22,47 +22,42 @@ unique artifacts; recovery is not a license for blanket pruning or deletion.
 
 Scientific next work: finish A1/M-world v2 retrieval and the shared flock/copy
 interface; complete faithful S4/memory bundle integration; only then scale
-response learning. Track B #1518 awaits unchanged source-bound parity after the
-compiler/storage boundary is repaired; its uncompiled drafts and interrupted
-attempts establish no quality result. #1519 reports the completed E8 B3 negative
+response learning. Track B #1518 completed its unchanged source-bound parity on September 30
+and failed numerical fidelity; localize the first divergent operator before
+repeating the gate. Its uncompiled B2 drafts establish no quality result. #1519 reports the completed E8 B3 negative
 and awaits review; do not repeat that run unchanged or treat it as family-wide
 disproof. [STATUS](../../STATUS.md) provides short navigation; GitHub carries the
 latest PR/incident state.
 
 ## Track B conversion, September 29
 
-The owner-returned Codex lab has a pinned Candle 0.9.2 Llama loader and
-Metal-enabled all-logit parity driver. On the recorded pre-interface revisions,
-three loader checks and one gate check pass. **Checkpoint CPU/Metal parity and B2 remain NOT_RUN:** the two-worker
-exact-reference attempt completed 25 of 45 positions before shared SSD free
-space crossed its registered 30 GiB reserve. Both loaded interrupted attempts
-are sealed; this is execution evidence, not a numerical or model-quality
-negative. See the [result](track-b-conversion-result-2026-09-29.md),
-[design proposal](track-b-harmonic-design-2026-09-29.md), and
+The Codex lab's pinned Candle 0.9.2 stock loader and shared differentiable
+model completed the unchanged CPU/Metal all-logit `1e-4` parity gate at
+`648ba939020054679f20e58d048dd6ae10a87758`. **FAIL_NUMERICAL_GATE:** all 45
+reference positions and 294 candidate rows completed; coverage passed, but
+stock CPU/Metal maximum errors were `0.0014320612` / `0.0085887909` and shared
+CPU/Metal errors were `0.0070133209` / `0.0067539215`. The fresh report was
+sealed and verified. See the [executed result](../evidence/track-b-parity-2026-09-30.md).
+B2 fitting remains unqualified. Next localize the first divergent operator on
+the smallest failing prefixes, preserving outputs and the unchanged tolerance;
+do not rerun the full comparison without a causal correction.
+
+Earlier interrupted attempts and the restored external compiler-cache failure
+remain historical execution evidence in the [September 29 record](track-b-conversion-result-2026-09-29.md)
+and [restoration receipt](../evidence/track-b-restoration-2026-09-29/README.md).
+They no longer describe the active execution boundary. Internal-cache validation
+passed 17 CPU unit tests and 3 parity-gate tests at `dcb8b107`; Metal compilation
+and the largest-arm gradient fixture passed. The separate unchanged Metal
+near-antipodal floor test failed, with a diagnostic locating the dominant error
+in its final Metal contraction ([result](../evidence/track-b-metal-floor-2026-09-30.md)).
+Neither unit tests nor small synthetic-token KL values override the failed
+checkpoint gate or establish language quality.
+
+Small focused checks run directly in internal caches. Under the owner's
+correction, finish useful builds and reclaim verified disposable cache afterward
+instead of stopping at the conservative 40 GiB mark. See the [design proposal](track-b-harmonic-design-2026-09-29.md),
+[shared attention interface](track-b-shared-attention-2026-09-29.md), and
 [owning board](https://github.com/UOR-Foundation/uor-r4/issues/1515).
-The [prospective storage correction](../evidence/track-b-storage-correction-2026-09-29.json)
-distinguishes the plan's 30 GiB trace allocation from our stricter free-space
-interpretation. That dated guard is historical; current host policy supplies the physical floors.
-Compile the changed path and complete the unchanged parity smoke in a new root
-before B2 fitting or the 360M ladder. The [shared differentiable
-attention interface](track-b-shared-attention-2026-09-29.md), harmonic features
-and bounded seeded generation are now source-implemented in draft PR #1518;
-their first compilation attempt exited 101 after 22.97 seconds during the
-owner's workspace-image restoration. A follow-up isolated macOS rejecting a
-cached procedural-macro dylib under the restored mount's `quarantine` policy;
-the dylib's code signature verifies on disk. At that historical checkpoint, new tests and checkpoint parity
-remained NOT_RUN. Model hashes and charge receipts survived; two missing B2
-drafts were recovered and pushed. See the [restoration record](../evidence/track-b-restoration-2026-09-29/README.md).
-September 30 executed continuation: the internal-cache build passed 17 Track B
-CPU tests and 3 parity-gate tests at `dcb8b107`. Metal compilation and the
-largest-arm gradient fixture also pass. The unchanged Metal near-antipodal
-floor fixture fails; a controlled diagnostic localizes its dominant error to
-the final Metal matrix contraction. Preserve that numerical limitation and the
-original test. See the [measured result](../evidence/track-b-metal-floor-2026-09-30.md).
-Full checkpoint CPU/Metal parity remains NOT_RUN and is the next independent
-step before B2 fitting. Small focused checks run directly in internal caches;
-under the owner's correction, finish useful builds and reclaim verified
-disposable cache afterward instead of stopping at the conservative 40 GiB mark.
 
 Independent B2 engineering is preserved in five unregistered drafts: source
 data, LoRA/operator transfer, isolated-layer fit/checkpointing, hybrid overlap

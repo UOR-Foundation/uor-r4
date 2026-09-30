@@ -1,0 +1,184 @@
+{
+  "b2_authorized_by_this_result": false,
+  "completed_compared_rows_total": 294,
+  "expected_compared_rows_per_backend": 147,
+  "expected_compared_rows_total": 294,
+  "language_quality": "NOT_EVALUATED",
+  "pass": false,
+  "reference_backend": {
+    "arithmetic_owner": "uor-matmul exact GEMM",
+    "available_backends": [
+      "portable",
+      "neon",
+      "neondotprod"
+    ],
+    "selected_backend": null,
+    "selection_status": "UNAVAILABLE: uor-matmul does not expose the private float auto-selection cache",
+    "std_runtime_detection_enabled": true,
+    "target_arch": "aarch64",
+    "target_os": "macos",
+    "uor_matmul_revision": "b13c98449948174f590e337c4dc25dfc394a07d0"
+  },
+  "reference_execution": {
+    "active_streams": 0,
+    "active_workers": 0,
+    "batched_matrix_calls": 0,
+    "effective_workers": 2,
+    "forward_calls": 45,
+    "forward_max_active_workers": 2,
+    "matrix_calls": 9495,
+    "max_active_streams": 1,
+    "max_active_workers": 2,
+    "max_matrix_batch_width": 0,
+    "multiworker_forward_calls": 45,
+    "observer_epoch": 0,
+    "output_cells_completed": 9210240,
+    "requested_workers": 2,
+    "scalar_terms_completed": 6051594240,
+    "streams_completed": 45,
+    "streams_started": 45,
+    "tiles_completed": 75960,
+    "workspace_growth_bytes": 98304,
+    "workspace_growth_events": 8
+  },
+  "reference_rows": 45,
+  "reference_seconds": 366.998780708,
+  "schema": "uor-r4.track-b-parity-result/2",
+  "serving_cost": "NOT_EVALUATED",
+  "status": "FAIL_NUMERICAL_GATE",
+  "tolerance_max_absolute": 0.0001,
+  "total_seconds": 386.8010895,
+  "training_steps": 0,
+  "source_revision": "648ba939020054679f20e58d048dd6ae10a87758",
+  "executable_sha256": "f1892eb7281cd15007f894d0867b1daadc1ebc22e8b53b8f4057ed23e6983be4",
+  "report_root": "/Volumes/UOR-Workspace/uor-r4-models/track-b/parity-648ba939-20260930",
+  "manifest_sha256": "a575fe03a1fa42869bb73c7a70ff95ba13382582ea019b29a571ef55a01970b3",
+  "complete_file_sha256": {
+    "cpu-shared-batch2-logits.f32le": "0967711e7a0a42a3cf49b397abd29fc0f1f04d0f087c1556cf1391170d1606f8",
+    "result.json": "72af2546ae08d965712d3fb58f7f93a0e0548e81d4fe970f6babc4b54f8f3b2f",
+    "cpu-logits.f32le": "9765ad3f1937e85c2079fff585aceb58535ce2aa14ed0ab8504a38b518765b41",
+    "metal-prefill-logits.f32le": "15a81ac967ea26ad2b8b442520f5ab17f1172c26799fb80a8e2ee67de659e976",
+    "metal-logits.f32le": "57650b69247b6f3241bf29c91ab344f9cadd94115a4624e5aa488a8c11e44e6e",
+    "cpu-shared-rows.jsonl": "06a9864eada875eae0387e0988c3f1ca4d20c41752c8d5433262ce425270ca19",
+    "resource-admission.json": "ff94dc8371045f909ec3aa8742f655b823b9f5dafdc6357971846c8c7d23bcdd",
+    "reference-logits.f32le": "b235781e5c178933727916d5ce9da72fbe248dfddb29b5ef8a3b605bf81d4102",
+    "cpu-prefill-logits.f32le": "5fcf2654b07b9c2b01d259dd08c894f0867ad3e4519f2c6c8040d9501eafc3ee",
+    "metal-shared-batch2-logits.f32le": "8198ab4fd551ec3e6d801124777483bd102051e6aab42ce678b982e2e67aeb55",
+    "metal-shared-rows.jsonl": "f47b79833a35cbd746286a28a839acd8c61f2e5522336f60ad1c00fca80dcb5e",
+    "inputs.json": "21c54e6c97c9c4c5ce29e6286206fbfeb7196894a6c5f5a0278a9b32a014dbf9",
+    "metal-shared-full-logits.f32le": "37654fe76a9cd3c6791c88b4c3d5c332dd1d431cb64d7f1049832afba785f0d4",
+    "manifest.json": "a575fe03a1fa42869bb73c7a70ff95ba13382582ea019b29a571ef55a01970b3",
+    "cpu-rows.jsonl": "93539c20a5e3972d8aa8062c1320307aab5a6b94305a2c05e9e573f8ebf1d16a",
+    "attempt.json": "941819fec35b0f1d59ca33bc5dacc7181bb55ccbe38baf42197acb677431eacb",
+    "metal-rows.jsonl": "650abbd6f7e6dec4e873630f5175583d54b55249a910c61083fe55c3891d94dd",
+    "cpu-shared-full-logits.f32le": "417caba38819b8e80a75470acaca6ac0e1519187700de6f739829791ca474ecd"
+  },
+  "implementations": [
+    {
+      "backends": [
+        {
+          "backend": "cpu",
+          "cells_over_1e_4": 138560,
+          "compared_cells": 2605056,
+          "completed_mode_counts": {
+            "fresh_full_prefill_final": 4,
+            "fresh_half_prefix_then_singletons_final": 4,
+            "singleton_every_position": 45
+          },
+          "completed_rows": 53,
+          "coverage_pass": true,
+          "evaluation_seconds": 2.447110583,
+          "expected_mode_counts": {
+            "fresh_full_prefill_final": 4,
+            "fresh_half_prefix_then_singletons_final": 4,
+            "singleton_every_position": 45
+          },
+          "expected_rows": 53,
+          "implementation": "candle-transformers/0.9.2::models::llama::Llama",
+          "load_seconds": 0.41862275,
+          "maximum_absolute_error": 0.0014320611953735352,
+          "pass": false
+        },
+        {
+          "backend": "metal",
+          "cells_over_1e_4": 345550,
+          "compared_cells": 2605056,
+          "completed_mode_counts": {
+            "fresh_full_prefill_final": 4,
+            "fresh_half_prefix_then_singletons_final": 4,
+            "singleton_every_position": 45
+          },
+          "completed_rows": 53,
+          "coverage_pass": true,
+          "evaluation_seconds": 7.449231459,
+          "expected_mode_counts": {
+            "fresh_full_prefill_final": 4,
+            "fresh_half_prefix_then_singletons_final": 4,
+            "singleton_every_position": 45
+          },
+          "expected_rows": 53,
+          "implementation": "candle-transformers/0.9.2::models::llama::Llama",
+          "load_seconds": 5.038936375,
+          "maximum_absolute_error": 0.008588790893554688,
+          "pass": false
+        }
+      ]
+    },
+    {
+      "backends": [
+        {
+          "backend": "cpu",
+          "cells_over_1e_4": 349490,
+          "compared_cells": 4620288,
+          "completed_mode_counts": {
+            "fresh_batch2_right_padding_row0_every_position": 45,
+            "fresh_batch2_right_padding_row1_position0": 4,
+            "fresh_full_prefix_every_position": 45
+          },
+          "completed_rows": 94,
+          "coverage_pass": true,
+          "evaluation_seconds": 0.827130833,
+          "expected_mode_counts": {
+            "fresh_batch2_right_padding_row0_every_position": 45,
+            "fresh_batch2_right_padding_row1_position0": 4,
+            "fresh_full_prefix_every_position": 45
+          },
+          "expected_rows": 94,
+          "implementation": "uor-r4-training::track_b::model::TrackBModel+DenseAttention",
+          "load_seconds": 1.036197625,
+          "maximum_absolute_error": 0.0070133209228515625,
+          "pass": false,
+          "raw_batch_rows": 90,
+          "raw_full_rows": 45,
+          "unscored_padding_raw_rows": 41
+        },
+        {
+          "backend": "metal",
+          "cells_over_1e_4": 381652,
+          "compared_cells": 4620288,
+          "completed_mode_counts": {
+            "fresh_batch2_right_padding_row0_every_position": 45,
+            "fresh_batch2_right_padding_row1_position0": 4,
+            "fresh_full_prefix_every_position": 45
+          },
+          "completed_rows": 94,
+          "coverage_pass": true,
+          "evaluation_seconds": 0.506941084,
+          "expected_mode_counts": {
+            "fresh_batch2_right_padding_row0_every_position": 45,
+            "fresh_batch2_right_padding_row1_position0": 4,
+            "fresh_full_prefix_every_position": 45
+          },
+          "expected_rows": 94,
+          "implementation": "uor-r4-training::track_b::model::TrackBModel+DenseAttention",
+          "load_seconds": 1.064434375,
+          "maximum_absolute_error": 0.0067539215087890625,
+          "pass": false,
+          "raw_batch_rows": 90,
+          "raw_full_rows": 45,
+          "unscored_padding_raw_rows": 41
+        }
+      ]
+    }
+  ]
+}
