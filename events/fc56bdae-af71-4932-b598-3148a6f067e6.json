@@ -1,0 +1,34 @@
+{
+  "event": {
+    "epoch": 3,
+    "event_id": "fc56bdae-af71-4932-b598-3148a6f067e6",
+    "issue": 1515,
+    "op": "checkpoint",
+    "packet": {
+      "blockers": [],
+      "branch": "codex/track-b-conversion",
+      "charges": "All compiler attempts through successful build, focused tests, review and cleanup charged once under unique codex-track-b-dcb8b107-20260930 events.",
+      "checkpoint_sha": "648ba939020054679f20e58d048dd6ae10a87758",
+      "checks": "Metal floor FAIL; diagnostic completed; Metal gradient PASS; dense checkpoint parity NOT_RUN",
+      "cleanup": "Removed2 inactive incremental directories after successful checks; observed df +628384KiB. Working cache, binaries, source, models and reports retained.",
+      "live_attempts": [
+        {
+          "exec_session": 2595,
+          "kind": "direct release compile",
+          "log": "/Users/casey.allard/.local/state/uor-r4/recovery/20260929-lab-system/continuation-20260930/track-b-648ba939-release-build.log",
+          "threads": 2
+        }
+      ],
+      "main_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+      "mandatory_cache": "Every Cargo invocation and new or resubmitted runner spec explicitly sets an INTERNAL CARGO_TARGET_DIR. Never use /Volumes/UOR-Workspace/BuildCaches. Current cache /Users/casey.allard/.cache/uor-r4-track-b-direct/target, verified internal.",
+      "next_action": "Release build running in INTERNAL cache, then unchanged CPU+Metal all-logit parity. Preserve recorded Metal harmonic floor failure; it is independent of dense model parity.",
+      "pr": 1518,
+      "preserve": "Untracked .local-recovery and retained historical evidence; peer model execution untouched.",
+      "status": "ACTIVE",
+      "worktree": "/Users/casey.allard/.codex/worktrees/track-b-conversion/uor-r4"
+    },
+    "session": "codex-durable-20260929-root"
+  },
+  "observed_server_time": 1790782596,
+  "previous_head": "0897c36c53f7fa0178de0fe0ca2b82aa89f40d6a"
+}
