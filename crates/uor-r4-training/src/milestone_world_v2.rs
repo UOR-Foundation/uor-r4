@@ -32,6 +32,33 @@
 //! answer "the most recent value" would pass; the item also records
 //! `pair_distance`, which adds the tokens of the assertion that follow the
 //! queried pair's value.
+//!
+//! Revision 2.1 (the council's A1 amendments, made before any treatment run):
+//!
+//! - **Cross cells.** An episode can be drawn under a [`Cell`]: the phrasing
+//!   of its user turns from one split and its values from the same or the
+//!   other. `dev_phrasing x dev_value` is the development split, drawn exactly
+//!   as before (`conversation(rng, split)` is `conversation_in` under
+//!   [`Cell::same`]) and the only cell the A1 gate is decided on;
+//!   `train_phrasing x dev_value` is the pure-retrieval cell (a trained
+//!   phrasing around a value never seen). [`CellScores`] reports every cell.
+//! - **Untrained rule baselines** ([`Rule`]): R-recency (the latest open value
+//!   in the history) and R-nlet (the continuation of the latest earlier
+//!   occurrence of the query's last two words), judged by [`judge_v2`] on the
+//!   same items. The instrument freezes only if both stay below
+//!   [`FREEZE_LIMIT`] on every gated cell ([`freeze_report`]).
+//! - **The generator revision that condition demanded.** Reading the
+//!   generator against the two rules found two leaks: a relation episode
+//!   stated one relation only, so the queried value was always the latest open
+//!   value (R-recency), and four MQAR query phrasings ended in "{k} is", the
+//!   two words that precede the value in the assertion (R-nlet). A relation
+//!   episode now states a second open relation after the queried one with
+//!   probability [`DISTRACTOR`], and no MQAR query phrasing ends in "{k} is".
+//!   The rules were not run when this was written (the machine was on hold);
+//!   `m-world baselines` measures them on the revised world.
+//! - **Recorded facts.** A [`Tag`] carries the phrasing template, the gold
+//!   value and the open values a turn states, for the rules, the per-template
+//!   leak report and the teacher-forced answer-span scores.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
@@ -62,6 +89,64 @@ pub fn tolerance(distance: usize) -> usize {
 
 /// The fraction of relation episodes that use v1's closed relations.
 pub const CLOSED_SHARE: f64 = 0.2;
+
+/// The instrument's revision, part of [`MWorld2::digest`]. `2.0` is the world
+/// as first written (c5b84173); `2.1` adds the council's A1 amendments.
+pub const REVISION: &str = "2.1";
+
+/// The share (numerator, denominator) of relation episodes that state a second
+/// open relation after the queried one, so the queried value is not always the
+/// latest open value in the history.
+pub const DISTRACTOR: (usize, usize) = (3, 4);
+
+/// The (phrasing split x value split) cell an item is drawn from. The four
+/// cells separate a failure to read a new phrasing from a failure to copy a
+/// new value. `dev_phrasing x dev_value` is the development split and the only
+/// cell the A1 gate is decided on ([`Cell::GATED`]); `train_phrasing x
+/// dev_value` is the pure-retrieval cell ([`Cell::PURE_RETRIEVAL`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct Cell {
+    /// The split of the user-turn templates (and the filler turns).
+    pub phrasing: Split,
+    /// The split of the names, numbers, code words, towns and closed values.
+    pub value: Split,
+}
+
+impl Cell {
+    /// The four cells, in a fixed order.
+    pub const ALL: [Cell; 4] = [
+        Cell::new(Split::Train, Split::Train),
+        Cell::new(Split::Train, Split::Development),
+        Cell::new(Split::Development, Split::Train),
+        Cell::new(Split::Development, Split::Development),
+    ];
+
+    /// The development split (development phrasing, development values): the
+    /// A1 gate is computed here, as before.
+    pub const GATED: Cell = Cell::new(Split::Development, Split::Development);
+
+    /// Trained phrasing, unseen values: retrieval with the phrasing held fixed.
+    pub const PURE_RETRIEVAL: Cell = Cell::new(Split::Train, Split::Development);
+
+    pub const fn new(phrasing: Split, value: Split) -> Self {
+        Self { phrasing, value }
+    }
+
+    /// The cell of a plain split: both from `split`.
+    pub const fn same(split: Split) -> Self {
+        Self::new(split, split)
+    }
+
+    /// The cell's name in reports.
+    pub const fn key(self) -> &'static str {
+        match (self.phrasing, self.value) {
+            (Split::Train, Split::Train) => "train_phrasing_train_value",
+            (Split::Train, Split::Development) => "train_phrasing_dev_value",
+            (Split::Development, Split::Train) => "dev_phrasing_train_value",
+            (Split::Development, Split::Development) => "dev_phrasing_dev_value",
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Judging: v1's checks plus the #1516 fixes.
@@ -140,7 +225,7 @@ fn clauses(text: &str) -> Vec<Vec<String>> {
         .collect()
 }
 
-fn contains_slice(haystack: &[String], needle: &[String]) -> bool {
+pub(crate) fn contains_slice(haystack: &[String], needle: &[String]) -> bool {
     !needle.is_empty()
         && haystack.len() >= needle.len()
         && haystack.windows(needle.len()).any(|w| w == needle)
@@ -448,6 +533,63 @@ pub fn two_syllable_count(split: Split, first: usize) -> usize {
     seen.len()
 }
 
+/// Every word of a fixed text of v1 or v2 (see `reserved`): no generated value
+/// is one of them, and a sealed probe must not use one as a value.
+pub fn reserved_words() -> &'static BTreeSet<String> {
+    reserved()
+}
+
+/// Whether the syllable generator can spell `text` (lowercase ASCII) in one to
+/// `max` syllables of onset x vowel x coda.
+pub fn is_syllable_word(text: &str, max: usize) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || !text.is_ascii() {
+        return false;
+    }
+    // fewest[i]: the fewest syllables that spell text[..i].
+    let mut fewest = vec![usize::MAX; bytes.len() + 1];
+    fewest[0] = 0;
+    for start in 0..bytes.len() {
+        if fewest[start] == usize::MAX {
+            continue;
+        }
+        for onset in ONSETS {
+            let Some(after_onset) = text[start..].strip_prefix(onset) else {
+                continue;
+            };
+            for vowel in VOWELS {
+                let Some(after_vowel) = after_onset.strip_prefix(vowel) else {
+                    continue;
+                };
+                for coda in CODAS {
+                    if after_vowel.starts_with(coda) {
+                        let end = bytes.len() - after_vowel.len() + coda.len();
+                        fewest[end] = fewest[end].min(fewest[start] + 1);
+                    }
+                }
+            }
+        }
+    }
+    fewest[bytes.len()] <= max
+}
+
+/// Whether one of the world's value generators can produce `text`, compared
+/// lowercased: a word or name of one to three syllables, a number of two to
+/// four digits, or a town of a one or two syllable stem and a suffix.
+pub fn in_generated_universe(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    let is_number = (2..=4).contains(&lower.len())
+        && lower.bytes().all(|b| b.is_ascii_digit())
+        && !lower.starts_with('0');
+    is_number
+        || is_syllable_word(&lower, 3)
+        || TOWN_SUFFIXES.iter().any(|suffix| {
+            lower
+                .strip_suffix(suffix)
+                .is_some_and(|stem| is_syllable_word(stem, 2))
+        })
+}
+
 // ---------------------------------------------------------------------------
 // Relations: v1's closed ones and the open ones.
 
@@ -748,18 +890,21 @@ static MQAR_LEAD: Phrasings = Phrasings {
         "Store these facts: {p}.",
     ],
 };
+/// No phrasing ends in "{k} is": the assertion states "{k} is {v}", so a query
+/// ending in those two words is answered by copying what follows their latest
+/// earlier occurrence (revision 2.1; R-nlet).
 static MQAR_QUERY: Phrasings = Phrasings {
     train: &[
         "What is {k}?",
         "What was {k} again?",
-        "Tell me what {k} is.",
-        "Do you remember what {k} is?",
+        "Tell me what {k} was.",
+        "Do you remember what {k} was?",
     ],
     development: &[
         "Remind me what {k} was.",
-        "What did I tell you {k} is?",
+        "What did I tell you {k} was?",
         "Quick question: what is {k}?",
-        "Say what {k} is.",
+        "Say what {k} was.",
     ],
 };
 const MQAR_ACKS: &[&str] = &[
@@ -836,7 +981,8 @@ pub struct Mqar {
     pub tokens: usize,
 }
 
-/// What the evaluator reports a scored turn under.
+/// What the evaluator reports a scored turn under, and the facts the rule
+/// baselines and the teacher-forced scores read.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tag {
     /// Open or closed value pool of a relation or MQAR query.
@@ -844,6 +990,18 @@ pub struct Tag {
     /// The query asks for a relation that was never stated.
     pub abstain: bool,
     pub mqar: Option<Mqar>,
+    /// The user phrasing template the turn was drawn from, slots unfilled
+    /// (relation and MQAR queries, statements, copy and abstentions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    /// The value a retrieval turn's reply must state (MQAR and relation
+    /// recall); absent for copy and for an abstention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+    /// The open-pool values the turn's user text states, in reading order:
+    /// the generator's recorded value spans. Closed values are not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
 }
 
 /// One user turn, the reply the world trains on, and the v2 oracle's checks.
@@ -1021,16 +1179,22 @@ impl<'a> MWorld2<'a> {
     /// One episode of `split`: the kind is drawn from the mix, and every
     /// reference reply passes its own checks and fits [`CONTEXT`] tokens.
     pub fn conversation(&mut self, rng: &mut Rng, split: Split) -> Result<Conversation2> {
+        self.conversation_in(rng, Cell::same(split))
+    }
+
+    /// One episode of `cell`: its phrasings from `cell.phrasing`, its values
+    /// from `cell.value`. Under [`Cell::same`] this is [`Self::conversation`].
+    pub fn conversation_in(&mut self, rng: &mut Rng, cell: Cell) -> Result<Conversation2> {
         for _ in 0..64 {
             let u = unit(rng);
             let (kind, turns) = if u < self.mix.mqar {
-                (Kind::Mqar, self.mqar(rng, split)?)
+                (Kind::Mqar, self.mqar(rng, cell)?)
             } else if u < self.mix.mqar + self.mix.copy {
-                (Kind::Copy, copy(rng, split)?)
+                (Kind::Copy, copy(rng, cell)?)
             } else if u < self.mix.mqar + self.mix.copy + self.mix.relation {
-                (Kind::Relation, self.relation(rng, split)?)
+                (Kind::Relation, self.relation(rng, cell)?)
             } else {
-                (Kind::Other, other(rng, split))
+                (Kind::Other, other(rng, cell.phrasing))
             };
             let tokens = self.meter.document(&turns);
             let sound = turns.iter().all(|t| judge_v2(&t.checks, &t.user, &t.reply));
@@ -1073,18 +1237,18 @@ impl<'a> MWorld2<'a> {
     /// The MQAR episode of the next (D, N) cell: N pairs asserted in one turn
     /// (fewer when the cell's N would not fit), acknowledged, then responsive
     /// filler turns until the distance reaches D, then the query.
-    fn mqar(&mut self, rng: &mut Rng, split: Split) -> Result<Vec<Turn2>> {
-        let cell = self.mqar_seen;
+    fn mqar(&mut self, rng: &mut Rng, cell: Cell) -> Result<Vec<Turn2>> {
+        let slot = self.mqar_seen;
         self.mqar_seen += 1;
-        let distance = DISTANCES[cell % DISTANCES.len()];
-        let requested = PAIR_COUNTS[(cell / DISTANCES.len()) % PAIR_COUNTS.len()];
+        let distance = DISTANCES[slot % DISTANCES.len()];
+        let requested = PAIR_COUNTS[(slot / DISTANCES.len()) % PAIR_COUNTS.len()];
         let mut n = requested;
         loop {
             // Ordinary draws first; then compact ones (two-syllable words, the
             // shortest templates), which are what fits a long distance.
             for attempt in 0..60 {
                 let compact = attempt >= 10;
-                if let Some(turns) = self.try_mqar(rng, split, (n, requested), distance, compact)? {
+                if let Some(turns) = self.try_mqar(rng, cell, (n, requested), distance, compact)? {
                     return Ok(turns);
                 }
             }
@@ -1100,7 +1264,7 @@ impl<'a> MWorld2<'a> {
     fn try_mqar(
         &self,
         rng: &mut Rng,
-        split: Split,
+        cell: Cell,
         (n, requested): (usize, usize),
         target: usize,
         compact: bool,
@@ -1113,9 +1277,9 @@ impl<'a> MWorld2<'a> {
             for is_key in [true, false] {
                 loop {
                     let candidate = if is_key || rng.below(2) == 0 {
-                        word(rng, split, syllables.0, syllables.1)?
+                        word(rng, cell.value, syllables.0, syllables.1)?
                     } else {
-                        digits(rng, split)?
+                        digits(rng, cell.value)?
                     };
                     if used.insert(candidate.clone()) {
                         if is_key {
@@ -1134,11 +1298,12 @@ impl<'a> MWorld2<'a> {
             .zip(&values)
             .map(|(k, v)| format!("{k} is {v}"))
             .collect();
-        // A template of the split; a compact draw takes the shortest of four.
+        // A template of the phrasing split; a compact draw takes the shortest
+        // of four.
         let template = |rng: &mut Rng, phrasings: &Phrasings| -> &'static str {
             let draws = if compact { 4 } else { 1 };
             (0..draws)
-                .map(|_| phrasings.pick(rng, split))
+                .map(|_| phrasings.pick(rng, cell.phrasing))
                 .min_by_key(|t| self.meter.text(t))
                 .unwrap_or_default()
         };
@@ -1146,7 +1311,8 @@ impl<'a> MWorld2<'a> {
         let assertion = fill(lead, &[("p", &pairs.join(", "))]);
         let ack = *pick(rng, MQAR_ACKS);
         let (key, value) = (&keys[queried], &values[queried]);
-        let mut query = fill(template(rng, &MQAR_QUERY), &[("k", key)]);
+        let query_template = template(rng, &MQAR_QUERY);
+        let mut query = fill(query_template, &[("k", key)]);
         capitalize(&mut query);
         let reply = (0..if compact { 4 } else { 1 })
             .map(|_| *pick(rng, MQAR_REPLIES))
@@ -1166,7 +1332,10 @@ impl<'a> MWorld2<'a> {
             user: assertion.clone(),
             reply: ack.into(),
             checks: ack_checks(),
-            tag: Tag::default(),
+            tag: Tag {
+                values: values.clone(),
+                ..Tag::default()
+            },
         }];
         // Everything but the distance: BOS, the assertion, the query and its
         // answer. What is left of the context bounds the distance.
@@ -1199,7 +1368,7 @@ impl<'a> MWorld2<'a> {
             let (mut finishing, mut progress) = (Vec::new(), Vec::new());
             for _ in 0..8 {
                 let turn = loop {
-                    let turn = lift(responsive(rng, split));
+                    let turn = lift(responsive(rng, cell.phrasing));
                     if turn.intent != "farewell" {
                         break turn;
                     }
@@ -1272,14 +1441,21 @@ impl<'a> MWorld2<'a> {
                     queried,
                     tokens,
                 }),
+                template: Some(query_template.to_owned()),
+                answer: Some(value.clone()),
+                values: Vec::new(),
             };
         }
         Ok(Some(turns))
     }
 
-    /// Assert, optional distractor and update, then the query (or an
-    /// abstention), with open values for the open relations.
-    fn relation(&self, rng: &mut Rng, split: Split) -> Result<Vec<Turn2>> {
+    /// Assert, an optional filler and update, and (with probability
+    /// [`DISTRACTOR`]) the assertion of a second open relation, then the query
+    /// about the first (or an abstention about a relation never stated), with
+    /// open values for the open relations. The second relation comes after the
+    /// queried one's last statement, so the queried value is not always the
+    /// latest open value in the history.
+    fn relation(&self, rng: &mut Rng, cell: Cell) -> Result<Vec<Turn2>> {
         let table = relations();
         let wanted = if unit(rng) < self.mix.closed {
             Pool::Closed
@@ -1288,10 +1464,10 @@ impl<'a> MWorld2<'a> {
         };
         let candidates: Vec<&Rel> = table.iter().filter(|r| r.pool() == wanted).collect();
         let rel = *pick(rng, &candidates);
-        let first = rel.draw(rng, split)?;
+        let first = rel.draw(rng, cell.value)?;
         let mut turns = vec![rel_turn(
             rng,
-            split,
+            cell.phrasing,
             rel,
             Act::Assert,
             &first,
@@ -1299,18 +1475,18 @@ impl<'a> MWorld2<'a> {
             rel.acks,
         )];
         if rng.below(2) == 0 {
-            turns.push(lift(responsive(rng, split)));
+            turns.push(lift(responsive(rng, cell.phrasing)));
         }
         let mut current = first.clone();
         let updated = rng.below(2) == 0;
         if updated {
-            let mut second = rel.draw(rng, split)?;
+            let mut second = rel.draw(rng, cell.value)?;
             while second == first {
-                second = rel.draw(rng, split)?;
+                second = rel.draw(rng, cell.value)?;
             }
             turns.push(rel_turn(
                 rng,
-                split,
+                cell.phrasing,
                 rel,
                 Act::Update,
                 &second,
@@ -1319,20 +1495,55 @@ impl<'a> MWorld2<'a> {
             ));
             current = second;
         }
+        // The distractor: another open relation, stated after the queried one.
+        let mut distractor: Option<(&Rel, String)> = None;
+        if rng.below(DISTRACTOR.1) < DISTRACTOR.0 {
+            let open: Vec<&Rel> = table
+                .iter()
+                .filter(|r| r.pool() == Pool::Open && r.name != rel.name)
+                .collect();
+            let other = *pick(rng, &open);
+            let mut value = other.draw(rng, cell.value)?;
+            while value.eq_ignore_ascii_case(&first) || value.eq_ignore_ascii_case(&current) {
+                value = other.draw(rng, cell.value)?;
+            }
+            turns.push(rel_turn(
+                rng,
+                cell.phrasing,
+                other,
+                Act::Assert,
+                &value,
+                ack_with(&value),
+                other.acks,
+            ));
+            distractor = Some((other, value));
+        }
         if rng.below(4) == 0 {
-            let others: Vec<&Rel> = table.iter().filter(|r| r.name != rel.name).collect();
+            let others: Vec<&Rel> = table
+                .iter()
+                .filter(|r| {
+                    r.name != rel.name
+                        && distractor
+                            .as_ref()
+                            .map_or(true, |(stated, _)| r.name != stated.name)
+                })
+                .collect();
             let asked = *pick(rng, &others);
             let mut rejected: BTreeSet<String> = [&first, &current]
                 .into_iter()
                 .map(|v| v.to_lowercase())
                 .collect();
+            if let Some((_, value)) = &distractor {
+                rejected.insert(value.to_lowercase());
+            }
             if let Values::Closed(train, development) = asked.values {
                 rejected.extend(train.iter().chain(development).map(|v| v.to_lowercase()));
             }
+            let template = asked.query.pick(rng, cell.phrasing);
             turns.push(Turn2 {
                 intent: format!("{}_absent", asked.name),
                 category: Category2::Relation,
-                user: asked.query.pick(rng, split).into(),
+                user: template.into(),
                 reply: (*pick(rng, ABSENT_REPLIES)).into(),
                 checks: vec![
                     Check2::V1(Check::AnyOf(strings(ABSENT_ACCEPT))),
@@ -1341,20 +1552,33 @@ impl<'a> MWorld2<'a> {
                 tag: Tag {
                     pool: Some(asked.pool()),
                     abstain: true,
-                    mqar: None,
+                    template: Some(template.to_owned()),
+                    ..Tag::default()
                 },
             });
         } else {
             let mut checks = vec![Check2::V1(Check::AnyOf(vec![current.to_lowercase()]))];
+            let mut stale = Vec::new();
             if updated {
-                checks.push(Check2::V1(Check::NoneOf(vec![first.to_lowercase()])));
+                stale.push(first.to_lowercase());
             }
-            let mut query = rel_turn(rng, split, rel, Act::Query, &current, checks, rel.answers);
-            query.tag = Tag {
-                pool: Some(rel.pool()),
-                abstain: false,
-                mqar: None,
-            };
+            if let Some((_, value)) = &distractor {
+                stale.push(value.to_lowercase());
+            }
+            if !stale.is_empty() {
+                checks.push(Check2::V1(Check::NoneOf(stale)));
+            }
+            let mut query = rel_turn(
+                rng,
+                cell.phrasing,
+                rel,
+                Act::Query,
+                &current,
+                checks,
+                rel.answers,
+            );
+            query.tag.pool = Some(rel.pool());
+            query.tag.answer = Some(current.clone());
             turns.push(query);
         }
         for turn in &mut turns {
@@ -1385,12 +1609,14 @@ impl<'a> MWorld2<'a> {
         all
     }
 
-    /// SHA-256 of every table v2 draws from, the judge's version and v1's
-    /// digest (v2 reuses v1's responsive and instruction tables).
+    /// SHA-256 of every table v2 draws from, the revision, the relation
+    /// distractor share, the cell names, the judge's version and v1's digest
+    /// (v2 reuses v1's responsive and instruction tables).
     pub fn digest() -> String {
         let phrasings = |p: &Phrasings| json!([p.train, p.development]);
         let tables = json!({
             "version": "m-world-v2",
+            "revision": REVISION,
             "judge": "judge2-1",
             "v1_digest": MWorld::digest(),
             "context": CONTEXT,
@@ -1404,6 +1630,8 @@ impl<'a> MWorld2<'a> {
             "mqar": [phrasings(&MQAR_LEAD), phrasings(&MQAR_QUERY), MQAR_ACKS, MQAR_REPLIES],
             "copy": [phrasings(&COPY), 3, 8],
             "update_acks": UPDATE_ACKS,
+            "relation_distractor": [DISTRACTOR.0, DISTRACTOR.1],
+            "cells": Cell::ALL.map(Cell::key),
             "relations": relations().iter().map(|r| {
                 let closed = match r.values {
                     Values::Closed(train, development) => json!([train, development]),
@@ -1430,6 +1658,9 @@ fn ack_with(value: &str) -> Vec<Check2> {
     vec![Check2::V1(Check::AnyOf(accepted))]
 }
 
+/// One turn of a relation conversation. `split` is the phrasing split; the
+/// turn records its template and, for a statement of an open relation, the
+/// value it states.
 fn rel_turn(
     rng: &mut Rng,
     split: Split,
@@ -1445,34 +1676,47 @@ fn rel_turn(
         Act::Update => (rel.update, "update", Category2::Responsive),
         Act::Query => (rel.query, "query", Category2::Relation),
     };
+    let template = phrasings.pick(rng, split);
+    let mut tag = Tag {
+        template: Some(template.to_owned()),
+        ..Tag::default()
+    };
+    if matches!(act, Act::Assert | Act::Update) && rel.pool() == Pool::Open {
+        tag.values = vec![value.to_owned()];
+    }
     Turn2 {
         intent: format!("{}_{suffix}", rel.name),
         category,
-        user: fill(phrasings.pick(rng, split), &slots),
+        user: fill(template, &slots),
         reply: fill(pick(rng, replies), &slots),
         checks,
-        tag: Tag::default(),
+        tag,
     }
 }
 
 /// "Repeat exactly: w1 ... wk" (k from 3 to 8) and the same words back.
-fn copy(rng: &mut Rng, split: Split) -> Result<Vec<Turn2>> {
+fn copy(rng: &mut Rng, cell: Cell) -> Result<Vec<Turn2>> {
     let count = 3 + rng.below(6);
     let mut list: Vec<String> = Vec::new();
     while list.len() < count {
-        let candidate = word(rng, split, 2, 3)?;
+        let candidate = word(rng, cell.value, 2, 3)?;
         if !list.contains(&candidate) {
             list.push(candidate);
         }
     }
     let joined = list.join(" ");
+    let template = COPY.pick(rng, cell.phrasing);
     Ok(vec![Turn2 {
         intent: "copy".into(),
         category: Category2::Copy,
-        user: fill(COPY.pick(rng, split), &[("w", &joined)]),
+        user: fill(template, &[("w", &joined)]),
         reply: joined,
-        checks: vec![Check2::CopyExact(list)],
-        tag: Tag::default(),
+        checks: vec![Check2::CopyExact(list.clone())],
+        tag: Tag {
+            template: Some(template.to_owned()),
+            values: list,
+            ..Tag::default()
+        },
     }])
 }
 
@@ -1618,9 +1862,387 @@ impl Scorecard {
                 "closed_abstain": one("relation/closed/abstain"),
             },
             "a1_gate": self.a1_gate(),
-            "a1_gate_rule": "MQAR recall >= 0.9 at every distance (16, 64, 200) AND open-relation recall >= 0.9; an empty cell fails",
+            "a1_gate_rule": A1_GATE_RULE,
         })
     }
+}
+
+/// The frozen A1 criterion, as every report words it.
+const A1_GATE_RULE: &str = "MQAR recall >= 0.9 at every distance (16, 64, 200) AND open-relation recall >= 0.9; an empty cell fails";
+
+// ---------------------------------------------------------------------------
+// Cross cells.
+
+/// A turn the retrieval instrument scores: an MQAR query, a relation query
+/// (recall or abstention) or a copy.
+pub fn is_retrieval(turn: &Turn2) -> bool {
+    matches!(
+        turn.category,
+        Category2::Mqar | Category2::Copy | Category2::Relation
+    )
+}
+
+/// The headline rates of one scorecard: MQAR recall by distance and overall,
+/// relation recall and abstention on each pool, and copy.
+fn headline(card: &Scorecard) -> Value {
+    let mut keys: Vec<String> = DISTANCES
+        .iter()
+        .map(|d| format!("mqar/distance/{d}"))
+        .collect();
+    keys.extend(
+        [
+            "mqar/all",
+            "relation/open/recall",
+            "relation/closed/recall",
+            "relation/open/abstain",
+            "relation/closed/abstain",
+            "copy",
+        ]
+        .map(str::to_owned),
+    );
+    let rows: BTreeMap<String, Value> = keys
+        .into_iter()
+        .map(|key| {
+            let (pass, of) = card.cell(&key);
+            let row = json!({"pass": pass, "of": of, "rate": card.rate(&key)});
+            (key, row)
+        })
+        .collect();
+    json!(rows)
+}
+
+/// Scorecards of the four cells. The A1 gate is decided on the development
+/// cell only ([`Cell::GATED`]), by the same [`Scorecard::a1_gate`] as before.
+#[derive(Default)]
+pub struct CellScores {
+    cards: BTreeMap<Cell, Scorecard>,
+}
+
+impl CellScores {
+    /// Count one judged turn under `cell`.
+    pub fn record(&mut self, cell: Cell, turn: &Turn2, pass: bool) {
+        self.cards.entry(cell).or_default().record(turn, pass);
+    }
+
+    /// The scorecard of `cell`, if any turn was counted under it.
+    pub fn card(&self, cell: Cell) -> Option<&Scorecard> {
+        self.cards.get(&cell)
+    }
+
+    /// The A1 gate: [`Scorecard::a1_gate`] of the development cell, false when
+    /// that cell was not scored.
+    pub fn a1_gate(&self) -> bool {
+        self.card(Cell::GATED).is_some_and(Scorecard::a1_gate)
+    }
+
+    /// Every cell's scores by category, MQAR distance and pool, the headline
+    /// matrix, and the pure-retrieval cell on its own. Only the development
+    /// cell carries a gate.
+    pub fn to_json(&self) -> Value {
+        let mut cells: BTreeMap<&str, Value> = BTreeMap::new();
+        let mut matrix: BTreeMap<&str, Value> = BTreeMap::new();
+        for (cell, card) in &self.cards {
+            let mut scores = card.to_json();
+            if *cell != Cell::GATED {
+                if let Some(object) = scores.as_object_mut() {
+                    object.remove("a1_gate");
+                    object.remove("a1_gate_rule");
+                }
+            }
+            cells.insert(cell.key(), scores);
+            matrix.insert(cell.key(), headline(card));
+        }
+        json!({
+            "cells": cells,
+            "matrix": matrix,
+            "pure_retrieval": {
+                "cell": Cell::PURE_RETRIEVAL.key(),
+                "reading": "trained phrasing, values never seen: what is left of a failure once the phrasing is held fixed",
+                "scores": self.cards.get(&Cell::PURE_RETRIEVAL).map(headline),
+            },
+            "gated_cell": Cell::GATED.key(),
+            "a1_gate": self.a1_gate(),
+            "a1_gate_rule": A1_GATE_RULE,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The untrained rule baselines (the council's A1 amendment).
+
+/// What a rule replies when it has nothing to copy.
+pub const DONT_KNOW: &str = "I don't know.";
+
+/// The freeze limit as a fraction: a rule must score strictly below 3/5 on
+/// every gated cell for the instrument to freeze.
+pub const FREEZE_LIMIT: (usize, usize) = (3, 5);
+
+/// The row that reports the world's own reference replies through the oracle:
+/// 1.0 unless the harness is broken.
+pub const REFERENCE: &str = "reference";
+
+/// An untrained rule over the reference history before the query. Words are
+/// compared case-insensitively and without punctuation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Rule {
+    /// R-recency: reply with the most recent open-pool value the generator
+    /// recorded in the history ([`Tag::values`]).
+    Recency,
+    /// R-nlet: find the latest earlier occurrence of the query's last two
+    /// words and reply with the words that follow it up to the clause end;
+    /// with no such occurrence, reply "I don't know.".
+    Nlet,
+}
+
+impl Rule {
+    pub const ALL: [Rule; 2] = [Rule::Recency, Rule::Nlet];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Recency => "R-recency",
+            Self::Nlet => "R-nlet",
+        }
+    }
+
+    /// The rule's reply to `query` after `history`, the turns before it.
+    pub fn reply(self, history: &[Turn2], query: &Turn2) -> String {
+        match self {
+            Self::Recency => history
+                .iter()
+                .rev()
+                .find_map(|turn| turn.tag.values.last().cloned())
+                .unwrap_or_else(|| DONT_KNOW.to_owned()),
+            Self::Nlet => nlet_reply(history, query),
+        }
+    }
+}
+
+/// The words of `text`, each with whether a clause ends after it: at
+/// punctuation, or at the end of the text.
+fn clause_words(text: &str) -> Vec<(String, bool)> {
+    let mut all = Vec::new();
+    for clause in text.split(|c: char| {
+        matches!(c, ',' | ';' | ':' | '.' | '!' | '?' | '(' | ')' | '\n')
+    }) {
+        let clause = words(clause);
+        let last = clause.len().saturating_sub(1);
+        for (i, word) in clause.into_iter().enumerate() {
+            all.push((word, i == last));
+        }
+    }
+    all
+}
+
+/// [`Rule::Nlet`]. The history is every earlier user turn and reply, in
+/// order, as one word sequence; a two-word occurrence may not be the query's
+/// own text.
+fn nlet_reply(history: &[Turn2], query: &Turn2) -> String {
+    let tail = words(&query.user);
+    if tail.len() < 2 {
+        return DONT_KNOW.to_owned();
+    }
+    let tail = &tail[tail.len() - 2..];
+    let mut flat: Vec<(String, bool)> = Vec::new();
+    for turn in history {
+        flat.extend(clause_words(&turn.user));
+        flat.extend(clause_words(&turn.reply));
+    }
+    let Some(at) = (0..flat.len().saturating_sub(1))
+        .rev()
+        .find(|&i| flat[i].0 == tail[0] && flat[i + 1].0 == tail[1])
+    else {
+        return DONT_KNOW.to_owned();
+    };
+    let mut follow: Vec<&str> = Vec::new();
+    if !flat[at + 1].1 {
+        for (word, end) in &flat[at + 2..] {
+            follow.push(word.as_str());
+            if *end {
+                break;
+            }
+        }
+    }
+    follow.join(" ")
+}
+
+/// The keys [`Scorecard::a1_gate`] reads: MQAR recall at each distance and
+/// open-relation recall.
+pub fn gated_keys() -> Vec<String> {
+    DISTANCES
+        .iter()
+        .map(|d| format!("mqar/distance/{d}"))
+        .chain(["relation/open/recall".to_owned()])
+        .collect()
+}
+
+/// Whether `pass` of `of` is below [`FREEZE_LIMIT`] (an empty cell is not).
+fn below_limit(pass: usize, of: usize) -> bool {
+    of > 0 && pass * FREEZE_LIMIT.1 < of * FREEZE_LIMIT.0
+}
+
+impl Scorecard {
+    /// Whether every gated key has items and a pass rate below
+    /// [`FREEZE_LIMIT`]: what an untrained rule must do for the instrument to
+    /// freeze.
+    pub fn below_freeze_limit(&self) -> bool {
+        gated_keys().iter().all(|key| {
+            let (pass, of) = self.cell(key);
+            below_limit(pass, of)
+        })
+    }
+}
+
+/// The upper end of the 95% Wilson interval of `pass` in `of`.
+pub fn wilson_upper(pass: usize, of: usize) -> f64 {
+    if of == 0 {
+        return 1.0;
+    }
+    let n = of as f64;
+    let p = pass as f64 / n;
+    let z2 = 1.96f64 * 1.96;
+    let centre = p + z2 / (2.0 * n);
+    let margin = 1.96 * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt();
+    ((centre + margin) / (1.0 + z2 / n)).min(1.0)
+}
+
+/// One row (a rule, or [`REFERENCE`]) over one cell's episodes.
+#[derive(Default)]
+pub struct RuleRun {
+    pub card: Scorecard,
+    /// Pass tallies of each gated key by the query template of the item, for
+    /// the leak report.
+    pub templates: BTreeMap<String, BTreeMap<String, (usize, usize)>>,
+}
+
+/// The gated key a turn is counted under, if it is a gated item.
+fn gate_key(turn: &Turn2) -> Option<String> {
+    if let Some(mqar) = &turn.tag.mqar {
+        return Some(format!("mqar/distance/{}", mqar.target_distance));
+    }
+    (turn.category == Category2::Relation
+        && turn.tag.pool == Some(Pool::Open)
+        && !turn.tag.abstain)
+        .then(|| "relation/open/recall".to_owned())
+}
+
+/// Every rule and the reference replies over `conversations` episodes of
+/// `cell`: each retrieval turn is answered after the episode's reference
+/// history and judged by [`judge_v2`].
+pub fn run_rules(
+    world: &mut MWorld2<'_>,
+    rng: &mut Rng,
+    cell: Cell,
+    conversations: usize,
+) -> Result<BTreeMap<&'static str, RuleRun>> {
+    let mut runs: BTreeMap<&'static str, RuleRun> = BTreeMap::new();
+    for name in Rule::ALL.map(Rule::name).into_iter().chain([REFERENCE]) {
+        runs.entry(name).or_default();
+    }
+    for _ in 0..conversations {
+        let conversation = world.conversation_in(rng, cell)?;
+        for (index, turn) in conversation.turns.iter().enumerate() {
+            if !is_retrieval(turn) {
+                continue;
+            }
+            let history = &conversation.turns[..index];
+            let replies = Rule::ALL
+                .iter()
+                .map(|rule| (rule.name(), rule.reply(history, turn)))
+                .chain([(REFERENCE, turn.reply.clone())]);
+            for (name, reply) in replies {
+                let pass = judge_v2(&turn.checks, &turn.user, &reply);
+                let run = runs.entry(name).or_default();
+                run.card.record(turn, pass);
+                if let Some(key) = gate_key(turn) {
+                    let template = turn
+                        .tag
+                        .template
+                        .clone()
+                        .unwrap_or_else(|| "(none)".to_owned());
+                    let tally = run
+                        .templates
+                        .entry(key)
+                        .or_default()
+                        .entry(template)
+                        .or_default();
+                    tally.0 += usize::from(pass);
+                    tally.1 += 1;
+                }
+            }
+        }
+    }
+    Ok(runs)
+}
+
+/// The freeze decision over the rule runs of one cell (the development cell
+/// decides): whether every rule is below [`FREEZE_LIMIT`] on every gated key,
+/// each rule's rate on each, and, for a key that leaks, the query templates
+/// behind it.
+pub fn freeze_report(runs: &BTreeMap<&'static str, RuleRun>) -> Value {
+    let mut ok = true;
+    let mut gated: BTreeMap<&str, BTreeMap<String, Value>> = BTreeMap::new();
+    let mut leaks = Vec::new();
+    for rule in Rule::ALL {
+        let run = runs.get(rule.name());
+        let mut rows = BTreeMap::new();
+        for key in gated_keys() {
+            let (pass, of) = run.map_or((0, 0), |run| run.card.cell(&key));
+            let below = below_limit(pass, of);
+            ok &= below;
+            let rate = if of == 0 { 0.0 } else { pass as f64 / of as f64 };
+            rows.insert(
+                key.clone(),
+                json!({
+                    "pass": pass,
+                    "of": of,
+                    "rate": rate,
+                    "wilson95_upper": wilson_upper(pass, of),
+                    "below_limit": below,
+                }),
+            );
+            if !below {
+                let mut templates: Vec<(String, usize, usize)> = run
+                    .and_then(|run| run.templates.get(&key))
+                    .map(|by| {
+                        by.iter()
+                            .map(|(template, &(pass, of))| (template.clone(), pass, of))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                templates.sort_by(|a, b| {
+                    (b.1 * a.2)
+                        .cmp(&(a.1 * b.2))
+                        .then_with(|| a.0.cmp(&b.0))
+                });
+                let by_template: Vec<Value> = templates
+                    .iter()
+                    .map(|(template, pass, of)| {
+                        json!({
+                            "template": template,
+                            "pass": pass,
+                            "of": of,
+                            "rate": if *of == 0 { 0.0 } else { *pass as f64 / *of as f64 },
+                        })
+                    })
+                    .collect();
+                leaks.push(json!({
+                    "rule": rule.name(),
+                    "key": key,
+                    "pass": pass,
+                    "of": of,
+                    "by_template": by_template,
+                }));
+            }
+        }
+        gated.insert(rule.name(), rows);
+    }
+    json!({
+        "limit": FREEZE_LIMIT.0 as f64 / FREEZE_LIMIT.1 as f64,
+        "rule": "instrument_freeze_ok is true only if both rules are strictly below 0.6 on every gated key (MQAR recall at each distance and open-relation recall, on the development cell) and every gated key has items",
+        "instrument_freeze_ok": ok,
+        "gated": gated,
+        "leaks": leaks,
+    })
 }
 
 #[cfg(test)]
@@ -2210,6 +2832,7 @@ mod tests {
                         queried: 0,
                         tokens: 100,
                     }),
+                    ..Tag::default()
                 },
             };
             let relation = pass_open.map(|_| Turn2 {
@@ -2222,6 +2845,7 @@ mod tests {
                     pool: Some(Pool::Open),
                     abstain: false,
                     mqar: None,
+                    ..Tag::default()
                 },
             });
             (mqar, relation)
@@ -2272,6 +2896,613 @@ mod tests {
         assert_eq!(report["relation"]["open"]["pass"], json!(9));
         assert_eq!(report["relation"]["open_abstain"]["pass"], json!(5));
         assert_eq!(report["relation"]["closed"]["of"], json!(0));
+    }
+
+    // -- The council's A1 amendments (revision 2.1) --------------------------
+
+    /// The digest of revision 2.1, the world the amendments freeze, and of
+    /// revision 2.0 as first written (c5b84173), which it supersedes. Both were
+    /// computed offline: the canonical JSON `digest()` hashes was rebuilt from
+    /// the two source files with jq (sorted keys, compact) and hashed with
+    /// `shasum -a 256`; the same procedure reproduces v1's pinned digest
+    /// exactly. If this assertion fails, the tables or constants moved: read the
+    /// value it prints, re-derive it, and post the new digest on issue 1511
+    /// before any treatment run.
+    const V2_DIGEST: &str = "04ad3bb0bf68d4213d90b41ffb886711ffa4c98043e5ac15f58719d7ce68ae4f";
+    const V2_DIGEST_2_0: &str = "3a4ee743766492c221747373ffcdd43b249e65d049e28d264869af634d8ffc26";
+
+    #[test]
+    fn the_v2_digest_is_pinned() {
+        assert_eq!(MWorld2::digest(), V2_DIGEST);
+        assert_ne!(V2_DIGEST, V2_DIGEST_2_0);
+        assert_eq!(REVISION, "2.1");
+        // v1 is untouched by the revision.
+        assert_eq!(MWorld::digest(), V1_DIGEST);
+    }
+
+    /// A hand-built turn; `values` are the open values its user text states.
+    fn hand_turn(user: &str, reply: &str, values: &[&str]) -> Turn2 {
+        Turn2 {
+            intent: "hand_built".into(),
+            category: Category2::Responsive,
+            user: user.into(),
+            reply: reply.into(),
+            checks: Vec::new(),
+            tag: Tag {
+                values: values.iter().map(|v| (*v).to_owned()).collect(),
+                ..Tag::default()
+            },
+        }
+    }
+
+    /// A scorecard holding exactly `pass` of `of` for each key.
+    fn card_of(rows: &[(&str, usize, usize)]) -> Scorecard {
+        let mut card = Scorecard::default();
+        for (key, pass, of) in rows {
+            for i in 0..*of {
+                card.add((*key).to_owned(), i < *pass);
+            }
+        }
+        card
+    }
+
+    fn mqar_item(distance: usize) -> Turn2 {
+        Turn2 {
+            intent: "mqar_query".into(),
+            category: Category2::Mqar,
+            user: String::new(),
+            reply: String::new(),
+            checks: Vec::new(),
+            tag: Tag {
+                pool: Some(Pool::Open),
+                mqar: Some(Mqar {
+                    n: 2,
+                    n_requested: 2,
+                    target_distance: distance,
+                    distance,
+                    pair_distance: distance,
+                    queried: 0,
+                    tokens: 100,
+                }),
+                ..Tag::default()
+            },
+        }
+    }
+
+    fn recall_item(pool: Pool) -> Turn2 {
+        Turn2 {
+            intent: "user_name_query".into(),
+            category: Category2::Relation,
+            user: String::new(),
+            reply: String::new(),
+            checks: Vec::new(),
+            tag: Tag {
+                pool: Some(pool),
+                ..Tag::default()
+            },
+        }
+    }
+
+    #[test]
+    fn the_rule_baselines_on_hand_built_episodes() {
+        let history = [
+            hand_turn(
+                "Please remember: bol is 47, tamir is kavu.",
+                "Noted.",
+                &["47", "kavu"],
+            ),
+            hand_turn("The weather is nice.", "It is.", &[]),
+        ];
+        let ask = |text: &str| hand_turn(text, "", &[]);
+        // R-recency: the latest recorded value, whichever pair is asked.
+        assert_eq!(Rule::Recency.reply(&history, &ask("What is bol?")), "kavu");
+        assert_eq!(
+            Rule::Recency.reply(&history[1..], &ask("What is bol?")),
+            DONT_KNOW
+        );
+        assert_eq!(Rule::Recency.reply(&[], &ask("What is bol?")), DONT_KNOW);
+        // A later statement wins over an earlier one.
+        let later = [
+            history[0].clone(),
+            hand_turn("Actually, my name is Zeta.", "Got it.", &["Zeta"]),
+            hand_turn("How are you?", "Fine.", &[]),
+        ];
+        assert_eq!(
+            Rule::Recency.reply(&later, &ask("What is my name?")),
+            "Zeta"
+        );
+        // R-nlet: what follows the latest earlier occurrence of the query's
+        // last two words, up to the clause end.
+        assert_eq!(
+            Rule::Nlet.reply(&history, &ask("Tell me what tamir is.")),
+            "kavu"
+        );
+        assert_eq!(
+            Rule::Nlet.reply(&history, &ask("SAY WHAT BOL IS!")),
+            "47"
+        );
+        // The last two words decide: "is bol" never occurs in the history.
+        assert_eq!(Rule::Nlet.reply(&history, &ask("What is bol?")), DONT_KNOW);
+        assert_eq!(
+            Rule::Nlet.reply(&history, &ask("Tell me what tamir was.")),
+            DONT_KNOW
+        );
+        // A query of one word, and an empty history, have nothing to match.
+        assert_eq!(Rule::Nlet.reply(&history, &ask("Hi")), DONT_KNOW);
+        assert_eq!(Rule::Nlet.reply(&[], &ask("What is bol?")), DONT_KNOW);
+        // The continuation stops at the clause end, and is empty when the
+        // two words end a clause.
+        let dog = [hand_turn(
+            "My dog goes by Ziggy, and he is tiny.",
+            "Got it.",
+            &["Ziggy"],
+        )];
+        assert_eq!(
+            Rule::Nlet.reply(&dog, &ask("What did I name my dog?")),
+            "goes by ziggy"
+        );
+        let number = [hand_turn("42 is my lucky number.", "Noted.", &["42"])];
+        assert_eq!(
+            Rule::Nlet.reply(&number, &ask("Remind me of my lucky number.")),
+            ""
+        );
+        // The latest occurrence wins, and replies are history too.
+        let twice = [
+            hand_turn("The code word is alpha.", "Okay.", &["alpha"]),
+            hand_turn(
+                "Hello.",
+                "Got it, the code word is beta, and that is all.",
+                &[],
+            ),
+        ];
+        assert_eq!(
+            Rule::Nlet.reply(&twice, &ask("Remind me of the code word.")),
+            "is beta"
+        );
+        // Judged by the oracle: a recency reply that names the asked value
+        // passes, the phrasing that ended in "{k} is" leaked to R-nlet, and
+        // the revised phrasing does not.
+        let checks = [
+            Check2::V1(Check::AnyOf(vec!["kavu".into()])),
+            Check2::V1(Check::NoneOf(vec!["47".into()])),
+        ];
+        let old = "Tell me what tamir is.";
+        let revised = "Tell me what tamir was.";
+        assert!(judge_v2(
+            &checks,
+            old,
+            &Rule::Recency.reply(&history, &ask(old))
+        ));
+        assert!(judge_v2(&checks, old, &Rule::Nlet.reply(&history, &ask(old))));
+        assert!(!judge_v2(
+            &checks,
+            revised,
+            &Rule::Nlet.reply(&history, &ask(revised))
+        ));
+    }
+
+    #[test]
+    fn no_mqar_query_phrasing_ends_in_the_words_before_the_value() {
+        for template in MQAR_QUERY.train.iter().chain(MQAR_QUERY.development) {
+            let bare = template.trim_end_matches(['?', '.']);
+            assert!(!bare.ends_with("{k} is"), "{template}");
+            assert!(bare.contains("{k}"), "{template}");
+        }
+    }
+
+    #[test]
+    fn the_freeze_limit_is_strictly_below_three_fifths() {
+        let gated = |pass: usize| {
+            card_of(&[
+                ("mqar/distance/16", pass, 100),
+                ("mqar/distance/64", pass, 100),
+                ("mqar/distance/200", pass, 100),
+                ("relation/open/recall", pass, 100),
+            ])
+        };
+        assert!(gated(0).below_freeze_limit());
+        assert!(gated(59).below_freeze_limit());
+        assert!(!gated(60).below_freeze_limit());
+        // One leaking key is enough, and a key with no items does not freeze.
+        let leaking = card_of(&[
+            ("mqar/distance/16", 5, 100),
+            ("mqar/distance/64", 5, 100),
+            ("mqar/distance/200", 61, 100),
+            ("relation/open/recall", 5, 100),
+        ]);
+        assert!(!leaking.below_freeze_limit());
+        let missing = card_of(&[
+            ("mqar/distance/16", 5, 100),
+            ("mqar/distance/64", 5, 100),
+            ("relation/open/recall", 5, 100),
+        ]);
+        assert!(!missing.below_freeze_limit());
+        assert!(!Scorecard::default().below_freeze_limit());
+        assert!((wilson_upper(50, 100) - 0.5962).abs() < 2e-3);
+        assert!((wilson_upper(0, 0) - 1.0).abs() < 1e-12);
+        // The report names the leaking rule and key, and the templates
+        // behind it, the most leaking first.
+        let mut runs: BTreeMap<&'static str, RuleRun> = BTreeMap::new();
+        runs.insert(
+            Rule::Recency.name(),
+            RuleRun {
+                card: gated(10),
+                templates: BTreeMap::new(),
+            },
+        );
+        let mut leak = RuleRun {
+            card: leaking,
+            templates: BTreeMap::new(),
+        };
+        let by_template = leak
+            .templates
+            .entry("mqar/distance/200".into())
+            .or_default();
+        by_template.insert("What is {k}?".into(), (11, 50));
+        by_template.insert("Say what {k} is.".into(), (50, 50));
+        runs.insert(Rule::Nlet.name(), leak);
+        let report = freeze_report(&runs);
+        assert_eq!(report["instrument_freeze_ok"], json!(false));
+        assert_eq!(report["leaks"].as_array().map(Vec::len), Some(1));
+        assert_eq!(report["leaks"][0]["rule"], json!("R-nlet"));
+        assert_eq!(report["leaks"][0]["key"], json!("mqar/distance/200"));
+        assert_eq!(
+            report["leaks"][0]["by_template"][0]["template"],
+            json!("Say what {k} is.")
+        );
+        assert_eq!(report["gated"]["R-nlet"]["mqar/distance/200"]["below_limit"], json!(false));
+        assert_eq!(report["gated"]["R-recency"]["mqar/distance/200"]["below_limit"], json!(true));
+        // Both below the limit: the instrument freezes.
+        runs.insert(
+            Rule::Nlet.name(),
+            RuleRun {
+                card: gated(3),
+                templates: BTreeMap::new(),
+            },
+        );
+        let report = freeze_report(&runs);
+        assert_eq!(report["instrument_freeze_ok"], json!(true));
+        assert_eq!(report["leaks"].as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn the_rules_stay_below_the_freeze_limit_on_the_development_cell() {
+        let mut world = world();
+        let mut rng = Rng::new(9_101);
+        let runs = run_rules(&mut world, &mut rng, Cell::GATED, 1_500).expect("rule runs");
+        let report = freeze_report(&runs);
+        assert_eq!(
+            report["instrument_freeze_ok"],
+            json!(true),
+            "{}",
+            serde_json::to_string_pretty(&report).unwrap_or_default()
+        );
+        // The world's own reference replies pass every item: the oracle
+        // judges what it should, so the rules' rates are not a harness slip.
+        let reference = runs.get(REFERENCE).expect("the reference row");
+        assert!(reference.card.a1_gate());
+        for key in gated_keys() {
+            assert!((reference.card.rate(&key) - 1.0).abs() < 1e-12, "{key}");
+        }
+        assert!(reference.card.rate("copy") > 0.999);
+        // Every gated key was scored.
+        for name in [Rule::Recency.name(), Rule::Nlet.name()] {
+            for key in gated_keys() {
+                assert!(runs[name].card.cell(&key).1 > 50, "{name} {key}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_relation_episode_states_a_second_relation_at_the_designed_share() {
+        let mut world = only(0.0, 0.0, 1.0, 0.0);
+        let all = episodes(&mut world, Split::Development, 61, 2_000);
+        let name_of = |intent: &str, suffix: &str| -> Option<String> {
+            intent.strip_suffix(suffix).map(str::to_owned)
+        };
+        let mut with_second = 0usize;
+        for conversation in &all {
+            let statements: Vec<&Turn2> = conversation
+                .turns
+                .iter()
+                .filter(|t| t.intent.ends_with("_assert") || t.intent.ends_with("_update"))
+                .collect();
+            let queried = statements
+                .first()
+                .and_then(|t| name_of(&t.intent, "_assert"))
+                .expect("the queried relation is stated first");
+            let query = conversation.turns.last().expect("a query");
+            let second: Vec<&&Turn2> = statements
+                .iter()
+                .filter(|t| name_of(&t.intent, "_assert").is_some_and(|n| n != queried))
+                .collect();
+            assert!(second.len() <= 1);
+            with_second += second.len();
+            // The second relation is stated after every statement of the
+            // queried one, is never the one asked, and its value is never
+            // the answer.
+            if let Some(stated) = second.first() {
+                let last_of_queried = statements
+                    .iter()
+                    .rposition(|t| {
+                        t.intent.starts_with(&format!("{queried}_"))
+                    })
+                    .expect("a statement of the queried relation");
+                let at = statements
+                    .iter()
+                    .position(|t| std::ptr::eq(*t, **stated))
+                    .expect("the second statement");
+                assert!(at > last_of_queried, "{:?}", conversation.turns);
+                if let Some(answer) = &query.tag.answer {
+                    assert!(!stated.tag.values.contains(answer));
+                    assert_eq!(
+                        query.intent.strip_suffix("_query"),
+                        Some(queried.as_str()),
+                        "the query asks the first relation"
+                    );
+                } else {
+                    // An abstention asks for a relation stated nowhere.
+                    let asked = name_of(&query.intent, "_absent").expect("an abstention");
+                    assert!(!statements
+                        .iter()
+                        .any(|t| t.intent.starts_with(&format!("{asked}_"))));
+                }
+            }
+        }
+        let share = with_second as f64 / all.len() as f64;
+        assert!(
+            (share - 0.75).abs() < 0.04,
+            "a second relation in {share} of the episodes"
+        );
+    }
+
+    #[test]
+    fn cells_use_their_own_phrasings_and_values() {
+        let train: BTreeSet<&str> = MWorld2::templates(Split::Train).into_iter().collect();
+        let development: BTreeSet<&str> =
+            MWorld2::templates(Split::Development).into_iter().collect();
+        assert!(train.is_disjoint(&development));
+        let closed_values = |split: Split| -> BTreeSet<&'static str> {
+            relations()
+                .iter()
+                .filter_map(|r| match r.values {
+                    Values::Closed(t, d) => Some(if split == Split::Train { t } else { d }),
+                    _ => None,
+                })
+                .flatten()
+                .copied()
+                .collect()
+        };
+        // A town's split is its stem's; every other open value's is its own.
+        let belongs = |value: &str, split: Split| -> bool {
+            let lower = value.to_lowercase();
+            split_of(&lower) == split
+                || TOWN_SUFFIXES.iter().any(|suffix| {
+                    lower
+                        .strip_suffix(suffix)
+                        .is_some_and(|stem| !stem.is_empty() && split_of(stem) == split)
+                })
+        };
+        let mut open_values: BTreeMap<Split, BTreeSet<String>> = BTreeMap::new();
+        let mut streams: BTreeMap<Cell, Vec<Conversation2>> = BTreeMap::new();
+        for cell in Cell::ALL {
+            let mut world = world();
+            let mut rng = Rng::new(77);
+            let mut checked = 0usize;
+            for index in 0..600 {
+                let conversation = world.conversation_in(&mut rng, cell).expect("an episode");
+                if index < 30 {
+                    streams.entry(cell).or_default().push(conversation.clone());
+                }
+                let (mine, other) = match cell.phrasing {
+                    Split::Train => (&train, &development),
+                    Split::Development => (&development, &train),
+                };
+                for turn in &conversation.turns {
+                    if let Some(template) = &turn.tag.template {
+                        checked += 1;
+                        assert!(mine.contains(template.as_str()), "{cell:?} {template}");
+                        assert!(!other.contains(template.as_str()), "{cell:?} {template}");
+                    }
+                    // Open values belong to the value split.
+                    for value in &turn.tag.values {
+                        assert!(belongs(value, cell.value), "{cell:?} {value}");
+                        open_values
+                            .entry(cell.value)
+                            .or_default()
+                            .insert(value.to_lowercase());
+                    }
+                    if let (Some(answer), Some(pool)) = (&turn.tag.answer, turn.tag.pool) {
+                        match pool {
+                            Pool::Open => {
+                                assert!(belongs(answer, cell.value), "{cell:?} {answer}");
+                            }
+                            Pool::Closed => assert!(
+                                closed_values(cell.value).contains(answer.as_str()),
+                                "{cell:?} {answer}"
+                            ),
+                        }
+                    }
+                }
+                // An MQAR lead-in is a template of the phrasing split, and
+                // not of the other.
+                if conversation.kind == Kind::Mqar {
+                    let first = &conversation.turns[0].user;
+                    let from = |p: &Phrasings, split: Split| {
+                        let list = match split {
+                            Split::Train => p.train,
+                            Split::Development => p.development,
+                        };
+                        list.iter()
+                            .any(|t| first.starts_with(t.split("{p}").next().unwrap_or("?")))
+                    };
+                    let other_split = match cell.phrasing {
+                        Split::Train => Split::Development,
+                        Split::Development => Split::Train,
+                    };
+                    assert!(from(&MQAR_LEAD, cell.phrasing), "{first}");
+                    assert!(!from(&MQAR_LEAD, other_split), "{first}");
+                }
+            }
+            assert!(checked > 300, "{cell:?} {checked}");
+        }
+        // No open value of one split appears in the other, across cells.
+        let (train_values, development_values) = (
+            &open_values[&Split::Train],
+            &open_values[&Split::Development],
+        );
+        assert!(train_values.len() > 500 && development_values.len() > 500);
+        assert!(train_values.is_disjoint(development_values));
+        // The four cells are four different streams.
+        let all: Vec<(&Cell, &Vec<Conversation2>)> = streams.iter().collect();
+        assert_eq!(all.len(), 4);
+        for (i, (a, first)) in all.iter().enumerate() {
+            for (b, second) in &all[i + 1..] {
+                assert_ne!(first, second, "{a:?} {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_same_split_cell_is_the_plain_split() {
+        for split in [Split::Train, Split::Development] {
+            let plain = episodes(&mut world(), split, 91, 300);
+            let mut cells = world();
+            let mut rng = Rng::new(91);
+            let cell: Vec<Conversation2> = (0..300)
+                .map(|_| {
+                    cells
+                        .conversation_in(&mut rng, Cell::same(split))
+                        .expect("an episode")
+                })
+                .collect();
+            assert_eq!(plain, cell);
+        }
+        assert_eq!(Cell::same(Split::Development), Cell::GATED);
+        assert_eq!(Cell::ALL.len(), 4);
+        let keys: BTreeSet<&str> = Cell::ALL.iter().map(|c| c.key()).collect();
+        assert_eq!(keys.len(), 4);
+    }
+
+    #[test]
+    fn the_a1_gate_is_unchanged_on_a_fixed_report() {
+        // 27/30 at each distance and 18/20 on the open relation: exactly 0.9.
+        let rows = |shortfall: Option<&str>| {
+            let of = |key: &str, pass: usize, total: usize| {
+                (
+                    key.to_owned(),
+                    if shortfall == Some(key) { pass - 1 } else { pass },
+                    total,
+                )
+            };
+            [
+                of("mqar/distance/16", 27, 30),
+                of("mqar/distance/64", 27, 30),
+                of("mqar/distance/200", 27, 30),
+                of("relation/open/recall", 18, 20),
+            ]
+        };
+        let build = |shortfall: Option<&str>| {
+            let mut card = Scorecard::default();
+            for (key, pass, total) in rows(shortfall) {
+                for i in 0..total {
+                    card.add(key.clone(), i < pass);
+                }
+            }
+            card
+        };
+        let card = build(None);
+        assert!(card.a1_gate());
+        let report = card.to_json();
+        assert_eq!(report["a1_gate"], json!(true));
+        assert_eq!(
+            report["a1_gate_rule"],
+            json!("MQAR recall >= 0.9 at every distance (16, 64, 200) AND open-relation recall >= 0.9; an empty cell fails")
+        );
+        assert_eq!(
+            report["mqar"]["by_distance"]["200"],
+            json!({"pass": 27, "of": 30, "rate": 0.9})
+        );
+        assert_eq!(
+            report["relation"]["open"],
+            json!({"pass": 18, "of": 20, "rate": 0.9})
+        );
+        // One item fewer at any gated key fails the gate.
+        for key in gated_keys() {
+            assert!(!build(Some(key.as_str())).a1_gate(), "{key}");
+        }
+        // The cells decide on the development cell alone.
+        let mut cells = CellScores::default();
+        for cell in Cell::ALL {
+            let pass = cell == Cell::PURE_RETRIEVAL;
+            for d in DISTANCES {
+                for _ in 0..10 {
+                    cells.record(cell, &mqar_item(d), pass);
+                }
+            }
+            for _ in 0..10 {
+                cells.record(cell, &recall_item(Pool::Open), pass);
+            }
+        }
+        assert!(!cells.a1_gate(), "only the pure-retrieval cell passes");
+        let mut gated = CellScores::default();
+        for d in DISTANCES {
+            for _ in 0..10 {
+                gated.record(Cell::GATED, &mqar_item(d), true);
+            }
+        }
+        for _ in 0..10 {
+            gated.record(Cell::GATED, &recall_item(Pool::Open), true);
+        }
+        assert!(gated.a1_gate());
+        assert!(!CellScores::default().a1_gate());
+        let report = cells.to_json();
+        assert_eq!(report["a1_gate"], json!(false));
+        assert_eq!(report["gated_cell"], json!("dev_phrasing_dev_value"));
+        assert_eq!(
+            report["pure_retrieval"]["cell"],
+            json!("train_phrasing_dev_value")
+        );
+        assert_eq!(
+            report["pure_retrieval"]["scores"]["mqar/distance/64"]["rate"],
+            json!(1.0)
+        );
+        assert_eq!(
+            report["matrix"]["dev_phrasing_dev_value"]["relation/open/recall"]["pass"],
+            json!(0)
+        );
+        // The gate and its rule appear on the development cell alone.
+        assert!(report["cells"]["dev_phrasing_dev_value"].get("a1_gate").is_some());
+        assert!(report["cells"]["train_phrasing_dev_value"].get("a1_gate").is_none());
+        assert!(report["cells"]["train_phrasing_train_value"].get("a1_gate_rule").is_none());
+    }
+
+    #[test]
+    fn the_syllable_universe_test_matches_the_generator() {
+        let mut rng = Rng::new(4);
+        for split in [Split::Train, Split::Development] {
+            for _ in 0..400 {
+                let w = word(&mut rng, split, 1, 3).expect("a word");
+                assert!(is_syllable_word(&w, 3) && in_generated_universe(&w), "{w}");
+                let n = name(&mut rng, split).expect("a name");
+                assert!(in_generated_universe(&n), "{n}");
+                let t = town(&mut rng, split).expect("a town");
+                assert!(in_generated_universe(&t), "{t}");
+                let d = digits(&mut rng, split).expect("digits");
+                assert!(in_generated_universe(&d), "{d}");
+            }
+        }
+        for outside in [
+            "Clara", "Ingrid", "Yusuf", "Halifax", "Okafor", "UA772", "48213", "12B", "5",
+            "918264",
+        ] {
+            assert!(!in_generated_universe(outside), "{outside}");
+        }
+        for inside in ["Denver", "Boulder", "kavu", "4821", "Bolville"] {
+            assert!(in_generated_universe(inside), "{inside}");
+        }
+        assert!(!is_syllable_word("", 3) && !is_syllable_word("kavu", 1));
+        assert!(is_syllable_word("kavu", 2));
     }
 
     /// The real tokenizer: every episode of every kind fits 256 tokens, the
