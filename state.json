@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 210,
-  "observed_server_time": 1790778844,
+  "sequence": 211,
+  "observed_server_time": 1790778847,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -262,17 +262,21 @@
     },
     "1544": {
       "session": "claude-lab-20260930",
-      "epoch": 2,
-      "work_card": "sha256:20d31fab5fa52b3d76bc5119aeca740ced50ea47882c326baf221599c7a417ce",
+      "epoch": 3,
+      "work_card": "sha256:5445f55dc6813c88b885d4f6079d267bfd5ab0ad6cc6b0eae3d7012338a7007a",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-      "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+      "base_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
       "paths": [
         "crates/uor-r4-workbench/src/comparison.rs",
         "crates/uor-r4-workbench/src/host.rs",
-        "crates/uor-r4-core/tests/conditioned_skip_engram_syntactic_tests.rs"
+        "crates/uor-r4-core/tests/conditioned_skip_engram_syntactic_tests.rs",
+        "crates/uor-r4-core/tests/hierarchical_routing_tests.rs",
+        "crates/uor-r4-core/src/bin/kvar_relative_energy.rs",
+        "crates/uor-r4-core/src/bin/support/kvar_relative_energy.rs",
+        "crates/uor-r4-core/src/bin/kvar-recall.rs"
       ],
-      "expires": 1790778844,
-      "phase": "released",
+      "expires": 1790780047,
+      "phase": "claimed",
       "checkpoint": null
     }
   },

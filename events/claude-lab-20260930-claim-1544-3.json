@@ -1,0 +1,24 @@
+{
+  "event": {
+    "base_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1544-3",
+    "issue": 1544,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-workbench/src/comparison.rs",
+      "crates/uor-r4-workbench/src/host.rs",
+      "crates/uor-r4-core/tests/conditioned_skip_engram_syntactic_tests.rs",
+      "crates/uor-r4-core/tests/hierarchical_routing_tests.rs",
+      "crates/uor-r4-core/src/bin/kvar_relative_energy.rs",
+      "crates/uor-r4-core/src/bin/support/kvar_relative_energy.rs",
+      "crates/uor-r4-core/src/bin/kvar-recall.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "same-session successor card v3 https://github.com/UOR-Foundation/uor-r4/issues/1544#issuecomment-5913425023; epoch 2 released by claude-lab-20260930-release-1544-e2; source codex/fix-workbench-compile@db4671a4 pushed",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:5445f55dc6813c88b885d4f6079d267bfd5ab0ad6cc6b0eae3d7012338a7007a"
+  },
+  "observed_server_time": 1790778847,
+  "previous_head": "4b88a28c612a2cc2cf99549447710255a8d4e2da"
+}
