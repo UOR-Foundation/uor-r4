@@ -1940,7 +1940,8 @@ mod tests {
             *issue = issue_number;
             *paths = vec![format!("src/issue-{issue_number}")];
         }
-        s.transition(&second_claim, 4).unwrap();
+        s.transition(&second_claim, s.observed_server_time.max(4))
+            .unwrap();
         let id = if issue_number == 2 {
             "job-two".to_string()
         } else {
@@ -2477,8 +2478,11 @@ mod tests {
     }
 
     #[test]
-    fn a_second_task_cannot_reserve_the_same_host_until_the_first_is_finalized() {
+    fn exclusive_task_blocks_partner_until_finalized() {
         let mut state = reserved_state();
+        let first = state.attempts.get_mut("job-one").unwrap();
+        first.spec.as_mut().unwrap().exclusive = true;
+        first.spec_sha256 = Some(spec_digest(first.spec.as_ref().unwrap()).unwrap());
         let mut other_claim = claim("one", None);
         if let Action::Claim { issue, paths, .. } = &mut other_claim.action {
             *issue = 2;
