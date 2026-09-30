@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 125,
-  "observed_server_time": 1790757424,
+  "sequence": 126,
+  "observed_server_time": 1790757427,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -147,12 +147,12 @@
     },
     "1520": {
       "session": "kimi-coordinator-20260930",
-      "epoch": 7,
+      "epoch": 8,
       "work_card": "sha256:c5e27e6bfae8813bcdccb559d7ce606a78f05a07030e0dca8d58bb50d2c2b9cc",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
       "paths": [],
-      "expires": 1790757156,
+      "expires": 1790758627,
       "phase": "claimed",
       "checkpoint": {
         "attempt": "continuity-pilot-20260930-c",
