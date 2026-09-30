@@ -1,0 +1,11 @@
+{
+  "event": {
+    "epoch": 2,
+    "event_id": "1582b832-087d-49d4-85b3-8e967d70def8",
+    "issue": 1520,
+    "op": "release",
+    "session": "codex-storage-pilot-successor"
+  },
+  "observed_server_time": 1790736510,
+  "previous_head": "d4d55663989dc70993a7daeabc0ef304800902e9"
+}
