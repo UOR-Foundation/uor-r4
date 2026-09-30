@@ -1,0 +1,20 @@
+{
+  "event": {
+    "base_sha": "d563b02f3270a2c931a7905d6624ba0beeb71d2a",
+    "dependencies": [],
+    "event_id": "claude-lab-20260930-claim-1541-2",
+    "issue": 1541,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/examples/m-world.rs",
+      "crates/uor-r4-training/src/milestone_world_v2.rs",
+      "crates/uor-r4-training/data/a1-english-probe.json"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "same-session reacquisition after a lapsed lease: claude-lab-20260930 heartbeats stopped 08:18-08:39 UTC while its delegated phase-1 engineer kept editing the three claimed files on codex/a1-retrieval-integration (last pushed b1c53c88); work card v1 sha256:d84f06e3a611513e1efdc606f45ea2d948396c7f2c7887cf3d1ea0d0eb4b585d unchanged; no other session claimed #1541",
+    "session": "claude-lab-20260930",
+    "work_card": "sha256:d84f06e3a611513e1efdc606f45ea2d948396c7f2c7887cf3d1ea0d0eb4b585d"
+  },
+  "observed_server_time": 1790757561,
+  "previous_head": "ad47af0373d9a18edea29c9e13ceaf9c9014e046"
+}
