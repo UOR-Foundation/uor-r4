@@ -1186,7 +1186,7 @@ fn test_pointer_copy_boosts_prior_token_logits_and_preserves_across_save_restore
     // 3. Save / restore state roundtrip preserves copy_scale_q16 and produces bit-identical continuation
     let saved = copy_session.save_state();
     assert_eq!(saved.copy_scale_q16, 1 << 16);
-    assert_eq!(saved.position, prompt.len());
+    assert_eq!(saved.position, prompt.len() as u64);
 
     let mut restored_session = model.session();
     restored_session.restore_state(&saved).expect("restore state");
@@ -1265,8 +1265,8 @@ fn test_pointer_copy_retrieval_boost_argmax_override_and_duplicate_accumulation(
     for &tok in &prompt {
         strong_copy.step(tok).expect("strong copy step");
     }
-    let strong_continuation = strong_copy.step(5).expect("strong copy step 5");
-    let winner = super::stack_argmax(strong_continuation) as u32;
+    let strong_continuation = strong_copy.step(5).expect("strong copy step 5").to_vec();
+    let winner = super::stack_argmax(&strong_continuation) as u32;
     assert!(
         prompt.contains(&winner),
         "under strong copy scale, a prefix token ({winner}) must win argmax through pointer retrieval"
