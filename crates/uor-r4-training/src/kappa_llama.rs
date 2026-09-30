@@ -47,6 +47,12 @@ use serde_json::Value;
 
 use crate::{invalid, Result};
 
+pub use crate::flock::{
+    flock_row_weights, flock_select, rank_table, raw_rank_weights, softmax_over_support,
+    FlockEntry, FlockScan, FlockSelect, FlockSelection, FlockSlot, FlockSpec, FlockStats,
+    FlockWeights, FLOCK_SELECTOR_VERSION,
+};
+
 /// Name of the per-head log curvature scale (`kappa = exp(2 log_eps)`).
 pub const LOG_EPS: &str = "curvature.log_eps";
 /// Name of the per-head log inverse temperature.
@@ -99,145 +105,14 @@ impl ScoreKind {
     }
 }
 
-/// How flock attention weights its selected support.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FlockWeights {
-    /// Arm A: the checkpoint's own softmax, restricted to the selected support.
-    Softmax,
-    /// Arm B: normalized fixed rank-indexed weights `w_i = 1 / (i + 1)`, where
-    /// `i` is the Lorentz-rank position of the key inside the support. No
-    /// exponentials.
-    Rank,
-}
-
-impl FlockWeights {
-    pub fn parse(text: &str) -> Result<Self> {
-        match text {
-            "softmax" => Ok(Self::Softmax),
-            "rank" => Ok(Self::Rank),
-            _ => Err(invalid(format!(
-                "weights must be softmax or rank, not {text}"
-            ))),
-        }
-    }
-}
-
-/// Training-free flock attention: sink + local window + exact top-k by Lorentz
-/// rank, over the checkpoint's own (dot) scores.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FlockSpec {
-    /// Exact top-k keys by Lorentz score from the non-sink, non-window past.
-    pub k: usize,
-    /// Nearest preceding positions always included (including the query itself).
-    pub window: usize,
-    /// Which weight arm to use.
-    pub weights: FlockWeights,
-}
-
-/// Role of a selected key inside the flock support.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FlockSlot {
-    /// The first position's key, always included.
-    Sink,
-    /// One of the nearest `window` causally visible positions.
-    Window,
-    /// An exact top-k key outside the window.
-    TopK,
-}
-
-/// Per-(batch, head, query) support-selection statistics over a probe run.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct FlockStats {
-    pub queries: u64,
-    pub selected: u64,
-    pub sink: u64,
-    pub window: u64,
-    pub top_k: u64,
-}
-
-impl FlockStats {
-    pub fn add(&mut self, other: &FlockStats) {
-        self.queries += other.queries;
-        self.selected += other.selected;
-        self.sink += other.sink;
-        self.window += other.window;
-        self.top_k += other.top_k;
-    }
-
-    pub fn mean_selected(&self) -> f64 {
-        if self.queries == 0 {
-            return 0.0;
-        }
-        self.selected as f64 / self.queries as f64
-    }
-
-    fn share(&self, part: u64) -> f64 {
-        if self.selected == 0 {
-            return 0.0;
-        }
-        part as f64 / self.selected as f64
-    }
-
-    pub fn sink_share(&self) -> f64 {
-        self.share(self.sink)
-    }
-
-    pub fn window_share(&self) -> f64 {
-        self.share(self.window)
-    }
-
-    pub fn top_k_share(&self) -> f64 {
-        self.share(self.top_k)
-    }
-}
-
-/// Normalized fixed rank table `w_i = 1 / (i + 1)` over `n` entries.
-pub fn rank_table(n: usize) -> Vec<f32> {
-    let raw: Vec<f64> = (0..n).map(|i| 1.0 / (i as f64 + 1.0)).collect();
-    let sum: f64 = raw.iter().sum();
-    raw.iter().map(|w| (w / sum) as f32).collect()
-}
-
-/// Exact flock support for one query row. `lorentz[i]` is the Minkowski product
-/// `-q0 k0 + q . k` of the query with position `i` (positions `0..=query`, all
-/// causally visible). The support is the sink followed by the `window` nearest
-/// positions and the exact top-`k` of the rest; no approximation, no index.
-///
-/// The returned order is (sink, window ascending, top-k by descending Lorentz
-/// score with ties broken by position).
-pub fn flock_support(
-    lorentz: &[f32],
-    query: usize,
-    k: usize,
-    window: usize,
-) -> Result<Vec<(usize, FlockSlot)>> {
-    if lorentz.len() != query + 1 {
-        return Err(invalid(format!(
-            "flock row has {} scores for query {query}",
-            lorentz.len()
-        )));
-    }
-    if window == 0 {
-        return Err(invalid("flock window must be positive"));
-    }
-    let mut support = vec![(0usize, FlockSlot::Sink)];
-    let window_start = (query + 1).saturating_sub(window).max(1);
-    for position in window_start..=query {
-        support.push((position, FlockSlot::Window));
-    }
-    let mut rest: Vec<usize> = (1..window_start).collect();
-    rest.sort_by(|&a, &b| lorentz[b].total_cmp(&lorentz[a]).then_with(|| a.cmp(&b)));
-    support.extend(rest.into_iter().take(k).map(|p| (p, FlockSlot::TopK)));
-    Ok(support)
-}
-
 /// Flock attention probabilities `(batch, heads, time, time)`, training-free.
 ///
 /// Keys are lifted to the Lorentz model as `x_L = (sqrt(1 + |x|^2), x)` and
 /// ranked by the Minkowski product `-q0 k0 + q . k`, which is monotone
 /// (`-cosh d`); **no `arcosh` is evaluated**. The `sqrt` is the ordinary f32
-/// tensor square root.
+/// tensor square root. The support and both weight arms come from the shared
+/// pure selector in [`crate::flock`]; this adapter only lifts the rows and
+/// writes the dense probability tensor.
 pub fn flock_probabilities(
     query: &Tensor,
     key: &Tensor,
@@ -258,7 +133,7 @@ pub fn flock_probabilities(
     let k0_t = k0.transpose(2, 3)?.contiguous()?;
     // -q0 k0 + q . k
     let lorentz = dot.sub(&q0.matmul(&k0_t)?)?;
-    // Arm A scores: the checkpoint's own scaled dot product.
+    // Arm S scores: the checkpoint's own scaled dot product.
     let scaled = dot.affine(1.0 / (head_dim as f64).sqrt(), 0.0)?;
     let cpu = Device::Cpu;
     let lorentz = lorentz.to_device(&cpu)?.flatten_all()?.to_vec1::<f32>()?;
@@ -267,49 +142,12 @@ pub fn flock_probabilities(
     for row in 0..batch * heads {
         let matrix = row * time * time;
         for position in 0..time {
-            let scores =
-                &lorentz[matrix + position * time..matrix + position * time + position + 1];
-            let support = flock_support(scores, position, spec.k, spec.window)?;
-            stats.queries += 1;
-            stats.selected += support.len() as u64;
-            for &(_, slot) in &support {
-                match slot {
-                    FlockSlot::Sink => stats.sink += 1,
-                    FlockSlot::Window => stats.window += 1,
-                    FlockSlot::TopK => stats.top_k += 1,
-                }
-            }
             let base = matrix + position * time;
-            match spec.weights {
-                FlockWeights::Softmax => {
-                    let mut maximum = f32::NEG_INFINITY;
-                    for &(index, _) in &support {
-                        maximum = maximum.max(scaled[base + index]);
-                    }
-                    let mut sum = 0f64;
-                    for &(index, _) in &support {
-                        let weight = f64::from((scaled[base + index] - maximum).exp());
-                        probability[base + index] = weight as f32;
-                        sum += weight;
-                    }
-                    for &(index, _) in &support {
-                        probability[base + index] =
-                            (f64::from(probability[base + index]) / sum) as f32;
-                    }
-                }
-                FlockWeights::Rank => {
-                    let mut ranked: Vec<usize> = support.iter().map(|&(index, _)| index).collect();
-                    ranked.sort_by(|&a, &b| {
-                        lorentz[base + b]
-                            .total_cmp(&lorentz[base + a])
-                            .then_with(|| a.cmp(&b))
-                    });
-                    let table = rank_table(ranked.len());
-                    for (rank, index) in ranked.iter().enumerate() {
-                        probability[base + index] = table[rank];
-                    }
-                }
-            }
+            let rank_row = &lorentz[base..base + position + 1];
+            let model_row = &scaled[base..base + position + 1];
+            let weighted = flock_row_weights(rank_row, model_row, position, &spec)?;
+            stats.record(&weighted.selection.scan);
+            probability[base..base + position + 1].copy_from_slice(&weighted.weights);
         }
     }
     Ok(Tensor::from_vec(
@@ -1755,28 +1593,6 @@ mod tests {
     }
 
     #[test]
-    fn flock_support_selects_exact_sink_window_and_topk() {
-        let scores = [0.0f32, 1.0, 2.0, 9.0, 3.0, 8.0, 4.0, 5.0, 6.0, 7.0, 0.5];
-        let support = flock_support(&scores, 10, 2, 4).expect("support");
-        assert_eq!(
-            support,
-            vec![
-                (0, FlockSlot::Sink),
-                (7, FlockSlot::Window),
-                (8, FlockSlot::Window),
-                (9, FlockSlot::Window),
-                (10, FlockSlot::Window),
-                (3, FlockSlot::TopK),
-                (5, FlockSlot::TopK),
-            ]
-        );
-        let first = flock_support(&scores[..1], 0, 7, 64).expect("first");
-        assert_eq!(first, vec![(0, FlockSlot::Sink)]);
-        assert!(flock_support(&scores, 10, 2, 0).is_err());
-        assert!(flock_support(&scores[..5], 10, 2, 4).is_err());
-    }
-
-    #[test]
     fn flock_top1_is_the_exact_copy_pointer() {
         let device = Device::Cpu;
         let time = 12usize;
@@ -1849,11 +1665,21 @@ mod tests {
                 -(1.0 + q2).sqrt() * (1.0 + k2).sqrt() + dot
             })
             .collect();
-        let support = flock_support(&lorentz, 8, 8, 1).expect("support");
-        let ranked: Vec<usize> = support
+        let selection = flock_select(
+            &lorentz,
+            8,
+            FlockSelect {
+                sink: 0,
+                window: 1,
+                k: 8,
+            },
+        )
+        .expect("selection");
+        let ranked: Vec<usize> = selection
+            .entries
             .iter()
-            .filter(|(_, slot)| *slot == FlockSlot::TopK)
-            .map(|(index, _)| *index)
+            .filter(|entry| entry.slot == FlockSlot::TopK)
+            .map(|entry| entry.position)
             .collect();
         // Reference: true hyperbolic distance d = arcosh(q0 k0 - q . k).
         let distance = |k: &[f32]| -> f64 {
