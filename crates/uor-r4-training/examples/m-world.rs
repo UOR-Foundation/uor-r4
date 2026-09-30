@@ -843,12 +843,14 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     let count = |text: &str| tokenizer.encode(text).len();
     let mut world = MWorld2::new(&count, mix)?;
     let mut rng = Rng::new(seed);
-    // The sealed English probe is never trained on: a conversation that shares
-    // an 8-word user-turn n-gram with it is drawn again.
+    // Training excludes the sealed English probe by an overlap rule: a
+    // conversation that shares an 8-word user-turn n-gram with it is drawn
+    // again. Shorter user turns escape the rule; it is not complete
+    // decontamination.
     let probe_items = probe()?;
     let probe_grams = probe_ngrams(&probe_items);
-    // The chat-v0 split is screened by the same rule: the probe is never
-    // trained on, whichever source a document comes from.
+    // The chat-v0 split is screened by the same rule, whichever source a
+    // document comes from.
     let screened = match &chat {
         Some(chat) => Some(screen_chat(chat, &tokenizer, &protocol, &probe_grams)?),
         None => None,
@@ -2239,7 +2241,7 @@ fn probe_evaluate(args: &Args, out: &Path) -> Result<()> {
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
         "history": "reference: the scored turn is answered after the item's own earlier replies",
-        "scope": "a sealed English retrieval probe, never trained on; a result on it is not chat quality",
+        "scope": "a sealed English retrieval probe, excluded from training by the 8-word user-turn overlap screen (not complete decontamination); a result on it is not chat quality",
         "context": context,
         "max_new_tokens": max_new_tokens,
         "items": items.len(),

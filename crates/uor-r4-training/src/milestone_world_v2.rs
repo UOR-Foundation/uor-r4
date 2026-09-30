@@ -65,14 +65,15 @@
 //!   the query asks either of the two on a fair coin drawn from the episode's
 //!   seeded stream, whatever order they were stated in. [`DISTRACTOR`] is now
 //!   only the order: the share of episodes with an update that state the
-//!   companion after it (otherwise the update comes last). A query-blind rule
-//!   over the stated values (the latest, the first, the k-th) is right on
-//!   about half of the items. The companion is always stated because a share
-//!   `s` of one-relation episodes, which every such rule answers, lets the best
-//!   of them score `s + (1 - s) / 2` however fair the coin: 0.625 at the former
-//!   `s = 1/4`, over the 0.6 [`FREEZE_LIMIT`]. The stream this generator draws
-//!   is pinned by a digest in the tests; [`MWorld2::digest`] hashes tables and
-//!   constants only and did not move.
+//!   companion after it (otherwise the update comes last). Each tested
+//!   query-blind rule over the stated values (the latest, the first, the k-th)
+//!   is right on at most about half of the items; some score less, since the
+//!   first raw value can be stale after an update. The companion is always
+//!   stated because a share `s` of one-relation episodes, which every such
+//!   rule answers, lets the best of them score `s + (1 - s) / 2` however fair
+//!   the coin: 0.625 at the former `s = 1/4`, over the 0.6 [`FREEZE_LIMIT`].
+//!   The stream this generator draws is pinned by a digest in the tests;
+//!   [`MWorld2::digest`] hashes tables and constants only and did not move.
 //! - **Recorded facts.** A [`Tag`] carries the phrasing template, the gold
 //!   value and the open values a turn states, for the rules, the per-template
 //!   leak report and the teacher-forced answer-span scores.
@@ -3979,12 +3980,10 @@ mod tests {
     /// first sealed (a query-blind second-latest rule scored 22 of 30) fails
     /// this, and the rebalanced file must pass it.
     ///
-    /// PENDING-REGEN (#1541, item 2): `data/a1-english-probe.json` is authored
-    /// data, not a generator's output, and its SHA-256 pin (`PROBE_SHA256`)
-    /// lives in `milestone_world_v2_probe`, outside the files this change
-    /// owns. So the sealed file is untouched, and this test fails on purpose
-    /// until the rebalanced file (the sealed one with [`REBALANCED_ROWS`]
-    /// applied) is installed and that pin is updated.
+    /// The rebalanced file (the first sealed one with [`REBALANCED_ROWS`]
+    /// applied) is installed as `data/a1-english-probe.json` and pinned by
+    /// `PROBE_SHA256` in `milestone_world_v2_probe` (#1541, item 2), so this
+    /// test holds the installed file to the bound.
     #[test]
     fn no_query_blind_position_rule_reaches_the_freeze_limit_on_the_probe() {
         let items = probe().expect("the probe loads and validates");
@@ -3999,9 +3998,8 @@ mod tests {
         }
         assert!(
             leaks.is_empty(),
-            "PENDING-REGEN: the sealed probe is position-biased ({leaks:?}); install the \
-             rebalanced data/a1-english-probe.json and re-pin PROBE_SHA256 in \
-             milestone_world_v2_probe.rs"
+            "the installed probe is position-biased ({leaks:?}): a query-blind position \
+             rule reaches the freeze limit on data/a1-english-probe.json"
         );
     }
 
@@ -4010,9 +4008,9 @@ mod tests {
     /// of the context the item already has, so the answer moves along the
     /// stated values (one asks the fourth of four, one the first of four, four
     /// the third of three, one the second of two) and the context turns stay as
-    /// they were sealed. Applied in memory by the test below; installing them in
-    /// `data/a1-english-probe.json` (and re-pinning `PROBE_SHA256`) is the
-    /// PENDING-REGEN step, after which this table only repeats the file.
+    /// they were sealed. They are installed in `data/a1-english-probe.json`
+    /// (pinned by `PROBE_SHA256`), so this table repeats the file; the test
+    /// below applies it in memory, which leaves the installed items unchanged.
     const REBALANCED_ROWS: [(&str, &str, &str, &str, &[&str]); 7] = [
         (
             "mqar-short-06",

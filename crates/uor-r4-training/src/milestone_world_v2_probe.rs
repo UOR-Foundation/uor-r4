@@ -10,9 +10,12 @@
 //! three-word fragment of any v1 or v2 template. It is authored data, pinned by
 //! SHA-256 ([`probe_sha256`]); each item's checks are derived from its typed
 //! fields by [`ProbeItem::checks`] with the same [`Check2`] machinery the M-world
-//! oracle uses, so the probe is judged by [`judge_v2`] like every other item. It is
-//! never trained on: [`conversation_excluding_probe`] drops any world
-//! conversation that shares an 8-word user-turn n-gram with it.
+//! oracle uses, so the probe is judged by [`judge_v2`] like every other item.
+//! Training excludes it by an overlap rule only: [`conversation_excluding_probe`]
+//! drops any world conversation that shares an 8-word user-turn n-gram with it.
+//! User turns shorter than 8 words and role-marker lines inside a document can
+//! escape that rule, so it is not complete decontamination and does not by
+//! itself make the probe a final held-out set.
 //!
 //! **Teacher-forced answer-span scores** ([`answer_layout`], [`teacher_forced`])
 //! give the negative log-likelihood, in nats, of the gold reply and of the
