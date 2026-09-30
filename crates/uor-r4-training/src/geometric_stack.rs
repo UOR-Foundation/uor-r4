@@ -1457,7 +1457,7 @@ impl TransportSnap {
             scope: "The model was saved with this transport snap set: its forward pass replaced \
                     every unit transport quaternion by the nearest of these roots before its \
                     scaling by lambda, with straight-through gradients. model.safetensors holds \
-                    the float variables; StackModel::load loads them without the snap, and \
+                    the float variables; StackModel::load restores this snap, and \
                     StackModel::saved_transport_snap reads this record."
                 .to_owned(),
         }

@@ -1467,7 +1467,7 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
     if settings.qat {
         model.set_served_representation(Some(qat_codec()))?;
     }
-    // After `init=` or a resume alike: a saved model holds no snap.
+    // After `init=` or a resume alike: the requested setting replaces any snap the load restored.
     model.set_transport_snap(settings.transport_snap)?;
     // A run from a trained model scores it before any update.
     if settings.init.is_some() && progress.step == 0 {
@@ -1677,6 +1677,7 @@ fn sample_mode(arguments: &[String]) -> Result<()> {
     let seed: u64 = args.number("seed", 1)?;
     report_output::claim(&out)?;
     let result = (|| -> Result<()> {
+        // `sample` runs the artifact as saved: the load restores its transport snap by design.
         let model = StackModel::load(&model_dir, &Device::Cpu)?;
         let valid = read_tokens(&valid_path, model.config.vocab_size)?;
         let decoder = Decoder::load(merges.as_deref(), tokenizer.as_deref())?;
@@ -1717,6 +1718,7 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
     let tune_blocks: usize = args.number("tune_blocks", 64)?;
     report_output::claim(&out)?;
     let result = (|| -> Result<()> {
+        // `evaluate` runs the artifact as saved: the load restores its transport snap by design.
         let model = StackModel::load(&model_dir, &Device::Cpu)?;
         let time = model.config.context;
         let tokens = read_tokens(&tokens_path, model.config.vocab_size)?;
@@ -3231,7 +3233,7 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
             (model, optimizer, progress, Some(state))
         }
     };
-    // After `init=` or a resume alike: a saved model holds neither mode.
+    // After `init=` or a resume alike: the requested settings replace any mode the load restored.
     if s.qat {
         model.set_served_representation(Some(qat_codec()))?;
     }

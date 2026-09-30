@@ -145,7 +145,7 @@
   },
   "scope": [
     "kernel compares the D11 integer engine with the artifact own dequantized float reference: same weights and snap",
-    "first divergences only: each window first root mismatch, in layer-major, position, lane order, has reference margin at most max_reference_margin (2.811e-4); these 16 are near-ties at a snap boundary",
+    "first divergences only: each window first root mismatch, in layer-major, position, lane order, has reference margin at most max_reference_margin (2.811e-4); 14 of these 16 are below the report's 1e-4 near-tie criterion (windows 8 and 9 exceed it), all at a snap boundary",
     "the remaining root mismatches (root_mismatches minus the 16 first divergences, about 2,461) occur after a window diverged and are UNCLASSIFIED: cascade through the recurrence or a kernel error on a rare branch is not distinguished; no claim that every mismatch is a near-tie; broader parity stays open",
     "near_ties counts selections below the near-tie margin taken from the reference; they are excluded from root_mismatches by construction",
     "mean log-probability is not NLL; one model, one held-out file, 16 windows",
