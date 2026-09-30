@@ -212,7 +212,8 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
 
     // 6. Export stack artifact without calibration (using QAT weights)
     check_export_representation(record.as_ref(), false)?;
-    let (lut_bytes, summary) = export_stack(&model, "head-compensated-qat-test".into(), None, None)?;
+    let (lut_bytes, summary) =
+        export_stack(&model, "head-compensated-qat-test".into(), None, None)?;
     assert!(!lut_bytes.is_empty());
     assert_eq!(
         summary["method"]["quantizer"],
@@ -1160,8 +1161,12 @@ fn test_s2_real_proportions_exported_artifact_dequantized_weights_equal_served_v
         reloaded.set_served_representation(Some(recovered_codec.clone()))?;
         assert_eq!(reloaded.served_codec().unwrap().name(), codec.name());
 
-        let (reloaded_bytes, reloaded_summary) =
-            export_stack(&reloaded, serde_json::json!({"test": "s2_reloaded"}), None, None)?;
+        let (reloaded_bytes, reloaded_summary) = export_stack(
+            &reloaded,
+            serde_json::json!({"test": "s2_reloaded"}),
+            None,
+            None,
+        )?;
         assert_eq!(reloaded_summary["method"]["quantizer"], codec.name());
         assert_eq!(
             reloaded_bytes,
