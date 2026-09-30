@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "3bc296cafa89971d3aa0b98c0eca187d8a76ef06",
-  "sequence": 5,
-  "observed_server_time": 1790735969,
+  "sequence": 6,
+  "observed_server_time": 1790736237,
   "labs": {
     "codex-durable-20260929-root": {
       "lab": "Codex",
@@ -15,7 +15,7 @@
         "independent-subagents"
       ],
       "available": true,
-      "heartbeat": 1790735749
+      "heartbeat": 1790736237
     },
     "codex-storage-pilot-successor": {
       "lab": "Codex internal subagent",
@@ -43,7 +43,7 @@
         ".github/workflows/lab-delivery.yml",
         "AGENTS.md"
       ],
-      "expires": 1790736949,
+      "expires": 1790737437,
       "phase": "claimed",
       "checkpoint": null
     }
