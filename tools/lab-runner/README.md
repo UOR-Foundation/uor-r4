@@ -237,16 +237,21 @@ Rollback removes the new list (normal-pressure policy); it does not cancel an
 already admitted bounded job. Preserve the previous binary and policy when
 first deploying this additive runner change, and switch only after jobs drain.
 
-## Work and validation lanes (owner correction, September 30)
+## Resource-based concurrency and direct small checks (owner correction, September 30)
 
-A host may set `max_jobs: 2` to run one ordinary work attempt and one
-`validation_lane: true` attempt together. Validation is for CPU builds and unit
-checks, capped at two declared workers, 2 GiB and 600 seconds, with no GPU and
-`exclusive: false`. The default lane is ordinary and omission preserves old
-canonical spec digests. Two ordinary jobs or two validation jobs cannot reserve
-the host together. The aggregate ceiling remains eight declared workers and
-11 GiB including GPU unified memory; actual RSS and critical pressure monitoring
-continue. Set build thread environment variables to the declared limits.
+Small development checks do not require this runner or a heavy-job reservation.
+Formatting, static checks, warm-cache builds and focused unit tests may run
+from an owned worktree directly with honest bounded resources, separate build
+caches and source-bound results. Monitor actual pressure and storage; stop only
+your own work on critical pressure or exhausted physical reserves. Record costs
+once. This does not authorize hidden model campaigns or exclusive timing claims.
+
+For supervised jobs, concurrency follows combined CPU, memory and storage
+reservations. Set `max_jobs` up to the declared CPU capacity (eight on this host);
+there is no ordinary/validation lane quota. Aggregate ceilings remain eight
+workers and 11 GiB including GPU unified memory, with measured pressure/RSS
+monitoring. The optional `validation_lane` classification retains its small-job
+bounds and serialization compatibility; it does not allocate an exclusive lane.
 
 Reserve and start the first attempt before reserving its partner in the same
 canonical runner root. Unknown or queued reservations absent from the daemon's
@@ -266,15 +271,15 @@ need; true exclusive jobs still block all concurrent admission.
 
 Warning-memory admission remains the separately reviewed exact-spec policy
 above; concurrency is not permission to ignore pressure or storage. Preserve
-physical floors and new-storage projections, including both jobs. A validation
+physical floors and new-storage projections, including all jobs. A validation
 that exceeds its envelope stops with its own receipt. The scheduler transition
 must preserve any already running job's identity and immutable specification.
-The owner's one-use monitored bootstrap repair is separately recorded on #1536;
-it is not a permanent manual bypass for ordinary lab jobs.
+The initial repair bootstrap is recorded on #1536. The later direct owner
+correction permits the bounded direct development checks described above.
 
-For a second job, source/input hashing runs inside its owned supervisor before
+For an additional job, source/input hashing runs inside its owned supervisor before
 `payload.go` is opened. The same job wall/RSS/identity monitor remains active
-for both attempts during verification. Verification failures never execute the
+for all attempts during verification. Verification failures never execute the
 payload; verification output has separate logs, and late ownership/resources/
 budget are checked again before the payload gate opens. An uncertain restart
 keeps the existing fail-closed reconciliation behavior; this change does not

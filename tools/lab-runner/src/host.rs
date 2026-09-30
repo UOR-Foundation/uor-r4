@@ -53,7 +53,8 @@ impl HostPolicy {
             || policy.max_rss_gib <= 0.0
             || policy.max_rss_gib > 11.0
             || !matches!(policy.admission_pressure_max, 1 | 2)
-            || !(1..=2).contains(&policy.max_jobs)
+            || policy.max_jobs == 0
+            || policy.max_jobs > policy.max_threads as usize
             || policy.volumes.is_empty()
         {
             return Err(invalid("host policy schema or resource ceilings invalid"));
@@ -233,25 +234,19 @@ pub fn memory_pressure() -> Result<u32> {
     }
 }
 
-/// Two jobs may share the host only as one ordinary job plus one bounded
-/// validation, never two model jobs or two opportunistic validation jobs.
+/// Concurrent jobs are limited by aggregate resources, not artificial lane pairs.
 fn check_concurrent_jobs(specs: &[JobSpec]) -> Result<()> {
     if specs.len() <= 1 {
         return Ok(());
     }
-    if specs.len() != 2
-        || specs.iter().filter(|s| s.validation_lane).count() != 1
-        || specs.iter().any(|s| s.exclusive)
-    {
-        return Err(invalid(
-            "concurrency requires one nonexclusive work job and one validation job",
-        ));
+    if specs.iter().any(|s| s.exclusive) {
+        return Err(invalid("exclusive measurement requires the host"));
     }
     for spec in specs {
         spec.validate()?;
     }
     let cargo: Vec<_> = specs.iter().filter(|s| s.cargo).collect();
-    if cargo.len() == 2 {
+    if cargo.len() > 1 {
         let target = |s: &JobSpec| -> Result<PathBuf> {
             let value = s
                 .env
@@ -268,10 +263,16 @@ fn check_concurrent_jobs(specs: &[JobSpec]) -> Result<()> {
             }
             Ok(fs::canonicalize(path)?)
         };
-        let a = target(cargo[0])?;
-        let b = target(cargo[1])?;
-        if a.starts_with(&b) || b.starts_with(&a) {
-            return Err(invalid("concurrent Cargo target directories overlap"));
+        let targets = cargo
+            .iter()
+            .map(|s| target(s))
+            .collect::<Result<Vec<_>>>()?;
+        for (i, a) in targets.iter().enumerate() {
+            for b in &targets[i + 1..] {
+                if a.starts_with(b) || b.starts_with(a) {
+                    return Err(invalid("concurrent Cargo target directories overlap"));
+                }
+            }
         }
     }
     Ok(())
@@ -539,14 +540,14 @@ mod tests {
     }
 
     #[test]
-    fn concurrency_requires_distinct_lanes_and_preserves_exclusivity() {
+    fn concurrency_has_no_lane_quota_and_preserves_exclusivity() {
         let (_, work) = pressure_fixture();
         let mut validation = work.clone();
         validation.id = "validation".into();
         validation.validation_lane = true;
         assert!(check_concurrent_jobs(&[work.clone(), validation.clone()]).is_ok());
-        assert!(check_concurrent_jobs(&[work.clone(), work.clone()]).is_err());
-        assert!(check_concurrent_jobs(&[validation.clone(), validation.clone()]).is_err());
+        assert!(check_concurrent_jobs(&[work.clone(), work.clone(), work.clone()]).is_ok());
+        assert!(check_concurrent_jobs(&[validation.clone(), validation.clone()]).is_ok());
         let mut exclusive = work;
         exclusive.exclusive = true;
         assert!(check_concurrent_jobs(&[exclusive, validation]).is_err());
