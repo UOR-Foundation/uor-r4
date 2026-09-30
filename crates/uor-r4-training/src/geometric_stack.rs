@@ -2017,13 +2017,19 @@ impl CustomOp2 for StraightThrough {
 
     fn cpu_fwd(
         &self,
-        _s1: &CpuStorage,
+        s1: &CpuStorage,
         l1: &Layout,
         s2: &CpuStorage,
         l2: &Layout,
     ) -> candle_core::Result<(CpuStorage, Shape)> {
         if l1.shape() != l2.shape() {
             candle_core::bail!("straight-through inputs must have one shape");
+        }
+        if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 {
+            candle_core::bail!("straight-through requires F32 tensors");
+        }
+        if l1.shape().elem_count() == 0 {
+            candle_core::bail!("straight-through requires non-empty tensors");
         }
         Ok((
             CpuStorage::F32(contiguous(s2, l2)?.to_vec()),

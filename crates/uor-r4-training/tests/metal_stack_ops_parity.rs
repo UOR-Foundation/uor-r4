@@ -815,14 +815,33 @@ fn test_metal_stack_ops_rejections() -> uor_r4_training::Result<()> {
     // 1. StraightThrough rejects non-F32 tensors and empty tensors
     let ct_u32 = candle_core::Tensor::zeros((2, 4), candle_core::DType::U32, &cpu_dev)?;
     let q_u32 = candle_core::Tensor::zeros((2, 4), candle_core::DType::U32, &cpu_dev)?;
+    let f32_4 = candle_core::Tensor::zeros((2, 4), candle_core::DType::F32, &cpu_dev)?;
+    let f32_6 = candle_core::Tensor::zeros((2, 6), candle_core::DType::F32, &cpu_dev)?;
     assert!(
         uor_r4_training::geometric_stack::straight_through(&ct_u32, &q_u32).is_err(),
-        "straight_through must reject non-F32"
+        "straight_through must reject non-F32 (both U32)"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::straight_through(&ct_u32, &f32_4).is_err(),
+        "straight_through must reject non-F32 continuous"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::straight_through(&f32_4, &q_u32).is_err(),
+        "straight_through must reject non-F32 quantized"
+    );
+    assert!(
+        uor_r4_training::geometric_stack::straight_through(&f32_4, &f32_6).is_err(),
+        "straight_through must reject shape mismatch"
     );
     let empty_st = candle_core::Tensor::zeros((0, 4), candle_core::DType::F32, &cpu_dev)?;
     assert!(
         uor_r4_training::geometric_stack::straight_through(&empty_st, &empty_st).is_err(),
         "straight_through must reject empty tensors"
+    );
+    let empty_6 = candle_core::Tensor::zeros((0, 6), candle_core::DType::F32, &cpu_dev)?;
+    assert!(
+        uor_r4_training::geometric_stack::straight_through(&empty_st, &empty_6).is_err(),
+        "straight_through must reject empty shape mismatch"
     );
 
     // 2. SwiGLU rejects non-F32, shape mismatch, empty
