@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 87,
-  "observed_server_time": 1790747323,
+  "sequence": 88,
+  "observed_server_time": 1790747491,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -678,8 +678,14 @@
       "session": "opencode-deepseek-20260930",
       "task_epoch": 3,
       "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
-      "phase": "reserved",
-      "receipt": null,
+      "phase": "finalized",
+      "receipt": {
+        "host": "host-284b64fb2f70567aee465dc4941430076137e580d19d9568b15726d14b157cec",
+        "job_id": "opencode-b0-flock-unit-20260930-e",
+        "attempt_id": "opencode-b0-flock-unit-20260930-e",
+        "path": "/Users/casey.allard/.local/share/uor-r4/runner/done/opencode-b0-flock-unit-20260930-e/exit.json",
+        "sha256": "8b504c77d715c9aa0bde8fa25b1b8a98a06dbd32377f69b37b208963a50be3cf"
+      },
       "spec": {
         "schema": "uor-r4.lab-runner-job/1",
         "id": "opencode-b0-flock-unit-20260930-e",
