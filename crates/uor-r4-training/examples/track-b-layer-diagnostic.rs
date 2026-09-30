@@ -1018,16 +1018,99 @@ fn replay_mlp(model_path: &Path, parent: &Path, trace: &Path, out: &Path) -> Res
     )
 }
 
+fn rms_window(model_path: &Path, parent: &Path, out: &Path) -> Result<Value> {
+    report_output::verify(parent)?;
+    let inputs: Value = serde_json::from_slice(&fs::read(parent.join("inputs.json"))?)?;
+    let prior: Value = serde_json::from_slice(&fs::read(parent.join("result.json"))?)?;
+    if prior["anchors_match_bitwise"] != true
+        || inputs["tokens"] != json!([1, 2, 3, 4, 5, 6, 7, 8])
+        || inputs["batch"] != 1
+        || inputs["time"] != 8
+    {
+        return Err("requires anchored fixed eight-token trace".into());
+    }
+    for name in [
+        "config.json",
+        "model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ] {
+        if inputs["parent_inputs"]["sha256"][name] != sha256_file(&model_path.join(name))? {
+            return Err(format!("input mismatch: {name}").into());
+        }
+    }
+    fs::write(
+        out.join("inputs.json"),
+        serde_json::to_vec_pretty(&json!({
+            "source_revision":option_env!("TRACK_B_SOURCE_REVISION").ok_or("missing source")?,
+            "source_diff_sha256":option_env!("TRACK_B_SOURCE_DIFF_SHA256").ok_or("missing diff")?,
+            "executable_sha256":sha256_file(&std::env::current_exe()?)?,"parent_manifest_sha256":sha256_file(&parent.join("manifest.json"))?,
+            "parent_inputs":inputs,"tokens":[1,2,3,4,5,6,7,8],"batch":1,"time":8,"tolerance":1e-4,
+            "scope":"shared RMS candidate fixed-window check; no full gate qualification"
+        }))?,
+    )?;
+    let reference = floats(&parent.join("reference-logits.f32le"))?;
+    if reference.len() != T * V {
+        return Err("incomplete reference logits".into());
+    }
+    let mut backends = Vec::new();
+    let mut passes = true;
+    for name in ["cpu", "metal"] {
+        let device = if name == "cpu" {
+            Device::Cpu
+        } else {
+            Device::new_metal(0)?
+        };
+        let model = TrackBModel::load(model_path, &device)?;
+        let ids: Vec<u32> = (1..=8).collect();
+        let logits = model.forward(&ids, 1, T)?.flatten_all()?.to_vec1::<f32>()?;
+        let old = floats(&parent.join(format!("{name}-logits.f32le")))?;
+        if logits.len() != T * V || old.len() != T * V {
+            return Err("incomplete candidate/parent logits".into());
+        }
+        write_floats(&out.join(format!("{name}-logits.f32le")), &logits)?;
+        let mut rows = Vec::new();
+        for pos in 0..T {
+            let range = pos * V..(pos + 1) * V;
+            let expected = &reference[range.clone()];
+            let actual = &logits[range.clone()];
+            let previous = &old[range];
+            let difference = compare(expected, actual)?;
+            let baseline = compare(expected, previous)?;
+            let fails = expected
+                .iter()
+                .zip(actual)
+                .filter(|(a, b)| (f64::from(**a) - f64::from(**b)).abs() > 1e-4)
+                .count();
+            let prior_fails = expected
+                .iter()
+                .zip(previous)
+                .filter(|(a, b)| (f64::from(**a) - f64::from(**b)).abs() > 1e-4)
+                .count();
+            passes &= fails == 0;
+            rows.push(json!({"position":pos,"candidate_vs_reference":difference,"parent_vs_reference":baseline,
+                "candidate_failing_logits":fails,"parent_failing_logits":prior_fails,"candidate_vs_parent":compare(previous,actual)?}));
+        }
+        backends.push(json!({"backend":name,"rows":rows}));
+    }
+    Ok(
+        json!({"schema":"uor-r4.track-b-rms-window/1","status":if passes {"PASS_WINDOW_ONLY"} else {"FAIL_NUMERICAL_GATE_WINDOW"},
+        "parent_anchors_verified":true,"window_gate_pass":passes,"parity_pass":false,"backends":backends,
+        "scope":"only shared eight-token window; full parity and stock comparators not rerun"}),
+    )
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     let layer12 = args.len() == 4 && args[3] == "replay-layer12";
     let block11 = args.len() == 4 && args[3] == "replay-block11";
     let down = args.len() == 4 && args[3] == "replay-down";
     let mlp = args.len() == 5 && args[3] == "replay-mlp";
-    let replay = layer12 || block11 || down || mlp;
+    let window = args.len() == 4 && args[3] == "rms-window";
+    let replay = layer12 || block11 || down || mlp || window;
     if args.len() != 3 && !replay {
         return Err(
-            "usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT [replay-layer12|replay-block11|replay-down|replay-mlp TRACE]"
+            "usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT [replay-layer12|replay-block11|replay-down|replay-mlp TRACE|rms-window]"
                 .into(),
         );
     }
@@ -1044,7 +1127,9 @@ fn main() -> Result<()> {
             std::process::exit(124);
         }
     });
-    let result = if mlp {
+    let result = if window {
+        rms_window(Path::new(&args[0]), Path::new(&args[1]), out)
+    } else if mlp {
         replay_mlp(
             Path::new(&args[0]),
             Path::new(&args[1]),
@@ -1062,8 +1147,9 @@ fn main() -> Result<()> {
     };
     let (value, code) = match result {
         Ok(v) => {
-            let code = if v["anchors_match_bitwise"] == true
-                || (!down && !mlp && replay && v["parent_anchors_verified"] == true)
+            let code = if (window && v["window_gate_pass"] == true)
+                || v["anchors_match_bitwise"] == true
+                || (!window && !down && !mlp && replay && v["parent_anchors_verified"] == true)
             {
                 0
             } else {

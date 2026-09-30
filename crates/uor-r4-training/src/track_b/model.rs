@@ -471,9 +471,17 @@ fn linear(input: &Tensor, weight: &Tensor) -> Result<Tensor> {
 }
 
 fn rms_norm(input: &Tensor, gain: &Tensor, epsilon: f64) -> Result<Tensor> {
-    // Unlike fused rms_norm, this primitive composition carries backward.
-    let denominator = input.sqr()?.mean_keepdim(1)?.affine(1.0, epsilon)?.sqrt()?;
-    Ok(input.broadcast_div(&denominator)?.broadcast_mul(gain)?)
+    // Preserve backward while aligning the reference scalar order. Reduction
+    // remains backend-native; this does not claim sequential-reference identity.
+    let width = Tensor::new(input.dim(1)? as f32, input.device())?;
+    let reciprocal = input
+        .sqr()?
+        .sum_keepdim(1)?
+        .broadcast_div(&width)?
+        .affine(1.0, epsilon)?
+        .sqrt()?
+        .recip()?;
+    Ok(input.broadcast_mul(&reciprocal)?.broadcast_mul(gain)?)
 }
 
 /// Match upstream Candle Cache's F32 inverse-frequency construction and device
