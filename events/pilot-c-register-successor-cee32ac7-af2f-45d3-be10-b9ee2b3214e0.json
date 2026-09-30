@@ -1,0 +1,15 @@
+{
+  "event": {
+    "adapter": "MANUAL CLI session; single operator",
+    "capabilities": [
+      "bounded inert live stewardship transfer",
+      "no model checkpoint qualification"
+    ],
+    "event_id": "pilot-c-register-successor-cee32ac7-af2f-45d3-be10-b9ee2b3214e0",
+    "lab": "Codex independent reviewer continuity drill",
+    "op": "register",
+    "session": "codex-review1-pilot-c-successor-20260930"
+  },
+  "observed_server_time": 1790739366,
+  "previous_head": "da689114eac2b03f525c481fe3c8ac88e7adde2d"
+}
