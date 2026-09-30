@@ -2136,9 +2136,10 @@ pub fn run_rules(
     conversations: usize,
 ) -> Result<BTreeMap<&'static str, RuleRun>> {
     let mut runs: BTreeMap<&'static str, RuleRun> = BTreeMap::new();
-    for name in Rule::ALL.map(Rule::name).into_iter().chain([REFERENCE]) {
-        runs.entry(name).or_default();
+    for rule in Rule::ALL {
+        runs.entry(rule.name()).or_default();
     }
+    runs.entry(REFERENCE).or_default();
     for _ in 0..conversations {
         let conversation = world.conversation_in(rng, cell)?;
         for (index, turn) in conversation.turns.iter().enumerate() {
@@ -2146,10 +2147,11 @@ pub fn run_rules(
                 continue;
             }
             let history = &conversation.turns[..index];
-            let replies = Rule::ALL
-                .iter()
-                .map(|rule| (rule.name(), rule.reply(history, turn)))
-                .chain([(REFERENCE, turn.reply.clone())]);
+            let mut replies: Vec<(&'static str, String)> = Vec::with_capacity(3);
+            for rule in Rule::ALL {
+                replies.push((rule.name(), rule.reply(history, turn)));
+            }
+            replies.push((REFERENCE, turn.reply.clone()));
             for (name, reply) in replies {
                 let pass = judge_v2(&turn.checks, &turn.user, &reply);
                 let run = runs.entry(name).or_default();
