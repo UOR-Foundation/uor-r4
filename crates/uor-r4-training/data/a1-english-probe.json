@@ -47,7 +47,7 @@
       "group": "mqar-short",
       "turns": [
         {"user": "Reminders for Saturday: Wendell is bringing the cake and Ottoline is bringing the folding tables.", "reply": "Sounds good, I will remember who is bringing what.", "values": ["Wendell", "Ottoline"]},
-        {"user": "Who is bringing the cake?", "reply": "Wendell is bringing the cake.", "answer": "Wendell", "stale": ["Ottoline"]}
+        {"user": "Who is bringing the folding tables?", "reply": "Ottoline is bringing the folding tables.", "answer": "Ottoline", "stale": ["Wendell"]}
       ]
     },
     {
@@ -55,7 +55,7 @@
       "group": "mqar-short",
       "turns": [
         {"user": "Here are the details for the move: the truck is booked for Savannah, the crew leader is Zainab, and the storage code is 77120.", "reply": "Thanks, all three details are saved.", "values": ["Savannah", "Zainab", "77120"]},
-        {"user": "Who is in charge of the move crew?", "reply": "Zainab is the crew leader.", "answer": "Zainab", "stale": ["Savannah", "77120"]}
+        {"user": "What was the storage code again?", "reply": "The storage code is 77120.", "answer": "77120", "stale": ["Savannah", "Zainab"]}
       ]
     },
     {
@@ -96,7 +96,7 @@
         {"user": "We saw a fox behind the shed.", "reply": "How exciting. Foxes are usually shy around people."},
         {"user": "The soup needs a little more salt.", "reply": "Add a pinch and taste it again."},
         {"user": "I need new running shoes soon.", "reply": "A proper fit matters. Try a few pairs first."},
-        {"user": "Who handles the catering?", "reply": "Delphine handles the catering.", "answer": "Delphine", "stale": ["Cormac", "Ottmar", "Isaac"]}
+        {"user": "Who runs registration?", "reply": "Cormac runs registration.", "answer": "Cormac", "stale": ["Delphine", "Ottmar", "Isaac"]}
       ]
     },
     {
@@ -107,7 +107,7 @@
         {"user": "The garden is full of tomatoes.", "reply": "What a harvest. Tomato sauce might be a good plan."},
         {"user": "It is quiet in the library today.", "reply": "Quiet days are good for focus."},
         {"user": "I found an old photo album.", "reply": "Old albums hold great memories. Enjoy flipping through it."},
-        {"user": "What is her badge number again?", "reply": "Her badge number is 47718.", "answer": "47718", "stale": ["Fairbanks", "Petrov"]}
+        {"user": "Who was her manager again?", "reply": "Her manager is Petrov.", "answer": "Petrov", "stale": ["Fairbanks", "47718"]}
       ]
     },
     {
@@ -129,7 +129,7 @@
         {"user": "My laptop fan is getting loud.", "reply": "Dust often causes that. A gentle cleaning may help."},
         {"user": "We repainted the hallway blue.", "reply": "Blue can look calm and bright. How did it turn out?"},
         {"user": "The bakery on my street closed.", "reply": "That is sad. A good bakery is a real loss."},
-        {"user": "Where is the March book set?", "reply": "The March book is set in Sapporo.", "answer": "Sapporo", "stale": ["Kyoto", "Nagoya", "Yakima"]}
+        {"user": "Where is the April book set?", "reply": "The April book is set in Yakima.", "answer": "Yakima", "stale": ["Kyoto", "Nagoya", "Sapporo"]}
       ]
     },
     {
@@ -189,7 +189,7 @@
         {"user": "My apartment number is 20983.", "reply": "Thanks, I have your apartment number.", "values": ["20983"]},
         {"user": "Sorry, I misread the sign, and it is actually 54167.", "reply": "Thanks for correcting that, I have 54167.", "values": ["54167"]},
         {"user": "The building code is 66041, by the way.", "reply": "Noted, I have the building code too.", "values": ["66041"]},
-        {"user": "Which apartment number did I give you?", "reply": "Your apartment number is 54167.", "answer": "54167", "stale": ["20983", "66041"]}
+        {"user": "What was the building code again?", "reply": "The building code is 66041.", "answer": "66041", "stale": ["20983", "54167"]}
       ]
     },
     {
@@ -255,7 +255,7 @@
         {"user": "The bakery down the street is run by Imogen.", "reply": "Good to know.", "values": ["Imogen"]},
         {"user": "It changed hands, and Quentin runs it now.", "reply": "Thanks, Quentin runs the bakery now.", "values": ["Quentin"]},
         {"user": "The florist next door is run by Gwen.", "reply": "Noted.", "values": ["Gwen"]},
-        {"user": "Who runs the bakery these days?", "reply": "Quentin runs the bakery.", "answer": "Quentin", "stale": ["Imogen", "Gwen"]}
+        {"user": "Who runs the florist these days?", "reply": "Gwen runs the florist.", "answer": "Gwen", "stale": ["Imogen", "Quentin"]}
       ]
     },
     {

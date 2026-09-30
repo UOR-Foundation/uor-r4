@@ -286,7 +286,10 @@ fn validate(items: &[ProbeItem]) -> Result<()> {
     let mut ids: BTreeSet<&str> = BTreeSet::new();
     for item in items {
         if !ids.insert(item.id.as_str()) || !item.id.starts_with(item.group.name()) {
-            return Err(invalid(format!("probe item id {} is repeated or misnamed", item.id)));
+            return Err(invalid(format!(
+                "probe item id {} is repeated or misnamed",
+                item.id
+            )));
         }
         let (fewest, most) = item.group.turns();
         if !(fewest..=most).contains(&item.turns.len()) {
@@ -791,7 +794,10 @@ pub fn static_report(items: &[ProbeItem], meter: &Meter<'_>, context: usize) -> 
             let reply = rule.reply(&conversation.turns[..last], scored);
             let pass = judge_v2(&scored.checks, &scored.user, &reply);
             *group.2.entry(rule.name()).or_default() += usize::from(pass);
-            rules.insert(rule.name().to_owned(), json!({"reply": reply, "pass": pass}));
+            rules.insert(
+                rule.name().to_owned(),
+                json!({"reply": reply, "pass": pass}),
+            );
         }
         rows.push(json!({
             "id": item.id,
@@ -839,7 +845,7 @@ mod tests {
     use uor_r4_tokenizer::dialogue::DialogueProtocol;
 
     /// The file's SHA-256, computed with `shasum -a 256` after it was written.
-    const PROBE_SHA256: &str = "062e61c4befe8051dc65b2ed946d722aa45b70083ec6d48660ff90f5d7cc4314";
+    const PROBE_SHA256: &str = "79433e90e4199a9c05391932590708b76c4e2ea70d7efeb7b38ed39712097add";
 
     /// About one token per three characters.
     fn toy(text: &str) -> usize {
@@ -873,9 +879,21 @@ mod tests {
             let last = conversation.turns.last().expect("a scored turn");
             // The reference reply passes; a hedge, an echo of the question and a
             // reply that names a stale value do not.
-            assert!(judge_v2(&last.checks, &last.user, &last.reply), "{}", item.id);
-            assert!(!judge_v2(&last.checks, &last.user, "I'm not sure."), "{}", item.id);
-            assert!(!judge_v2(&last.checks, &last.user, &last.user), "{}", item.id);
+            assert!(
+                judge_v2(&last.checks, &last.user, &last.reply),
+                "{}",
+                item.id
+            );
+            assert!(
+                !judge_v2(&last.checks, &last.user, "I'm not sure."),
+                "{}",
+                item.id
+            );
+            assert!(
+                !judge_v2(&last.checks, &last.user, &last.user),
+                "{}",
+                item.id
+            );
             let scored = item.turns.last().expect("a turn");
             for stale in &scored.stale {
                 let both = format!(
@@ -1009,7 +1027,9 @@ mod tests {
         let mut rng = Rng::new(5);
         let (mut index, mut gram) = (0usize, None);
         while gram.is_none() {
-            let conversation = scan.conversation(&mut rng, Split::Train).expect("an episode");
+            let conversation = scan
+                .conversation(&mut rng, Split::Train)
+                .expect("an episode");
             gram = conversation
                 .turns
                 .iter()
@@ -1046,8 +1066,15 @@ mod tests {
         let mut rng = Rng::new(5);
         let mut none = Rejected::default();
         let empty = BTreeSet::new();
-        conversation_excluding_probe(&mut world, &mut rng, Split::Train, &panel, &empty, &mut none)
-            .expect("an episode");
+        conversation_excluding_probe(
+            &mut world,
+            &mut rng,
+            Split::Train,
+            &panel,
+            &empty,
+            &mut none,
+        )
+        .expect("an episode");
         assert_eq!(none.total(), 0);
         // A panel turn is still excluded by equality.
         let mut world = self::world();
@@ -1087,7 +1114,10 @@ mod tests {
         }
         assert_eq!(report["items"].as_array().map(Vec::len), Some(PROBE_ITEMS));
         // No rule copies: the copy group has no history to read.
-        assert_eq!(report["by_group"]["copy"]["rules"]["R-nlet"]["pass"], json!(0));
+        assert_eq!(
+            report["by_group"]["copy"]["rules"]["R-nlet"]["pass"],
+            json!(0)
+        );
     }
 
     // -- Teacher forcing ------------------------------------------------------

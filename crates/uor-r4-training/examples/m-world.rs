@@ -2053,7 +2053,10 @@ fn baselines(args: &Args, out: &Path) -> Result<()> {
     for cell in &to_run {
         let mut world = MWorld2::new(&count, mix)?;
         let mut rng = Rng::new(seed);
-        by_cell.insert(*cell, run_rules(&mut world, &mut rng, *cell, conversations)?);
+        by_cell.insert(
+            *cell,
+            run_rules(&mut world, &mut rng, *cell, conversations)?,
+        );
     }
     let cells_json: BTreeMap<&str, Value> = by_cell
         .iter()
@@ -2331,11 +2334,7 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
     }
 }
 
-fn claimed(
-    rest: &[String],
-    allowed: &[&str],
-    run: fn(&Args, &Path) -> Result<()>,
-) -> Result<()> {
+fn claimed(rest: &[String], allowed: &[&str], run: fn(&Args, &Path) -> Result<()>) -> Result<()> {
     let args = Args::parse(rest, allowed)?;
     let out = PathBuf::from(args.required("out")?);
     report_output::claim(&out)?;
@@ -2502,7 +2501,10 @@ mod tests {
         );
         assert!(user_turns_of("Assistant: only me").is_empty());
         assert!(user_turns_of("").is_empty());
-        assert_eq!(user_turns_of("  User: indented"), vec!["indented".to_owned()]);
+        assert_eq!(
+            user_turns_of("  User: indented"),
+            vec!["indented".to_owned()]
+        );
     }
 
     #[test]
@@ -2603,8 +2605,14 @@ mod tests {
             .sum();
         assert_eq!(covered as usize, screened.tokens.len());
         assert_eq!(screened.record["excluded_documents"], json!(1));
-        assert_eq!(screened.record["by_source"][0]["excluded_documents"], json!(1));
-        assert_eq!(screened.record["by_source"][1]["excluded_documents"], json!(0));
+        assert_eq!(
+            screened.record["by_source"][0]["excluded_documents"],
+            json!(1)
+        );
+        assert_eq!(
+            screened.record["by_source"][1]["excluded_documents"],
+            json!(0)
+        );
         // With nothing to match, the store and the sources come back unchanged.
         let clean = screen_documents(
             &tokens,

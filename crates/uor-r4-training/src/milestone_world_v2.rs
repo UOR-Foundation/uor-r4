@@ -2066,9 +2066,9 @@ impl Rule {
 /// punctuation, or at the end of the text.
 fn clause_words(text: &str) -> Vec<(String, bool)> {
     let mut all = Vec::new();
-    for clause in text.split(|c: char| {
-        matches!(c, ',' | ';' | ':' | '.' | '!' | '?' | '(' | ')' | '\n')
-    }) {
+    for clause in
+        text.split(|c: char| matches!(c, ',' | ';' | ':' | '.' | '!' | '?' | '(' | ')' | '\n'))
+    {
         let clause = words(clause);
         let last = clause.len().saturating_sub(1);
         for (i, word) in clause.into_iter().enumerate() {
@@ -2164,9 +2164,7 @@ fn gate_key(turn: &Turn2) -> Option<String> {
     if let Some(mqar) = &turn.tag.mqar {
         return Some(format!("mqar/distance/{}", mqar.target_distance));
     }
-    (turn.category == Category2::Relation
-        && turn.tag.pool == Some(Pool::Open)
-        && !turn.tag.abstain)
+    (turn.category == Category2::Relation && turn.tag.pool == Some(Pool::Open) && !turn.tag.abstain)
         .then(|| "relation/open/recall".to_owned())
 }
 
@@ -2236,7 +2234,11 @@ pub fn freeze_report(runs: &BTreeMap<&'static str, RuleRun>) -> Value {
             let (pass, of) = run.map_or((0, 0), |run| run.card.cell(&key));
             let below = below_limit(pass, of);
             ok &= below;
-            let rate = if of == 0 { 0.0 } else { pass as f64 / of as f64 };
+            let rate = if of == 0 {
+                0.0
+            } else {
+                pass as f64 / of as f64
+            };
             rows.insert(
                 key.clone(),
                 json!({
@@ -2256,11 +2258,7 @@ pub fn freeze_report(runs: &BTreeMap<&'static str, RuleRun>) -> Value {
                             .collect()
                     })
                     .unwrap_or_default();
-                templates.sort_by(|a, b| {
-                    (b.1 * a.2)
-                        .cmp(&(a.1 * b.2))
-                        .then_with(|| a.0.cmp(&b.0))
-                });
+                templates.sort_by(|a, b| (b.1 * a.2).cmp(&(a.1 * b.2)).then_with(|| a.0.cmp(&b.0)));
                 let by_template: Vec<Value> = templates
                     .iter()
                     .map(|(template, pass, of)| {
@@ -3120,10 +3118,7 @@ mod tests {
             Rule::Nlet.reply(&history, &ask("Tell me what tamir is.")),
             "kavu"
         );
-        assert_eq!(
-            Rule::Nlet.reply(&history, &ask("SAY WHAT BOL IS!")),
-            "47"
-        );
+        assert_eq!(Rule::Nlet.reply(&history, &ask("SAY WHAT BOL IS!")), "47");
         // The last two words decide: "is bol" never occurs in the history.
         assert_eq!(Rule::Nlet.reply(&history, &ask("What is bol?")), DONT_KNOW);
         assert_eq!(
@@ -3176,7 +3171,11 @@ mod tests {
             old,
             &Rule::Recency.reply(&history, &ask(old))
         ));
-        assert!(judge_v2(&checks, old, &Rule::Nlet.reply(&history, &ask(old))));
+        assert!(judge_v2(
+            &checks,
+            old,
+            &Rule::Nlet.reply(&history, &ask(old))
+        ));
         assert!(!judge_v2(
             &checks,
             revised,
@@ -3253,8 +3252,14 @@ mod tests {
             report["leaks"][0]["by_template"][0]["template"],
             json!("Say what {k} is.")
         );
-        assert_eq!(report["gated"]["R-nlet"]["mqar/distance/200"]["below_limit"], json!(false));
-        assert_eq!(report["gated"]["R-recency"]["mqar/distance/200"]["below_limit"], json!(true));
+        assert_eq!(
+            report["gated"]["R-nlet"]["mqar/distance/200"]["below_limit"],
+            json!(false)
+        );
+        assert_eq!(
+            report["gated"]["R-recency"]["mqar/distance/200"]["below_limit"],
+            json!(true)
+        );
         // Both below the limit: the instrument freezes.
         runs.insert(
             Rule::Nlet.name(),
@@ -3386,10 +3391,7 @@ mod tests {
                 continue;
             }
             recall += 1;
-            let asked = query
-                .intent
-                .strip_suffix("_query")
-                .expect("a query intent");
+            let asked = query.intent.strip_suffix("_query").expect("a query intent");
             assert!(asked == queried.as_str() || asked == companion, "{asked}");
             let asks_companion = asked == companion;
             companion_asked += usize::from(asks_companion);
@@ -3717,7 +3719,11 @@ mod tests {
             let of = |key: &str, pass: usize, total: usize| {
                 (
                     key.to_owned(),
-                    if shortfall == Some(key) { pass - 1 } else { pass },
+                    if shortfall == Some(key) {
+                        pass - 1
+                    } else {
+                        pass
+                    },
                     total,
                 )
             };
@@ -3798,9 +3804,15 @@ mod tests {
             json!(0)
         );
         // The gate and its rule appear on the development cell alone.
-        assert!(report["cells"]["dev_phrasing_dev_value"].get("a1_gate").is_some());
-        assert!(report["cells"]["train_phrasing_dev_value"].get("a1_gate").is_none());
-        assert!(report["cells"]["train_phrasing_train_value"].get("a1_gate_rule").is_none());
+        assert!(report["cells"]["dev_phrasing_dev_value"]
+            .get("a1_gate")
+            .is_some());
+        assert!(report["cells"]["train_phrasing_dev_value"]
+            .get("a1_gate")
+            .is_none());
+        assert!(report["cells"]["train_phrasing_train_value"]
+            .get("a1_gate_rule")
+            .is_none());
     }
 
     #[test]
@@ -3819,8 +3831,7 @@ mod tests {
             }
         }
         for outside in [
-            "Clara", "Ingrid", "Yusuf", "Halifax", "Okafor", "UA772", "48213", "12B", "5",
-            "918264",
+            "Clara", "Ingrid", "Yusuf", "Halifax", "Okafor", "UA772", "48213", "12B", "5", "918264",
         ] {
             assert!(!in_generated_universe(outside), "{outside}");
         }
@@ -3889,18 +3900,17 @@ mod tests {
 
     #[test]
     fn the_position_rules_are_read_off_the_stated_values() {
-        let turn = |user: &str,
-                    reply: &str,
-                    values: &[&str],
-                    answer: Option<&str>,
-                    stale: &[&str]| ProbeTurn {
-            user: user.to_owned(),
-            reply: reply.to_owned(),
-            values: values.iter().map(|v| (*v).to_owned()).collect(),
-            answer: answer.map(str::to_owned),
-            stale: stale.iter().map(|v| (*v).to_owned()).collect(),
-            copy: None,
-        };
+        let turn =
+            |user: &str, reply: &str, values: &[&str], answer: Option<&str>, stale: &[&str]| {
+                ProbeTurn {
+                    user: user.to_owned(),
+                    reply: reply.to_owned(),
+                    values: values.iter().map(|v| (*v).to_owned()).collect(),
+                    answer: answer.map(str::to_owned),
+                    stale: stale.iter().map(|v| (*v).to_owned()).collect(),
+                    copy: None,
+                }
+            };
         // Four values stated and the third asked: only the rules that land on
         // the third value pass.
         let four = ProbeItem {
@@ -4077,8 +4087,16 @@ mod tests {
         for item in items.iter().filter(|item| item.group != ProbeGroup::Copy) {
             let checks = item.checks().expect("the item's checks");
             let scored = item.turns.last().expect("a scored turn");
-            assert!(judge_v2(&checks, &scored.user, &scored.reply), "{}", item.id);
-            assert!(!judge_v2(&checks, &scored.user, &scored.user), "{}", item.id);
+            assert!(
+                judge_v2(&checks, &scored.user, &scored.reply),
+                "{}",
+                item.id
+            );
+            assert!(
+                !judge_v2(&checks, &scored.user, &scored.user),
+                "{}",
+                item.id
+            );
             let stated: BTreeSet<&str> = item.turns[..item.turns.len() - 1]
                 .iter()
                 .flat_map(|turn| turn.values.iter().map(String::as_str))
