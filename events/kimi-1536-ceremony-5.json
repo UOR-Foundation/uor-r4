@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": true,
+    "event_id": "kimi-1536-ceremony-5",
+    "op": "heartbeat",
+    "session": "kimi-coordinator-20260930"
+  },
+  "observed_server_time": 1790757424,
+  "previous_head": "695f3ffc772d37899804fdb17d970292a66731ba"
+}
