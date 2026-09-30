@@ -463,6 +463,7 @@ pub struct SnapTraceEntry {
 /// The trace buffer: one root index per (position, recurrence layer, lane),
 /// in step order. Writes are plain stores — no allocation in a step.
 struct SnapTrace {
+    origin_position: usize,
     selected: Vec<u32>,
     written: usize,
 }
@@ -521,26 +522,39 @@ pub struct IntegerStackSession<'m> {
 }
 
 /// Maximum justified serialized JSON size for a session of the given model shape.
-/// Used to reject oversized inputs before reading or allocating into memory.
+/// Derived with checked arithmetic from actual layer kinds, allocating 32 bytes per
+/// integer to soundly bound compact JSON (<=12 bytes/int) and pretty JSON (23-32 bytes/int).
 fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
     let s = &model.shape;
     let d = s.width as u64;
     let ctx = s.context as u64;
     let heads = s.heads as u64;
     let vocab = s.vocab as u64;
-    let layers = model.layers.len() as u64;
     let rec_layers = s.pattern.bytes().filter(|&b| b == b'r').count() as u64;
 
-    // In JSON, integer arrays format as numbers + commas + whitespace (~16 bytes per entry).
-    let max_read_per_layer = 2 * ctx * d * 16 + ctx * heads * 24;
-    let max_rec_per_layer = 4 * d * 16;
-    let max_layer_bytes = layers * max_read_per_layer.max(max_rec_per_layer);
-    let max_logits_bytes = vocab * 16;
-    let max_tokens_bytes = ctx * 16;
-    let max_trace_bytes = ctx * (s.lanes() as u64) * rec_layers * 16;
-    let margin = 65536u64;
+    let layer_bytes: u64 = s
+        .pattern
+        .bytes()
+        .map(|c| {
+            if c == b'a' {
+                let lifts = if model.lorentz { ctx * heads } else { 0 };
+                (2 * ctx * d + lifts) * 32
+            } else {
+                (CONVOLUTION_WIDTH as u64 * d) * 32
+            }
+        })
+        .sum();
 
-    max_layer_bytes + max_logits_bytes + max_tokens_bytes + max_trace_bytes + margin
+    let logits_bytes = vocab * 32;
+    let tokens_bytes = ctx * 16;
+    let trace_bytes = if model.snapped {
+        ctx * (s.lanes() as u64) * rec_layers * 16
+    } else {
+        0
+    };
+    let margin = 131072u64; // 128 KiB for schema, metadata keys, and formatting whitespace
+
+    layer_bytes + logits_bytes + tokens_bytes + trace_bytes + margin
 }
 
 impl IntegerStackSession<'_> {
@@ -557,8 +571,10 @@ impl IntegerStackSession<'_> {
     pub fn enable_snap_trace(&mut self) {
         let s = &self.model.shape;
         let recurrences = s.pattern.bytes().filter(|&c| c == b'r').count();
-        let entries = s.context * recurrences * s.lanes();
+        let remaining_positions = s.context.saturating_sub(self.position);
+        let entries = remaining_positions * recurrences * s.lanes();
         self.b.snap_trace = Some(SnapTrace {
+            origin_position: self.position,
             selected: vec![u32::MAX; entries],
             written: 0,
         });
@@ -585,10 +601,10 @@ impl IntegerStackSession<'_> {
         let written = trace.written.min(trace.selected.len());
         let entries = (0..written)
             .map(|slot| {
-                let (position, rem) = (slot / per_position, slot % per_position);
+                let (rel_pos, rem) = (slot / per_position, slot % per_position);
                 SnapTraceEntry {
                     layer: recurrences[rem / lanes],
-                    position,
+                    position: trace.origin_position + rel_pos,
                     lane: rem % lanes,
                     root: trace.selected[slot] as usize,
                 }
@@ -610,6 +626,7 @@ impl IntegerStackSession<'_> {
         self.tokens.clear();
         self.b.logits.fill(0);
         if let Some(trace) = &mut self.b.snap_trace {
+            trace.origin_position = 0;
             trace.written = 0;
             trace.selected.fill(u32::MAX);
         }
@@ -680,11 +697,25 @@ impl IntegerStackSession<'_> {
             Vec::new()
         };
 
-        let snap_trace = self
-            .b
-            .snap_trace
-            .as_ref()
-            .map(|t| t.selected[..t.written].to_vec());
+        let snap_trace = if self.model.snapped {
+            let rec_layers = self
+                .model
+                .shape
+                .pattern
+                .bytes()
+                .filter(|&b| b == b'r')
+                .count();
+            let expected_len = self.position * self.model.shape.lanes() * rec_layers;
+            self.b.snap_trace.as_ref().and_then(|t| {
+                if t.origin_position == 0 && t.written == expected_len {
+                    Some(t.selected[..t.written].to_vec())
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        };
 
         SerializedStackSession {
             schema: STACK_SESSION_SCHEMA.to_string(),
@@ -747,25 +778,25 @@ impl IntegerStackSession<'_> {
             return Err(StackError::SessionState);
         }
 
-        // Validate pending logits length if present
-        if saved.position > 0 && !saved.logits.is_empty() {
-            if saved.logits.len() != self.model.shape.vocab {
+        // Validate pending logits
+        if saved.position == 0 {
+            if !saved.logits.is_empty() {
                 return Err(StackError::SessionState);
             }
+        } else if saved.logits.len() != self.model.shape.vocab {
+            return Err(StackError::SessionState);
         }
 
-        // Validate tokens if present
-        if !saved.tokens.is_empty() {
-            if saved.tokens.len() != saved.position {
-                return Err(StackError::SessionState);
-            }
-            for &tok in &saved.tokens {
-                if tok as usize >= self.model.shape.vocab {
-                    return Err(StackError::Token {
-                        token: tok,
-                        vocab: self.model.shape.vocab,
-                    });
-                }
+        // Validate tokens
+        if saved.tokens.len() != saved.position {
+            return Err(StackError::SessionState);
+        }
+        for &tok in &saved.tokens {
+            if tok as usize >= self.model.shape.vocab {
+                return Err(StackError::Token {
+                    token: tok,
+                    vocab: self.model.shape.vocab,
+                });
             }
         }
 
@@ -783,12 +814,18 @@ impl IntegerStackSession<'_> {
             .and_then(|x| x.checked_mul(rec_layers))
             .ok_or(StackError::SessionState)?;
         if let Some(ref trace_entries) = saved.snap_trace {
-            if trace_entries.len() != expected_snap_entries {
-                return Err(StackError::SessionState);
-            }
-            for &root in trace_entries {
-                if root >= 120 {
+            if !self.model.snapped {
+                if !trace_entries.is_empty() {
                     return Err(StackError::SessionState);
+                }
+            } else {
+                if trace_entries.len() != expected_snap_entries {
+                    return Err(StackError::SessionState);
+                }
+                for &root in trace_entries {
+                    if root >= 120 {
+                        return Err(StackError::SessionState);
+                    }
                 }
             }
         }
@@ -873,7 +910,7 @@ impl IntegerStackSession<'_> {
         self.lift_at = saved.lift_at;
 
         // Restore pending logits
-        if saved.position > 0 && !saved.logits.is_empty() {
+        if saved.position > 0 {
             self.b.logits.copy_from_slice(&saved.logits);
         } else {
             self.b.logits.fill(0);
@@ -881,27 +918,26 @@ impl IntegerStackSession<'_> {
 
         // Restore tokens
         self.tokens.clear();
-        if !saved.tokens.is_empty() {
-            self.tokens.extend_from_slice(&saved.tokens);
-        }
+        self.tokens.extend_from_slice(&saved.tokens);
 
         // Restore snap trace
         if let Some(ref trace_entries) = saved.snap_trace {
-            if let Some(trace) = &mut self.b.snap_trace {
-                trace.selected[..trace_entries.len()].copy_from_slice(trace_entries);
-                trace.written = trace_entries.len();
-            } else if self.model.snap().is_some() {
+            if self.model.snapped {
                 let total = self.model.shape.context * self.model.shape.lanes() * rec_layers;
                 let mut selected = vec![u32::MAX; total];
                 selected[..trace_entries.len()].copy_from_slice(trace_entries);
                 self.b.snap_trace = Some(SnapTrace {
+                    origin_position: 0,
                     selected,
                     written: trace_entries.len(),
                 });
+            } else {
+                self.b.snap_trace = None;
             }
-        } else if let Some(trace) = &mut self.b.snap_trace {
-            trace.written = 0;
-            trace.selected.fill(u32::MAX);
+        } else {
+            // Untraced snapshot: explicitly disable tracing in destination session to
+            // prevent partial or misaligned root history from a prior session.
+            self.b.snap_trace = None;
         }
 
         Ok(())
@@ -915,12 +951,13 @@ impl IntegerStackSession<'_> {
     /// if a failure occurs during writing.
     pub fn save_session_to_file(&self, path: &Path) -> Result<(), StackError> {
         let serialized = self.save_state();
-        let bytes = serde_json::to_vec_pretty(&serialized)
-            .map_err(|e| StackError::Numerics(e.to_string()))?;
-        let parent = path.parent().unwrap_or_else(|| Path::new("."));
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(StackError::Io)?;
-        }
+        let bytes =
+            serde_json::to_vec(&serialized).map_err(|e| StackError::Numerics(e.to_string()))?;
+        let parent = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p,
+            _ => Path::new("."),
+        };
+        std::fs::create_dir_all(parent).map_err(StackError::Io)?;
 
         static SAVE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let count = SAVE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -931,24 +968,31 @@ impl IntegerStackSession<'_> {
             .unwrap_or("session");
         let temp_path = parent.join(format!(".{file_name}.tmp-{pid}-{count}"));
 
+        let mut temp_created = false;
         let write_res = (|| -> Result<(), std::io::Error> {
             use std::io::Write;
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&temp_path)?;
+            temp_created = true;
             file.write_all(&bytes)?;
             file.sync_all()?;
             drop(file);
+
             std::fs::rename(&temp_path, path)?;
+            temp_created = false;
+
             if let Ok(dir) = std::fs::File::open(parent) {
-                let _ = dir.sync_all();
+                dir.sync_all()?;
             }
             Ok(())
         })();
 
         if let Err(e) = write_res {
-            let _ = std::fs::remove_file(&temp_path);
+            if temp_created {
+                let _ = std::fs::remove_file(&temp_path);
+            }
             return Err(StackError::Io(e));
         }
 

@@ -525,6 +525,11 @@ fn session_save_and_restore_produces_bit_identical_logits() {
     assert_eq!(session.cache_at(), 3 * WIDTH);
     assert_eq!(session.lift_at(), 3 * HEADS);
     assert_eq!(session.tokens(), &initial_tokens);
+    assert_eq!(
+        session.logits(),
+        saved.logits.as_slice(),
+        "restored session logits must match saved session logits before next step"
+    );
 
     let mut restored_logits = Vec::new();
     for &tok in &next_tokens {
@@ -542,10 +547,10 @@ fn session_save_and_restore_produces_bit_identical_logits() {
     assert_eq!(fresh_session.position(), 3);
     assert_eq!(fresh_session.cache_at(), 3 * WIDTH);
     assert_eq!(fresh_session.tokens(), &initial_tokens);
-    // Next-token logits immediately after restore must match
+    // Next-token logits immediately after restore must match saved position 3 logits
     assert_eq!(
         fresh_session.logits(),
-        session.logits(),
+        saved.logits.as_slice(),
         "fresh restored session logits must match saved session logits before next step"
     );
 
@@ -790,7 +795,15 @@ fn session_save_to_file_is_atomic_and_preserves_existing_on_failure() {
     let original_bytes = std::fs::read(&save_path).expect("read original");
     assert!(!original_bytes.is_empty());
 
-    // 2. Attempt save to an impossible destination (child of an existing file)
+    // 2. Preexisting colliding temporary file must NOT be deleted on creation collision
+    let pid = std::process::id();
+    for counter in 0..5 {
+        let collision_path = temp_dir.join(format!(".checkpoint.json.tmp-{pid}-{counter}"));
+        let sentinel_content = format!("sentinel-data-{counter}");
+        let _ = std::fs::write(&collision_path, sentinel_content.as_bytes());
+    }
+
+    // Attempt save to an impossible destination (child of an existing file)
     let bad_path = save_path.join("impossible_subfile.json");
     let res = session.save_session_to_file(&bad_path);
     assert!(res.is_err());
@@ -830,9 +843,46 @@ fn session_restore_rejects_oversized_file_without_allocating() {
 }
 
 #[test]
-fn session_restore_validates_and_restores_snap_trace() {
-    let bytes = artifact(19);
+fn session_restore_accepts_valid_edge_value_snapshot_within_bound() {
+    let bytes = artifact(11);
     let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut session = model.session();
+
+    for tok in 0..CONTEXT as u32 {
+        session.step(tok % VOCAB as u32).expect("step");
+    }
+
+    let temp_dir = std::env::temp_dir().join(format!("uor-stack-test-edge-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).expect("create_dir");
+    let save_path = temp_dir.join("full_checkpoint.json");
+
+    session.save_session_to_file(&save_path).expect("save full");
+    let file_len = std::fs::metadata(&save_path).expect("metadata").len();
+    let max_len = super::max_serialized_session_bytes(&model);
+    assert!(
+        file_len > 0 && file_len <= max_len,
+        "valid serialized session size {file_len} must be <= max bound {max_len}"
+    );
+
+    let mut fresh_session = model.session();
+    fresh_session
+        .restore_session_from_file(&save_path)
+        .expect("restore full");
+    assert_eq!(fresh_session.position(), CONTEXT);
+    assert_eq!(fresh_session.tokens(), session.tokens());
+    assert_eq!(fresh_session.logits(), session.logits());
+
+    let _ = std::fs::remove_file(&save_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn session_restore_validates_and_restores_snap_trace() {
+    // 1. Snapped model with trace enabled
+    let snapped = with_header(&artifact(11), |header| {
+        header["transport_snap"] = snap_record();
+    });
+    let model = IntegerStackModel::parse(&snapped).expect("parse");
 
     let mut session = model.session();
     session.enable_snap_trace();
@@ -841,11 +891,14 @@ fn session_restore_validates_and_restores_snap_trace() {
 
     let original_trace = session.snap_trace().expect("trace");
     assert!(!original_trace.is_empty());
+    for entry in &original_trace {
+        assert!(entry.root < 120);
+    }
 
     let saved = session.save_state();
     assert!(saved.snap_trace.is_some());
 
-    // 1. Restore into fresh session with snap trace enabled
+    // Restore into fresh session with snap trace enabled
     let mut fresh_session = model.session();
     fresh_session.enable_snap_trace();
     fresh_session.restore_state(&saved).expect("restore");
@@ -855,7 +908,7 @@ fn session_restore_validates_and_restores_snap_trace() {
         "restored snap trace must match original exactly"
     );
 
-    // 2. Restore into fresh session without snap trace initially enabled (model has snap)
+    // Restore into fresh session without snap trace initially enabled (model has snap)
     let mut lazy_session = model.session();
     lazy_session.restore_state(&saved).expect("restore lazy");
     assert_eq!(
@@ -864,7 +917,7 @@ fn session_restore_validates_and_restores_snap_trace() {
         "snap trace should be populated from saved state when model has snap"
     );
 
-    // 3. Restore state without snap trace into session that had snap trace: resets trace to avoid stale entries
+    // 2. Restore state without snap trace into session that had snap trace: disables trace to avoid stale/misaligned entries
     let mut no_trace_session = model.session();
     no_trace_session.step(1).expect("step 1");
     let saved_no_trace = no_trace_session.save_state();
@@ -878,9 +931,28 @@ fn session_restore_validates_and_restores_snap_trace() {
     used_trace_session
         .restore_state(&saved_no_trace)
         .expect("restore no trace");
-    // Should reset trace so no stale trace entries from used session are exposed
-    assert_eq!(
-        used_trace_session.snap_trace().unwrap(),
-        Vec::<super::SnapTraceEntry>::new()
-    );
+    // Should disable tracing so no stale trace entries from used session are exposed
+    assert!(used_trace_session.snap_trace().is_none());
+
+    // 3. Late enable_snap_trace records correct position
+    let mut late_session = model.session();
+    late_session.step(1).expect("step 1");
+    late_session.step(2).expect("step 2");
+    assert_eq!(late_session.position(), 2);
+    late_session.enable_snap_trace();
+    late_session.step(3).expect("step 3");
+    let late_trace = late_session.snap_trace().expect("late trace");
+    assert!(!late_trace.is_empty());
+    assert_eq!(late_trace[0].position, 2);
+
+    // 4. Unsnapped model: trace is None in save_state, records no roots
+    let unsnapped_model = IntegerStackModel::parse(&artifact(11)).expect("parse unsnapped");
+    let mut unsnapped_session = unsnapped_model.session();
+    unsnapped_session.enable_snap_trace();
+    unsnapped_session.step(1).expect("step unsnapped");
+    assert!(unsnapped_session.snap_trace().unwrap().is_empty());
+    let saved_unsnapped = unsnapped_session.save_state();
+    assert!(saved_unsnapped.snap_trace.is_none());
+    let mut fresh_unsnapped = unsnapped_model.session();
+    assert!(fresh_unsnapped.restore_state(&saved_unsnapped).is_ok());
 }
