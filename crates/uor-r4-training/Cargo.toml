@@ -27,3 +27,7 @@ uor-r4-lut = { path = "../uor-r4-lut" }
 uor-r4-tokenizer = { path = "../uor-r4-tokenizer" }
 rayon = "1.10"
 half = "2.7.1"
+
+[dev-dependencies]
+# Diagnostic exact projection owner, identical revision/features to model-source.
+uor-matmul = { git = "https://github.com/UOR-Foundation/uor-matmul.git", version = "0.1.0", rev = "b13c98449948174f590e337c4dc25dfc394a07d0", default-features = false, features = ["std"] }

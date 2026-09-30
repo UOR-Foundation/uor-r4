@@ -3028,6 +3028,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "uor-matmul",
  "uor-r4-core",
  "uor-r4-integer",
  "uor-r4-lut",

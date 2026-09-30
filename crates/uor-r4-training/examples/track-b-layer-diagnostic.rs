@@ -661,14 +661,144 @@ fn replay_block11(model_path: &Path, parent: &Path, out: &Path) -> Result<Value>
     )
 }
 
+fn replay_down(model_path: &Path, parent: &Path, out: &Path) -> Result<Value> {
+    use uor_r4_training::kappa_llama::load_checkpoint;
+    report_output::verify(parent)?;
+    let inputs: Value = serde_json::from_slice(&fs::read(parent.join("inputs.json"))?)?;
+    let prior: Value = serde_json::from_slice(&fs::read(parent.join("result.json"))?)?;
+    if prior["schema"] != "uor-r4.track-b-block11-replay/1"
+        || prior["parent_anchors_verified"] != true
+        || prior["status"] != "DIAGNOSTIC_COMPLETE"
+        || inputs["layer"] != 11
+        || inputs["batch"] != 1
+        || inputs["time"] != 8
+    {
+        return Err("requires completed fixed block11 replay".into());
+    }
+    for name in [
+        "config.json",
+        "model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ] {
+        if inputs["parent_inputs"]["parent_inputs"]["sha256"][name]
+            != sha256_file(&model_path.join(name))?
+        {
+            return Err(format!("parent input mismatch: {name}").into());
+        }
+    }
+    fs::write(
+        out.join("inputs.json"),
+        serde_json::to_vec_pretty(&json!({
+            "source_revision":option_env!("TRACK_B_SOURCE_REVISION").ok_or("missing source")?,
+            "source_diff_sha256":option_env!("TRACK_B_SOURCE_DIFF_SHA256").ok_or("missing diff")?,
+            "executable_sha256":sha256_file(&std::env::current_exe()?)?,
+            "parent_manifest_sha256":sha256_file(&parent.join("manifest.json"))?,
+            "parent_inputs":inputs,"exact_revision":uor_r4_model_source::UOR_MATMUL_REVISION,
+            "batch":1,"time":8,"scope":"same saved gated inputs through unchanged CPU/Metal and pinned exact down projection"
+        }))?,
+    )?;
+    let checkpoint = load_checkpoint(model_path, &Device::Cpu)?;
+    const W: usize = 576;
+    const K: usize = 1536;
+    if checkpoint.shape.width != W || checkpoint.shape.ffn != K || checkpoint.shape.layers != 30 {
+        return Err("unexpected down replay geometry".into());
+    }
+    let weight = checkpoint
+        .tensors
+        .get("model.layers.11.mlp.down_proj.weight")
+        .ok_or("missing down weight")?
+        .clone();
+    if weight.dims() != [W, K] {
+        return Err("unexpected down weight shape".into());
+    }
+    let weight_bits = weight.flatten_all()?.to_vec1::<f32>()?;
+    drop(checkpoint);
+    let metal = Device::new_metal(0)?;
+    let mut rows_by_input = Vec::new();
+    let mut all_exact = Vec::new();
+    let mut all_inputs = Vec::new();
+    let mut anchors_match = true;
+    for origin in ["cpu", "metal"] {
+        let x = floats(&parent.join(format!("{origin}-native-gated.f32le")))?;
+        let original = floats(&parent.join(format!("{origin}-native-down.f32le")))?;
+        if x.len() != T * K
+            || original.len() != T * W
+            || x.iter().chain(&weight_bits).any(|v| !v.is_finite())
+        {
+            return Err("invalid saved projection inputs".into());
+        }
+        // Exact executor's portable shared-weight layout: W[W,K] * X^T[K,T],
+        // followed by transpose to the model's [T,W] output. Each dot rounds once.
+        let mut xt = vec![0f32; K * T];
+        for pos in 0..T {
+            for depth in 0..K {
+                xt[depth * T + pos] = x[pos * K + depth];
+            }
+        }
+        let mut exact_t = vec![0f32; W * T];
+        let mut pa = vec![uor_matmul::PackedCode::default(); K];
+        let mut pb = vec![uor_matmul::PackedCode::default(); K * T];
+        uor_matmul::slice::gemm_float(W, K, T, &weight_bits, &xt, &mut exact_t, &mut pa, &mut pb)
+            .map_err(|e| format!("exact projection failed: {e:?}"))?;
+        let mut exact = vec![0f32; T * W];
+        for pos in 0..T {
+            for row in 0..W {
+                exact[pos * W + row] = exact_t[row * T + pos];
+            }
+        }
+        write_floats(
+            &out.join(format!("{origin}-input-exact-down.f32le")),
+            &exact,
+        )?;
+        let mut backends = Vec::new();
+        for (name, device) in [("cpu", &Device::Cpu), ("metal", &metal)] {
+            let actual = Tensor::from_slice(&x, (T, K), device)?
+                .matmul(&weight.to_device(device)?.t()?)?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            write_floats(
+                &out.join(format!("{origin}-input-{name}-down.f32le")),
+                &actual,
+            )?;
+            let anchor = if name == origin {
+                let a = compare(&original, &actual)?;
+                anchors_match &= a["different_bits"] == 0;
+                a
+            } else {
+                Value::Null
+            };
+            let mut rows = Vec::new();
+            for pos in 0..T {
+                rows.push(json!({"position":pos,"local_vs_exact":compare(&exact[pos*W..(pos+1)*W],&actual[pos*W..(pos+1)*W])?}));
+            }
+            backends.push(json!({"backend":name,"matching_saved_anchor":anchor,"rows":rows}));
+        }
+        rows_by_input.push(json!({"input_origin":origin,"backends":backends}));
+        all_inputs.push(x);
+        all_exact.push(exact);
+    }
+    let mut propagated = Vec::new();
+    for pos in 0..T {
+        propagated.push(json!({"position":pos,"gated_input_difference":compare(&all_inputs[0][pos*K..(pos+1)*K],&all_inputs[1][pos*K..(pos+1)*K])?,
+            "exact_output_difference":compare(&all_exact[0][pos*W..(pos+1)*W],&all_exact[1][pos*W..(pos+1)*W])?}));
+    }
+    Ok(
+        json!({"schema":"uor-r4.track-b-down-replay/1","status":if anchors_match {"DIAGNOSTIC_COMPLETE"} else {"ANCHOR_MISMATCH"},
+        "anchors_match_bitwise":anchors_match,"parent_anchors_verified":true,"parity_pass":false,"inputs":rows_by_input,"propagated":propagated,
+        "scope":"local down-projection rounding versus exact, and propagation of two saved gated inputs; not full reference block error"}),
+    )
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     let layer12 = args.len() == 4 && args[3] == "replay-layer12";
     let block11 = args.len() == 4 && args[3] == "replay-block11";
-    let replay = layer12 || block11;
+    let down = args.len() == 4 && args[3] == "replay-down";
+    let replay = layer12 || block11 || down;
     if args.len() != 3 && !replay {
         return Err(
-            "usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT [replay-layer12|replay-block11]"
+            "usage: track-b-layer-diagnostic MODEL SEALED_PARENT NEW_REPORT [replay-layer12|replay-block11|replay-down]"
                 .into(),
         );
     }
@@ -685,7 +815,9 @@ fn main() -> Result<()> {
             std::process::exit(124);
         }
     });
-    let result = if block11 {
+    let result = if down {
+        replay_down(Path::new(&args[0]), Path::new(&args[1]), out)
+    } else if block11 {
         replay_block11(Path::new(&args[0]), Path::new(&args[1]), out)
     } else if layer12 {
         replay_layer12(Path::new(&args[0]), Path::new(&args[1]), out)
@@ -695,7 +827,7 @@ fn main() -> Result<()> {
     let (value, code) = match result {
         Ok(v) => {
             let code = if v["anchors_match_bitwise"] == true
-                || (replay && v["parent_anchors_verified"] == true)
+                || (!down && replay && v["parent_anchors_verified"] == true)
             {
                 0
             } else {
