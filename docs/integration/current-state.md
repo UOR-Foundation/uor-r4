@@ -50,14 +50,19 @@ and bounded seeded generation are now source-implemented in draft PR #1518;
 their first compilation attempt exited 101 after 22.97 seconds during the
 owner's workspace-image restoration. A follow-up isolated macOS rejecting a
 cached procedural-macro dylib under the restored mount's `quarantine` policy;
-the dylib's code signature verifies on disk. New tests and checkpoint parity
-remain NOT_RUN. Model hashes and charge receipts survived; two missing B2
+the dylib's code signature verifies on disk. At that historical checkpoint, new tests and checkpoint parity
+remained NOT_RUN. Model hashes and charge receipts survived; two missing B2
 drafts were recovered and pushed. See the [restoration record](../evidence/track-b-restoration-2026-09-29/README.md).
-September 30 continuation: runner repair #1543 is deployed. Small focused
-checks run directly under the owner correction; no global Cargo lock applies.
-The existing branch is being reconciled with current main before those checks.
-The old restored compiler-cache failure remains historical evidence, not a
-claim that present compiler access has been tested.
+September 30 executed continuation: the internal-cache build passed 17 Track B
+CPU tests and 3 parity-gate tests at `dcb8b107`. Metal compilation and the
+largest-arm gradient fixture also pass. The unchanged Metal near-antipodal
+floor fixture fails; a controlled diagnostic localizes its dominant error to
+the final Metal matrix contraction. Preserve that numerical limitation and the
+original test. See the [measured result](../evidence/track-b-metal-floor-2026-09-30.md).
+Full checkpoint CPU/Metal parity remains NOT_RUN and is the next independent
+step before B2 fitting. Small focused checks run directly in internal caches;
+under the owner's correction, finish useful builds and reclaim verified
+disposable cache afterward instead of stopping at the conservative 40 GiB mark.
 
 Independent B2 engineering is preserved in five unregistered drafts: source
 data, LoRA/operator transfer, isolated-layer fit/checkpointing, hybrid overlap
