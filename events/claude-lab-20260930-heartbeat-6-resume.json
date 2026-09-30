@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": true,
+    "event_id": "claude-lab-20260930-heartbeat-6-resume",
+    "op": "heartbeat",
+    "session": "claude-lab-20260930"
+  },
+  "observed_server_time": 1790754816,
+  "previous_head": "843f1aea2e7d953a73f47799e3fdc61750b57f8b"
+}
