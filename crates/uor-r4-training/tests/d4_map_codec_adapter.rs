@@ -55,21 +55,19 @@ fn head_compensated_codec_produces_finite_values() -> Result<()> {
     assert_eq!(rt_all.len(), 64 * 32);
     assert!(rt_all.iter().all(|v| v.is_finite()));
 
-    let codec_head = HeadCompensatedMapCodec::head_only();
-    assert_eq!(codec_head.name(), "native-d4-head-compensated-head-only");
-    // When rows <= cols, head_only falls back to D11Interim:
-    let rt_head = codec_head.round_trip(&values, 32, 64)?;
-    let rt_d11 = D11Interim.round_trip(&values, 32, 64)?;
-    assert_eq!(rt_head, rt_d11);
-
     // Test explicit target shape with head_only_for:
     let codec_targeted = HeadCompensatedMapCodec::head_only_for(64, 32);
+    assert_eq!(
+        codec_targeted.name(),
+        "native-d4-head-compensated-head-only-64x32"
+    );
     let rt_targeted_match = codec_targeted.round_trip(&values, 64, 32)?;
     let mat = uor_r4_integer::codec::quantize_matrix_compensated(&values, 64, 32)?;
     let rt_comp = uor_r4_integer::codec::Grouped4BitCodec::default().dequantize(&mat)?;
     assert_eq!(rt_targeted_match, rt_comp);
 
     // Non-matching shape falls back to D11Interim:
+    let rt_d11 = D11Interim.round_trip(&values, 32, 64)?;
     let rt_targeted_nonmatch = codec_targeted.round_trip(&values, 32, 64)?;
     assert_eq!(rt_targeted_nonmatch, rt_d11);
 
@@ -117,10 +115,12 @@ fn qat_adapters_integrate_with_stack_model_and_export_contract() -> Result<()> {
     assert!(check_export_representation(record.as_ref(), true).is_err());
 
     // 2. Set served representation with HeadCompensatedMapCodec
-    model.set_served_representation(Some(Arc::new(HeadCompensatedMapCodec::head_only())))?;
+    model.set_served_representation(Some(Arc::new(HeadCompensatedMapCodec::head_only_for(
+        96, 64,
+    ))))?;
     assert_eq!(
         model.served_codec().unwrap().name(),
-        "native-d4-head-compensated-head-only"
+        "native-d4-head-compensated-head-only-96x64"
     );
 
     let save_dir_hc = tmp_root.join("saved_model_hc");
@@ -129,7 +129,7 @@ fn qat_adapters_integrate_with_stack_model_and_export_contract() -> Result<()> {
     let record_hc = StackModel::saved_served_representation(&save_dir_hc)?;
     assert_eq!(
         record_hc.as_ref().unwrap().codec,
-        "native-d4-head-compensated-head-only"
+        "native-d4-head-compensated-head-only-96x64"
     );
 
     // Verify export representation check passes for HeadCompensated QAT model
@@ -165,7 +165,7 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     model.set_served_representation(Some(codec))?;
     assert_eq!(
         model.served_codec().unwrap().name(),
-        "native-d4-head-compensated-head-only"
+        "native-d4-head-compensated-head-only-96x32"
     );
 
     // 2. Compute loss on dummy inputs
@@ -207,7 +207,7 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     let record = StackModel::saved_served_representation(&save_dir)?;
     assert_eq!(
         record.as_ref().unwrap().codec,
-        "native-d4-head-compensated-head-only"
+        "native-d4-head-compensated-head-only-96x32"
     );
 
     // 6. Export stack artifact without calibration (using QAT weights)
@@ -216,7 +216,7 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     assert!(!lut_bytes.is_empty());
     assert_eq!(
         summary["method"]["quantizer"],
-        "native-d4-head-compensated-head-only"
+        "native-d4-head-compensated-head-only-96x32"
     );
 
     // 7. Verify S1.1 invariant: served float forward matches exported grid reference bit for bit
@@ -280,7 +280,7 @@ fn qat_head_compensated_end_to_end_export_and_exactness() -> Result<()> {
     reloaded.set_served_representation(Some(recovered_codec))?;
     assert_eq!(
         reloaded.served_codec().unwrap().name(),
-        "native-d4-head-compensated-head-only"
+        "native-d4-head-compensated-head-only-96x32"
     );
 
     // Clean up
@@ -730,7 +730,7 @@ fn qat_rec_out_min_mse_end_to_end_export_and_exactness() -> Result<()> {
     model.set_served_representation(Some(codec))?;
     assert_eq!(
         model.served_codec().unwrap().name(),
-        "native-d4-rec-out-min-mse"
+        "native-d4-rec-out-min-mse-32x32"
     );
 
     // 2. Compute loss on dummy inputs
@@ -770,14 +770,20 @@ fn qat_rec_out_min_mse_end_to_end_export_and_exactness() -> Result<()> {
     model.save(&save_dir)?;
 
     let record = StackModel::saved_served_representation(&save_dir)?;
-    assert_eq!(record.as_ref().unwrap().codec, "native-d4-rec-out-min-mse");
+    assert_eq!(
+        record.as_ref().unwrap().codec,
+        "native-d4-rec-out-min-mse-32x32"
+    );
 
     // 6. Export stack artifact without calibration (using QAT weights)
     check_export_representation(record.as_ref(), false)?;
     assert!(check_export_representation(record.as_ref(), true).is_err());
     let (lut_bytes, summary) = export_stack(&model, "rec-out-min-mse-qat-test".into(), None)?;
     assert!(!lut_bytes.is_empty());
-    assert_eq!(summary["method"]["quantizer"], "native-d4-rec-out-min-mse");
+    assert_eq!(
+        summary["method"]["quantizer"],
+        "native-d4-rec-out-min-mse-32x32"
+    );
 
     // 7. Verify S1.1 invariant: served float forward matches exported grid reference bit for bit
     let artifact = StackArtifact::parse(lut_bytes.clone())
@@ -935,10 +941,237 @@ fn qat_rec_out_min_mse_end_to_end_export_and_exactness() -> Result<()> {
     reloaded.set_served_representation(Some(recovered_codec))?;
     assert_eq!(
         reloaded.served_codec().unwrap().name(),
-        "native-d4-rec-out-min-mse"
+        "native-d4-rec-out-min-mse-32x32"
     );
 
     // Clean up
     let _ = std::fs::remove_dir_all(&tmp_root);
+    Ok(())
+}
+
+#[test]
+fn test_codec_by_name_refuses_bare_shape_dependent_names_and_accepts_qualified() -> Result<()> {
+    match codec_by_name("native-d4-head-compensated-head-only") {
+        Err(err) => assert!(
+            err.to_string().contains("requires explicit target shape"),
+            "unexpected error message: {err}"
+        ),
+        Ok(_) => panic!("expected refusal for bare head-compensated name"),
+    }
+
+    match codec_by_name("native-d4-rec-out-min-mse") {
+        Err(err) => assert!(
+            err.to_string().contains("requires explicit target shape"),
+            "unexpected error message: {err}"
+        ),
+        Ok(_) => panic!("expected refusal for bare rec-out-min-mse name"),
+    }
+
+    match codec_by_name("native-d4-s2-rec-out-min-mse") {
+        Err(err) => assert!(
+            err.to_string().contains("requires explicit target shape"),
+            "unexpected error message: {err}"
+        ),
+        Ok(_) => panic!("expected refusal for bare s2-rec-out-min-mse name"),
+    }
+
+    // Qualified names parse successfully:
+    let hc = codec_by_name("native-d4-head-compensated-head-only-4096x288")?;
+    assert_eq!(hc.name(), "native-d4-head-compensated-head-only-4096x288");
+
+    let rec = codec_by_name("native-d4-rec-out-min-mse-288x288")?;
+    assert_eq!(rec.name(), "native-d4-rec-out-min-mse-288x288");
+
+    let s2_rec = codec_by_name("native-d4-s2-rec-out-min-mse-288x288")?;
+    assert_eq!(s2_rec.name(), "native-d4-rec-out-min-mse-288x288");
+
+    Ok(())
+}
+
+#[test]
+fn test_export_stack_directly_refuses_e8_matched_bit() -> Result<()> {
+    let config = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 96,
+        width: 32,
+        heads: 1,
+        mlp_hidden: 32,
+        context: 8,
+        pattern: "r".into(),
+        read: ReadScore::Dot,
+        rotation: false,
+        seed: 42,
+        memory: None,
+    };
+    let device = Device::Cpu;
+    let mut model = StackModel::new(config, &device)?;
+    model.set_served_representation(Some(Arc::new(E8MatchedBitMapCodec::default())))?;
+
+    let err = export_stack(&model, "e8-direct-refusal-test".into(), None).unwrap_err();
+    assert!(
+        err.to_string().contains("stack export does not write"),
+        "expected export refusal for E8 served codec, got: {err}"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_s2_real_proportions_exported_artifact_dequantized_weights_equal_served_view() -> Result<()>
+{
+    let config = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 4096,
+        width: 288,
+        heads: 4,
+        mlp_hidden: 768,
+        context: 16,
+        pattern: "rrarra".into(),
+        read: ReadScore::Lorentz,
+        rotation: true,
+        seed: 42,
+        memory: None,
+    };
+    let device = Device::Cpu;
+
+    let codecs: Vec<Arc<dyn MapCodec>> = vec![
+        Arc::new(HeadCompensatedMapCodec::head_only_for(4096, 288)),
+        Arc::new(RecurrenceOutMinMseMapCodec::for_shape(288, 288)),
+    ];
+
+    for codec in codecs {
+        let mut model = StackModel::new(config.clone(), &device)?;
+        model.set_served_representation(Some(codec.clone()))?;
+
+        let (lut_bytes, summary) =
+            export_stack(&model, serde_json::json!({"test": "s2_parity"}), None)?;
+        assert_eq!(summary["method"]["quantizer"], codec.name());
+
+        let artifact = StackArtifact::parse(lut_bytes.clone())
+            .map_err(|e| uor_r4_training::TrainingError::Invalid(e.to_string()))?;
+
+        // Verify element-for-element bitwise equality across all matrices
+        let vars = model.variables();
+        let var_name = |name: &str| -> Result<Vec<f32>> {
+            Ok(vars
+                .get(name)
+                .ok_or_else(|| uor_r4_training::TrainingError::Invalid(name.to_string()))?
+                .as_tensor()
+                .flatten_all()?
+                .to_vec1::<f32>()?)
+        };
+
+        for spec in &artifact.header.matrices {
+            let dequantized = uor_r4_training::lut_export::dequantize_matrix(
+                spec.rows,
+                spec.cols,
+                spec.exp_base,
+                artifact.section(spec.nibbles),
+                artifact.section(spec.scales),
+            )?;
+
+            let expected_served = match spec.name.as_str() {
+                "embed" => {
+                    let src = var_name("embedding.weight")?;
+                    codec.round_trip(&src, spec.rows, spec.cols)?
+                }
+                "head" => {
+                    let mut src = var_name("embedding.weight")?;
+                    let gain = var_name("final_norm.weight")?;
+                    fold_columns(&mut src, spec.cols, &gain);
+                    codec.round_trip(&src, spec.rows, spec.cols)?
+                }
+                name => {
+                    let layer = name[1..2].parse::<usize>().unwrap();
+                    let part = &name[3..];
+                    match part {
+                        "rec_in" => {
+                            let mut src = var_name(&format!("layers.{layer:02}.rec.in.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.rec_norm.weight"))?;
+                            fold_columns(&mut src, spec.cols, &gain);
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "rec_gate" => {
+                            let mut src = var_name(&format!("layers.{layer:02}.rec.gate.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.rec_norm.weight"))?;
+                            fold_columns(&mut src, spec.cols, &gain);
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "rec_out" => {
+                            let src = var_name(&format!("layers.{layer:02}.rec.out.weight"))?;
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "query" | "key" | "value" => {
+                            let mut src =
+                                var_name(&format!("layers.{layer:02}.read.{part}.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.read_norm.weight"))?;
+                            fold_columns(&mut src, spec.cols, &gain);
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "null" => {
+                            let mut src = var_name(&format!("layers.{layer:02}.read.null.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.read_norm.weight"))?;
+                            fold_columns(&mut src, spec.cols, &gain);
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "out" => {
+                            let src = var_name(&format!("layers.{layer:02}.read.out.weight"))?;
+                            codec.round_trip(&src, spec.rows, spec.cols)?
+                        }
+                        "gate" | "up" => {
+                            let mut src =
+                                var_name(&format!("layers.{layer:02}.mlp.{part}.weight"))?;
+                            let gain = var_name(&format!("layers.{layer:02}.mlp_norm.weight"))?;
+                            fold_columns(&mut src, config.width, &gain);
+                            let padded =
+                                pad(&src, config.mlp_hidden, config.width, spec.rows, spec.cols);
+                            codec.round_trip(&padded, spec.rows, spec.cols)?
+                        }
+                        "down" => {
+                            let src = var_name(&format!("layers.{layer:02}.mlp.down.weight"))?;
+                            let padded =
+                                pad(&src, config.width, config.mlp_hidden, spec.rows, spec.cols);
+                            codec.round_trip(&padded, spec.rows, spec.cols)?
+                        }
+                        other => panic!("unknown matrix in artifact: {other}"),
+                    }
+                }
+            };
+
+            assert_eq!(
+                dequantized,
+                expected_served,
+                "codec {}, matrix {}: exported artifact dequantized weights must match served view element by element bit for bit",
+                codec.name(),
+                spec.name
+            );
+        }
+
+        // Verify save and reload with codec_by_name recovery
+        let tmp_root = std::env::temp_dir().join(format!("d4-s2-reload-{}", std::process::id()));
+        let save_dir = tmp_root.join("saved");
+        model.save(&save_dir)?;
+
+        let saved_rec = StackModel::saved_served_representation(&save_dir)?;
+        let recovered_codec = codec_by_name(&saved_rec.unwrap().codec)?;
+        assert_eq!(recovered_codec.name(), codec.name());
+
+        let mut reloaded = StackModel::load(&save_dir, &device)?;
+        assert!(reloaded.served_codec().is_none());
+        reloaded.set_served_representation(Some(recovered_codec.clone()))?;
+        assert_eq!(reloaded.served_codec().unwrap().name(), codec.name());
+
+        let (reloaded_bytes, reloaded_summary) =
+            export_stack(&reloaded, serde_json::json!({"test": "s2_reloaded"}), None)?;
+        assert_eq!(reloaded_summary["method"]["quantizer"], codec.name());
+        assert_eq!(
+            reloaded_bytes,
+            lut_bytes,
+            "codec {}: reloaded model export must be bit-identical to original export",
+            codec.name()
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_root);
+    }
+
     Ok(())
 }

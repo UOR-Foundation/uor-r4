@@ -274,6 +274,14 @@ pub fn export_stack(
             snap.name()
         )));
     }
+    if let Some(codec) = model.served_codec() {
+        if codec.name().starts_with("native-d4-e8") {
+            return Err(invalid(format!(
+                "the model was trained against the served representation {}, which stack export does not write",
+                codec.name()
+            )));
+        }
+    }
     let (d, heads) = (c.width, c.heads);
     let mlp = c.mlp_hidden.div_ceil(GROUP) * GROUP;
     let shape = StackShape {
@@ -332,10 +340,23 @@ pub fn export_stack(
                     Some("native-d4-head-compensated-all-maps") => {
                         quantize_matrix_compensated_packed(values, rows, cols)?
                     }
-                    Some("native-d4-head-compensated-head-only")
-                        if site == Some(StackSite::Head) || site.is_none() =>
-                    {
-                        quantize_matrix_compensated_packed(values, rows, cols)?
+                    Some(name) if name.starts_with("native-d4-head-compensated-head-only-") => {
+                        let shape_str =
+                            name.trim_start_matches("native-d4-head-compensated-head-only-");
+                        if let Some((r_str, c_str)) = shape_str.split_once('x') {
+                            if let (Ok(r), Ok(c)) = (r_str.parse::<usize>(), c_str.parse::<usize>())
+                            {
+                                if rows == r && cols == c {
+                                    quantize_matrix_compensated_packed(values, rows, cols)?
+                                } else {
+                                    quantize_matrix(values, rows, cols)?
+                                }
+                            } else {
+                                quantize_matrix(values, rows, cols)?
+                            }
+                        } else {
+                            quantize_matrix(values, rows, cols)?
+                        }
                     }
                     Some("native-d11-grouped-4bit-g32-min-mse") => {
                         let c = uor_r4_integer::codec::Grouped4BitCodec::new(
@@ -355,24 +376,44 @@ pub fn export_stack(
                             relative_rms_error: rel_err,
                         }
                     }
-                    Some("native-d4-rec-out-min-mse") | Some("native-d4-s2-rec-out-min-mse")
-                        if matches!(site, Some(StackSite::RecurrenceOut(_))) =>
+                    Some(name)
+                        if name.starts_with("native-d4-rec-out-min-mse-")
+                            || name.starts_with("native-d4-s2-rec-out-min-mse-") =>
                     {
-                        let c = uor_r4_integer::codec::Grouped4BitCodec::new(
-                            GROUP,
-                            uor_r4_integer::codec::Grouped4BitRounding::MinimumMseScale,
-                        );
-                        let mat = c
-                            .quantize(values, rows, cols)
-                            .map_err(|e| invalid(e.to_string()))?;
-                        let rel_err = mat
-                            .relative_rms_error(values)
-                            .map_err(|e| invalid(e.to_string()))?;
-                        Packed {
-                            nibbles: mat.nibbles,
-                            scales: mat.scales,
-                            exp_base: mat.exp_base,
-                            relative_rms_error: rel_err,
+                        let shape_str =
+                            if let Some(rest) = name.strip_prefix("native-d4-rec-out-min-mse-") {
+                                rest
+                            } else {
+                                name.trim_start_matches("native-d4-s2-rec-out-min-mse-")
+                            };
+                        if let Some((r_str, c_str)) = shape_str.split_once('x') {
+                            if let (Ok(r), Ok(c)) = (r_str.parse::<usize>(), c_str.parse::<usize>())
+                            {
+                                if rows == r && cols == c {
+                                    let c = uor_r4_integer::codec::Grouped4BitCodec::new(
+                                        GROUP,
+                                        uor_r4_integer::codec::Grouped4BitRounding::MinimumMseScale,
+                                    );
+                                    let mat = c
+                                        .quantize(values, rows, cols)
+                                        .map_err(|e| invalid(e.to_string()))?;
+                                    let rel_err = mat
+                                        .relative_rms_error(values)
+                                        .map_err(|e| invalid(e.to_string()))?;
+                                    Packed {
+                                        nibbles: mat.nibbles,
+                                        scales: mat.scales,
+                                        exp_base: mat.exp_base,
+                                        relative_rms_error: rel_err,
+                                    }
+                                } else {
+                                    quantize_matrix(values, rows, cols)?
+                                }
+                            } else {
+                                quantize_matrix(values, rows, cols)?
+                            }
+                        } else {
+                            quantize_matrix(values, rows, cols)?
                         }
                     }
                     _ => quantize_matrix(values, rows, cols)?,
@@ -612,9 +653,14 @@ pub fn check_export_representation(
         || saved.codec == "native-d11-grouped-4bit-g32-rtn"
         || saved.codec == "native-d11-grouped-4bit-g32-min-mse"
         || saved.codec == "native-d4-head-compensated-head-only"
+        || saved
+            .codec
+            .starts_with("native-d4-head-compensated-head-only-")
         || saved.codec == "native-d4-head-compensated-all-maps"
         || saved.codec == "native-d4-rec-out-min-mse"
-        || saved.codec == "native-d4-s2-rec-out-min-mse";
+        || saved.codec.starts_with("native-d4-rec-out-min-mse-")
+        || saved.codec == "native-d4-s2-rec-out-min-mse"
+        || saved.codec.starts_with("native-d4-s2-rec-out-min-mse-");
     if !is_export_compatible {
         return Err(invalid(format!(
             "the model was trained against the served representation {}, which the stack \
@@ -1318,6 +1364,12 @@ mod tests {
         assert!(check_export_representation(Some(&head_comp), false).is_ok());
         assert!(check_export_representation(Some(&head_comp), true).is_err());
 
+        let head_comp_shape = SavedServedRepresentation {
+            codec: "native-d4-head-compensated-head-only-4096x288".to_owned(),
+        };
+        assert!(check_export_representation(Some(&head_comp_shape), false).is_ok());
+        assert!(check_export_representation(Some(&head_comp_shape), true).is_err());
+
         let min_mse = SavedServedRepresentation {
             codec: "native-d11-grouped-4bit-g32-min-mse".to_owned(),
         };
@@ -1329,6 +1381,12 @@ mod tests {
         };
         assert!(check_export_representation(Some(&rec_out_min_mse), false).is_ok());
         assert!(check_export_representation(Some(&rec_out_min_mse), true).is_err());
+
+        let rec_out_shape = SavedServedRepresentation {
+            codec: "native-d4-rec-out-min-mse-288x288".to_owned(),
+        };
+        assert!(check_export_representation(Some(&rec_out_shape), false).is_ok());
+        assert!(check_export_representation(Some(&rec_out_shape), true).is_err());
 
         let e8_matched_bit = SavedServedRepresentation {
             codec: "native-d4-e8-matched-bit".to_owned(),

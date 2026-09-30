@@ -49,7 +49,7 @@ impl MapCodec for D4Grouped4BitAdapter {
 /// Evaluates candidate base exponents and boundary mantissas to minimize squared error across
 /// groups, reducing output-head distortion in logit margins without requiring
 /// any changes to the served D11 runtime kernels or multiplier instructions.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct HeadCompensatedMapCodec {
     /// If `head_only` is true, only rows x cols matching the output head receive
     /// compensation, while other matrices use standard D11Interim.
@@ -59,20 +59,15 @@ pub struct HeadCompensatedMapCodec {
     /// If specified, only matrices matching `(rows, cols) == (vocab_size, width)`
     /// receive compensation in `head_only` mode.
     pub head_shape: Option<(usize, usize)>,
+    name: String,
 }
 
 impl HeadCompensatedMapCodec {
-    pub fn new(head_only: bool) -> Self {
+    pub fn all_maps() -> Self {
         Self {
-            head_only,
+            head_only: false,
             head_shape: None,
-        }
-    }
-
-    pub fn head_only() -> Self {
-        Self {
-            head_only: true,
-            head_shape: None,
+            name: "native-d4-head-compensated-all-maps".to_string(),
         }
     }
 
@@ -80,34 +75,24 @@ impl HeadCompensatedMapCodec {
         Self {
             head_only: true,
             head_shape: Some((rows, cols)),
-        }
-    }
-
-    pub fn all_maps() -> Self {
-        Self {
-            head_only: false,
-            head_shape: None,
+            name: format!("native-d4-head-compensated-head-only-{}x{}", rows, cols),
         }
     }
 }
 
 impl MapCodec for HeadCompensatedMapCodec {
     fn name(&self) -> &str {
-        if self.head_only {
-            "native-d4-head-compensated-head-only"
-        } else {
-            "native-d4-head-compensated-all-maps"
-        }
+        &self.name
     }
 
     fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
-        let is_target_head = if let Some((target_rows, target_cols)) = self.head_shape {
+        let is_target = if let Some((target_rows, target_cols)) = self.head_shape {
             rows == target_rows && cols == target_cols
         } else {
-            rows > cols && rows != 2 * cols
+            !self.head_only
         };
 
-        if self.head_only && !is_target_head {
+        if self.head_only && !is_target {
             D11Interim.round_trip(values, rows, cols)
         } else {
             let mat = uor_r4_integer::codec::quantize_matrix_compensated(values, rows, cols)
@@ -158,46 +143,35 @@ impl MapCodec for E8MatchedBitMapCodec {
 }
 
 /// Lab 3 codec applying minimum-MSE scale optimization to recurrence output projections
-/// (`rec_out`), preserving greedy dialogue trajectories.
-///
-/// Discovered via S2 greedy-flip behavior-sensitive attribution, where recurrence output
-/// projections are highly sensitive to round-to-nearest quantization distortion.
-/// Using Minimum-MSE scale search on recurrence output maps increases matching greedy
-/// turns from 14/58 to 16/58 without increasing the 4.2500 bpw budget or requiring
-/// format/kernel modifications.
-///
-/// Note: The 16/58 turns result (+2 turns over baseline 14/58) is not promoted: inside the
-/// arms' spread (-3 to +2 turns). Preserved as an explicit non-default export option.
-#[derive(Clone, Copy, Debug, Default)]
+/// (`rec_out`) or specified square matrices within the <= 4.25 bpw D4 gate.
+#[derive(Clone, Debug)]
 pub struct RecurrenceOutMinMseMapCodec {
     /// Target shape for recurrence output projections (e.g. `(width, width)`).
     /// If specified, only matrices matching `(rows, cols) == (width, width)` receive
     /// Minimum-MSE quantization, while others use standard RTN.
     pub target_shape: Option<(usize, usize)>,
+    name: String,
 }
 
 impl RecurrenceOutMinMseMapCodec {
-    pub fn new() -> Self {
-        Self { target_shape: None }
-    }
-
     pub fn for_shape(rows: usize, cols: usize) -> Self {
         Self {
             target_shape: Some((rows, cols)),
+            name: format!("native-d4-rec-out-min-mse-{}x{}", rows, cols),
         }
     }
 }
 
 impl MapCodec for RecurrenceOutMinMseMapCodec {
     fn name(&self) -> &str {
-        "native-d4-rec-out-min-mse"
+        &self.name
     }
 
     fn round_trip(&self, values: &[f32], rows: usize, cols: usize) -> Result<Vec<f32>> {
         let is_target = if let Some((target_rows, target_cols)) = self.target_shape {
             rows == target_rows && cols == target_cols
         } else {
-            rows == cols
+            false
         };
 
         if is_target {
@@ -219,13 +193,47 @@ pub fn codec_by_name(name: &str) -> Result<Arc<dyn MapCodec>> {
             Ok(Arc::new(D11Interim))
         }
         "native-d11-grouped-4bit-g32-min-mse" => Ok(Arc::new(D4Grouped4BitAdapter::min_mse())),
-        "native-d4-head-compensated-head-only" => {
-            Ok(Arc::new(HeadCompensatedMapCodec::head_only()))
-        }
         "native-d4-head-compensated-all-maps" => Ok(Arc::new(HeadCompensatedMapCodec::all_maps())),
         "native-d4-e8-matched-bit" => Ok(Arc::new(E8MatchedBitMapCodec::default())),
-        "native-d4-rec-out-min-mse" | "native-d4-s2-rec-out-min-mse" => {
-            Ok(Arc::new(RecurrenceOutMinMseMapCodec::default()))
+        "native-d4-head-compensated-head-only" => Err(invalid(
+            "codec native-d4-head-compensated-head-only requires explicit target shape, \
+             e.g. native-d4-head-compensated-head-only-4096x288",
+        )),
+        "native-d4-rec-out-min-mse" | "native-d4-s2-rec-out-min-mse" => Err(invalid(
+            "codec native-d4-rec-out-min-mse requires explicit target shape, \
+             e.g. native-d4-rec-out-min-mse-288x288",
+        )),
+        s if s.starts_with("native-d4-head-compensated-head-only-") => {
+            let shape_str = s.trim_start_matches("native-d4-head-compensated-head-only-");
+            let (r_str, c_str) = shape_str
+                .split_once('x')
+                .ok_or_else(|| invalid(format!("invalid shape in codec name: {s}")))?;
+            let r: usize = r_str
+                .parse()
+                .map_err(|e| invalid(format!("invalid rows in codec name {s}: {e}")))?;
+            let c: usize = c_str
+                .parse()
+                .map_err(|e| invalid(format!("invalid cols in codec name {s}: {e}")))?;
+            Ok(Arc::new(HeadCompensatedMapCodec::head_only_for(r, c)))
+        }
+        s if s.starts_with("native-d4-rec-out-min-mse-")
+            || s.starts_with("native-d4-s2-rec-out-min-mse-") =>
+        {
+            let shape_str = if let Some(rest) = s.strip_prefix("native-d4-rec-out-min-mse-") {
+                rest
+            } else {
+                s.trim_start_matches("native-d4-s2-rec-out-min-mse-")
+            };
+            let (r_str, c_str) = shape_str
+                .split_once('x')
+                .ok_or_else(|| invalid(format!("invalid shape in codec name: {s}")))?;
+            let r: usize = r_str
+                .parse()
+                .map_err(|e| invalid(format!("invalid rows in codec name {s}: {e}")))?;
+            let c: usize = c_str
+                .parse()
+                .map_err(|e| invalid(format!("invalid cols in codec name {s}: {e}")))?;
+            Ok(Arc::new(RecurrenceOutMinMseMapCodec::for_shape(r, c)))
         }
         _ => Err(invalid(format!("unknown served codec name: {name}"))),
     }
