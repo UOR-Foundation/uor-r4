@@ -2,8 +2,8 @@
   "schema": "uor-r4.lab-state/1",
   "repository": "UOR-Foundation/uor-r4",
   "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
-  "sequence": 244,
-  "observed_server_time": 1790781723,
+  "sequence": 245,
+  "observed_server_time": 1790781725,
   "labs": {
     "antigravity-lab-20260930": {
       "lab": "Antigravity",
@@ -123,7 +123,7 @@
     },
     "1515": {
       "session": "codex-durable-20260929-root",
-      "epoch": 2,
+      "epoch": 3,
       "work_card": "sha256:77303452e678ae9d37ac51848020dbbcddbb0900fef4dbe00f144c3f1834492c",
       "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
       "base_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
@@ -132,7 +132,7 @@
         "crates/uor-r4-training/drafts",
         "crates/uor-r4-training/examples/track-b-parity.rs"
       ],
-      "expires": 1790781432,
+      "expires": 1790782925,
       "phase": "claimed",
       "checkpoint": {
         "blockers": [],

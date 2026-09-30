@@ -1,0 +1,20 @@
+{
+  "event": {
+    "base_sha": "dc82874723c45fca9ffe7b9fa80f80ee9d3fe497",
+    "dependencies": [],
+    "event_id": "a6eb1c0a-cb94-47d4-a490-1298e87e9676",
+    "issue": 1515,
+    "op": "claim",
+    "paths": [
+      "crates/uor-r4-training/src/track_b",
+      "crates/uor-r4-training/drafts",
+      "crates/uor-r4-training/examples/track-b-parity.rs"
+    ],
+    "policy_sha": "ba266ad44f21c9df2dafa9d56a1e2051c1565d91",
+    "recovery_receipt": "Own expired claim, same branch dcb8b107 preserved, direct processes70263 and82224 stopped; no runner attempt. Completed tests17+3 evidence c9d8b8ee. No duplicate execution. Renew to publish outcome and retain next Metal validation responsibility.",
+    "session": "codex-durable-20260929-root",
+    "work_card": "sha256:77303452e678ae9d37ac51848020dbbcddbb0900fef4dbe00f144c3f1834492c"
+  },
+  "observed_server_time": 1790781725,
+  "previous_head": "95d84e1f34a1bfa184c729ea59bc74947fbe16be"
+}
