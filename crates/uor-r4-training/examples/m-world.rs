@@ -9,7 +9,8 @@
 //!   exclude=REQUESTS.json [conversations=5600] [seed=1]
 //! m-world corpus world=v2 out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [chat=CHAT_V0_TRAIN_DIR] \
 //!   [exclude=REQUESTS.json] [conversations=5600] [seed=1] \
-//!   [mqar_share=0.35] [copy_share=0.10] [relation_share=0.30] [other_share=0.25]
+//!   [mqar_share=0.35] [copy_share=0.10] [relation_share=0.30] [other_share=0.25] \
+//!   [recall=off|oracle|sieve] [recall_at=reply|query] [context=256]
 //! m-world evaluate [world=v1] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json] [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
@@ -624,6 +625,38 @@ fn messages_through(turns: &[Turn2], upto: usize) -> Vec<Message<'_>> {
     messages
 }
 
+/// A whole episode's messages with each turn's recall line (`lines[i]` for
+/// turn `i`) as a system turn just before its reply or just before its user
+/// turn, as `evaluate world=v2 recall=` places it.
+fn recalled_messages<'a>(
+    turns: &'a [Turn2],
+    lines: &'a [Option<String>],
+    at: RecallAt,
+) -> Vec<Message<'a>> {
+    let mut messages = Vec::with_capacity(3 * turns.len());
+    for (turn, line) in turns.iter().zip(lines) {
+        let system = line.as_deref().map(|content| Message {
+            role: "system",
+            content,
+        });
+        if at == RecallAt::Query {
+            messages.extend(system);
+        }
+        messages.push(Message {
+            role: "user",
+            content: &turn.user,
+        });
+        if at == RecallAt::Reply {
+            messages.extend(system);
+        }
+        messages.push(Message {
+            role: "assistant",
+            content: &turn.reply,
+        });
+    }
+    messages
+}
+
 /// The user turns of a decoded literal-role document ("User: ..." lines, with
 /// "Assistant: " and "System: " turns between them): a line that begins (after
 /// optional spaces) with a role marker opens a turn of that role, and any other
@@ -881,6 +914,15 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     let conversations: usize = args.number("conversations", 5_600)?;
     let seed: u64 = args.number("seed", 1)?;
     let mix = mix_of(args)?;
+    // The log-sieve emission curriculum: each retrieval turn's recall line in
+    // the training episode, which the reply then answers from.
+    let recall = recall_of(args)?;
+    let recall_at = recall_at_of(args)?;
+    let context: usize = args.number("context", CONTEXT)?;
+    if context < CONTEXT {
+        return Err(invalid(format!("context must be at least {CONTEXT}")));
+    }
+    let mut recall_lines = 0usize;
     let tokenizer = load_tokenizer(&tokenizer_path)?;
     let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
@@ -966,9 +1008,37 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
                 encoded.tokens.len()
             )));
         }
-        if encoded.tokens.len() > CONTEXT {
+        // The meter checks the plain episode; with recall lines the corpus
+        // holds the episode with each retrieval turn's line added.
+        let encoded = if recall == Recall::Off {
+            encoded
+        } else {
+            let lines: Vec<Option<String>> = conversation
+                .turns
+                .iter()
+                .enumerate()
+                .map(|(i, turn)| match recall {
+                    _ if !takes_recall(turn) => None,
+                    Recall::Off => None,
+                    Recall::Oracle => Some(recall_line(oracle_recall(turn))),
+                    Recall::Sieve => Some(recall_line(
+                        sieve_value(&conversation.turns[..i], turn).as_deref(),
+                    )),
+                })
+                .collect();
+            recall_lines += lines.iter().flatten().count();
+            let messages = recalled_messages(&conversation.turns, &lines, recall_at);
+            let recalled = encoder.encode_document(&messages);
+            if recalled.emitted_turns != messages.len() || recalled.special_token_occurrences != 0 {
+                return Err(invalid(format!(
+                    "M-world v2 conversation {index} with recall lines did not encode"
+                )));
+            }
+            recalled
+        };
+        if encoded.tokens.len() > context {
             return Err(invalid(format!(
-                "M-world v2 conversation {index} has {} tokens, over the {CONTEXT}-token context",
+                "M-world v2 conversation {index} has {} tokens, over the {context}-token context",
                 encoded.tokens.len()
             )));
         }
@@ -1154,6 +1224,14 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
             "mqar_achieved_distance_by_bucket": distance_report,
             "mqar_n_requested_to_achieved": n_matrix,
             "episode_tokens_max": longest,
+            "recall": (recall != Recall::Off).then(|| json!({
+                "mode": format!("{recall:?}").to_lowercase(),
+                "at": format!("{recall_at:?}").to_lowercase(),
+                "lines": recall_lines,
+                "context": context,
+                "rule": "one system turn per MQAR and relation query, \"Memory: {value}.\" or \
+                         \"Memory: none.\"; the plain episode is the one the meter checks",
+            })),
             "episode_tokens_histogram_by_32": length_histogram
                 .iter()
                 .map(|(bucket, n)| (format!("{bucket}-{}", bucket + 31), *n))
@@ -2559,6 +2637,9 @@ fn main() -> Result<()> {
                 "copy_share",
                 "relation_share",
                 "other_share",
+                "recall",
+                "recall_at",
+                "context",
             ],
         )?,
         "evaluate" => Args::parse(
@@ -2588,6 +2669,24 @@ fn main() -> Result<()> {
     };
     // `recall=` and `recall_at=` are checked before the root is claimed: a
     // malformed value, or one given to world=v1, claims nothing.
+    if mode == "corpus" {
+        let recall = recall_of(&args)?;
+        recall_at_of(&args)?;
+        let v1 = world_of(&args)? == World::V1;
+        if v1
+            && (recall != Recall::Off
+                || args.optional("recall_at").is_some()
+                || args.optional("context").is_some())
+        {
+            return Err(invalid("recall=, recall_at= and context= need world=v2"));
+        }
+        if recall == Recall::Off && args.optional("recall_at").is_some() {
+            return Err(invalid("recall_at= needs recall=oracle or recall=sieve"));
+        }
+        if args.number("context", CONTEXT)? < CONTEXT {
+            return Err(invalid(format!("context must be at least {CONTEXT}")));
+        }
+    }
     if mode == "evaluate" {
         let recall = recall_of(&args)?;
         recall_at_of(&args)?;
