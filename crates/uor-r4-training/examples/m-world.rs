@@ -167,8 +167,8 @@ use uor_r4_training::milestone_world_v2_probe::{
     EXCLUSION_NGRAM,
 };
 use uor_r4_training::relation_compiler::{
-    collect, label, paraphrase_examples, score, trunk_features, CompilerSettings, Example, Lexicon,
-    RelationRoute, SavedCompiler, Softmax, SparseSoftmax, ACTS, NONE as RC_NONE,
+    collect, label, paraphrase_examples, score, trunk_features, ActRule, CompilerSettings, Example,
+    Lexicon, RelationRoute, SavedCompiler, Softmax, SparseSoftmax, ACTS, NONE as RC_NONE,
 };
 use uor_r4_training::stack_checkpoint::{
     save_checkpoint, sealed_manifest_sha256, CheckpointIdentity, DataIdentity,
@@ -3042,6 +3042,10 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
     let eval_conversations: usize = args.number("eval_conversations", 1_000)?;
     let seed: u64 = args.number("seed", 9_101)?;
     let values = args.optional("values").unwrap_or_else(|| "train".into());
+    let settings = CompilerSettings {
+        act_rule: ActRule::parse(&args.optional("act_rule").unwrap_or_else(|| "table".into()))?,
+        ..CompilerSettings::default()
+    };
     let tokenizer = load_tokenizer(&tokenizer_path)?;
     let tokenizer_sha256 = sha256_file(&tokenizer_path)?;
     let count = |text: &str| tokenizer.encode(text).len();
@@ -3097,12 +3101,7 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
         "examples": train.len(),
     });
     let fit_started = Instant::now();
-    let saved = SavedCompiler::fit(
-        &train,
-        &tokenizer_sha256,
-        training.clone(),
-        CompilerSettings::default(),
-    )?;
+    let saved = SavedCompiler::fit(&train, &tokenizer_sha256, training.clone(), settings)?;
     let fit_seconds = fit_started.elapsed().as_secs_f64();
     fs::write(out.join("compiler.json"), saved.bytes())?;
     let mut cells = serde_json::Map::new();
@@ -3176,7 +3175,7 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
         "artifact_sha256": saved.identity().artifact_sha256,
         "identity": saved.identity(),
         "training": training,
-        "settings": format!("{:?}", CompilerSettings::default()),
+        "settings": format!("{settings:?}"),
         "fit_seconds": fit_seconds,
         "evaluation": {
             "draw": format!("relation-heavy mix, development phrasings, {eval_conversations} conversations per value split, seed {}", seed + 1),
@@ -3408,8 +3407,8 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         println!(
             "arm {arm}: MQAR {}/{}; open relation {}/{}; closed relation {}/{}; \
              open abstain {}/{}; errors {errors}",
-            scores["mqar"]["pass"],
-            scores["mqar"]["of"],
+            scores["mqar"]["all"]["pass"],
+            scores["mqar"]["all"]["of"],
             scores["relation"]["open"]["pass"],
             scores["relation"]["open"]["of"],
             scores["relation"]["closed"]["pass"],
@@ -3558,6 +3557,7 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "seed",
         "values",
         "paraphrases",
+        "act_rule",
     ];
     let session_keys: &[&str] = &[
         "out",

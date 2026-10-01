@@ -494,16 +494,17 @@ impl SparseSoftmax {
         best
     }
 
+    fn logit(&self, row: &[(usize, f64)], class: usize) -> f64 {
+        self.bias[class]
+            + row
+                .iter()
+                .map(|&(i, v)| self.weights[class * self.dim + i] * v)
+                .sum::<f64>()
+    }
+
     /// Class 1's logit minus class 0's, for a two-class head.
     fn margin(&self, row: &[(usize, f64)]) -> f64 {
-        let logit = |c: usize| {
-            self.bias[c]
-                + row
-                    .iter()
-                    .map(|&(i, v)| self.weights[c * self.dim + i] * v)
-                    .sum::<f64>()
-        };
-        logit(1) - logit(0)
+        self.logit(row, 1) - self.logit(row, 0)
     }
 }
 
@@ -646,6 +647,21 @@ impl RelationRoute {
             relations,
             trunk: norm,
         })
+    }
+
+    /// For a turn known to be a statement: `update` when the act head scores
+    /// it above `assert`, otherwise `assert`.
+    pub fn statement_act(&self, text: &str, dense: Option<&[f64]>) -> Result<&'static str> {
+        let row = route_row(&self.lexicon, self.trunk.as_ref(), text, dense)?;
+        // ACTS[0] is assert and ACTS[1] update.
+        let (assert, update) = (0, 1);
+        Ok(
+            if self.act_head.logit(&row, update) > self.act_head.logit(&row, assert) {
+                ACTS[update]
+            } else {
+                ACTS[assert]
+            },
+        )
     }
 
     /// Whether the route reads trunk features beside the words.
@@ -931,6 +947,29 @@ pub struct CompilerSettings {
     pub span_rate: f64,
     pub span_l2: f64,
     pub span_max_words: usize,
+    pub act_rule: ActRule,
+}
+
+/// Which head decides whether a turn naming a relation is a statement or a
+/// query.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ActRule {
+    /// The table's act head names assert, update, query or none.
+    #[default]
+    Table,
+    /// A decoded value span makes the turn a statement, and the act head
+    /// only chooses assert or update; no span makes it a query.
+    Span,
+}
+
+impl ActRule {
+    pub fn parse(text: &str) -> Result<Self> {
+        match text {
+            "table" => Ok(Self::Table),
+            "span" => Ok(Self::Span),
+            other => Err(invalid(format!("unknown act rule {other}"))),
+        }
+    }
 }
 
 impl Default for CompilerSettings {
@@ -945,6 +984,7 @@ impl Default for CompilerSettings {
             span_rate: 0.5,
             span_l2: 1e-4,
             span_max_words: 4,
+            act_rule: ActRule::Table,
         }
     }
 }
@@ -1052,6 +1092,10 @@ struct CompilerArtifact {
     span_rate_l2: Vec<f64>,
     /// Where the training turns came from (draws, files and digests).
     training: Value,
+    /// `span` for [`ActRule::Span`]; absent for [`ActRule::Table`], so
+    /// artifacts saved before the rule existed keep their bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    act_rule: Option<String>,
 }
 
 fn is_sha256(value: &str) -> bool {
@@ -1068,6 +1112,7 @@ fn is_sha256(value: &str) -> bool {
 pub struct SavedCompiler {
     bytes: Vec<u8>,
     inner: std::sync::Arc<(RelationRoute, SpanHead)>,
+    act_rule: ActRule,
     identity: crate::stack_grounded_session::CompilerIdentity,
 }
 
@@ -1146,6 +1191,11 @@ impl SavedCompiler {
             span_rate: artifact.span_rate_l2[0],
             span_l2: artifact.span_rate_l2[1],
             span_max_words: artifact.span_max_words,
+            act_rule: match artifact.act_rule.as_deref() {
+                None => ActRule::Table,
+                Some("span") => ActRule::Span,
+                Some(_) => return Err(invalid("a saved compiler names an unknown act rule")),
+            },
         };
         let table_dim = artifact.words.len().max(1);
         let lexicon = Lexicon {
@@ -1214,8 +1264,13 @@ impl SavedCompiler {
         Ok(Self {
             bytes,
             inner: std::sync::Arc::new((route, span)),
+            act_rule: settings.act_rule,
             identity,
         })
+    }
+
+    pub fn act_rule(&self) -> ActRule {
+        self.act_rule
     }
 
     pub fn bytes(&self) -> &[u8] {
@@ -1242,7 +1297,9 @@ impl SavedCompiler {
 
     /// The action for a user turn: a query of the named relation; a
     /// statement or correction with the span head's value; or unresolved
-    /// when the table names no relation or act, or the head marks no value.
+    /// when the table names no relation. Under [`ActRule::Table`] a turn is
+    /// also unresolved when the table names no act, or names a statement
+    /// whose value the span head does not mark.
     pub fn action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
         let unresolved = |reason: &str| {
@@ -1257,6 +1314,19 @@ impl SavedCompiler {
         let id = self
             .relation_id(relation)
             .ok_or_else(|| invalid("the table named a relation outside its labels"))?;
+        if self.act_rule == ActRule::Span {
+            return Ok(match self.span().decode(source) {
+                None => CompiledAction::QueryCurrent { relation: id },
+                Some((start, end)) => {
+                    let span = SourceSpan { start, end };
+                    if self.route().statement_act(source, None)? == "update" {
+                        CompiledAction::Correct { relation: id, span }
+                    } else {
+                        CompiledAction::Assert { relation: id, span }
+                    }
+                }
+            });
+        }
         match act {
             "query" => Ok(CompiledAction::QueryCurrent { relation: id }),
             "assert" | "update" => match self.span().decode(source) {
@@ -1325,6 +1395,10 @@ fn encode(
         span_steps: settings.span_steps,
         span_rate_l2: vec![settings.span_rate, settings.span_l2],
         training,
+        act_rule: match settings.act_rule {
+            ActRule::Table => None,
+            ActRule::Span => Some("span".to_owned()),
+        },
     };
     Ok(serde_json::to_vec(&artifact)?)
 }
@@ -1771,6 +1845,51 @@ mod tests {
             CompilerSettings::default()
         )
         .is_err());
+        // The table rule writes no act-rule field, so its bytes predate it.
+        assert!(!String::from_utf8_lossy(saved.bytes()).contains("act_rule"));
+        Ok(())
+    }
+
+    #[test]
+    fn under_the_span_rule_a_value_makes_a_statement_and_none_a_query() -> Result<()> {
+        use crate::stack_grounded_session::{CompiledAction, SourceSpan, TurnCompiler};
+        let train = small_world();
+        let settings = CompilerSettings {
+            act_rule: ActRule::Span,
+            ..CompilerSettings::default()
+        };
+        let saved = SavedCompiler::fit(&train, &"cd".repeat(32), json!({}), settings)?;
+        assert_eq!(saved.act_rule(), ActRule::Span);
+        let again = SavedCompiler::from_bytes(saved.bytes().to_vec())?;
+        assert_eq!(again.act_rule(), ActRule::Span);
+        assert_eq!(again.bytes(), saved.bytes());
+        let name = saved
+            .relation_id("user_name")
+            .ok_or_else(|| invalid("no id"))?;
+        let compile = |text: &str| saved.compile(text).map_err(|e| invalid(e.to_string()));
+        assert_eq!(
+            compile("My name is Zorvak.")?,
+            CompiledAction::Assert {
+                relation: name,
+                span: SourceSpan { start: 11, end: 17 }
+            }
+        );
+        assert_eq!(
+            compile("Actually, my name is Plimbo.")?,
+            CompiledAction::Correct {
+                relation: name,
+                span: SourceSpan { start: 21, end: 27 }
+            }
+        );
+        assert_eq!(
+            compile("What is my name?")?,
+            CompiledAction::QueryCurrent { relation: name }
+        );
+        let mut artifact: Value = serde_json::from_slice(saved.bytes())?;
+        assert_eq!(artifact["act_rule"], "span");
+        artifact["act_rule"] = json!("guess");
+        assert!(SavedCompiler::from_bytes(serde_json::to_vec(&artifact)?).is_err());
+        assert!(ActRule::parse("span").is_ok() && ActRule::parse("both").is_err());
         Ok(())
     }
 
