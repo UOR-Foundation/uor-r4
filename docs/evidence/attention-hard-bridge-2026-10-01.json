@@ -509,5 +509,17 @@
       ],
       "prior_soft_reproduced": true
     }
-  ]
+  ],
+  "minimum_absolute_gate_logits": {
+    "Held-s1/evaluation.json": 5.649386405944824,
+    "Held-s1/stress.json": 5.591119766235352,
+    "Held-s2/evaluation.json": 6.051016807556152,
+    "Held-s2/stress.json": 6.340917587280273,
+    "Local-s1/evaluation.json": 2.540858268737793,
+    "Local-s1/stress.json": 2.280109405517578,
+    "Local-s2/evaluation.json": 0.8317056894302368,
+    "Local-s2/stress.json": 1.021418809890747
+  },
+  "source_commit_containing_implementation": "77271969dda9862e8c76a5089b51d229b168e0ed",
+  "binary_embedded_source_commit": "UNAVAILABLE; exact source and executable hashes supplied separately"
 }
