@@ -546,15 +546,18 @@ impl RelationRoute {
     }
 
     /// The value the log gives for a relation query: the latest earlier user
-    /// turn the table names as stating or updating the asked relation, and its
-    /// words outside the world's fixed vocabulary (`reserved`, instrument
-    /// knowledge, as R-sieve's content cut). `None` when the query names no
-    /// relation or no such statement holds a value.
+    /// turn the table names as the asked relation, and its words outside the
+    /// world's fixed vocabulary (`reserved`, instrument knowledge, as R-sieve's
+    /// content cut). With `fact_acts` the turn must also be named an assert or
+    /// update; without, the value's presence alone marks a statement (a query
+    /// states no value). `None` when the query names no relation or no such
+    /// turn holds a value.
     pub fn value(
         &self,
         history: &[Turn2],
         query: &Turn2,
         reserved: &std::collections::BTreeSet<String>,
+        fact_acts: bool,
     ) -> Option<String> {
         let (asked, _) = self.classify(&query.user);
         if asked == NONE {
@@ -562,7 +565,7 @@ impl RelationRoute {
         }
         history.iter().rev().find_map(|turn| {
             let (relation, act) = self.classify(&turn.user);
-            if relation != asked || !matches!(act, "assert" | "update") {
+            if relation != asked || (fact_acts && !matches!(act, "assert" | "update")) {
                 return None;
             }
             let value: Vec<String> = words(&turn.user)
@@ -784,18 +787,18 @@ mod tests {
                 .collect();
         assert_eq!(
             route
-                .value(&history, &user("Who is my friend?"), &reserved)
+                .value(&history, &user("Who is my friend?"), &reserved, true)
                 .as_deref(),
             Some("quandle")
         );
         assert_eq!(
             route
-                .value(&history, &user("What is my dog called?"), &reserved)
+                .value(&history, &user("What is my dog called?"), &reserved, false)
                 .as_deref(),
             Some("plimbo")
         );
         assert_eq!(
-            route.value(&[], &user("Who is my friend?"), &reserved),
+            route.value(&[], &user("Who is my friend?"), &reserved, true),
             None
         );
         // The sparse fit refuses an index outside its width.
