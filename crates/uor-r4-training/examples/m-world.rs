@@ -16,7 +16,8 @@
 //! m-world evaluate world=v2 out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
-//!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K] [recall=off|oracle|sieve]
+//!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K] [recall=off|oracle|sieve] \
+//!   [recall_at=reply|query]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! m-world evaluate-cells [world=v2] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [conversations=300] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
@@ -114,7 +115,9 @@
 //!   {value}." or "Memory: none.", before each MQAR and relation query's reply:
 //!   the oracle's value, or R-sieve's. A query whose line leaves no room to
 //!   reply is answered empty and counted in `recall.overflow`. `recall=off`
-//!   (the default) leaves the report unchanged.
+//!   (the default) leaves the report unchanged. `recall_at=query` puts the
+//!   line just before the query's own user turn instead, so that the question
+//!   stays the last turn.
 //!
 //! A saved transport snap is restored; a saved served representation is
 //! refused. Every root is claimed before anything is loaded and sealed at the
@@ -291,6 +294,25 @@ enum Recall {
     Off,
     Oracle,
     Sieve,
+}
+
+/// `recall_at=` of `evaluate world=v2`: where the recall line goes, just
+/// before the reply (`reply`, the default) or just before the query's own
+/// user turn (`query`), so that the question stays the last turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RecallAt {
+    Reply,
+    Query,
+}
+
+fn recall_at_of(args: &Args) -> Result<RecallAt> {
+    match args.optional("recall_at").as_deref() {
+        None | Some("reply") => Ok(RecallAt::Reply),
+        Some("query") => Ok(RecallAt::Query),
+        Some(other) => Err(invalid(format!(
+            "unknown recall_at={other}: reply or query"
+        ))),
+    }
 }
 
 fn recall_of(args: &Args) -> Result<Recall> {
@@ -1480,6 +1502,7 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
     let (model, identity, selection_override) = load_model(&model_dir, &device, &args.selection)?;
     let context = model.config.context;
     let recall = recall_of(args)?;
+    let recall_at = recall_at_of(args)?;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let mut reply =
         |history: &[u32], cap: usize| greedy_reply(&model, history, cap, protocol.eos_id);
@@ -1505,10 +1528,15 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
             };
             let mut messages = messages_through(&conversation.turns, t);
             if let Some(line) = &line {
-                messages.push(Message {
+                let system = Message {
                     role: "system",
                     content: line,
-                });
+                };
+                match recall_at {
+                    RecallAt::Reply => messages.push(system),
+                    // Before the query's own user turn, the last message.
+                    RecallAt::Query => messages.insert(messages.len() - 1, system),
+                }
             }
             let prefix = encoder.encode_assistant_prefix(&messages);
             if prefix.emitted_turns != messages.len() || prefix.special_token_occurrences != 0 {
@@ -1625,8 +1653,10 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
         println!("recall={recall:?}: {recall_overflow} queries had no room to reply");
         report["recall"] = json!({
             "mode": format!("{recall:?}").to_lowercase(),
-            "line": "one system turn before each MQAR and relation query's reply: \
-                     \"Memory: {value}.\" or \"Memory: none.\"",
+            "at": format!("{recall_at:?}").to_lowercase(),
+            "line": "one system turn per MQAR and relation query, \"Memory: {value}.\" or \
+                     \"Memory: none.\", just before the reply (at=reply) or just before the \
+                     query's own user turn (at=query)",
             "overflow": recall_overflow,
             "overflow_rule": "a query whose recall line leaves no room to reply is \
                               answered empty and fails",
@@ -2550,15 +2580,23 @@ fn main() -> Result<()> {
                 "select",
                 "pointer_select",
                 "recall",
+                "recall_at",
             ],
         )?,
         "rejudge" => Args::parse(rest, &["out", "report", "tokenizer"])?,
         other => return Err(invalid(format!("unknown mode {other}"))),
     };
-    // `recall=` is checked before the root is claimed: a malformed value, or
-    // one given to world=v1, claims nothing.
-    if mode == "evaluate" && recall_of(&args)? != Recall::Off && world_of(&args)? != World::V2 {
-        return Err(invalid("recall= needs world=v2"));
+    // `recall=` and `recall_at=` are checked before the root is claimed: a
+    // malformed value, or one given to world=v1, claims nothing.
+    if mode == "evaluate" {
+        let recall = recall_of(&args)?;
+        recall_at_of(&args)?;
+        if recall != Recall::Off && world_of(&args)? != World::V2 {
+            return Err(invalid("recall= needs world=v2"));
+        }
+        if recall == Recall::Off && args.optional("recall_at").is_some() {
+            return Err(invalid("recall_at= needs recall=oracle or recall=sieve"));
+        }
     }
     let world = if mode == "rejudge" {
         World::V1
