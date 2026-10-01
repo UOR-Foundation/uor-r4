@@ -636,7 +636,9 @@ pub enum StackSite {
     /// The recurrence core's output, read by `rec.out`.
     RecurrenceOut(usize),
     /// The normalized state before its gain, read by a read layer's query,
-    /// key, value and NoRead maps, or by the control's attention.
+    /// key, value and NoRead maps, or by the control's attention. With identity
+    /// carry enabled this remains the current state for value/NoRead; query
+    /// and key projections use its causal predecessor (zero at position zero).
     Read(usize),
     /// The merged heads, read by `read.out` or the control's `attn.o`.
     ReadOut(usize),
@@ -742,6 +744,8 @@ pub struct StackModel {
     /// The roots the recurrences snap their transport to, if set
     /// ([`Self::set_transport_snap`]).
     transport: Option<TransportSnap>,
+    /// The q/k projection input is the preceding normalized state, when set.
+    read_identity_carry: bool,
 }
 
 impl StackModel {
@@ -840,6 +844,7 @@ impl StackModel {
             device: device.clone(),
             served: None,
             transport: None,
+            read_identity_carry: false,
         })
     }
 
@@ -1148,9 +1153,11 @@ impl StackModel {
         let heads = self.config.heads;
         tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
         let u = self.norm(p, x, &layer_name(layer, "read_norm.weight"))?;
+        let identity = self.read_identity_input(&u)?;
         let project = |part: &str| -> Result<Tensor> {
+            let input = if part == "value" { &u } else { &identity };
             self.heads(
-                &Self::linear(&u, p.layer(layer, &format!("read.{part}.weight"))?)?,
+                &Self::linear(input, p.layer(layer, &format!("read.{part}.weight"))?)?,
                 batch,
                 time,
             )
@@ -1226,6 +1233,51 @@ impl StackModel {
         let merged = self.merge_heads(&read, batch, time)?;
         tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
         Self::linear(&merged, p.layer(layer, "read.out.weight")?)
+    }
+
+    fn read_identity_input(&self, normalized: &Tensor) -> Result<Tensor> {
+        if !self.read_identity_carry {
+            return Ok(normalized.clone());
+        }
+        let (batch, time, width) = normalized.dims3()?;
+        let zero = Tensor::zeros((batch, 1, width), normalized.dtype(), normalized.device())?;
+        if time == 1 {
+            Ok(zero)
+        } else {
+            Ok(Tensor::cat(
+                &[&zero, &normalized.narrow(1, 0, time - 1)?],
+                1,
+            )?)
+        }
+    }
+
+    /// Opt into a causal predecessor-to-payload association at every geometric
+    /// read: q/k at t project normalized input t-1 (zero at t=0), while values,
+    /// NoRead and age remain at t. No labels or token parsing enter this rule.
+    /// The full causal support, including self, is unchanged. Consequently a
+    /// same-identity self candidate is still possible and must be learned away.
+    /// No new parameters are introduced. The default is false.
+    ///
+    /// This initial float-training mechanism has no integer export or served
+    /// representation; both must refuse it until the corresponding port exists.
+    pub fn set_read_identity_carry(&mut self, enabled: bool) -> Result<()> {
+        if enabled {
+            if self.config.arch != StackArch::Geometric || !self.config.pattern.contains('a') {
+                return Err(invalid(
+                    "read identity carry needs a geometric stack with a read layer",
+                ));
+            }
+            if self.served.is_some() {
+                return Err(invalid("read identity carry has no served representation"));
+            }
+        }
+        self.read_identity_carry = enabled;
+        Ok(())
+    }
+
+    /// Whether geometric q/k inputs use the preceding normalized state.
+    pub fn read_identity_carry(&self) -> bool {
+        self.read_identity_carry
     }
 
     fn recurrence(
@@ -1932,6 +1984,9 @@ impl StackModel {
     /// transport snap from its record, so a loaded model's forward pass is the
     /// one that was trained. It does not restore the served representation;
     /// its callers read [`Self::saved_served_representation`].
+    /// Opt-in read identity carry also writes [`READ_IDENTITY_CARRY_RECORD`]
+    /// and pins its digest in config.json; a default save removes stale carry
+    /// metadata and retains the legacy config byte format.
     pub fn save(&self, directory: &Path) -> Result<()> {
         fs::create_dir_all(directory)?;
         let tensors: std::collections::HashMap<String, Tensor> = self
@@ -1940,7 +1995,7 @@ impl StackModel {
             .map(|(name, var)| (name.clone(), var.as_tensor().clone()))
             .collect();
         candle_core::safetensors::save(&tensors, directory.join("model.safetensors"))?;
-        let config = match &self.served {
+        let mut config = match &self.served {
             None => serde_json::to_vec_pretty(&self.config)?,
             Some(state) => serde_json::to_vec_pretty(&ServedConfigFile {
                 config: &self.config,
@@ -1949,6 +2004,34 @@ impl StackModel {
                 },
             })?,
         };
+        let carry_path = directory.join(READ_IDENTITY_CARRY_RECORD);
+        if self.read_identity_carry {
+            let record = ReadIdentityCarryRecord {
+                schema: READ_IDENTITY_CARRY_SCHEMA.to_owned(),
+                operation: READ_IDENTITY_CARRY_OPERATION.to_owned(),
+                config_sha256: hex::encode(Sha256::digest(serde_json::to_vec_pretty(
+                    &self.config,
+                )?)),
+                model_sha256: hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?)),
+            };
+            let bytes = serde_json::to_vec_pretty(&record)?;
+            let marker = ReadIdentityCarryMarker {
+                schema: READ_IDENTITY_CARRY_SCHEMA.to_owned(),
+                record_sha256: hex::encode(Sha256::digest(&bytes)),
+            };
+            let mut with_marker: serde_json::Value = serde_json::from_slice(&config)?;
+            with_marker["read_identity_carry"] = serde_json::to_value(marker)?;
+            config = serde_json::to_vec_pretty(&with_marker)?;
+            fs::write(&carry_path, bytes)?;
+        } else {
+            match fs::remove_file(&carry_path) {
+                Ok(()) => (),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                Err(error) => return Err(error.into()),
+            }
+        }
         fs::write(directory.join("config.json"), config)?;
         let record = directory.join(TRANSPORT_RECORD);
         match self.transport {
@@ -2003,6 +2086,55 @@ impl StackModel {
         Ok(Some(snap))
     }
 
+    /// Read and verify the opt-in carry record. Legacy directories without a
+    /// marker or sidecar mean false. A declared-but-missing, undeclared-extra,
+    /// stale or mismatched record is refused, including unknown operations.
+    /// The config marker binds exact metadata bytes; the record binds this
+    /// model's float weights and canonical StackConfig. These are integrity
+    /// checks, not authentication of an untrusted directory.
+    pub fn saved_read_identity_carry(directory: &Path) -> Result<bool> {
+        #[derive(Deserialize)]
+        struct ConfigMarker {
+            #[serde(default)]
+            read_identity_carry: Option<ReadIdentityCarryMarker>,
+        }
+        let config_bytes = fs::read(directory.join("config.json"))?;
+        let marker: ConfigMarker = serde_json::from_slice(&config_bytes)?;
+        let bytes = match fs::read(directory.join(READ_IDENTITY_CARRY_RECORD)) {
+            Ok(bytes) => Some(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        let (marker, bytes) = match (marker.read_identity_carry, bytes) {
+            (None, None) => return Ok(false),
+            (Some(marker), Some(bytes)) => (marker, bytes),
+            _ => {
+                return Err(invalid(
+                    "read identity carry marker and record presence differ",
+                ))
+            }
+        };
+        let record: ReadIdentityCarryRecord = serde_json::from_slice(&bytes)?;
+        let config: StackConfig = serde_json::from_slice(&config_bytes)?;
+        if marker.schema != READ_IDENTITY_CARRY_SCHEMA
+            || record.schema != READ_IDENTITY_CARRY_SCHEMA
+            || record.operation != READ_IDENTITY_CARRY_OPERATION
+            || marker.record_sha256 != hex::encode(Sha256::digest(&bytes))
+            || record.config_sha256
+                != hex::encode(Sha256::digest(serde_json::to_vec_pretty(&config)?))
+            || record.model_sha256
+                != hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?))
+            || Self::saved_served_representation(directory)?.is_some()
+        {
+            return Err(invalid(
+                "saved read identity carry metadata, operation or model binding differs",
+            ));
+        }
+        Ok(true)
+    }
+
     /// Load a saved model. A directory whose [`TRANSPORT_RECORD`] records a
     /// transport snap loads with it set ([`Self::saved_transport_snap`] checks
     /// its roots; [`Self::set_transport_snap`] checks the configuration), so
@@ -2035,8 +2167,10 @@ impl StackModel {
             device: device.clone(),
             served: None,
             transport: None,
+            read_identity_carry: false,
         };
         model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
+        model.set_read_identity_carry(Self::saved_read_identity_carry(directory)?)?;
         Ok(model)
     }
 }
@@ -2256,6 +2390,29 @@ fn unit_quaternion(raw: [f32; 4]) -> ([f32; 4], f32) {
 pub const TRANSPORT_RECORD: &str = "transport.json";
 /// The schema of [`TRANSPORT_RECORD`].
 pub const TRANSPORT_RECORD_SCHEMA: &str = "uor-r4.stack-transport/1";
+
+/// The opt-in read identity carry's operation and model binding, also pinned
+/// by its exact SHA-256 in config.json. Absent in legacy/default saves.
+pub const READ_IDENTITY_CARRY_RECORD: &str = "read-identity-carry.json";
+const READ_IDENTITY_CARRY_SCHEMA: &str = "uor-r4.stack-read-identity-carry/1";
+const READ_IDENTITY_CARRY_OPERATION: &str =
+    "q_key=normalized_input[t-1];t0=zeros;value=normalized_input[t];null=normalized_input[t];age=current;support=unchanged";
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReadIdentityCarryRecord {
+    schema: String,
+    operation: String,
+    config_sha256: String,
+    model_sha256: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReadIdentityCarryMarker {
+    schema: String,
+    record_sha256: String,
+}
 
 /// A fixed set of unit quaternions that every recurrence's unit transport
 /// quaternion snaps to, before its scaling by lambda, in training and
@@ -3085,6 +3242,9 @@ impl StackModel {
     pub fn set_served_representation(&mut self, codec: Option<Arc<dyn MapCodec>>) -> Result<()> {
         self.served = match codec {
             None => None,
+            Some(_) if self.read_identity_carry => {
+                return Err(invalid("read identity carry has no served representation"));
+            }
             Some(_) if self.config.pointer.is_some() => return Err(pointer_served_refusal()),
             Some(codec) => {
                 let plan = served_plan(&self.config)?;
@@ -7146,6 +7306,218 @@ mod tests {
                 },
             ],
         }
+    }
+
+    #[test]
+    fn read_identity_carry_matches_predecessor_qk_current_values_and_binding_gradient() -> Result<()>
+    {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let mut model = StackModel::new(tiny(StackArch::Geometric, "ra", score, true), &cpu())?;
+            let original = bits(&model.forward(&ids, 2, 8)?)?;
+            assert!(!model.read_identity_carry());
+            model.set_read_identity_carry(false)?;
+            assert_eq!(bits(&model.forward(&ids, 2, 8)?)?, original);
+            model.set_read_identity_carry(true)?;
+            let p = model.params()?;
+            let x = model.run_layers(model.embed(&ids, 2, 8)?, 0..1)?;
+            let u = model.norm(&p, &x, &layer_name(1, "read_norm.weight"))?;
+            let shifted = model.read_identity_input(&u)?;
+            assert_eq!(
+                shifted
+                    .narrow(1, 0, 1)?
+                    .abs()?
+                    .max_all()?
+                    .to_scalar::<f32>()?,
+                0.0
+            );
+            assert_eq!(
+                max_abs_gap(&shifted.narrow(1, 1, 7)?, &u.narrow(1, 0, 7)?)?,
+                0.0
+            );
+            assert_eq!(
+                model
+                    .read_identity_input(&u.narrow(1, 0, 1)?)?
+                    .abs()?
+                    .max_all()?
+                    .to_scalar::<f32>()?,
+                0.0
+            );
+            let project = |input: &Tensor, part: &str| -> Result<Tensor> {
+                model.heads(
+                    &StackModel::linear(input, p.layer(1, &format!("read.{part}.weight"))?)?,
+                    2,
+                    8,
+                )
+            };
+            // Independent assembled reference: delayed q/k, current values,
+            // and current NoRead/age, through the unchanged fused scorer.
+            let query = project(&shifted, "query")?;
+            let key = project(&shifted, "key")?;
+            let value = project(&u, "value")?;
+            let null = StackModel::linear(&u, p.layer(1, "read.null.weight")?)?
+                .broadcast_add(p.layer(1, "read.null.bias")?)?
+                .transpose(1, 2)?
+                .flatten_all()?;
+            let age = p.layer(1, "read.age")?.narrow(1, 0, 8)?.flatten_all()?;
+            let mut aux = vec![null, age];
+            if score == ReadScore::Lorentz {
+                aux.push(p.layer(1, "read.log_beta")?.exp()?);
+                aux.push(p.layer(1, "read.offset")?.clone());
+            }
+            let reference = fused_read_selected(
+                &query,
+                &key,
+                &value,
+                &Tensor::cat(&aux, 0)?,
+                score,
+                true,
+                true,
+                false,
+                None,
+            )?;
+            let reference = StackModel::linear(
+                &model.merge_heads(&reference, 2, 8)?,
+                p.layer(1, "read.out.weight")?,
+            )?;
+            let actual = model.geometric_read(&p, 1, &x, &mut None, &mut None)?;
+            assert_eq!(max_abs_gap(&actual, &reference)?, 0.0);
+            let target = binding_rows(1);
+            let (_, observed) = model.hidden_with_binding(&p, &ids, 2, 8, &target)?;
+            assert_eq!(
+                bits(&observed)?,
+                bits(&model.read_binding_masses(&ids, 2, 8, &target)?)?
+            );
+            let with_labels = model.hidden_with_binding(&p, &ids, 2, 8, &target)?.0;
+            assert_eq!(max_abs_gap(&with_labels, &model.hidden(&ids, 2, 8)?)?, 0.0);
+            let names = [
+                "layers.01.read.query.weight",
+                "layers.01.read.key.weight",
+                "layers.00.rec.in.weight",
+                "layers.01.read.age",
+                "layers.01.read.null.bias",
+            ];
+            let vars: Vec<Var> = names
+                .iter()
+                .map(|name| model.variables()[*name].clone())
+                .collect();
+            let objective = || -> Result<Tensor> {
+                Ok(model
+                    .loss_with_binding(&ids, &ids, None, 2, 8, &target)?
+                    .binding)
+            };
+            let grads = objective()?.backward()?;
+            for (name, var) in names.iter().zip(&vars) {
+                let grad = grads
+                    .get(var)
+                    .ok_or_else(|| invalid(format!("carry binding misses {name}")))?;
+                assert!(
+                    grad.abs()?.max_all()?.to_scalar::<f32>()? > 0.0,
+                    "{score:?} {name}"
+                );
+            }
+            check_gradient(&vars, objective, 2e-2)?;
+            model.set_read_identity_carry(false)?;
+            assert_eq!(bits(&model.forward(&ids, 2, 8)?)?, original);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_carry_save_reload_is_bound_and_default_format_stays_legacy() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("stack-read-identity-carry-{}", std::process::id()));
+        let free_dir = root.join("free");
+        let carry_dir = root.join("carry");
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        let ids = [1, 2, 3, 4, 5, 6];
+        model.save(&free_dir)?;
+        assert_eq!(
+            fs::read(free_dir.join("config.json"))?,
+            serde_json::to_vec_pretty(&model.config)?
+        );
+        assert!(!free_dir.join(READ_IDENTITY_CARRY_RECORD).exists());
+        assert!(!StackModel::load(&free_dir, &cpu())?.read_identity_carry());
+        model.set_transport_snap(Some(TransportSnap::Icosian))?;
+        model.set_read_identity_carry(true)?;
+        let expected = bits(&model.forward(&ids, 1, ids.len())?)?;
+        model.save(&carry_dir)?;
+        let config = fs::read(carry_dir.join("config.json"))?;
+        let record = fs::read(carry_dir.join(READ_IDENTITY_CARRY_RECORD))?;
+        assert!(StackModel::saved_read_identity_carry(&carry_dir)?);
+        let mut loaded = StackModel::load(&carry_dir, &cpu())?;
+        assert!(loaded.read_identity_carry());
+        assert_eq!(loaded.transport_snap(), Some(TransportSnap::Icosian));
+        assert_eq!(bits(&loaded.forward(&ids, 1, ids.len())?)?, expected);
+        loaded.save(&carry_dir)?;
+        assert!(StackModel::load(&carry_dir, &cpu())?.read_identity_carry());
+        // Missing or undeclared sidecars cannot silently change behavior.
+        fs::remove_file(carry_dir.join(READ_IDENTITY_CARRY_RECORD))?;
+        assert!(StackModel::load(&carry_dir, &cpu()).is_err());
+        fs::write(carry_dir.join(READ_IDENTITY_CARRY_RECORD), &record)?;
+        fs::write(free_dir.join(READ_IDENTITY_CARRY_RECORD), &record)?;
+        assert!(StackModel::load(&free_dir, &cpu()).is_err());
+        // Even resealing the sidecar digest cannot admit another operation,
+        // schema, config binding or weight binding.
+        for (field, bad) in [
+            ("operation", "future-state"),
+            ("schema", "unknown/2"),
+            ("config_sha256", "00"),
+            ("model_sha256", "00"),
+        ] {
+            let mut altered: serde_json::Value = serde_json::from_slice(&record)?;
+            altered[field] = serde_json::json!(bad);
+            let bytes = serde_json::to_vec_pretty(&altered)?;
+            let mut marker: serde_json::Value = serde_json::from_slice(&config)?;
+            marker["read_identity_carry"]["record_sha256"] =
+                serde_json::json!(hex::encode(Sha256::digest(&bytes)));
+            fs::write(
+                carry_dir.join("config.json"),
+                serde_json::to_vec_pretty(&marker)?,
+            )?;
+            fs::write(carry_dir.join(READ_IDENTITY_CARRY_RECORD), bytes)?;
+            assert!(StackModel::load(&carry_dir, &cpu()).is_err(), "{field}");
+        }
+        fs::write(carry_dir.join("config.json"), &config)?;
+        fs::write(carry_dir.join(READ_IDENTITY_CARRY_RECORD), b"broken")?;
+        assert!(StackModel::load(&carry_dir, &cpu()).is_err());
+        loaded.set_read_identity_carry(false)?;
+        loaded.save(&carry_dir)?;
+        assert!(!carry_dir.join(READ_IDENTITY_CARRY_RECORD).exists());
+        assert!(!StackModel::load(&carry_dir, &cpu())?.read_identity_carry());
+        assert_eq!(
+            fs::read(carry_dir.join("config.json"))?,
+            serde_json::to_vec_pretty(&loaded.config)?
+        );
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_carry_refuses_served_mode_in_both_orders() -> Result<()> {
+        let mut config = tiny(StackArch::Geometric, "ra", ReadScore::Dot, true);
+        config.width = 32;
+        config.mlp_hidden = 64;
+        let mut model = StackModel::new(config, &cpu())?;
+        model.set_read_identity_carry(true)?;
+        assert!(model
+            .set_served_representation(Some(Arc::new(D11Interim)))
+            .is_err());
+        assert!(model.read_identity_carry() && model.served_codec().is_none());
+        model.set_read_identity_carry(false)?;
+        model.set_served_representation(Some(Arc::new(D11Interim)))?;
+        assert!(model.set_read_identity_carry(true).is_err());
+        assert!(!model.read_identity_carry() && model.served_codec().is_some());
+        for (arch, pattern) in [(StackArch::Geometric, "rr"), (StackArch::Transformer, "aa")] {
+            let mut unsupported =
+                StackModel::new(tiny(arch, pattern, ReadScore::Dot, false), &cpu())?;
+            assert!(unsupported.set_read_identity_carry(true).is_err());
+            assert!(!unsupported.read_identity_carry());
+        }
+        Ok(())
     }
 
     #[test]

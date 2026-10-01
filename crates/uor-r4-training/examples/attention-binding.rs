@@ -1,6 +1,6 @@
 //! Paired occurrence-binding experiment on the existing native stack.
 //! Synthetic token episodes test query/key association, not natural language.
-//! Run: attention-binding out=NEW_ROOT [steps=320] [max_seconds=900]
+//! Run: attention-binding out=NEW_ROOT [steps=320] [max_seconds=900] [carry=0|1]
 use candle_core::{DType, Device, Tensor};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -146,7 +146,7 @@ fn score(model: &StackModel, episodes: &[Episode]) -> Result<Vec<Value>> {
     }
     Ok(out)
 }
-fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
+fn run(out: &Path, steps: usize, max_seconds: u64, carry: bool) -> Result<Value> {
     let start = Instant::now();
     let eval = evaluation();
     fs::write(
@@ -157,6 +157,9 @@ fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
     for seed in [1, 2] {
         for read in [ReadScore::Dot, ReadScore::Lorentz] {
             for auxiliary in [false, true] {
+                if carry && !auxiliary {
+                    continue;
+                }
                 if start.elapsed().as_secs() >= max_seconds {
                     break;
                 }
@@ -181,7 +184,8 @@ fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
                     select: None,
                     pointer: None,
                 };
-                let model = StackModel::new(config, &Device::Cpu)?;
+                let mut model = StackModel::new(config, &Device::Cpu)?;
+                model.set_read_identity_carry(carry)?;
                 let mut optimizer = StackAdamW::new(&model, 0.0, 1.0)?;
                 let mut rng = Rng(700019 + seed);
                 let mut history = Vec::new();
@@ -258,7 +262,7 @@ fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
                     .forward(ids, 1, ids.len())?
                     .flatten_all()?
                     .to_vec1::<f32>()?;
-                let report = json!({"name":name,"seed":seed,"read":read,"binding_weight":if auxiliary {1.0}else{0.0},
+                let report = json!({"name":name,"read_identity_carry":carry,"seed":seed,"read":read,"binding_weight":if auxiliary {1.0}else{0.0},
                     "steps":done,"requested_steps":steps,"config":model.config,"parameter_count":model.variables().values().map(|v|v.elem_count()).sum::<usize>(),
                     "history":history,"rows":rows,"read_output_disabled_rows":read_disabled,"reload_logits_identical":before==after,
                     "scope":"synthetic token association only; no natural language, quantized serving, geometric superiority or frontier qualification"});
@@ -273,12 +277,12 @@ fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
     Ok(
         json!({"schema":"uor-r4.attention-binding-experiment/1","reports":reports,
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),
-        "steps":steps,"max_seconds":max_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),
+        "read_identity_carry":carry,"planned_arms":if carry {4}else{8},"steps":steps,"max_seconds":max_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),
         "data":"distinct shuffled keys, iid values with duplicate tokens; 2/4/8 facts; query, value and order interventions",
         "labels":"training-only exact value occurrence; no candidate pruning or runtime annotation",
         "sampling":"16 base episodes per fact count, four correlated interventions each; fresh deterministic draws, not a certified deduplicated final holdout",
         "mediation":"selected read output projection is temporarily zeroed for paired evaluation then restored; recurrent residual paths remain available",
-        "limits":"cooperative deadline, checkpoints retained at each arm; eight planned arms, unfinished arms are NOT_RUN",
+        "limits":"cooperative deadline, checkpoints retained at each arm; planned_arms above; unfinished arms are NOT_RUN",
         "uniform_baseline":"includes all causal token positions and NoRead; empirical latest-answer/source baselines retained separately"}),
     )
 }
@@ -315,6 +319,13 @@ fn latent(
         .get("layers.02.read_norm.weight")
         .ok_or_else(|| invalid("read gain"))?;
     let u = input.broadcast_mul(gain.as_tensor())?;
+    let u = if model.read_identity_carry() {
+        let shaped = u.reshape((batch, time, 32))?;
+        let zero = Tensor::zeros((batch, 1, 32), DType::F32, model.device())?;
+        Tensor::cat(&[&zero, &shaped.narrow(1, 0, time - 1)?], 1)?.reshape((batch * time, 32))?
+    } else {
+        u
+    };
     let project = |name: &str| -> Result<Vec<Vec<f32>>> {
         let weight = model
             .variables()
@@ -331,6 +342,11 @@ fn latent(
     ))
 }
 fn probe(models: &Path, out: &Path) -> Result<Value> {
+    report_output::verify(models)?;
+    let parent_report: Value = serde_json::from_slice(&fs::read(models.join("report.json"))?)?;
+    let carry = parent_report["read_identity_carry"]
+        .as_bool()
+        .unwrap_or(false);
     let bytes = fs::read(models.join("evaluation.json"))?;
     let all: Vec<Episode> = serde_json::from_slice(&bytes)?;
     let episodes: Vec<_> = all
@@ -348,6 +364,9 @@ fn probe(models: &Path, out: &Path) -> Result<Value> {
     for seed in [1, 2] {
         for read in [ReadScore::Dot, ReadScore::Lorentz] {
             for auxiliary in [false, true] {
+                if carry && !auxiliary {
+                    continue;
+                }
                 let name = format!(
                     "{read:?}-{}-s{seed}",
                     if auxiliary { "binding" } else { "language" }
@@ -432,7 +451,7 @@ fn probe(models: &Path, out: &Path) -> Result<Value> {
         json!({"schema":"uor-r4.attention-query-probe/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),
         "evaluation_sha256":uor_r4_training::sha256_file(&models.join("evaluation.json"))?,"models":models,"reports":reports,
         "contrast":"log(mAA/mAB)-log(mBA/mBB); normalizer, NoRead and fixed positional preferences cancel; positive is correct query-specific separation",
-        "latent":"RMS-normalized pre-gain read input; learned gain then actual query/key projections, head0; relative RMS Euclidean differences",
+        "latent":"RMS-normalized current pre-gain read input; learned gain and optional causal predecessor shift then actual query/key projections, head0; relative RMS Euclidean differences",
         "scope":"saved synthetic models only, no fit, threshold promotion or geometry advantage"}),
     )
 }
@@ -442,12 +461,20 @@ fn main() -> Result<()> {
     let mut models = None;
     let mut steps = 320;
     let mut seconds = 900;
+    let mut carry = false;
     for arg in std::env::args().skip(1) {
         let (k, v) = arg
             .split_once('=')
             .ok_or_else(|| invalid("expected key=value"))?;
         match k {
             "mode" => mode = v.into(),
+            "carry" => {
+                carry = match v {
+                    "0" => false,
+                    "1" => true,
+                    _ => return Err(invalid("carry 0|1")),
+                }
+            }
             "models" => models = Some(std::path::PathBuf::from(v)),
             "out" => out = Some(std::path::PathBuf::from(v)),
             "steps" => steps = v.parse().map_err(|_| invalid("steps"))?,
@@ -461,7 +488,7 @@ fn main() -> Result<()> {
     let out = out.ok_or_else(|| invalid("out required"))?;
     report_output::claim(&out)?;
     let result = match mode.as_str() {
-        "fit" => run(&out, steps, seconds),
+        "fit" => run(&out, steps, seconds, carry),
         "probe" => probe(&models.ok_or_else(|| invalid("models required"))?, &out),
         _ => Err(invalid("mode fit|probe")),
     };
