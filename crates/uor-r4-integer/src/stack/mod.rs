@@ -48,6 +48,7 @@
 pub mod flock;
 mod format;
 mod kernels;
+mod lorentz_distance;
 mod session;
 #[cfg(test)]
 mod tests;
@@ -63,6 +64,10 @@ pub use format::{
     Fixed, StackNumerics, StackShape, StackTransportSnap, GROUP, MAGIC, STACK_SCHEMA,
 };
 pub use kernels::{stack_argmax, stack_snap_select};
+pub use lorentz_distance::{
+    IntegerLorentzDistance, LiftedVector, LorentzDistanceError, LorentzDistanceResult,
+    LORENTZ_MAX_HEAD_WIDTH, LORENTZ_MIN_EXCESS_CODE,
+};
 pub use session::{
     IntegerStackModel, IntegerStackSession, SerializedStackLayerState, SerializedStackSession,
     SnapTraceEntry, CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,

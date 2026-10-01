@@ -162,13 +162,14 @@ enum LatchGates<'a> {
     Hard,
     Replay(&'a Tensor),
     Projections(&'a Tensor, &'a Tensor),
+    Distances(&'a Tensor, &'a Tensor, &'a Tensor),
 }
 
 impl LatchGates<'_> {
     fn apply(self, logits: &Tensor) -> Result<Tensor> {
         match self {
             Self::Soft => Ok(candle_nn::ops::sigmoid(logits)?),
-            Self::Replay(_) | Self::Projections(..) => {
+            Self::Replay(_) | Self::Projections(..) | Self::Distances(..) => {
                 Err(invalid("numerical replay has no gate policy"))
             }
             Self::Hard => {
@@ -1222,7 +1223,7 @@ impl StackModel {
         let u = self.norm(p, x, &layer_name(layer, "read_norm.weight"))?;
         let identity = self.read_identity_input(&u)?;
         let latched = match (self.read_identity_latch, gates) {
-            (_, LatchGates::Projections(..)) => None,
+            (_, LatchGates::Projections(..) | LatchGates::Distances(..)) => None,
             (Some(mode), _) => Some(match gates {
                 LatchGates::Replay(identity) => identity.clone(),
                 _ => self.read_latch_inputs(p, layer, &u, mode, gates)?.0,
@@ -1230,7 +1231,9 @@ impl StackModel {
             (None, _) => None,
         };
         let project = |part: &str| -> Result<Tensor> {
-            if let LatchGates::Projections(query, key) = gates {
+            if let LatchGates::Projections(query, key) | LatchGates::Distances(query, key, _) =
+                gates
+            {
                 match part {
                     "query" => return self.heads(query, batch, time),
                     "key" => return self.heads(key, batch, time),
@@ -1289,7 +1292,7 @@ impl StackModel {
                 Tensor::cat(&[&value, &mask], 3)?
             }
         };
-        let read = fused_read_selected(
+        let read = fused_read_selected_with_distances(
             &query,
             &key,
             &value,
@@ -1299,6 +1302,10 @@ impl StackModel {
             true,
             false,
             self.config.select,
+            match gates {
+                LatchGates::Distances(_, _, d) => Some(d),
+                _ => None,
+            },
         )?;
         let read = if let Some(target) = target {
             let indices: Vec<u32> = target
@@ -1812,6 +1819,97 @@ impl StackModel {
                 time,
                 binding,
                 LatchGates::Projections(query, key),
+            )?
+            .1)
+    }
+
+    fn validate_distance_replay(
+        &self,
+        query: &Tensor,
+        key: &Tensor,
+        distances: &Tensor,
+        batch: usize,
+        time: usize,
+    ) -> Result<()> {
+        self.validate_projection_replay(query, key, batch, time)?;
+        if self.config.read != ReadScore::Lorentz
+            || self.config.select.is_some()
+            || !matches!(&self.device, Device::Cpu)
+            || batch == 0
+            || time == 0
+            || time > self.config.context
+            || distances.dims4()? != (batch, self.config.heads, time, time)
+            || distances.dtype() != DType::F64
+            || !matches!(distances.device(), Device::Cpu)
+        {
+            return Err(invalid(
+                "distance replay needs CPU full-support Lorentz and matching F64 pair distances",
+            ));
+        }
+        let values = distances.flatten_all()?.to_vec1::<f64>()?;
+        for block in values.chunks_exact(time * time) {
+            for t in 0..time {
+                if block[t * time..t * time + t + 1]
+                    .iter()
+                    .any(|d| !d.is_finite() || *d < 0.)
+                {
+                    return Err(invalid(
+                        "distance replay needs finite nonnegative causal distances",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// CPU per-call distance comparison. Consumes only causal entries of F64
+    /// [batch,heads,time,time], preserving saved scalar/age/NoRead/value paths.
+    /// Caller causality is not certified. Nothing is saved; backward is refused.
+    pub fn forward_read_distance_replay(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        query: &Tensor,
+        key: &Tensor,
+        distances: &Tensor,
+    ) -> Result<Tensor> {
+        self.validate_distance_replay(query, key, distances, batch, time)?;
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_bound(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut None,
+            LatchGates::Distances(query, key, distances),
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Source probabilities through exactly the same distance replay path.
+    pub fn read_binding_masses_distance_replay(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        binding: &ReadBindingTarget,
+        query: &Tensor,
+        key: &Tensor,
+        distances: &Tensor,
+    ) -> Result<Tensor> {
+        self.validate_distance_replay(query, key, distances, batch, time)?;
+        let p = self.params()?;
+        Ok(self
+            .hidden_with_binding_policy(
+                &p,
+                ids,
+                batch,
+                time,
+                binding,
+                LatchGates::Distances(query, key, distances),
             )?
             .1)
     }
@@ -5032,7 +5130,7 @@ fn axpy(alpha: f32, x: &[f32], y: &mut [f32]) {
 /// over (window, head) blocks, with an exact backward that recomputes the
 /// probabilities. Inner loops run over positions or features as `axpy`, so
 /// they vectorize.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct FusedRead {
     batch: usize,
     heads: usize,
@@ -5046,6 +5144,7 @@ struct FusedRead {
     rope: bool,
     /// Flock selection of the sources each row softmaxes over.
     select: Option<FlockSelect>,
+    distance_replay: Option<std::sync::Arc<[f64]>>,
 }
 
 /// One (window, head) block: queries and keys (rotated with RoPE) in row
@@ -5063,6 +5162,7 @@ struct Block<'a> {
     key_lift: Vec<f64>,
     beta: f64,
     offset: f64,
+    distance_replay: Option<&'a [f64]>,
 }
 
 /// Scratch for a tile of `TILE` rows, each `time` wide: the Lorentz
@@ -5302,7 +5402,7 @@ impl FusedRead {
     }
 
     fn block<'a>(
-        &self,
+        &'a self,
         query: &[f32],
         kv: &[f32],
         aux: &'a [f32],
@@ -5359,12 +5459,14 @@ impl FusedRead {
         let (mut query_lift, mut key_lift, mut beta, mut offset) =
             (Vec::new(), Vec::new(), 0.0, 0.0);
         if self.score == ReadScore::Lorentz {
-            query_lift = (0..time)
-                .map(|t| lift(&query[t * key..(t + 1) * key]))
-                .collect();
-            key_lift = (0..time)
-                .map(|t| lift(&key_rows[t * key..(t + 1) * key]))
-                .collect();
+            if self.distance_replay.is_none() {
+                query_lift = (0..time)
+                    .map(|t| lift(&query[t * key..(t + 1) * key]))
+                    .collect();
+                key_lift = (0..time)
+                    .map(|t| lift(&key_rows[t * key..(t + 1) * key]))
+                    .collect();
+            }
             beta = f64::from(aux[cursor + head]);
             offset = f64::from(aux[cursor + self.heads + head]);
         }
@@ -5380,6 +5482,10 @@ impl FusedRead {
             key_lift,
             beta,
             offset,
+            distance_replay: self
+                .distance_replay
+                .as_ref()
+                .map(|values| &values[index * time * time..(index + 1) * time * time]),
         }
     }
 
@@ -5407,8 +5513,14 @@ impl FusedRead {
             let score = match self.score {
                 ReadScore::Dot => row[j] * scale + age,
                 ReadScore::Lorentz => {
-                    let e = block.query_lift[t] * block.key_lift[j] - f64::from(row[j]) - 1.0;
-                    let d = lorentz_distance(e);
+                    let (e, d) = match block.distance_replay {
+                        Some(values) => (0., values[t * self.time + j]),
+                        None => {
+                            let e =
+                                block.query_lift[t] * block.key_lift[j] - f64::from(row[j]) - 1.;
+                            (e, lorentz_distance(e))
+                        }
+                    };
                     excess[j] = e;
                     distance[j] = d;
                     (-block.beta * (d - block.offset)) as f32 + age
@@ -5454,17 +5566,21 @@ impl FusedRead {
         scratch: &mut Scratch,
     ) -> candle_core::Result<[f32; TILE]> {
         let (key, time) = (self.key, self.time);
-        tile_product(
-            &block.query[t0 * key..],
-            key,
-            rows,
-            &block.key_columns,
-            time,
-            t0 + rows,
-            key,
-            probabilities,
-            time,
-        );
+        if block.distance_replay.is_none() {
+            tile_product(
+                &block.query[t0 * key..],
+                key,
+                rows,
+                &block.key_columns,
+                time,
+                t0 + rows,
+                key,
+                probabilities,
+                time,
+            );
+        } else {
+            probabilities.fill(0.);
+        }
         let mut null = [0f32; TILE];
         for (r, null) in null.iter_mut().enumerate().take(rows) {
             let span = r * time..(r + 1) * time;
@@ -5641,6 +5757,9 @@ impl CustomOp3 for FusedRead {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>, Option<Tensor>)> {
+        if self.distance_replay.is_some() {
+            candle_core::bail!("distance replay has no surrogate backward");
+        }
         let q_values = query.flatten_all()?.to_vec1::<f32>()?;
         let kv_values = kv.flatten_all()?.to_vec1::<f32>()?;
         let aux_values = aux.flatten_all()?.to_vec1::<f32>()?;
@@ -5865,6 +5984,22 @@ pub fn fused_read_selected(
     rope: bool,
     select: Option<FlockSelect>,
 ) -> Result<Tensor> {
+    fused_read_selected_with_distances(query, key, value, aux, score, null, age, rope, select, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fused_read_selected_with_distances(
+    query: &Tensor,
+    key: &Tensor,
+    value: &Tensor,
+    aux: &Tensor,
+    score: ReadScore,
+    null: bool,
+    age: bool,
+    rope: bool,
+    select: Option<FlockSelect>,
+    distances: Option<&Tensor>,
+) -> Result<Tensor> {
     if query.dtype() != DType::F32
         || key.dtype() != DType::F32
         || value.dtype() != DType::F32
@@ -5890,6 +6025,26 @@ pub fn fused_read_selected(
     if aux.rank() != 1 || aux.dim(0)? != expected.max(1) {
         return Err(invalid("fused read auxiliary input has the wrong length"));
     }
+    let distance_replay = match distances {
+        None => None,
+        Some(values) => {
+            if score != ReadScore::Lorentz
+                || rope
+                || select.is_some()
+                || !matches!(query.device(), Device::Cpu)
+                || !matches!(values.device(), Device::Cpu)
+                || values.dtype() != DType::F64
+                || values.dims4()? != (batch, heads, time, time)
+            {
+                return Err(invalid(
+                    "distance override requires CPU Lorentz full support and matching F64 layout",
+                ));
+            }
+            Some(std::sync::Arc::<[f64]>::from(
+                values.flatten_all()?.to_vec1::<f64>()?,
+            ))
+        }
+    };
     let op = FusedRead {
         batch,
         heads,
@@ -5901,6 +6056,7 @@ pub fn fused_read_selected(
         age,
         rope,
         select,
+        distance_replay,
     };
     if rope && key_width % 2 != 0 {
         return Err(invalid("RoPE needs an even head width"));
@@ -8262,6 +8418,126 @@ mod tests {
         assert!(wrong
             .forward_read_projection_replay(&ids, 1, 8, &zero, &zero)
             .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn read_distance_replay_matches_float_geometry_and_refuses_backward() -> Result<()> {
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8, 2, 5, 9, 3, 7, 1, 4, 6];
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "rra", ReadScore::Lorentz, true),
+                &cpu(),
+            )?;
+            model.set_read_identity_latch(mode)?;
+            let ordinary = bits(&model.forward(&ids, 2, 8)?)?;
+            let u = model.read_identity_latch_replay_input(&ids, 2, 8)?;
+            let p = model.params()?;
+            let prior = model
+                .read_latch_inputs(&p, 2, &u, mode, LatchGates::Hard)?
+                .0;
+            let project = |part: &str| -> Result<Tensor> {
+                Ok(
+                    StackModel::linear(&u, p.layer(2, &format!("read.{part}.weight"))?)?.add(
+                        &StackModel::linear(
+                            &prior,
+                            p.layer(2, &format!("read.{part}_identity.weight"))?,
+                        )?,
+                    )?,
+                )
+            };
+            let query = project("query")?;
+            let key = project("key")?;
+            let q = model.heads(&query, 2, 8)?.to_vec4::<f32>()?;
+            let k = model.heads(&key, 2, 8)?.to_vec4::<f32>()?;
+            let mut values = vec![f64::NAN; 2 * model.config.heads * 8 * 8];
+            for b in 0..2 {
+                for h in 0..model.config.heads {
+                    for t in 0..8 {
+                        for j in 0..=t {
+                            let ql = (1. + f64::from(dot(&q[b][h][t], &q[b][h][t]))).sqrt();
+                            let kl = (1. + f64::from(dot(&k[b][h][j], &k[b][h][j]))).sqrt();
+                            values[((b * model.config.heads + h) * 8 + t) * 8 + j] =
+                                lorentz_distance(
+                                    ql * kl - f64::from(dot(&q[b][h][t], &k[b][h][j])) - 1.,
+                                );
+                        }
+                    }
+                }
+            }
+            let distances =
+                Tensor::from_vec(values.clone(), (2, model.config.heads, 8, 8), &cpu())?;
+            let reference = bits(&model.forward_read_projection_replay(&ids, 2, 8, &query, &key)?)?;
+            assert_eq!(
+                reference,
+                bits(&model.forward_read_distance_replay(&ids, 2, 8, &query, &key, &distances)?)?
+            );
+            for h in 0..model.config.heads {
+                let binding = ReadBindingTarget {
+                    layer: 2,
+                    head: h,
+                    rows: vec![
+                        ReadBinding {
+                            batch: 0,
+                            query: 7,
+                            sources: vec![3],
+                        },
+                        ReadBinding {
+                            batch: 1,
+                            query: 6,
+                            sources: vec![2],
+                        },
+                    ],
+                };
+                assert_eq!(
+                    bits(&model.read_binding_masses_projection_replay(
+                        &ids, 2, 8, &binding, &query, &key
+                    )?)?,
+                    bits(&model.read_binding_masses_distance_replay(
+                        &ids, 2, 8, &binding, &query, &key, &distances
+                    )?)?
+                );
+            }
+            for x in &mut values {
+                if x.is_nan() {
+                    *x = 1e300;
+                }
+            }
+            let future = Tensor::from_vec(values.clone(), (2, model.config.heads, 8, 8), &cpu())?;
+            assert_eq!(
+                reference,
+                bits(&model.forward_read_distance_replay(&ids, 2, 8, &query, &key, &future)?)?
+            );
+            let loss = model
+                .forward_read_distance_replay(&ids, 2, 8, &query, &key, &distances)?
+                .sum_all()?;
+            assert!(loss.backward().is_err());
+            assert_eq!(ordinary, bits(&model.forward(&ids, 2, 8)?)?);
+            for invalid_value in [-1., f64::NAN, f64::INFINITY] {
+                values[0] = invalid_value;
+                let bad = Tensor::from_vec(values.clone(), (2, model.config.heads, 8, 8), &cpu())?;
+                assert!(model
+                    .forward_read_distance_replay(&ids, 2, 8, &query, &key, &bad)
+                    .is_err());
+            }
+            assert!(model
+                .forward_read_distance_replay(
+                    &ids,
+                    2,
+                    8,
+                    &query,
+                    &key,
+                    &distances.to_dtype(DType::F32)?
+                )
+                .is_err());
+            assert!(model
+                .forward_read_distance_replay(&ids, 2, 8, &query, &key, &distances.narrow(3, 0, 7)?)
+                .is_err());
+            model.config.read = ReadScore::Dot;
+            assert!(model
+                .forward_read_distance_replay(&ids, 2, 8, &query, &key, &distances)
+                .is_err());
+        }
         Ok(())
     }
 
