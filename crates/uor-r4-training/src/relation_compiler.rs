@@ -1043,6 +1043,15 @@ pub enum RelationMode {
     /// and its binary words, standardized (E3's `combined` head). The
     /// compiler then loads only with that trunk.
     Combined,
+    /// The combined relation head names the relation; the table's act head
+    /// keeps the act (and, under [`ActRule::Span`], assert vs update).
+    CombinedRelation,
+}
+
+impl RelationMode {
+    fn uses_trunk(self) -> bool {
+        self != Self::Table
+    }
 }
 
 impl RelationMode {
@@ -1050,6 +1059,7 @@ impl RelationMode {
         match text {
             "table" => Ok(Self::Table),
             "combined" => Ok(Self::Combined),
+            "combined_relation" => Ok(Self::CombinedRelation),
             other => Err(invalid(format!("unknown relation mode {other}"))),
         }
     }
@@ -1229,7 +1239,9 @@ struct CombinedParts {
     trunk: crate::stack_grounded_session::EncoderIdentity,
     trunk_width: usize,
     relation_head: DenseParts,
-    act_head: DenseParts,
+    /// Absent under [`RelationMode::CombinedRelation`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    act_head: Option<DenseParts>,
 }
 
 /// The saved artifact. Field order is the encoding; [`SavedCompiler`] loads
@@ -1269,7 +1281,7 @@ struct CompilerArtifact {
     /// artifacts saved before the rule existed keep their bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     act_rule: Option<String>,
-    /// Present for [`RelationMode::Combined`] only.
+    /// Present for the combined relation modes only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     combined: Option<CombinedParts>,
 }
@@ -1285,7 +1297,8 @@ fn is_sha256(value: &str) -> bool {
 struct Combined {
     trunk: Trunk,
     relation_head: Softmax,
-    act_head: Softmax,
+    /// `None` under [`RelationMode::CombinedRelation`]: the table names acts.
+    act_head: Option<Softmax>,
 }
 
 impl Combined {
@@ -1347,7 +1360,7 @@ impl SavedCompiler {
         )?;
         let combined = match (settings.relation_mode, trunk) {
             (RelationMode::Table, None) => None,
-            (RelationMode::Combined, Some(trunk)) => {
+            (RelationMode::Combined | RelationMode::CombinedRelation, Some(trunk)) => {
                 let mut x = Vec::with_capacity(train.len());
                 for example in train {
                     let mut row = trunk.features(&example.text)?;
@@ -1383,7 +1396,10 @@ impl SavedCompiler {
                     )
                 };
                 let relation_head = fit(&relation_y, route.relations.len())?;
-                let act_head = fit(&act_y, ACTS.len())?;
+                let act_head = match settings.relation_mode {
+                    RelationMode::Combined => Some(fit(&act_y, ACTS.len())?),
+                    _ => None,
+                };
                 Some(Combined {
                     trunk,
                     relation_head,
@@ -1393,9 +1409,7 @@ impl SavedCompiler {
             (RelationMode::Table, Some(_)) => {
                 return Err(invalid("the table relation mode reads no trunk"))
             }
-            (RelationMode::Combined, None) => {
-                return Err(invalid("the combined relation mode needs a trunk"))
-            }
+            (_, None) => return Err(invalid("a combined relation mode needs a trunk")),
         };
         let bytes = encode(
             &route,
@@ -1468,10 +1482,10 @@ impl SavedCompiler {
                 Some("span") => ActRule::Span,
                 Some(_) => return Err(invalid("a saved compiler names an unknown act rule")),
             },
-            relation_mode: if artifact.combined.is_some() {
-                RelationMode::Combined
-            } else {
-                RelationMode::Table
+            relation_mode: match &artifact.combined {
+                None => RelationMode::Table,
+                Some(parts) if parts.act_head.is_some() => RelationMode::Combined,
+                Some(_) => RelationMode::CombinedRelation,
             },
         };
         let words = artifact.words.len();
@@ -1522,7 +1536,10 @@ impl SavedCompiler {
                 Some(Combined {
                     trunk,
                     relation_head: parts.relation_head.head(route.relations.len(), dim)?,
-                    act_head: parts.act_head.head(ACTS.len(), dim)?,
+                    act_head: parts
+                        .act_head
+                        .map(|head| head.head(ACTS.len(), dim))
+                        .transpose()?,
                 })
             }
             (Some(_), None) => return Err(invalid("this compiler needs its trunk to load")),
@@ -1575,10 +1592,10 @@ impl SavedCompiler {
     }
 
     pub fn relation_mode(&self) -> RelationMode {
-        if self.combined.is_some() {
-            RelationMode::Combined
-        } else {
-            RelationMode::Table
+        match &self.combined {
+            None => RelationMode::Table,
+            Some(combined) if combined.act_head.is_some() => RelationMode::Combined,
+            Some(_) => RelationMode::CombinedRelation,
         }
     }
 
@@ -1624,7 +1641,10 @@ impl SavedCompiler {
             (None, None) => self.route().classify(source, None),
             (Some(combined), Some(row)) => Ok((
                 self.route().relations[combined.relation_head.predict(row)].as_str(),
-                ACTS[combined.act_head.predict(row)],
+                match &combined.act_head {
+                    Some(head) => ACTS[head.predict(row)],
+                    None => self.route().classify(source, None)?.1,
+                },
             )),
             _ => Err(invalid(
                 "a combined row must accompany exactly combined heads",
@@ -1638,7 +1658,10 @@ impl SavedCompiler {
         match (&self.combined, row) {
             (None, None) => self.route().statement_act(source, None),
             (Some(combined), Some(row)) => {
-                let logits = combined.act_head.logits(row);
+                let Some(head) = &combined.act_head else {
+                    return self.route().statement_act(source, None);
+                };
+                let logits = head.logits(row);
                 // ACTS[0] is assert and ACTS[1] update.
                 Ok(if logits[1] > logits[0] {
                     ACTS[1]
@@ -1714,7 +1737,11 @@ fn encode(
     if route.trunk.is_some() {
         return Err(invalid("a saved compiler's table has no trunk features"));
     }
-    if (settings.relation_mode == RelationMode::Combined) != combined.is_some() {
+    if settings.relation_mode.uses_trunk() != combined.is_some()
+        || combined.is_some_and(|c| {
+            c.act_head.is_some() != (settings.relation_mode == RelationMode::Combined)
+        })
+    {
         return Err(invalid("the relation mode and the combined heads disagree"));
     }
     // JSON floats need not reload to the same bits; only the f64 fields
@@ -1765,7 +1792,7 @@ fn encode(
             trunk: c.trunk.identity.clone(),
             trunk_width: 2 * c.trunk.model.config.width,
             relation_head: DenseParts::of(&c.relation_head),
-            act_head: DenseParts::of(&c.act_head),
+            act_head: c.act_head.as_ref().map(DenseParts::of),
         }),
     };
     Ok(serde_json::to_vec(&artifact)?)
@@ -2391,6 +2418,43 @@ mod tests {
         )
         .is_err());
         assert!(RelationMode::parse("combined").is_ok() && RelationMode::parse("dense").is_err());
+        // The split mode: combined relation names, the table's acts.
+        let split = SavedCompiler::fit_with(
+            &train,
+            &digest,
+            json!({"draw": "small world"}),
+            CompilerSettings {
+                relation_mode: RelationMode::CombinedRelation,
+                ..settings
+            },
+            Some(Trunk::load(&directory, &tokenizer, &device)?),
+        )?;
+        assert_eq!(split.relation_mode(), RelationMode::CombinedRelation);
+        let artifact: Value = serde_json::from_slice(split.bytes())?;
+        assert!(artifact["combined"].get("act_head").is_none());
+        let split_again = SavedCompiler::load(
+            split.bytes().to_vec(),
+            Some(Trunk::load(&directory, &tokenizer, &device)?),
+        )?;
+        assert_eq!(split_again.relation_mode(), RelationMode::CombinedRelation);
+        for text in [
+            "My name is Zorvak.",
+            "Sorry, I grew up in Dunmere.",
+            "Where am I from?",
+        ] {
+            assert_eq!(
+                split.classify(text)?.1,
+                split.route().classify(text, None)?.1,
+                "{text}"
+            );
+            assert_eq!(
+                split_again
+                    .compile(text)
+                    .map_err(|e| invalid(e.to_string()))?,
+                split.compile(text).map_err(|e| invalid(e.to_string()))?
+            );
+        }
+        assert!(RelationMode::parse("combined_relation").is_ok());
         let _ = std::fs::remove_dir_all(&directory);
         let _ = std::fs::remove_dir_all(&other);
         Ok(())
