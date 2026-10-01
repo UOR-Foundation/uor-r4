@@ -1,0 +1,54 @@
+name: grounded-session-evidence
+on:
+  push:
+    branches: ['codex/ci/oct01-grounded-session']
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_TERM_COLOR: never
+      UOR_BUILD_SOURCE_COMMIT: 2f0449641576df63e5fe96824ea26133c01ff6a5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2f0449641576df63e5fe96824ea26133c01ff6a5
+          fetch-depth: 2
+      - name: Confirm exact PR head
+        run: test "$(git rev-parse HEAD)" = "$UOR_BUILD_SOURCE_COMMIT"
+      - name: Documentation and policy checks
+        run: |
+          python3 scripts/check_claim_wording.py
+          python3 -m json.tool docs/integration/agent-execution-policy.json > /dev/null
+          git diff --check HEAD^ HEAD
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+            merge-evidence-v2-${{ runner.os }}-
+      - name: Format
+        run: cargo fmt --check
+      - name: Compile session library and current consumer
+        run: cargo check -p uor-r4-training --lib --example m-world --locked
+      - name: Focused tokenizer protocol tests
+        run: cargo test -p uor-r4-tokenizer --lib dialogue::tests --locked -- --test-threads=2
+      - name: Focused grounded session transactions and fresh-process continuation
+        run: cargo test -p uor-r4-training --lib stack_grounded_session::tests --locked -- --test-threads=2
+      - uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
