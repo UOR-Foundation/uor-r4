@@ -168,7 +168,8 @@ use uor_r4_training::milestone_world_v2_probe::{
 };
 use uor_r4_training::relation_compiler::{
     collect, label, paraphrase_examples, score, trunk_features, ActRule, CompilerSettings, Example,
-    Lexicon, RelationRoute, SavedCompiler, Softmax, SparseSoftmax, ACTS, NONE as RC_NONE,
+    Lexicon, RelationMode, RelationRoute, SavedCompiler, Softmax, SparseSoftmax, Trunk, ACTS,
+    NONE as RC_NONE,
 };
 use uor_r4_training::stack_checkpoint::{
     save_checkpoint, sealed_manifest_sha256, CheckpointIdentity, DataIdentity,
@@ -3044,6 +3045,11 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
     let values = args.optional("values").unwrap_or_else(|| "train".into());
     let settings = CompilerSettings {
         act_rule: ActRule::parse(&args.optional("act_rule").unwrap_or_else(|| "table".into()))?,
+        relation_mode: RelationMode::parse(
+            &args
+                .optional("relation_mode")
+                .unwrap_or_else(|| "table".into()),
+        )?,
         ..CompilerSettings::default()
     };
     let tokenizer = load_tokenizer(&tokenizer_path)?;
@@ -3101,7 +3107,16 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
         "examples": train.len(),
     });
     let fit_started = Instant::now();
-    let saved = SavedCompiler::fit(&train, &tokenizer_sha256, training.clone(), settings)?;
+    let trunk = match args.optional("trunk") {
+        Some(directory) => Some(Trunk::load(
+            Path::new(&directory),
+            &fs::read(&tokenizer_path)?,
+            &Device::Cpu,
+        )?),
+        None => None,
+    };
+    let saved =
+        SavedCompiler::fit_with(&train, &tokenizer_sha256, training.clone(), settings, trunk)?;
     let fit_seconds = fit_started.elapsed().as_secs_f64();
     fs::write(out.join("compiler.json"), saved.bytes())?;
     let mut cells = serde_json::Map::new();
@@ -3117,7 +3132,7 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
         };
         let mut misses = Vec::new();
         for example in &examples {
-            let (relation, act) = saved.route().classify(&example.text, None)?;
+            let (relation, act) = saved.classify(&example.text)?;
             if example.relation != RC_NONE {
                 add("relation".into(), relation == example.relation);
             }
@@ -3260,7 +3275,16 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     let tokenizer_json = fs::read(&tokenizer_path)?;
     let tokenizer = load_tokenizer(&tokenizer_path)?;
     let compiler_bytes = fs::read(&compiler_path)?;
-    let compiler = SavedCompiler::from_bytes(compiler_bytes.clone())?;
+    let trunk_directory = args.optional("trunk").map(PathBuf::from);
+    // A combined compiler loads only with the trunk it binds.
+    let load_compiler = || -> Result<SavedCompiler> {
+        let trunk = match &trunk_directory {
+            Some(directory) => Some(Trunk::load(directory, &tokenizer_json, &Device::Cpu)?),
+            None => None,
+        };
+        SavedCompiler::load(compiler_bytes.clone(), trunk)
+    };
+    let compiler = load_compiler()?;
     let device = Device::Cpu;
     // The emitter as a sealed inference checkpoint with an empty store. Its
     // data identities are the training report's recorded inputs, bound by
@@ -3450,7 +3474,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         let root = out.join(format!("reload-{index:04}"));
         first.save(&root).map_err(|e| invalid(e.to_string()))?;
         drop(first);
-        let reloaded = SavedCompiler::from_bytes(compiler_bytes.clone())?;
+        let reloaded = load_compiler()?;
         let mut second =
             GroundedSession::load(&root, reloaded, &device).map_err(|e| invalid(e.to_string()))?;
         for turn in &conversation.turns[middle..] {
@@ -3479,6 +3503,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         "checkpoint": "checkpoint",
         "compiler": compiler_path.display().to_string(),
         "compiler_identity": compiler.identity(),
+        "trunk": trunk_directory.as_ref().map(|d| d.display().to_string()),
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "limits": limits,
         "scope": "MQAR keys have no channel in the one-entity session: MQAR turns compile to unresolved and are scored without recall",
@@ -3558,6 +3583,8 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "values",
         "paraphrases",
         "act_rule",
+        "relation_mode",
+        "trunk",
     ];
     let session_keys: &[&str] = &[
         "out",
@@ -3570,6 +3597,7 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "max_new_tokens",
         "reload",
         "arms",
+        "trunk",
     ];
     match mode {
         "compiler" => Some(claimed(rest, relation_compiler, compiler)),

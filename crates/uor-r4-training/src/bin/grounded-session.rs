@@ -34,10 +34,10 @@ use std::process::ExitCode;
 use candle_core::Device;
 use serde_json::json;
 use uor_r4_tokenizer::ByteBpeTokenizer;
-use uor_r4_training::relation_compiler::SavedCompiler;
+use uor_r4_training::relation_compiler::{SavedCompiler, Trunk};
 use uor_r4_training::stack_grounded_session::{
     ContextPolicy, GroundedSession, SessionLimits, SessionScope, TurnControls, TurnOutcome,
-    COMPILER_FILE,
+    COMPILER_FILE, TOKENIZER_FILE,
 };
 
 type Error = Box<dyn std::error::Error>;
@@ -111,14 +111,15 @@ fn run() -> Result<(), Error> {
                 "max_history_tokens",
                 "max_store_records",
                 "context",
+                "trunk",
             ],
         )?),
         "turn" => turn(&Args::parse(
             rest,
-            &["session", "out", "text", "read", "write"],
+            &["session", "out", "text", "read", "write", "trunk"],
         )?),
-        "chat" => chat(&Args::parse(rest, &["session", "out"])?),
-        "show" => show(&Args::parse(rest, &["session"])?),
+        "chat" => chat(&Args::parse(rest, &["session", "out", "trunk"])?),
+        "show" => show(&Args::parse(rest, &["session", "trunk"])?),
         other => Err(format!("unknown mode {other}").into()),
     }
 }
@@ -128,7 +129,10 @@ fn init(args: &Args) -> Result<(), Error> {
     let tokenizer_json = fs::read(args.path("tokenizer")?)?;
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_json)
         .ok_or("unreadable tokenizer.json")?;
-    let compiler = SavedCompiler::from_bytes(fs::read(args.path("compiler")?)?)?;
+    let compiler = SavedCompiler::load(
+        fs::read(args.path("compiler")?)?,
+        trunk(args, &tokenizer_json)?,
+    )?;
     let scope = SessionScope {
         scope: args.or("scope", "default").as_bytes().to_vec(),
         entity: tokenizer.encode(args.or("entity", "user")),
@@ -162,9 +166,25 @@ fn init(args: &Args) -> Result<(), Error> {
     Ok(())
 }
 
-/// Load an envelope with the compiler saved inside it.
-fn open(root: &Path) -> Result<GroundedSession<SavedCompiler>, Error> {
-    let compiler = SavedCompiler::from_bytes(fs::read(root.join(COMPILER_FILE))?)?;
+/// The trunk of `trunk=`, which a compiler with combined heads needs.
+fn trunk(args: &Args, tokenizer_json: &[u8]) -> Result<Option<Trunk>, Error> {
+    Ok(match args.0.get("trunk") {
+        Some(directory) => Some(Trunk::load(
+            Path::new(directory),
+            tokenizer_json,
+            &Device::Cpu,
+        )?),
+        None => None,
+    })
+}
+
+/// Load an envelope with the compiler saved inside it (and `trunk=`).
+fn open(args: &Args, root: &Path) -> Result<GroundedSession<SavedCompiler>, Error> {
+    let tokenizer_json = fs::read(root.join(TOKENIZER_FILE))?;
+    let compiler = SavedCompiler::load(
+        fs::read(root.join(COMPILER_FILE))?,
+        trunk(args, &tokenizer_json)?,
+    )?;
     Ok(GroundedSession::load(root, compiler, &Device::Cpu)?)
 }
 
@@ -184,7 +204,7 @@ fn outcome_json(index: usize, outcome: &TurnOutcome) -> serde_json::Value {
 
 fn turn(args: &Args) -> Result<(), Error> {
     let out = args.path("out")?;
-    let mut session = open(&args.path("session")?)?;
+    let mut session = open(args, &args.path("session")?)?;
     let controls = TurnControls {
         read: args.number("read", true)?,
         write: args.number("write", true)?,
@@ -197,7 +217,7 @@ fn turn(args: &Args) -> Result<(), Error> {
 
 fn chat(args: &Args) -> Result<(), Error> {
     let out = args.path("out")?;
-    let mut session = open(&args.path("session")?)?;
+    let mut session = open(args, &args.path("session")?)?;
     for line in std::io::stdin().lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
@@ -219,7 +239,7 @@ fn chat(args: &Args) -> Result<(), Error> {
 }
 
 fn show(args: &Args) -> Result<(), Error> {
-    let session = open(&args.path("session")?)?;
+    let session = open(args, &args.path("session")?)?;
     for (index, outcome) in session.turns().iter().enumerate() {
         println!("{}", outcome_json(index, outcome));
     }
