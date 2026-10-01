@@ -215,6 +215,17 @@ impl Lexicon {
         self.index.is_empty()
     }
 
+    /// The vocabulary indices of `text`'s words, sorted and distinct.
+    pub fn active(&self, text: &str) -> Vec<usize> {
+        let mut active: Vec<usize> = words(text)
+            .iter()
+            .filter_map(|word| self.index.get(word).copied())
+            .collect();
+        active.sort_unstable();
+        active.dedup();
+        active
+    }
+
     /// The features of `text`; words outside the vocabulary carry nothing.
     pub fn features(&self, text: &str) -> Vec<f64> {
         let mut features = vec![0f64; self.index.len()];
@@ -340,6 +351,188 @@ impl Softmax {
             }
         }
         best
+    }
+}
+
+/// A softmax classifier on sparse binary features (the active indices of a
+/// row), fitted without standardization so a row costs only its active
+/// features. In serving it is a table of word weights summed per class.
+pub struct SparseSoftmax {
+    classes: usize,
+    dim: usize,
+    weights: Vec<f64>,
+    bias: Vec<f64>,
+}
+
+impl SparseSoftmax {
+    /// Full-batch gradient descent on the mean cross-entropy plus `l2` times
+    /// the squared weights (applied as a shrink each step).
+    pub fn fit(
+        rows: &[Vec<usize>],
+        y: &[usize],
+        classes: usize,
+        dim: usize,
+        steps: usize,
+        rate: f64,
+        l2: f64,
+    ) -> Result<Self> {
+        if rows.is_empty()
+            || rows.len() != y.len()
+            || classes < 2
+            || y.iter().any(|&label| label >= classes)
+            || rows.iter().flatten().any(|&i| i >= dim)
+        {
+            return Err(invalid(
+                "a sparse classifier needs labelled rows inside its width",
+            ));
+        }
+        let n = rows.len() as f64;
+        let mut model = Self {
+            classes,
+            dim,
+            weights: vec![0f64; classes * dim],
+            bias: vec![0f64; classes],
+        };
+        for _ in 0..steps {
+            let mut grad_w = vec![0f64; classes * dim];
+            let mut grad_b = vec![0f64; classes];
+            for (row, &label) in rows.iter().zip(y) {
+                let p = model.probabilities(row);
+                for c in 0..classes {
+                    let g = (p[c] - f64::from(u8::from(c == label))) / n;
+                    grad_b[c] += g;
+                    for &i in row {
+                        grad_w[c * dim + i] += g;
+                    }
+                }
+            }
+            let shrink = 1.0 - rate * l2;
+            for (w, g) in model.weights.iter_mut().zip(&grad_w) {
+                *w = *w * shrink - rate * g;
+            }
+            for (b, g) in model.bias.iter_mut().zip(&grad_b) {
+                *b -= rate * g;
+            }
+        }
+        Ok(model)
+    }
+
+    fn probabilities(&self, row: &[usize]) -> Vec<f64> {
+        let logits: Vec<f64> = (0..self.classes)
+            .map(|c| {
+                self.bias[c]
+                    + row
+                        .iter()
+                        .map(|&i| self.weights[c * self.dim + i])
+                        .sum::<f64>()
+            })
+            .collect();
+        let top = logits.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let exp: Vec<f64> = logits.iter().map(|l| (l - top).exp()).collect();
+        let total: f64 = exp.iter().sum();
+        exp.iter().map(|e| e / total).collect()
+    }
+
+    /// The most probable class of a row (ties to the lower class).
+    pub fn predict(&self, row: &[usize]) -> usize {
+        let p = self.probabilities(row);
+        let mut best = 0;
+        for c in 1..p.len() {
+            if p[c] > p[best] {
+                best = c;
+            }
+        }
+        best
+    }
+}
+
+/// The relation channel of the log-sieve design (§2.3) as a route: a word
+/// table naming each user turn's relation and act, fitted on labelled turns.
+pub struct RelationRoute {
+    lexicon: Lexicon,
+    relation_head: SparseSoftmax,
+    act_head: SparseSoftmax,
+    relations: Vec<String>,
+}
+
+impl RelationRoute {
+    pub fn fit(train: &[Example], steps: usize, rate: f64, l2: f64) -> Result<Self> {
+        let lexicon = Lexicon::fit(train.iter().map(|e| e.text.as_str()));
+        let relations: Vec<String> = relation_names()
+            .iter()
+            .map(|name| (*name).to_owned())
+            .chain([NONE.to_owned()])
+            .collect();
+        let rows: Vec<Vec<usize>> = train.iter().map(|e| lexicon.active(&e.text)).collect();
+        let relation_y: Vec<usize> = train
+            .iter()
+            .map(|e| {
+                relations
+                    .iter()
+                    .position(|r| *r == e.relation)
+                    .unwrap_or(relations.len() - 1)
+            })
+            .collect();
+        let act_y: Vec<usize> = train
+            .iter()
+            .map(|e| {
+                ACTS.iter()
+                    .position(|a| *a == e.act)
+                    .unwrap_or(ACTS.len() - 1)
+            })
+            .collect();
+        let dim = lexicon.len().max(1);
+        Ok(Self {
+            relation_head: SparseSoftmax::fit(
+                &rows,
+                &relation_y,
+                relations.len(),
+                dim,
+                steps,
+                rate,
+                l2,
+            )?,
+            act_head: SparseSoftmax::fit(&rows, &act_y, ACTS.len(), dim, steps, rate, l2)?,
+            lexicon,
+            relations,
+        })
+    }
+
+    /// The relation and act the table names for a user turn.
+    pub fn classify(&self, text: &str) -> (&str, &'static str) {
+        let row = self.lexicon.active(text);
+        (
+            self.relations[self.relation_head.predict(&row)].as_str(),
+            ACTS[self.act_head.predict(&row)],
+        )
+    }
+
+    /// The value the log gives for a relation query: the latest earlier user
+    /// turn the table names as stating or updating the asked relation, and its
+    /// words outside the world's fixed vocabulary (`reserved`, instrument
+    /// knowledge, as R-sieve's content cut). `None` when the query names no
+    /// relation or no such statement holds a value.
+    pub fn value(
+        &self,
+        history: &[Turn2],
+        query: &Turn2,
+        reserved: &std::collections::BTreeSet<String>,
+    ) -> Option<String> {
+        let (asked, _) = self.classify(&query.user);
+        if asked == NONE {
+            return None;
+        }
+        history.iter().rev().find_map(|turn| {
+            let (relation, act) = self.classify(&turn.user);
+            if relation != asked || !matches!(act, "assert" | "update") {
+                return None;
+            }
+            let value: Vec<String> = words(&turn.user)
+                .into_iter()
+                .filter(|word| !reserved.contains(word))
+                .collect();
+            (!value.is_empty()).then(|| value.join(" "))
+        })
     }
 }
 
@@ -508,6 +701,67 @@ mod tests {
             paraphrase_examples(r#"{"relation":"nope","act":"query","text":"x"}"#, &training)
                 .is_err()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn the_relation_route_finds_the_latest_statement_of_the_asked_relation() -> Result<()> {
+        let example = |text: &str, relation: &str, act| Example {
+            text: text.into(),
+            relation: relation.into(),
+            act,
+            template: None,
+        };
+        let train = [
+            example("My friend is Sam.", "friend_name", "assert"),
+            example("Who is my friend?", "friend_name", "query"),
+            example("My dog is Rex.", "pet_name", "assert"),
+            example("What is my dog called?", "pet_name", "query"),
+            example("The weather is nice.", NONE, NONE),
+        ];
+        let route = RelationRoute::fit(&train, 300, 0.5, 1e-4)?;
+        assert_eq!(
+            route.classify("Who is my friend?"),
+            ("friend_name", "query")
+        );
+        assert_eq!(route.classify("My dog is Max."), ("pet_name", "assert"));
+        let user = |text: &str| Turn2 {
+            intent: String::new(),
+            category: Category2::Relation,
+            user: text.into(),
+            reply: String::new(),
+            checks: Vec::new(),
+            tag: Tag::default(),
+        };
+        let history = [
+            user("My friend is Zorvik."),
+            user("My dog is Plimbo."),
+            user("My friend is Quandle."),
+        ];
+        // Words outside the fixed vocabulary are the value; the latest wins.
+        let reserved: std::collections::BTreeSet<String> =
+            ["my", "friend", "is", "dog", "who", "what", "called"]
+                .iter()
+                .map(|w| (*w).to_owned())
+                .collect();
+        assert_eq!(
+            route
+                .value(&history, &user("Who is my friend?"), &reserved)
+                .as_deref(),
+            Some("quandle")
+        );
+        assert_eq!(
+            route
+                .value(&history, &user("What is my dog called?"), &reserved)
+                .as_deref(),
+            Some("plimbo")
+        );
+        assert_eq!(
+            route.value(&[], &user("Who is my friend?"), &reserved),
+            None
+        );
+        // The sparse fit refuses an index outside its width.
+        assert!(SparseSoftmax::fit(&[vec![3]], &[0], 2, 3, 1, 0.5, 0.0).is_err());
         Ok(())
     }
 
