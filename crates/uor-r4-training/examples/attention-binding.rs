@@ -356,6 +356,7 @@ fn probe(models: &Path, out: &Path) -> Result<Value> {
     let carry = parent_report["read_identity_carry"]
         .as_bool()
         .unwrap_or(false);
+    let auxiliary_filter = parent_report["auxiliary_filter"].as_bool();
     let bytes = fs::read(models.join("evaluation.json"))?;
     let all: Vec<Episode> = serde_json::from_slice(&bytes)?;
     let episodes: Vec<_> = all
