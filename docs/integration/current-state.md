@@ -118,8 +118,12 @@ wordings, 3 are conflicts and 1 is an emission miss. MQAR has no channel in the
 one-entity session. This is one draw on one development cell, with raw
 paraphrase labels, not a gate or capability claim.
 
-The ordinary-text CLI and full #962 temporal/scope/conflict and capability
-acceptance stay open.
+The ordinary-text CLI is `grounded-session`, with `init`, `turn`, `chat` and
+`show`. Each command loads a sealed envelope in a fresh process, with the
+compiler taken from the envelope's own bytes, and saves a new envelope. Three
+development conversations replayed this way, one process per turn, match the
+in-process run on 14/14 turns: reply, action and recall. Full #962
+temporal/scope/conflict and capability acceptance stays open.
 
 **Learning-data diagnosis:** a deterministic 40-row stratified audit of the
 373 accepted `paraphrases-1` rows found actual inherited-label errors, including
