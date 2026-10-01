@@ -1,0 +1,45 @@
+name: plan-adoption-evidence
+on:
+  push:
+    branches: ['codex/ci/oct01-plan-adoption']
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_TERM_COLOR: never
+      UOR_BUILD_SOURCE_COMMIT: 46fbfeef882e102fc42b85c8083366a8658a60c7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 46fbfeef882e102fc42b85c8083366a8658a60c7
+          fetch-depth: 2
+      - name: Confirm exact PR head
+        run: test "$(git rev-parse HEAD)" = "$UOR_BUILD_SOURCE_COMMIT"
+      - name: Documentation and policy checks
+        run: |
+          python3 scripts/check_claim_wording.py
+          python3 -m json.tool docs/integration/agent-execution-policy.json > /dev/null
+          git diff --check HEAD^ HEAD
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+            merge-evidence-v2-${{ runner.os }}-
+      - name: Format
+        run: cargo fmt --check
+      - name: Compile current compiler and consumer
+        run: cargo check -p uor-r4-training --lib --example m-world --locked
+      - name: Existing focused compiler interface tests
+        run: cargo test -p uor-r4-training --lib relation_compiler::tests --locked
