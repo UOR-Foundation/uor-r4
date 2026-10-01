@@ -484,24 +484,112 @@ impl SparseSoftmax {
     }
 }
 
+/// The standardization of dense features appended to a sparse word row.
+struct DenseNorm {
+    mean: Vec<f64>,
+    scale: Vec<f64>,
+}
+
 /// The relation channel of the log-sieve design (§2.3) as a route: a word
-/// table naming each user turn's relation and act, fitted on labelled turns.
+/// table naming each user turn's relation and act, fitted on labelled turns,
+/// optionally with a frozen trunk's features of the turn appended to each word
+/// row at their standardized values.
 pub struct RelationRoute {
     lexicon: Lexicon,
     relation_head: SparseSoftmax,
     act_head: SparseSoftmax,
     relations: Vec<String>,
+    trunk: Option<DenseNorm>,
+}
+
+/// A turn's row: its present words at their standardized scale, then any
+/// trunk features, standardized, after the vocabulary.
+fn route_row(
+    lexicon: &Lexicon,
+    norm: Option<&DenseNorm>,
+    text: &str,
+    dense: Option<&[f64]>,
+) -> Result<Vec<(usize, f64)>> {
+    let mut row = lexicon.scaled(text);
+    match (norm, dense) {
+        (None, None) => {}
+        (Some(norm), Some(x)) if x.len() == norm.mean.len() => {
+            let base = lexicon.len();
+            row.extend(
+                x.iter()
+                    .enumerate()
+                    .map(|(j, v)| (base + j, (v - norm.mean[j]) / norm.scale[j])),
+            );
+        }
+        _ => {
+            return Err(invalid(
+                "trunk features must accompany exactly a route fitted with them",
+            ))
+        }
+    }
+    Ok(row)
 }
 
 impl RelationRoute {
     pub fn fit(train: &[Example], steps: usize, rate: f64, l2: f64) -> Result<Self> {
+        Self::fit_with(train, None, steps, rate, l2)
+    }
+
+    /// [`Self::fit`] with `trunk[i]`, the trunk's features of `train[i]`,
+    /// appended to each word row.
+    pub fn fit_with(
+        train: &[Example],
+        trunk: Option<&[Vec<f64>]>,
+        steps: usize,
+        rate: f64,
+        l2: f64,
+    ) -> Result<Self> {
         let lexicon = Lexicon::fit(train.iter().map(|e| e.text.as_str()));
         let relations: Vec<String> = relation_names()
             .iter()
             .map(|name| (*name).to_owned())
             .chain([NONE.to_owned()])
             .collect();
-        let rows: Vec<Vec<(usize, f64)>> = train.iter().map(|e| lexicon.scaled(&e.text)).collect();
+        let norm = match trunk {
+            None => None,
+            Some(x) => {
+                let width = x.first().map_or(0, Vec::len);
+                if x.len() != train.len() || width == 0 || x.iter().any(|row| row.len() != width) {
+                    return Err(invalid(
+                        "one trunk feature row of one width per training turn",
+                    ));
+                }
+                let n = x.len() as f64;
+                let mut mean = vec![0f64; width];
+                for row in x {
+                    for (m, v) in mean.iter_mut().zip(row) {
+                        *m += v / n;
+                    }
+                }
+                let mut scale = vec![0f64; width];
+                for row in x {
+                    for ((s, v), m) in scale.iter_mut().zip(row).zip(&mean) {
+                        *s += (v - m) * (v - m) / n;
+                    }
+                }
+                for s in &mut scale {
+                    *s = if *s > 1e-12 { s.sqrt() } else { 1.0 };
+                }
+                Some(DenseNorm { mean, scale })
+            }
+        };
+        let rows: Vec<Vec<(usize, f64)>> = train
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                route_row(
+                    &lexicon,
+                    norm.as_ref(),
+                    &e.text,
+                    trunk.map(|x| x[i].as_slice()),
+                )
+            })
+            .collect::<Result<_>>()?;
         let relation_y: Vec<usize> = train
             .iter()
             .map(|e| {
@@ -519,7 +607,7 @@ impl RelationRoute {
                     .unwrap_or(ACTS.len() - 1)
             })
             .collect();
-        let dim = lexicon.len().max(1);
+        let dim = (lexicon.len() + norm.as_ref().map_or(0, |n| n.mean.len())).max(1);
         Ok(Self {
             relation_head: SparseSoftmax::fit(
                 &rows,
@@ -533,16 +621,23 @@ impl RelationRoute {
             act_head: SparseSoftmax::fit(&rows, &act_y, ACTS.len(), dim, steps, rate, l2)?,
             lexicon,
             relations,
+            trunk: norm,
         })
     }
 
-    /// The relation and act the table names for a user turn.
-    pub fn classify(&self, text: &str) -> (&str, &'static str) {
-        let row = self.lexicon.scaled(text);
-        (
+    /// Whether the route reads trunk features beside the words.
+    pub fn needs_trunk(&self) -> bool {
+        self.trunk.is_some()
+    }
+
+    /// The relation and act the table names for a user turn, given its trunk
+    /// features exactly when the route was fitted with them.
+    pub fn classify(&self, text: &str, dense: Option<&[f64]>) -> Result<(&str, &'static str)> {
+        let row = route_row(&self.lexicon, self.trunk.as_ref(), text, dense)?;
+        Ok((
             self.relations[self.relation_head.predict(&row)].as_str(),
             ACTS[self.act_head.predict(&row)],
-        )
+        ))
     }
 
     /// The value the log gives for a relation query: the latest earlier user
@@ -552,28 +647,36 @@ impl RelationRoute {
     /// update; without, the value's presence alone marks a statement (a query
     /// states no value). `None` when the query names no relation or no such
     /// turn holds a value.
+    /// `trunk` gives a turn's trunk features (`None` for a route fitted
+    /// without them).
     pub fn value(
         &self,
         history: &[Turn2],
         query: &Turn2,
         reserved: &std::collections::BTreeSet<String>,
         fact_acts: bool,
-    ) -> Option<String> {
-        let (asked, _) = self.classify(&query.user);
+        trunk: &mut dyn FnMut(&str) -> Result<Option<Vec<f64>>>,
+    ) -> Result<Option<String>> {
+        let dense = trunk(&query.user)?;
+        let (asked, _) = self.classify(&query.user, dense.as_deref())?;
         if asked == NONE {
-            return None;
+            return Ok(None);
         }
-        history.iter().rev().find_map(|turn| {
-            let (relation, act) = self.classify(&turn.user);
+        for turn in history.iter().rev() {
+            let dense = trunk(&turn.user)?;
+            let (relation, act) = self.classify(&turn.user, dense.as_deref())?;
             if relation != asked || (fact_acts && !matches!(act, "assert" | "update")) {
-                return None;
+                continue;
             }
             let value: Vec<String> = words(&turn.user)
                 .into_iter()
                 .filter(|word| !reserved.contains(word))
                 .collect();
-            (!value.is_empty()).then(|| value.join(" "))
-        })
+            if !value.is_empty() {
+                return Ok(Some(value.join(" ")));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -761,11 +864,26 @@ mod tests {
             example("The weather is nice.", NONE, NONE),
         ];
         let route = RelationRoute::fit(&train, 300, 0.5, 1e-4)?;
+        assert!(!route.needs_trunk());
         assert_eq!(
-            route.classify("Who is my friend?"),
+            route.classify("Who is my friend?", None)?,
             ("friend_name", "query")
         );
-        assert_eq!(route.classify("My dog is Max."), ("pet_name", "assert"));
+        assert_eq!(
+            route.classify("My dog is Max.", None)?,
+            ("pet_name", "assert")
+        );
+        // A route without trunk features refuses them, and one with them
+        // refuses a turn without them.
+        assert!(route.classify("Who is my friend?", Some(&[0.5])).is_err());
+        let trunk: Vec<Vec<f64>> = (0..train.len()).map(|i| vec![i as f64, 1.0]).collect();
+        let with = RelationRoute::fit_with(&train, Some(&trunk), 300, 0.5, 1e-4)?;
+        assert!(with.needs_trunk());
+        assert!(with.classify("Who is my friend?", None).is_err());
+        assert!(with
+            .classify("Who is my friend?", Some(&[1.0, 1.0]))
+            .is_ok());
+        let mut none = |_: &str| -> Result<Option<Vec<f64>>> { Ok(None) };
         let user = |text: &str| Turn2 {
             intent: String::new(),
             category: Category2::Relation,
@@ -787,18 +905,30 @@ mod tests {
                 .collect();
         assert_eq!(
             route
-                .value(&history, &user("Who is my friend?"), &reserved, true)
+                .value(
+                    &history,
+                    &user("Who is my friend?"),
+                    &reserved,
+                    true,
+                    &mut none
+                )?
                 .as_deref(),
             Some("quandle")
         );
         assert_eq!(
             route
-                .value(&history, &user("What is my dog called?"), &reserved, false)
+                .value(
+                    &history,
+                    &user("What is my dog called?"),
+                    &reserved,
+                    false,
+                    &mut none
+                )?
                 .as_deref(),
             Some("plimbo")
         );
         assert_eq!(
-            route.value(&[], &user("Who is my friend?"), &reserved, true),
+            route.value(&[], &user("Who is my friend?"), &reserved, true, &mut none)?,
             None
         );
         // The sparse fit refuses an index outside its width.
