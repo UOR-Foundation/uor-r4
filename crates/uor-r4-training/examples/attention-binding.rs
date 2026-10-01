@@ -492,7 +492,21 @@ fn stress(models: &Path, out: &Path) -> Result<Value> {
                 if model.read_identity_carry() != carry {
                     return Err(invalid("parent carry differs"));
                 }
-                reports.push(json!({"name":name,"read_identity_carry":carry,"rows":score(&model,&eval)?,
+                let mut head1 = Vec::new();
+                for group in eval.chunks(64) {
+                    let time = group[0].ids.len();
+                    let (ids, _, _) = batch(group);
+                    let mut target = binding(group);
+                    target.head = 1;
+                    let masses = model
+                        .read_binding_masses(&ids, group.len(), time, &target)?
+                        .to_vec1::<f32>()?;
+                    for (e, mass) in group.iter().zip(masses) {
+                        head1.push(json!({"pair":e.pair,"condition":e.condition,"correct_occurrence_mass":mass,"source_majority":mass>0.5}));
+                    }
+                }
+                reports.push(json!({"name":name,"read_identity_carry":carry,"rows":score(&model,&eval)?,"head1_occurrence_rows":head1,
+
                     "model_sha256":uor_r4_training::sha256_file(&root.join("model/model.safetensors"))?}));
             }
         }
