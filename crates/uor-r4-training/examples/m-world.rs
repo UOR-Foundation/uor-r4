@@ -32,7 +32,7 @@
 //!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
 //! m-world compiler world=v2 out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [train_conversations=2000] [eval_conversations=1000] [seed=9101] [steps=400] [rate=0.5] [l2=0.0001] \
-//!   [lexical=true|false]
+//!   [lexical=true|false] [paraphrases=PARAPHRASES.jsonl]
 //! m-world probe out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json [max_new_tokens=48] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world probe-static out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [context=256]
@@ -167,7 +167,8 @@ use uor_r4_training::milestone_world_v2_probe::{
     EXCLUSION_NGRAM,
 };
 use uor_r4_training::relation_compiler::{
-    collect, score, trunk_features, Example, Lexicon, Softmax, ACTS, NONE as RC_NONE,
+    collect, paraphrase_examples, score, trunk_features, Example, Lexicon, Softmax, ACTS,
+    NONE as RC_NONE,
 };
 
 fn invalid(message: impl Into<String>) -> TrainingError {
@@ -2446,6 +2447,23 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
             seed,
         )?);
     }
+    // Teacher paraphrases (`teacher-paraphrase`), filled with training values,
+    // join the training turns; the development turns are untouched.
+    let paraphrases = match args.optional("paraphrases") {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            let (examples, skipped) = paraphrase_examples(&fs::read_to_string(&path)?, &train)?;
+            let record = json!({
+                "path": path.display().to_string(),
+                "sha256": sha256_file(&path)?,
+                "examples": examples.len(),
+                "skipped_without_a_value": skipped,
+            });
+            train.extend(examples);
+            Some(record)
+        }
+        None => None,
+    };
     let tests: Vec<(Cell, Vec<Example>)> = [Split::Development, Split::Train]
         .into_iter()
         .map(|value| {
@@ -2558,6 +2576,7 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
             "conversations_per_cell": train_conversations,
             "turns": train.len(),
             "relation_turns": train_relation.iter().filter(|&&r| r != none).count(),
+            "paraphrases": paraphrases,
             "lexicon_words": lexicon.len(),
         },
         "eval_conversations_per_cell": eval_conversations,
@@ -2791,6 +2810,7 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "rate",
         "l2",
         "lexical",
+        "paraphrases",
         "select",
         "pointer_select",
     ];

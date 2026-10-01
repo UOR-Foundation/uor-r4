@@ -40,6 +40,75 @@ pub struct Example {
     pub text: String,
     pub relation: String,
     pub act: &'static str,
+    /// The phrasing template the turn was drawn from, slot unfilled.
+    pub template: Option<String>,
+}
+
+impl Example {
+    /// The value filling the template's `{v}` slot in the text, if the turn
+    /// has a one-slot template that the text matches.
+    pub fn slot_value(&self) -> Option<&str> {
+        let template = self.template.as_deref()?;
+        let (before, after) = template.split_once("{v}")?;
+        let value = self.text.strip_prefix(before)?.strip_suffix(after)?;
+        (!value.trim().is_empty()).then_some(value)
+    }
+}
+
+/// Training examples from teacher paraphrases (one JSON object per line with
+/// `relation`, `act` and `text`): each `{v}` is filled with a value the
+/// training draws gave that relation, in turn (a paraphrase whose relation
+/// has no recorded value is skipped). Returns the examples and the count
+/// skipped.
+pub fn paraphrase_examples(jsonl: &str, training: &[Example]) -> Result<(Vec<Example>, usize)> {
+    let mut values: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for example in training {
+        if let Some(value) = example.slot_value() {
+            let pool = values.entry(example.relation.as_str()).or_default();
+            if !pool.contains(&value) {
+                pool.push(value);
+            }
+        }
+    }
+    let mut next: BTreeMap<String, usize> = BTreeMap::new();
+    let (mut examples, mut skipped) = (Vec::new(), 0usize);
+    for line in jsonl.lines().filter(|line| !line.trim().is_empty()) {
+        let row: Value = serde_json::from_str(line)?;
+        let (Some(relation), Some(act), Some(text)) = (
+            row["relation"].as_str(),
+            row["act"].as_str(),
+            row["text"].as_str(),
+        ) else {
+            return Err(invalid("a paraphrase row needs relation, act and text"));
+        };
+        let act = ACTS
+            .iter()
+            .copied()
+            .find(|a| *a == act && *a != NONE)
+            .ok_or_else(|| invalid(format!("unknown paraphrase act {act}")))?;
+        if !relation_names().contains(&relation) {
+            return Err(invalid(format!("unknown paraphrase relation {relation}")));
+        }
+        let text = if text.contains("{v}") {
+            let Some(pool) = values.get(relation).filter(|pool| !pool.is_empty()) else {
+                skipped += 1;
+                continue;
+            };
+            let i = next.entry(relation.to_owned()).or_default();
+            let value = pool[*i % pool.len()];
+            *i += 1;
+            text.replace("{v}", value)
+        } else {
+            text.to_owned()
+        };
+        examples.push(Example {
+            text,
+            relation: relation.to_owned(),
+            act,
+            template: None,
+        });
+    }
+    Ok((examples, skipped))
 }
 
 /// A turn's relation and act from its typed intent.
@@ -77,6 +146,7 @@ pub fn collect(
                 text: turn.user,
                 relation,
                 act,
+                template: turn.tag.template,
             });
         }
     }
@@ -381,6 +451,63 @@ mod tests {
         let report = score(&labels, &y, &predicted, |label| label != 2);
         assert_eq!(report["of"], 20);
         assert_eq!(report["rate"], 1.0);
+        Ok(())
+    }
+
+    #[test]
+    fn paraphrases_are_filled_with_the_relations_training_values() -> Result<()> {
+        let example = |text: &str, relation: &str, act, template: &str| Example {
+            text: text.into(),
+            relation: relation.into(),
+            act,
+            template: Some(template.into()),
+        };
+        let training = [
+            example(
+                "My friend is Sam.",
+                "friend_name",
+                "assert",
+                "My friend is {v}.",
+            ),
+            example(
+                "Tam is my friend.",
+                "friend_name",
+                "assert",
+                "{v} is my friend.",
+            ),
+            example(
+                "Who is my friend?",
+                "friend_name",
+                "query",
+                "Who is my friend?",
+            ),
+        ];
+        assert_eq!(training[0].slot_value(), Some("Sam"));
+        assert_eq!(training[1].slot_value(), Some("Tam"));
+        assert_eq!(training[2].slot_value(), None);
+        let jsonl = concat!(
+            r#"{"relation":"friend_name","act":"assert","text":"My buddy is {v}."}"#,
+            "\n",
+            r#"{"relation":"friend_name","act":"assert","text":"{v} is a pal of mine."}"#,
+            "\n",
+            r#"{"relation":"friend_name","act":"query","text":"Who's my pal?"}"#,
+            "\n",
+            r#"{"relation":"hometown","act":"assert","text":"I grew up in {v}."}"#,
+            "\n",
+        );
+        let (examples, skipped) = paraphrase_examples(jsonl, &training)?;
+        // Values are used in turn; a relation without one is skipped.
+        assert_eq!(skipped, 1);
+        let texts: Vec<&str> = examples.iter().map(|e| e.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["My buddy is Sam.", "Tam is a pal of mine.", "Who's my pal?"]
+        );
+        assert_eq!(examples[2].act, "query");
+        assert!(
+            paraphrase_examples(r#"{"relation":"nope","act":"query","text":"x"}"#, &training)
+                .is_err()
+        );
         Ok(())
     }
 
