@@ -787,8 +787,15 @@ impl<C: TurnCompiler> GroundedSession<C> {
 
     fn validate_reply(&self, reply: &Reply) -> Result<(), GroundedSessionError> {
         let eos = self.identity.protocol.eos_id;
+        let stop_matches = match Reply::stop(&reply.ids, eos) {
+            Some(detected) => reply.eos == detected.eos && reply.cycle == detected.cycle,
+            None => {
+                !reply.eos && reply.cycle.is_none() && reply.ids.len() == self.limits.max_new_tokens
+            }
+        };
         if reply.ids.is_empty()
             || reply.ids.len() > self.limits.max_new_tokens
+            || !stop_matches
             || reply.eos != (reply.ids.last() == Some(&eos))
             || (reply.eos && reply.cycle.is_some())
             || reply.cycle == Some(0)
