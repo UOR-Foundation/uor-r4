@@ -18,7 +18,7 @@
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K] [recall=off|oracle|sieve|route] \
-//!   [recall_at=reply|query] [route_paraphrases=A.jsonl[,B.jsonl...]] [route_acts=fact|any]
+//!   [recall_at=reply|query] [route_paraphrases=A.jsonl[,B.jsonl...]] [route_acts=fact|any] [route_trunk=MODEL_DIR]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! m-world evaluate-cells [world=v2] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [conversations=300] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
@@ -1611,9 +1611,43 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
         |history: &[u32], cap: usize| greedy_reply(&model, history, cap, protocol.eos_id);
     let count = |text: &str| tokenizer.encode(text).len();
     // recall=route fits the relation channel's word table first, from the
-    // training-phrasing draws `compiler` uses (and any teacher paraphrases).
+    // training-phrasing draws `compiler` uses (and any teacher paraphrases),
+    // with `route_trunk=`'s features of each turn beside its words.
+    let route_trunk = match args.optional("route_trunk") {
+        Some(directory) => {
+            let (trunk, identity, _) =
+                load_model(Path::new(&directory), &device, &Selection::default())?;
+            Some((
+                trunk,
+                json!({"model": directory, "model_identity": identity}),
+            ))
+        }
+        None => None,
+    };
+    let trunk_cache: std::cell::RefCell<BTreeMap<String, Vec<f64>>> = Default::default();
+    let trunk_of = |text: &str| -> Result<Option<Vec<f64>>> {
+        let Some((trunk, _)) = &route_trunk else {
+            return Ok(None);
+        };
+        if let Some(features) = trunk_cache.borrow().get(text) {
+            return Ok(Some(features.clone()));
+        }
+        let features = trunk_features(trunk, &encoder, protocol.bos_id, text)?;
+        trunk_cache
+            .borrow_mut()
+            .insert(text.to_owned(), features.clone());
+        Ok(Some(features))
+    };
     let (route, route_record) = if recall == Recall::Route {
-        let (route, record) = fit_route(&count, args.optional("route_paraphrases"))?;
+        let features =
+            |text: &str| -> Result<Vec<f64>> { trunk_of(text)?.ok_or_else(|| invalid("no trunk")) };
+        let trunk = route_trunk.as_ref().map(|(_, identity)| {
+            (
+                &features as &dyn Fn(&str) -> Result<Vec<f64>>,
+                identity.clone(),
+            )
+        });
+        let (route, record) = fit_route(&count, args.optional("route_paraphrases"), trunk)?;
         (Some(route), Some(record))
     } else {
         (None, None)
@@ -1640,14 +1674,20 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
                 (Recall::Sieve, _) => Some(recall_line(sieve_value(history, turn).as_deref())),
                 (Recall::Route, Some(route)) => {
                     if turn.category == Category2::Relation {
+                        let dense = trunk_of(&turn.user)?;
                         route_named.1 += 1;
-                        route_named.0 += usize::from(route.classify(&turn.user).0 == label(turn).0);
+                        route_named.0 += usize::from(
+                            route.classify(&turn.user, dense.as_deref())?.0 == label(turn).0,
+                        );
                     }
-                    Some(recall_line(
-                        sieve_value(history, turn)
-                            .or_else(|| route.value(history, turn, reserved, route_fact_acts))
-                            .as_deref(),
-                    ))
+                    let value = match sieve_value(history, turn) {
+                        Some(value) => Some(value),
+                        None => {
+                            let mut trunk = |text: &str| trunk_of(text);
+                            route.value(history, turn, reserved, route_fact_acts, &mut trunk)?
+                        }
+                    };
+                    Some(recall_line(value.as_deref()))
                 }
                 (Recall::Route, None) => return Err(invalid("recall=route without a route")),
             };
@@ -2477,6 +2517,7 @@ fn load_paraphrases(list: &str, train: &[Example]) -> Result<(Vec<Example>, Valu
 fn fit_route(
     count: &dyn Fn(&str) -> usize,
     paraphrases: Option<String>,
+    trunk: Option<(&dyn Fn(&str) -> Result<Vec<f64>>, Value)>,
 ) -> Result<(RelationRoute, Value)> {
     let mix = Mix {
         mqar: 0.15,
@@ -2505,8 +2546,21 @@ fn fit_route(
         }
         None => None,
     };
-    let route = RelationRoute::fit(&train, 400, 0.5, 1e-4)?;
+    let (route, trunk_record) = match trunk {
+        None => (RelationRoute::fit(&train, 400, 0.5, 1e-4)?, Value::Null),
+        Some((features, identity)) => {
+            let x: Vec<Vec<f64>> = train
+                .iter()
+                .map(|e| features(&e.text))
+                .collect::<Result<_>>()?;
+            (
+                RelationRoute::fit_with(&train, Some(&x), 400, 0.5, 1e-4)?,
+                identity,
+            )
+        }
+    };
     let record = json!({
+        "trunk": trunk_record,
         "channels": "identity (R-sieve) first; then the relation channel: the latest earlier user turn the word table names as asserting or updating the asked relation, and its words outside the world's fixed vocabulary",
         "table": "sparse softmax over the words of a turn, 400 full-batch steps, rate 0.5, l2 1e-4",
         "training_turns": turns,
@@ -3045,6 +3099,7 @@ fn main() -> Result<()> {
                 "recall_at",
                 "route_paraphrases",
                 "route_acts",
+                "route_trunk",
             ],
         )?,
         "rejudge" => Args::parse(rest, &["out", "report", "tokenizer"])?,
@@ -3089,7 +3144,7 @@ fn main() -> Result<()> {
                 || args.optional("route_acts").is_some())
         {
             return Err(invalid(
-                "route_paraphrases= and route_acts= need recall=route",
+                "route_paraphrases=, route_acts= and route_trunk= need recall=route",
             ));
         }
         route_acts_of(&args)?;
