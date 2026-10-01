@@ -8448,18 +8448,49 @@ mod tests {
             };
             let query = project("query")?;
             let key = project("key")?;
-            let q = model.heads(&query, 2, 8)?.to_vec4::<f32>()?;
-            let k = model.heads(&key, 2, 8)?.to_vec4::<f32>()?;
+            let q = model
+                .heads(&query, 2, 8)?
+                .contiguous()?
+                .reshape((
+                    2 * model.config.heads,
+                    8,
+                    model.config.width / model.config.heads,
+                ))?
+                .to_vec3::<f32>()?;
+            let k = model
+                .heads(&key, 2, 8)?
+                .contiguous()?
+                .reshape((
+                    2 * model.config.heads,
+                    8,
+                    model.config.width / model.config.heads,
+                ))?
+                .to_vec3::<f32>()?;
             let mut values = vec![f64::NAN; 2 * model.config.heads * 8 * 8];
             for b in 0..2 {
                 for h in 0..model.config.heads {
                     for t in 0..8 {
                         for j in 0..=t {
-                            let ql = (1. + f64::from(dot(&q[b][h][t], &q[b][h][t]))).sqrt();
-                            let kl = (1. + f64::from(dot(&k[b][h][j], &k[b][h][j]))).sqrt();
+                            let ql = (1.
+                                + f64::from(dot(
+                                    &q[b * model.config.heads + h][t],
+                                    &q[b * model.config.heads + h][t],
+                                )))
+                            .sqrt();
+                            let kl = (1.
+                                + f64::from(dot(
+                                    &k[b * model.config.heads + h][j],
+                                    &k[b * model.config.heads + h][j],
+                                )))
+                            .sqrt();
                             values[((b * model.config.heads + h) * 8 + t) * 8 + j] =
                                 lorentz_distance(
-                                    ql * kl - f64::from(dot(&q[b][h][t], &k[b][h][j])) - 1.,
+                                    ql * kl
+                                        - f64::from(dot(
+                                            &q[b * model.config.heads + h][t],
+                                            &k[b * model.config.heads + h][j],
+                                        ))
+                                        - 1.,
                                 );
                         }
                     }
