@@ -61,7 +61,10 @@ impl Args {
         }
     }
     fn text(&self, key: &str, default: &str) -> String {
-        self.0.get(key).cloned().unwrap_or_else(|| default.to_owned())
+        self.0
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| default.to_owned())
     }
 }
 
@@ -180,7 +183,13 @@ fn main() -> Result<()> {
     // (3) teacher sampling: the flat-limit checkpoint itself.
     let checkpoint = load_checkpoint(&model_dir, &device)?;
     let weights_sha = sha256_file(&model_dir.join("model.safetensors"))?;
-    let mut model = KappaLlama::new(checkpoint, ScoreKind::Dot, FLAT_LOG_EPS, Trainable::Scalars, &device)?;
+    let mut model = KappaLlama::new(
+        checkpoint,
+        ScoreKind::Dot,
+        FLAT_LOG_EPS,
+        Trainable::Scalars,
+        &device,
+    )?;
     let stop = tokenizer.encode("<|im_end|>");
     let mut sampler = Rng::new(seed ^ 0x9E37_79B9_7F4A_7C15);
 
@@ -293,7 +302,10 @@ fn main() -> Result<()> {
         },
         "provenance": { "executable_sha256": sha256_file(&std::env::current_exe()?)? },
     });
-    std::fs::write(out.join("paraphrase-manifest.json"), serde_json::to_vec_pretty(&manifest)?)?;
+    std::fs::write(
+        out.join("paraphrase-manifest.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
     report_output::seal(&out)?;
     let unlisted = report_output::verify(&out)?;
     if !unlisted.is_empty() {
