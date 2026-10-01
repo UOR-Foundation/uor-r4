@@ -66,9 +66,12 @@ fn draw(rng: &mut Rng, n: usize) -> Vec<(u32, u32)> {
         .collect()
 }
 fn evaluation() -> Vec<Episode> {
-    let mut rng = Rng(910173);
+    evaluation_draw(910173, &[2, 4, 8])
+}
+fn evaluation_draw(seed: u64, sizes: &[usize]) -> Vec<Episode> {
+    let mut rng = Rng(seed);
     let mut out = Vec::new();
-    for n in [2, 4, 8] {
+    for &n in sizes {
         for p in 0..16 {
             let pair = n * 100 + p;
             let facts = draw(&mut rng, n);
@@ -146,7 +149,13 @@ fn score(model: &StackModel, episodes: &[Episode]) -> Result<Vec<Value>> {
     }
     Ok(out)
 }
-fn run(out: &Path, steps: usize, max_seconds: u64, carry: bool) -> Result<Value> {
+fn run(
+    out: &Path,
+    steps: usize,
+    max_seconds: u64,
+    carry: bool,
+    auxiliary_filter: Option<bool>,
+) -> Result<Value> {
     let start = Instant::now();
     let eval = evaluation();
     fs::write(
@@ -157,7 +166,7 @@ fn run(out: &Path, steps: usize, max_seconds: u64, carry: bool) -> Result<Value>
     for seed in [1, 2] {
         for read in [ReadScore::Dot, ReadScore::Lorentz] {
             for auxiliary in [false, true] {
-                if carry && !auxiliary {
+                if carry && auxiliary != auxiliary_filter.unwrap_or(true) {
                     continue;
                 }
                 if start.elapsed().as_secs() >= max_seconds {
@@ -277,7 +286,7 @@ fn run(out: &Path, steps: usize, max_seconds: u64, carry: bool) -> Result<Value>
     Ok(
         json!({"schema":"uor-r4.attention-binding-experiment/1","reports":reports,
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),
-        "read_identity_carry":carry,"planned_arms":if carry {4}else{8},"steps":steps,"max_seconds":max_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),
+        "read_identity_carry":carry,"auxiliary_filter":auxiliary_filter,"planned_arms":if carry {4}else{8},"steps":steps,"max_seconds":max_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),
         "data":"distinct shuffled keys, iid values with duplicate tokens; 2/4/8 facts; query, value and order interventions",
         "labels":"training-only exact value occurrence; no candidate pruning or runtime annotation",
         "sampling":"16 base episodes per fact count, four correlated interventions each; fresh deterministic draws, not a certified deduplicated final holdout",
@@ -364,7 +373,7 @@ fn probe(models: &Path, out: &Path) -> Result<Value> {
     for seed in [1, 2] {
         for read in [ReadScore::Dot, ReadScore::Lorentz] {
             for auxiliary in [false, true] {
-                if carry && !auxiliary {
+                if carry && auxiliary != auxiliary_filter.unwrap_or(true) {
                     continue;
                 }
                 let name = format!(
@@ -455,6 +464,45 @@ fn probe(models: &Path, out: &Path) -> Result<Value> {
         "scope":"saved synthetic models only, no fit, threshold promotion or geometry advantage"}),
     )
 }
+/// Fixed post-fit development challenge; no training or design selection.
+fn stress(models: &Path, out: &Path) -> Result<Value> {
+    report_output::verify(models)?;
+    let parent: Value = serde_json::from_slice(&fs::read(models.join("report.json"))?)?;
+    let carry = parent["read_identity_carry"].as_bool().unwrap_or(false);
+    let auxiliary_filter = parent["auxiliary_filter"].as_bool();
+    let eval = evaluation_draw(1920173, &[2, 8, 16]);
+    fs::write(
+        out.join("evaluation.json"),
+        serde_json::to_vec_pretty(&eval)?,
+    )?;
+    let mut reports = Vec::new();
+    for seed in [1, 2] {
+        for read in [ReadScore::Dot, ReadScore::Lorentz] {
+            for auxiliary in [false, true] {
+                if carry && auxiliary != auxiliary_filter.unwrap_or(true) {
+                    continue;
+                }
+                let name = format!(
+                    "{read:?}-{}-s{seed}",
+                    if auxiliary { "binding" } else { "language" }
+                );
+                let root = models.join(&name);
+                let model = StackModel::load(&root.join("model"), &Device::Cpu)?;
+                if model.read_identity_carry() != carry {
+                    return Err(invalid("parent carry differs"));
+                }
+                reports.push(json!({"name":name,"read_identity_carry":carry,"rows":score(&model,&eval)?,
+                    "model_sha256":uor_r4_training::sha256_file(&root.join("model/model.safetensors"))?}));
+            }
+        }
+    }
+    Ok(
+        json!({"schema":"uor-r4.attention-binding-stress/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),
+        "models":models,"seed":1920173,"facts":[2,8,16],"read_identity_carry":carry,"reports":reports,
+        "scope":"post-fit fresh deterministic development draw; 16-fact length extrapolation beyond training 8; no certified final holdout or serving qualification"}),
+    )
+}
+
 fn main() -> Result<()> {
     let mut out = None;
     let mut mode = "fit".to_string();
@@ -462,12 +510,20 @@ fn main() -> Result<()> {
     let mut steps = 320;
     let mut seconds = 900;
     let mut carry = false;
+    let mut auxiliary_filter = None;
     for arg in std::env::args().skip(1) {
         let (k, v) = arg
             .split_once('=')
             .ok_or_else(|| invalid("expected key=value"))?;
         match k {
             "mode" => mode = v.into(),
+            "auxiliary" => {
+                auxiliary_filter = Some(match v {
+                    "0" => false,
+                    "1" => true,
+                    _ => return Err(invalid("auxiliary 0|1")),
+                })
+            }
             "carry" => {
                 carry = match v {
                     "0" => false,
@@ -485,12 +541,16 @@ fn main() -> Result<()> {
     if steps == 0 || steps > 2000 || seconds == 0 || seconds > 1800 {
         return Err(invalid("steps 1..2000, max_seconds 1..1800"));
     }
+    if auxiliary_filter.is_some() && !carry {
+        return Err(invalid("auxiliary filter requires carry=1"));
+    }
     let out = out.ok_or_else(|| invalid("out required"))?;
     report_output::claim(&out)?;
     let result = match mode.as_str() {
-        "fit" => run(&out, steps, seconds, carry),
+        "fit" => run(&out, steps, seconds, carry, auxiliary_filter),
         "probe" => probe(&models.ok_or_else(|| invalid("models required"))?, &out),
-        _ => Err(invalid("mode fit|probe")),
+        "stress" => stress(&models.ok_or_else(|| invalid("models required"))?, &out),
+        _ => Err(invalid("mode fit|probe|stress")),
     };
     match &result {
         Ok(report) => fs::write(out.join("report.json"), serde_json::to_vec_pretty(report)?)?,
