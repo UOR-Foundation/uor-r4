@@ -3132,8 +3132,18 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
             entry.1 += 1;
         };
         let mut misses = Vec::new();
-        for example in &examples {
-            let (relation, act) = saved.classify(&example.text)?;
+        // One compile per turn, in parallel; tallies stay sequential.
+        let predictions = parallel_map(&examples, |example| {
+            let action = saved.action(&example.text)?;
+            let classified = if saved.relation_mode() == RelationMode::OpModel {
+                classified_of(&saved, &action)
+            } else {
+                let (relation, act) = saved.classify(&example.text)?;
+                (relation.to_owned(), act)
+            };
+            Ok((classified, action))
+        })?;
+        for (example, ((relation, act), predicted)) in examples.iter().zip(predictions) {
             if example.relation != RC_NONE {
                 add("relation".into(), relation == example.relation);
             }
@@ -3148,7 +3158,6 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
             } else {
                 add("span/no_write".into(), decoded.is_none());
             }
-            let predicted = saved.action(&example.text)?;
             let gold = gold_of(&saved, example)?;
             let pass = same_action(&predicted, &gold);
             add(format!("action/{}", action_kind(&gold)), pass);
@@ -3202,6 +3211,54 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
     });
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
     Ok(())
+}
+
+/// `map` over `items` on all available cores, results in order. Each worker
+/// takes a contiguous chunk; the first error stops the collection.
+fn parallel_map<T: Sync, R: Send>(
+    items: &[T],
+    map: impl Fn(&T) -> Result<R> + Sync,
+) -> Result<Vec<R>> {
+    let workers = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .clamp(1, 8);
+    let chunk = items.len().div_ceil(workers).max(1);
+    let map = &map;
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = items
+            .chunks(chunk)
+            .map(|part| scope.spawn(move || part.iter().map(map).collect::<Result<Vec<R>>>()))
+            .collect();
+        let mut out = Vec::with_capacity(items.len());
+        for handle in handles {
+            out.extend(
+                handle
+                    .join()
+                    .map_err(|_| invalid("an evaluation worker panicked"))??,
+            );
+        }
+        Ok(out)
+    })
+}
+
+/// The relation and act an action implies (none for an unresolved turn).
+fn classified_of(compiler: &SavedCompiler, action: &CompiledAction) -> (String, &'static str) {
+    let name = |id: &u32| {
+        compiler
+            .identity()
+            .relations
+            .iter()
+            .find(|label| label.id == *id)
+            .map_or(RC_NONE.to_owned(), |label| label.name.clone())
+    };
+    match action {
+        CompiledAction::Assert { relation, .. } => (name(relation), "assert"),
+        CompiledAction::Correct { relation, .. } => (name(relation), "update"),
+        CompiledAction::QueryCurrent { relation } | CompiledAction::Query { relation, .. } => {
+            (name(relation), "query")
+        }
+        CompiledAction::Unresolved { .. } => (RC_NONE.to_owned(), RC_NONE),
+    }
 }
 
 /// The gold action of a labelled example (see [`gold_action`]).
