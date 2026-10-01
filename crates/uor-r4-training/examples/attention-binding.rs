@@ -8,6 +8,7 @@ use std::{fs, path::Path, time::Instant};
 use uor_r4_core::report_output;
 use uor_r4_training::geometric_stack::{
     ReadBinding, ReadBindingTarget, ReadScore, StackAdamW, StackArch, StackConfig, StackModel,
+    StackSite,
 };
 use uor_r4_training::{Result, TrainingError};
 
@@ -281,8 +282,164 @@ fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
         "uniform_baseline":"includes all causal token positions and NoRead; empirical latest-answer/source baselines retained separately"}),
     )
 }
+
+fn difference(a: &[f32], b: &[f32]) -> f64 {
+    let delta = a
+        .iter()
+        .zip(b)
+        .map(|(&a, &b)| (f64::from(a) - f64::from(b)).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    let scale = ((a.iter().map(|&x| f64::from(x).powi(2)).sum::<f64>()
+        + b.iter().map(|&x| f64::from(x).powi(2)).sum::<f64>())
+        / 2.0)
+        .sqrt();
+    delta / scale.max(1e-12)
+}
+fn latent(
+    model: &StackModel,
+    ids: &[u32],
+    batch: usize,
+    time: usize,
+) -> Result<(Vec<Vec<f32>>, Vec<Vec<f32>>, Vec<Vec<f32>>)> {
+    let mut input = None;
+    let _ = model.hidden_with_capture(ids, batch, time, &mut |site, tensor| {
+        if site == StackSite::Read(2) {
+            input = Some(tensor.clone());
+        }
+        Ok(())
+    })?;
+    let input = input.ok_or_else(|| invalid("missing read input"))?;
+    let gain = model
+        .variables()
+        .get("layers.02.read_norm.weight")
+        .ok_or_else(|| invalid("read gain"))?;
+    let u = input.broadcast_mul(gain.as_tensor())?;
+    let project = |name: &str| -> Result<Vec<Vec<f32>>> {
+        let weight = model
+            .variables()
+            .get(name)
+            .ok_or_else(|| invalid("read weight"))?;
+        Ok(u.matmul(&weight.as_tensor().t()?)?
+            .narrow(1, 0, 16)?
+            .to_vec2::<f32>()?)
+    };
+    Ok((
+        input.to_vec2::<f32>()?,
+        project("layers.02.read.query.weight")?,
+        project("layers.02.read.key.weight")?,
+    ))
+}
+fn probe(models: &Path, out: &Path) -> Result<Value> {
+    let bytes = fs::read(models.join("evaluation.json"))?;
+    let all: Vec<Episode> = serde_json::from_slice(&bytes)?;
+    let episodes: Vec<_> = all
+        .into_iter()
+        .filter(|e| e.condition == "base" || e.condition == "changed_query")
+        .collect();
+    if episodes.len() != 96 {
+        return Err(invalid("expected frozen 48 query pairs"));
+    }
+    fs::write(
+        out.join("query-pairs.json"),
+        serde_json::to_vec_pretty(&episodes)?,
+    )?;
+    let mut reports = Vec::new();
+    for seed in [1, 2] {
+        for read in [ReadScore::Dot, ReadScore::Lorentz] {
+            for auxiliary in [false, true] {
+                let name = format!(
+                    "{read:?}-{}-s{seed}",
+                    if auxiliary { "binding" } else { "language" }
+                );
+                let root = models.join(&name);
+                let parent: Value = serde_json::from_slice(&fs::read(root.join("result.json"))?)?;
+                let model = StackModel::load(&root.join("model"), &Device::Cpu)?;
+                if model.config.width != 32
+                    || model.config.heads != 2
+                    || model.config.pattern != "rra"
+                {
+                    return Err(invalid("probe model shape"));
+                }
+                let mut rows = Vec::new();
+                for group in episodes.chunks(32) {
+                    let time = group[0].ids.len();
+                    for pair in group.chunks(2) {
+                        if pair.len() != 2
+                            || pair[0].pair != pair[1].pair
+                            || pair[0].source == pair[1].source
+                        {
+                            return Err(invalid("invalid query pair"));
+                        }
+                    }
+                    let (ids, _, _) = batch(group);
+                    let target = |which: usize| ReadBindingTarget {
+                        layer: 2,
+                        head: 0,
+                        rows: group
+                            .iter()
+                            .enumerate()
+                            .map(|(batch, e)| ReadBinding {
+                                batch,
+                                query: e.ids.len() - 1,
+                                sources: vec![group[batch - batch % 2 + which].source],
+                            })
+                            .collect(),
+                    };
+                    let a = model
+                        .read_binding_masses(&ids, group.len(), time, &target(0))?
+                        .to_vec1::<f32>()?;
+                    let b = model
+                        .read_binding_masses(&ids, group.len(), time, &target(1))?
+                        .to_vec1::<f32>()?;
+                    let (input, query, key) = latent(&model, &ids, group.len(), time)?;
+                    let mut swapped = group.to_vec();
+                    for pair in swapped.chunks_mut(2) {
+                        let i = pair[0].source - 1;
+                        let j = pair[1].source - 1;
+                        for e in pair {
+                            e.ids.swap(i, j);
+                        }
+                    }
+                    let (swap_ids, _, _) = batch(&swapped);
+                    let (swap_input, _, swap_key) = latent(&model, &swap_ids, group.len(), time)?;
+                    for p in (0..group.len()).step_by(2) {
+                        let masses = [a[p], b[p], a[p + 1], b[p + 1]];
+                        if masses.iter().any(|&m| m <= 0.0 || !m.is_finite()) {
+                            return Err(invalid("probe mass invalid"));
+                        }
+                        let contrast = (f64::from(a[p]) / f64::from(b[p])).ln()
+                            - (f64::from(a[p + 1]) / f64::from(b[p + 1])).ln();
+                        let first = p * time;
+                        let second = (p + 1) * time;
+                        let source = group[p].source;
+                        rows.push(json!({"pair":group[p].pair,"facts":group[p].facts,"masses_AA_AB_BA_BB":masses,
+                    "query_specific_log_odds_contrast":contrast,
+                    "query_key_state_change":difference(&input[first+time-2],&input[second+time-2]),
+                    "query_answer_state_change":difference(&input[first+time-1],&input[second+time-1]),
+                    "query_projection_change":difference(&query[first+time-1],&query[second+time-1]),
+                    "swapped_source_key_state_change":difference(&input[first+source-1],&swap_input[first+source-1]),
+                    "swapped_source_value_state_change":difference(&input[first+source],&swap_input[first+source]),
+                    "swapped_source_value_key_projection_change":difference(&key[first+source],&swap_key[first+source]),
+                    "swap_inputs":swapped[p].ids}));
+                    }
+                }
+                reports.push(json!({"name":name,"steps":parent["steps"],"rows":rows,"model_sha256":uor_r4_training::sha256_file(root.join("model/model.safetensors"))?}));
+            }
+        }
+    }
+    Ok(
+        json!({"schema":"uor-r4.attention-query-probe/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),
+        "evaluation_sha256":uor_r4_training::sha256_file(models.join("evaluation.json"))?,"models":models,"reports":reports,
+        "contrast":"log(mAA/mAB)-log(mBA/mBB); normalizer, NoRead and fixed positional preferences cancel; positive is correct query-specific separation",
+        "latent":"RMS-normalized pre-gain read input; learned gain then actual query/key projections, head0; relative RMS Euclidean differences",
+        "scope":"saved synthetic models only, no fit, threshold promotion or geometry advantage"}),
+    )
+}
 fn main() -> Result<()> {
     let mut out = None;
+    let mut mode = "fit".to_string();
+    let mut models = None;
     let mut steps = 320;
     let mut seconds = 900;
     for arg in std::env::args().skip(1) {
@@ -290,6 +447,8 @@ fn main() -> Result<()> {
             .split_once('=')
             .ok_or_else(|| invalid("expected key=value"))?;
         match k {
+            "mode" => mode = v.into(),
+            "models" => models = Some(std::path::PathBuf::from(v)),
             "out" => out = Some(std::path::PathBuf::from(v)),
             "steps" => steps = v.parse().map_err(|_| invalid("steps"))?,
             "max_seconds" => seconds = v.parse().map_err(|_| invalid("max_seconds"))?,
@@ -301,7 +460,11 @@ fn main() -> Result<()> {
     }
     let out = out.ok_or_else(|| invalid("out required"))?;
     report_output::claim(&out)?;
-    let result = run(&out, steps, seconds);
+    let result = match mode.as_str() {
+        "fit" => run(&out, steps, seconds),
+        "probe" => probe(&models.ok_or_else(|| invalid("models required"))?, &out),
+        _ => Err(invalid("mode fit|probe")),
+    };
     match &result {
         Ok(report) => fs::write(out.join("report.json"), serde_json::to_vec_pretty(report)?)?,
         Err(error) => fs::write(
