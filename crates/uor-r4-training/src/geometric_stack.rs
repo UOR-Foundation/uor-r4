@@ -345,20 +345,31 @@ pub fn parse_pointer_select(text: &str) -> Result<Option<PointerSelect>> {
 }
 
 /// A pointer route from its command-line form: `none`, `prime:<window>` (the
-/// exact route) or `prime-ranked:<window>`.
+/// exact route, admitting by a shared atom), `prime-ranked:<window>`, or
+/// `ngram:<window>` / `ngram-ranked:<window>` (admitting by the longest
+/// ordered n-let match).
 pub fn parse_pointer_route(text: &str) -> Result<Option<PrimeRoute>> {
     if text == "none" {
         return Ok(None);
     }
     let route = match text.split_once(':') {
-        Some((kind @ ("prime" | "prime-ranked"), window)) => PrimeRoute {
-            window: window.parse().map_err(|_| {
+        Some((kind @ ("prime" | "prime-ranked" | "ngram" | "ngram-ranked"), window)) => {
+            let window = window.parse().map_err(|_| {
                 invalid(format!(
-                    "invalid pointer route {text:?} (none, prime:<window> or prime-ranked:<window>)"
+                    "invalid pointer route {text:?} (none, prime:<window>, prime-ranked:<window>, ngram:<window> or ngram-ranked:<window>)"
                 ))
-            })?,
-            ranked: kind == "prime-ranked",
-        },
+            })?;
+            let route = if kind.ends_with("-ranked") {
+                PrimeRoute::ranked(window)
+            } else {
+                PrimeRoute::exact(window)
+            };
+            if kind.starts_with("ngram") {
+                route.admitting(RouteAdmission::Ngram)
+            } else {
+                route
+            }
+        }
         _ => {
             return Err(invalid(format!(
                 "invalid pointer route {text:?} (none or prime:<window>)"
@@ -424,6 +435,17 @@ pub struct PointerConfig {
 /// identity; ranking among sources that share the same atoms (a fact and the
 /// question that repeats its words) is learned, and the query and key get
 /// their gradient as under a selection.
+///
+/// Admission is [`RouteAdmission::SharedAtom`] as above, or
+/// [`RouteAdmission::Ngram`]: the ordered n-let identity of ADR-0003's
+/// transition indexes with divisor fallback (I2 before I1). For the longest
+/// `n <= window` with any match, a source `j` is admitted when the `n` tokens
+/// before it equal, in order, the query's last `n` (on registered primes,
+/// whose assignment is injective, this is equality of the ordered prime
+/// sequences), the key again wholly before the query's tokens; shorter `n`
+/// are tried only when no longer one matches. An admitted source scores the
+/// matched n-let's prime weight (the sum of `ln p` over its atoms, so a rare
+/// n-let outweighs a common one in the exact route's sharpness) plus recency.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrimeRoute {
@@ -434,6 +456,28 @@ pub struct PrimeRoute {
     /// exact route.
     #[serde(default, skip_serializing_if = "is_false")]
     pub ranked: bool,
+    /// Which sources the route admits; a route saved before this field
+    /// admits by a shared atom.
+    #[serde(default, skip_serializing_if = "RouteAdmission::is_shared_atom")]
+    pub admission: RouteAdmission,
+}
+
+/// How a [`PrimeRoute`] admits a source.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RouteAdmission {
+    /// Any atom shared by the key before the source and the query's key
+    /// (`gcd > 1`).
+    #[default]
+    SharedAtom,
+    /// The longest ordered n-let match, backing off to shorter n-lets.
+    Ngram,
+}
+
+impl RouteAdmission {
+    fn is_shared_atom(&self) -> bool {
+        *self == Self::SharedAtom
+    }
 }
 
 fn is_false(flag: &bool) -> bool {
@@ -455,15 +499,21 @@ impl PrimeRoute {
         Self {
             window,
             ranked: false,
+            admission: RouteAdmission::SharedAtom,
         }
     }
 
     /// The ranked route of `window`-token keys.
     pub fn ranked(window: usize) -> Self {
         Self {
-            window,
             ranked: true,
+            ..Self::exact(window)
         }
+    }
+
+    /// The same route admitting by `admission`.
+    pub fn admitting(self, admission: RouteAdmission) -> Self {
+        Self { admission, ..self }
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -512,9 +562,38 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
 }
 
 /// The sources the route admits at position `t` of a window whose tokens are
-/// `ids[..=t]` (see [`PrimeRoute`]), with their route scores (`ln gcd` plus
-/// recency), in position order.
-fn route_scores(ids: &[u32], t: usize, window: usize) -> Vec<(usize, f64)> {
+/// `ids[..=t]` (see [`PrimeRoute`]), with their route scores, in position
+/// order.
+fn route_scores(ids: &[u32], t: usize, route: PrimeRoute) -> Vec<(usize, f64)> {
+    match route.admission {
+        RouteAdmission::SharedAtom => shared_atom_scores(ids, t, route.window),
+        RouteAdmission::Ngram => ngram_scores(ids, t, route.window),
+    }
+}
+
+/// The longest ordered n-let match (see [`RouteAdmission::Ngram`]).
+fn ngram_scores(ids: &[u32], t: usize, window: usize) -> Vec<(usize, f64)> {
+    for n in (1..=window.min(t + 1)).rev() {
+        let query = &ids[t + 1 - n..=t];
+        let weight: f64 = query
+            .iter()
+            .filter_map(|&id| token_prime(id))
+            .map(|p| (p as f64).ln())
+            .sum();
+        // A source's n-let ends at `j - 1 <= t - n`, before the query's.
+        let matches: Vec<(usize, f64)> = (n..=t + 1 - n)
+            .filter(|&j| ids[j - n..j] == *query)
+            .map(|j| (j, weight + ROUTE_RECENCY * j as f64 / (t + 1) as f64))
+            .collect();
+        if !matches.is_empty() {
+            return matches;
+        }
+    }
+    Vec::new()
+}
+
+/// Any shared atom (see [`RouteAdmission::SharedAtom`]): `ln gcd` plus recency.
+fn shared_atom_scores(ids: &[u32], t: usize, window: usize) -> Vec<(usize, f64)> {
     let query = route_key(ids, t, window);
     // Sources whose key ends before the query's first token.
     let last = (t + 1).saturating_sub(window);
@@ -553,7 +632,7 @@ fn admitted_softmax(t: usize, scores: &[(usize, f64)]) -> Vec<f64> {
 /// softmax of [`ROUTE_SHARPNESS`] times the route scores of the admitted
 /// sources.
 fn route_attention(ids: &[u32], t: usize, route: PrimeRoute) -> Vec<f64> {
-    let scores: Vec<(usize, f64)> = route_scores(ids, t, route.window)
+    let scores: Vec<(usize, f64)> = route_scores(ids, t, route)
         .into_iter()
         .map(|(j, score)| (j, ROUTE_SHARPNESS * score))
         .collect();
@@ -568,7 +647,7 @@ fn ranked_attention(
     t: usize,
     route: PrimeRoute,
 ) -> candle_core::Result<Vec<f64>> {
-    let admitted = route_scores(ids, t, route.window);
+    let admitted = route_scores(ids, t, route);
     if admitted.is_empty() {
         return pointer_weights(learned, None);
     }
@@ -13082,7 +13161,7 @@ mod tests {
             // softmax over every source when none is admitted.
             let admitted = pointer
                 .route
-                .map(|route| route_scores(&ids[first..=first + t], t, route.window))
+                .map(|route| route_scores(&ids[first..=first + t], t, route))
                 .unwrap_or_default();
             let (attention, keep): (Vec<f64>, Vec<bool>) = match pointer.route {
                 Some(route) if route.ranked && !admitted.is_empty() => {
@@ -13439,15 +13518,61 @@ mod tests {
     }
 
     #[test]
+    fn an_ngram_route_admits_the_longest_ordered_match() -> Result<()> {
+        let two = PrimeRoute::exact(2).admitting(RouteAdmission::Ngram);
+        // "10 11" matches as a bigram: only its successor is admitted,
+        // although the unigram 11 recurs elsewhere (a shared atom admits more).
+        let ids = [5u32, 10, 11, 50, 6, 11, 60, 10, 11];
+        let a = route_attention(&ids, 8, two);
+        assert_eq!(a[3], 1.0, "{a:?}");
+        let shared = route_attention(&ids, 8, PrimeRoute::exact(2));
+        assert!(
+            shared.iter().filter(|&&w| w > 0.0).count() > 1,
+            "{shared:?}"
+        );
+        // No bigram match: back off to the unigram.
+        let b = route_attention(&[7, 11, 60, 8, 11], 4, two);
+        assert_eq!(b[2], 1.0, "{b:?}");
+        // Order matters: "11 10" is not "10 11"; the unigram 10 matches.
+        let c = route_attention(&[10, 11, 50, 11, 10], 4, two);
+        assert_eq!(c[1], 1.0, "{c:?}");
+        // Two matches of one n-let: recency orders them.
+        let d = route_attention(&[4, 5, 6, 4, 5, 7, 4, 5], 7, two);
+        assert!(d[5] > d[2] && d[2] > 0.0, "{d:?}");
+        assert_eq!(d.iter().filter(|&&w| w > 0.0).count(), 2);
+        // Nothing recurs: nothing admitted.
+        assert!(route_attention(&[1, 2, 3], 2, two)
+            .iter()
+            .all(|&w| w == 0.0));
+        // The grammar and the saved form.
+        assert_eq!(parse_pointer_route("ngram:2")?, Some(two));
+        assert_eq!(
+            parse_pointer_route("ngram-ranked:3")?,
+            Some(PrimeRoute::ranked(3).admitting(RouteAdmission::Ngram))
+        );
+        assert!(parse_pointer_route("ngram:0").is_err());
+        let json = serde_json::to_string(&two)?;
+        assert_eq!(json, r#"{"window":2,"admission":"ngram"}"#);
+        assert_eq!(serde_json::from_str::<PrimeRoute>(&json)?, two);
+        Ok(())
+    }
+
+    #[test]
     fn a_ranked_route_trains_the_scores_it_ranks_by() -> Result<()> {
         let (ids, targets, weights) = routed_batch();
         let data = (&ids[..], &targets[..], &weights[..]);
-        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+        let ngram = PrimeRoute::ranked(2).admitting(RouteAdmission::Ngram);
+        for (score, route) in [
+            (ReadScore::Dot, PrimeRoute::ranked(1)),
+            (ReadScore::Lorentz, PrimeRoute::ranked(1)),
+            (ReadScore::Dot, ngram),
+            (ReadScore::Lorentz, ngram),
+        ] {
             let mut model = pointer_model(score, None, 0)?;
             let soft = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
             model.set_pointer_route(Some(PrimeRoute::exact(1)))?;
             let exact = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
-            model.set_pointer_route(Some(PrimeRoute::ranked(1)))?;
+            model.set_pointer_route(Some(route))?;
             let hidden = model.hidden(&ids, 2, 12)?.to_vec2::<f32>()?;
             let (rows, _, contested) = reference_mixture(&model, &hidden, data, (2, 12))?;
             assert!(contested);
@@ -13507,9 +13632,13 @@ mod tests {
 
     #[test]
     fn a_routed_pointer_trains_its_gate_and_leaves_its_scores_alone() -> Result<()> {
+        exact_route_trains_only_its_gate(PrimeRoute::exact(1))?;
+        exact_route_trains_only_its_gate(PrimeRoute::exact(2).admitting(RouteAdmission::Ngram))
+    }
+
+    fn exact_route_trains_only_its_gate(route: PrimeRoute) -> Result<()> {
         let (ids, targets, weights) = routed_batch();
         let data = (&ids[..], &targets[..], &weights[..]);
-        let route = PrimeRoute::exact(1);
         let soft = pointer_model(ReadScore::Dot, None, 0)?;
         let soft_loss = soft.weighted_loss(&ids, &targets, &weights, 2, 12)?;
         let mut model = pointer_model(ReadScore::Dot, None, 0)?;

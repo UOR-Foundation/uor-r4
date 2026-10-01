@@ -43,7 +43,8 @@
 //!   (init=ROOT/model | arch=geometric|transformer [shape options as train]) [qat=false|true] \
 //!   [transport_snap=none|icosian] [select=none|flock:WINDOW:K] [pointer=none|DIM] \
 //!   [pointer_score=dot|lorentz] [pointer_select=none|flock:WINDOW:K|top:K] \
-//!   [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW] [context=256] \
+//!   [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW|ngram:WINDOW|ngram-ranked:WINDOW] \
+//!   [context=256] \
 //!   [policy=full_prefix|role_only|truncated_prefix[:KEEP]] [data_seed=1] [steps=1024] [batch=16] [lr=0.001] [warmup=50] \
 //!   [min_lr=0.1] [weight_decay=0.1] [clip=1.0] [eval_every=128] [dev_seed=1] [dev_per_source=32] \
 //!   [checkpoint_every=128] [resume=OLD_ROOT/checkpoint] [max_seconds=inf] [requests=REQUESTS.json] \
@@ -204,7 +205,10 @@
 //! the gate still learns, the query and key get no gradient. `prime-ranked:WINDOW`
 //! keeps that admission and ranks the admitted sources by the learned score
 //! plus the route's, falling back to the learned pointer where nothing is
-//! admitted (the query and key then train). Either excludes
+//! admitted (the query and key then train). `ngram:WINDOW` and
+//! `ngram-ranked:WINDOW` admit by the longest ordered n-let match instead
+//! (the n tokens before a source equal the query's last n, for the longest
+//! n up to WINDOW with a match; ADR-0003's transition indexes). Each
 //! `pointer_select=`, and `none` clears a saved route.
 //! Each evaluation reports the pointer's mean gate and hit rate on the scored
 //! targets (`dev_pointer_*` in the curve, `pointer` in the developments). The
@@ -4236,7 +4240,8 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
   stack_mlp= mlp=]) [qat=false|true] [transport_snap=none|icosian] \\
   [select=none|flock:WINDOW:K] [pointer=none|DIM] [pointer_score=dot|lorentz] \\
   [pointer_select=none|flock:WINDOW:K|top:K] \\
-  [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW] [seed=] [context=] [policy=] \\
+  [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW|ngram:WINDOW|ngram-ranked:WINDOW] \\
+  [seed=] [context=] [policy=] \\
   [data_seed=] \\
   [steps=] \\
   [batch=] [lr=] [warmup=] [min_lr=] [weight_decay=] [clip=] [eval_every=] [dev_seed=] \\
@@ -4272,7 +4277,9 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
                          ln gcd plus recency, and the pointer copies the token that followed. The
                          gate learns; the query and key get no gradient. prime-ranked:WINDOW
                          keeps the admission and ranks admitted sources by the learned score
-                         plus the route's (learned pointer where none is admitted). Excludes
+                         plus the route's (learned pointer where none is admitted). ngram:WINDOW
+                         and ngram-ranked:WINDOW admit by the longest ordered n-let match
+                         (n up to WINDOW) instead of any shared atom. Excludes
                          pointer_select=. With init=, replaces the saved head's route.
   reports                each eval adds dev_pointer_mean_gate / dev_pointer_hit_rate /
                          dev_pointer_reachable_rate to the curve; all settings are in the saved
