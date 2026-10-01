@@ -425,7 +425,8 @@ mod tests {
         let mut values = vec![0; 33];
         values[0] = 1;
         values[32] = 1;
-        let zeros = vec![0; 33];
+        let zeros = vec![0i8; 33];
+        let zero_inputs = vec![0i16; 33];
         let mut grouped =
             PairedProjection::new(vec![row(&codes, &[-17, -17])], vec![row(&zeros, &[0, 0])])?;
         let mut out = [0];
@@ -435,7 +436,7 @@ mod tests {
                 exponent: 0,
             },
             DyadicVector {
-                mantissas: &zeros,
+                mantissas: &zero_inputs,
                 exponent: 64,
             },
             &mut out,
