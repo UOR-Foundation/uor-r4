@@ -167,9 +167,9 @@ use uor_r4_training::milestone_world_v2_probe::{
     EXCLUSION_NGRAM,
 };
 use uor_r4_training::relation_compiler::{
-    collect, label, paraphrase_examples, score, trunk_features, ActRule, CompilerSettings, Example,
-    Lexicon, RelationMode, RelationRoute, SavedCompiler, Softmax, SparseSoftmax, Trunk, ACTS,
-    NONE as RC_NONE,
+    collect, label, op_text, paraphrase_examples, score, trunk_features, ActRule, CompilerSettings,
+    Example, Lexicon, RelationMode, RelationRoute, SavedCompiler, Softmax, SparseSoftmax, Trunk,
+    ACTS, COMPILE_PROMPT, NONE as RC_NONE,
 };
 use uor_r4_training::stack_checkpoint::{
     save_checkpoint, sealed_manifest_sha256, CheckpointIdentity, DataIdentity,
@@ -3522,6 +3522,147 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// `compile-corpus`: training documents that teach a stack to compile a user
+/// turn into its memory operation (`relation_mode=op_model`). Each document is
+/// `System: Compile.` / `User: <turn>` / `Assistant: <op>`, where the op comes
+/// from the turn's typed intent and template slot (`relation_compiler::op_text`).
+/// Only the op is supervised. `train/` draws training phrasings with training
+/// values (plus any teacher paraphrases); `dev/` draws training phrasings with
+/// development values, so checkpoint selection never sees development phrasings.
+fn compile_corpus(args: &Args, out: &Path) -> Result<()> {
+    if args.optional("world").as_deref() != Some("v2") {
+        return Err(invalid("compile-corpus needs world=v2"));
+    }
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let conversations: usize = args.number("conversations", 4_000)?;
+    let dev_conversations: usize = args.number("dev_conversations", 300)?;
+    let seed: u64 = args.number("seed", 9_101)?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let vocab = u32::try_from(tokenizer.vocab_size())
+        .map_err(|_| invalid("the tokenizer's vocabulary does not fit the token store"))?;
+    let count = |text: &str| tokenizer.encode(text).len();
+    let mix = Mix {
+        mqar: 0.15,
+        copy: 0.05,
+        relation: 0.60,
+        other: 0.20,
+        ..Mix::default()
+    };
+    let draw = |value: Split, conversations: usize, seed: u64| -> Result<Vec<Example>> {
+        let mut world = MWorld2::new(&count, mix)?;
+        let mut rng = Rng::new(seed);
+        collect(
+            &mut world,
+            &mut rng,
+            Cell::new(Split::Train, value),
+            conversations,
+        )
+    };
+    let mut train = draw(Split::Train, conversations, seed)?;
+    let paraphrases = match args.optional("paraphrases") {
+        Some(list) => {
+            let (examples, record) = load_paraphrases(&list, &train)?;
+            train.extend(examples);
+            record
+        }
+        None => Value::Null,
+    };
+    let dev = draw(Split::Development, dev_conversations, seed + 1)?;
+    let mut splits = serde_json::Map::new();
+    for (name, examples) in [("train", &train), ("dev", &dev)] {
+        let (mut tokens, mut mask) = (Vec::new(), Vec::new());
+        let (mut documents, mut skipped) = (0usize, 0usize);
+        let mut by_op: BTreeMap<String, usize> = BTreeMap::new();
+        for example in examples.iter() {
+            let Some(op) = op_text(example) else {
+                skipped += 1;
+                continue;
+            };
+            let messages = [
+                Message {
+                    role: "system",
+                    content: COMPILE_PROMPT,
+                },
+                Message {
+                    role: "user",
+                    content: &example.text,
+                },
+                Message {
+                    role: "assistant",
+                    content: &op,
+                },
+            ];
+            let encoded = encoder.encode_document(&messages);
+            if encoded.emitted_turns != 3 || encoded.special_token_occurrences != 0 {
+                skipped += 1;
+                continue;
+            }
+            if encoded.tokens.len() > CONTEXT {
+                return Err(invalid("a compile document is longer than the context"));
+            }
+            for &id in &encoded.tokens {
+                tokens.push(u16::try_from(id).map_err(|_| invalid("a token ID exceeds u16"))?);
+            }
+            mask.extend(&encoded.response_mask);
+            documents += 1;
+            *by_op
+                .entry(op.split_whitespace().nth(1).unwrap_or("?").to_owned())
+                .or_default() += 1;
+        }
+        let directory = out.join(name);
+        fs::create_dir_all(&directory)?;
+        let mut writer = CorpusWriter::create(&directory.join("tokens.u16"), vocab)
+            .map_err(|e| invalid(format!("token store: {e}")))?;
+        writer
+            .write_tokens(&tokens)
+            .map_err(|e| invalid(format!("token store: {e}")))?;
+        writer
+            .finish()
+            .map_err(|e| invalid(format!("token store: {e}")))?;
+        fs::write(directory.join("response_mask.u8"), &mask)?;
+        let manifest = json!({
+            "schema": "uor-r4.m-world-compile-corpus/1",
+            "files": [{
+                "label": format!("m-world-v2.compile.{name}"),
+                "tokens": tokens.len(),
+                "special_token_occurrences": 0,
+            }],
+            "drops": {"special_token_occurrences": 0},
+            "documents": documents,
+            "skipped_without_a_recoverable_op": skipped,
+            "documents_by_op": by_op,
+        });
+        fs::write(
+            directory.join("manifest.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+        println!(
+            "{name}: {documents} documents, {} tokens, {skipped} skipped",
+            tokens.len()
+        );
+        splits.insert(name.to_owned(), manifest);
+    }
+    let report = json!({
+        "schema": "uor-r4.m-world-compile-corpus-report/1",
+        "executable_sha256": sha256_file(&std::env::current_exe()?)?,
+        "world_digest": MWorld2::digest(),
+        "tokenizer_sha256": sha256_file(&tokenizer_path)?,
+        "prompt": COMPILE_PROMPT,
+        "op_format": "Op: none | Op: query <relation> | Op: assert <relation> <value> | Op: update <relation> <value>",
+        "train_draw": format!("relation-heavy mix, training phrasings x training values, {conversations} conversations, seed {seed}"),
+        "dev_draw": format!("relation-heavy mix, training phrasings x development values, {dev_conversations} conversations, seed {}", seed + 1),
+        "paraphrases": paraphrases,
+        "splits": splits,
+    });
+    fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
+    Ok(())
+}
+
 fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
     let cells: &[&str] = &[
         "out",
@@ -3577,6 +3718,15 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "select",
         "pointer_select",
     ];
+    let compile_corpus_keys: &[&str] = &[
+        "out",
+        "world",
+        "tokenizer",
+        "conversations",
+        "dev_conversations",
+        "seed",
+        "paraphrases",
+    ];
     let compiler_save_keys: &[&str] = &[
         "out",
         "world",
@@ -3605,6 +3755,7 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
     ];
     match mode {
         "compiler" => Some(claimed(rest, relation_compiler, compiler)),
+        "compile-corpus" => Some(claimed(rest, compile_corpus_keys, compile_corpus)),
         "compiler-save" => Some(claimed(rest, compiler_save_keys, compiler_save)),
         "session" => Some(claimed(rest, session_keys, session)),
         "evaluate-cells" => Some(claimed(rest, cells, evaluate_cells)),

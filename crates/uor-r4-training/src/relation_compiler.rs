@@ -1046,12 +1046,11 @@ pub enum RelationMode {
     /// The combined relation head names the relation; the table's act head
     /// keeps the act (and, under [`ActRule::Span`], assert vs update).
     CombinedRelation,
-}
-
-impl RelationMode {
-    fn uses_trunk(self) -> bool {
-        self != Self::Table
-    }
+    /// A stack fine-tuned on `compile-corpus` documents generates each
+    /// turn's op (`Op: assert user_name Ada`), and the value is located in
+    /// the turn's own text ([`parse_op`]). The table and span head are
+    /// saved alongside but not consulted.
+    OpModel,
 }
 
 impl RelationMode {
@@ -1060,6 +1059,7 @@ impl RelationMode {
             "table" => Ok(Self::Table),
             "combined" => Ok(Self::Combined),
             "combined_relation" => Ok(Self::CombinedRelation),
+            "op_model" => Ok(Self::OpModel),
             other => Err(invalid(format!("unknown relation mode {other}"))),
         }
     }
@@ -1102,6 +1102,81 @@ impl Default for CompilerSettings {
             act_rule: ActRule::Table,
             relation_mode: RelationMode::Table,
         }
+    }
+}
+
+/// The system line that asks a stack to compile the next user turn.
+pub const COMPILE_PROMPT: &str = "Compile.";
+/// The longest op an op model may generate, in tokens.
+const OP_MAX_TOKENS: usize = 24;
+
+/// The op a labelled turn compiles to: `Op: none`, `Op: query <relation>`, or
+/// `Op: assert|update <relation> <value>` with the template's slot value.
+/// `None` for a statement whose slot cannot be recovered.
+pub fn op_text(example: &Example) -> Option<String> {
+    if example.relation == NONE || example.act == NONE {
+        return Some("Op: none".to_owned());
+    }
+    match example.act {
+        "query" => Some(format!("Op: query {}", example.relation)),
+        act => example
+            .slot_value()
+            .map(|value| format!("Op: {act} {} {}", example.relation, value.trim())),
+    }
+}
+
+/// The action of a generated op for `source`. A statement's value must occur
+/// in the source (exactly, else ignoring ASCII case), and its span is that
+/// occurrence; anything else is unresolved with a reason. `relation_id` maps
+/// a relation name to its store ID.
+pub fn parse_op(
+    text: &str,
+    source: &str,
+    relation_id: impl Fn(&str) -> Option<u32>,
+) -> crate::stack_grounded_session::CompiledAction {
+    use crate::stack_grounded_session::{CompiledAction, SourceSpan};
+    let unresolved = |reason: &str| CompiledAction::Unresolved {
+        reason: reason.to_owned(),
+    };
+    let Some(rest) = text.trim().strip_prefix("Op:") else {
+        return unresolved("the model produced no op");
+    };
+    let mut parts = rest.trim().splitn(3, ' ');
+    let (act, relation, value) = (parts.next(), parts.next(), parts.next());
+    let id = |name: &str| relation_id(name);
+    match (act, relation, value) {
+        (Some("none"), None, None) => unresolved("the op is none"),
+        (Some("query"), Some(name), None) => match id(name) {
+            Some(relation) => CompiledAction::QueryCurrent { relation },
+            None => unresolved("the op names an unknown relation"),
+        },
+        (Some(act @ ("assert" | "update")), Some(name), Some(value)) => {
+            let Some(relation) = id(name) else {
+                return unresolved("the op names an unknown relation");
+            };
+            let value = value.trim().trim_end_matches(['.', '!', '?', ',']).trim();
+            if value.is_empty() {
+                return unresolved("the op has an empty value");
+            }
+            let start = source.find(value).or_else(|| {
+                source
+                    .to_ascii_lowercase()
+                    .find(&value.to_ascii_lowercase())
+            });
+            let Some(start) = start else {
+                return unresolved("the op's value does not occur in the turn");
+            };
+            let span = SourceSpan {
+                start,
+                end: start + value.len(),
+            };
+            if act == "assert" {
+                CompiledAction::Assert { relation, span }
+            } else {
+                CompiledAction::Correct { relation, span }
+            }
+        }
+        _ => unresolved("the op does not parse"),
     }
 }
 
@@ -1284,6 +1359,9 @@ struct CompilerArtifact {
     /// Present for the combined relation modes only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     combined: Option<CombinedParts>,
+    /// The bound op model, for [`RelationMode::OpModel`] only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    op_model: Option<crate::stack_grounded_session::EncoderIdentity>,
 }
 
 fn is_sha256(value: &str) -> bool {
@@ -1320,6 +1398,7 @@ pub struct SavedCompiler {
     bytes: Vec<u8>,
     inner: std::sync::Arc<(RelationRoute, SpanHead)>,
     combined: Option<std::sync::Arc<Combined>>,
+    op: Option<std::sync::Arc<Trunk>>,
     act_rule: ActRule,
     identity: crate::stack_grounded_session::CompilerIdentity,
 }
@@ -1358,8 +1437,11 @@ impl SavedCompiler {
             settings.span_l2,
             settings.span_max_words,
         )?;
-        let combined = match (settings.relation_mode, trunk) {
-            (RelationMode::Table, None) => None,
+        let (combined, op) = match (settings.relation_mode, trunk) {
+            (RelationMode::Table, None) => (None, None),
+            // The op model is trained separately (`compile-corpus`); the
+            // compiler binds it and reads its generated ops.
+            (RelationMode::OpModel, Some(trunk)) => (None, Some(trunk)),
             (RelationMode::Combined | RelationMode::CombinedRelation, Some(trunk)) => {
                 let mut x = Vec::with_capacity(train.len());
                 for example in train {
@@ -1400,26 +1482,30 @@ impl SavedCompiler {
                     RelationMode::Combined => Some(fit(&act_y, ACTS.len())?),
                     _ => None,
                 };
-                Some(Combined {
-                    trunk,
-                    relation_head,
-                    act_head,
-                })
+                (
+                    Some(Combined {
+                        trunk,
+                        relation_head,
+                        act_head,
+                    }),
+                    None,
+                )
             }
             (RelationMode::Table, Some(_)) => {
                 return Err(invalid("the table relation mode reads no trunk"))
             }
-            (_, None) => return Err(invalid("a combined relation mode needs a trunk")),
+            (_, None) => return Err(invalid("this relation mode needs a trunk")),
         };
         let bytes = encode(
             &route,
             &span,
             combined.as_ref(),
+            op.as_ref().map(|t| &t.identity),
             tokenizer_sha256,
             training,
             settings,
         )?;
-        Self::load(bytes, combined.map(|c| c.trunk))
+        Self::load(bytes, combined.map(|c| c.trunk).or(op))
     }
 
     /// Load a saved compiler that reads no trunk. Only canonical bytes of
@@ -1482,10 +1568,11 @@ impl SavedCompiler {
                 Some("span") => ActRule::Span,
                 Some(_) => return Err(invalid("a saved compiler names an unknown act rule")),
             },
-            relation_mode: match &artifact.combined {
-                None => RelationMode::Table,
-                Some(parts) if parts.act_head.is_some() => RelationMode::Combined,
-                Some(_) => RelationMode::CombinedRelation,
+            relation_mode: match (&artifact.combined, &artifact.op_model) {
+                (None, None) => RelationMode::Table,
+                (None, Some(_)) => RelationMode::OpModel,
+                (Some(parts), _) if parts.act_head.is_some() => RelationMode::Combined,
+                (Some(_), _) => RelationMode::CombinedRelation,
             },
         };
         let words = artifact.words.len();
@@ -1521,9 +1608,23 @@ impl SavedCompiler {
                 .head(2, artifact.span_features.len().max(1))?,
             max_words: artifact.span_max_words,
         };
-        let combined = match (artifact.combined, trunk) {
-            (None, None) => None,
-            (Some(parts), Some(trunk)) => {
+        let op_model = artifact.op_model.clone();
+        let (combined, op) = match (artifact.combined, &op_model, trunk) {
+            (None, None, None) => (None, None),
+            (Some(_), Some(_), _) => {
+                return Err(invalid(
+                    "a compiler binds combined heads or an op model, not both",
+                ))
+            }
+            (None, Some(bound), Some(trunk)) => {
+                if *bound != trunk.identity || trunk.tokenizer_sha256 != artifact.tokenizer_sha256 {
+                    return Err(invalid(
+                        "the op model or its tokenizer is not the one the compiler binds",
+                    ));
+                }
+                (None, Some(trunk))
+            }
+            (Some(parts), None, Some(trunk)) => {
                 if parts.trunk != trunk.identity
                     || trunk.tokenizer_sha256 != artifact.tokenizer_sha256
                     || parts.trunk_width != 2 * trunk.model.config.width
@@ -1533,22 +1634,26 @@ impl SavedCompiler {
                     ));
                 }
                 let dim = parts.trunk_width + words;
-                Some(Combined {
-                    trunk,
-                    relation_head: parts.relation_head.head(route.relations.len(), dim)?,
-                    act_head: parts
-                        .act_head
-                        .map(|head| head.head(ACTS.len(), dim))
-                        .transpose()?,
-                })
+                (
+                    Some(Combined {
+                        trunk,
+                        relation_head: parts.relation_head.head(route.relations.len(), dim)?,
+                        act_head: parts
+                            .act_head
+                            .map(|head| head.head(ACTS.len(), dim))
+                            .transpose()?,
+                    }),
+                    None,
+                )
             }
-            (Some(_), None) => return Err(invalid("this compiler needs its trunk to load")),
-            (None, Some(_)) => return Err(invalid("this compiler reads no trunk")),
+            (_, _, None) => return Err(invalid("this compiler needs its trunk to load")),
+            (None, None, Some(_)) => return Err(invalid("this compiler reads no trunk")),
         };
         if encode(
             &route,
             &span,
             combined.as_ref(),
+            op_model.as_ref(),
             &artifact.tokenizer_sha256,
             artifact.training.clone(),
             settings,
@@ -1576,12 +1681,16 @@ impl SavedCompiler {
             tokenizer_sha256: artifact.tokenizer_sha256,
             label_schema: COMPILER_LABEL_SCHEMA.to_owned(),
             relations,
-            encoder: combined.as_ref().map(|c| c.trunk.identity.clone()),
+            encoder: combined
+                .as_ref()
+                .map(|c| c.trunk.identity.clone())
+                .or(op_model),
         };
         Ok(Self {
             bytes,
             inner: std::sync::Arc::new((route, span)),
             combined: combined.map(std::sync::Arc::new),
+            op: op.map(std::sync::Arc::new),
             act_rule: settings.act_rule,
             identity,
         })
@@ -1592,6 +1701,9 @@ impl SavedCompiler {
     }
 
     pub fn relation_mode(&self) -> RelationMode {
+        if self.op.is_some() {
+            return RelationMode::OpModel;
+        }
         match &self.combined {
             None => RelationMode::Table,
             Some(combined) if combined.act_head.is_some() => RelationMode::Combined,
@@ -1621,9 +1733,77 @@ impl SavedCompiler {
             .map(|label| label.id)
     }
 
+    /// The op model's action for a turn read alone: the prompt is
+    /// `System: Compile.` and the turn, the op is decoded greedily up to EOS
+    /// ([`OP_MAX_TOKENS`] at most) and parsed by [`parse_op`].
+    fn op_action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
+        use crate::stack_grounded_session::CompiledAction;
+        use uor_r4_tokenizer::dialogue::Message;
+        let op = self
+            .op
+            .as_ref()
+            .ok_or_else(|| invalid("this compiler has no op model"))?;
+        let encoder = op
+            .protocol
+            .bind(&op.tokenizer)
+            .map_err(|e| invalid(format!("protocol: {e}")))?;
+        let prompt = encoder.encode_assistant_prefix(&[
+            Message {
+                role: "system",
+                content: COMPILE_PROMPT,
+            },
+            Message {
+                role: "user",
+                content: source,
+            },
+        ]);
+        if prompt.emitted_turns != 2 || prompt.special_token_occurrences != 0 {
+            return Ok(CompiledAction::Unresolved {
+                reason: "the turn does not encode as a compile prompt".into(),
+            });
+        }
+        if prompt.tokens.len() + OP_MAX_TOKENS + 1 > op.model.config.context {
+            return Ok(CompiledAction::Unresolved {
+                reason: "the turn is too long to compile".into(),
+            });
+        }
+        let reply = crate::stack_dialogue::greedy_reply(
+            &op.model,
+            &prompt.tokens,
+            OP_MAX_TOKENS,
+            op.protocol.eos_id,
+        )?;
+        let ids: Vec<u32> = reply
+            .ids
+            .iter()
+            .copied()
+            .filter(|&id| id != op.protocol.eos_id)
+            .collect();
+        let text = op.tokenizer.decode(&ids);
+        Ok(parse_op(&text, source, |name| self.relation_id(name)))
+    }
+
     /// The relation and act the compiler's heads name for a turn: the
     /// combined heads when it has them, otherwise the table.
     pub fn classify(&self, source: &str) -> Result<(&str, &'static str)> {
+        if self.op.is_some() {
+            use crate::stack_grounded_session::CompiledAction;
+            let (id, act) = match self.op_action(source)? {
+                CompiledAction::Assert { relation, .. } => (relation, ACTS[0]),
+                CompiledAction::Correct { relation, .. } => (relation, ACTS[1]),
+                CompiledAction::QueryCurrent { relation }
+                | CompiledAction::Query { relation, .. } => (relation, ACTS[2]),
+                CompiledAction::Unresolved { .. } => return Ok((NONE, NONE)),
+            };
+            let name = self
+                .identity
+                .relations
+                .iter()
+                .find(|label| label.id == id)
+                .map(|label| label.name.as_str())
+                .ok_or_else(|| invalid("an op named a relation outside the labels"))?;
+            return Ok((name, act));
+        }
         let row = self.combined_row(source)?;
         self.classify_row(source, row.as_deref())
     }
@@ -1682,6 +1862,9 @@ impl SavedCompiler {
     /// value the span head does not mark.
     pub fn action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
+        if self.op.is_some() {
+            return self.op_action(source);
+        }
         let unresolved = |reason: &str| {
             Ok(CompiledAction::Unresolved {
                 reason: reason.to_owned(),
@@ -1730,6 +1913,7 @@ fn encode(
     route: &RelationRoute,
     span: &SpanHead,
     combined: Option<&Combined>,
+    op_model: Option<&crate::stack_grounded_session::EncoderIdentity>,
     tokenizer_sha256: &str,
     training: Value,
     settings: CompilerSettings,
@@ -1737,7 +1921,14 @@ fn encode(
     if route.trunk.is_some() {
         return Err(invalid("a saved compiler's table has no trunk features"));
     }
-    if settings.relation_mode.uses_trunk() != combined.is_some()
+    let combined_mode = matches!(
+        settings.relation_mode,
+        RelationMode::Combined | RelationMode::CombinedRelation
+    );
+    if (settings.relation_mode == RelationMode::OpModel) != op_model.is_some() {
+        return Err(invalid("the relation mode and the op model disagree"));
+    }
+    if combined_mode != combined.is_some()
         || combined.is_some_and(|c| {
             c.act_head.is_some() != (settings.relation_mode == RelationMode::Combined)
         })
@@ -1794,6 +1985,7 @@ fn encode(
             relation_head: DenseParts::of(&c.relation_head),
             act_head: c.act_head.as_ref().map(DenseParts::of),
         }),
+        op_model: op_model.cloned(),
     };
     Ok(serde_json::to_vec(&artifact)?)
 }
@@ -2455,9 +2647,103 @@ mod tests {
             );
         }
         assert!(RelationMode::parse("combined_relation").is_ok());
+        // The op-model mode binds the model and reads its generated ops.
+        let op = SavedCompiler::fit_with(
+            &train,
+            &digest,
+            json!({"draw": "small world"}),
+            CompilerSettings {
+                relation_mode: RelationMode::OpModel,
+                ..settings
+            },
+            Some(Trunk::load(&directory, &tokenizer, &device)?),
+        )?;
+        assert_eq!(op.relation_mode(), RelationMode::OpModel);
+        let artifact: Value = serde_json::from_slice(op.bytes())?;
+        assert!(artifact["op_model"]["model_sha256"].is_string());
+        assert!(artifact.get("combined").is_none());
+        // An untrained stack's output is not an op: unresolved, not an error.
+        let action = op
+            .compile("My name is Zorvak.")
+            .map_err(|e| invalid(e.to_string()))?;
+        assert!(matches!(
+            action,
+            crate::stack_grounded_session::CompiledAction::Unresolved { .. }
+        ));
+        assert!(SavedCompiler::from_bytes(op.bytes().to_vec()).is_err());
+        assert!(SavedCompiler::load(
+            op.bytes().to_vec(),
+            Some(Trunk::load(&other, &tokenizer, &device)?)
+        )
+        .is_err());
+        assert!(SavedCompiler::load(
+            op.bytes().to_vec(),
+            Some(Trunk::load(&directory, &tokenizer, &device)?)
+        )
+        .is_ok());
         let _ = std::fs::remove_dir_all(&directory);
         let _ = std::fs::remove_dir_all(&other);
         Ok(())
+    }
+
+    #[test]
+    fn ops_are_written_from_labels_and_parsed_against_the_source() {
+        use crate::stack_grounded_session::{CompiledAction, SourceSpan};
+        let train = small_world();
+        assert_eq!(
+            op_text(&train[0]).as_deref(),
+            Some("Op: assert user_name Sam")
+        );
+        assert_eq!(
+            op_text(&train[1]).as_deref(),
+            Some("Op: update user_name Tam")
+        );
+        assert_eq!(op_text(&train[3]).as_deref(), Some("Op: query user_name"));
+        assert_eq!(op_text(&train[4]).as_deref(), Some("Op: none"));
+        let ids = |name: &str| match name {
+            "user_name" => Some(1),
+            "hometown" => Some(4),
+            _ => None,
+        };
+        let source = "Actually, call me Zorvak.";
+        assert_eq!(
+            parse_op("Op: update user_name Zorvak", source, ids),
+            CompiledAction::Correct {
+                relation: 1,
+                span: SourceSpan { start: 18, end: 24 }
+            }
+        );
+        // Case may differ; a trailing period is ignored.
+        assert_eq!(
+            parse_op(" Op: assert user_name zorvak.", source, ids),
+            CompiledAction::Assert {
+                relation: 1,
+                span: SourceSpan { start: 18, end: 24 }
+            }
+        );
+        assert_eq!(
+            parse_op("Op: query hometown", "Where am I from?", ids),
+            CompiledAction::QueryCurrent { relation: 4 }
+        );
+        for (text, reason) in [
+            ("Op: none", "the op is none"),
+            ("Your name is Zorvak.", "the model produced no op"),
+            (
+                "Op: assert user_name Plimbo",
+                "the op's value does not occur in the turn",
+            ),
+            ("Op: query pet_kind", "the op names an unknown relation"),
+            ("Op: assert user_name", "the op does not parse"),
+            ("Op: query hometown extra", "the op does not parse"),
+        ] {
+            assert_eq!(
+                parse_op(text, source, ids),
+                CompiledAction::Unresolved {
+                    reason: reason.into()
+                },
+                "{text}"
+            );
+        }
     }
 
     #[test]
