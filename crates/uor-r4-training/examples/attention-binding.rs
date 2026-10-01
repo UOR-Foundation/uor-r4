@@ -424,13 +424,13 @@ fn probe(models: &Path, out: &Path) -> Result<Value> {
                     "swap_inputs":swapped[p].ids}));
                     }
                 }
-                reports.push(json!({"name":name,"steps":parent["steps"],"rows":rows,"model_sha256":uor_r4_training::sha256_file(root.join("model/model.safetensors"))?}));
+                reports.push(json!({"name":name,"steps":parent["steps"],"rows":rows,"model_sha256":uor_r4_training::sha256_file(&root.join("model/model.safetensors"))?}));
             }
         }
     }
     Ok(
         json!({"schema":"uor-r4.attention-query-probe/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),
-        "evaluation_sha256":uor_r4_training::sha256_file(models.join("evaluation.json"))?,"models":models,"reports":reports,
+        "evaluation_sha256":uor_r4_training::sha256_file(&models.join("evaluation.json"))?,"models":models,"reports":reports,
         "contrast":"log(mAA/mAB)-log(mBA/mBB); normalizer, NoRead and fixed positional preferences cancel; positive is correct query-specific separation",
         "latent":"RMS-normalized pre-gain read input; learned gain then actual query/key projections, head0; relative RMS Euclidean differences",
         "scope":"saved synthetic models only, no fit, threshold promotion or geometry advantage"}),
