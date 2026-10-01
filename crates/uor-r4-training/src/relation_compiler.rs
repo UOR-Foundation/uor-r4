@@ -192,19 +192,52 @@ pub fn trunk_features(
 /// Binary bag-of-words features over a fixed vocabulary.
 pub struct Lexicon {
     index: BTreeMap<String, usize>,
+    /// Per word, `sqrt((1 - p) / p)` for its document frequency `p` in the
+    /// fitted texts: the value a present word takes when standardized, so a
+    /// sparse table can weigh rare words as a standardized fit does.
+    scale: Vec<f64>,
 }
 
 impl Lexicon {
     /// The vocabulary of `texts` (lowercased words without punctuation).
     pub fn fit<'a>(texts: impl IntoIterator<Item = &'a str>) -> Self {
         let mut index = BTreeMap::new();
+        let mut documents: Vec<usize> = Vec::new();
+        let mut total = 0usize;
         for text in texts {
+            total += 1;
+            let mut seen = std::collections::BTreeSet::new();
             for word in words(text) {
                 let next = index.len();
-                index.entry(word).or_insert(next);
+                let i = *index.entry(word).or_insert(next);
+                if i == documents.len() {
+                    documents.push(0);
+                }
+                if seen.insert(i) {
+                    documents[i] += 1;
+                }
             }
         }
-        Self { index }
+        let scale = documents
+            .iter()
+            .map(|&d| {
+                let p = d as f64 / total.max(1) as f64;
+                if p >= 1.0 {
+                    1.0
+                } else {
+                    ((1.0 - p) / p).sqrt()
+                }
+            })
+            .collect();
+        Self { index, scale }
+    }
+
+    /// The present words of `text` with their standardized scale, sorted.
+    pub fn scaled(&self, text: &str) -> Vec<(usize, f64)> {
+        self.active(text)
+            .into_iter()
+            .map(|i| (i, self.scale[i]))
+            .collect()
     }
 
     pub fn len(&self) -> usize {
@@ -354,9 +387,11 @@ impl Softmax {
     }
 }
 
-/// A softmax classifier on sparse binary features (the active indices of a
-/// row), fitted without standardization so a row costs only its active
-/// features. In serving it is a table of word weights summed per class.
+/// A softmax classifier on sparse features (each row's present indices with
+/// their values), so a row costs only its present features. With the
+/// lexicon's standardized scale ([`Lexicon::scaled`]) it weighs rare words as a
+/// standardized fit does. In serving it is a table of word weights summed per
+/// class.
 pub struct SparseSoftmax {
     classes: usize,
     dim: usize,
@@ -368,7 +403,7 @@ impl SparseSoftmax {
     /// Full-batch gradient descent on the mean cross-entropy plus `l2` times
     /// the squared weights (applied as a shrink each step).
     pub fn fit(
-        rows: &[Vec<usize>],
+        rows: &[Vec<(usize, f64)>],
         y: &[usize],
         classes: usize,
         dim: usize,
@@ -380,7 +415,10 @@ impl SparseSoftmax {
             || rows.len() != y.len()
             || classes < 2
             || y.iter().any(|&label| label >= classes)
-            || rows.iter().flatten().any(|&i| i >= dim)
+            || rows
+                .iter()
+                .flatten()
+                .any(|&(i, v)| i >= dim || !v.is_finite())
         {
             return Err(invalid(
                 "a sparse classifier needs labelled rows inside its width",
@@ -401,8 +439,8 @@ impl SparseSoftmax {
                 for c in 0..classes {
                     let g = (p[c] - f64::from(u8::from(c == label))) / n;
                     grad_b[c] += g;
-                    for &i in row {
-                        grad_w[c * dim + i] += g;
+                    for &(i, v) in row {
+                        grad_w[c * dim + i] += g * v;
                     }
                 }
             }
@@ -417,13 +455,13 @@ impl SparseSoftmax {
         Ok(model)
     }
 
-    fn probabilities(&self, row: &[usize]) -> Vec<f64> {
+    fn probabilities(&self, row: &[(usize, f64)]) -> Vec<f64> {
         let logits: Vec<f64> = (0..self.classes)
             .map(|c| {
                 self.bias[c]
                     + row
                         .iter()
-                        .map(|&i| self.weights[c * self.dim + i])
+                        .map(|&(i, v)| self.weights[c * self.dim + i] * v)
                         .sum::<f64>()
             })
             .collect();
@@ -434,7 +472,7 @@ impl SparseSoftmax {
     }
 
     /// The most probable class of a row (ties to the lower class).
-    pub fn predict(&self, row: &[usize]) -> usize {
+    pub fn predict(&self, row: &[(usize, f64)]) -> usize {
         let p = self.probabilities(row);
         let mut best = 0;
         for c in 1..p.len() {
@@ -463,7 +501,7 @@ impl RelationRoute {
             .map(|name| (*name).to_owned())
             .chain([NONE.to_owned()])
             .collect();
-        let rows: Vec<Vec<usize>> = train.iter().map(|e| lexicon.active(&e.text)).collect();
+        let rows: Vec<Vec<(usize, f64)>> = train.iter().map(|e| lexicon.scaled(&e.text)).collect();
         let relation_y: Vec<usize> = train
             .iter()
             .map(|e| {
@@ -500,7 +538,7 @@ impl RelationRoute {
 
     /// The relation and act the table names for a user turn.
     pub fn classify(&self, text: &str) -> (&str, &'static str) {
-        let row = self.lexicon.active(text);
+        let row = self.lexicon.scaled(text);
         (
             self.relations[self.relation_head.predict(&row)].as_str(),
             ACTS[self.act_head.predict(&row)],
@@ -761,7 +799,7 @@ mod tests {
             None
         );
         // The sparse fit refuses an index outside its width.
-        assert!(SparseSoftmax::fit(&[vec![3]], &[0], 2, 3, 1, 0.5, 0.0).is_err());
+        assert!(SparseSoftmax::fit(&[vec![(3, 1.0)]], &[0], 2, 3, 1, 0.5, 0.0).is_err());
         Ok(())
     }
 
