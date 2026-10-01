@@ -5,8 +5,8 @@ use serde_json::{json, Value};
 use std::{fs, path::Path, time::Instant};
 use uor_r4_core::report_output;
 use uor_r4_training::geometric_stack::{
-    ReadBinding, ReadBindingTarget, ReadIdentityLatch, ReadScore, StackAdamW, StackArch,
-    StackConfig, StackModel,
+    logits_cross_entropy, ReadBinding, ReadBindingTarget, ReadIdentityLatch, ReadScore, StackAdamW,
+    StackArch, StackConfig, StackModel,
 };
 use uor_r4_training::{Result, TrainingError};
 fn invalid(s: impl Into<String>) -> TrainingError {
@@ -230,7 +230,7 @@ fn ablate(model: &StackModel, es: &[Episode]) -> Result<Vec<Value>> {
     result
 }
 fn gate_roles(model: &StackModel, es: &[Episode]) -> Result<Value> {
-    let mut sums = std::collections::BTreeMap::<String, (usize, f64, f32, f32)>::new();
+    let mut sums = std::collections::BTreeMap::<String, (usize, f64, f32, f32, usize)>::new();
     for group in es.chunks(32) {
         let (ids, _, _, time) = batch(group);
         let gates = model
@@ -238,23 +238,62 @@ fn gate_roles(model: &StackModel, es: &[Episode]) -> Result<Value> {
             .to_vec2::<f32>()?;
         for (e, g) in group.iter().zip(gates) {
             for (role, v) in e.roles.iter().zip(g) {
-                let x = sums.entry(role.clone()).or_insert((0, 0., 1., 0.));
+                let x = sums.entry(role.clone()).or_insert((0, 0., 1., 0., 0));
                 x.0 += 1;
                 x.1 += f64::from(v);
                 x.2 = x.2.min(v);
                 x.3 = x.3.max(v);
+                x.4 += usize::from(v >= 0.5);
             }
         }
     }
     Ok(json!(sums
         .into_iter()
-        .map(|(role, (count, sum, min, max))| (
+        .map(|(role, (count, sum, min, max, captures))| (
             role,
-            json!({"count":count,"mean":sum/count as f64,"min":min,"max":max})
+            json!({"count":count,"mean":sum/count as f64,"min":min,"max":max,"predicted_captures":captures,"expected_capture":role=="write_key" || role=="query_key"})
         ))
         .collect::<std::collections::BTreeMap<_, _>>()))
 }
-fn run(out: &Path, steps: usize, max_seconds: u64, binding_weight: f64) -> Result<Value> {
+fn capture_loss(model: &StackModel, ids: &[u32], es: &[Episode], time: usize) -> Result<Tensor> {
+    let mut targets = vec![0; ids.len()];
+    let mut weights = vec![0.; ids.len()];
+    let capture_count = es
+        .iter()
+        .flat_map(|e| &e.roles)
+        .filter(|r| r.as_str() == "write_key" || r.as_str() == "query_key")
+        .count();
+    let positions = es.iter().map(|e| e.ids.len()).sum::<usize>();
+    let no_capture_count = positions - capture_count;
+    if capture_count == 0 || no_capture_count == 0 {
+        return Err(invalid("capture credit needs both labelled classes"));
+    }
+    for (b, e) in es.iter().enumerate() {
+        for (t, role) in e.roles.iter().enumerate() {
+            let capture = role == "write_key" || role == "query_key";
+            targets[b * time + t] = u32::from(capture);
+            weights[b * time + t] = 0.5
+                / if capture {
+                    capture_count as f32
+                } else {
+                    no_capture_count as f32
+                };
+        }
+    }
+    let logits = model
+        .read_identity_latch_gate_logits(ids, es.len(), time, 2)?
+        .reshape((ids.len(), 1))?;
+    let zero = Tensor::zeros(logits.shape(), DType::F32, model.device())?;
+    let logits = Tensor::cat(&[&zero, &logits], 1)?;
+    logits_cross_entropy(&logits, &targets, Some(&weights))
+}
+fn run(
+    out: &Path,
+    steps: usize,
+    max_seconds: u64,
+    binding_weight: f64,
+    capture_weight: f64,
+) -> Result<Value> {
     let start = Instant::now();
     let eval = evaluation(2110173, 4);
     let stress = evaluation(3110173, 8);
@@ -333,17 +372,30 @@ fn run(out: &Path, steps: usize, max_seconds: u64, binding_weight: f64) -> Resul
                     .as_ref()
                     .map(|x| x.to_scalar::<f32>())
                     .transpose()?;
-                let loss = match &source_loss {
+                let mut loss = match &source_loss {
                     Some(source) => (&language + source.affine(binding_weight, 0.)?)?,
                     None => language.clone(),
                 };
+                let action_loss = if capture_weight > 0. {
+                    Some(capture_loss(&model, &ids, &es, time)?)
+                } else {
+                    None
+                };
+                let action_value = action_loss
+                    .as_ref()
+                    .map(|x| x.to_scalar::<f32>())
+                    .transpose()?;
+                if let Some(action) = &action_loss {
+                    loss = (&loss + action.affine(capture_weight, 0.)?)?;
+                }
                 let gradients = loss.backward()?;
-                let answer_gradients =
-                    if binding_weight > 0. && (step % 40 < 2 || step + 1 == steps) {
-                        Some(language.backward()?)
-                    } else {
-                        None
-                    };
+                let answer_gradients = if (binding_weight > 0. || capture_weight > 0.)
+                    && (step % 40 < 2 || step + 1 == steps)
+                {
+                    Some(language.backward()?)
+                } else {
+                    None
+                };
                 let context_gradients_store = answer_gradients.as_ref().unwrap_or(&gradients);
                 let mut context_gradients = serde_json::Map::new();
                 if step % 40 < 2 || step + 1 == steps {
@@ -370,7 +422,7 @@ fn run(out: &Path, steps: usize, max_seconds: u64, binding_weight: f64) -> Resul
                 let norm = optimizer.update(&model, &gradients, 0.003)?;
                 done = step + 1;
                 if step % 40 < 2 || done == steps {
-                    history.push(json!({"step":done,"facts":n,"answer_nll":value,"binding_nll_head0":source_value,"gradient_norm":norm,"pure_answer_context_gradient_l2":context_gradients,"time":time,"elapsed_seconds":start.elapsed().as_secs_f64()}));
+                    history.push(json!({"step":done,"facts":n,"answer_nll":value,"binding_nll_head0":source_value,"capture_nll_balanced":action_value,"gradient_norm":norm,"pure_answer_context_gradient_l2":context_gradients,"time":time,"elapsed_seconds":start.elapsed().as_secs_f64()}));
                 }
             }
             model.save(&root.join("model"))?;
@@ -391,7 +443,7 @@ fn run(out: &Path, steps: usize, max_seconds: u64, binding_weight: f64) -> Resul
             } else {
                 None
             };
-            let report = json!({"name":name,"seed":seed,"mode":format!("{mode:?}"),"binding_weight":binding_weight,"steps":done,"requested_steps":steps,"config":model.config,"parameters":model.variables().values().map(|v|v.elem_count()).sum::<usize>(),"unpadded_training_positions":input_tokens,"padded_training_positions":padded_tokens,"history":history,"measured":measured,"reload_logits_identical_fixed_episode":before==after,"model_sha256":uor_r4_training::sha256_file(&root.join("model/model.safetensors"))?});
+            let report = json!({"name":name,"seed":seed,"mode":format!("{mode:?}"),"binding_weight":binding_weight,"capture_weight":capture_weight,"steps":done,"requested_steps":steps,"config":model.config,"parameters":model.variables().values().map(|v|v.elem_count()).sum::<usize>(),"unpadded_training_positions":input_tokens,"padded_training_positions":padded_tokens,"history":history,"measured":measured,"reload_logits_identical_fixed_episode":before==after,"model_sha256":uor_r4_training::sha256_file(&root.join("model/model.safetensors"))?});
             fs::write(
                 root.join("result.json"),
                 serde_json::to_vec_pretty(&report)?,
@@ -400,7 +452,7 @@ fn run(out: &Path, steps: usize, max_seconds: u64, binding_weight: f64) -> Resul
         }
     }
     Ok(
-        json!({"schema":"uor-r4.attention-latch-experiment/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),"reports":reports,"steps":steps,"max_seconds":max_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),"binding_weight":binding_weight,"training_gaps":"independent uniform 0..4 noise pairs per write/query; ordinary final-answer loss plus declared head0 source loss; no gate labels","evaluation":"32 base groups, four correlated interventions; fresh development 0..4 and postfit 0..8 gap draws, not certified final holdout","control":"same gate and current/identity projections; Local retains only preceding g*u, Held accumulates causal convex state","context":"ceiling128, training actual<=60, stress actual<=100, width32; full causal support","scope":"synthetic capture/hold/rebind, no explicit clear, language, integer serving, geometry superiority or energy qualification"}),
+        json!({"schema":"uor-r4.attention-latch-experiment/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT").unwrap_or("UNAVAILABLE"),"reports":reports,"steps":steps,"max_seconds":max_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),"binding_weight":binding_weight,"capture_weight":capture_weight,"training_gaps":"independent uniform 0..4 noise pairs per write/query; ordinary final-answer loss plus declared head0 source and capture-action loss; labels used only for training","evaluation":"32 base groups, four correlated interventions; fresh development 0..4 and postfit 0..8 gap draws, not certified final holdout","control":"same gate and current/identity projections; Local retains only preceding g*u, Held accumulates causal convex state","context":"ceiling128, training actual<=60, stress actual<=100, width32; full causal support","scope":"synthetic capture/hold/rebind, no explicit clear, language, integer serving, geometry superiority or energy qualification"}),
     )
 }
 fn main() -> Result<()> {
@@ -408,6 +460,7 @@ fn main() -> Result<()> {
     let mut steps = 320;
     let mut seconds = 1500;
     let mut binding_weight = 0.;
+    let mut capture_weight = 0.;
     for arg in std::env::args().skip(1) {
         let (k, v) = arg.split_once('=').ok_or_else(|| invalid("key=value"))?;
         match k {
@@ -416,6 +469,9 @@ fn main() -> Result<()> {
             "max_seconds" => seconds = v.parse().map_err(|_| invalid("seconds"))?,
             "binding_weight" => {
                 binding_weight = v.parse::<f64>().map_err(|_| invalid("binding_weight"))?
+            }
+            "capture_weight" => {
+                capture_weight = v.parse::<f64>().map_err(|_| invalid("capture_weight"))?
             }
             _ => return Err(invalid("unknown argument")),
         }
@@ -426,12 +482,16 @@ fn main() -> Result<()> {
         || seconds > 3600
         || !binding_weight.is_finite()
         || !(0. ..=1.).contains(&binding_weight)
+        || !capture_weight.is_finite()
+        || !(0. ..=1.).contains(&capture_weight)
     {
-        return Err(invalid("steps1..2000,seconds1..3600,binding_weight0..1"));
+        return Err(invalid(
+            "steps1..2000,seconds1..3600,binding_weight0..1,capture_weight0..1",
+        ));
     }
     let out = out.ok_or_else(|| invalid("out required"))?;
     report_output::claim(&out)?;
-    let result = run(&out, steps, seconds, binding_weight);
+    let result = run(&out, steps, seconds, binding_weight, capture_weight);
     match &result {
         Ok(r) => fs::write(out.join("report.json"), serde_json::to_vec_pretty(r)?)?,
         Err(e) => fs::write(

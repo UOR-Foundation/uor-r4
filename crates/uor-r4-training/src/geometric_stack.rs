@@ -1383,13 +1383,7 @@ impl StackModel {
         self.read_identity_latch
     }
 
-    fn read_latch_inputs(
-        &self,
-        p: &Params<'_>,
-        layer: usize,
-        u: &Tensor,
-        mode: ReadIdentityLatch,
-    ) -> Result<(Tensor, Tensor)> {
+    fn read_latch_gate_logits(&self, p: &Params<'_>, layer: usize, u: &Tensor) -> Result<Tensor> {
         let (batch, time, width) = u.dims3()?;
         let zero = Tensor::zeros((batch, 1, width), u.dtype(), u.device())?;
         let previous = if time == 1 {
@@ -1398,11 +1392,22 @@ impl StackModel {
             Tensor::cat(&[&zero, &u.narrow(1, 0, time - 1)?], 1)?
         };
         let gate_input = Tensor::cat(&[u, &previous], 2)?;
-        let gates = candle_nn::ops::sigmoid(
-            &Self::linear(&gate_input, p.layer(layer, "read.identity_gate.weight")?)?
+        Ok(
+            Self::linear(&gate_input, p.layer(layer, "read.identity_gate.weight")?)?
                 .broadcast_add(p.layer(layer, "read.identity_gate.bias")?)?,
-        )?;
-        let mut state = zero;
+        )
+    }
+
+    fn read_latch_inputs(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        u: &Tensor,
+        mode: ReadIdentityLatch,
+    ) -> Result<(Tensor, Tensor)> {
+        let (batch, time, width) = u.dims3()?;
+        let gates = candle_nn::ops::sigmoid(&self.read_latch_gate_logits(p, layer, u)?)?;
+        let mut state = Tensor::zeros((batch, 1, width), u.dtype(), u.device())?;
         let mut identities = Vec::with_capacity(time);
         for t in 0..time {
             identities.push(state.clone());
@@ -1427,9 +1432,27 @@ impl StackModel {
         time: usize,
         layer: usize,
     ) -> Result<Tensor> {
-        let mode = self
-            .read_identity_latch
-            .ok_or_else(|| invalid("read identity latch is disabled"))?;
+        Ok(candle_nn::ops::sigmoid(
+            &self.read_identity_latch_gate_logits(ids, batch, time, layer)?,
+        )?)
+    }
+
+    /// Gate preactivations [batch,time] from the same learned input and map as
+    /// the actual reader, with a live gradient to its gate and preceding trunk.
+    /// For stable training-only capture credit, form two-class logits [0,z]
+    /// and use [`logits_cross_entropy`] with labels 0 (no capture) or 1
+    /// (capture). Do not take logarithms of rounded sigmoid probabilities.
+    /// This accessor neither supplies actions nor changes inference gates.
+    pub fn read_identity_latch_gate_logits(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        layer: usize,
+    ) -> Result<Tensor> {
+        if self.read_identity_latch.is_none() {
+            return Err(invalid("read identity latch is disabled"));
+        }
         if layer >= self.config.layers() || self.config.layer_kind(layer) != 'a' {
             return Err(invalid(
                 "read identity latch gate diagnostic needs a read layer",
@@ -1439,7 +1462,7 @@ impl StackModel {
         let x = self.embed_with(&p, ids, batch, time)?;
         let x = self.layer_range_hooked(&p, x, 0..layer, &mut None)?;
         let u = self.norm(&p, &x, &layer_name(layer, "read_norm.weight"))?;
-        Ok(self.read_latch_inputs(&p, layer, &u, mode)?.1.squeeze(2)?)
+        Ok(self.read_latch_gate_logits(&p, layer, &u)?.squeeze(2)?)
     }
 
     fn recurrence(
@@ -7718,6 +7741,118 @@ mod tests {
                     var.set(&Tensor::zeros(var.shape(), DType::F32, &cpu())?)?;
                 }
                 assert_eq!(bits(&model.forward(&ids, 2, 8)?)?, baseline);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_latch_gate_logits_match_sigmoid_and_causal_capture_gradients() -> Result<()> {
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8];
+        let targets = [0, 1, 0, 0, 1, 0, 0, 0];
+        // Equal total weight for CAPTURE and NO_CAPTURE, not a padding loss.
+        let weights: Vec<f32> = targets
+            .iter()
+            .map(|&t| if t == 1 { 0.25 } else { 1.0 / 12.0 })
+            .collect();
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "ra", ReadScore::Lorentz, true),
+                &cpu(),
+            )?;
+            assert!(model
+                .read_identity_latch_gate_logits(&ids, 1, 8, 1)
+                .is_err());
+            model.set_read_identity_latch(mode)?;
+            assert!(model
+                .read_identity_latch_gate_logits(&ids, 1, 8, 0)
+                .is_err());
+            let capture_loss = || -> Result<Tensor> {
+                let z = model
+                    .read_identity_latch_gate_logits(&ids, 1, 8, 1)?
+                    .reshape((8, 1))?;
+                let binary = Tensor::cat(&[&Tensor::zeros((8, 1), DType::F32, &cpu())?, &z], 1)?;
+                logits_cross_entropy(&binary, &targets, Some(&weights))
+            };
+            let first = capture_loss()?.backward()?;
+            for name in [
+                "layers.01.read.identity_gate.weight",
+                "layers.01.read.identity_gate.bias",
+            ] {
+                let var = &model.variables()[name];
+                let grad = first
+                    .get(var)
+                    .ok_or_else(|| invalid(format!("capture misses {name}")))?;
+                assert!(grad.abs()?.max_all()?.to_scalar::<f32>()? > 0.0);
+                var.set(&var.as_tensor().sub(&grad.affine(0.1, 0.0)?)?)?;
+            }
+            // W_gate starts zero: the first capture gradient updates it;
+            // after that update the same objective also reaches the trunk.
+            let second = capture_loss()?.backward()?;
+            for name in [
+                "embedding.weight",
+                "layers.00.rec.in.weight",
+                "layers.01.read_norm.weight",
+            ] {
+                let grad = second
+                    .get(&model.variables()[name])
+                    .ok_or_else(|| invalid(format!("capture trunk misses {name}")))?;
+                let size = grad.abs()?.max_all()?.to_scalar::<f32>()?;
+                assert!(size.is_finite() && size > 0.0, "{mode:?} {name}: {size}");
+            }
+            let before = bits(&model.forward(&ids, 1, 8)?)?;
+            let logits = model.read_identity_latch_gate_logits(&ids, 1, 8, 1)?;
+            let p = model.params()?;
+            let x = model.run_layers(model.embed(&ids, 1, 8)?, 0..1)?;
+            let u = model.norm(&p, &x, &layer_name(1, "read_norm.weight"))?;
+            let previous = Tensor::cat(
+                &[
+                    &Tensor::zeros((1, 1, 16), DType::F32, &cpu())?,
+                    &u.narrow(1, 0, 7)?,
+                ],
+                1,
+            )?;
+            let expected = StackModel::linear(
+                &Tensor::cat(&[&u, &previous], 2)?,
+                p.layer(1, "read.identity_gate.weight")?,
+            )?
+            .broadcast_add(p.layer(1, "read.identity_gate.bias")?)?
+            .squeeze(2)?;
+            assert_eq!(bits(&logits)?, bits(&expected)?);
+            let actual_gates = model.read_latch_inputs(&p, 1, &u, mode)?.1.squeeze(2)?;
+            assert_eq!(
+                bits(&candle_nn::ops::sigmoid(&logits)?)?,
+                bits(&actual_gates)?
+            );
+            assert_eq!(
+                bits(&model.read_identity_latch_gates(&ids, 1, 8, 1)?)?,
+                bits(&actual_gates)?
+            );
+            assert_eq!(bits(&model.forward(&ids, 1, 8)?)?, before);
+            let mut future = ids;
+            future[6] = 19;
+            let changed = model.read_identity_latch_gate_logits(&future, 1, 8, 1)?;
+            assert_eq!(
+                max_abs_gap(&logits.narrow(1, 0, 6)?, &changed.narrow(1, 0, 6)?)?,
+                0.0
+            );
+            // Stable logit CE retains corrective gradients even when the
+            // actual sigmoid has rounded all the way to 0 or 1.
+            let bias = &model.variables()["layers.01.read.identity_gate.bias"];
+            for (value, expected_gradient) in [(-1000.0f32, -0.5f32), (1000.0, 0.5)] {
+                bias.set(&Tensor::from_vec(vec![value], 1, &cpu())?)?;
+                let loss = capture_loss()?;
+                assert!(loss.to_scalar::<f32>()?.is_finite());
+                let grads = loss.backward()?;
+                let gradient = grads
+                    .get(bias)
+                    .ok_or_else(|| invalid("missing saturated capture gradient"))?
+                    .sum_all()?
+                    .to_scalar::<f32>()?;
+                assert!(
+                    (gradient - expected_gradient).abs() < 1e-6,
+                    "{value}: {gradient}"
+                );
             }
         }
         Ok(())
