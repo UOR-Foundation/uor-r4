@@ -1607,7 +1607,8 @@ mod tests {
         let artifact = StackArtifact::parse(bytes).map_err(lut_error)?;
         model.set_read_identity_latch(crate::geometric_stack::ReadIdentityLatch::Held)?;
         model.set_geometric_address(crate::geometric_address::GeometricAddressConfig::new(
-            32, 2,
+            model.config.width,
+            model.config.heads,
         )?)?;
         model.set_geometric_span(crate::geometric_span::GeometricSpanConfig::new(
             model.config.width,
