@@ -1,5 +1,13 @@
 # Current UOR-R4 research state
 
+## Immediate owner correction — geometric attention, October 1
+
+The owner redirected current work to actual geometric attention while the SSD is reformatted. Use the internal drive and remove this lab's disposable worktree/build cache after protected delivery, preserving unique research and models. Grounded conversation/memory remains the alpha priority; it does not displace this immediate attention research.
+
+The [occurrence-credit and identity-carry study](geometric-attention-binding-2026-10-01.md) changes the existing Rust native stack, not a separate model. A no-carry negative and saved-state probe motivated supplying predecessor identity to q/k while keeping payload values current. The same Lorentz scorer then learns correct occurrence selection on the finite synthetic task; Dot is an ordinary matched control. Exact results, carry-only credit controls and fresh length diagnostic live in that report. This does not establish natural language, geometric superiority, bounded indexed retrieval or integer serving.
+
+Next research mechanism: variable-gap typed identity capture/hold/commit/reset with separate payload-role state, preserving the scorer and full candidate support. Occurrence supervision remains an optional diagnostic/shaping objective; ordinary answer credit can learn the carry task. Do not restart the prior selector/metric sweep. #1512 remains open for its wider language and serving acceptance.
+
 ## Active execution contract — grounded conversation and durable memory, October 1
 
 The owner adopted the [canonical plan](project-track.md) under
@@ -178,6 +186,40 @@ an erasure guarantee or a parent-to-child lifecycle audit trail. Focused
 construction checks use an initialized geometric emitter and saved learned
 compiler; they do not qualify unseen conversation or the selected trained-emitter
 scope/reset witness. Executed validation and delivery belong to #962.
+
+<!-- grounded-script-boundary -->
+**Typed conversation measurement (#962):** `grounded-session evaluate` runs
+versioned scripts through the same saved compiler, exact store and emitter.
+Scripts contain user text, caller scope/restart events and explicit controls.
+Expected act/relation/span/view, record identity/status and frozen complete
+answers are scoring annotations. They are never supplied to the compiler,
+store writes or emitter. Every case declares its baseline store commit and
+record count; a mismatch is an execution/precondition failure, not a model miss.
+
+The separate instrument preserves MWorld2 and its existing results. It reports
+compiler matching, memory matching and frozen complete-answer membership,
+with errors in the declared denominators and unsupported status cohorts visible.
+It preserves exact replies, generated IDs and emitter input identity. An unlisted
+legitimate paraphrase can fail membership, so rejected text remains available
+for separate review; that score alone is not a semantic or mechanism-family
+verdict. Frozen answer forms are authored before evaluation from recorded intent,
+without output-derived alternatives or location-template substitution.
+
+Clean durable-memory probes explicitly restart first: NoRead suppresses the
+current recall injection while its store read still occurs. Continuous-history
+conditions remain separate. Selected-update suppression retains the original
+task answer score and separately reports pre-authored intervention-consistent
+forms. Global record IDs and conversation-local source indexes remain distinct.
+Optional reload cuts replay the same script and compare full successful outcomes,
+history and store; matching failed turns cannot qualify continuity.
+
+The report binds input bytes, baseline/checkpoint/parameters, compiler,
+tokenizer, limits and executable/source identity. Training exposure is explicitly
+unverified unless checked against the actual selected artifacts. Internal
+construction uses authored rows and an initialized emitter; selected-trained
+temporal/scope complete-answer measurement remains **NOT_RUN** during the SSD
+pause. Executed checks, review and protected delivery are recorded on #962.
+<!-- /grounded-script-boundary -->
 
 **Combined relation head: a recorded negative (#1552 card v20).** Dense heads
 over the R1 trunk and words name relations better than the table (0.922
