@@ -64,12 +64,12 @@ Unpersisted served/QAT state remains refused on save and load. Focused tests
 cover loaded logits, short greedy continuation and store updates; executed
 exact-head validation and delivery receipts belong to
 [#1565](https://github.com/UOR-Foundation/uor-r4/issues/1565).
-This is a library persistence interface, currently without a dialogue CLI
-consumer. A trained R1/S4 artifact witness is **NOT_RUN**. The checkpoint
-does not include the learned compiler, transcript or live session cache, and
-does not establish generated-history dialogue or D11 export. The next
-integration must consume the saved compiler and preserve the actual session
-history alongside this model/store boundary.
+This library persistence interface is consumed by the grounded-session
+envelope and CLI below. A trained R1/S4 transport-snap artifact witness is
+**NOT_RUN**. The checkpoint itself does not include the learned compiler,
+transcript or live session cache; those belong to the separate session
+envelope. Checkpoint tests alone do not establish generated-history language
+behavior or D11 export.
 
 **Grounded session boundary (#962):** `stack_grounded_session` composes the
 checkpoint loader, a caller-supplied artifact-bound `TurnCompiler`, existing
@@ -124,6 +124,86 @@ compiler taken from the envelope's own bytes, and saves a new envelope. Three
 development conversations replayed this way, one process per turn, match the
 in-process run on 14/14 turns: reply, action and recall. Full #962
 temporal/scope/conflict and capability acceptance stays open.
+
+**Temporal session interface (#962):** an additive `Query { relation, view }`
+action exposes the store's Current, PreviousAssertion, PreviousDistinctValue
+and Initial views. `QueryCurrent` and current-only schema-1 output remain
+compatible. Transcripts using the new action save with schema 2; the loader
+rejects that action inside a schema-1 envelope. Receipt validation checks the
+selected version and original-commit residency, so a later eviction neither
+invalidates an earlier found receipt nor allows a previous-distinct read to
+cross its eviction barrier. Missing history and eviction remain unsupported
+recall states distinct from absence. The saved compiler still predicts only
+current queries: this interface does not establish learned temporal intent or
+complete temporal answers. Scope/conflict/reset/forget and capability
+acceptance remain open; executed checks and delivery are recorded on #962.
+
+**Learned temporal producer (#962):** `TemporalCompiler` fits a five-class
+query-view head on supplied text/intent rows using source word identities and
+ordered adjacent-word pairs. It reuses the existing sparse cross-entropy
+learner and embeds the selected `SavedCompiler` bytes unchanged. Only a base
+predicted query is decorated; statements, corrections and unresolved base
+actions pass through unchanged. Current predictions retain `QueryCurrent`;
+historical predictions use the typed view, and a learned unresolved prediction
+requests no memory. Labels refer to recorded history, not presumed real-world
+chronology. Ordered features preserve distinctions an unordered word set loses;
+this is an interim lexical interface, not geometric-advantage evidence.
+
+The `temporal-compiler fit|score` CLI saves the complete composite artifact and
+reports isolated view selection separately from composite action accuracy,
+including base relation/act failures in the denominator. Training rows, group
+identities, feature/label order, parameters, fit settings and original base bytes
+are bound in the artifact. `grounded-session` and `m-world session` explicitly
+load legacy or composite schemas, without malformed-artifact fallback. M-world's
+existing generator still supplies current-only gold intents; it is not a temporal
+qualification set. Ordinary-text consumers do not receive gold query views.
+Construction checks and delivery are recorded on #962. A selected trained-emitter
+temporal complete-answer witness is **NOT_RUN** during the SSD pause. Unsupported
+phrasing, learned scope/conflict/forget and full capability acceptance remain open.
+
+**Conversation lifecycle (#962):** `GroundedSession::start_conversation` and
+`grounded-session restart` start an empty conversation over the unchanged exact
+store. Both prior turns and generated-token context are cleared, and the new
+conversation begins at the current store commit. The caller can retain the
+current scope/entity or explicitly supply another address. Invalid identities
+are refused before mutation. Model, compiler, tokenizer, store versions and
+admission limits remain bound; store-record limits continue across restarts.
+New turns count from the fresh conversation while record IDs and commits remain
+global. The existing sealed envelope format already represents this baseline.
+
+The lifecycle is explicit caller-controlled addressing, not authentication,
+learned entity resolution or forgetting. Old envelopes and store value bytes,
+including eviction tombstones, remain available. This operation does not claim
+an erasure guarantee or a parent-to-child lifecycle audit trail. Focused
+construction checks use an initialized geometric emitter and saved learned
+compiler; they do not qualify unseen conversation or the selected trained-emitter
+scope/reset witness. Executed validation and delivery belong to #962.
+
+**Combined relation head: a recorded negative (#1552 card v20).** Dense heads
+over the R1 trunk and words name relations better than the table (0.922
+against 0.900 on development phrasings × development values). But the combined
+act head almost never chooses an update (Correct exact 41/313, against 272/313
+for the table). Corrections then become bare asserts, which the store marks as
+conflicts. In the session the default arm falls to 26/52 open relation,
+against 34/52 for v19, so the v19 table compiler stays integrated. The source
+stays unmerged on `codex/compiler-combined`. The run stopped at its reload
+step on an SSD read fault, so v20 reload continuity was not measured.
+
+**Reviewed paraphrase labels (#1573).** Each of the 776 raw teacher
+paraphrases was judged against a rubric frozen before review. The outcome was
+372 keep, 22 relabel, 260 drop and 122 exact duplicates, giving a 394-row
+derivative over all ten relations; `hometown/update` is empty. The
+`paraphrase-review` tool checks every decision against the raw text and
+recomputes duplicates. The paired fit (reviewed against raw, everything else
+fixed) is the next causal test of label quality. It waits for the storage
+repair below.
+
+**Storage incident, 1 October (#820).** A region of at most 1 MiB in one band of
+`UOR-Workspace.sparsebundle` on the exFAT X10 Pro returns I/O errors. Four
+regenerable Claude roots written about 09:10–09:30 UTC are unreadable:
+`compiler-save-1/2` and `session-1/2`. Their numbers above were recorded on
+#1552 before the fault. By owner ruling, all labs pause SSD writes until the
+owner has backed up unique material and run First Aid.
 
 **Learning-data diagnosis:** a deterministic 40-row stratified audit of the
 373 accepted `paraphrases-1` rows found actual inherited-label errors, including

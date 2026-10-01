@@ -548,7 +548,7 @@ impl SparseSoftmax {
         Ok(model)
     }
 
-    fn probabilities(&self, row: &[(usize, f64)]) -> Vec<f64> {
+    pub(crate) fn probabilities(&self, row: &[(usize, f64)]) -> Vec<f64> {
         let logits: Vec<f64> = (0..self.classes)
             .map(|c| {
                 self.bias[c]
@@ -1101,7 +1101,7 @@ const COMPILER_FEATURES: &str = "table: words at standardized scale; span: frame
      two-word window, the l1|r1 pair, shape and position";
 
 /// Serialize `f64`s by their bits, so a saved artifact reloads exactly.
-mod f64_bits {
+pub(crate) mod f64_bits {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize<S: Serializer>(values: &[f64], s: S) -> Result<S::Ok, S::Error> {
@@ -1122,7 +1122,7 @@ mod f64_bits {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct HeadParts {
+pub(crate) struct HeadParts {
     classes: usize,
     dim: usize,
     #[serde(with = "f64_bits")]
@@ -1132,7 +1132,7 @@ struct HeadParts {
 }
 
 impl HeadParts {
-    fn of(head: &SparseSoftmax) -> Self {
+    pub(crate) fn of(head: &SparseSoftmax) -> Self {
         Self {
             classes: head.classes,
             dim: head.dim,
@@ -1141,7 +1141,7 @@ impl HeadParts {
         }
     }
 
-    fn head(self, classes: usize, dim: usize) -> Result<SparseSoftmax> {
+    pub(crate) fn head(self, classes: usize, dim: usize) -> Result<SparseSoftmax> {
         if self.classes != classes
             || self.dim != dim
             || self.weights.len() != classes * dim

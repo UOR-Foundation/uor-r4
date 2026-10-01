@@ -179,6 +179,7 @@ use uor_r4_training::stack_grounded_session::{
     SourceSpan, TurnCompiler, TurnControls, TurnOutcome,
 };
 use uor_r4_training::stack_store::StackStore;
+use uor_r4_training::temporal_compiler::GroundedCompiler;
 
 fn invalid(message: impl Into<String>) -> TrainingError {
     TrainingError::Invalid(message.into())
@@ -3014,7 +3015,7 @@ fn action_kind(action: &CompiledAction) -> &'static str {
     match action {
         CompiledAction::Assert { .. } => "assert",
         CompiledAction::Correct { .. } => "correct",
-        CompiledAction::QueryCurrent { .. } => "query",
+        CompiledAction::QueryCurrent { .. } | CompiledAction::Query { .. } => "query",
         CompiledAction::Unresolved { .. } => "unresolved",
     }
 }
@@ -3276,13 +3277,16 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     let tokenizer = load_tokenizer(&tokenizer_path)?;
     let compiler_bytes = fs::read(&compiler_path)?;
     let trunk_directory = args.optional("trunk").map(PathBuf::from);
-    // A combined compiler loads only with the trunk it binds.
-    let load_compiler = || -> Result<SavedCompiler> {
-        let trunk = match &trunk_directory {
-            Some(directory) => Some(Trunk::load(directory, &tokenizer_json, &Device::Cpu)?),
-            None => None,
-        };
-        SavedCompiler::load(compiler_bytes.clone(), trunk)
+    // A combined compiler loads only with the trunk it binds; otherwise the
+    // artifact's own schema chooses the grounded compiler.
+    let load_compiler = || -> Result<GroundedCompiler> {
+        match &trunk_directory {
+            Some(directory) => Ok(GroundedCompiler::Legacy(SavedCompiler::load(
+                compiler_bytes.clone(),
+                Some(Trunk::load(directory, &tokenizer_json, &Device::Cpu)?),
+            )?)),
+            None => GroundedCompiler::from_bytes(compiler_bytes.clone()),
+        }
     };
     let compiler = load_compiler()?;
     let device = Device::Cpu;
@@ -3339,7 +3343,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         max_store_records: 4_096,
         context_policy: ContextPolicy::WholeCompletedTurns,
     };
-    let open = |compiler: SavedCompiler| {
+    let open = |compiler: GroundedCompiler| {
         GroundedSession::from_checkpoint_path(
             &checkpoint,
             tokenizer_json.clone(),
@@ -3377,7 +3381,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             let mut rows = Vec::new();
             let mut outcomes = Vec::new();
             for turn in &conversation.turns {
-                let gold = gold_action(&compiler, &turn.user, turn)?;
+                let gold = gold_action(compiler.base(), &turn.user, turn)?;
                 let (pass, row, outcome) = match session.turn_with_controls(&turn.user, controls) {
                     Ok(outcome) => {
                         let pass = judge_v2(&turn.checks, &turn.user, &outcome.reply_text);

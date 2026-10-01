@@ -7,11 +7,13 @@
 //!   [context=whole_turns|strict]
 //! grounded-session turn session=SESSION out=NEW_SESSION text=TEXT [read=true] [write=true]
 //! grounded-session chat session=SESSION out=NEW_SESSION
+//! grounded-session restart session=SESSION out=NEW_SESSION [scope=SCOPE] [entity=ENTITY]
 //! grounded-session show session=SESSION
 //! ```
 //!
 //! `init` binds a sealed inference checkpoint (model and store), its
-//! tokenizer and a saved relation compiler (`m-world compiler-save`) into an
+//! tokenizer and a saved relation compiler (`m-world compiler-save`) or its
+//! learned temporal adapter (`temporal-compiler fit`) into an
 //! empty session envelope. `turn` loads an envelope in this fresh process,
 //! answers one user turn and prints its outcome as JSON; `chat` answers one
 //! user turn per line of standard input. Both save the continued session to
@@ -19,6 +21,10 @@
 //! loaded from the envelope's own `compiler.bin`, so a session resumes only
 //! with its exact saved compiler, and loading replays the whole transcript
 //! against the store before any new turn.
+//! `restart` begins an empty conversation over the retained exact store,
+//! optionally at another caller-supplied scope/entity. It clears the prior
+//! transcript and generated context, not durable records or old envelopes.
+//! These identities address memory; they provide no authentication or erasure.
 //!
 //! This is a floating-point development path, not a D11 serving kernel, and
 //! makes no capability claim.
@@ -33,12 +39,13 @@ use std::process::ExitCode;
 
 use candle_core::Device;
 use serde_json::json;
+use uor_r4_core::native_geometric::learner::realtext_support::sha256_hex;
 use uor_r4_tokenizer::ByteBpeTokenizer;
-use uor_r4_training::relation_compiler::{SavedCompiler, Trunk};
 use uor_r4_training::stack_grounded_session::{
     ContextPolicy, GroundedSession, SessionLimits, SessionScope, TurnControls, TurnOutcome,
     COMPILER_FILE, TOKENIZER_FILE,
 };
+use uor_r4_training::temporal_compiler::GroundedCompiler;
 
 type Error = Box<dyn std::error::Error>;
 
@@ -93,7 +100,7 @@ impl Args {
 fn run() -> Result<(), Error> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let Some((mode, rest)) = arguments.split_first() else {
-        return Err("usage: grounded-session init|turn|chat|show key=value ...".into());
+        return Err("usage: grounded-session init|turn|chat|restart|show key=value ...".into());
     };
     match mode.as_str() {
         "init" => init(&Args::parse(
@@ -111,15 +118,15 @@ fn run() -> Result<(), Error> {
                 "max_history_tokens",
                 "max_store_records",
                 "context",
-                "trunk",
             ],
         )?),
         "turn" => turn(&Args::parse(
             rest,
-            &["session", "out", "text", "read", "write", "trunk"],
+            &["session", "out", "text", "read", "write"],
         )?),
-        "chat" => chat(&Args::parse(rest, &["session", "out", "trunk"])?),
-        "show" => show(&Args::parse(rest, &["session", "trunk"])?),
+        "chat" => chat(&Args::parse(rest, &["session", "out"])?),
+        "restart" => restart(&Args::parse(rest, &["session", "out", "scope", "entity"])?),
+        "show" => show(&Args::parse(rest, &["session"])?),
         other => Err(format!("unknown mode {other}").into()),
     }
 }
@@ -129,10 +136,7 @@ fn init(args: &Args) -> Result<(), Error> {
     let tokenizer_json = fs::read(args.path("tokenizer")?)?;
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_json)
         .ok_or("unreadable tokenizer.json")?;
-    let compiler = SavedCompiler::load(
-        fs::read(args.path("compiler")?)?,
-        trunk(args, &tokenizer_json)?,
-    )?;
+    let compiler = GroundedCompiler::from_bytes(fs::read(args.path("compiler")?)?)?;
     let scope = SessionScope {
         scope: args.or("scope", "default").as_bytes().to_vec(),
         entity: tokenizer.encode(args.or("entity", "user")),
@@ -166,25 +170,9 @@ fn init(args: &Args) -> Result<(), Error> {
     Ok(())
 }
 
-/// The trunk of `trunk=`, which a compiler with combined heads needs.
-fn trunk(args: &Args, tokenizer_json: &[u8]) -> Result<Option<Trunk>, Error> {
-    Ok(match args.0.get("trunk") {
-        Some(directory) => Some(Trunk::load(
-            Path::new(directory),
-            tokenizer_json,
-            &Device::Cpu,
-        )?),
-        None => None,
-    })
-}
-
-/// Load an envelope with the compiler saved inside it (and `trunk=`).
-fn open(args: &Args, root: &Path) -> Result<GroundedSession<SavedCompiler>, Error> {
-    let tokenizer_json = fs::read(root.join(TOKENIZER_FILE))?;
-    let compiler = SavedCompiler::load(
-        fs::read(root.join(COMPILER_FILE))?,
-        trunk(args, &tokenizer_json)?,
-    )?;
+/// Load an envelope with the compiler saved inside it.
+fn open(root: &Path) -> Result<GroundedSession<GroundedCompiler>, Error> {
+    let compiler = GroundedCompiler::from_bytes(fs::read(root.join(COMPILER_FILE))?)?;
     Ok(GroundedSession::load(root, compiler, &Device::Cpu)?)
 }
 
@@ -204,7 +192,7 @@ fn outcome_json(index: usize, outcome: &TurnOutcome) -> serde_json::Value {
 
 fn turn(args: &Args) -> Result<(), Error> {
     let out = args.path("out")?;
-    let mut session = open(args, &args.path("session")?)?;
+    let mut session = open(&args.path("session")?)?;
     let controls = TurnControls {
         read: args.number("read", true)?,
         write: args.number("write", true)?,
@@ -217,7 +205,7 @@ fn turn(args: &Args) -> Result<(), Error> {
 
 fn chat(args: &Args) -> Result<(), Error> {
     let out = args.path("out")?;
-    let mut session = open(args, &args.path("session")?)?;
+    let mut session = open(&args.path("session")?)?;
     for line in std::io::stdin().lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
@@ -239,9 +227,42 @@ fn chat(args: &Args) -> Result<(), Error> {
 }
 
 fn show(args: &Args) -> Result<(), Error> {
-    let session = open(args, &args.path("session")?)?;
+    let session = open(&args.path("session")?)?;
     for (index, outcome) in session.turns().iter().enumerate() {
         println!("{}", outcome_json(index, outcome));
     }
+    Ok(())
+}
+
+fn restart(args: &Args) -> Result<(), Error> {
+    let out = args.path("out")?;
+    let mut session = open(&args.path("session")?)?;
+    let mut scope = session.scope().clone();
+    if let Some(value) = args.0.get("scope") {
+        scope.scope = value.as_bytes().to_vec();
+    }
+    if let Some(value) = args.0.get("entity") {
+        let tokenizer_json = fs::read(args.path("session")?.join(TOKENIZER_FILE))?;
+        if sha256_hex(&tokenizer_json) != session.compiler_identity().tokenizer_sha256 {
+            return Err("saved tokenizer changed after loading the session".into());
+        }
+        let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_json)
+            .ok_or("unreadable saved tokenizer.json")?;
+        scope.entity = tokenizer.encode(value);
+    }
+    session.start_conversation(scope)?;
+    session.save(&out)?;
+    println!(
+        "{}",
+        json!({
+            "session":out.display().to_string(),
+            "scope":session.scope(),
+            "turns":session.turns().len(),
+            "memory_commit":session.store().commit(),
+            "memory_records":session.store().records(),
+            "compiler_sha256":session.compiler_identity().artifact_sha256,
+            "durable_memory_retained":true,
+        })
+    );
     Ok(())
 }
