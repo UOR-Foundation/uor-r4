@@ -316,7 +316,7 @@ fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
                 let value = loss.to_scalar::<f32>()?;
                 let gradients = loss.backward()?;
                 let mut context_gradients = serde_json::Map::new();
-                if step % 40 == 0 || step + 1 == steps {
+                if step % 40 < 2 || step + 1 == steps {
                     for part in [
                         "identity_gate.weight",
                         "identity_gate.bias",
@@ -339,8 +339,8 @@ fn run(out: &Path, steps: usize, max_seconds: u64) -> Result<Value> {
                 }
                 let norm = optimizer.update(&model, &gradients, 0.003)?;
                 done = step + 1;
-                if step % 40 == 0 || done == steps {
-                    history.push(json!({"step":done,"answer_nll":value,"gradient_norm":norm,"pure_answer_context_gradient_l2":context_gradients,"time":time,"elapsed_seconds":start.elapsed().as_secs_f64()}));
+                if step % 40 < 2 || done == steps {
+                    history.push(json!({"step":done,"facts":n,"answer_nll":value,"gradient_norm":norm,"pure_answer_context_gradient_l2":context_gradients,"time":time,"elapsed_seconds":start.elapsed().as_secs_f64()}));
                 }
             }
             model.save(&root.join("model"))?;
