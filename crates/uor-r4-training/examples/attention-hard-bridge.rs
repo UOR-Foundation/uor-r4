@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{fs, path::Path, time::Instant};
 use uor_r4_core::report_output;
 use uor_r4_training::geometric_stack::{
-    ReadBinding, ReadBindingTarget, ReadIdentityLatch, StackModel,
+    ReadBinding, ReadBindingTarget, ReadIdentityLatch, ReadScore, StackArch, StackModel,
 };
 use uor_r4_training::{sha256_file, Result, TrainingError};
 fn invalid(s: impl Into<String>) -> TrainingError {
@@ -141,7 +141,14 @@ fn run(out: &Path, parent: &Path, limit: u64) -> Result<Value> {
         let model_root = parent.join(name).join("model");
         let identity = sha256_file(&model_root.join("model.safetensors"))?;
         let model = StackModel::load(&model_root, &Device::Cpu)?;
-        if model.config.pattern != "rra"
+        if model.config.arch != StackArch::Geometric
+            || model.config.vocab_size != 40
+            || model.config.read != ReadScore::Lorentz
+            || !model.config.rotation
+            || model.config.pointer.is_some()
+            || model.config.select.is_some()
+            || model.config.memory.is_some()
+            || model.config.pattern != "rra"
             || model.config.width != 32
             || model.config.context != 128
             || model.config.heads != 2

@@ -521,5 +521,15 @@
     "Local-s2/stress.json": 1.021418809890747
   },
   "source_commit_containing_implementation": "77271969dda9862e8c76a5089b51d229b168e0ed",
-  "binary_embedded_source_commit": "UNAVAILABLE; exact source and executable hashes supplied separately"
+  "binary_embedded_source_commit": "UNAVAILABLE; exact source and executable hashes supplied separately",
+  "validation": {
+    "focused_latch_tests": 9,
+    "failures": 0,
+    "test_seconds": 0.54,
+    "rustfmt": "PASS",
+    "diff_check": "PASS",
+    "claim_wording": "PASS",
+    "test_log_sha256": "334ac274d8270e385bbe0924388033c3e5d113e7dc068933dec06543eb2a8a6d"
+  },
+  "subsequent_evaluator_change": "Fixed geometric configuration validation only; measured executable and evaluator retained."
 }
