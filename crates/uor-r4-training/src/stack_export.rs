@@ -1609,7 +1609,9 @@ mod tests {
         model.set_geometric_address(crate::geometric_address::GeometricAddressConfig::new(
             32, 2,
         )?)?;
-        model.set_geometric_span(crate::geometric_span::GeometricSpanConfig::new(32)?)?;
+        model.set_geometric_span(crate::geometric_span::GeometricSpanConfig::new(
+            model.config.width,
+        )?)?;
         assert!(export_stack(&model, json!({}), None, None).is_err());
         assert!(stack_grid_reference(&model, &artifact).is_err());
         Ok(())
