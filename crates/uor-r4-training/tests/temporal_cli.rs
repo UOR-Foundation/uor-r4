@@ -828,10 +828,61 @@ fn scripted_evaluation_witness(base: &Path, baseline: &Path, queries: &[(&str, &
         fs::read(out.join("cases.json")).expect("frozen retained cases"),
         fs::read(&input).expect("input")
     );
-    // Detailed report assertions follow the evaluator's public report contract.
-    assert!(report
-        .to_string()
-        .contains("frozen_complete_answer_membership"));
+    assert_eq!(report["scores"]["action"], json!({"pass":53,"of":55}));
+    assert_eq!(report["scores"]["memory"], json!({"pass":54,"of":55}));
+    assert_eq!(
+        report["scores"]["frozen_complete_answer_membership"],
+        json!({"pass":0,"of":22})
+    );
+    assert_eq!(
+        report["scores"]["intervention_complete_answer_membership"],
+        json!({"pass":0,"of":1})
+    );
+    assert_eq!(report["scores"]["joint"], json!({"pass":33,"of":55}));
+    let case = |id: &str| {
+        report["cases"]
+            .as_array()
+            .expect("cases")
+            .iter()
+            .find(|case| case["id"] == id)
+            .expect("case")
+    };
+    for id in [
+        "temporal-continuous",
+        "temporal-clean",
+        "temporal-no-read-clean",
+        "selected-update-disabled",
+        "scope-entity-return",
+        "evicted",
+    ] {
+        assert_eq!(case(id)["reload"]["pass"], true, "{id}");
+    }
+    assert_eq!(case("failed-turn-reload")["reload"]["pass"], false);
+    assert_eq!(case("failed-turn-reload")["reload"]["failed_pairs"], 1);
+    assert_eq!(
+        case("absent")["rows"][0]["outcome"],
+        case("wrong-relation-control")["rows"][0]["outcome"]
+    );
+    assert_eq!(case("absent")["rows"][0]["scores"]["action"], true);
+    assert_eq!(
+        case("wrong-relation-control")["rows"][0]["scores"]["action"],
+        false
+    );
+    for row in &case("temporal-no-read-clean")["rows"]
+        .as_array()
+        .expect("rows")[5..]
+    {
+        assert_eq!(row["scores"]["memory"], true);
+        assert_eq!(row["outcome"]["recall"]["kind"], "disabled");
+    }
+    assert_eq!(
+        case("no-history")["rows"][1]["outcome"]["memory"]["read"],
+        "NoHistory"
+    );
+    assert_eq!(
+        case("evicted")["rows"][9]["outcome"]["memory"]["read"],
+        "Evicted"
+    );
     let invalid = base.join("script-invalid.json");
     let mut invalid_script = script.clone();
     invalid_script["cases"][0]["baseline_commit"] = json!(1);
