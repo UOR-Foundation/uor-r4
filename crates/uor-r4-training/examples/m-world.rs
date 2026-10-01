@@ -18,7 +18,7 @@
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K] [recall=off|oracle|sieve|route] \
-//!   [recall_at=reply|query] [route_paraphrases=A.jsonl[,B.jsonl...]]
+//!   [recall_at=reply|query] [route_paraphrases=A.jsonl[,B.jsonl...]] [route_acts=fact|any]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! m-world evaluate-cells [world=v2] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [conversations=300] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
@@ -315,6 +315,17 @@ enum Recall {
 enum RecallAt {
     Reply,
     Query,
+}
+
+/// `route_acts=` of `evaluate recall=route`: whether the route's lookup needs
+/// a statement the table names an assert or update (`fact`, the default), or
+/// only one that holds a value (`any`). Returns whether `fact` applies.
+fn route_acts_of(args: &Args) -> Result<bool> {
+    match args.optional("route_acts").as_deref() {
+        None | Some("fact") => Ok(true),
+        Some("any") => Ok(false),
+        Some(other) => Err(invalid(format!("unknown route_acts={other}: fact or any"))),
+    }
 }
 
 fn recall_at_of(args: &Args) -> Result<RecallAt> {
@@ -1594,6 +1605,7 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
     let context = model.config.context;
     let recall = recall_of(args)?;
     let recall_at = recall_at_of(args)?;
+    let route_fact_acts = route_acts_of(args)?;
     let decode = |ids: &[u32]| tokenizer.decode(ids);
     let mut reply =
         |history: &[u32], cap: usize| greedy_reply(&model, history, cap, protocol.eos_id);
@@ -1633,7 +1645,7 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
                     }
                     Some(recall_line(
                         sieve_value(history, turn)
-                            .or_else(|| route.value(history, turn, reserved))
+                            .or_else(|| route.value(history, turn, reserved, route_fact_acts))
                             .as_deref(),
                     ))
                 }
@@ -1776,6 +1788,8 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
         });
         if let Some(record) = route_record {
             report["recall"]["route"] = record;
+            report["recall"]["route"]["lookup_acts"] =
+                json!(if route_fact_acts { "fact" } else { "any" });
             report["recall"]["route"]["relation_queries_named"] =
                 rate_json((route_named.0, route_named.1));
             println!(
@@ -3030,6 +3044,7 @@ fn main() -> Result<()> {
                 "recall",
                 "recall_at",
                 "route_paraphrases",
+                "route_acts",
             ],
         )?,
         "rejudge" => Args::parse(rest, &["out", "report", "tokenizer"])?,
@@ -3069,9 +3084,15 @@ fn main() -> Result<()> {
         if recall == Recall::Off && args.optional("recall_at").is_some() {
             return Err(invalid("recall_at= needs recall=oracle or recall=sieve"));
         }
-        if recall != Recall::Route && args.optional("route_paraphrases").is_some() {
-            return Err(invalid("route_paraphrases= needs recall=route"));
+        if recall != Recall::Route
+            && (args.optional("route_paraphrases").is_some()
+                || args.optional("route_acts").is_some())
+        {
+            return Err(invalid(
+                "route_paraphrases= and route_acts= need recall=route",
+            ));
         }
+        route_acts_of(&args)?;
     }
     let world = if mode == "rejudge" {
         World::V1
