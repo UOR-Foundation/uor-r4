@@ -144,6 +144,43 @@ pub enum ReadScore {
     Dot,
 }
 
+/// A training label for one query's exact historical source occurrences.
+/// Positions are local to the input window, not token identities: equal token
+/// IDs at other positions receive no positive mass. Sources must be unique,
+/// nonempty and strictly earlier than `query`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadBinding {
+    pub batch: usize,
+    pub query: usize,
+    pub sources: Vec<usize>,
+}
+
+/// Teacher-only binding labels for one declared geometric read layer/head.
+/// The initial interface permits at most one labelled query per batch item.
+/// It requires full source admission; excluded positives cannot learn through
+/// a hard selection mask. This object is never a model or checkpoint field.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadBindingTarget {
+    pub layer: usize,
+    pub head: usize,
+    pub rows: Vec<ReadBinding>,
+}
+
+/// Losses from the same forward graph. The caller chooses the coefficient in
+/// `language + lambda * binding`. `masses` follows the label-row order and
+/// `binding` is its mean negative log; no clipping or hidden coefficient is
+/// applied. Only the ordinary value channels reach the language computation.
+pub struct StackBindingLoss {
+    pub language: Tensor,
+    pub binding: Tensor,
+    pub masses: Tensor,
+}
+
+struct BindingCapture<'a> {
+    target: &'a ReadBindingTarget,
+    masses: Option<Tensor>,
+}
+
 /// Refuse a flock the reads cannot evaluate. The selection itself is the shared
 /// selector's ([`crate::flock::flock_select`]); a read row's sink is its first
 /// source (position 0), the window keeps at least the row's own position, and
@@ -1105,6 +1142,7 @@ impl StackModel {
         layer: usize,
         x: &Tensor,
         capture: &mut Capture<'_>,
+        binding: &mut Option<BindingCapture<'_>>,
     ) -> Result<Tensor> {
         let (batch, time, _) = x.dims3()?;
         let heads = self.config.heads;
@@ -1135,6 +1173,27 @@ impl StackModel {
         if aux.dim(0)? != fused_aux_len(batch, heads, time, self.config.read, true, true) {
             return Err(invalid("fused read auxiliary layout differs"));
         }
+        // One auxiliary value channel shares the exact scores, admission and
+        // normalization of the ordinary read. It is removed before read.out,
+        // so neither the teacher mask nor its mass enters the residual stream.
+        let target = binding
+            .as_ref()
+            .filter(|binding| binding.target.layer == layer)
+            .map(|binding| binding.target);
+        let value_width = value.dim(3)?;
+        let value = match target {
+            None => value,
+            Some(target) => {
+                let mut mask = vec![0.0f32; batch * heads * time];
+                for row in &target.rows {
+                    for &source in &row.sources {
+                        mask[(row.batch * heads + target.head) * time + source] = 1.0;
+                    }
+                }
+                let mask = Tensor::from_vec(mask, (batch, heads, time, 1), &self.device)?;
+                Tensor::cat(&[&value, &mask], 3)?
+            }
+        };
         let read = fused_read_selected(
             &query,
             &key,
@@ -1146,6 +1205,24 @@ impl StackModel {
             false,
             self.config.select,
         )?;
+        let read = if let Some(target) = target {
+            let indices: Vec<u32> = target
+                .rows
+                .iter()
+                .map(|row| ((row.batch * heads + target.head) * time + row.query) as u32)
+                .collect();
+            let indices = Tensor::from_vec(indices, target.rows.len(), &self.device)?;
+            let masses = read
+                .narrow(3, value_width, 1)?
+                .flatten_all()?
+                .index_select(&indices, 0)?;
+            if let Some(binding) = binding {
+                binding.masses = Some(masses);
+            }
+            read.narrow(3, 0, value_width)?
+        } else {
+            read
+        };
         let merged = self.merge_heads(&read, batch, time)?;
         tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
         Self::linear(&merged, p.layer(layer, "read.out.weight")?)
@@ -1323,15 +1400,26 @@ impl StackModel {
     fn layer_range_hooked(
         &self,
         p: &Params<'_>,
+        x: Tensor,
+        layers: std::ops::Range<usize>,
+        capture: &mut Capture<'_>,
+    ) -> Result<Tensor> {
+        self.layer_range_bound(p, x, layers, capture, &mut None)
+    }
+
+    fn layer_range_bound(
+        &self,
+        p: &Params<'_>,
         mut x: Tensor,
         layers: std::ops::Range<usize>,
         capture: &mut Capture<'_>,
+        binding: &mut Option<BindingCapture<'_>>,
     ) -> Result<Tensor> {
         for layer in layers {
             let mixed = match (self.config.arch, self.config.layer_kind(layer)) {
                 (StackArch::Transformer, _) => self.attention(p, layer, &x, capture)?,
                 (StackArch::Geometric, 'r') => self.recurrence(p, layer, &x, capture)?,
-                (StackArch::Geometric, _) => self.geometric_read(p, layer, &x, capture)?,
+                (StackArch::Geometric, _) => self.geometric_read(p, layer, &x, capture, binding)?,
             };
             x = x.add(&mixed)?;
             x = x.add(&self.mlp(p, layer, &x, capture)?)?;
@@ -1402,15 +1490,27 @@ impl StackModel {
         batch: usize,
         time: usize,
     ) -> Result<Tensor> {
+        let p = self.params()?;
+        let hidden = self.hidden_hooked(&p, ids, batch, time, &mut None)?;
+        self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time)
+    }
+
+    fn pointer_loss_from_hidden(
+        &self,
+        p: &Params<'_>,
+        hidden: &Tensor,
+        ids: &[u32],
+        targets: &[u32],
+        weights: Option<&[f32]>,
+        time: usize,
+    ) -> Result<Tensor> {
         let pointer = self
             .config
             .pointer
             .ok_or_else(|| invalid("the model has no pointer head"))?;
-        let p = self.params()?;
-        let hidden = self.hidden_hooked(&p, ids, batch, time, &mut None)?;
         let logits = hidden.matmul(&p.head()?.t()?)?;
-        let side = self.pointer_side(&p, &hidden)?;
-        let beta = self.pointer_beta(&p)?;
+        let side = self.pointer_side(p, hidden)?;
+        let beta = self.pointer_beta(p)?;
         Ok(logits.contiguous()?.apply_op3(
             &side.contiguous()?,
             &beta.contiguous()?,
@@ -1424,6 +1524,161 @@ impl StackModel {
                 weights: weights.map(<[f32]>::to_vec),
             },
         )?)
+    }
+
+    fn validate_binding(
+        &self,
+        batch: usize,
+        time: usize,
+        target: &ReadBindingTarget,
+    ) -> Result<()> {
+        if batch == 0
+            || time == 0
+            || time > self.config.context
+            || batch
+                .checked_mul(self.config.heads)
+                .and_then(|n| n.checked_mul(time))
+                .is_none_or(|n| n > u32::MAX as usize)
+        {
+            return Err(invalid(
+                "read binding needs nonempty batch/time within context and u32 indices",
+            ));
+        }
+        if self.config.arch != StackArch::Geometric
+            || target.layer >= self.config.layers()
+            || self.config.layer_kind(target.layer) != 'a'
+            || target.head >= self.config.heads
+        {
+            return Err(invalid(
+                "read binding needs a declared geometric read layer and head",
+            ));
+        }
+        if self.config.select.is_some() {
+            return Err(invalid("read binding requires full source admission"));
+        }
+        if target.rows.is_empty() {
+            return Err(invalid("read binding needs at least one labelled query"));
+        }
+        let mut batches = BTreeSet::new();
+        for row in &target.rows {
+            if row.batch >= batch || row.query >= time || !batches.insert(row.batch) {
+                return Err(invalid(
+                    "read binding needs one in-range query per labelled batch item",
+                ));
+            }
+            let mut sources = BTreeSet::new();
+            if row.sources.is_empty()
+                || row
+                    .sources
+                    .iter()
+                    .any(|&source| source >= row.query || !sources.insert(source))
+            {
+                return Err(invalid(
+                    "read binding sources must be unique, nonempty, exact past occurrences",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn hidden_with_binding(
+        &self,
+        p: &Params<'_>,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        target: &ReadBindingTarget,
+    ) -> Result<(Tensor, Tensor)> {
+        self.validate_binding(batch, time, target)?;
+        let x = self.embed_with(p, ids, batch, time)?;
+        let mut binding = Some(BindingCapture {
+            target,
+            masses: None,
+        });
+        let x = self.layer_range_bound(p, x, 0..self.config.layers(), &mut None, &mut binding)?;
+        let hidden = self.finish_hooked(p, x, &mut None)?;
+        let masses = binding
+            .and_then(|binding| binding.masses)
+            .ok_or_else(|| invalid("declared read binding layer was not evaluated"))?;
+        Ok((hidden, masses))
+    }
+
+    /// The declared source-set mass at each labelled query, in row order.
+    /// This diagnostic uses the actual read, including age and NoRead. Labels
+    /// only select which probabilities are observed; they never alter logits.
+    /// The same full-admission and causal-occurrence rules as the loss apply.
+    pub fn read_binding_masses(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        binding: &ReadBindingTarget,
+    ) -> Result<Tensor> {
+        let p = self.params()?;
+        Ok(self.hidden_with_binding(&p, ids, batch, time, binding)?.1)
+    }
+
+    /// Joint language and exact-source binding losses from one forward graph.
+    /// `weights` has the same meaning as in [`Self::weighted_loss`]; `None`
+    /// uses the ordinary mean language loss. Pointer models retain their
+    /// actual mixture loss. Binding labels are teacher-only and never change
+    /// the forward language logits, the parameter set, or saved model format.
+    ///
+    /// Binding is `mean(-log(sum_{source in label} attention[source]))` at
+    /// the chosen layer/head/query. NoRead participates in the denominator.
+    /// A zero/nonfinite mass is an explicit error, not a clipped zero-gradient
+    /// objective. This initial API supervises at most one query per batch item.
+    pub fn loss_with_binding(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: Option<&[f32]>,
+        batch: usize,
+        time: usize,
+        binding: &ReadBindingTarget,
+    ) -> Result<StackBindingLoss> {
+        if targets.len() != ids.len()
+            || targets
+                .iter()
+                .any(|&id| id as usize >= self.config.vocab_size)
+        {
+            return Err(invalid(
+                "read binding language loss needs one in-vocabulary target per input",
+            ));
+        }
+        if let Some(weights) = weights {
+            if weights.len() != ids.len()
+                || weights.iter().any(|&w| !w.is_finite() || w < 0.0)
+                || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+            {
+                return Err(invalid("read binding language weights must match inputs and be finite, nonnegative and not all zero"));
+            }
+        }
+        let p = self.params()?;
+        let (hidden, masses) = self.hidden_with_binding(&p, ids, batch, time, binding)?;
+        if masses
+            .to_vec1::<f32>()?
+            .iter()
+            .any(|&mass| !mass.is_finite() || mass <= 0.0)
+        {
+            return Err(invalid(
+                "read binding positive-source mass is zero or nonfinite",
+            ));
+        }
+        let language = if self.config.pointer.is_some() {
+            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time)?
+        } else {
+            hidden.matmul(&p.head()?.t()?)?.apply_op1(CrossEntropy {
+                targets: targets.to_vec(),
+                weights: weights.map(<[f32]>::to_vec),
+            })?
+        };
+        let binding = masses.log()?.mean_all()?.neg()?;
+        Ok(StackBindingLoss {
+            language,
+            binding,
+            masses,
+        })
     }
 
     /// Mean next-token negative log-likelihood (nats) over all targets. For a
@@ -1834,7 +2089,7 @@ impl StackModel {
         for layer in 0..self.config.layers() {
             let mixed = match self.config.layer_kind(layer) {
                 'r' => self.composed_recurrence(&p, layer, &x, transport)?,
-                _ => self.geometric_read(&p, layer, &x, &mut None)?,
+                _ => self.geometric_read(&p, layer, &x, &mut None, &mut None)?,
             };
             x = x.add(&mixed)?;
             x = x.add(&self.mlp(&p, layer, &x, &mut None)?)?;
@@ -6872,6 +7127,267 @@ mod tests {
             select: None,
             pointer: None,
         }
+    }
+
+    fn binding_rows(layer: usize) -> ReadBindingTarget {
+        ReadBindingTarget {
+            layer,
+            head: 1,
+            rows: vec![
+                ReadBinding {
+                    batch: 0,
+                    query: 6,
+                    sources: vec![1],
+                },
+                ReadBinding {
+                    batch: 1,
+                    query: 5,
+                    sources: vec![0, 2],
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn read_binding_labels_leave_language_and_its_gradient_unchanged() -> Result<()> {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 7 + 3) % 37).collect();
+        let targets: Vec<u32> = ids.iter().map(|&id| (id + 1) % 37).collect();
+        let weights: Vec<f32> = (0..16)
+            .map(|i| if i % 3 == 0 { 0.0 } else { 1.0 })
+            .collect();
+        for read in [ReadScore::Dot, ReadScore::Lorentz] {
+            for pointer in [false, true] {
+                let mut config = tiny(StackArch::Geometric, "rra", read, true);
+                if pointer {
+                    config.pointer = Some(PointerConfig::new(4));
+                }
+                let mut model = StackModel::new(config, &cpu())?;
+                model.set_transport_snap(Some(TransportSnap::Icosian))?;
+                let p = model.params()?;
+                let ordinary_hidden = model.hidden(&ids, 2, 8)?;
+                let labels = binding_rows(2);
+                let mut changed = labels.clone();
+                changed.rows[0].sources = vec![0, 3];
+                changed.rows[1].sources = vec![4];
+                for target in [&labels, &changed] {
+                    let (hidden, _) = model.hidden_with_binding(&p, &ids, 2, 8, target)?;
+                    assert_eq!(max_abs_gap(&hidden, &ordinary_hidden)?, 0.0);
+                }
+                for row_weights in [None, Some(weights.as_slice())] {
+                    let ordinary = match row_weights {
+                        None => model.loss(&ids, &targets, 2, 8)?,
+                        Some(weights) => model.weighted_loss(&ids, &targets, weights, 2, 8)?,
+                    };
+                    let joint =
+                        model.loss_with_binding(&ids, &targets, row_weights, 2, 8, &labels)?;
+                    assert_eq!(
+                        ordinary.to_scalar::<f32>()?.to_bits(),
+                        joint.language.to_scalar::<f32>()?.to_bits()
+                    );
+                    let expected = ordinary.backward()?;
+                    let got = joint.language.backward()?;
+                    for (name, var) in model.variables() {
+                        match (expected.get(var), got.get(var)) {
+                            (Some(a), Some(b)) => assert!(
+                                max_abs_gap(a, b)? < 1e-6,
+                                "{read:?} pointer={pointer} {name}"
+                            ),
+                            (None, None) => (),
+                            _ => {
+                                return Err(invalid(format!(
+                                    "binding changed language gradient reachability: {name}"
+                                )))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_binding_gradient_reaches_query_key_age_null_and_recurrent_trunk() -> Result<()> {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        for read in [ReadScore::Dot, ReadScore::Lorentz] {
+            let model = StackModel::new(tiny(StackArch::Geometric, "rra", read, true), &cpu())?;
+            let labels = binding_rows(2);
+            let objective = || -> Result<Tensor> {
+                Ok(model
+                    .loss_with_binding(&ids, &ids, None, 2, 8, &labels)?
+                    .binding)
+            };
+            let loss = objective()?;
+            let before = loss.to_scalar::<f32>()?;
+            let grads = loss.backward()?;
+            let mut names = vec![
+                "embedding.weight",
+                "layers.01.rec.in.weight",
+                "layers.01.rec.gate.weight",
+                "layers.02.read.query.weight",
+                "layers.02.read.key.weight",
+                "layers.02.read.age",
+                "layers.02.read.null.weight",
+                "layers.02.read.null.bias",
+            ];
+            if read == ReadScore::Lorentz {
+                names.extend(["layers.02.read.log_beta", "layers.02.read.offset"]);
+            }
+            for name in &names {
+                let grad = grads
+                    .get(&model.variables()[*name])
+                    .ok_or_else(|| invalid(format!("missing binding gradient {name}")))?;
+                let size = grad.abs()?.max_all()?.to_scalar::<f32>()?;
+                assert!(size.is_finite() && size > 0.0, "{read:?} {name}: {size}");
+            }
+            // Binding credit cannot train the value or output projection by
+            // smuggling its teacher mask into the residual/language path.
+            for name in ["layers.02.read.value.weight", "layers.02.read.out.weight"] {
+                if let Some(grad) = grads.get(&model.variables()[name]) {
+                    assert_eq!(grad.abs()?.max_all()?.to_scalar::<f32>()?, 0.0, "{name}");
+                }
+            }
+            let vars: Vec<Var> = names
+                .iter()
+                .map(|name| model.variables()[*name].clone())
+                .collect();
+            check_gradient(&vars, objective, 2e-2)?;
+            for var in model.variables().values() {
+                if let Some(grad) = grads.get(var) {
+                    var.set(&var.as_tensor().sub(&grad.affine(0.05, 0.0)?)?)?;
+                }
+            }
+            let after = objective()?.to_scalar::<f32>()?;
+            assert!(after < before, "{read:?}: binding step {before} -> {after}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_binding_tracks_exact_duplicate_occurrences_and_no_read_mass() -> Result<()> {
+        let model = StackModel::new(
+            tiny(StackArch::Geometric, "a", ReadScore::Dot, false),
+            &cpu(),
+        )?;
+        for name in [
+            "layers.00.read.query.weight",
+            "layers.00.read.key.weight",
+            "layers.00.read.null.weight",
+        ] {
+            let var = &model.variables()[name];
+            var.set(&Tensor::zeros(var.shape(), DType::F32, &cpu())?)?;
+        }
+        let mut ages = vec![0.0f32; model.config.heads * model.config.context];
+        ages[1] = 2.0;
+        ages[3] = -2.0;
+        model.variables()["layers.00.read.age"].set(&Tensor::from_vec(ages, (2, 12), &cpu())?)?;
+        let ids = [3, 7, 9, 7, 5, 6]; // The two 7s are distinct source occurrences.
+        let target = |sources| ReadBindingTarget {
+            layer: 0,
+            head: 0,
+            rows: vec![ReadBinding {
+                batch: 0,
+                query: 4,
+                sources,
+            }],
+        };
+        let mass = |sources| -> Result<f32> {
+            Ok(model
+                .read_binding_masses(&ids, 1, 6, &target(sources))?
+                .to_vec1::<f32>()?[0])
+        };
+        let old = mass(vec![1])?;
+        let recent = mass(vec![3])?;
+        let both = mass(vec![1, 3])?;
+        assert!((f64::from(recent / old) - 4.0f64.exp()).abs() < 1e-4);
+        assert!((both - old - recent).abs() < 1e-6);
+        // Five causal positions plus NoRead. The future position is absent.
+        let denominator = 4.0 + 2.0f64.exp() + (-2.0f64).exp();
+        assert!((f64::from(old) - (-2.0f64).exp() / denominator).abs() < 1e-7);
+        model.variables()["layers.00.read.null.bias"].set(&Tensor::from_vec(
+            vec![3.0f32, 0.0],
+            2,
+            &cpu(),
+        )?)?;
+        assert!(mass(vec![1])? < old);
+        let got = model.loss_with_binding(&ids, &ids, None, 1, 6, &target(vec![1]))?;
+        assert!(
+            (got.binding.to_scalar::<f32>()? + got.masses.to_vec1::<f32>()?[0].ln()).abs() < 1e-6
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn read_binding_rejects_noncausal_ambiguous_or_zero_mass_labels() -> Result<()> {
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::Dot, false),
+            &cpu(),
+        )?;
+        let ids = [1, 2, 1, 4];
+        let target = ReadBindingTarget {
+            layer: 1,
+            head: 0,
+            rows: vec![ReadBinding {
+                batch: 0,
+                query: 3,
+                sources: vec![0],
+            }],
+        };
+        let mut invalid_labels = Vec::new();
+        for sources in [vec![], vec![0, 0], vec![3], vec![4]] {
+            let mut bad = target.clone();
+            bad.rows[0].sources = sources;
+            invalid_labels.push(bad);
+        }
+        let mut bad = target.clone();
+        bad.rows.push(bad.rows[0].clone());
+        invalid_labels.push(bad);
+        let mut bad = target.clone();
+        bad.rows[0].batch = 1;
+        invalid_labels.push(bad);
+        let mut bad = target.clone();
+        bad.rows[0].query = 4;
+        invalid_labels.push(bad);
+        let mut bad = target.clone();
+        bad.head = 2;
+        invalid_labels.push(bad);
+        let mut bad = target.clone();
+        bad.layer = 0;
+        invalid_labels.push(bad);
+        let mut bad = target.clone();
+        bad.layer = 2;
+        invalid_labels.push(bad);
+        let mut bad = target.clone();
+        bad.rows.clear();
+        invalid_labels.push(bad);
+        for bad in invalid_labels {
+            assert!(
+                model
+                    .loss_with_binding(&ids, &ids, None, 1, 4, &bad)
+                    .is_err(),
+                "{bad:?}"
+            );
+        }
+        model.config.select = Some(FlockSelect {
+            sink: 0,
+            window: 1,
+            k: 1,
+        });
+        assert!(model.read_binding_masses(&ids, 1, 4, &target).is_err());
+        model.config.select = None;
+        let mut ages = vec![0.0f32; 24];
+        ages[3] = -1000.0;
+        model.variables()["layers.01.read.age"].set(&Tensor::from_vec(ages, (2, 12), &cpu())?)?;
+        assert_eq!(
+            model
+                .read_binding_masses(&ids, 1, 4, &target)?
+                .to_vec1::<f32>()?,
+            vec![0.0]
+        );
+        assert!(model
+            .loss_with_binding(&ids, &ids, None, 1, 4, &target)
+            .is_err());
+        Ok(())
     }
 
     #[test]
