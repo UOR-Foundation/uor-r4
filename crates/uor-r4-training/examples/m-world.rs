@@ -31,7 +31,8 @@
 //!   [split=development|train] [conversations=2000] [seed=9101] [cells=true] \
 //!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
 //! m-world compiler world=v2 out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
-//!   [train_conversations=2000] [eval_conversations=1000] [seed=9101] [steps=400] [rate=0.5] [l2=0.0001]
+//!   [train_conversations=2000] [eval_conversations=1000] [seed=9101] [steps=400] [rate=0.5] [l2=0.0001] \
+//!   [lexical=true|false]
 //! m-world probe out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json [max_new_tokens=48] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world probe-static out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [context=256]
@@ -2414,6 +2415,7 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
     let steps: usize = args.number("steps", 400)?;
     let rate: f64 = args.number("rate", 0.5)?;
     let l2: f64 = args.number("l2", 1e-4)?;
+    let lexical_head: bool = args.number("lexical", true)?;
     let tokenizer = load_tokenizer(&tokenizer_path)?;
     let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
@@ -2482,7 +2484,13 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
     let train_relation: Vec<usize> = train.iter().map(relation_index).collect();
     let train_act: Vec<usize> = train.iter().map(act_index).collect();
     let mut heads = BTreeMap::new();
-    for (name, x) in [("trunk", trunk(&train)?), ("lexical", lexical(&train))] {
+    let mut features = vec![("trunk", trunk(&train)?)];
+    // The lexical control depends on the turns alone, not on the trunk, so a
+    // second trunk on the same draw may skip it (`lexical=false`).
+    if lexical_head {
+        features.push(("lexical", lexical(&train)));
+    }
+    for (name, x) in features {
         let relation_head = Softmax::fit(&x, &train_relation, relations.len(), steps, rate, l2)?;
         let act_head = Softmax::fit(&x, &train_act, acts.len(), steps, rate, l2)?;
         heads.insert(name, (relation_head, act_head));
@@ -2553,7 +2561,7 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
             "lexicon_words": lexicon.len(),
         },
         "eval_conversations_per_cell": eval_conversations,
-        "fit": {"steps": steps, "rate": rate, "l2": l2, "features": {
+        "fit": {"steps": steps, "rate": rate, "l2": l2, "lexical_head": lexical_head, "features": {
             "trunk": "final normalized state at the assistant marker and its mean over the turn read alone (2 x width)",
             "lexical": "binary words of the training turns (a control)",
         }},
@@ -2782,6 +2790,7 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "steps",
         "rate",
         "l2",
+        "lexical",
         "select",
         "pointer_select",
     ];
