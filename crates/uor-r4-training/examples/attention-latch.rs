@@ -250,7 +250,7 @@ fn gate_roles(model: &StackModel, es: &[Episode]) -> Result<Value> {
     Ok(json!(sums
         .into_iter()
         .map(|(role, (count, sum, min, max, captures))| (
-            role,
+            role.clone(),
             json!({"count":count,"mean":sum/count as f64,"min":min,"max":max,"predicted_captures":captures,"expected_capture":role=="write_key" || role=="query_key"})
         ))
         .collect::<std::collections::BTreeMap<_, _>>()))
