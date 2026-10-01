@@ -46,10 +46,11 @@ use super::lowbit_core::{adam_update, quantize_codes, softmax_f32, xorshift_unit
 ///
 /// `class_of[g]` is the class index of `g`, and the returned count is the number of classes. This is
 /// the exact finite analogue of a spherical-harmonic band decomposition: by Peter–Weyl, the
-/// conjugation-invariant functions on a finite group (the functions of the *relative* element) form a
-/// space whose dimension is the number of conjugacy classes, spanned by the irreducible characters.
-/// A graded kernel that depends only on `class(q⁻¹g)` is therefore the maximally compact
-/// rotation-invariant kernel this group admits — nine free weights rather than 120.
+/// conjugation-invariant functions on a finite group form a space whose dimension
+/// is the number of conjugacy classes, spanned by the irreducible characters.
+/// A general function of the directed relative element q⁻¹g instead has 120
+/// values. Restricting it to `class(q⁻¹g)` imposes additional conjugation
+/// invariance and reduces that space to nine free weights.
 ///
 /// Computed rather than cited: conjugation `g ↦ h g h⁻¹` uses the table's product and inverse rows.
 pub fn conjugacy_classes() -> (Vec<u8>, usize) {
@@ -129,8 +130,10 @@ pub fn address_space(order: usize) -> usize {
 /// The fixed element of `2I` assigned to each token.
 ///
 /// Injective for a vocabulary of at most 120, which is what makes an ordered word a unique address at
-/// this size. A larger vocabulary needs an injective learned assignment over the 120 roots (the
-/// project's `nearest_h4_root` over learned embeddings) rather than a wider hash.
+/// this size. More than 120 distinct vocabulary entries cannot be assigned
+/// injectively to one root. They require multiple ordered codes or separately
+/// retained exact identity; learning or nearest-root classification does not
+/// remove this bound.
 pub fn element_table(vocab: usize) -> Vec<u16> {
     (0..vocab).map(|t| (t % RADIX) as u16).collect()
 }
