@@ -1,0 +1,58 @@
+name: learned-temporal-evidence
+on:
+  push:
+    branches: ['codex/ci/oct01-learned-temporal']
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_TERM_COLOR: never
+      UOR_BUILD_SOURCE_COMMIT: b507167a28eb1354c57b5f53ff19903ca5691e10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b507167a28eb1354c57b5f53ff19903ca5691e10
+          fetch-depth: 2
+      - name: Confirm exact PR head
+        run: test "$(git rev-parse HEAD)" = "$UOR_BUILD_SOURCE_COMMIT"
+      - name: Documentation and policy checks
+        run: |
+          python3 scripts/check_claim_wording.py
+          python3 -m json.tool docs/integration/agent-execution-policy.json > /dev/null
+          git diff --check HEAD^ HEAD
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+            merge-evidence-v2-${{ runner.os }}-
+      - name: Format
+        run: cargo fmt --check
+      - name: Compile session library and current consumer
+        run: cargo check -p uor-r4-training --lib --example m-world --bin grounded-session --bin temporal-compiler --locked
+      - name: Learned temporal producer and fresh-process construction
+        run: cargo test -p uor-r4-training --lib temporal_compiler::tests --locked -- --test-threads=2
+      - name: Actual fit score and ordinary-text session CLIs
+        run: cargo test -p uor-r4-training --test temporal_cli --locked -- --test-threads=2
+      - name: Legacy grounded session compatibility
+        run: cargo test -p uor-r4-training --lib stack_grounded_session::tests --locked -- --test-threads=2
+      - name: Frozen compiler compatibility
+        run: cargo test -p uor-r4-training --lib relation_compiler::tests --locked -- --test-threads=2
+      - uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
