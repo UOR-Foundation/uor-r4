@@ -344,18 +344,20 @@ pub fn parse_pointer_select(text: &str) -> Result<Option<PointerSelect>> {
     Ok(Some(select))
 }
 
-/// A pointer route from its command-line form: `none` or `prime:<window>`.
+/// A pointer route from its command-line form: `none`, `prime:<window>` (the
+/// exact route) or `prime-ranked:<window>`.
 pub fn parse_pointer_route(text: &str) -> Result<Option<PrimeRoute>> {
     if text == "none" {
         return Ok(None);
     }
     let route = match text.split_once(':') {
-        Some(("prime", window)) => PrimeRoute {
+        Some((kind @ ("prime" | "prime-ranked"), window)) => PrimeRoute {
             window: window.parse().map_err(|_| {
                 invalid(format!(
-                    "invalid pointer route {text:?} (none or prime:<window>)"
+                    "invalid pointer route {text:?} (none, prime:<window> or prime-ranked:<window>)"
                 ))
             })?,
+            ranked: kind == "prime-ranked",
         },
         _ => {
             return Err(invalid(format!(
@@ -410,13 +412,32 @@ pub struct PointerConfig {
 /// attention is the softmax of [`ROUTE_SHARPNESS`] times that score over the
 /// admitted sources, and all zero when none is admitted. The pointer's gate,
 /// which mixes the route's copy with the generated distribution, stays
-/// learned; the route has no learned parameters of its own (its query and
-/// key widths are unused and receive no gradient).
+/// learned; an exact route has no learned parameters of its own (its query
+/// and key widths are unused and receive no gradient).
+///
+/// A **ranked** route keeps the admission and hands the ranking to the
+/// pointer's learned score: an admitted source scores its learned score plus
+/// [`ROUTE_SHARPNESS`] times its route score, and the attention is the softmax
+/// of that over the admitted sources; with none admitted it is the learned
+/// pointer's softmax over every source, so a position no key matches (the
+/// first token of a reply) can still copy by content. Admission is exact
+/// identity; ranking among sources that share the same atoms (a fact and the
+/// question that repeats its words) is learned, and the query and key get
+/// their gradient as under a selection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrimeRoute {
     /// Tokens in each key, 1 to [`MAX_ROUTE_WINDOW`].
     pub window: usize,
+    /// Rank admitted sources by the learned score plus the route's; `false`
+    /// (the default, and what a route saved before this field means) is the
+    /// exact route.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ranked: bool,
+}
+
+fn is_false(flag: &bool) -> bool {
+    !*flag
 }
 
 /// The longest key: six distinct primes below the table's bound fit a u128.
@@ -429,6 +450,22 @@ const ROUTE_RECENCY: f64 = 0.5;
 const ROUTE_PRIMES: usize = 65_536;
 
 impl PrimeRoute {
+    /// The exact route of `window`-token keys.
+    pub fn exact(window: usize) -> Self {
+        Self {
+            window,
+            ranked: false,
+        }
+    }
+
+    /// The ranked route of `window`-token keys.
+    pub fn ranked(window: usize) -> Self {
+        Self {
+            window,
+            ranked: true,
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         if self.window == 0 || self.window > MAX_ROUTE_WINDOW {
             return Err(invalid(format!(
@@ -474,16 +511,16 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
     a
 }
 
-/// The route's attention of position `t` of a window whose tokens are
-/// `ids[..=t]` (see [`PrimeRoute`]): weights over the sources `0..=t`.
-fn route_attention(ids: &[u32], t: usize, route: PrimeRoute) -> Vec<f64> {
-    let mut weights = vec![0f64; t + 1];
-    let query = route_key(ids, t, route.window);
+/// The sources the route admits at position `t` of a window whose tokens are
+/// `ids[..=t]` (see [`PrimeRoute`]), with their route scores (`ln gcd` plus
+/// recency), in position order.
+fn route_scores(ids: &[u32], t: usize, window: usize) -> Vec<(usize, f64)> {
+    let query = route_key(ids, t, window);
     // Sources whose key ends before the query's first token.
-    let last = (t + 1).saturating_sub(route.window);
-    let scores: Vec<(usize, f64)> = (1..=last)
+    let last = (t + 1).saturating_sub(window);
+    (1..=last)
         .filter_map(|j| {
-            let shared = gcd(query, route_key(ids, j - 1, route.window));
+            let shared = gcd(query, route_key(ids, j - 1, window));
             (shared > 1).then(|| {
                 (
                     j,
@@ -491,19 +528,55 @@ fn route_attention(ids: &[u32], t: usize, route: PrimeRoute) -> Vec<f64> {
                 )
             })
         })
-        .collect();
+        .collect()
+}
+
+/// The softmax of `scores` over their sources, as weights over `0..=t`
+/// (exactly 0 elsewhere, and all 0 for no scores).
+fn admitted_softmax(t: usize, scores: &[(usize, f64)]) -> Vec<f64> {
+    let mut weights = vec![0f64; t + 1];
     let Some(top) = scores.iter().map(|&(_, s)| s).reduce(f64::max) else {
         return weights;
     };
     let mut total = 0.0;
-    for &(j, score) in &scores {
-        weights[j] = (ROUTE_SHARPNESS * (score - top)).exp();
+    for &(j, score) in scores {
+        weights[j] = (score - top).exp();
         total += weights[j];
     }
     for weight in &mut weights {
         *weight /= total;
     }
     weights
+}
+
+/// The exact route's attention of position `t` (see [`PrimeRoute`]): the
+/// softmax of [`ROUTE_SHARPNESS`] times the route scores of the admitted
+/// sources.
+fn route_attention(ids: &[u32], t: usize, route: PrimeRoute) -> Vec<f64> {
+    let scores: Vec<(usize, f64)> = route_scores(ids, t, route.window)
+        .into_iter()
+        .map(|(j, score)| (j, ROUTE_SHARPNESS * score))
+        .collect();
+    admitted_softmax(t, &scores)
+}
+
+/// The ranked route's attention of position `t` (see [`PrimeRoute`]) from the
+/// pointer's learned scores of the sources `0..=t`.
+fn ranked_attention(
+    learned: Vec<f32>,
+    ids: &[u32],
+    t: usize,
+    route: PrimeRoute,
+) -> candle_core::Result<Vec<f64>> {
+    let admitted = route_scores(ids, t, route.window);
+    if admitted.is_empty() {
+        return pointer_weights(learned, None);
+    }
+    let scores: Vec<(usize, f64)> = admitted
+        .into_iter()
+        .map(|(j, score)| (j, f64::from(learned[j]) + ROUTE_SHARPNESS * score))
+        .collect();
+    Ok(admitted_softmax(t, &scores))
 }
 
 fn default_pointer_score() -> ReadScore {
@@ -7305,6 +7378,9 @@ fn pointer_attention(
     match rule.route {
         // The window's tokens: `ids` is indexed like `side`'s rows.
         Some(route) => match ids.get(first..=first + t) {
+            Some(window) if route.ranked => {
+                ranked_attention(pointer_scores(side, first, t, rule), window, t, route)
+            }
             Some(window) => Ok(route_attention(window, t, route)),
             None => candle_core::bail!("a routed pointer needs the window's token ids"),
         },
@@ -7544,7 +7620,9 @@ impl CustomOp3 for PointerMixture {
                     // p_copy is 0 whatever the scores are, so this row gives
                     // them no gradient (and none is formed: zero times the
                     // overflow would be NaN).
-                    let sources: &[f64] = if row.copy > 0.0 && self.route.is_none() {
+                    // An exact route has no learned score; a ranked one ranks by it.
+                    let scored = self.route.is_none_or(|route| route.ranked);
+                    let sources: &[f64] = if row.copy > 0.0 && scored {
                         &row.attention
                     } else {
                         &[]
@@ -12998,9 +13076,25 @@ mod tests {
                 })
                 .collect();
             let normal: f64 = exps.iter().sum();
-            // A routed pointer attends by the exact route, which keeps the
-            // sources it admits.
+            // A routed pointer keeps the sources its route admits: the exact
+            // route weighs them by the route's score, the ranked one by the
+            // learned score plus that, and falls back to the learned
+            // softmax over every source when none is admitted.
+            let admitted = pointer
+                .route
+                .map(|route| route_scores(&ids[first..=first + t], t, route.window))
+                .unwrap_or_default();
             let (attention, keep): (Vec<f64>, Vec<bool>) = match pointer.route {
+                Some(route) if route.ranked && !admitted.is_empty() => {
+                    let combined: Vec<(usize, f64)> = admitted
+                        .iter()
+                        .map(|&(j, score)| (j, scores[j] + ROUTE_SHARPNESS * score))
+                        .collect();
+                    let attention = admitted_softmax(t, &combined);
+                    let kept = attention.iter().map(|&a| a > 0.0).collect();
+                    (attention, kept)
+                }
+                Some(route) if route.ranked => (exps.iter().map(|e| e / normal).collect(), keep),
                 Some(route) => {
                     let attention = route_attention(&ids[first..=first + t], t, route);
                     let admitted = attention.iter().map(|&a| a > 0.0).collect();
@@ -13202,7 +13296,7 @@ mod tests {
 
     #[test]
     fn a_route_copies_the_value_after_the_matching_key() {
-        let two = PrimeRoute { window: 2 };
+        let two = PrimeRoute::exact(2);
         // "10 11 50" earlier; the query ends with "10 11".
         let ids = [5u32, 10, 11, 50, 6, 7, 10, 11];
         let attention = route_attention(&ids, 7, two);
@@ -13215,8 +13309,8 @@ mod tests {
 
     #[test]
     fn a_route_without_a_shared_atom_attends_nowhere() {
-        let one = PrimeRoute { window: 1 };
-        let two = PrimeRoute { window: 2 };
+        let one = PrimeRoute::exact(1);
+        let two = PrimeRoute::exact(2);
         assert!(route_attention(&[1, 2, 3, 4], 3, one)
             .iter()
             .all(|&a| a == 0.0));
@@ -13230,7 +13324,7 @@ mod tests {
 
     #[test]
     fn a_route_orders_by_shared_rarity_then_recency() {
-        let one = PrimeRoute { window: 1 };
+        let one = PrimeRoute::exact(1);
         // Two earlier 9s: the later one's successor gets more mass, by the
         // recency term only.
         let a = route_attention(&[9, 1, 9, 2, 9], 4, one);
@@ -13240,7 +13334,7 @@ mod tests {
         assert_eq!(a[0] + a[2] + a[4], 0.0);
         // A shared rare atom (id 300) outweighs a later shared common one
         // (id 1).
-        let two = PrimeRoute { window: 2 };
+        let two = PrimeRoute::exact(2);
         let b = route_attention(&[300, 50, 1, 60, 8, 9, 1, 300], 7, two);
         assert!(b[1] + b[2] > 0.999, "{b:?}");
         assert!(b[2] > b[1]);
@@ -13248,13 +13342,9 @@ mod tests {
 
     #[test]
     fn a_route_is_validated_and_excludes_a_selection() -> Result<()> {
-        assert!(PrimeRoute { window: 0 }.validate().is_err());
-        assert!(PrimeRoute {
-            window: MAX_ROUTE_WINDOW + 1
-        }
-        .validate()
-        .is_err());
-        let route = PrimeRoute { window: 2 };
+        assert!(PrimeRoute::exact(0).validate().is_err());
+        assert!(PrimeRoute::exact(MAX_ROUTE_WINDOW + 1).validate().is_err());
+        let route = PrimeRoute::exact(2);
         let mut config = PointerConfig::new(4);
         config.route = Some(route);
         config.validate()?;
@@ -13284,11 +13374,11 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn a_routed_pointer_trains_its_gate_and_leaves_its_scores_alone() -> Result<()> {
-        // Two windows of 12 in which a token recurs with different successors,
-        // so a row admits sources that hold its target and sources that do
-        // not; the target is the next token (the window's first at its end).
+    /// Two windows of 12 in which a token recurs with different successors,
+    /// so a row admits sources that hold its target and sources that do not
+    /// (and a first occurrence admits none); the target is the next token
+    /// (the window's first at its end), with [`pointer_batch`]'s weights.
+    fn routed_batch() -> (Vec<u32>, Vec<u32>, Vec<f32>) {
         let ids: Vec<u32> = vec![
             1, 2, 1, 3, 1, 2, 4, 1, 3, 5, 1, 0, 7, 8, 7, 9, 7, 8, 6, 7, 9, 5, 7, 4,
         ];
@@ -13302,8 +13392,124 @@ mod tests {
             })
             .collect();
         let (_, _, weights) = pointer_batch();
+        (ids, targets, weights)
+    }
+
+    fn route_bits(weights: &[f64]) -> Vec<u64> {
+        weights.iter().map(|w| w.to_bits()).collect()
+    }
+
+    #[test]
+    fn a_ranked_route_is_exact_at_zero_scores_and_learned_where_it_admits_nothing() -> Result<()> {
+        // At zero learned scores the ranked route is the exact one.
+        let ids = [5u32, 10, 11, 50, 6, 7, 10, 11];
+        let exact = route_attention(&ids, 7, PrimeRoute::exact(2));
+        let ranked = ranked_attention(vec![0.0; 8], &ids, 7, PrimeRoute::ranked(2))?;
+        assert_eq!(route_bits(&exact), route_bits(&ranked));
+        // Learned scores re-rank sources that share the same atoms, and never
+        // admit one the route does not.
+        let one = PrimeRoute::ranked(1);
+        let ids = [9u32, 1, 9, 2, 9];
+        let plain = ranked_attention(vec![0.0; 5], &ids, 4, one)?;
+        assert!(plain[3] > plain[1], "{plain:?}");
+        let reranked = ranked_attention(vec![0.0, 2.0, 0.0, 0.0, 9.0], &ids, 4, one)?;
+        assert!(reranked[1] > reranked[3], "{reranked:?}");
+        assert_eq!(reranked[0] + reranked[2] + reranked[4], 0.0);
+        // With none admitted it is the learned pointer over every source.
+        let learned = vec![0.5f32, -1.0, 2.0, 0.0];
+        let fallback = ranked_attention(learned.clone(), &[1, 2, 3, 4], 3, one)?;
+        assert_eq!(
+            route_bits(&fallback),
+            route_bits(&pointer_weights(learned, None)?)
+        );
+        assert_eq!(
+            parse_pointer_route("prime-ranked:3")?,
+            Some(PrimeRoute::ranked(3))
+        );
+        assert_eq!(parse_pointer_route("prime:3")?, Some(PrimeRoute::exact(3)));
+        assert!(parse_pointer_route("prime-ranked:0").is_err());
+        // The flag is saved only when set, and a route saved without it is exact.
+        assert_eq!(
+            serde_json::to_string(&PrimeRoute::exact(2))?,
+            r#"{"window":2}"#
+        );
+        let back: PrimeRoute = serde_json::from_str(r#"{"window":2}"#)?;
+        assert_eq!(back, PrimeRoute::exact(2));
+        Ok(())
+    }
+
+    #[test]
+    fn a_ranked_route_trains_the_scores_it_ranks_by() -> Result<()> {
+        let (ids, targets, weights) = routed_batch();
         let data = (&ids[..], &targets[..], &weights[..]);
-        let route = PrimeRoute { window: 1 };
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let mut model = pointer_model(score, None, 0)?;
+            let soft = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+            model.set_pointer_route(Some(PrimeRoute::exact(1)))?;
+            let exact = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+            model.set_pointer_route(Some(PrimeRoute::ranked(1)))?;
+            let hidden = model.hidden(&ids, 2, 12)?.to_vec2::<f32>()?;
+            let (rows, _, contested) = reference_mixture(&model, &hidden, data, (2, 12))?;
+            assert!(contested);
+            let loss = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+            let got = f64::from(loss.to_scalar::<f32>()?);
+            let want = weighted_mean(&rows, &weights);
+            assert!(
+                (got - want).abs() < 1e-5 * want.abs().max(1.0),
+                "{score:?}: {got} against {want}"
+            );
+            for other in [&soft, &exact] {
+                assert_ne!(
+                    got.to_bits(),
+                    f64::from(other.to_scalar::<f32>()?).to_bits()
+                );
+            }
+            let scored = model.score_targets(&ids, &targets, Some(&weights), 2, 12)?;
+            for n in 0..24 {
+                assert!(
+                    (scored.nll[n] - rows[n]).abs() < 1e-5 * rows[n].abs().max(1.0),
+                    "{score:?}: row {n} scored {} against {}",
+                    scored.nll[n],
+                    rows[n]
+                );
+            }
+            for t in (0..12).filter(|&t| weights[t] != 0.0) {
+                let next = model.next_scores(&ids[..=t])?;
+                let value = f64::from(next[targets[t] as usize]);
+                assert!(
+                    (value + rows[t]).abs() < 1e-4 * rows[t].abs().max(1.0),
+                    "{score:?} position {t}: {value} against {}",
+                    -rows[t]
+                );
+            }
+            // Every pointer variable, the query and key included, gets the
+            // reference's gradient.
+            let grads = loss.backward()?;
+            for name in pointer_names(score) {
+                let numeric = reference_derivative(&model, name, &hidden, data, (2, 12))?;
+                let analytic = grads
+                    .get(model.variables()[name].as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let scale = numeric.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+                assert!(scale > 0.0, "{score:?}: {name} has no effect");
+                for (i, (&a, &n)) in analytic.iter().zip(&numeric).enumerate() {
+                    assert!(
+                        (f64::from(a) - n).abs() < 2e-4 * scale + 2e-6,
+                        "{score:?}: {name}[{i}] analytic {a} against numeric {n}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_routed_pointer_trains_its_gate_and_leaves_its_scores_alone() -> Result<()> {
+        let (ids, targets, weights) = routed_batch();
+        let data = (&ids[..], &targets[..], &weights[..]);
+        let route = PrimeRoute::exact(1);
         let soft = pointer_model(ReadScore::Dot, None, 0)?;
         let soft_loss = soft.weighted_loss(&ids, &targets, &weights, 2, 12)?;
         let mut model = pointer_model(ReadScore::Dot, None, 0)?;
