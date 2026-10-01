@@ -1102,7 +1102,7 @@ mod tests {
         duplicate.cases.push(duplicate.cases[0].clone());
         assert!(duplicate.validate(&EvalSettings::default()).is_err());
         let mut wrong_field = encoded.clone();
-        wrong_field["cases"][0]["events"][0]["hidden_oracle"] = "a";
+        wrong_field["cases"][0]["events"][0]["hidden_oracle"] = "a".into();
         assert!(serde_json::from_value::<ScriptSet>(wrong_field).is_err());
         let mut settings = EvalSettings::default();
         settings.max_events = 0;
