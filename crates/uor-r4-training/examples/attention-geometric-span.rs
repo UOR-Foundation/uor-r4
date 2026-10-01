@@ -467,7 +467,7 @@ fn run(
                 if step % 40 < 2 || step + 1 == steps {
                     for (name, variable) in model.variables().iter().filter(|(name, _)| {
                         name.contains("read.span")
-                            || name == "embedding.weight"
+                            || name.as_str() == "embedding.weight"
                             || name.contains("read.address")
                             || name.starts_with("layers.01.rec.")
                     }) {
