@@ -18,7 +18,7 @@
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K] [recall=off|oracle|sieve|route] \
-//!   [recall_at=reply|query] [route_paraphrases=PARAPHRASES.jsonl]
+//!   [recall_at=reply|query] [route_paraphrases=A.jsonl[,B.jsonl...]]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! m-world evaluate-cells [world=v2] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [conversations=300] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
@@ -32,7 +32,7 @@
 //!   [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..]
 //! m-world compiler world=v2 out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [train_conversations=2000] [eval_conversations=1000] [seed=9101] [steps=400] [rate=0.5] [l2=0.0001] \
-//!   [lexical=true|false] [paraphrases=PARAPHRASES.jsonl]
+//!   [lexical=true|false] [paraphrases=A.jsonl[,B.jsonl...]]
 //! m-world probe out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json [max_new_tokens=48] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K]
 //! m-world probe-static out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [context=256]
@@ -168,7 +168,7 @@ use uor_r4_training::milestone_world_v2_probe::{
 };
 use uor_r4_training::relation_compiler::{
     collect, label, paraphrase_examples, score, trunk_features, Example, Lexicon, RelationRoute,
-    Softmax, ACTS, NONE as RC_NONE,
+    Softmax, SparseSoftmax, ACTS, NONE as RC_NONE,
 };
 
 fn invalid(message: impl Into<String>) -> TrainingError {
@@ -2433,6 +2433,29 @@ fn route(args: &Args, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Teacher paraphrases from a comma-separated list of `teacher-paraphrase`
+/// files, filled with `train`'s values (`paraphrase_examples`), with each
+/// file's SHA-256 and counts.
+fn load_paraphrases(list: &str, train: &[Example]) -> Result<(Vec<Example>, Value)> {
+    let (mut all, mut files) = (Vec::new(), Vec::new());
+    for path in list.split(',').filter(|p| !p.trim().is_empty()) {
+        let path = PathBuf::from(path.trim());
+        let (examples, skipped) = paraphrase_examples(&fs::read_to_string(&path)?, train)?;
+        files.push(json!({
+            "path": path.display().to_string(),
+            "sha256": sha256_file(&path)?,
+            "examples": examples.len(),
+            "skipped_without_a_value": skipped,
+        }));
+        all.extend(examples);
+    }
+    if files.is_empty() {
+        return Err(invalid("paraphrases= names no file"));
+    }
+    let record = json!({"files": files, "examples": all.len()});
+    Ok((all, record))
+}
+
 /// The relation channel's word table for `evaluate recall=route`: fitted on
 /// every user turn of relation-heavy draws with training phrasings (both value
 /// splits, 2,000 conversations each, seed 9,101: `compiler`'s draw), plus any
@@ -2461,15 +2484,8 @@ fn fit_route(
     }
     let turns = train.len();
     let paraphrase_record = match paraphrases {
-        Some(path) => {
-            let path = PathBuf::from(path);
-            let (examples, skipped) = paraphrase_examples(&fs::read_to_string(&path)?, &train)?;
-            let record = json!({
-                "path": path.display().to_string(),
-                "sha256": sha256_file(&path)?,
-                "examples": examples.len(),
-                "skipped_without_a_value": skipped,
-            });
+        Some(list) => {
+            let (examples, record) = load_paraphrases(&list, &train)?;
             train.extend(examples);
             Some(record)
         }
@@ -2539,15 +2555,8 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
     // Teacher paraphrases (`teacher-paraphrase`), filled with training values,
     // join the training turns; the development turns are untouched.
     let paraphrases = match args.optional("paraphrases") {
-        Some(path) => {
-            let path = PathBuf::from(path);
-            let (examples, skipped) = paraphrase_examples(&fs::read_to_string(&path)?, &train)?;
-            let record = json!({
-                "path": path.display().to_string(),
-                "sha256": sha256_file(&path)?,
-                "examples": examples.len(),
-                "skipped_without_a_value": skipped,
-            });
+        Some(list) => {
+            let (examples, record) = load_paraphrases(&list, &train)?;
             train.extend(examples);
             Some(record)
         }
@@ -2590,32 +2599,72 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
     };
     let train_relation: Vec<usize> = train.iter().map(relation_index).collect();
     let train_act: Vec<usize> = train.iter().map(act_index).collect();
+    // The dense heads: the trunk's states; and, unless `lexical=false` (the
+    // word heads depend on the turns alone, not on the trunk), the turn's
+    // words and both together. The sparse `table` head is the route's word
+    // table (`recall=route`): present words at their standardized scale.
+    let dense = |name: &str, trunk_x: &[Vec<f64>], examples: &[Example]| -> Vec<Vec<f64>> {
+        match name {
+            "trunk" => trunk_x.to_vec(),
+            "lexical" => lexical(examples),
+            _ => trunk_x
+                .iter()
+                .zip(lexical(examples))
+                .map(|(t, w)| t.iter().copied().chain(w).collect())
+                .collect(),
+        }
+    };
+    let dense_names: &[&str] = if lexical_head {
+        &["trunk", "lexical", "combined"]
+    } else {
+        &["trunk"]
+    };
+    let train_trunk = trunk(&train)?;
     let mut heads = BTreeMap::new();
-    let mut features = vec![("trunk", trunk(&train)?)];
-    // The lexical control depends on the turns alone, not on the trunk, so a
-    // second trunk on the same draw may skip it (`lexical=false`).
-    if lexical_head {
-        features.push(("lexical", lexical(&train)));
-    }
-    for (name, x) in features {
+    for name in dense_names {
+        let x = dense(name, &train_trunk, &train);
         let relation_head = Softmax::fit(&x, &train_relation, relations.len(), steps, rate, l2)?;
         let act_head = Softmax::fit(&x, &train_act, acts.len(), steps, rate, l2)?;
-        heads.insert(name, (relation_head, act_head));
+        heads.insert(*name, (relation_head, act_head));
     }
+    let table_rows: Vec<Vec<(usize, f64)>> =
+        train.iter().map(|e| lexicon.scaled(&e.text)).collect();
+    let dim = lexicon.len().max(1);
+    let table = (
+        SparseSoftmax::fit(
+            &table_rows,
+            &train_relation,
+            relations.len(),
+            dim,
+            steps,
+            rate,
+            l2,
+        )?,
+        SparseSoftmax::fit(&table_rows, &train_act, acts.len(), dim, steps, rate, l2)?,
+    );
     let mut cells_json = BTreeMap::new();
     for (cell, examples) in &tests {
         let truth_relation: Vec<usize> = examples.iter().map(relation_index).collect();
         let truth_act: Vec<usize> = examples.iter().map(act_index).collect();
-        let mut rows = BTreeMap::new();
+        let test_trunk = trunk(examples)?;
+        let mut predictions: Vec<(&str, Vec<usize>, Vec<usize>)> = Vec::new();
         for (name, (relation_head, act_head)) in &heads {
-            let x = if *name == "trunk" {
-                trunk(examples)?
-            } else {
-                lexical(examples)
-            };
-            let predicted_relation: Vec<usize> =
-                x.iter().map(|row| relation_head.predict(row)).collect();
-            let predicted_act: Vec<usize> = x.iter().map(|row| act_head.predict(row)).collect();
+            let x = dense(name, &test_trunk, examples);
+            predictions.push((
+                *name,
+                x.iter().map(|row| relation_head.predict(row)).collect(),
+                x.iter().map(|row| act_head.predict(row)).collect(),
+            ));
+        }
+        let rows_x: Vec<Vec<(usize, f64)>> =
+            examples.iter().map(|e| lexicon.scaled(&e.text)).collect();
+        predictions.push((
+            "table",
+            rows_x.iter().map(|row| table.0.predict(row)).collect(),
+            rows_x.iter().map(|row| table.1.predict(row)).collect(),
+        ));
+        let mut rows = BTreeMap::new();
+        for (name, predicted_relation, predicted_act) in predictions {
             let relation_turns = score(&relations, &truth_relation, &predicted_relation, |t| {
                 t != none
             });
@@ -2672,6 +2721,8 @@ fn compiler(args: &Args, out: &Path) -> Result<()> {
         "fit": {"steps": steps, "rate": rate, "l2": l2, "lexical_head": lexical_head, "features": {
             "trunk": "final normalized state at the assistant marker and its mean over the turn read alone (2 x width)",
             "lexical": "binary words of the training turns (a control)",
+            "combined": "trunk and lexical features together (dense, standardized)",
+            "table": "the route's sparse word table: present words at their standardized scale sqrt((1-p)/p), fitted without standardizing absent ones",
         }},
         "labels": {"relations": relations, "acts": acts},
         "gate": {
