@@ -1264,9 +1264,9 @@ mod tests {
         assert!(word_address(&[1, 2], 2) < address_space(2));
     }
 
-    /// The harmonic grounding: conjugation-invariant functions on `2I` (functions of the *relative*
-    /// element) form a space whose dimension is the number of conjugacy classes — the Peter–Weyl
-    /// dimension of the conjugation-invariant function space. Computed from the project's verified table.
+    /// Conjugation-invariant functions on `2I` have dimension equal to the
+    /// number of conjugacy classes. This test counts that partition from the
+    /// verified table; it does not compute a character transform.
     #[test]
     fn conjugacy_classes_of_2i_from_the_verified_table() {
         let (class_of, n_classes) = conjugacy_classes();
