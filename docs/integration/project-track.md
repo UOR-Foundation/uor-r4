@@ -111,6 +111,18 @@ embeddings alone are not assumed to contain reasoning.
    component retention, geometric advantage, language capability and final
    numerical/energy qualification remain separate decisions.
 
+The [completed K1 comparison](../evidence/geometric-value-native-2026-10-02.json)
+shows seed-1 frozen-decoder losses and seed-2 partial retention. The next
+representation decision is one bounded two-atom residual comparison, retaining
+a zero residual and all K1 candidates, with the same saved panels, scores,
+NoRead, coordinate width and decoder. Recovery supports a residual packet;
+improved reconstruction without answer recovery redirects effort to ordinary
+answer learning or a compatible decoder. Little improvement ends this residual
+comparison without starting a larger alphabet sweep. Native producer learning
+must separately expose retained state through the offline gradient path;
+detached trace IDs do not carry credit into earlier transitions. Value-root
+surrogates must preserve antipodal choice credit and declare zero/radius limits.
+
 For value compilation, keep the existing four coordinates per lane and sixteen
 per head until an explicit decoder-interface change. Packet status, exact
 occurrence/version identity and numeric coordinates are distinct. Assess
