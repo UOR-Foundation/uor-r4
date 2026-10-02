@@ -9,7 +9,8 @@ driver. Direct formatting and independent source reviews are complete; six
 legacy caller initializer omissions are repaired. Hosted Linux release checks
 now pass all3 intended integer fixtures,0 failed/ignored. The training library
 compiles; the replay example's E0508 packet move is repaired with a borrow and
-its driver-only hosted retry is in progress. Loaded-parent comparison and
+its driver-only hosted retry passes in6m03s. Downloaded binary and owned-source
+SHA bindings are verified; the Linux execution receipt is linked in the record. Loaded-parent comparison and
 allocation/opcode qualification remain NOT_RUN; no serving or answer claim
 follows. No local Cargo/model process or private artifact upload occurred.
 Continue #1512 with the source-bound hosted build, then artifact-bound replay;

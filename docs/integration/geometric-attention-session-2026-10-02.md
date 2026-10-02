@@ -2,8 +2,8 @@
 
 Status: source implemented and statically reviewed. Three focused release
 integer session tests pass on hosted Linux at source head5e9dfb52. The training
-library compiled; the replay example first failed with E0508 and is retrying
-at e19bbd33 after a one-line borrow repair. Loaded comparison, allocation and
+library compiled; the replay example first failed with E0508 and then builds
+successfully at e19bbd33 after a one-line borrow repair. Loaded comparison, allocation and
 compiled-instruction qualification remain **NOT_RUN**.
 This record does not promote the session, its mathematical adjoints, or the
 surrounding language model. The active source card is
@@ -153,8 +153,11 @@ all12 changed Rust files at the tested head.
 The training library compiles, but the example's retained packet comparison
 tries to move a non-Copy record out of an array (E0508). The failed log remains
 retained; e19bbd33 changes only that access to a borrow. A driver-only hosted
-retry has a35min ceiling inside the remaining compile allowance; integer source
-is unchanged and its prior passing checks are retained. No source policy,
+[retry37064609925](https://github.com/UOR-Foundation/uor-r4/actions/runs/37064609925)
+passes the release build in6m03s inside its35min ceiling; integer source is
+unchanged and its prior passing checks are retained. The downloaded Linux
+binary SHA256 and all12 owned changed Rust source hashes are verified.
+[Execution receipt](../evidence/geometric-attention-hosted-2026-10-02.json). No source policy,
 numerical operation, artifact or learning dose changes.
 
 Hosted compilation removes the local build-slot dependency. Saved-parent replay
