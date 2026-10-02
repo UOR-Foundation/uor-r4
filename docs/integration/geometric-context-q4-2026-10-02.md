@@ -84,6 +84,28 @@ Finite connection does not qualify stability or learning readiness. Preserve the
 observation and assess the conditional-selector adjoint before any learning dose;
 exact group transport alone does not bound the full coupled recurrent Jacobian.
 
+The independent saved-row audit joins all512 parent rows and recomputes answer
+argmax, CE and changes, plus all1024 query-head weights/denominators/NoRead from
+saved source scores and age. Of45 losses,28 retain a correct-source majority in
+at least one head, including19 with mass>=0.9; all45 change a target-source Q16
+payload. Seed2 original row22 increases head0 correct-source mass from0.99995193
+to0.99995343 while changing correct answer16 to20 and changing payload. All
+histories change at least one context state/code/value trace. The earliest
+raw-root/code difference is BOS for seed1, with state/action differences later;
+seed2 first differs in all four fields at the first OPEN. These changes
+are simultaneous; majority retention is not sufficient for answer correctness,
+and the audit does not isolate a causal culprit. Do not repair or retire the
+address mechanism on aggregate answer counts alone. Each panel contains32
+correlated groups, so128 rows are not128 independent samples.
+
+The independent reviewer does not rerun model/backward computation. Full-position
+logit maxima, all-causal native-score equality and source/native packet/NoRead
+equality are the executed driver's checks; the independent arithmetic audit
+covers the saved answer vectors and query-head traces. Attempt inventory/sizes,
+16 rebound numerical payloads,23 bound dependency files, source/packed hashes
+and exact-u64 RNGs are separately audited. Driver sealing/verification is
+executed; independent manifest BLAKE3 rehash is not claimed.
+
 ## Validation and retained failures
 
 Fifteen executed focused cases pass: four integer codec/arithmetic/layout cases,
@@ -109,6 +131,16 @@ No foreign process/cache was modified. A launch refused by shared capacity did
 not start a model worker. Build/review/shared-slot waiting, failed attempts and
 all delivery work remain cumulative charges rather than only these worker times.
 Actual execution/source/executable hashes and checks are in the evidence receipt.
+
+Conflict-free rebase preserves merged Claude Metal work and sequencing scripts.
+Only Stack changes among the ten execution-bound paths; reversing that exact
+upstream patch recovers the construction-source Stack hash. The combined source
+passes six context/admission and five credit cases and its release build. One
+unchanged seed1 coexistence worker finishes19.393313s at801882112B RSS; all
+saved row/episode/prefix files and numeric panel/gradient/route/RNG records equal
+the completed candidate exactly. This is delivery integration evidence, not
+another independent quality draw. Completed executable SHA256 is
+`cc737df235791ebf1df5f943aca9be4c04403d3406b72c4d4c9a0ab9ac84b93b`.
 
 ## Decision and programme continuation
 
@@ -138,3 +170,11 @@ laptop energy remain unfinished. Preserve offline donor/operator compilation;
 the present two-atom bank is not a general donor compiler. Claude's scale/Metal
 lane stays concurrent and separately qualified; stack_grounded_session.rs is
 untouched. A conversion loss does not retire geometric attention.
+
+The frozen 217-file research inventory totals524767600B. All local SHA256s
+remain unchanged after verified cloud preservation at
+`icloud:UOR-R4/results/codex/geometric-context-q4-20261002.tar`
+(525449216B, MD5 `9c6a071a8af32ceb028872dd0ae18c8f`). An independent
+combined-source review binds source head10a4caef and the unchanged seed1
+coexistence outputs; its delivery-note SHA256 is
+`d170e626cdbeb34ce4d9b135b27404efe996cc8b8f2206551b352628afad6ad0`.

@@ -1477,13 +1477,14 @@
     "losses": 45,
     "optimizer_updates": 0,
     "source_native_answer_changes": 0,
-    "maximum_actual_position_logit_delta": 0.0002969503402709961
+    "maximum_actual_position_logit_delta": 0.0002969503402709961,
+    "actual_causal_q24_scores_compared": 1883664
   },
   "validation": {
     "completed_focused_cases": 15,
     "first_library_compile_failure": "missing typed potential endpoints; repaired",
-    "first_loaded_attempt": "strict value compiler rejected q4 context; repaired, regression passes; no predictions",
-    "standalone_model_build": "first driver build passed, updated driver rebuild pending foreign cargo termination",
+    "first_loaded_attempt": "First worker stopped pre-generation on legacy-only context admission; failure sealed, strict-q4 admission repaired, regression and completed constructions pass",
+    "standalone_model_build": "Repaired-source driver-build-2 and combined-source main-driver-build-1 both completed exit0; exact same-seed combined-source coexistence verified",
     "checks": [
       {
         "receipt": "integer-tests-1-execution.json",
@@ -1534,7 +1535,129 @@
         "seconds": 149.648413417,
         "source_unchanged": true
       }
-    ]
+    ],
+    "completed_source_main_checks": {
+      "driver-build-2-execution.json": {
+        "command": [
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--example",
+          "attention-geometric-context-q4"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 269.07959895899995,
+        "source_sha256": {
+          "crates/uor-r4-integer/src/geometric_context_q4.rs": "75f5166c09a17ad8ece08690ff0b2c49b4d92cbd64611ab24dbaa7b154a507a9",
+          "crates/uor-r4-integer/src/lib.rs": "b63c167b4bb2a9fd9e3218912bc2365c193eee7e7c5089ca3cb9aea19ca5702e",
+          "crates/uor-r4-training/src/geometric_context.rs": "9c26cb0ca67cb4959b52016a2cefbcdb7cc0cb96b3a89f42868a5a139b8d5be9",
+          "crates/uor-r4-training/src/geometric_context_credit.rs": "fe0b655fa02c68f7e1be8ef2caf51c296919a29585633ad9e90fb5d608ef408a",
+          "crates/uor-r4-training/src/geometric_value_producer.rs": "21bf33affcd68330fed86b10c769ce48d5c80c93148ec397e181d31622faa7ae",
+          "crates/uor-r4-training/src/geometric_value_producer_native.rs": "c2561bd06e21512d94434bd705abf256926264de3fa8fed1e7365ebea5053a5f",
+          "crates/uor-r4-training/src/geometric_no_read_native.rs": "4fcf8f409c7178a73c186117c6bd20ae6af992c75f82f17d1757ab1406ef2778",
+          "crates/uor-r4-training/src/geometric_stack.rs": "b8826b634499ef461061b420a1afa128318c19baa221c10c0fb3611782df7692",
+          "crates/uor-r4-training/src/lib.rs": "a37fe163c6c4c6015a64568faab0dfad4cbd18ad1a92b2325627d023cbb12d7f",
+          "crates/uor-r4-training/examples/attention-geometric-context-q4.rs": "d2297119388c5accbeef3327e892b3b465564510c3ad2d82bcf9ca1ac489f755"
+        },
+        "unchanged_source_after": true,
+        "measured_maximum_resident_set_bytes": null,
+        "executable_sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1"
+      },
+      "main-context-tests-1-execution.json": {
+        "command": [
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "test",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--lib",
+          "context_q4_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 476.27736425,
+        "source_sha256": {
+          "crates/uor-r4-integer/src/geometric_context_q4.rs": "75f5166c09a17ad8ece08690ff0b2c49b4d92cbd64611ab24dbaa7b154a507a9",
+          "crates/uor-r4-integer/src/lib.rs": "b63c167b4bb2a9fd9e3218912bc2365c193eee7e7c5089ca3cb9aea19ca5702e",
+          "crates/uor-r4-training/src/geometric_context.rs": "9c26cb0ca67cb4959b52016a2cefbcdb7cc0cb96b3a89f42868a5a139b8d5be9",
+          "crates/uor-r4-training/src/geometric_context_credit.rs": "fe0b655fa02c68f7e1be8ef2caf51c296919a29585633ad9e90fb5d608ef408a",
+          "crates/uor-r4-training/src/geometric_value_producer.rs": "21bf33affcd68330fed86b10c769ce48d5c80c93148ec397e181d31622faa7ae",
+          "crates/uor-r4-training/src/geometric_value_producer_native.rs": "c2561bd06e21512d94434bd705abf256926264de3fa8fed1e7365ebea5053a5f",
+          "crates/uor-r4-training/src/geometric_no_read_native.rs": "4fcf8f409c7178a73c186117c6bd20ae6af992c75f82f17d1757ab1406ef2778",
+          "crates/uor-r4-training/src/geometric_stack.rs": "45e169ad2873b371616e56e0b7045b094c816c671aeee449ae0bc5f969b825e1",
+          "crates/uor-r4-training/src/lib.rs": "a37fe163c6c4c6015a64568faab0dfad4cbd18ad1a92b2325627d023cbb12d7f",
+          "crates/uor-r4-training/examples/attention-geometric-context-q4.rs": "d2297119388c5accbeef3327e892b3b465564510c3ad2d82bcf9ca1ac489f755"
+        },
+        "unchanged_source_after": true,
+        "measured_maximum_resident_set_bytes": null,
+        "executable_sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1"
+      },
+      "main-credit-tests-1-execution.json": {
+        "command": [
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "test",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--lib",
+          "context_credit_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.766584667,
+        "source_sha256": {
+          "crates/uor-r4-integer/src/geometric_context_q4.rs": "75f5166c09a17ad8ece08690ff0b2c49b4d92cbd64611ab24dbaa7b154a507a9",
+          "crates/uor-r4-integer/src/lib.rs": "b63c167b4bb2a9fd9e3218912bc2365c193eee7e7c5089ca3cb9aea19ca5702e",
+          "crates/uor-r4-training/src/geometric_context.rs": "9c26cb0ca67cb4959b52016a2cefbcdb7cc0cb96b3a89f42868a5a139b8d5be9",
+          "crates/uor-r4-training/src/geometric_context_credit.rs": "fe0b655fa02c68f7e1be8ef2caf51c296919a29585633ad9e90fb5d608ef408a",
+          "crates/uor-r4-training/src/geometric_value_producer.rs": "21bf33affcd68330fed86b10c769ce48d5c80c93148ec397e181d31622faa7ae",
+          "crates/uor-r4-training/src/geometric_value_producer_native.rs": "c2561bd06e21512d94434bd705abf256926264de3fa8fed1e7365ebea5053a5f",
+          "crates/uor-r4-training/src/geometric_no_read_native.rs": "4fcf8f409c7178a73c186117c6bd20ae6af992c75f82f17d1757ab1406ef2778",
+          "crates/uor-r4-training/src/geometric_stack.rs": "45e169ad2873b371616e56e0b7045b094c816c671aeee449ae0bc5f969b825e1",
+          "crates/uor-r4-training/src/lib.rs": "a37fe163c6c4c6015a64568faab0dfad4cbd18ad1a92b2325627d023cbb12d7f",
+          "crates/uor-r4-training/examples/attention-geometric-context-q4.rs": "d2297119388c5accbeef3327e892b3b465564510c3ad2d82bcf9ca1ac489f755"
+        },
+        "unchanged_source_after": true,
+        "measured_maximum_resident_set_bytes": null,
+        "executable_sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1"
+      },
+      "main-driver-build-1-execution.json": {
+        "command": [
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--example",
+          "attention-geometric-context-q4"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 118.662402,
+        "source_sha256": {
+          "crates/uor-r4-integer/src/geometric_context_q4.rs": "75f5166c09a17ad8ece08690ff0b2c49b4d92cbd64611ab24dbaa7b154a507a9",
+          "crates/uor-r4-integer/src/lib.rs": "b63c167b4bb2a9fd9e3218912bc2365c193eee7e7c5089ca3cb9aea19ca5702e",
+          "crates/uor-r4-training/src/geometric_context.rs": "9c26cb0ca67cb4959b52016a2cefbcdb7cc0cb96b3a89f42868a5a139b8d5be9",
+          "crates/uor-r4-training/src/geometric_context_credit.rs": "fe0b655fa02c68f7e1be8ef2caf51c296919a29585633ad9e90fb5d608ef408a",
+          "crates/uor-r4-training/src/geometric_value_producer.rs": "21bf33affcd68330fed86b10c769ce48d5c80c93148ec397e181d31622faa7ae",
+          "crates/uor-r4-training/src/geometric_value_producer_native.rs": "c2561bd06e21512d94434bd705abf256926264de3fa8fed1e7365ebea5053a5f",
+          "crates/uor-r4-training/src/geometric_no_read_native.rs": "4fcf8f409c7178a73c186117c6bd20ae6af992c75f82f17d1757ab1406ef2778",
+          "crates/uor-r4-training/src/geometric_stack.rs": "45e169ad2873b371616e56e0b7045b094c816c671aeee449ae0bc5f969b825e1",
+          "crates/uor-r4-training/src/lib.rs": "a37fe163c6c4c6015a64568faab0dfad4cbd18ad1a92b2325627d023cbb12d7f",
+          "crates/uor-r4-training/examples/attention-geometric-context-q4.rs": "d2297119388c5accbeef3327e892b3b465564510c3ad2d82bcf9ca1ac489f755"
+        },
+        "unchanged_source_after": true,
+        "measured_maximum_resident_set_bytes": null,
+        "executable_sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1"
+      }
+    }
   },
   "limitations": [
     "exposed authored development panels",
@@ -1544,5 +1667,76 @@
     "float trunk/output and offline float learning graph retained",
     "bounded full causal scans; no selected-access/energy/language qualification"
   ],
-  "next": "Persistent integer attention session preserving exact existing occurrence and denominator semantics, no automatic context recovery fit"
+  "next": "Persistent integer attention session preserving exact existing occurrence and denominator semantics, no automatic context recovery fit",
+  "independent_review": {
+    "files": {
+      "independent-result-review.md": "36668305622b786fae63f1a78ac83ea96de6698de858eae3053cbd602d7d9b63",
+      "independent-row-diagnostic.json": "938037cfde40b8c5d903f0859cb712628f65c37314cb17ca307c8866cf90b705",
+      "independent-freeze-credit-audit.json": "cfb2c1becaf096493cfe0a71a6958fbff404bb5c31c33c880354f34747610afb",
+      "source-integration-review.md": "d6a376b733043ebb9ef2ce016d50de2c19e73bcdbd47faf96b717c3cfddc8e07",
+      "context-source-independent-review.md": "e9bcc2171a599c2974bd14abab9bde53795e0d07fcd7478097b21fc22275891d",
+      "credit-stability-and-incremental-session.md": "939ed4b3092d02467803be3c3af8abe44fc6a27c417ee2e423151e45017a39c7",
+      "next-boundary-note.md": "8773e491910a2571353f602bbf15890d0a02d72e2b995974384b5a445344b248"
+    },
+    "saved_rows_joined": 512,
+    "query_head_weights_denominators_reconstructed": 1024,
+    "losses_retaining_correct_source_majority": 28,
+    "losses_with_correct_source_mass_at_least_point9": 19,
+    "losses_with_target_payload_change": 45,
+    "scope": "Independent saved-data arithmetic/binding and source review, not a model/backward rerun or independent manifest BLAKE3 rehash"
+  },
+  "main_coexistence": {
+    "all_saved_rows_episodes_prefix_bytes_equal": {
+      "original-rows.json": true,
+      "stress-rows.json": true,
+      "original-episodes.json": true,
+      "stress-episodes.json": true,
+      "diagnostic-3200-episodes.json": true,
+      "diagnostic-3201-episodes.json": true,
+      "cheap-loaded-prefix.json": true
+    },
+    "panels_equal": true,
+    "gradient_and_route_numeric_records_equal": true,
+    "exact_rng_equal": true,
+    "execution": {
+      "command": [
+        "/Users/casey.allard/uor-r4-local/workspace/build/codex-native-target/release/examples/attention-geometric-context-q4",
+        "/Users/casey.allard/uor-r4-local/workspace/research/geometric-context-q4-20261002/args-s1-construction-main.json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 19.393312708,
+      "source_sha256": {
+        "crates/uor-r4-integer/src/geometric_context_q4.rs": "75f5166c09a17ad8ece08690ff0b2c49b4d92cbd64611ab24dbaa7b154a507a9",
+        "crates/uor-r4-integer/src/lib.rs": "b63c167b4bb2a9fd9e3218912bc2365c193eee7e7c5089ca3cb9aea19ca5702e",
+        "crates/uor-r4-training/src/geometric_context.rs": "9c26cb0ca67cb4959b52016a2cefbcdb7cc0cb96b3a89f42868a5a139b8d5be9",
+        "crates/uor-r4-training/src/geometric_context_credit.rs": "fe0b655fa02c68f7e1be8ef2caf51c296919a29585633ad9e90fb5d608ef408a",
+        "crates/uor-r4-training/src/geometric_value_producer.rs": "21bf33affcd68330fed86b10c769ce48d5c80c93148ec397e181d31622faa7ae",
+        "crates/uor-r4-training/src/geometric_value_producer_native.rs": "c2561bd06e21512d94434bd705abf256926264de3fa8fed1e7365ebea5053a5f",
+        "crates/uor-r4-training/src/geometric_no_read_native.rs": "4fcf8f409c7178a73c186117c6bd20ae6af992c75f82f17d1757ab1406ef2778",
+        "crates/uor-r4-training/src/geometric_stack.rs": "45e169ad2873b371616e56e0b7045b094c816c671aeee449ae0bc5f969b825e1",
+        "crates/uor-r4-training/src/lib.rs": "a37fe163c6c4c6015a64568faab0dfad4cbd18ad1a92b2325627d023cbb12d7f",
+        "crates/uor-r4-training/examples/attention-geometric-context-q4.rs": "d2297119388c5accbeef3327e892b3b465564510c3ad2d82bcf9ca1ac489f755"
+      },
+      "unchanged_source_after": true,
+      "measured_maximum_resident_set_bytes": 801882112,
+      "executable_sha256": "cc737df235791ebf1df5f943aca9be4c04403d3406b72c4d4c9a0ab9ac84b93b"
+    },
+    "report_sha256": "9bb0361259023fbb1131141c5336a2383d3b3831ac51acbecc7c8237fe47fce4",
+    "scope": "Unchanged seed1 post-main-Metal coexistence only; not an additional independent quality draw"
+  },
+  "preservation": {
+    "local_files_verified": 217,
+    "local_bytes": 524767600,
+    "cloud_index_verified": true,
+    "cloud_archive_bytes": 525449216,
+    "cloud_archive_md5": "9c6a071a8af32ceb028872dd0ae18c8f",
+    "cloud_path": "icloud:UOR-R4/results/codex/geometric-context-q4-20261002.tar",
+    "archive_upload_download_md5_verified": true
+  },
+  "combined_source_review": {
+    "file": "source-rebind-10a4caef.md",
+    "sha256": "d170e626cdbeb34ce4d9b135b27404efe996cc8b8f2206551b352628afad6ad0",
+    "source_head": "10a4caef5e2eca2dccf23c7dd4482e08e8e0f367",
+    "scope": "Independent static and saved-output verification; no additional model rerun"
+  }
 }
