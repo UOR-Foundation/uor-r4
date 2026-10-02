@@ -21,6 +21,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde_json::Value;
+use uor_r4_core::native_geometric::mmap_corpus::MmapCorpusReader;
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 type Result<T> = std::result::Result<T, String>;
@@ -45,21 +46,22 @@ fn run(args: &[String]) -> Result<()> {
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(
         &fs::read(&tokenizer_path).map_err(|e| e.to_string())?,
     )
-        .ok_or("unreadable tokenizer.json")?;
-    let manifest: Value = serde_json::from_slice(
-        &fs::read(store.join("manifest.json")).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    let bos = manifest["bos_id"].as_u64().ok_or("manifest has no bos_id")? as u32;
-    let eos = manifest["eos_id"].as_u64().ok_or("manifest has no eos_id")? as u32;
-    let bytes = fs::read(store.join("tokens.u16")).map_err(|e| e.to_string())?;
-    if bytes.len() % 2 != 0 {
-        return Err("tokens.u16 has an odd byte length".into());
-    }
-    let ids: Vec<u32> = bytes
-        .chunks_exact(2)
-        .map(|c| u32::from(u16::from_le_bytes([c[0], c[1]])))
-        .collect();
+    .ok_or("unreadable tokenizer.json")?;
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(store.join("manifest.json")).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let bos = manifest["bos_id"]
+        .as_u64()
+        .ok_or("manifest has no bos_id")? as u32;
+    let eos = manifest["eos_id"]
+        .as_u64()
+        .ok_or("manifest has no eos_id")? as u32;
+    // The store is a corpus file with a header, not a bare token array: read it
+    // through the same reader the trainer uses. Reading the file from byte 0
+    // picks up the 64-byte `CORPUS_HEADER_SIZE` prefix and shifts every document boundary, which is
+    // exactly the false alarm this tool raised before it was corrected.
+    let reader = MmapCorpusReader::open(store.join("tokens.u16")).map_err(|e| e.to_string())?;
+    let ids: Vec<u32> = reader.as_slice().iter().map(|&t| u32::from(t)).collect();
     let mask = fs::read(store.join("response_mask.u8")).map_err(|e| e.to_string())?;
     println!(
         "{} rows declared, {} tokens, mask {} bytes, bos={bos} eos={eos}",
@@ -108,7 +110,11 @@ fn run(args: &[String]) -> Result<()> {
         if n < show {
             let full = tokenizer.decode(doc);
             let answer = tokenizer.decode(&scored);
-            println!("\n--- document {n} ({} tokens, {} scored)", doc.len(), scored.len());
+            println!(
+                "\n--- document {n} ({} tokens, {} scored)",
+                doc.len(),
+                scored.len()
+            );
             println!("    full  : {:?}", full.replace('\n', "\\n"));
             println!("    scored: {:?}", answer);
         }
