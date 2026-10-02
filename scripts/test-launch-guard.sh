@@ -1,13 +1,41 @@
 #!/usr/bin/env bash
-tri(){ local others="$1" load="$2" swapmb="$3" i="${4:-1}"
+# Unit-test the launch guard's three conditions, including the memory pair.
+#
+# A guard that never fires and a guard that always fires are both failures, and
+# neither is visible from the outside. This exercises every combination.
+set -uo pipefail
+
+check(){ # others load avail_mb swap_mb [poll] -> FIRE|wait
+  local others="$1" load="$2" avail="$3" swap="$4" i="${5:-1}"
   local limit; if [ "$i" -le 48 ]; then limit=4.0; else limit=8.0; fi
-  local q r
-  q=$(python3 -c "print(1 if float('$load') < $limit else 0)")
-  r=$(python3 -c "print(1 if $swapmb >= 1500 else 0)")
-  if [ "$others" = "0" ] && [ "$q" = "1" ] && [ "$r" = "1" ]; then echo FIRE; else echo wait; fi; }
-printf "  others=0 load=2 swap=5000  -> %s (expect FIRE)\n" "$(tri 0 2 5000)"
-printf "  others=0 load=2 swap=900   -> %s (expect wait: swap tight)\n" "$(tri 0 2 900)"
-printf "  others=0 load=9 swap=5000  -> %s (expect wait: load)\n" "$(tri 0 9 5000)"
-printf "  others=2 load=2 swap=5000  -> %s (expect wait: peer job)\n" "$(tri 2 2 5000)"
-printf "  others=0 load=5 swap=5000 poll49 -> %s (expect FIRE: relaxed)\n" "$(tri 0 5 5000 49)"
-printf "  others=0 load=5 swap=900  poll49 -> %s (expect wait: swap tight)\n" "$(tri 0 5 900 49)"
+  python3 -c "
+q = float('$load') < $limit
+r = int('$avail') >= 2100 and int('$swap') >= 512
+print('FIRE' if ('$others' == '0' and q and r) else 'wait')"
+}
+
+fail=0
+expect(){ local got="$1" want="$2" label="$3"
+  if [ "$got" = "$want" ]; then printf "  ok    %-46s -> %s\n" "$label" "$got"
+  else printf "  FAIL  %-46s -> %s (want %s)\n" "$label" "$got" "$want"; fail=1; fi; }
+
+echo "=== all three conditions must hold ==="
+expect "$(check 0 2 4000 4000)"    FIRE "others=0 load=2 avail=4000 swap=4000"
+expect "$(check 2 2 4000 4000)"    wait "a peer job present, everything else green"
+expect "$(check 0 9 4000 4000)"    wait "load above the strict bar"
+expect "$(check 0 2 900  4000)"    wait "reclaimable memory too low"
+expect "$(check 0 2 4000 300)"     wait "swap too low"
+
+echo "=== load tier relaxes after STRICT_POLLS; memory never does ==="
+expect "$(check 0 5 4000 4000 49)" FIRE "poll 49: relaxed load bar"
+expect "$(check 0 5 900  4000 49)" wait "poll 49: relaxed load, memory still low"
+expect "$(check 0 5 4000 300  49)" wait "poll 49: relaxed load, swap still low"
+
+echo "=== boundaries, inclusive ==="
+expect "$(check 0 3.99 2100 512)"  FIRE "exactly at both memory floors"
+expect "$(check 0 4.01 2100 512)"  wait "just over the strict load bar"
+expect "$(check 0 3.99 2099 512)"  wait "one MB under the reclaimable floor"
+expect "$(check 0 3.99 2100 511)"  wait "one MB under the swap floor"
+
+echo
+if [ "$fail" = 0 ]; then echo "all launch-guard cases pass"; else echo "FAILURES PRESENT"; exit 1; fi

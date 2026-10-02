@@ -62,20 +62,38 @@ for i in $(seq 1 "$MAX_POLLS"); do
   fi
   quiet=$(python3 -c "print(1 if float('$load') < $limit else 0)" 2>/dev/null || echo 0)
 
-  # Memory guard. This is not only about protecting my own run: the LM phase
-  # needs ~1.4 GB resident, and on a box whose swap is already nearly full the
-  # kernel may resolve the shortfall by killing the largest task on the machine
-  # -- which here would be a peer lab's multi-hour run. Observed during this
-  # queue: swap free fell to 0.85 GiB of 15 GiB while a 6 GB teacher model sat
-  # resident, so launching into that state is a way to destroy someone else's
-  # work rather than merely run slowly.
-  swap_free_mb=$(python3 -c "
-import re,subprocess
+  # Memory guard. Two numbers, because they measure different things.
+  #
+  # Reclaimable memory (free + inactive + speculative + purgeable) is what a new
+  # 1.4 GB process can actually take. Swap free is what the kernel can fall back
+  # on when it must evict. Both matter, and neither alone is the right test:
+  # swap occupancy is sticky -- pages stay swapped with no pressure to reclaim
+  # them -- so a swap-only test can refuse to launch on an idle machine, while a
+  # reclaimable-only test would launch into a box whose swap is exhausted and
+  # whose compressor is already holding gigabytes.
+  #
+  # Measured on this machine during the queue: reclaimable 2168 MB against a
+  # 1400 MB need (1.5x, tight), swap free 762 MB, wired 8977 MB, compressor
+  # 4245 MB. This is not about my own throughput: when memory runs out the
+  # kernel kills the largest task present, which here is a peer lab's
+  # multi-hour run.
+  read -r avail_mb swap_free_mb <<EOF2
+$(python3 -c "
+import re, subprocess
+ps = int(subprocess.run(['sysctl','-n','hw.pagesize'],capture_output=True,text=True).stdout.strip())
+vm = subprocess.run(['vm_stat'],capture_output=True,text=True).stdout
+def pg(n):
+    m = re.search(rf'{n}:\\s+(\\d+)', vm)
+    return int(m.group(1)) if m else 0
+avail = (pg('Pages free')+pg('Pages inactive')+pg('Pages speculative')+pg('Pages purgeable'))*ps//(1024*1024)
 out = subprocess.run(['sysctl','-n','vm.swapusage'],capture_output=True,text=True).stdout
 m = re.search(r'free = ([0-9.]+)M', out)
-print(int(float(m.group(1))) if m else 0)
-" 2>/dev/null || echo 0)
-  roomy=$(python3 -c "print(1 if $swap_free_mb >= ${MIN_SWAP_FREE_MB:-1500} else 0)" 2>/dev/null || echo 0)
+print(avail, int(float(m.group(1))) if m else 0)
+" 2>/dev/null || echo "0 0")
+EOF2
+  roomy=$(python3 -c "
+ok = $avail_mb >= ${MIN_AVAIL_MB:-2100} and $swap_free_mb >= ${MIN_SWAP_FREE_MB:-512}
+print(1 if ok else 0)" 2>/dev/null || echo 0)
 
   # Heartbeat every ~30 min so the wait is observable and a stall cannot be
   # mistaken for patience: logging only state changes is indistinguishable from
