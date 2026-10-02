@@ -3552,6 +3552,6 @@
     "NoRead and trunk/output remain floating; wide Q24 table values do not establish D0-b four-bit free-weight qualification.",
     "512 pooled rows include authored interventions and identical panels across policy/seed comparisons; no IID test or frontier/general-language inference."
   ],
-  "independent_audit_note_sha256": "d707f9f7701aab59d44241cde4ef293006a9051990408b2b635d10a62832cd84",
+  "independent_audit_note_sha256": "30ea278577408b95784f1d79ac019dc90ceb85cecbd32e54987cc6645f8cf278",
   "integer_identity_encoding": "u64 RNG identifiers are exact decimal strings; derived-report numeric rounding repaired; raw fits unaffected"
 }
