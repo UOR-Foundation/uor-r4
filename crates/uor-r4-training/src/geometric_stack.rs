@@ -10199,7 +10199,18 @@ mod tests {
     }
 
     fn tiny_span_model() -> Result<StackModel> {
-        let mut model = tiny_address_model()?;
+        tiny_span_model_with_width(16)
+    }
+
+    fn tiny_span_model_with_width(width: usize) -> Result<StackModel> {
+        let mut config = tiny(StackArch::Geometric, "rra", ReadScore::Lorentz, true);
+        config.width = width;
+        let mut model = StackModel::new(config, &cpu())?;
+        model.set_read_identity_latch(ReadIdentityLatch::Held)?;
+        model.set_geometric_address(GeometricAddressConfig::new(
+            model.config.width,
+            model.config.heads,
+        )?)?;
         model.set_geometric_span(GeometricSpanConfig::new(model.config.width)?)?;
         // Construction-only controller: stable action markers occupy the
         // first lane, while two payloads have different static action lanes.
@@ -10409,7 +10420,8 @@ mod tests {
 
     #[test]
     fn native_geometric_context_reader_has_delayed_answer_credit_and_typed_reload() -> Result<()> {
-        let model = tiny_span_model()?;
+        // Match the retained value codec: two heads, four R4 lanes per head.
+        let model = tiny_span_model_with_width(32)?;
         let ids = [1, 2, 3, 4, 5, 1, 3, 2, 4, 6];
         let events = EventWeights::new(model.config.vocab_size, 2, 47)?;
         let lexical = events
@@ -10534,7 +10546,8 @@ mod tests {
         let teacher = model.geometric_context_teacher(&ids, 1, 10)?;
         let (old_teacher, _) = model.geometric_potential_inputs(&ids, 1, 10, &span)?;
         assert_eq!(bits(&teacher)?, bits(&old_teacher)?);
-        let wrong_heads = ContextWeights::new(model.config.vocab_size, model.config.width, 1, 82)?;
+        // Independently admitted four-lane configuration with incompatible head count.
+        let wrong_heads = ContextWeights::new(model.config.vocab_size, 16, 1, 82)?;
         assert!(model
             .forward_geometric_context(&ids, 1, 10, &wrong_heads, &event, &span, false)
             .is_err());
