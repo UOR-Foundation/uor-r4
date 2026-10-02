@@ -1300,6 +1300,46 @@ fn train_settings(args: &Args) -> Result<Settings> {
     Ok(settings)
 }
 
+/// `UOR_NAN_TRACE`: fail before the update when any gradient (or parameter)
+/// is nonfinite, naming the variables, their largest finite magnitude and
+/// the step, so a run that would poison every parameter shows where the
+/// nonfinite value first appears.
+fn check_finite_gradients(
+    model: &StackModel,
+    grads: &candle_core::backprop::GradStore,
+    step: usize,
+    loss: f64,
+) -> Result<()> {
+    let mut bad = Vec::new();
+    for (name, var) in model.variables() {
+        let parameter = var.as_tensor().flatten_all()?.to_vec1::<f32>()?;
+        if parameter.iter().any(|v| !v.is_finite()) {
+            bad.push(format!("{name}: parameter nonfinite"));
+        }
+        if let Some(grad) = grads.get(var.as_tensor()) {
+            let values = grad.flatten_all()?.to_vec1::<f32>()?;
+            let nonfinite = values.iter().filter(|v| !v.is_finite()).count();
+            if nonfinite > 0 {
+                let largest = values
+                    .iter()
+                    .filter(|v| v.is_finite())
+                    .fold(0f32, |m, v| m.max(v.abs()));
+                bad.push(format!(
+                    "{name}: {nonfinite}/{} gradient values nonfinite, largest finite {largest:e}",
+                    values.len()
+                ));
+            }
+        }
+    }
+    if bad.is_empty() {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "nonfinite gradients at step {step} (loss {loss}): {}",
+        bad.join("; ")
+    )))
+}
+
 fn learning_rate(settings: &Settings, step: usize) -> f64 {
     cosine_rate(
         settings.lr,
@@ -1725,6 +1765,9 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
     let mut step_seconds = Vec::new();
     let mut served_in_steps = ServedStatistics::default();
     let started = Instant::now();
+    // UOR_NAN_TRACE=1: before every update, stop at the first nonfinite
+    // gradient and name the variables that carry it (diagnosis only).
+    let nan_trace = std::env::var("UOR_NAN_TRACE").is_ok_and(|v| v == "1");
     while progress.step < settings.steps {
         let lr = learning_rate(settings, progress.step);
         let clock = Instant::now();
@@ -1754,6 +1797,9 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
             )));
         }
         let grads = loss.backward()?;
+        if nan_trace {
+            check_finite_gradients(&model, &grads, progress.step, value)?;
+        }
         let grad_norm = optimizer.update(&model, &grads, lr)?;
         let seconds = clock.elapsed().as_secs_f64();
         add_served_work(
