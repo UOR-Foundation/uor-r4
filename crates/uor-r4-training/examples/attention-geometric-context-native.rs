@@ -1,6 +1,6 @@
 //! Native latent geometric context compilation in the existing reader.
 //! Authored grammar and frozen base; no natural-language or full serving claim.
-use candle_core::{DType, Device, Tensor};
+use candle_core::{Device, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
