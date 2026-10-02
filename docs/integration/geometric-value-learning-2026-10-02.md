@@ -120,7 +120,7 @@ Embedded commit metadata is UNAVAILABLE; exact source hashes, unchanged library
 base, committed source blobs and executable receipts provide the disclosed
 external binding. Sources and models are not reconstructed from names.
 
-The two fits take204.384/205.394 seconds inside the driver,205.408/210.510
+The two fits take204.384/205.394 seconds inside the driver,205.407/210.509
 seconds in wrappers. Frozen-target preparation is125.529 seconds combined and
 forward/backward/update261.501 seconds. Sampled model RSS is387,344/394,080KiB.
 Counterfactual replays take3.585/3.548 seconds. These shared-machine measurements
