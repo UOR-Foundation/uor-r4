@@ -38,7 +38,18 @@ fi
 
 log "monitor started; waiting for a free machine (launcher=$LAUNCHER)"
 
-for i in $(seq 1 "$MAX_POLLS"); do
+# Poll counter persisted across restarts. Without this, restarting the monitor
+# resets the counter to 1 and the tier progression can never advance -- so under
+# sustained load the run would wait forever, which is the same defect as a guard
+# that can never fire, arrived at from a different direction. Observed: five
+# restarts in a row each began at poll 1.
+POLL_FILE="$HOME/.local/share/uor-r4/locks/waiter-poll-count"
+i=$(cat "$POLL_FILE" 2>/dev/null || echo 0)
+case "$i" in ''|*[!0-9]*) i=0 ;; esac
+log "resuming at poll $i (persisted)"
+for _ in $(seq 1 "$MAX_POLLS"); do
+  i=$((i + 1))
+  echo "$i" > "$POLL_FILE" 2>/dev/null || true
   others=$(pgrep -f "geometric-stack" | wc -l | tr -d ' ')
 
   # `others` counts *processes*, but what cost me 9x was *resource contention*

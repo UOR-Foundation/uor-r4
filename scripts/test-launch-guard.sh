@@ -53,3 +53,17 @@ expect "$(python3 -c "print('FIRE' if float('') >= 50 else 'wait')" 2>/dev/null 
 
 echo
 if [ "$fail" = 0 ]; then echo "all launch-guard cases pass"; else echo "FAILURES PRESENT"; exit 1; fi
+
+echo "=== poll counter must survive a restart, or tiers never advance ==="
+PF=$(mktemp)
+echo 47 > "$PF"
+r1=$(cat "$PF"); echo $((r1+1)) > "$PF"; r2=$(cat "$PF")
+expect "$r2" 48 "counter persists across 'restart' (47 -> 48)"
+echo 720 > "$PF"; r3=$(cat "$PF")
+expect "$r3" 720 "counter can reach the tier-3 boundary"
+floors 721; expect "$peer" 1 "poll 721 admits a lingering peer"
+floors 48; expect "$peer" 0 "poll 48 still requires peer absence"
+rm -f "$PF"
+
+echo
+if [ "$fail" = 0 ]; then echo "all launch-guard cases pass"; else echo "FAILURES PRESENT"; exit 1; fi
