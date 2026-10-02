@@ -10600,7 +10600,7 @@ mod tests {
         // The oracle codec changes only payload representation, preserving
         // actual source/NoRead weights and exact integer payload trace bits.
         let value_source = crate::geometric_value_native::ValueSourceBinding::from_directory(
-            &base, &tokenizer, &potential, &reducer, 2,
+            &base, registry, &potential, &reducer, 2,
         )?;
         let value_codec =
             crate::geometric_value_native::CompiledGeometricValues::compile(&value_source)?;
