@@ -416,6 +416,27 @@ fn run(args: &[String]) -> Result<()> {
                 "overlapping relations (colour/car) sometimes share a competing value"
             ]
         },
+        // The dialogue loader refuses a split whose manifest does not record
+        // zero literal special-token text, overall and per source, and whose
+        // per-source token counts do not exactly cover the store. These are
+        // not optional metadata: `Split::load` reads them before the fit and
+        // rejects the store outright, so the generator writes them explicitly
+        // rather than leaving the loader to read a missing key as non-zero.
+        "drops": {
+            "rows_dropped_no_messages": 0,
+            "rows_dropped_empty": 0,
+            "rows_dropped_no_response": 0,
+            "rows_dropped_oversized": 0,
+            "special_token_occurrences": 0
+        },
+        "files": [{
+            "label": "synthetic-memory-rows",
+            "tokens": total,
+            "response_tokens": response_tokens,
+            "special_token_occurrences": 0,
+            "rows_used": rows,
+            "rows_total": rows
+        }],
         "tokenizer": {"path": tokenizer_path.display().to_string(), "sha256": tokenizer_sha},
         "dialogue_protocol": protocol.schema,
         "bos_id": bos,
