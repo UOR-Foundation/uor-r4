@@ -147,6 +147,15 @@ fn compare_panel(
         let native = model
             .forward_geometric_span_native(&ids, group.len(), time, compiled)?
             .to_vec2::<f32>()?;
+        if baseline.len() != ids.len()
+            || native.len() != baseline.len()
+            || baseline
+                .iter()
+                .zip(&native)
+                .any(|(a, b)| a.len() != model.config.vocab_size || b.len() != a.len())
+        {
+            return Err(invalid("full-prefix output shape differs"));
+        }
         for (a, b) in baseline.iter().zip(&native) {
             full_logit_bit_mismatches += a
                 .iter()
