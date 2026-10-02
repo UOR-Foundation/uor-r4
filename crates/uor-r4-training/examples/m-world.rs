@@ -10,7 +10,7 @@
 //! m-world corpus world=v2 out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json [chat=CHAT_V0_TRAIN_DIR] \
 //!   [exclude=REQUESTS.json] [conversations=5600] [seed=1] \
 //!   [mqar_share=0.35] [copy_share=0.10] [relation_share=0.30] [other_share=0.25] \
-//!   [recall=off|oracle|sieve] [recall_at=reply|query] [context=256]
+//!   [recall=off|oracle|sieve] [recall_at=reply|query] [context=256] [protocol=1|2]
 //! m-world evaluate [world=v1] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [split=development|train] [conversations=300] [seed=9101] [max_new_tokens=32] \
 //!   [panel=REQUESTS.json] [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K] \
@@ -20,7 +20,8 @@
 //!   [panel=REQUESTS.json] [mqar_share=..] [copy_share=..] [relation_share=..] [other_share=..] \
 //!   [select=none|flock:W:K] [pointer_select=none|flock:W:K|top:K] \
 //!   [pointer_route=none|prime:W|prime-ranked:W|ngram:W|ngram-ranked:W] [recall=off|oracle|sieve|route] \
-//!   [recall_at=reply|query] [route_paraphrases=A.jsonl[,B.jsonl...]] [route_acts=fact|any] [route_trunk=MODEL_DIR]
+//!   [recall_at=reply|query] [route_paraphrases=A.jsonl[,B.jsonl...]] [route_acts=fact|any] [route_trunk=MODEL_DIR] \
+//!   [protocol=1|2]
 //! m-world rejudge out=NEW_REPORT_ROOT report=OLD_ROOT/m_world_evaluation.json [tokenizer=T.json]
 //! m-world evaluate-cells [world=v2] out=NEW_REPORT_ROOT model=MODEL_DIR tokenizer=TOKENIZER.json \
 //!   [conversations=300] [seed=9101] [max_new_tokens=32] [teacher_forced=true] \
@@ -71,6 +72,14 @@
 //! relation recall on open and closed pools (abstentions apart), and the A1
 //! gate: MQAR recall >= 0.9 at every distance AND open-relation recall >= 0.9,
 //! computed on this report's split (the gate counts on `split=development`).
+//!
+//! `protocol=2` (`corpus` and `evaluate`, world=v2) uses literal-role dialogue
+//! version 2 (`uor_r4_tokenizer::dialogue::SCHEMA_V2`): the space after a role
+//! marker belongs to the message, so a reply's first word is the token it is
+//! mid-sentence and can be copied from context. A version 2 corpus has no
+//! `chat=` part (chat-v0 is prepared in version 1) and records
+//! `dialogue_protocol` in its manifest; evaluate a model in the version it was
+//! trained in. Replies are scored without the leading space.
 //!
 //! `rejudge` re-judges an evaluation's saved replies with this build's oracle;
 //! a v2 report needs `tokenizer=` (its MQAR distances depend on it).
@@ -158,8 +167,8 @@ use uor_r4_training::milestone_world_v2::{
     judge_v2, render, Conversation2, Kind, MWorld2, Mix, Pool, Scorecard, Turn2, CONTEXT,
 };
 use uor_r4_training::stack_dialogue::{
-    check_panel, episode_contract, greedy_reply, load_requests, reply_panel, DialogueSplit, Reply,
-    Request,
+    check_panel, episode_contract, episode_contract_for, greedy_reply, load_requests, reply_panel,
+    DialogueSplit, Reply, Request,
 };
 use uor_r4_training::stack_memory_replies::score_memory;
 use uor_r4_training::stack_tracking::Rng;
@@ -178,8 +187,9 @@ use uor_r4_training::milestone_world_v2_probe::{
     EXCLUSION_NGRAM,
 };
 use uor_r4_training::relation_compiler::{
-    collect, label, paraphrase_examples, score, trunk_features, ActRule, CompilerSettings, Example,
-    Lexicon, RelationRoute, SavedCompiler, Softmax, SparseSoftmax, ACTS, NONE as RC_NONE,
+    collect, label, op_text, paraphrase_examples, score, trunk_features, ActRule, CompilerSettings,
+    Example, Lexicon, RelationMode, RelationRoute, SavedCompiler, Softmax, SparseSoftmax, Trunk,
+    ACTS, COMPILE_PROMPT, NONE as RC_NONE,
 };
 use uor_r4_training::stack_checkpoint::{
     save_checkpoint, sealed_manifest_sha256, CheckpointIdentity, DataIdentity,
@@ -373,6 +383,19 @@ fn recall_at_of(args: &Args) -> Result<RecallAt> {
         Some(other) => Err(invalid(format!(
             "unknown recall_at={other}: reply or query"
         ))),
+    }
+}
+
+/// `protocol=1|2` (`corpus` and `evaluate` with world=v2): the literal-role
+/// dialogue version a corpus is encoded and an evaluation prompts in (default
+/// 1). Version 2 puts the space after a role marker into the message, so a
+/// reply's first word is the token it is mid-sentence; a model trained on one
+/// version is evaluated in it.
+fn protocol_version_of(args: &Args) -> Result<u8> {
+    match args.optional("protocol").as_deref() {
+        None | Some("1") => Ok(1),
+        Some("2") => Ok(2),
+        Some(other) => Err(invalid(format!("invalid protocol={other} (1 or 2)"))),
     }
 }
 
@@ -985,7 +1008,13 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
     }
     let mut recall_lines = 0usize;
     let tokenizer = load_tokenizer(&tokenizer_path)?;
-    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+    let version = protocol_version_of(args)?;
+    if version != 1 && args.optional("chat").is_some() {
+        return Err(invalid(
+            "chat= documents are prepared in protocol 1; a protocol=2 corpus is M-world alone",
+        ));
+    }
+    let protocol = DialogueProtocol::literal_roles_version(&tokenizer, version)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let encoder = protocol
         .bind(&tokenizer)
@@ -1005,6 +1034,7 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
             .map_err(|_| invalid("the tokenizer's vocabulary does not fit the token store"))?,
     };
     let count = |text: &str| tokenizer.encode(text).len();
+    let spaced_meter = uor_r4_training::milestone_world_v2::Meter::spaced(&count);
     let mut world = MWorld2::new(&count, mix)?;
     let mut rng = Rng::new(seed);
     // Training excludes the sealed English probe by an overlap rule: a
@@ -1062,10 +1092,18 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
                 "M-world v2 conversation {index} did not encode"
             )));
         }
-        if encoded.tokens.len() != conversation.tokens {
+        // Conversations are drawn under version 1's meter, so both versions
+        // encode the same conversations; a version 2 document is checked
+        // against version 2's layout.
+        let metered = if version == 1 {
+            conversation.tokens
+        } else {
+            spaced_meter.document(&conversation.turns)
+        };
+        if encoded.tokens.len() != metered {
             return Err(invalid(format!(
                 "M-world v2 conversation {index}: the meter counted {} tokens, the protocol {}",
-                conversation.tokens,
+                metered,
                 encoded.tokens.len()
             )));
         }
@@ -1324,10 +1362,15 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
         "mask_sha256": sha256_file(&mask_path)?,
         "composition": composition,
     });
+    let mut manifest = manifest;
+    // Recorded only for version 2, so version 1 manifests are unchanged.
+    if version != 1 {
+        manifest["dialogue_protocol"] = json!(protocol.schema);
+    }
     let manifest_path = train.join("manifest.json");
     fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
     // The split must load and index exactly as `dialogue-train` will read it.
-    let (_, contract) = episode_contract(&tokenizer, vocab as usize)?;
+    let (_, contract) = episode_contract_for(&tokenizer, vocab as usize, CONTEXT, version)?;
     let split = DialogueSplit::load(&tokens_path, &mask_path, &manifest_path)?;
     let index = split.index(contract)?;
     let sources: Vec<Value> = index
@@ -1587,6 +1630,7 @@ fn evaluate(args: &Args, out: &Path) -> Result<()> {
         "selection_override": selection_override,
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "protocol_identity": protocol.identity().map_err(|e| invalid(format!("protocol: {e}")))?,
+        "dialogue_protocol": protocol.schema,
         "world": "m-world-v1",
         "split": split,
         "seed": seed,
@@ -1633,7 +1677,7 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
     let max_new_tokens: usize = args.number("max_new_tokens", 32)?;
     let mix = mix_of(args)?;
     let tokenizer = load_tokenizer(&tokenizer_path)?;
-    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+    let protocol = DialogueProtocol::literal_roles_version(&tokenizer, protocol_version_of(args)?)
         .map_err(|e| invalid(format!("protocol: {e}")))?;
     let encoder = protocol
         .bind(&tokenizer)
@@ -1759,7 +1803,10 @@ fn evaluate_v2(args: &Args, out: &Path) -> Result<()> {
                     .copied()
                     .filter(|&id| id != protocol.eos_id)
                     .collect();
-                (decode(&text_ids), generated.stop_record())
+                (
+                    protocol.reply_text(&decode(&text_ids)).to_owned(),
+                    generated.stop_record(),
+                )
             };
             let pass = judge_v2(&turn.checks, &turn.user, &text);
             all &= pass;
@@ -3074,6 +3121,11 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
     let values = args.optional("values").unwrap_or_else(|| "train".into());
     let settings = CompilerSettings {
         act_rule: ActRule::parse(&args.optional("act_rule").unwrap_or_else(|| "table".into()))?,
+        relation_mode: RelationMode::parse(
+            &args
+                .optional("relation_mode")
+                .unwrap_or_else(|| "table".into()),
+        )?,
         ..CompilerSettings::default()
     };
     let tokenizer = load_tokenizer(&tokenizer_path)?;
@@ -3131,7 +3183,16 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
         "examples": train.len(),
     });
     let fit_started = Instant::now();
-    let saved = SavedCompiler::fit(&train, &tokenizer_sha256, training.clone(), settings)?;
+    let trunk = match args.optional("trunk") {
+        Some(directory) => Some(Trunk::load(
+            Path::new(&directory),
+            &fs::read(&tokenizer_path)?,
+            &Device::Cpu,
+        )?),
+        None => None,
+    };
+    let saved =
+        SavedCompiler::fit_with(&train, &tokenizer_sha256, training.clone(), settings, trunk)?;
     let fit_seconds = fit_started.elapsed().as_secs_f64();
     fs::write(out.join("compiler.json"), saved.bytes())?;
     let mut cells = serde_json::Map::new();
@@ -3146,8 +3207,18 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
             entry.1 += 1;
         };
         let mut misses = Vec::new();
-        for example in &examples {
-            let (relation, act) = saved.route().classify(&example.text, None)?;
+        // One compile per turn, in parallel; tallies stay sequential.
+        let predictions = parallel_map(&examples, |example| {
+            let action = saved.action(&example.text)?;
+            let classified = if saved.relation_mode() == RelationMode::OpModel {
+                classified_of(&saved, &action)
+            } else {
+                let (relation, act) = saved.classify(&example.text)?;
+                (relation.to_owned(), act)
+            };
+            Ok((classified, action))
+        })?;
+        for (example, ((relation, act), predicted)) in examples.iter().zip(predictions) {
             if example.relation != RC_NONE {
                 add("relation".into(), relation == example.relation);
             }
@@ -3162,7 +3233,6 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
             } else {
                 add("span/no_write".into(), decoded.is_none());
             }
-            let predicted = saved.action(&example.text)?;
             let gold = gold_of(&saved, example)?;
             let pass = same_action(&predicted, &gold);
             add(format!("action/{}", action_kind(&gold)), pass);
@@ -3216,6 +3286,54 @@ fn compiler_save(args: &Args, out: &Path) -> Result<()> {
     });
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
     Ok(())
+}
+
+/// `map` over `items` on all available cores, results in order. Each worker
+/// takes a contiguous chunk; the first error stops the collection.
+fn parallel_map<T: Sync, R: Send>(
+    items: &[T],
+    map: impl Fn(&T) -> Result<R> + Sync,
+) -> Result<Vec<R>> {
+    let workers = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .clamp(1, 8);
+    let chunk = items.len().div_ceil(workers).max(1);
+    let map = &map;
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = items
+            .chunks(chunk)
+            .map(|part| scope.spawn(move || part.iter().map(map).collect::<Result<Vec<R>>>()))
+            .collect();
+        let mut out = Vec::with_capacity(items.len());
+        for handle in handles {
+            out.extend(
+                handle
+                    .join()
+                    .map_err(|_| invalid("an evaluation worker panicked"))??,
+            );
+        }
+        Ok(out)
+    })
+}
+
+/// The relation and act an action implies (none for an unresolved turn).
+fn classified_of(compiler: &SavedCompiler, action: &CompiledAction) -> (String, &'static str) {
+    let name = |id: &u32| {
+        compiler
+            .identity()
+            .relations
+            .iter()
+            .find(|label| label.id == *id)
+            .map_or(RC_NONE.to_owned(), |label| label.name.clone())
+    };
+    match action {
+        CompiledAction::Assert { relation, .. } => (name(relation), "assert"),
+        CompiledAction::Correct { relation, .. } => (name(relation), "update"),
+        CompiledAction::QueryCurrent { relation } | CompiledAction::Query { relation, .. } => {
+            (name(relation), "query")
+        }
+        CompiledAction::Unresolved { .. } => (RC_NONE.to_owned(), RC_NONE),
+    }
 }
 
 /// The gold action of a labelled example (see [`gold_action`]).
@@ -3290,7 +3408,19 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     let tokenizer_json = fs::read(&tokenizer_path)?;
     let tokenizer = load_tokenizer(&tokenizer_path)?;
     let compiler_bytes = fs::read(&compiler_path)?;
-    let compiler = GroundedCompiler::from_bytes(compiler_bytes.clone())?;
+    let trunk_directory = args.optional("trunk").map(PathBuf::from);
+    // A combined compiler loads only with the trunk it binds; otherwise the
+    // artifact's own schema chooses the grounded compiler.
+    let load_compiler = || -> Result<GroundedCompiler> {
+        match &trunk_directory {
+            Some(directory) => Ok(GroundedCompiler::Legacy(SavedCompiler::load(
+                compiler_bytes.clone(),
+                Some(Trunk::load(directory, &tokenizer_json, &Device::Cpu)?),
+            )?)),
+            None => GroundedCompiler::from_bytes(compiler_bytes.clone()),
+        }
+    };
+    let compiler = load_compiler()?;
     let device = Device::Cpu;
     // The emitter as a sealed inference checkpoint with an empty store. Its
     // data identities are the training report's recorded inputs, bound by
@@ -3480,7 +3610,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         let root = out.join(format!("reload-{index:04}"));
         first.save(&root).map_err(|e| invalid(e.to_string()))?;
         drop(first);
-        let reloaded = GroundedCompiler::from_bytes(compiler_bytes.clone())?;
+        let reloaded = load_compiler()?;
         let mut second =
             GroundedSession::load(&root, reloaded, &device).map_err(|e| invalid(e.to_string()))?;
         for turn in &conversation.turns[middle..] {
@@ -3509,6 +3639,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         "checkpoint": "checkpoint",
         "compiler": compiler_path.display().to_string(),
         "compiler_identity": compiler.identity(),
+        "trunk": trunk_directory.as_ref().map(|d| d.display().to_string()),
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "limits": limits,
         "scope": "MQAR keys have no channel in the one-entity session: MQAR turns compile to unresolved and are scored without recall",
@@ -3518,6 +3649,147 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             "conversations": continuity,
         },
         "wall_seconds": started.elapsed().as_secs_f64(),
+    });
+    fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
+    Ok(())
+}
+
+/// `compile-corpus`: training documents that teach a stack to compile a user
+/// turn into its memory operation (`relation_mode=op_model`). Each document is
+/// `System: Compile.` / `User: <turn>` / `Assistant: <op>`, where the op comes
+/// from the turn's typed intent and template slot (`relation_compiler::op_text`).
+/// Only the op is supervised. `train/` draws training phrasings with training
+/// values (plus any teacher paraphrases); `dev/` draws training phrasings with
+/// development values, so checkpoint selection never sees development phrasings.
+fn compile_corpus(args: &Args, out: &Path) -> Result<()> {
+    if args.optional("world").as_deref() != Some("v2") {
+        return Err(invalid("compile-corpus needs world=v2"));
+    }
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let conversations: usize = args.number("conversations", 4_000)?;
+    let dev_conversations: usize = args.number("dev_conversations", 300)?;
+    let seed: u64 = args.number("seed", 9_101)?;
+    let tokenizer = load_tokenizer(&tokenizer_path)?;
+    let protocol = DialogueProtocol::literal_roles_v1(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let encoder = protocol
+        .bind(&tokenizer)
+        .map_err(|e| invalid(format!("protocol: {e}")))?;
+    let vocab = u32::try_from(tokenizer.vocab_size())
+        .map_err(|_| invalid("the tokenizer's vocabulary does not fit the token store"))?;
+    let count = |text: &str| tokenizer.encode(text).len();
+    let mix = Mix {
+        mqar: 0.15,
+        copy: 0.05,
+        relation: 0.60,
+        other: 0.20,
+        ..Mix::default()
+    };
+    let draw = |value: Split, conversations: usize, seed: u64| -> Result<Vec<Example>> {
+        let mut world = MWorld2::new(&count, mix)?;
+        let mut rng = Rng::new(seed);
+        collect(
+            &mut world,
+            &mut rng,
+            Cell::new(Split::Train, value),
+            conversations,
+        )
+    };
+    let mut train = draw(Split::Train, conversations, seed)?;
+    let paraphrases = match args.optional("paraphrases") {
+        Some(list) => {
+            let (examples, record) = load_paraphrases(&list, &train)?;
+            train.extend(examples);
+            record
+        }
+        None => Value::Null,
+    };
+    let dev = draw(Split::Development, dev_conversations, seed + 1)?;
+    let mut splits = serde_json::Map::new();
+    for (name, examples) in [("train", &train), ("dev", &dev)] {
+        let (mut tokens, mut mask) = (Vec::new(), Vec::new());
+        let (mut documents, mut skipped) = (0usize, 0usize);
+        let mut by_op: BTreeMap<String, usize> = BTreeMap::new();
+        for example in examples.iter() {
+            let Some(op) = op_text(example) else {
+                skipped += 1;
+                continue;
+            };
+            let messages = [
+                Message {
+                    role: "system",
+                    content: COMPILE_PROMPT,
+                },
+                Message {
+                    role: "user",
+                    content: &example.text,
+                },
+                Message {
+                    role: "assistant",
+                    content: &op,
+                },
+            ];
+            let encoded = encoder.encode_document(&messages);
+            if encoded.emitted_turns != 3 || encoded.special_token_occurrences != 0 {
+                skipped += 1;
+                continue;
+            }
+            if encoded.tokens.len() > CONTEXT {
+                return Err(invalid("a compile document is longer than the context"));
+            }
+            for &id in &encoded.tokens {
+                tokens.push(u16::try_from(id).map_err(|_| invalid("a token ID exceeds u16"))?);
+            }
+            mask.extend(&encoded.response_mask);
+            documents += 1;
+            *by_op
+                .entry(op.split_whitespace().nth(1).unwrap_or("?").to_owned())
+                .or_default() += 1;
+        }
+        let directory = out.join(name);
+        fs::create_dir_all(&directory)?;
+        let mut writer = CorpusWriter::create(&directory.join("tokens.u16"), vocab)
+            .map_err(|e| invalid(format!("token store: {e}")))?;
+        writer
+            .write_tokens(&tokens)
+            .map_err(|e| invalid(format!("token store: {e}")))?;
+        writer
+            .finish()
+            .map_err(|e| invalid(format!("token store: {e}")))?;
+        fs::write(directory.join("response_mask.u8"), &mask)?;
+        let manifest = json!({
+            "schema": "uor-r4.m-world-compile-corpus/1",
+            "files": [{
+                "label": format!("m-world-v2.compile.{name}"),
+                "tokens": tokens.len(),
+                "special_token_occurrences": 0,
+            }],
+            "drops": {"special_token_occurrences": 0},
+            "documents": documents,
+            "skipped_without_a_recoverable_op": skipped,
+            "documents_by_op": by_op,
+        });
+        fs::write(
+            directory.join("manifest.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+        println!(
+            "{name}: {documents} documents, {} tokens, {skipped} skipped",
+            tokens.len()
+        );
+        splits.insert(name.to_owned(), manifest);
+    }
+    let report = json!({
+        "schema": "uor-r4.m-world-compile-corpus-report/1",
+        "executable_sha256": sha256_file(&std::env::current_exe()?)?,
+        "world_digest": MWorld2::digest(),
+        "tokenizer_sha256": sha256_file(&tokenizer_path)?,
+        "prompt": COMPILE_PROMPT,
+        "op_format": "Op: none | Op: query <relation> | Op: assert <relation> <value> | Op: update <relation> <value>",
+        "train_draw": format!("relation-heavy mix, training phrasings x training values, {conversations} conversations, seed {seed}"),
+        "dev_draw": format!("relation-heavy mix, training phrasings x development values, {dev_conversations} conversations, seed {}", seed + 1),
+        "paraphrases": paraphrases,
+        "splits": splits,
     });
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
     Ok(())
@@ -3581,6 +3853,15 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "pointer_select",
         "pointer_route",
     ];
+    let compile_corpus_keys: &[&str] = &[
+        "out",
+        "world",
+        "tokenizer",
+        "conversations",
+        "dev_conversations",
+        "seed",
+        "paraphrases",
+    ];
     let compiler_save_keys: &[&str] = &[
         "out",
         "world",
@@ -3591,6 +3872,8 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "values",
         "paraphrases",
         "act_rule",
+        "relation_mode",
+        "trunk",
     ];
     let session_keys: &[&str] = &[
         "out",
@@ -3603,9 +3886,11 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "max_new_tokens",
         "reload",
         "arms",
+        "trunk",
     ];
     match mode {
         "compiler" => Some(claimed(rest, relation_compiler, compiler)),
+        "compile-corpus" => Some(claimed(rest, compile_corpus_keys, compile_corpus)),
         "compiler-save" => Some(claimed(rest, compiler_save_keys, compiler_save)),
         "session" => Some(claimed(rest, session_keys, session)),
         "evaluate-cells" => Some(claimed(rest, cells, evaluate_cells)),
@@ -3659,6 +3944,7 @@ fn main() -> Result<()> {
                 "recall",
                 "recall_at",
                 "context",
+                "protocol",
             ],
         )?,
         "evaluate" => Args::parse(
@@ -3685,13 +3971,26 @@ fn main() -> Result<()> {
                 "route_paraphrases",
                 "route_acts",
                 "route_trunk",
+                "protocol",
             ],
         )?,
         "rejudge" => Args::parse(rest, &["out", "report", "tokenizer"])?,
         other => return Err(invalid(format!("unknown mode {other}"))),
     };
     // `recall=` and `recall_at=` are checked before the root is claimed: a
-    // malformed value, or one given to world=v1, claims nothing.
+    // malformed value, or one given to world=v1, claims nothing. So is
+    // `protocol=`, which only world=v2 encodes, and never with chat=.
+    if mode == "corpus" || mode == "evaluate" {
+        let version = protocol_version_of(&args)?;
+        if version != 1 && world_of(&args)? != World::V2 {
+            return Err(invalid("protocol=2 needs world=v2"));
+        }
+        if version != 1 && args.optional("chat").is_some() {
+            return Err(invalid(
+                "chat= documents are prepared in protocol 1; a protocol=2 corpus is M-world alone",
+            ));
+        }
+    }
     if mode == "corpus" {
         let recall = recall_of(&args)?;
         recall_at_of(&args)?;
@@ -3824,6 +4123,19 @@ mod tests {
         assert_eq!(*parsed, Some(PrimeRoute::exact(4)));
         // A mode that does not take them refuses them as unknown arguments.
         assert!(parse(&["out=r", "select=none"], &["out", "tokenizer"]).is_err());
+    }
+
+    #[test]
+    fn the_protocol_version_is_one_or_two() {
+        let keys = ["out", "protocol"];
+        let version =
+            |given: &[&str]| parse(given, &keys).and_then(|args| protocol_version_of(&args));
+        assert_eq!(version(&["out=r"]).expect("default"), 1);
+        assert_eq!(version(&["out=r", "protocol=1"]).expect("one"), 1);
+        assert_eq!(version(&["out=r", "protocol=2"]).expect("two"), 2);
+        for bad in ["protocol=3", "protocol=v2", "protocol="] {
+            assert!(version(&["out=r", bad]).is_err(), "{bad}");
+        }
     }
 
     #[test]
