@@ -251,8 +251,8 @@ Assert acknowledgements inside relation conversations fell (`lucky_number`
 within what another seed could change. Relation open is 43/52 in both
 paraphrase arms, against 45 for emit-5c.
 
-A save and fresh load of an earlier configuration (emit-4p2a) continued
-identically in 20/20 conversations.
+A save and fresh load of emit-6r continued identically in 20/20
+conversations, and the reloaded run reproduced every score above.
 
 **Scope.** This is measured behaviour on the authored M-world world, from one
 seed and one draw. It is not general prose, general reasoning or open-domain
