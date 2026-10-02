@@ -7443,6 +7443,50 @@ fn adam_step(
         });
 }
 
+/// [`adam_step`] on Metal, in place in the variable's and moments' buffers,
+/// with the same f32 operations in the same order.
+#[cfg(feature = "metal")]
+fn adam_step_metal(
+    device: &candle_core::MetalDevice,
+    var: &Var,
+    grad: &Tensor,
+    m: &Var,
+    v: &Var,
+    c: &AdamConstants,
+) -> Result<()> {
+    use crate::metal_stack_kernels::metal::{launch, Arg};
+    let gradient = metal_ready(grad)?;
+    let n = var.elem_count();
+    if gradient.elem_count() != n || m.elem_count() != n || v.elem_count() != n {
+        return Err(invalid("Metal AdamW sizes disagree"));
+    }
+    let (p, g, first, second) = (
+        metal_storage(var.as_tensor())?,
+        metal_storage(&gradient)?,
+        metal_storage(m.as_tensor())?,
+        metal_storage(v.as_tensor())?,
+    );
+    let constants = [
+        c.scale, c.beta1, c.rest1, c.beta2, c.rest2, c.correct1, c.correct2, c.epsilon, c.keep,
+        c.lr,
+    ]
+    .map(f32::to_bits);
+    launch(
+        device,
+        "adam_update",
+        n,
+        &[
+            Arg::Out(p.buffer()),
+            Arg::Out(first.buffer()),
+            Arg::Out(second.buffer()),
+            Arg::In(g.buffer()),
+            Arg::Words(&constants),
+            Arg::U32(n as u32),
+        ],
+    )?;
+    Ok(())
+}
+
 /// AdamW with global gradient-norm clipping and resumable moments.
 pub struct StackAdamW {
     pub beta1: f64,
@@ -7485,9 +7529,23 @@ impl StackAdamW {
         lr: f64,
     ) -> Result<f64> {
         let mut total = 0f64;
-        for var in model.variables().values() {
-            if let Some(grad) = grads.get(var.as_tensor()) {
-                total += f64::from(grad.sqr()?.sum_all()?.to_scalar::<f32>()?);
+        if matches!(model.device(), Device::Metal(_)) {
+            // One host synchronization for the whole norm: each variable's
+            // squared sum stays on the device, then their f32 sum is read.
+            let sums = model
+                .variables()
+                .values()
+                .filter_map(|var| grads.get(var.as_tensor()))
+                .map(|grad| grad.sqr()?.sum_all()?.reshape(1))
+                .collect::<candle_core::Result<Vec<_>>>()?;
+            if !sums.is_empty() {
+                total = f64::from(Tensor::cat(&sums, 0)?.sum_all()?.to_scalar::<f32>()?);
+            }
+        } else {
+            for var in model.variables().values() {
+                if let Some(grad) = grads.get(var.as_tensor()) {
+                    total += f64::from(grad.sqr()?.sum_all()?.to_scalar::<f32>()?);
+                }
             }
         }
         let norm = total.sqrt();
@@ -7527,6 +7585,11 @@ impl StackAdamW {
                 keep: keep as f32,
                 lr: lr as f32,
             };
+            #[cfg(feature = "metal")]
+            if let Device::Metal(device) = var.device() {
+                adam_step_metal(device, var, grad, m, v, &constants)?;
+                continue;
+            }
             let mut parameters = var.as_tensor().flatten_all()?.to_vec1::<f32>()?;
             let gradient = grad.flatten_all()?.to_vec1::<f32>()?;
             let mut first_moment = m.as_tensor().flatten_all()?.to_vec1::<f32>()?;

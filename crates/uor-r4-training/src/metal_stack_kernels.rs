@@ -1186,6 +1186,27 @@ kernel void read_tile_inner(
     out[slot] = score;
 }
 
+// AdamW step in place; c = [scale, beta1, rest1, beta2, rest2, correct1,
+// correct2, epsilon, keep, lr], as the CPU `adam_step`.
+kernel void adam_update(
+    device float* p [[buffer(0)]],
+    device float* m [[buffer(1)]],
+    device float* v [[buffer(2)]],
+    device const float* g [[buffer(3)]],
+    constant float* c [[buffer(4)]],
+    constant uint& n [[buffer(5)]],
+    uint i [[thread_position_in_grid]]
+) {
+    if (i >= n) return;
+    float grad = g[i] * c[0];
+    float first = m[i] * c[1] + grad * c[2];
+    float second = v[i] * c[3] + (grad * grad) * c[4];
+    m[i] = first;
+    v[i] = second;
+    float step = (first * c[5]) / (precise::sqrt(second * c[6]) + c[7]);
+    p[i] = p[i] * c[8] - step * c[9];
+}
+
 // read_softmax with one SIMD group (32 threads) per row.
 kernel void read_softmax_simd(
     device float* scores [[buffer(0)]],
