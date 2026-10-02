@@ -228,5 +228,11 @@
     }
   ],
   "raw_report_sha256": "089b05fedf1a4c45309688fff7c2ee5c0c762f4db1ab3107160fd3eeab2659e7",
-  "retained_root": "/Users/casey.allard/.local/share/uor-r4/research/geometric-span-native-20261001"
+  "retained_root": "/Users/casey.allard/.local/share/uor-r4/research/geometric-span-native-20261001",
+  "integration": {
+    "main": "f9c926925caa232a4c32e9729d8c5ca574ee32b9",
+    "tested_head": "2fc1ec4f847b857a526109828e649350d37ee703",
+    "span_tests_passed": 17,
+    "scope": "optional prime-ranked/ngram pointer changes integrated; preserved models use pointer=None; no second model replay"
+  }
 }
