@@ -608,7 +608,7 @@
   "compiled_scope": "Component retention in float surrounding model; not complete native serving or all-parameter four-bit qualification",
   "no_read_design_sha256": "01af7a03a354cd8fbf408c3f80ab5330f02654f2d5023356eba9557738e129ac",
   "adversarial_review_sha256": "73e6d02af755e535e2028a3b693903a1aae05219566f7826814d84d1b46b9a1b",
-  "independent_audit_sha256": "4d169a78759e9dfe2f797155cb19d61dec8fe5a68da00982f5eb6d604c495a43",
+  "independent_audit_sha256": "c6ac7bbf3875820c3436867c62efcc52ce70c476770729fd2491cdd64358d148",
   "paired_step_audits": [
     {
       "seed": 1,
@@ -644,7 +644,7 @@
       "training_actual_positions": 245926,
       "training_padded_positions": 287312,
       "paired_input_stream_sha256": "85147040ab202f7f974ad9891247d0cf2ad010929982f70ab57db6e2c7c5887b",
-      "final_generator_state": 12355479550239717000
+      "final_generator_state": "12355479550239716776"
     },
     {
       "seed": 2,
@@ -680,7 +680,7 @@
       "training_actual_positions": 245454,
       "training_padded_positions": 286544,
       "paired_input_stream_sha256": "addb9bee5b77fc8999f59773b93a65a31fe7954bf2d769590af8940d6e00fc37",
-      "final_generator_state": 11629321088715907000
+      "final_generator_state": "11629321088715907971"
     }
   ],
   "rowwise_comparison": {
@@ -3551,5 +3551,7 @@
     "No primitive zero/absence teacher target occurs in actual training draws; tests, not these draws, establish zero-mask edge behavior.",
     "NoRead and trunk/output remain floating; wide Q24 table values do not establish D0-b four-bit free-weight qualification.",
     "512 pooled rows include authored interventions and identical panels across policy/seed comparisons; no IID test or frontier/general-language inference."
-  ]
+  ],
+  "independent_audit_note_sha256": "d707f9f7701aab59d44241cde4ef293006a9051990408b2b635d10a62832cd84",
+  "integer_identity_encoding": "u64 RNG identifiers are exact decimal strings; derived-report numeric rounding repaired; raw fits unaffected"
 }
