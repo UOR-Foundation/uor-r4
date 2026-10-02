@@ -161,6 +161,11 @@ fn run(a: &Args, at: Instant) -> Result<()> {
         potential_native: &pn,
     };
     let context = CompiledContext::load(&cn, &cs, dependencies, &tokenizer)?;
+    if serde_json::to_value(context.metadata())? != report["compiled_metadata"] {
+        return Err(invalid(
+            "loaded context identity differs from the retained measured parent",
+        ));
+    }
     let reducer = CompiledGeometricRead::load(
         &rn,
         &ReadSourceBinding::from_directory(&parent.model, &tokenizer, &potential, 2)?,

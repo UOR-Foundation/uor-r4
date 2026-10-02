@@ -47,8 +47,9 @@ normalization and vocabulary projection remain. It does not edit
 
 The new comparison example loads the two unchanged, sealed strict-context
 lineages from the completed [context construction](geometric-context-q4-2026-10-02.md).
-It binds the exact parent report and retained episode hashes; no artifact is
-compiled or rebound during evaluation. It compares each token's event/context
+It binds the exact parent report, sealed argument bytes, loaded context
+metadata and retained episode hashes; no artifact is compiled or rebound during
+evaluation. It compares each token's event/context
 state/action, raw observations, old-held content, value packet/raw choices,
 composed payload, every causal score/age, occurrence/NoRead weights, denominator,
 maximum score, head output and checked sum with the native whole-window path.
@@ -60,8 +61,10 @@ refused. Capacity/invalid-token rejection and reset are checked on each loaded
 episode. Separate same-shape Stack comparisons cover a short prefix and B2
 with different retained sequences. Synthetic integer cases cover delayed span
 visibility, repeated occurrences, absent/present-zero/cancellation, independent
-head denominators and a late second-head error. These tests are authored and
-parsed, not executed yet.
+head denominators and a late second-head error. The capacity fixture also
+pushes all128 occurrences, checks every support length and independent weight
+sum, and rejects the129th without publishing a new result. These tests are
+authored and parsed, not executed yet.
 
 The storage receipt counts actual inline layout and constructor-owned heap
 elements, including padded address storage, payload cache, span buffers and both
@@ -79,7 +82,7 @@ unchanged no-update comparisons30, delivery45. Each admitted build/worker uses
 private build cache at most1.5GiB, physical stop margin128MiB. All preparation,
 reviews, failures, waits and delivery remain cumulative ledger charges.
 
-At the source checkpoint, actual peer workers declare6+4threads against the
+At the initial source checkpoint, actual peer workers declare6+4threads against the
 shared ceiling8. No own Cargo/model worker has started. The live coordination
 observation is on #820; the source is preserved in a draft PR pending scoped
 execution. This is a capacity constraint, not attention-quality evidence.
@@ -90,3 +93,37 @@ float trunk/output replacement, natural-input durable conversation and novel
 coding/reasoning remain programme obligations. Offline donor/operator compilation
 is retained. Neither this source implementation nor context's retained45 losses
 establishes a reason to retire geometric attention.
+
+## Learning policy: primary-literature applicability review
+
+The independent mathematics review does not justify changing context learning
+while this session is implemented. The native-conditioned forward chooses exact
+actions deterministically. [Rao-Blackwellized straight-through Gumbel-Softmax](https://arxiv.org/abs/2010.04838)
+reduces conditional sampling variance under a categorical/Gumbel sampling law;
+that law is absent here. The [2023 counteranalysis](https://proceedings.mlr.press/v202/shekhovtsov23a.html)
+also does not establish stability for this deterministic recurrent surrogate.
+The retained large-gradient draws differ in input content and history; they are
+not a controlled context-length or estimator-variance experiment.
+
+Tangent projection is already the historical context adjoint. It can erase
+useful finite-choice credit: at the positive identity, a radial gradient of
+`softplus(alpha * x0)` projects to zero although the negative identity lowers
+the loss for positive alpha. Reducing a norm by restoring that projection is
+therefore not evidence of improved learning. The current finite-choice backward
+already enumerates all120 local actions through a linearized downstream
+adjoint; simply enumerating exact roots again does not supply actual nonlinear
+suffix losses. This is a mathematical/source review, not model execution.
+
+A distinct later diagnostic remains available if directional context credit
+becomes the observed blocker: freeze one real transition site and evaluate
+actual downstream loss after each exact action intervention, replaying the
+hard suffix and affected neighbor/consumer states. With those120 losses `C_a`
+held fixed, the local surrogate `S = sum_a softmax(z)_a C_a` has derivative
+`p_i * (C_i - sum_a p_a C_a)`, bounded coordinatewise by one quarter of the
+observed cost range. This is a finite local objective, not the deterministic
+model gradient, a proof of shared-q4 realizability, or a learning guarantee.
+A later work card would need to compare that ordering with the current credit
+and state the decision its extra replay cost can change. No intervention run,
+new estimator, tangent change, stochastic serving, temperature sweep or fit is
+part of this card. Preserve the mechanism and finish the persistent integer
+session first.
