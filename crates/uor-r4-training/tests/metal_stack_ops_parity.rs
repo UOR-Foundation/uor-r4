@@ -1187,3 +1187,65 @@ fn test_fused_read_general_parity() -> uor_r4_training::Result<()> {
     }
     Ok(())
 }
+
+/// Timing of the training-size read and recurrence, forward plus backward,
+/// on Metal and CPU. Run explicitly: `--ignored --nocapture`.
+#[cfg(feature = "metal")]
+#[test]
+#[ignore]
+fn bench_training_size_read_and_recurrence() -> uor_r4_training::Result<()> {
+    use std::time::Instant;
+    use uor_r4_training::geometric_stack::{fused_aux_len, ReadScore};
+    let metal_dev = match candle_core::Device::new_metal(0) {
+        Ok(dev) => dev,
+        Err(_) => return Ok(()),
+    };
+    let (batch, heads, time, key, value, width) = (16, 8, 384, 64, 64, 512);
+    let shape = (batch, heads, time, key, value);
+    let q = noise(batch * heads * time * key, 1, 0.5);
+    let k = noise(batch * heads * time * key, 2, 0.5);
+    let v = noise(batch * heads * time * value, 3, 1.0);
+    let mut aux = noise(
+        fused_aux_len(batch, heads, time, ReadScore::Lorentz, true, true),
+        4,
+        0.5,
+    );
+    let n = aux.len();
+    for h in 0..heads {
+        aux[n - 2 * heads + h] = 1.0;
+    }
+    let w = noise(batch * heads * time * value, 5, 1.0);
+    let lanes = width / 4;
+    let gate_width = lanes + width;
+    let b_data = noise(batch * time * 2 * width, 6, 1.0);
+    let g_data = noise(batch * time * gate_width, 7, 1.0);
+    let p_data = noise(5 * width + lanes, 8, 0.5);
+    let rw = noise(batch * time * width, 9, 1.0);
+    for device in [metal_dev.clone(), candle_core::Device::Cpu] {
+        for round in 0..3 {
+            let start = Instant::now();
+            read_run(
+                &device,
+                [&q, &k, &v, &aux, &w],
+                shape,
+                ReadScore::Lorentz,
+                true,
+                true,
+            )?;
+            let read = start.elapsed();
+            let start = Instant::now();
+            recurrence_run(
+                &device,
+                [&b_data, &g_data, &p_data, &rw],
+                batch,
+                time,
+                width,
+                true,
+                gate_width,
+            )?;
+            let recurrence = start.elapsed();
+            println!("{device:?} round {round}: read {read:?}, recurrence {recurrence:?}");
+        }
+    }
+    Ok(())
+}

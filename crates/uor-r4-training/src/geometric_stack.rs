@@ -9090,7 +9090,7 @@ impl FusedRead {
         aux: (&candle_metal_kernels::metal::Buffer, usize),
         keep_excess: bool,
     ) -> candle_core::Result<MetalReadPass> {
-        use crate::metal_stack_kernels::metal::{launch, Arg};
+        use crate::metal_stack_kernels::metal::{launch, launch_groups, Arg};
         let dims = self.metal_dims();
         let rows = self.batch * self.heads * self.time;
         let square = rows * self.time;
@@ -9120,10 +9120,21 @@ impl FusedRead {
                 ],
             )?;
         }
-        launch(
+        let tiles = self.time.div_ceil(16);
+        let geometry = [
+            self.key as u32,
+            0,
+            self.width() as u32,
+            0,
+            self.key as u32,
+            1,
+            u32::from(write_excess),
+        ];
+        launch_groups(
             device,
-            "read_scores",
-            square,
+            "read_tile_inner",
+            (tiles, tiles, self.batch * self.heads),
+            (16, 16, 1),
             &[
                 Arg::InAt(query.0, query.1),
                 Arg::InAt(kv.0, kv.1),
@@ -9133,13 +9144,13 @@ impl FusedRead {
                 Arg::Out(&probabilities),
                 Arg::Out(&excess),
                 Arg::Words(&dims),
-                Arg::U32(u32::from(write_excess)),
+                Arg::Words(&geometry),
             ],
         )?;
         launch(
             device,
-            "read_softmax",
-            rows,
+            "read_softmax_simd",
+            32 * rows,
             &[
                 Arg::Out(&probabilities),
                 Arg::InAt(aux.0, aux.1),
@@ -9165,7 +9176,7 @@ impl FusedRead {
         aux: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Tensor, Tensor, Tensor)> {
-        use crate::metal_stack_kernels::metal::{launch, Arg};
+        use crate::metal_stack_kernels::metal::{launch, launch_groups, Arg};
         let (q, kvt, a, dy) = (
             metal_ready(query)?,
             metal_ready(kv)?,
@@ -9206,21 +9217,37 @@ impl FusedRead {
         let dkv = device.new_buffer(kvt.elem_count(), DType::F32, "read_dkv")?;
         let aux_parts = self.null || self.age || lorentz;
         let d_aux = device.new_buffer(a.elem_count(), DType::F32, "read_d_aux")?;
-        launch(
+        let tiles = self.time.div_ceil(16);
+        let geometry = [
+            self.value as u32,
+            0,
+            self.width() as u32,
+            self.key as u32,
+            self.value as u32,
+            0,
+            0,
+        ];
+        launch_groups(
             device,
-            "read_dp",
-            square,
+            "read_tile_inner",
+            (tiles, tiles, self.batch * self.heads),
+            (16, 16, 1),
             &[
                 Arg::In(dys.buffer()),
                 Arg::In(kvs.buffer()),
+                Arg::In(auxs.buffer()),
+                Arg::In(&pass.query_lift),
+                Arg::In(&pass.key_lift),
                 Arg::Out(&ds),
+                Arg::Out(&pass.excess),
                 Arg::Words(&dims),
+                Arg::Words(&geometry),
             ],
         )?;
         launch(
             device,
-            "read_row_grad",
-            rows,
+            "read_row_grad_simd",
+            32 * rows,
             &[
                 Arg::In(&pass.probabilities),
                 Arg::Out(&ds),

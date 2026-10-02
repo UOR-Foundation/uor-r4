@@ -1113,6 +1113,193 @@ kernel void read_dbeta(
     }
     d_aux[read_beta_offset(d) + id] = sum;
 }
+
+// Tiled causal inner products of one block: out[index, t, j] for j <= t of
+// sum_c a[index * time + t][c] b[index * time + j][c] over `length`
+// columns. geom = [a_stride, a_offset, b_stride, b_offset, length, mode,
+// write_excess]. Mode 0 stores the raw product; mode 1 stores the read score
+// (Dot or Lorentz, with age) and, with write_excess, the Lorentz excess.
+// Threadgroups are 16 x 16 over (j tile, t tile, index); tiles wholly above
+// the diagonal exit at once.
+kernel void read_tile_inner(
+    device const float* a [[buffer(0)]],
+    device const float* b [[buffer(1)]],
+    device const float* aux [[buffer(2)]],
+    device const float* query_lift [[buffer(3)]],
+    device const float* key_lift [[buffer(4)]],
+    device float* out [[buffer(5)]],
+    device float* excess [[buffer(6)]],
+    constant ReadDims& d [[buffer(7)]],
+    constant uint* geom [[buffer(8)]],
+    uint3 group [[threadgroup_position_in_grid]],
+    uint3 local [[thread_position_in_threadgroup]]
+) {
+    uint jt = group.x;
+    uint tt = group.y;
+    if (jt > tt) return;
+    uint index = group.z;
+    uint time = d.time;
+    uint a_stride = geom[0];
+    uint a_offset = geom[1];
+    uint b_stride = geom[2];
+    uint b_offset = geom[3];
+    uint length = geom[4];
+    threadgroup float tile_a[16][17];
+    threadgroup float tile_b[16][17];
+    uint t = tt * 16 + local.y;
+    uint j = jt * 16 + local.x;
+    uint b_row = jt * 16 + local.y;
+    float acc = 0.0f;
+    for (uint c0 = 0; c0 < length; c0 += 16) {
+        uint c = c0 + local.x;
+        tile_a[local.y][local.x] = (t < time && c < length)
+            ? a[(index * time + t) * a_stride + a_offset + c] : 0.0f;
+        tile_b[local.y][local.x] = (b_row < time && c < length)
+            ? b[(index * time + b_row) * b_stride + b_offset + c] : 0.0f;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint k = 0; k < 16; ++k) {
+            acc += tile_a[local.y][k] * tile_b[local.x][k];
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    if (t >= time || j > t) return;
+    uint slot = (index * time + t) * time + j;
+    if (geom[5] == 0) {
+        out[slot] = acc;
+        return;
+    }
+    uint head = index % d.heads;
+    float age = d.age_on != 0 ? aux[read_age_offset(d) + head * time + (t - j)] : 0.0f;
+    float score;
+    if (d.lorentz != 0) {
+        float e = query_lift[index * time + t] * key_lift[index * time + j] - acc - 1.0f;
+        if (geom[6] != 0) {
+            excess[slot] = e;
+        }
+        uint beta_offset = read_beta_offset(d);
+        float beta = aux[beta_offset + head];
+        float offset = aux[beta_offset + d.heads + head];
+        score = -beta * (read_distance(e) - offset) + age;
+    } else {
+        score = acc * rsqrt(float(d.key)) + age;
+    }
+    out[slot] = score;
+}
+
+// read_softmax with one SIMD group (32 threads) per row.
+kernel void read_softmax_simd(
+    device float* scores [[buffer(0)]],
+    device const float* aux [[buffer(1)]],
+    device float* null_probability [[buffer(2)]],
+    constant ReadDims& d [[buffer(3)]],
+    uint id [[thread_position_in_grid]]
+) {
+    uint time = d.time;
+    uint row = id / 32;
+    uint lane = id % 32;
+    if (row >= d.batch * d.heads * time) return;
+    uint t = row % time;
+    device float* s = scores + row * time;
+    float null_score = d.null_on != 0 ? aux[row] : -INFINITY;
+    float maximum = null_score;
+    for (uint j = lane; j <= t; j += 32) {
+        maximum = max(maximum, s[j]);
+    }
+    maximum = simd_max(maximum);
+    float total = 0.0f;
+    for (uint j = lane; j <= t; j += 32) {
+        float w = precise::exp(s[j] - maximum);
+        s[j] = w;
+        total += w;
+    }
+    total = simd_sum(total);
+    float null_weight = d.null_on != 0 ? precise::exp(null_score - maximum) : 0.0f;
+    total += null_weight;
+    float inverse = 1.0f / total;
+    for (uint j = lane; j <= t; j += 32) {
+        s[j] *= inverse;
+    }
+    if (lane == 0) {
+        null_probability[row] = null_weight * inverse;
+    }
+}
+
+// read_row_grad with one SIMD group (32 threads) per row.
+kernel void read_row_grad_simd(
+    device const float* probabilities [[buffer(0)]],
+    device float* dp [[buffer(1)]],
+    device float* inner_grad [[buffer(2)]],
+    device const float* excess [[buffer(3)]],
+    device const float* null_probability [[buffer(4)]],
+    device const float* aux [[buffer(5)]],
+    device const float* query_lift [[buffer(6)]],
+    device const float* key_lift [[buffer(7)]],
+    device float* query_self [[buffer(8)]],
+    device float* row_beta [[buffer(9)]],
+    device float* row_offset [[buffer(10)]],
+    device float* d_aux [[buffer(11)]],
+    constant ReadDims& d [[buffer(12)]],
+    uint id [[thread_position_in_grid]]
+) {
+    uint time = d.time;
+    uint row = id / 32;
+    uint lane = id % 32;
+    if (row >= d.batch * d.heads * time) return;
+    uint t = row % time;
+    uint index = row / time;
+    uint head = index % d.heads;
+    device const float* p = probabilities + row * time;
+    device float* g = dp + row * time;
+    device float* ig = inner_grad + row * time;
+    float row_dot = 0.0f;
+    for (uint j = lane; j <= t; j += 32) {
+        row_dot += p[j] * g[j];
+    }
+    row_dot = simd_sum(row_dot);
+    if (d.null_on != 0 && lane == 0) {
+        d_aux[row] = -null_probability[row] * row_dot;
+    }
+    float scale = rsqrt(float(d.key));
+    float beta = 0.0f;
+    float offset = 0.0f;
+    if (d.lorentz != 0) {
+        uint beta_offset = read_beta_offset(d);
+        beta = aux[beta_offset + head];
+        offset = aux[beta_offset + d.heads + head];
+    }
+    float self_q = 0.0f;
+    float d_beta = 0.0f;
+    float d_offset = 0.0f;
+    float lq = d.lorentz != 0 ? query_lift[row] : 1.0f;
+    for (uint j = lane; j <= t; j += 32) {
+        float ds = p[j] * (g[j] - row_dot);
+        g[j] = ds;
+        if (d.lorentz != 0) {
+            float e = excess[row * time + j];
+            d_beta -= ds * (read_distance(e) - offset);
+            d_offset += ds * beta;
+            if (e > 1e-7f) {
+                float de = -beta * ds / precise::sqrt(e * (e + 2.0f));
+                self_q += de * key_lift[index * time + j] / lq;
+                ig[j] = -de;
+            } else {
+                ig[j] = 0.0f;
+            }
+        } else {
+            ig[j] = ds * scale;
+        }
+    }
+    if (d.lorentz != 0) {
+        self_q = simd_sum(self_q);
+        d_beta = simd_sum(d_beta);
+        d_offset = simd_sum(d_offset);
+        if (lane == 0) {
+            query_self[row] = self_q;
+            row_beta[row] = d_beta;
+            row_offset[row] = d_offset;
+        }
+    }
+}
 "#;
 
     // -----------------------------------------------------------------------
@@ -1558,8 +1745,8 @@ kernel void read_dbeta(
         Words(&'a [u32]),
     }
 
-    /// Dispatches `name` over `threads` threads with `args` bound at
-    /// indices 0, 1, ... in order.
+    /// Dispatches `name` over `threads` threads (a 1-D grid) with `args`
+    /// bound at indices 0, 1, ... in order.
     pub fn launch(
         device: &MetalDevice,
         name: &str,
@@ -1569,7 +1756,34 @@ kernel void read_dbeta(
         if threads == 0 {
             return Ok(());
         }
+        dispatch(device, name, None, threads, args)
+    }
+
+    /// Dispatches `name` over `groups` threadgroups of `group` threads each.
+    pub fn launch_groups(
+        device: &MetalDevice,
+        name: &str,
+        groups: (usize, usize, usize),
+        group: (usize, usize, usize),
+        args: &[Arg<'_>],
+    ) -> Result<()> {
+        if groups.0 * groups.1 * groups.2 == 0 {
+            return Ok(());
+        }
+        dispatch(device, name, Some((groups, group)), 0, args)
+    }
+
+    fn dispatch(
+        device: &MetalDevice,
+        name: &str,
+        shape: Option<((usize, usize, usize), (usize, usize, usize))>,
+        threads: usize,
+        args: &[Arg<'_>],
+    ) -> Result<()> {
         let pipeline = get_cache().get_or_compile(device, name)?;
+        if profiling() {
+            device.wait_until_completed()?;
+        }
         let encoder = device.command_encoder()?;
         encoder.set_compute_pipeline_state(&pipeline);
         for (index, arg) in args.iter().enumerate() {
@@ -1590,8 +1804,35 @@ kernel void read_dbeta(
                 Arg::Words(words) => set_param(&encoder, index, *words),
             }
         }
-        let (grid, group) = linear_split(&pipeline, threads);
+        let (grid, group) = match shape {
+            None => linear_split(&pipeline, threads),
+            Some((groups, group)) => (
+                MTLSize {
+                    width: groups.0,
+                    height: groups.1,
+                    depth: groups.2,
+                },
+                MTLSize {
+                    width: group.0,
+                    height: group.1,
+                    depth: group.2,
+                },
+            ),
+        };
         encoder.dispatch_thread_groups(grid, group);
+        if profiling() {
+            drop(encoder);
+            let start = std::time::Instant::now();
+            device.wait_until_completed()?;
+            eprintln!("metal-kernel {name} {} us", start.elapsed().as_micros());
+        }
         Ok(())
+    }
+
+    /// `UOR_METAL_PROFILE=1` synchronizes after each launched kernel and
+    /// reports its wall time on stderr (diagnostic only; it serializes the GPU).
+    fn profiling() -> bool {
+        static PROFILE: OnceLock<bool> = OnceLock::new();
+        *PROFILE.get_or_init(|| std::env::var_os("UOR_METAL_PROFILE").is_some())
     }
 }
