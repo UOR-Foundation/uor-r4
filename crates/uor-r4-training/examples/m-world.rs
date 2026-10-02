@@ -3460,8 +3460,20 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 .to_owned(),
         });
     }
-    let identity = CheckpointIdentity::from_tokenizer(
+    // The emitter is served in the dialogue protocol it was trained in: its
+    // training record names version 2 explicitly (`protocol`), else 1.
+    let protocol_version = match training_report["settings"]["protocol"].as_u64() {
+        None => 1u8,
+        Some(2) => 2,
+        Some(other) => {
+            return Err(invalid(format!(
+                "the emitter's training protocol {other} is unknown"
+            )))
+        }
+    };
+    let identity = CheckpointIdentity::from_tokenizer_version(
         &tokenizer_json,
+        protocol_version,
         data,
         sealed_manifest_sha256(&model_root).map_err(|e| invalid(e.to_string()))?,
     )
@@ -3670,6 +3682,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         "trunk": trunk_directory.as_ref().map(|d| d.display().to_string()),
         "op_policy": format!("{op_policy:?}"),
         "log_recall": args.optional("log_recall").unwrap_or_else(|| "off".into()),
+        "dialogue_protocol_version": protocol_version,
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "limits": limits,
         "scope": "MQAR keys have no channel in the one-entity session: MQAR turns compile to unresolved and are scored without recall",
