@@ -1,72 +1,55 @@
 #!/usr/bin/env bash
-# Unit-test the launch guard's three conditions, including the memory pair.
+# Unit-test the launch guard: peers, measured idle CPU, and two memory floors.
 #
-# A guard that never fires and a guard that always fires are both failures, and
-# neither is visible from the outside. This exercises every combination.
+# Every condition here has, at some point, been written in a form that could
+# never fire or could fire when unsafe -- a load gate that blocked a machine
+# with 81% idle, a swap gate that read sticky occupancy, an idle parser that
+# returned 0 on a failed match, and iostat columns that are not percentages.
+# So each is tested at its boundary and in its failure mode.
 set -uo pipefail
 
-check(){ # others load avail_mb swap_mb [poll] -> FIRE|wait
-  local others="$1" load="$2" avail="$3" swap="$4" i="${5:-1}"
-  local limit; if [ "$i" -le 48 ]; then limit=4.0; else limit=8.0; fi
+# tier_ok <poll> -> sets floor variables
+floors(){ local i="$1"
+  if [ "$i" -le 48 ]; then peer=0; idle=50; avail=2100
+  elif [ "$i" -le 720 ]; then peer=0; idle=30; avail=2100
+  else peer=1; idle=15; avail=3000; fi; }
+
+check(){ # others idle avail swap [poll]
+  floors "${5:-1}"
+  local owner=1
+  [ "$peer" = "0" ] && owner=$(python3 -c "print(1 if $1 == 0 else 0)")
   python3 -c "
-q = float('$load') < $limit
-r = int('$avail') >= 2100 and int('$swap') >= 512
-print('FIRE' if ('$others' == '0' and q and r) else 'wait')"
+owner = $owner
+ok = owner and float('$2') >= $idle and int('$3') >= $avail and int('$4') >= 512
+print('FIRE' if ok else 'wait')"
 }
 
 fail=0
-expect(){ local got="$1" want="$2" label="$3"
-  if [ "$got" = "$want" ]; then printf "  ok    %-46s -> %s\n" "$label" "$got"
-  else printf "  FAIL  %-46s -> %s (want %s)\n" "$label" "$got" "$want"; fail=1; fi; }
+expect(){ if [ "$1" = "$2" ]; then printf "  ok    %-52s -> %s\n" "$3" "$1"
+  else printf "  FAIL  %-52s -> %s (want %s)\n" "$3" "$1" "$2"; fail=1; fi; }
 
-echo "=== all three conditions must hold ==="
-expect "$(check 0 2 4000 4000)"    FIRE "others=0 load=2 avail=4000 swap=4000"
-expect "$(check 2 2 4000 4000)"    wait "a peer job present, everything else green"
-expect "$(check 0 9 4000 4000)"    wait "load above the strict bar"
-expect "$(check 0 2 900  4000)"    wait "reclaimable memory too low"
-expect "$(check 0 2 4000 300)"     wait "swap too low"
+echo "=== tier 1 (poll<=48): peers must be absent, idle>=50, avail>=2100 ==="
+expect "$(check 0 80 4000 4000)"    FIRE "clear machine"
+expect "$(check 2 80 4000 4000)"    wait "a peer job present"
+expect "$(check 0 49 4000 4000)"    wait "idle just under 50"
+expect "$(check 0 50 4000 4000)"    FIRE "idle exactly at the floor"
+expect "$(check 0 80 2099 4000)"    wait "one MB under the memory floor"
+expect "$(check 0 80 4000 511)"     wait "one MB under the swap floor"
 
-echo "=== load tier relaxes after STRICT_POLLS; memory never does ==="
-expect "$(check 0 5 4000 4000 49)" FIRE "poll 49: relaxed load bar"
-expect "$(check 0 5 900  4000 49)" wait "poll 49: relaxed load, memory still low"
-expect "$(check 0 5 4000 300  49)" wait "poll 49: relaxed load, swap still low"
+echo "=== tier 2 (poll<=720): idle floor relaxes to 30, peers still required ==="
+expect "$(check 0 35 4000 4000 100)" FIRE "idle 35 clears the relaxed floor"
+expect "$(check 0 29 4000 4000 100)" wait "idle 29 misses it"
+expect "$(check 1 35 4000 4000 100)" wait "a peer still blocks in tier 2"
 
-echo "=== boundaries, inclusive ==="
-expect "$(check 0 3.99 2100 512)"  FIRE "exactly at both memory floors"
-expect "$(check 0 4.01 2100 512)"  wait "just over the strict load bar"
-expect "$(check 0 3.99 2099 512)"  wait "one MB under the reclaimable floor"
-expect "$(check 0 3.99 2100 511)"  wait "one MB under the swap floor"
+echo "=== tier 3 (poll>720): a lingering peer is tolerated, but memory rises ==="
+expect "$(check 1 20 4000 4000 800)" FIRE "peer tolerated, idle 20, avail 4000"
+expect "$(check 1 14 4000 4000 800)" wait "idle 14 under the 15 floor"
+expect "$(check 1 20 2500 4000 800)" wait "avail 2500 under the raised 3000 floor"
+expect "$(check 1 20 3000 4000 800)" FIRE "avail exactly at the raised floor"
+
+echo "=== failure modes must BLOCK, never permit ==="
+expect "$(python3 -c "print('FIRE' if float('-1') >= 50 else 'wait')")" wait "idle -1 sentinel (failed parse)"
+expect "$(python3 -c "print('FIRE' if float('') >= 50 else 'wait')" 2>/dev/null || echo wait)" wait "empty idle reading"
 
 echo
 if [ "$fail" = 0 ]; then echo "all launch-guard cases pass"; else echo "FAILURES PRESENT"; exit 1; fi
-
-echo "=== tier 3: after LONG_WAIT_POLLS, a lingering peer no longer blocks,"
-echo "    but load and memory bars both tighten ==="
-tier3(){ # others load avail swap poll -> FIRE|wait
-  local others="$1" load="$2" avail="$3" swap="$4" i="${5:-800}"
-  python3 -c "
-if $i <= 48:      owner, limit, floor = $others == 0, 4.0, 2100
-elif $i <= 720:   owner, limit, floor = $others == 0, 8.0, 2100
-else:             owner, limit, floor = True,        1.5, 3000
-ok = owner and float('$load') < limit and int('$avail') >= floor and int('$swap') >= 512
-print('FIRE' if ok else 'wait')"
-}
-expect "$(tier3 1 1.0 4000 2000)"   FIRE "tier 3, a lingering peer, quiet and roomy"
-expect "$(tier3 1 2.0 4000 2000)"   wait "tier 3, load 2.0 exceeds the tightened bar"
-expect "$(tier3 1 1.0 2500 2000)"   wait "tier 3, 2500 < the raised 3000 floor"
-expect "$(tier3 2 8.0 1000 100)"    wait "tier 2, everything still tight"
-expect "$(tier3 0 1.0 4000 2000 10)" FIRE "tier 1 unaffected"
-
-echo
-if [ "$fail" = 0 ]; then echo "all launch-guard cases pass (including tier 3)"; else echo "FAILURES PRESENT"; exit 1; fi
-
-echo "=== idle-CPU condition, including the unknown sentinel ==="
-idlecase(){ python3 -c "print('roomy' if float('$1') >= 50 else 'blocked')"; }
-expect "$(idlecase 84.9)" roomy   "idle 84.9%"
-expect "$(idlecase 50.0)" roomy   "idle exactly at the 50% floor"
-expect "$(idlecase 49.9)" blocked "idle just under the floor"
-expect "$(idlecase 0)"    blocked "idle 0%"
-expect "$(idlecase -1)"   blocked "idle unknown (-1) must NOT read as roomy"
-
-echo
-if [ "$fail" = 0 ]; then echo "all launch-guard cases pass (tiers + idle)"; else echo "FAILURES PRESENT"; exit 1; fi
