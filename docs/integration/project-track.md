@@ -134,7 +134,9 @@ embeddings alone are not assumed to contain reasoning.
    both conversions and complete three-route answer credit, alongside every
    regression and the long-draw gradient-stability concern. End construction
    without automatic recovery training. The [persistent integer session source](geometric-attention-session-2026-10-02.md)
-   is implemented; scoped execution remains pending shared capacity. Exercise
+   is implemented; three hosted Linux integer fixtures pass and the replay
+   driver build is retrying after a concrete borrow repair. Loaded comparison
+   and compiled runtime qualification remain pending. Exercise
    the session using existing event/context/span/value/NoRead/potential/
    reducer/bank primitives: compute each occurrence once and only the newest
    query row. Preserve old-held timing, all absent/zero candidates, exact

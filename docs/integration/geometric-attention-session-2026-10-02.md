@@ -1,7 +1,10 @@
 # Persistent integer geometric attention — source implementation
 
-Status: source implemented and statically reviewed; scoped compilation, loaded
-comparison, allocation and compiled-instruction qualification are **NOT_RUN**.
+Status: source implemented and statically reviewed. Three focused release
+integer session tests pass on hosted Linux at source head5e9dfb52. The training
+library compiled; the replay example first failed with E0508 and is retrying
+at e19bbd33 after a one-line borrow repair. Loaded comparison, allocation and
+compiled-instruction qualification remain **NOT_RUN**.
 This record does not promote the session, its mathematical adjoints, or the
 surrounding language model. The active source card is
 [#1512 comment5958637499](https://github.com/UOR-Foundation/uor-r4/issues/1512#issuecomment-5958637499).
@@ -64,7 +67,7 @@ visibility, repeated occurrences, absent/present-zero/cancellation, independent
 head denominators and a late second-head error. The capacity fixture also
 pushes all128 occurrences, checks every support length and independent weight
 sum, and rejects the129th without publishing a new result. These tests are
-authored and parsed, not executed yet.
+executed successfully on hosted x86_64 Linux:3 passed,0 failed/ignored.
 
 The storage receipt counts actual inline layout and constructor-owned heap
 elements, including padded address storage, payload cache, span buffers and both
@@ -78,7 +81,8 @@ that omitted the new optional residual field. All six now explicitly initialize
 it to `None`; the other four literals use the default or set the injected
 residual. This repairs a source-level compilation blocker across ordinary,
 span, binding and composed callers. Direct parsing/formatting and diff checks
-pass; actual compilation and behavioral checks remain NOT_RUN. No numerical
+pass; the focused integer compilation/tests now pass on Linux. Loaded model
+comparisons remain NOT_RUN. No numerical
 operator, learned artifact or learning policy changes in this repair.
 
 ## Execution admission and continuation
@@ -135,3 +139,27 @@ and state the decision its extra replay cost can change. No intervention run,
 new estimator, tangent change, stochastic serving, temperature sweep or fit is
 part of this card. Preserve the mechanism and finish the persistent integer
 session first.
+
+## Hosted execution — October 2
+
+Following the owner's runner direction, reuse Claude's temporary `codex/ci/*`
+method: the exact product head plus one workflow-only commit, never merged into
+the product. [Run37063718908](https://github.com/UOR-Foundation/uor-r4/actions/runs/37063718908)
+executes two hosted Ubuntu jobs in parallel, with source identity guards. The
+integer release build takes31.54s; all three intended fixtures pass in0.04s
+using Rust1.97.1/x86_64-unknown-linux-gnu. Downloaded source SHA records match
+all12 changed Rust files at the tested head.
+
+The training library compiles, but the example's retained packet comparison
+tries to move a non-Copy record out of an array (E0508). The failed log remains
+retained; e19bbd33 changes only that access to a borrow. A driver-only hosted
+retry has a35min ceiling inside the remaining compile allowance; integer source
+is unchanged and its prior passing checks are retained. No source policy,
+numerical operation, artifact or learning dose changes.
+
+Hosted compilation removes the local build-slot dependency. Saved-parent replay
+still needs the retained model/artifacts; no private artifacts are uploaded by
+these jobs. Linux binary/instruction evidence is platform-specific and cannot
+qualify M1 runtime, energy or whole-model serving. There is no local Cargo/model
+run. The clean temporary CI checkout was removed after its workflow commit was
+pushed; its branch/workflow and all research remain preserved.

@@ -1,17 +1,20 @@
 # Current UOR-R4 research state
 
-## Persistent integer attention — source checkpoint, October 2
+## Persistent integer attention — hosted fixture checkpoint, October 2
 
 The [persistent session implementation](geometric-attention-session-2026-10-02.md)
 now contains the integer occurrence cache/newest-row reader, strict admitted
 component adapter, CPU Stack residual bridge and retained-parent comparison
-driver. Direct source parsing/formatting and nonauthor static reviews are
-complete. Scoped compilation, loaded comparison and allocation/opcode checks
-are NOT_RUN; no serving or answer claim follows. Actual peer trainers declare
-6+4threads above the shared8 ceiling, so no own Cargo/model worker has started.
-Continue the active #1512 card with admitted focused checks as capacity permits;
-preserve all source and both context lineages. Event/age source policies, selected
-access and the float model tail remain explicit unfinished boundaries.
+driver. Direct formatting and independent source reviews are complete; six
+legacy caller initializer omissions are repaired. Hosted Linux release checks
+now pass all3 intended integer fixtures,0 failed/ignored. The training library
+compiles; the replay example's E0508 packet move is repaired with a borrow and
+its driver-only hosted retry is in progress. Loaded-parent comparison and
+allocation/opcode qualification remain NOT_RUN; no serving or answer claim
+follows. No local Cargo/model process or private artifact upload occurred.
+Continue #1512 with the source-bound hosted build, then artifact-bound replay;
+preserve both context lineages. Event/age source policies, selected access and
+the float model tail remain explicit unfinished boundaries.
 
 ## Strict q4 geometric context — fixed construction and three-route credit complete, October 2
 
