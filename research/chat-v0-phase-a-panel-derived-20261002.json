@@ -1,0 +1,288 @@
+[
+ {
+  "id": "dev-core-greet-01",
+  "category": "core",
+  "user_turns": [
+   "Hi there!"
+  ]
+ },
+ {
+  "id": "dev-core-greet-02",
+  "category": "core",
+  "user_turns": [
+   "Good morning!"
+  ]
+ },
+ {
+  "id": "dev-core-greet-03",
+  "category": "core",
+  "user_turns": [
+   "How are you today?"
+  ]
+ },
+ {
+  "id": "dev-core-greet-04",
+  "category": "core",
+  "user_turns": [
+   "Nice to meet you."
+  ]
+ },
+ {
+  "id": "dev-core-greet-05",
+  "category": "core",
+  "user_turns": [
+   "Thank you very much!"
+  ]
+ },
+ {
+  "id": "dev-core-fact-01",
+  "category": "core",
+  "user_turns": [
+   "What is the capital of France?"
+  ]
+ },
+ {
+  "id": "dev-core-fact-02",
+  "category": "core",
+  "user_turns": [
+   "How many legs does a spider have?"
+  ]
+ },
+ {
+  "id": "dev-core-fact-03",
+  "category": "core",
+  "user_turns": [
+   "What color is the sky on a clear day?"
+  ]
+ },
+ {
+  "id": "dev-core-fact-04",
+  "category": "core",
+  "user_turns": [
+   "How many days are in a week?"
+  ]
+ },
+ {
+  "id": "dev-core-fact-05",
+  "category": "core",
+  "user_turns": [
+   "What is the largest planet in our solar system?"
+  ]
+ },
+ {
+  "id": "dev-core-fact-06",
+  "category": "core",
+  "user_turns": [
+   "What do bees make?"
+  ]
+ },
+ {
+  "id": "dev-core-fact-07",
+  "category": "core",
+  "user_turns": [
+   "What is the freezing point of water in Celsius?"
+  ]
+ },
+ {
+  "id": "dev-core-fact-08",
+  "category": "core",
+  "user_turns": [
+   "Which animal is known as the king of the jungle?"
+  ]
+ },
+ {
+  "id": "dev-core-inst-01",
+  "category": "core",
+  "user_turns": [
+   "Write a sentence about the sun."
+  ]
+ },
+ {
+  "id": "dev-core-inst-02",
+  "category": "core",
+  "user_turns": [
+   "Write a sentence about a dog."
+  ]
+ },
+ {
+  "id": "dev-core-inst-03",
+  "category": "core",
+  "user_turns": [
+   "Write a sentence about the ocean."
+  ]
+ },
+ {
+  "id": "dev-core-inst-04",
+  "category": "core",
+  "user_turns": [
+   "Write a sentence about winter."
+  ]
+ },
+ {
+  "id": "dev-core-inst-05",
+  "category": "core",
+  "user_turns": [
+   "Write a sentence about a book."
+  ]
+ },
+ {
+  "id": "dev-core-inst-06",
+  "category": "core",
+  "user_turns": [
+   "Write a sentence about music."
+  ]
+ },
+ {
+  "id": "dev-core-inst-07",
+  "category": "core",
+  "user_turns": [
+   "Write a sentence about a mountain."
+  ]
+ },
+ {
+  "id": "dev-mem-01",
+  "category": "memory",
+  "user_turns": [
+   "My name is Alex.",
+   "I also like apples.",
+   "What is my name?"
+  ]
+ },
+ {
+  "id": "dev-mem-02",
+  "category": "memory",
+  "user_turns": [
+   "My cat is named Momo.",
+   "She likes to sleep.",
+   "What is my cat's name?"
+  ]
+ },
+ {
+  "id": "dev-mem-03",
+  "category": "memory",
+  "user_turns": [
+   "My favorite color is green.",
+   "I also like blue.",
+   "What is my favorite color?"
+  ]
+ },
+ {
+  "id": "dev-mem-04",
+  "category": "memory",
+  "user_turns": [
+   "I work as a teacher.",
+   "My school is nearby.",
+   "What is my job?"
+  ]
+ },
+ {
+  "id": "dev-mem-05",
+  "category": "memory",
+  "user_turns": [
+   "My sister lives in Tokyo.",
+   "She visits often.",
+   "Where does my sister live?"
+  ]
+ },
+ {
+  "id": "dev-mem-06",
+  "category": "memory",
+  "user_turns": [
+   "I have two brothers.",
+   "They are older than me.",
+   "How many brothers do I have?"
+  ]
+ },
+ {
+  "id": "dev-mem-07",
+  "category": "memory",
+  "user_turns": [
+   "My birthday is in July.",
+   "I love summer.",
+   "When is my birthday?"
+  ]
+ },
+ {
+  "id": "dev-mem-08",
+  "category": "memory",
+  "user_turns": [
+   "I drive a blue car.",
+   "It is fast.",
+   "What color is my car?"
+  ]
+ },
+ {
+  "id": "dev-mem-09",
+  "category": "memory",
+  "user_turns": [
+   "I am learning to play the piano.",
+   "It is hard but fun.",
+   "What instrument am I learning?"
+  ]
+ },
+ {
+  "id": "dev-mem-10",
+  "category": "memory",
+  "user_turns": [
+   "My favorite food is pizza.",
+   "I eat it on Fridays.",
+   "What is my favorite food?"
+  ]
+ },
+ {
+  "id": "dev-ref-01",
+  "category": "refusal",
+  "user_turns": [
+   "What is the best flavor?"
+  ]
+ },
+ {
+  "id": "dev-ref-02",
+  "category": "refusal",
+  "user_turns": [
+   "Tell me about the thing."
+  ]
+ },
+ {
+  "id": "dev-ref-03",
+  "category": "refusal",
+  "user_turns": [
+   "What did I do yesterday?"
+  ]
+ },
+ {
+  "id": "dev-ref-04",
+  "category": "refusal",
+  "user_turns": [
+   "Who won the game?"
+  ]
+ },
+ {
+  "id": "dev-ref-05",
+  "category": "refusal",
+  "user_turns": [
+   "What is the answer?"
+  ]
+ },
+ {
+  "id": "dev-ref-06",
+  "category": "refusal",
+  "user_turns": [
+   "Tell me about the future."
+  ]
+ },
+ {
+  "id": "dev-ref-07",
+  "category": "refusal",
+  "user_turns": [
+   "Give me the number."
+  ]
+ },
+ {
+  "id": "dev-ref-08",
+  "category": "refusal",
+  "user_turns": [
+   "What is the name of that song?"
+  ]
+ }
+]
