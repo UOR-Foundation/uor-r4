@@ -3727,7 +3727,19 @@ fn main() -> Result<()> {
         other => return Err(invalid(format!("unknown mode {other}"))),
     };
     // `recall=` and `recall_at=` are checked before the root is claimed: a
-    // malformed value, or one given to world=v1, claims nothing.
+    // malformed value, or one given to world=v1, claims nothing. So is
+    // `protocol=`, which only world=v2 encodes, and never with chat=.
+    if mode == "corpus" || mode == "evaluate" {
+        let version = protocol_version_of(&args)?;
+        if version != 1 && world_of(&args)? != World::V2 {
+            return Err(invalid("protocol=2 needs world=v2"));
+        }
+        if version != 1 && args.optional("chat").is_some() {
+            return Err(invalid(
+                "chat= documents are prepared in protocol 1; a protocol=2 corpus is M-world alone",
+            ));
+        }
+    }
     if mode == "corpus" {
         let recall = recall_of(&args)?;
         recall_at_of(&args)?;
@@ -3860,6 +3872,19 @@ mod tests {
         assert_eq!(*parsed, Some(PrimeRoute { window: 4 }));
         // A mode that does not take them refuses them as unknown arguments.
         assert!(parse(&["out=r", "select=none"], &["out", "tokenizer"]).is_err());
+    }
+
+    #[test]
+    fn the_protocol_version_is_one_or_two() {
+        let keys = ["out", "protocol"];
+        let version =
+            |given: &[&str]| parse(given, &keys).and_then(|args| protocol_version_of(&args));
+        assert_eq!(version(&["out=r"]).expect("default"), 1);
+        assert_eq!(version(&["out=r", "protocol=1"]).expect("one"), 1);
+        assert_eq!(version(&["out=r", "protocol=2"]).expect("two"), 2);
+        for bad in ["protocol=3", "protocol=v2", "protocol="] {
+            assert!(version(&["out=r", bad]).is_err(), "{bad}");
+        }
     }
 
     #[test]
