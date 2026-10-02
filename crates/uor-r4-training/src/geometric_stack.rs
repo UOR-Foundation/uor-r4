@@ -108,11 +108,16 @@ use uor_r4_core::native_geometric::learner::embedding::canonical_h4_roots;
 use uor_r4_lut::GROUP;
 
 use crate::flock::{self, FlockSelect};
+use crate::geometric_address::{self, AddressWeights, GeometricAddressConfig};
+use crate::geometric_potential_native::{self, CompiledGeometricPotentials};
+use crate::geometric_span::{self, GeometricSpanConfig, SpanPolicy};
+use crate::geometric_span_native::{self, CompiledSpanActions};
 use crate::lut_export::{dequantize_matrix, quantize_matrix};
 use crate::stack_export::{
     block, decay_of_rate, decay_rate, fixed, fixed_value, fold_columns, grid_code, grid_value, pad,
 };
 use crate::stack_memory::{keys_aux_len, product_key_memory, MemoryConfig, MemoryScore};
+use crate::stack_prime_route::PrimeRegistry;
 use crate::{invalid, Result};
 
 /// Lower bound on `z - 1` in the Lorentz score. Below it the distance is
@@ -142,6 +147,91 @@ pub enum StackArch {
 pub enum ReadScore {
     Lorentz,
     Dot,
+}
+
+/// Matched identity-input mechanisms for geometric reads. Both use the same
+/// learned gate and current-role plus identity projections. Only Held retains
+/// identity across multiple intervening positions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadIdentityLatch {
+    Held,
+    Local,
+}
+
+/// Per-call research counterfactual, deliberately absent from model state and
+/// saved metadata. Hard decisions have no surrogate gate gradient.
+#[derive(Clone, Copy)]
+enum LatchGates<'a> {
+    Soft,
+    Hard,
+    Replay(&'a Tensor),
+    Projections(&'a Tensor, &'a Tensor),
+}
+
+/// Original selected token rows are separate from the contextual residual.
+/// A side-channel caller without that provenance cannot construct span actions.
+#[derive(Clone, Copy)]
+struct ReadSource<'a> {
+    tokens: Option<&'a Tensor>,
+    span_policy: SpanPolicy,
+    native_span: Option<(&'a CompiledSpanActions, &'a [u32])>,
+    native_potential: Option<&'a CompiledGeometricPotentials>,
+}
+
+impl Default for ReadSource<'_> {
+    fn default() -> Self {
+        Self {
+            tokens: None,
+            span_policy: SpanPolicy::Ordered,
+            native_span: None,
+            native_potential: None,
+        }
+    }
+}
+
+impl LatchGates<'_> {
+    fn apply(self, logits: &Tensor) -> Result<Tensor> {
+        match self {
+            Self::Soft => Ok(candle_nn::ops::sigmoid(logits)?),
+            Self::Replay(_) | Self::Projections(..) => {
+                Err(invalid("numerical replay has no gate policy"))
+            }
+            Self::Hard => {
+                if logits
+                    .flatten_all()?
+                    .to_vec1::<f32>()?
+                    .iter()
+                    .any(|z| !z.is_finite())
+                {
+                    return Err(invalid("hard read identity latch needs finite gate logits"));
+                }
+                // Compare the logit itself: a tiny negative logit can have a
+                // rounded sigmoid of exactly 0.5. Both signed zeros capture.
+                Ok(logits.detach().ge(0.0)?.to_dtype(logits.dtype())?)
+            }
+        }
+    }
+}
+
+fn read_identity_latch_shapes(config: &StackConfig) -> BTreeMap<String, Vec<usize>> {
+    let mut shapes = BTreeMap::new();
+    for layer in 0..config.layers() {
+        if config.layer_kind(layer) == 'a' {
+            for part in ["query_identity", "key_identity"] {
+                shapes.insert(
+                    layer_name(layer, &format!("read.{part}.weight")),
+                    vec![config.width, config.width],
+                );
+            }
+            shapes.insert(
+                layer_name(layer, "read.identity_gate.weight"),
+                vec![1, 2 * config.width],
+            );
+            shapes.insert(layer_name(layer, "read.identity_gate.bias"), vec![1]);
+        }
+    }
+    shapes
 }
 
 /// A training label for one query's exact historical source occurrences.
@@ -278,6 +368,42 @@ pub fn parse_pointer_select(text: &str) -> Result<Option<PointerSelect>> {
     Ok(Some(select))
 }
 
+/// A pointer route from its command-line form: `none`, `prime:<window>` (the
+/// exact route, admitting by a shared atom), `prime-ranked:<window>`, or
+/// `ngram:<window>` / `ngram-ranked:<window>` (admitting by the longest
+/// ordered n-let match).
+pub fn parse_pointer_route(text: &str) -> Result<Option<PrimeRoute>> {
+    if text == "none" {
+        return Ok(None);
+    }
+    let route = match text.split_once(':') {
+        Some((kind @ ("prime" | "prime-ranked" | "ngram" | "ngram-ranked"), window)) => {
+            let window = window.parse().map_err(|_| {
+                invalid(format!(
+                    "invalid pointer route {text:?} (none, prime:<window>, prime-ranked:<window>, ngram:<window> or ngram-ranked:<window>)"
+                ))
+            })?;
+            let route = if kind.ends_with("-ranked") {
+                PrimeRoute::ranked(window)
+            } else {
+                PrimeRoute::exact(window)
+            };
+            if kind.starts_with("ngram") {
+                route.admitting(RouteAdmission::Ngram)
+            } else {
+                route
+            }
+        }
+        _ => {
+            return Err(invalid(format!(
+                "invalid pointer route {text:?} (none or prime:<window>)"
+            )))
+        }
+    };
+    route.validate()?;
+    Ok(Some(route))
+}
+
 /// The pointer-copy head (A1): `dim` is the width of its query and key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PointerConfig {
@@ -297,6 +423,263 @@ pub struct PointerConfig {
     /// head was built with its model. A resume verifies it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub init_seed: Option<u64>,
+    /// Exact prime routing of the pointer's sources ([`PrimeRoute`]); `None`
+    /// (the default, and what a configuration saved before this field means)
+    /// keeps the learned scores.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<PrimeRoute>,
+}
+
+/// Exact prime routing for the pointer (the prime router of ADR-0003,
+/// `docs/adr/0003-fixed-zeta-prime-route-attention.md`): its sources come from
+/// arithmetic on registered primes, not from learned query/key scores.
+///
+/// Every token id has a registered prime ([`token_prime`]; frequent, low ids
+/// get small primes). A position's key is the product of the distinct primes
+/// of its last `window` tokens. At position `t`, a source `j` is admitted when
+/// the key ending at `j - 1` lies wholly before the query's own tokens
+/// (`j - 1 <= t - window`; an overlapping key shares the query's positions,
+/// not an earlier occurrence) and shares a factor with the key ending at `t`
+/// (`gcd > 1`), and the pointer then copies the token at `j`: the value that
+/// followed a matching key. An admitted source is scored by `ln gcd` (shared
+/// rare atoms weigh more than shared common ones) plus a recency term below
+/// `ln 2`, which only orders sources with the same shared atoms; the
+/// attention is the softmax of [`ROUTE_SHARPNESS`] times that score over the
+/// admitted sources, and all zero when none is admitted. The pointer's gate,
+/// which mixes the route's copy with the generated distribution, stays
+/// learned; an exact route has no learned parameters of its own (its query
+/// and key widths are unused and receive no gradient).
+///
+/// A **ranked** route keeps the admission and hands the ranking to the
+/// pointer's learned score: an admitted source scores its learned score plus
+/// [`ROUTE_SHARPNESS`] times its route score, and the attention is the softmax
+/// of that over the admitted sources; with none admitted it is the learned
+/// pointer's softmax over every source, so a position no key matches (the
+/// first token of a reply) can still copy by content. Admission is exact
+/// identity; ranking among sources that share the same atoms (a fact and the
+/// question that repeats its words) is learned, and the query and key get
+/// their gradient as under a selection.
+///
+/// Admission is [`RouteAdmission::SharedAtom`] as above, or
+/// [`RouteAdmission::Ngram`]: the ordered n-let identity of ADR-0003's
+/// transition indexes with divisor fallback (I2 before I1). For the longest
+/// `n <= window` with any match, a source `j` is admitted when the `n` tokens
+/// before it equal, in order, the query's last `n` (on registered primes,
+/// whose assignment is injective, this is equality of the ordered prime
+/// sequences), the key again wholly before the query's tokens; shorter `n`
+/// are tried only when no longer one matches. An admitted source scores the
+/// matched n-let's prime weight (the sum of `ln p` over its atoms, so a rare
+/// n-let outweighs a common one in the exact route's sharpness) plus recency.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrimeRoute {
+    /// Tokens in each key, 1 to [`MAX_ROUTE_WINDOW`].
+    pub window: usize,
+    /// Rank admitted sources by the learned score plus the route's; `false`
+    /// (the default, and what a route saved before this field means) is the
+    /// exact route.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ranked: bool,
+    /// Which sources the route admits; a route saved before this field
+    /// admits by a shared atom.
+    #[serde(default, skip_serializing_if = "RouteAdmission::is_shared_atom")]
+    pub admission: RouteAdmission,
+}
+
+/// How a [`PrimeRoute`] admits a source.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RouteAdmission {
+    /// Any atom shared by the key before the source and the query's key
+    /// (`gcd > 1`).
+    #[default]
+    SharedAtom,
+    /// The longest ordered n-let match, backing off to shorter n-lets.
+    Ngram,
+}
+
+impl RouteAdmission {
+    fn is_shared_atom(&self) -> bool {
+        *self == Self::SharedAtom
+    }
+}
+
+fn is_false(flag: &bool) -> bool {
+    !*flag
+}
+
+/// The longest key: six distinct primes below the table's bound fit a u128.
+pub const MAX_ROUTE_WINDOW: usize = 6;
+/// The fixed sharpness of the route's softmax over `ln gcd` scores.
+pub const ROUTE_SHARPNESS: f64 = 4.0;
+/// The weight of recency in a route score, below `ln 2`.
+const ROUTE_RECENCY: f64 = 0.5;
+/// How many token ids have a registered prime.
+const ROUTE_PRIMES: usize = 65_536;
+
+impl PrimeRoute {
+    /// The exact route of `window`-token keys.
+    pub fn exact(window: usize) -> Self {
+        Self {
+            window,
+            ranked: false,
+            admission: RouteAdmission::SharedAtom,
+        }
+    }
+
+    /// The ranked route of `window`-token keys.
+    pub fn ranked(window: usize) -> Self {
+        Self {
+            ranked: true,
+            ..Self::exact(window)
+        }
+    }
+
+    /// The same route admitting by `admission`.
+    pub fn admitting(self, admission: RouteAdmission) -> Self {
+        Self { admission, ..self }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.window == 0 || self.window > MAX_ROUTE_WINDOW {
+            return Err(invalid(format!(
+                "a prime route's key window is 1 to {MAX_ROUTE_WINDOW} tokens"
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// The registered prime of token `id` (the relation store's
+/// [`PrimeRegistry`]: the `(id + 1)`-th prime), for ids below
+/// [`ROUTE_PRIMES`]; `None` above (such a token is no atom).
+pub fn token_prime(id: u32) -> Option<u64> {
+    static REGISTRY: OnceLock<Option<PrimeRegistry>> = OnceLock::new();
+    REGISTRY
+        .get_or_init(|| PrimeRegistry::new(ROUTE_PRIMES).ok())
+        .as_ref()?
+        .prime(id)
+        .ok()
+}
+
+/// The product of the distinct primes of the `window` tokens of `ids` ending
+/// at `end` (fewer at the start).
+fn route_key(ids: &[u32], end: usize, window: usize) -> u128 {
+    let start = (end + 1).saturating_sub(window);
+    let mut key = 1u128;
+    for &id in &ids[start..=end] {
+        if let Some(p) = token_prime(id) {
+            let p = u128::from(p);
+            if !key.is_multiple_of(p) {
+                key *= p;
+            }
+        }
+    }
+    key
+}
+
+fn gcd(mut a: u128, mut b: u128) -> u128 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
+/// The sources the route admits at position `t` of a window whose tokens are
+/// `ids[..=t]` (see [`PrimeRoute`]), with their route scores, in position
+/// order.
+fn route_scores(ids: &[u32], t: usize, route: PrimeRoute) -> Vec<(usize, f64)> {
+    match route.admission {
+        RouteAdmission::SharedAtom => shared_atom_scores(ids, t, route.window),
+        RouteAdmission::Ngram => ngram_scores(ids, t, route.window),
+    }
+}
+
+/// The longest ordered n-let match (see [`RouteAdmission::Ngram`]).
+fn ngram_scores(ids: &[u32], t: usize, window: usize) -> Vec<(usize, f64)> {
+    for n in (1..=window.min(t + 1)).rev() {
+        let query = &ids[t + 1 - n..=t];
+        let weight: f64 = query
+            .iter()
+            .filter_map(|&id| token_prime(id))
+            .map(|p| (p as f64).ln())
+            .sum();
+        // A source's n-let ends at `j - 1 <= t - n`, before the query's.
+        let matches: Vec<(usize, f64)> = (n..=t + 1 - n)
+            .filter(|&j| ids[j - n..j] == *query)
+            .map(|j| (j, weight + ROUTE_RECENCY * j as f64 / (t + 1) as f64))
+            .collect();
+        if !matches.is_empty() {
+            return matches;
+        }
+    }
+    Vec::new()
+}
+
+/// Any shared atom (see [`RouteAdmission::SharedAtom`]): `ln gcd` plus recency.
+fn shared_atom_scores(ids: &[u32], t: usize, window: usize) -> Vec<(usize, f64)> {
+    let query = route_key(ids, t, window);
+    // Sources whose key ends before the query's first token.
+    let last = (t + 1).saturating_sub(window);
+    (1..=last)
+        .filter_map(|j| {
+            let shared = gcd(query, route_key(ids, j - 1, window));
+            (shared > 1).then(|| {
+                (
+                    j,
+                    (shared as f64).ln() + ROUTE_RECENCY * j as f64 / (t + 1) as f64,
+                )
+            })
+        })
+        .collect()
+}
+
+/// The softmax of `scores` over their sources, as weights over `0..=t`
+/// (exactly 0 elsewhere, and all 0 for no scores).
+fn admitted_softmax(t: usize, scores: &[(usize, f64)]) -> Vec<f64> {
+    let mut weights = vec![0f64; t + 1];
+    let Some(top) = scores.iter().map(|&(_, s)| s).reduce(f64::max) else {
+        return weights;
+    };
+    let mut total = 0.0;
+    for &(j, score) in scores {
+        weights[j] = (score - top).exp();
+        total += weights[j];
+    }
+    for weight in &mut weights {
+        *weight /= total;
+    }
+    weights
+}
+
+/// The exact route's attention of position `t` (see [`PrimeRoute`]): the
+/// softmax of [`ROUTE_SHARPNESS`] times the route scores of the admitted
+/// sources.
+fn route_attention(ids: &[u32], t: usize, route: PrimeRoute) -> Vec<f64> {
+    let scores: Vec<(usize, f64)> = route_scores(ids, t, route)
+        .into_iter()
+        .map(|(j, score)| (j, ROUTE_SHARPNESS * score))
+        .collect();
+    admitted_softmax(t, &scores)
+}
+
+/// The ranked route's attention of position `t` (see [`PrimeRoute`]) from the
+/// pointer's learned scores of the sources `0..=t`.
+fn ranked_attention(
+    learned: Vec<f32>,
+    ids: &[u32],
+    t: usize,
+    route: PrimeRoute,
+) -> candle_core::Result<Vec<f64>> {
+    let admitted = route_scores(ids, t, route);
+    if admitted.is_empty() {
+        return pointer_weights(learned, None);
+    }
+    let scores: Vec<(usize, f64)> = admitted
+        .into_iter()
+        .map(|(j, score)| (j, f64::from(learned[j]) + ROUTE_SHARPNESS * score))
+        .collect();
+    Ok(admitted_softmax(t, &scores))
 }
 
 fn default_pointer_score() -> ReadScore {
@@ -315,6 +698,7 @@ impl PointerConfig {
             score: ReadScore::Dot,
             select: None,
             init_seed: None,
+            route: None,
         }
     }
 
@@ -324,6 +708,12 @@ impl PointerConfig {
         }
         if let Some(select) = &self.select {
             select.validate()?;
+        }
+        if let Some(route) = &self.route {
+            route.validate()?;
+            if self.select.is_some() {
+                return Err(invalid("a routed pointer has no selection"));
+            }
         }
         Ok(())
     }
@@ -734,6 +1124,31 @@ fn pointer_served_refusal() -> crate::TrainingError {
     )
 }
 
+fn remove_address_projection_parameters<T>(parameters: &mut BTreeMap<String, T>) {
+    for suffix in [
+        "read.query.weight",
+        "read.key.weight",
+        "read.query_identity.weight",
+        "read.key_identity.weight",
+        "read.log_beta",
+        "read.offset",
+    ] {
+        parameters.remove(&layer_name(2, suffix));
+    }
+}
+
+fn geometric_span_shapes(config: &StackConfig) -> BTreeMap<String, Vec<usize>> {
+    [
+        (
+            layer_name(2, "read.span_control.weight"),
+            vec![4, 2 * config.width],
+        ),
+        (layer_name(2, "read.span_control.bias"), vec![4]),
+    ]
+    .into_iter()
+    .collect()
+}
+
 pub struct StackModel {
     pub config: StackConfig,
     variables: BTreeMap<String, Var>,
@@ -746,6 +1161,10 @@ pub struct StackModel {
     transport: Option<TransportSnap>,
     /// The q/k projection input is the preceding normalized state, when set.
     read_identity_carry: bool,
+    read_identity_latch: Option<ReadIdentityLatch>,
+    /// Direct paired content/context geometry, with no q/k projection maps.
+    geometric_address: Option<GeometricAddressConfig>,
+    geometric_span: Option<GeometricSpanConfig>,
 }
 
 impl StackModel {
@@ -845,6 +1264,9 @@ impl StackModel {
             served: None,
             transport: None,
             read_identity_carry: false,
+            read_identity_latch: None,
+            geometric_address: None,
+            geometric_span: None,
         })
     }
 
@@ -857,6 +1279,11 @@ impl StackModel {
     /// [`Self::set_pointer_select`]); a head of another width or score is
     /// refused. The optimizer of a model must be built after this.
     pub fn add_pointer(&mut self, pointer: PointerConfig, seed: u64) -> Result<bool> {
+        if self.geometric_address.is_some() {
+            return Err(invalid(
+                "geometric addressing does not support a pointer head",
+            ));
+        }
         if let Some(existing) = self.config.pointer {
             if existing.dim == pointer.dim && existing.score == pointer.score {
                 return Ok(false);
@@ -938,6 +1365,9 @@ impl StackModel {
 
     /// Replace the flock selection of the reads. The parameters do not change.
     pub fn set_select(&mut self, select: Option<FlockSelect>) -> Result<()> {
+        if self.geometric_address.is_some() && select.is_some() {
+            return Err(invalid("geometric addressing requires full causal support"));
+        }
         if let Some(select) = &select {
             validate_flock(select)?;
         }
@@ -945,16 +1375,44 @@ impl StackModel {
         Ok(())
     }
 
+    /// Route the pointer's sources by exact prime arithmetic ([`PrimeRoute`])
+    /// instead of its learned scores, or clear the route. The parameters do
+    /// not change: the gate and the generated branch keep their weights, and
+    /// clearing the route restores the learned scores. `Some` is refused on a
+    /// model without a pointer head, or whose pointer has a selection (a
+    /// route admits its own sources).
+    pub fn set_pointer_route(&mut self, route: Option<PrimeRoute>) -> Result<()> {
+        if let Some(route) = &route {
+            route.validate()?;
+        }
+        match self.config.pointer.as_mut() {
+            Some(pointer) if route.is_some() && pointer.select.is_some() => {
+                return Err(invalid("a routed pointer has no selection; clear it first"))
+            }
+            Some(pointer) => pointer.route = route,
+            None if route.is_some() => {
+                return Err(invalid("the model has no pointer head to route"))
+            }
+            None => {}
+        }
+        Ok(())
+    }
+
     /// Replace the pointer's own selection of its sources (the pointer never
     /// reads [`StackConfig::select`]). The parameters do not change, so this
     /// applies a selection to weights trained without one, and clearing it
     /// restores the soft pointer bit for bit. `Some` is refused on a model
-    /// without a pointer head; `None` on one is a no-op.
+    /// without a pointer head or with a routed one; `None` on one is a no-op.
     pub fn set_pointer_select(&mut self, select: Option<PointerSelect>) -> Result<()> {
         if let Some(select) = &select {
             select.validate()?;
         }
         match self.config.pointer.as_mut() {
+            Some(pointer) if select.is_some() && pointer.route.is_some() => {
+                return Err(invalid(
+                    "a routed pointer has no selection; clear the route first",
+                ))
+            }
             Some(pointer) => pointer.select = select,
             None if select.is_some() => {
                 return Err(invalid("the model has no pointer head to select for"))
@@ -993,6 +1451,9 @@ impl StackModel {
     /// The tensors a forward pass reads: the variables, or in served mode the
     /// served view of their current values.
     fn params(&self) -> Result<Params<'_>> {
+        if let Some(config) = &self.geometric_address {
+            self.validate_geometric_address(config)?;
+        }
         match &self.served {
             None => Ok(Params::Float(&self.variables)),
             Some(state) => Ok(Params::Served(self.served_view(state)?)),
@@ -1148,19 +1609,58 @@ impl StackModel {
         x: &Tensor,
         capture: &mut Capture<'_>,
         binding: &mut Option<BindingCapture<'_>>,
+        gates: LatchGates,
     ) -> Result<Tensor> {
+        self.geometric_read_with_source(p, layer, x, capture, binding, gates, ReadSource::default())
+    }
+
+    fn geometric_read_with_source(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        x: &Tensor,
+        capture: &mut Capture<'_>,
+        binding: &mut Option<BindingCapture<'_>>,
+        gates: LatchGates,
+        source: ReadSource<'_>,
+    ) -> Result<Tensor> {
+        if let Some(config) = &self.geometric_address {
+            return self
+                .geometric_address_read(p, layer, x, capture, binding, gates, config, source);
+        }
         let (batch, time, _) = x.dims3()?;
         let heads = self.config.heads;
         tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
         let u = self.norm(p, x, &layer_name(layer, "read_norm.weight"))?;
         let identity = self.read_identity_input(&u)?;
+        let latched = match (self.read_identity_latch, gates) {
+            (_, LatchGates::Projections(..)) => None,
+            (Some(mode), _) => Some(match gates {
+                LatchGates::Replay(identity) => identity.clone(),
+                _ => self.read_latch_inputs(p, layer, &u, mode, gates)?.0,
+            }),
+            (None, _) => None,
+        };
         let project = |part: &str| -> Result<Tensor> {
+            if let LatchGates::Projections(query, key) = gates {
+                match part {
+                    "query" => return self.heads(query, batch, time),
+                    "key" => return self.heads(key, batch, time),
+                    _ => {}
+                }
+            }
             let input = if part == "value" { &u } else { &identity };
-            self.heads(
-                &Self::linear(input, p.layer(layer, &format!("read.{part}.weight"))?)?,
-                batch,
-                time,
-            )
+            let mut projected =
+                Self::linear(input, p.layer(layer, &format!("read.{part}.weight"))?)?;
+            if part != "value" {
+                if let Some(identity) = &latched {
+                    projected = projected.add(&Self::linear(
+                        identity,
+                        p.layer(layer, &format!("read.{part}_identity.weight"))?,
+                    )?)?;
+                }
+            }
+            self.heads(&projected, batch, time)
         };
         let (query, key, value) = (project("query")?, project("key")?, project("value")?);
         let null = Self::linear(&u, p.layer(layer, "read.null.weight")?)?
@@ -1180,6 +1680,29 @@ impl StackModel {
         if aux.dim(0)? != fused_aux_len(batch, heads, time, self.config.read, true, true) {
             return Err(invalid("fused read auxiliary layout differs"));
         }
+        let (value, value_width) = self.read_binding_values(value, layer, binding)?;
+        let read = fused_read_selected(
+            &query,
+            &key,
+            &value,
+            &aux,
+            self.config.read,
+            true,
+            true,
+            false,
+            self.config.select,
+        )?;
+        self.finish_geometric_read(p, layer, &read, value_width, capture, binding)
+    }
+
+    /// The label mask is an auxiliary value channel, never a score input.
+    fn read_binding_values(
+        &self,
+        value: Tensor,
+        layer: usize,
+        binding: &Option<BindingCapture<'_>>,
+    ) -> Result<(Tensor, usize)> {
+        let (batch, heads, time, _) = value.dims4()?;
         // One auxiliary value channel shares the exact scores, admission and
         // normalization of the ordinary read. It is removed before read.out,
         // so neither the teacher mask nor its mass enters the residual stream.
@@ -1201,17 +1724,23 @@ impl StackModel {
                 Tensor::cat(&[&value, &mask], 3)?
             }
         };
-        let read = fused_read_selected(
-            &query,
-            &key,
-            &value,
-            &aux,
-            self.config.read,
-            true,
-            true,
-            false,
-            self.config.select,
-        )?;
+        Ok((value, value_width))
+    }
+
+    fn finish_geometric_read(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        read: &Tensor,
+        value_width: usize,
+        capture: &mut Capture<'_>,
+        binding: &mut Option<BindingCapture<'_>>,
+    ) -> Result<Tensor> {
+        let (batch, heads, time, _) = read.dims4()?;
+        let target = binding
+            .as_ref()
+            .filter(|binding| binding.target.layer == layer)
+            .map(|binding| binding.target);
         let read = if let Some(target) = target {
             let indices: Vec<u32> = target
                 .rows
@@ -1228,7 +1757,7 @@ impl StackModel {
             }
             read.narrow(3, 0, value_width)?
         } else {
-            read
+            read.clone()
         };
         let merged = self.merge_heads(&read, batch, time)?;
         tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
@@ -1262,6 +1791,11 @@ impl StackModel {
     /// representation; both must refuse it until the corresponding port exists.
     pub fn set_read_identity_carry(&mut self, enabled: bool) -> Result<()> {
         if enabled {
+            if self.read_identity_latch.is_some() || self.geometric_span.is_some() {
+                return Err(invalid(
+                    "read identity carry and latch are mutually exclusive",
+                ));
+            }
             if self.config.arch != StackArch::Geometric || !self.config.pattern.contains('a') {
                 return Err(invalid(
                     "read identity carry needs a geometric stack with a read layer",
@@ -1278,6 +1812,636 @@ impl StackModel {
     /// Whether geometric q/k inputs use the preceding normalized state.
     pub fn read_identity_carry(&self) -> bool {
         self.read_identity_carry
+    }
+
+    /// Add learned identity inputs to every read. Original q/k maps continue
+    /// to project current normalized input (role); new maps project h[t-1].
+    /// g[t] = sigmoid(W [u[t], u[t-1]] + b). Held updates
+    /// h[t] = (1-g[t]) h[t-1] + g[t] u[t]; Local uses h[t] = g[t] u[t].
+    /// Initial u[-1] and h[-1] are zero. Values, NoRead, age and admission are
+    /// unchanged. This is an offline float-training mechanism, not an expert
+    /// gate or an integer serving implementation.
+    ///
+    /// Enable before constructing the optimizer: this adds parameters. The
+    /// identity maps copy the current q/k weights, W starts zero and b at -2.
+    /// Repeating the same mode is a no-op; changing modes is explicit research
+    /// in another model, not a silent reinterpretation of saved parameters.
+    pub fn set_read_identity_latch(&mut self, mode: ReadIdentityLatch) -> Result<()> {
+        if self.geometric_span.is_some() {
+            return Err(invalid(
+                "geometric span production replaces the scalar identity latch",
+            ));
+        }
+        if let Some(existing) = self.read_identity_latch {
+            return if existing == mode {
+                Ok(())
+            } else {
+                Err(invalid("read identity latch mode is already fixed"))
+            };
+        }
+        if self.config.arch != StackArch::Geometric || !self.config.pattern.contains('a') {
+            return Err(invalid(
+                "read identity latch needs a geometric stack with a read layer",
+            ));
+        }
+        if self.read_identity_carry || self.served.is_some() {
+            return Err(invalid(
+                "read identity latch is incompatible with carry and served mode",
+            ));
+        }
+        let mut added = BTreeMap::new();
+        for (name, shape) in read_identity_latch_shapes(&self.config) {
+            let variable =
+                if name.ends_with("query_identity.weight") || name.ends_with("key_identity.weight")
+                {
+                    let source = name.replace("_identity.weight", ".weight");
+                    let source = self.variables.get(&source).ok_or_else(|| {
+                        invalid("read identity latch lacks its initial projection")
+                    })?;
+                    Var::from_tensor(&source.as_tensor().copy()?)?
+                } else if name.ends_with(".bias") {
+                    Var::from_vec(vec![-2.0f32], shape.as_slice(), &self.device)?
+                } else {
+                    Var::from_tensor(&Tensor::zeros(shape.as_slice(), DType::F32, &self.device)?)?
+                };
+            added.insert(name, variable);
+        }
+        self.variables.extend(added);
+        self.read_identity_latch = Some(mode);
+        Ok(())
+    }
+
+    pub fn read_identity_latch(&self) -> Option<ReadIdentityLatch> {
+        self.read_identity_latch
+    }
+
+    /// Replace the rra reader's four dense q/k maps by direct, trained-in
+    /// geometric content/context addresses. Enable before building an optimizer.
+    /// This removes the unused maps and Lorentz scalars from the parameter set;
+    /// there is deliberately no disable operation that would invent them again.
+    /// The value/output maps, full causal support, age and NoRead stay in use.
+    /// This first implementation is an offline CPU float-training prototype.
+    pub fn set_geometric_address(&mut self, config: GeometricAddressConfig) -> Result<()> {
+        self.validate_geometric_address(&config)?;
+        if let Some(existing) = &self.geometric_address {
+            return if existing == &config {
+                Ok(())
+            } else {
+                Err(invalid("geometric address mode is already fixed"))
+            };
+        }
+        let mut rng = Initializer(self.config.seed ^ 0x6164_6472_6573_7331);
+        let mut added = BTreeMap::new();
+        for (suffix, shape) in
+            geometric_address::parameter_shapes(self.config.width, self.config.heads)?
+        {
+            let count = shape.iter().product();
+            let values: Vec<f32> = if suffix.ends_with("radius") || suffix.ends_with("presence") {
+                vec![0.0; count]
+            } else {
+                (0..count)
+                    .map(|_| (rng.normal() * INITIAL_STD) as f32)
+                    .collect()
+            };
+            added.insert(
+                layer_name(2, &suffix),
+                Var::from_vec(values, shape.as_slice(), &self.device)?,
+            );
+        }
+        remove_address_projection_parameters(&mut self.variables);
+        self.variables.extend(added);
+        self.geometric_address = Some(config);
+        Ok(())
+    }
+
+    pub fn geometric_address(&self) -> Option<&GeometricAddressConfig> {
+        self.geometric_address.as_ref()
+    }
+
+    /// Replace the geometric reader's scalar Held latch with an ordered token
+    /// action producer. Enable after geometric addressing and before creating
+    /// the optimizer. Static actions use original selected embedding rows;
+    /// only the four-action controller sees contextual gained read inputs.
+    /// OPEN/APPEND/COMMIT/HOLD are predicted during every forward. Their
+    /// training labels never enter this API. Existing scalar-latch artifacts
+    /// retain their original behavior and tensor inventory.
+    pub fn set_geometric_span(&mut self, config: GeometricSpanConfig) -> Result<()> {
+        config.validate(self.config.width)?;
+        if let Some(existing) = &self.geometric_span {
+            return if existing == &config {
+                Ok(())
+            } else {
+                Err(invalid("geometric span mode is already fixed"))
+            };
+        }
+        let address = self
+            .geometric_address
+            .as_ref()
+            .ok_or_else(|| invalid("geometric spans require geometric addressing"))?;
+        self.validate_geometric_address(address)?;
+        let mut added = BTreeMap::new();
+        for (name, shape) in geometric_span_shapes(&self.config) {
+            added.insert(
+                name,
+                Var::from_tensor(&Tensor::zeros(shape.as_slice(), DType::F32, &self.device)?)?,
+            );
+        }
+        for suffix in ["read.identity_gate.weight", "read.identity_gate.bias"] {
+            self.variables.remove(&layer_name(2, suffix));
+        }
+        self.variables.extend(added);
+        self.read_identity_latch = None;
+        self.geometric_span = Some(config);
+        Ok(())
+    }
+
+    pub fn geometric_span(&self) -> Option<&GeometricSpanConfig> {
+        self.geometric_span.as_ref()
+    }
+
+    fn span_control_logits(&self, p: &Params<'_>, layer: usize, u: &Tensor) -> Result<Tensor> {
+        let (batch, time, width) = u.dims3()?;
+        let zero = Tensor::zeros((batch, 1, width), u.dtype(), u.device())?;
+        let previous = if time == 1 {
+            zero
+        } else {
+            Tensor::cat(&[&zero, &u.narrow(1, 0, time - 1)?], 1)?
+        };
+        let input = Tensor::cat(&[u, &previous], 2)?;
+        Ok(
+            Self::linear(&input, p.layer(layer, "read.span_control.weight")?)?
+                .broadcast_add(p.layer(layer, "read.span_control.bias")?)?,
+        )
+    }
+
+    /// Actual learned controller logits [batch,time,4], ordered as HOLD,
+    /// OPEN, APPEND, COMMIT. A caller may apply a training-only cross entropy;
+    /// the producer itself always follows its predicted earliest argmax.
+    pub fn geometric_span_control_logits(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        if self.geometric_span.is_none() {
+            return Err(invalid("geometric span production is disabled"));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_bound(&p, x, 0..2, &mut None, &mut None, LatchGates::Soft)?;
+        let u = self.norm(&p, &x, &layer_name(2, "read_norm.weight"))?;
+        self.span_control_logits(&p, 2, &u)
+    }
+
+    /// Per-call last-token control: the same predicted FSM runs, but APPEND
+    /// replaces working content rather than right-composing a token action.
+    /// Parameters and saved Ordered semantics are unchanged.
+    pub fn forward_geometric_span_last_token(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        if self.geometric_span.is_none() {
+            return Err(invalid("geometric span production is disabled"));
+        }
+        let p = self.params()?;
+        let tokens = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_with_source(
+            &p,
+            tokens.clone(),
+            0..self.config.layers(),
+            &mut None,
+            &mut None,
+            LatchGates::Soft,
+            ReadSource {
+                tokens: Some(&tokens),
+                span_policy: SpanPolicy::LastToken,
+                native_span: None,
+                native_potential: None,
+            },
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Replay the same saved reader with exported static token actions and
+    /// exact integer span-register updates. The controller and surrounding
+    /// computation remain float; this is not a whole-model served mode.
+    pub fn forward_geometric_span_native(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        compiled: &CompiledSpanActions,
+    ) -> Result<Tensor> {
+        let (hidden, _) =
+            self.hidden_geometric_span_native(ids, batch, time, compiled, None, None)?;
+        let p = self.params()?;
+        Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Observe exact source probabilities from that same native-producer read.
+    /// The binding labels select observations only, never controller actions.
+    pub fn read_binding_masses_geometric_span_native(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        target: &ReadBindingTarget,
+        compiled: &CompiledSpanActions,
+    ) -> Result<Tensor> {
+        self.hidden_geometric_span_native(ids, batch, time, compiled, Some(target), None)?
+            .1
+            .ok_or_else(|| invalid("native span source observer was not evaluated"))
+    }
+
+    /// Evaluate the existing reader with native token actions and compiled
+    /// signed-relative lookup/add potentials. Input production, normalization,
+    /// score reconstruction and surrounding computation remain floating point.
+    pub fn forward_geometric_potential_native(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        span: &CompiledSpanActions,
+        potential: &CompiledGeometricPotentials,
+    ) -> Result<Tensor> {
+        let (hidden, _) =
+            self.hidden_geometric_span_native(ids, batch, time, span, None, Some(potential))?;
+        let p = self.params()?;
+        Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Source labels observe the same native-potential reader; they do not
+    /// generate events, geometric codes or candidate scores.
+    pub fn read_binding_masses_geometric_potential_native(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        target: &ReadBindingTarget,
+        span: &CompiledSpanActions,
+        potential: &CompiledGeometricPotentials,
+    ) -> Result<Tensor> {
+        self.hidden_geometric_span_native(ids, batch, time, span, Some(target), Some(potential))?
+            .1
+            .ok_or_else(|| invalid("native potential source observer was not evaluated"))
+    }
+
+    /// Actual learned potentials for source-bound offline compilation.
+    pub fn geometric_address_potentials(&self) -> Result<AddressWeights> {
+        let config = self
+            .geometric_address
+            .as_ref()
+            .ok_or_else(|| invalid("geometric address absent"))?;
+        self.validate_geometric_address(config)?;
+        self.address_weights(&self.params()?, 2)
+    }
+
+    /// Reproduce the exact pre-read subgraph to observe both scorer inputs.
+    /// No source/answer/action labels are accepted. The same normalization and
+    /// predicted span controller feed the native reader above.
+    pub fn geometric_potential_inputs(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        compiled: &CompiledSpanActions,
+    ) -> Result<(Tensor, Tensor)> {
+        let span = self
+            .geometric_span
+            .as_ref()
+            .ok_or_else(|| invalid("geometric span absent"))?;
+        let address = self
+            .geometric_address
+            .as_ref()
+            .ok_or_else(|| invalid("geometric address absent"))?;
+        self.validate_geometric_address(address)?;
+        let p = self.params()?;
+        compiled.validate_for(p.get("embedding.weight")?, span)?;
+        let tokens = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_bound(&p, tokens, 0..2, &mut None, &mut None, LatchGates::Soft)?;
+        let current = self.norm(&p, &x, &layer_name(2, "read_norm.weight"))?;
+        let events = self.span_control_logits(&p, 2, &current)?;
+        let prior = geometric_span_native::produce_native(ids, batch, time, &events, compiled)?;
+        Ok((current, prior))
+    }
+
+    fn hidden_geometric_span_native(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        compiled: &CompiledSpanActions,
+        target: Option<&ReadBindingTarget>,
+        potential: Option<&CompiledGeometricPotentials>,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let span = self
+            .geometric_span
+            .as_ref()
+            .ok_or_else(|| invalid("native span replay requires geometric spans"))?;
+        let address = self
+            .geometric_address
+            .as_ref()
+            .ok_or_else(|| invalid("native span replay requires geometric addressing"))?;
+        self.validate_geometric_address(address)?;
+        let p = self.params()?;
+        compiled.validate_for(p.get("embedding.weight")?, span)?;
+        if let Some(target) = target {
+            self.validate_binding(batch, time, target)?;
+        }
+        let tokens = self.embed_with(&p, ids, batch, time)?;
+        let mut binding = target.map(|target| BindingCapture {
+            target,
+            masses: None,
+        });
+        let x = self.layer_range_with_source(
+            &p,
+            tokens.clone(),
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            LatchGates::Soft,
+            ReadSource {
+                tokens: Some(&tokens),
+                span_policy: SpanPolicy::Ordered,
+                native_span: Some((compiled, ids)),
+                native_potential: potential,
+            },
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        Ok((hidden, binding.and_then(|capture| capture.masses)))
+    }
+
+    fn validate_geometric_address(&self, address: &GeometricAddressConfig) -> Result<()> {
+        self.config.validate()?;
+        address.validate(self.config.width, self.config.heads)?;
+        if !self.device.is_cpu()
+            || self.config.arch != StackArch::Geometric
+            || self.config.pattern != "rra"
+            || self.config.select.is_some()
+            || self.config.pointer.is_some()
+            || self.served.is_some()
+            || self.read_identity_carry
+            || !matches!(
+                (&self.geometric_span, self.read_identity_latch),
+                (None, Some(ReadIdentityLatch::Held)) | (Some(_), None)
+            )
+        {
+            return Err(invalid(
+                "geometric addressing requires CPU rra, a Held latch or span producer, full causal support and no pointer, carry or served view",
+            ));
+        }
+        Ok(())
+    }
+
+    fn address_weights(&self, p: &Params<'_>, layer: usize) -> Result<AddressWeights> {
+        let get = |name: &str| p.layer(layer, &format!("read.address.{name}")).cloned();
+        Ok(AddressWeights {
+            content_unary: get("content_unary")?,
+            context_unary: get("context_unary")?,
+            pair: get("pair")?,
+            content_radius: get("content_radius")?,
+            context_radius: get("context_radius")?,
+            content_presence: get("content_presence")?,
+            context_presence: get("context_presence")?,
+        })
+    }
+
+    fn geometric_address_read(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        x: &Tensor,
+        capture: &mut Capture<'_>,
+        binding: &mut Option<BindingCapture<'_>>,
+        gates: LatchGates,
+        config: &GeometricAddressConfig,
+        source: ReadSource<'_>,
+    ) -> Result<Tensor> {
+        if layer != 2 || matches!(gates, LatchGates::Replay(_) | LatchGates::Projections(..)) {
+            return Err(invalid(
+                "geometric addressing does not accept numerical q/k or identity replay",
+            ));
+        }
+        let (batch, time, _) = x.dims3()?;
+        let heads = self.config.heads;
+        tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
+        let u = self.norm(p, x, &layer_name(layer, "read_norm.weight"))?;
+        let prior = match &self.geometric_span {
+            Some(span) => {
+                if !matches!(gates, LatchGates::Soft) {
+                    return Err(invalid(
+                        "geometric spans do not use binary latch gate overrides",
+                    ));
+                }
+                let tokens = source.tokens.ok_or_else(|| {
+                    invalid("geometric spans require original selected token rows")
+                })?;
+                let logits = self.span_control_logits(p, layer, &u)?;
+                match source.native_span {
+                    Some((compiled, ids)) => {
+                        if source.span_policy != SpanPolicy::Ordered {
+                            return Err(invalid("native span replay does not accept LastToken"));
+                        }
+                        geometric_span_native::produce_native(ids, batch, time, &logits, compiled)?
+                    }
+                    None => geometric_span::produce(tokens, &logits, span, source.span_policy)?,
+                }
+            }
+            None => {
+                self.read_latch_inputs(p, layer, &u, ReadIdentityLatch::Held, gates)?
+                    .0
+            }
+        };
+        let weights = self.address_weights(p, layer)?;
+        let mut scores = match source.native_potential {
+            Some(compiled) => {
+                if source.native_span.is_none() {
+                    return Err(invalid(
+                        "native geometric potentials require the compiled span producer",
+                    ));
+                }
+                geometric_potential_native::score_native(&u, &prior, config, &weights, compiled)?
+            }
+            None => geometric_address::score(&u, &prior, config, &weights)?,
+        };
+        if scores.dims4()? != (batch, heads, time, time) {
+            return Err(invalid(
+                "geometric address scores differ from [batch,heads,time,time]",
+            ));
+        }
+        let mut ages = Vec::with_capacity(time * time);
+        let mut mask = Vec::with_capacity(time * time);
+        for query in 0..time {
+            for source in 0..time {
+                ages.push(query.saturating_sub(source) as u32);
+                mask.push(if source <= query {
+                    0.0f32
+                } else {
+                    f32::NEG_INFINITY
+                });
+            }
+        }
+        let ages = Tensor::from_vec(ages, time * time, &self.device)?;
+        let age = p
+            .layer(layer, "read.age")?
+            .index_select(&ages, 1)?
+            .reshape((1, heads, time, time))?;
+        scores = scores
+            .broadcast_add(&age)?
+            .broadcast_add(&Tensor::from_vec(mask, (1, 1, time, time), &self.device)?)?;
+        let null = Self::linear(&u, p.layer(layer, "read.null.weight")?)?
+            .broadcast_add(p.layer(layer, "read.null.bias")?)?
+            .transpose(1, 2)?
+            .unsqueeze(3)?;
+        let scores = Tensor::cat(&[&null, &scores], 3)?;
+        let value = self.heads(
+            &Self::linear(&u, p.layer(layer, "read.value.weight")?)?,
+            batch,
+            time,
+        )?;
+        let (value, value_width) = self.read_binding_values(value, layer, binding)?;
+        let value = Tensor::cat(
+            &[
+                &Tensor::zeros((batch, heads, 1, value.dim(3)?), DType::F32, &self.device)?,
+                &value,
+            ],
+            2,
+        )?;
+        let read = candle_nn::ops::softmax(&scores, 3)?.matmul(&value)?;
+        self.finish_geometric_read(p, layer, &read, value_width, capture, binding)
+    }
+
+    fn read_latch_gate_logits(&self, p: &Params<'_>, layer: usize, u: &Tensor) -> Result<Tensor> {
+        let (batch, time, width) = u.dims3()?;
+        let zero = Tensor::zeros((batch, 1, width), u.dtype(), u.device())?;
+        let previous = if time == 1 {
+            zero.clone()
+        } else {
+            Tensor::cat(&[&zero, &u.narrow(1, 0, time - 1)?], 1)?
+        };
+        let gate_input = Tensor::cat(&[u, &previous], 2)?;
+        Ok(
+            Self::linear(&gate_input, p.layer(layer, "read.identity_gate.weight")?)?
+                .broadcast_add(p.layer(layer, "read.identity_gate.bias")?)?,
+        )
+    }
+
+    fn read_latch_inputs(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        u: &Tensor,
+        mode: ReadIdentityLatch,
+        gate_policy: LatchGates,
+    ) -> Result<(Tensor, Tensor)> {
+        let (batch, time, width) = u.dims3()?;
+        let gates = gate_policy.apply(&self.read_latch_gate_logits(p, layer, u)?)?;
+        let mut state = Tensor::zeros((batch, 1, width), u.dtype(), u.device())?;
+        let zero = state.clone();
+        let mut identities = Vec::with_capacity(time);
+        for t in 0..time {
+            identities.push(state.clone());
+            let gate = gates.narrow(1, t, 1)?;
+            if matches!(gate_policy, LatchGates::Hard) {
+                // A hard action copies the existing state or current content
+                // exactly, without renormalizing or blending either value.
+                let no_capture = match mode {
+                    ReadIdentityLatch::Held => &state,
+                    ReadIdentityLatch::Local => &zero,
+                };
+                state = gate
+                    .broadcast_as((batch, 1, width))?
+                    .to_dtype(DType::U8)?
+                    .where_cond(&u.narrow(1, t, 1)?, no_capture)?;
+                continue;
+            }
+            let update = u.narrow(1, t, 1)?.broadcast_mul(&gate)?;
+            state = match mode {
+                ReadIdentityLatch::Held => state
+                    .broadcast_mul(&gate.affine(-1.0, 1.0)?)?
+                    .add(&update)?,
+                ReadIdentityLatch::Local => update,
+            };
+        }
+        Ok((Tensor::cat(&identities, 1)?, gates))
+    }
+
+    /// Diagnostic gate openings [batch,time] from the actual layer input.
+    /// This does not modify gates or inject event annotations.
+    pub fn read_identity_latch_gates(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        layer: usize,
+    ) -> Result<Tensor> {
+        Ok(candle_nn::ops::sigmoid(
+            &self.read_identity_latch_gate_logits(ids, batch, time, layer)?,
+        )?)
+    }
+
+    /// Gate preactivations [batch,time] from the same learned input and map as
+    /// the actual reader, with a live gradient to its gate and preceding trunk.
+    /// For stable training-only capture credit, form two-class logits [0,z]
+    /// and use [`logits_cross_entropy`] with labels 0 (no capture) or 1
+    /// (capture). Do not take logarithms of rounded sigmoid probabilities.
+    /// This accessor neither supplies actions nor changes inference gates.
+    pub fn read_identity_latch_gate_logits(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        layer: usize,
+    ) -> Result<Tensor> {
+        self.latch_gate_logits_with_policy(ids, batch, time, layer, LatchGates::Soft)
+    }
+
+    /// Actual binary actions [batch,time] for the hard-latch counterfactual.
+    /// All preceding read layers also use hard gates in this call. This differs
+    /// from thresholding the ordinary soft getter in a stack with earlier reads.
+    /// A finite logit >= 0 captures, including a tie; a negative logit holds the
+    /// prior Held identity or sets the Local identity to zero for the next row.
+    pub fn read_identity_latch_hard_gates(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        layer: usize,
+    ) -> Result<Tensor> {
+        self.require_hard_read_identity_latch()?;
+        LatchGates::Hard.apply(&self.latch_gate_logits_with_policy(
+            ids,
+            batch,
+            time,
+            layer,
+            LatchGates::Hard,
+        )?)
+    }
+
+    fn latch_gate_logits_with_policy(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        layer: usize,
+        gates: LatchGates,
+    ) -> Result<Tensor> {
+        if self.read_identity_latch.is_none() {
+            return Err(invalid("read identity latch is disabled"));
+        }
+        if layer >= self.config.layers() || self.config.layer_kind(layer) != 'a' {
+            return Err(invalid(
+                "read identity latch gate diagnostic needs a read layer",
+            ));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_bound(&p, x, 0..layer, &mut None, &mut None, gates)?;
+        let u = self.norm(&p, &x, &layer_name(layer, "read_norm.weight"))?;
+        Ok(self.read_latch_gate_logits(&p, layer, &u)?.squeeze(2)?)
     }
 
     fn recurrence(
@@ -1335,6 +2499,222 @@ impl StackModel {
         Ok(hidden.matmul(&p.head()?.t()?)?)
     }
 
+    /// Raw vocabulary logits with every learned read latch's gate replaced by
+    /// the diagnostic action `logit >= 0`. The selected Held/Local recurrence,
+    /// learned content, q/k/value maps and read scorer are otherwise unchanged.
+    /// Like [`Self::forward`], this does not mix in a pointer head.
+    ///
+    /// This is a per-call floating-point research counterfactual, not a served
+    /// model or a training STE. It changes no parameters or persistent options;
+    /// [`Self::save`] still saves the original soft model. Reports must record
+    /// this override separately; loading that model never enables hard gates.
+    pub fn forward_hard_read_identity_latch(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        self.require_hard_read_identity_latch()?;
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_bound(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut None,
+            LatchGates::Hard,
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Actual gained read input for the fixed single-read `rra` diagnostic.
+    /// This observes the preceding floating-point trunk; it is not an integer
+    /// normalizer or a serving export.
+    pub fn read_identity_latch_replay_input(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        self.require_identity_replay()?;
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_hooked(&p, x, 0..2, &mut None)?;
+        self.norm(&p, &x, &layer_name(2, "read_norm.weight"))
+    }
+
+    fn require_identity_replay(&self) -> Result<()> {
+        if self.geometric_address.is_some() {
+            return Err(invalid(
+                "geometric addressing has no numerical identity or q/k replay view",
+            ));
+        }
+        self.require_hard_read_identity_latch()?;
+        if self.config.pattern != "rra" || self.config.pointer.is_some() {
+            return Err(invalid("identity replay needs rra without a pointer head"));
+        }
+        Ok(())
+    }
+
+    fn validate_identity_replay(&self, prior: &Tensor, batch: usize, time: usize) -> Result<()> {
+        self.require_identity_replay()?;
+        if prior.dims3()? != (batch, time, self.config.width)
+            || prior.dtype() != DType::F32
+            || prior.device().location() != self.device.location()
+            || prior
+                .flatten_all()?
+                .to_vec1::<f32>()?
+                .iter()
+                .any(|x| !x.is_finite())
+        {
+            return Err(invalid(
+                "identity replay needs finite matching prior vectors",
+            ));
+        }
+        if prior
+            .narrow(1, 0, 1)?
+            .flatten_all()?
+            .to_vec1::<f32>()?
+            .iter()
+            .any(|x| *x != 0.)
+        {
+            return Err(invalid("identity replay starts at zero"));
+        }
+        Ok(())
+    }
+
+    /// Numerical-component diagnostic: caller supplies the prior gained
+    /// identity reconstructed from its causal latch. The model does not certify
+    /// caller causality. Current-role maps, values, trunk and scorer remain
+    /// floating point. No override is persisted and no parameters are modified.
+    pub fn forward_read_identity_latch_replay(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        prior: &Tensor,
+    ) -> Result<Tensor> {
+        self.validate_identity_replay(prior, batch, time)?;
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_bound(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut None,
+            LatchGates::Replay(prior),
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Observes exact-source mass under the same numerical replay as its
+    /// forward. Labels select probabilities only and do not select identity.
+    pub fn read_binding_masses_identity_latch_replay(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        binding: &ReadBindingTarget,
+        prior: &Tensor,
+    ) -> Result<Tensor> {
+        self.validate_identity_replay(prior, batch, time)?;
+        let p = self.params()?;
+        Ok(self
+            .hidden_with_binding_policy(&p, ids, batch, time, binding, LatchGates::Replay(prior))?
+            .1)
+    }
+
+    fn validate_projection_replay(
+        &self,
+        query: &Tensor,
+        key: &Tensor,
+        batch: usize,
+        time: usize,
+    ) -> Result<()> {
+        self.require_identity_replay()?;
+        for projection in [query, key] {
+            if projection.dims3()? != (batch, time, self.config.width)
+                || projection.dtype() != DType::F32
+                || projection.device().location() != self.device.location()
+                || projection
+                    .flatten_all()?
+                    .to_vec1::<f32>()?
+                    .iter()
+                    .any(|x| !x.is_finite())
+            {
+                return Err(invalid(
+                    "projection replay needs finite matching q/k vectors",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Per-call numerical q/k diagnostic for the fixed single-read rra stack.
+    /// Caller supplies projected vectors, before splitting heads. Their causal
+    /// construction is the caller's obligation. Values, scorer and surrounding
+    /// model stay unchanged; no projection override enters saved model state.
+    pub fn forward_read_projection_replay(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        query: &Tensor,
+        key: &Tensor,
+    ) -> Result<Tensor> {
+        self.validate_projection_replay(query, key, batch, time)?;
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let x = self.layer_range_bound(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut None,
+            LatchGates::Projections(query, key),
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Observe source mass with the same supplied projections as the forward.
+    /// Binding labels select measured probabilities and never supply q/k.
+    pub fn read_binding_masses_projection_replay(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        binding: &ReadBindingTarget,
+        query: &Tensor,
+        key: &Tensor,
+    ) -> Result<Tensor> {
+        self.validate_projection_replay(query, key, batch, time)?;
+        let p = self.params()?;
+        Ok(self
+            .hidden_with_binding_policy(
+                &p,
+                ids,
+                batch,
+                time,
+                binding,
+                LatchGates::Projections(query, key),
+            )?
+            .1)
+    }
+
+    fn require_hard_read_identity_latch(&self) -> Result<()> {
+        if self.read_identity_latch.is_none() || self.served.is_some() {
+            return Err(invalid(
+                "hard read identity latch diagnostic needs an enabled float latch",
+            ));
+        }
+        Ok(())
+    }
+
     /// The final normalized states [batch * time, width], which the tied
     /// embedding (in served mode, the served head) maps to logits.
     pub fn hidden(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
@@ -1367,6 +2747,24 @@ impl StackModel {
         capture: &mut Capture<'_>,
     ) -> Result<Tensor> {
         let x = self.embed_with(p, ids, batch, time)?;
+        if self.geometric_span.is_some() {
+            let source = ReadSource {
+                tokens: Some(&x),
+                span_policy: SpanPolicy::Ordered,
+                native_span: None,
+                native_potential: None,
+            };
+            let hidden = self.layer_range_with_source(
+                p,
+                x.clone(),
+                0..self.config.layers(),
+                capture,
+                &mut None,
+                LatchGates::Soft,
+                source,
+            )?;
+            return self.finish_hooked(p, hidden, capture);
+        }
         self.layers_hooked(p, x, capture)
     }
 
@@ -1456,22 +2854,38 @@ impl StackModel {
         layers: std::ops::Range<usize>,
         capture: &mut Capture<'_>,
     ) -> Result<Tensor> {
-        self.layer_range_bound(p, x, layers, capture, &mut None)
+        self.layer_range_bound(p, x, layers, capture, &mut None, LatchGates::Soft)
     }
 
     fn layer_range_bound(
+        &self,
+        p: &Params<'_>,
+        x: Tensor,
+        layers: std::ops::Range<usize>,
+        capture: &mut Capture<'_>,
+        binding: &mut Option<BindingCapture<'_>>,
+        gates: LatchGates,
+    ) -> Result<Tensor> {
+        self.layer_range_with_source(p, x, layers, capture, binding, gates, ReadSource::default())
+    }
+
+    fn layer_range_with_source(
         &self,
         p: &Params<'_>,
         mut x: Tensor,
         layers: std::ops::Range<usize>,
         capture: &mut Capture<'_>,
         binding: &mut Option<BindingCapture<'_>>,
+        gates: LatchGates,
+        source: ReadSource<'_>,
     ) -> Result<Tensor> {
         for layer in layers {
             let mixed = match (self.config.arch, self.config.layer_kind(layer)) {
                 (StackArch::Transformer, _) => self.attention(p, layer, &x, capture)?,
                 (StackArch::Geometric, 'r') => self.recurrence(p, layer, &x, capture)?,
-                (StackArch::Geometric, _) => self.geometric_read(p, layer, &x, capture, binding)?,
+                (StackArch::Geometric, _) => {
+                    self.geometric_read_with_source(p, layer, &x, capture, binding, gates, source)?
+                }
             };
             x = x.add(&mixed)?;
             x = x.add(&self.mlp(p, layer, &x, capture)?)?;
@@ -1571,6 +2985,7 @@ impl StackModel {
                 dim: pointer.dim,
                 score: pointer.score,
                 select: pointer.select,
+                route: pointer.route,
                 ids: ids.to_vec(),
                 targets: targets.to_vec(),
                 weights: weights.map(<[f32]>::to_vec),
@@ -1641,13 +3056,59 @@ impl StackModel {
         time: usize,
         target: &ReadBindingTarget,
     ) -> Result<(Tensor, Tensor)> {
+        self.hidden_with_binding_policy(p, ids, batch, time, target, LatchGates::Soft)
+    }
+
+    fn hidden_with_binding_policy(
+        &self,
+        p: &Params<'_>,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        target: &ReadBindingTarget,
+        gates: LatchGates,
+    ) -> Result<(Tensor, Tensor)> {
+        self.hidden_with_binding_span_policy(
+            p,
+            ids,
+            batch,
+            time,
+            target,
+            gates,
+            SpanPolicy::Ordered,
+        )
+    }
+
+    fn hidden_with_binding_span_policy(
+        &self,
+        p: &Params<'_>,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        target: &ReadBindingTarget,
+        gates: LatchGates,
+        span_policy: SpanPolicy,
+    ) -> Result<(Tensor, Tensor)> {
         self.validate_binding(batch, time, target)?;
         let x = self.embed_with(p, ids, batch, time)?;
         let mut binding = Some(BindingCapture {
             target,
             masses: None,
         });
-        let x = self.layer_range_bound(p, x, 0..self.config.layers(), &mut None, &mut binding)?;
+        let x = self.layer_range_with_source(
+            p,
+            x.clone(),
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            gates,
+            ReadSource {
+                tokens: Some(&x),
+                span_policy,
+                native_span: None,
+                native_potential: None,
+            },
+        )?;
         let hidden = self.finish_hooked(p, x, &mut None)?;
         let masses = binding
             .and_then(|binding| binding.masses)
@@ -1668,6 +3129,50 @@ impl StackModel {
     ) -> Result<Tensor> {
         let p = self.params()?;
         Ok(self.hidden_with_binding(&p, ids, batch, time, binding)?.1)
+    }
+
+    /// The existing exact-source observer under the explicit last-token span
+    /// control. Labels only select observed probabilities, never token actions
+    /// or predicted controller transitions.
+    pub fn read_binding_masses_geometric_span_last_token(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        binding: &ReadBindingTarget,
+    ) -> Result<Tensor> {
+        if self.geometric_span.is_none() {
+            return Err(invalid("geometric span production is disabled"));
+        }
+        let p = self.params()?;
+        Ok(self
+            .hidden_with_binding_span_policy(
+                &p,
+                ids,
+                batch,
+                time,
+                binding,
+                LatchGates::Soft,
+                SpanPolicy::LastToken,
+            )?
+            .1)
+    }
+
+    /// Exact source-set probabilities under the same per-call hard override as
+    /// [`Self::forward_hard_read_identity_latch`]. Labels only select observed
+    /// masses and do not enter the hard gate, hidden states or language logits.
+    pub fn read_binding_masses_hard_read_identity_latch(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        binding: &ReadBindingTarget,
+    ) -> Result<Tensor> {
+        self.require_hard_read_identity_latch()?;
+        let p = self.params()?;
+        Ok(self
+            .hidden_with_binding_policy(&p, ids, batch, time, binding, LatchGates::Hard)?
+            .1)
     }
 
     /// Joint language and exact-source binding losses from one forward graph.
@@ -1849,6 +3354,7 @@ impl StackModel {
             dim: pointer.dim,
             score: pointer.score,
             select: pointer.select,
+            route: pointer.route,
             ids: ids.to_vec(),
             targets: targets.to_vec(),
             weights: weights.map(<[f32]>::to_vec),
@@ -1921,8 +3427,9 @@ impl StackModel {
             score: pointer.score,
             select: pointer.select,
             beta: one_value(&self.pointer_beta(&p)?)?,
+            route: pointer.route,
         };
-        let attention = pointer_attention(&side, 0, time - 1, &rule)?;
+        let attention = pointer_attention(&side, 0, time - 1, &rule, ids)?;
         let gate = sigmoid_f64(f64::from(
             side[(time - 1) * (2 * pointer.dim + 1) + 2 * pointer.dim],
         ));
@@ -1988,6 +3495,17 @@ impl StackModel {
     /// and pins its digest in config.json; a default save removes stale carry
     /// metadata and retains the legacy config byte format.
     pub fn save(&self, directory: &Path) -> Result<()> {
+        if let Some(span) = &self.geometric_span {
+            span.validate(self.config.width)?;
+            if self.geometric_address.is_none() || self.read_identity_latch.is_some() {
+                return Err(invalid(
+                    "geometric span producer and address/latch inventory differ",
+                ));
+            }
+        }
+        if let Some(config) = &self.geometric_address {
+            self.validate_geometric_address(config)?;
+        }
         fs::create_dir_all(directory)?;
         let tensors: std::collections::HashMap<String, Tensor> = self
             .variables
@@ -2027,6 +3545,103 @@ impl StackModel {
             fs::write(&carry_path, bytes)?;
         } else {
             match fs::remove_file(&carry_path) {
+                Ok(()) => (),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let latch_path = directory.join(READ_IDENTITY_LATCH_RECORD);
+        if let Some(mode) = self.read_identity_latch {
+            let record = ReadIdentityLatchRecord {
+                schema: READ_IDENTITY_LATCH_SCHEMA.to_owned(),
+                operation: if self.geometric_address.is_some() {
+                    READ_IDENTITY_LATCH_ADDRESS_OPERATION
+                } else {
+                    READ_IDENTITY_LATCH_OPERATION
+                }
+                .to_owned(),
+                mode,
+                config_sha256: hex::encode(Sha256::digest(serde_json::to_vec_pretty(
+                    &self.config,
+                )?)),
+                model_sha256: hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?)),
+            };
+            let bytes = serde_json::to_vec_pretty(&record)?;
+            let marker = ReadIdentityCarryMarker {
+                schema: READ_IDENTITY_LATCH_SCHEMA.to_owned(),
+                record_sha256: hex::encode(Sha256::digest(&bytes)),
+            };
+            let mut with_marker: serde_json::Value = serde_json::from_slice(&config)?;
+            with_marker["read_identity_latch"] = serde_json::to_value(marker)?;
+            config = serde_json::to_vec_pretty(&with_marker)?;
+            fs::write(latch_path, bytes)?;
+        } else {
+            match fs::remove_file(latch_path) {
+                Ok(()) => (),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let address_path = directory.join(GEOMETRIC_ADDRESS_RECORD);
+        if let Some(address) = &self.geometric_address {
+            let record = GeometricAddressRecord {
+                schema: GEOMETRIC_ADDRESS_SCHEMA.to_owned(),
+                operation: if self.geometric_span.is_some() {
+                    GEOMETRIC_ADDRESS_SPAN_OPERATION
+                } else {
+                    GEOMETRIC_ADDRESS_OPERATION
+                }
+                .to_owned(),
+                address: address.clone(),
+                config_sha256: hex::encode(Sha256::digest(serde_json::to_vec_pretty(
+                    &self.config,
+                )?)),
+                model_sha256: hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?)),
+            };
+            let bytes = serde_json::to_vec_pretty(&record)?;
+            let marker = ReadIdentityCarryMarker {
+                schema: GEOMETRIC_ADDRESS_SCHEMA.to_owned(),
+                record_sha256: hex::encode(Sha256::digest(&bytes)),
+            };
+            let mut with_marker: serde_json::Value = serde_json::from_slice(&config)?;
+            with_marker["geometric_address"] = serde_json::to_value(marker)?;
+            config = serde_json::to_vec_pretty(&with_marker)?;
+            fs::write(address_path, bytes)?;
+        } else {
+            match fs::remove_file(address_path) {
+                Ok(()) => (),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let span_path = directory.join(GEOMETRIC_SPAN_RECORD);
+        if let Some(span) = &self.geometric_span {
+            let record = GeometricSpanRecord {
+                schema: GEOMETRIC_SPAN_SCHEMA.to_owned(),
+                operation: GEOMETRIC_SPAN_OPERATION.to_owned(),
+                span: span.clone(),
+                config_sha256: hex::encode(Sha256::digest(serde_json::to_vec_pretty(
+                    &self.config,
+                )?)),
+                model_sha256: hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?)),
+            };
+            let bytes = serde_json::to_vec_pretty(&record)?;
+            let marker = ReadIdentityCarryMarker {
+                schema: GEOMETRIC_SPAN_SCHEMA.to_owned(),
+                record_sha256: hex::encode(Sha256::digest(&bytes)),
+            };
+            let mut with_marker: serde_json::Value = serde_json::from_slice(&config)?;
+            with_marker["geometric_span"] = serde_json::to_value(marker)?;
+            config = serde_json::to_vec_pretty(&with_marker)?;
+            fs::write(span_path, bytes)?;
+        } else {
+            match fs::remove_file(span_path) {
                 Ok(()) => (),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
                 Err(error) => return Err(error.into()),
@@ -2135,6 +3750,180 @@ impl StackModel {
         Ok(true)
     }
 
+    /// Verify the optional learned-latch record and return its mode. The
+    /// marker pins exact metadata bytes; the sidecar binds operation, mode,
+    /// canonical configuration and exact saved weights including the new maps.
+    pub fn saved_read_identity_latch(directory: &Path) -> Result<Option<ReadIdentityLatch>> {
+        #[derive(Deserialize)]
+        struct ConfigMarker {
+            #[serde(default)]
+            read_identity_latch: Option<ReadIdentityCarryMarker>,
+            #[serde(default)]
+            geometric_address: Option<ReadIdentityCarryMarker>,
+        }
+        let config_bytes = fs::read(directory.join("config.json"))?;
+        let marker: ConfigMarker = serde_json::from_slice(&config_bytes)?;
+        let bytes = match fs::read(directory.join(READ_IDENTITY_LATCH_RECORD)) {
+            Ok(bytes) => Some(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        let has_address_marker = marker.geometric_address.is_some();
+        let (marker, bytes) = match (marker.read_identity_latch, bytes) {
+            (None, None) => return Ok(None),
+            (Some(marker), Some(bytes)) => (marker, bytes),
+            _ => {
+                return Err(invalid(
+                    "read identity latch marker and record presence differ",
+                ))
+            }
+        };
+        let record: ReadIdentityLatchRecord = serde_json::from_slice(&bytes)?;
+        let config: StackConfig = serde_json::from_slice(&config_bytes)?;
+        let expected_operation = if has_address_marker {
+            READ_IDENTITY_LATCH_ADDRESS_OPERATION
+        } else {
+            READ_IDENTITY_LATCH_OPERATION
+        };
+        if marker.schema != READ_IDENTITY_LATCH_SCHEMA
+            || record.schema != READ_IDENTITY_LATCH_SCHEMA
+            || record.operation != expected_operation
+            || marker.record_sha256 != hex::encode(Sha256::digest(&bytes))
+            || record.config_sha256
+                != hex::encode(Sha256::digest(serde_json::to_vec_pretty(&config)?))
+            || record.model_sha256
+                != hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?))
+            || Self::saved_served_representation(directory)?.is_some()
+            || Self::saved_read_identity_carry(directory)?
+            || config.arch != StackArch::Geometric
+            || !config.pattern.contains('a')
+        {
+            return Err(invalid(
+                "saved read identity latch operation, model binding or configuration differs",
+            ));
+        }
+        Ok(Some(record.mode))
+    }
+
+    /// Verify a geometric-address sidecar against its config marker, exact
+    /// model bytes, fixed codebook/root order and the Held-latch contract.
+    /// No marker and no record is the legacy projected reader. One without
+    /// the other is an error; these are integrity checks, not authentication.
+    pub fn saved_geometric_address(directory: &Path) -> Result<Option<GeometricAddressConfig>> {
+        #[derive(Deserialize)]
+        struct ConfigMarker {
+            #[serde(default)]
+            geometric_address: Option<ReadIdentityCarryMarker>,
+        }
+        let config_bytes = fs::read(directory.join("config.json"))?;
+        let marker: ConfigMarker = serde_json::from_slice(&config_bytes)?;
+        let bytes = match fs::read(directory.join(GEOMETRIC_ADDRESS_RECORD)) {
+            Ok(bytes) => Some(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        let (marker, bytes) = match (marker.geometric_address, bytes) {
+            (None, None) => return Ok(None),
+            (Some(marker), Some(bytes)) => (marker, bytes),
+            _ => {
+                return Err(invalid(
+                    "geometric address marker and record presence differ",
+                ))
+            }
+        };
+        let record: GeometricAddressRecord = serde_json::from_slice(&bytes)?;
+        let config: StackConfig = serde_json::from_slice(&config_bytes)?;
+        config.validate()?;
+        record.address.validate(config.width, config.heads)?;
+        let span = Self::saved_geometric_span(directory)?;
+        let expected_operation = if span.is_some() {
+            GEOMETRIC_ADDRESS_SPAN_OPERATION
+        } else {
+            GEOMETRIC_ADDRESS_OPERATION
+        };
+        let latch = Self::saved_read_identity_latch(directory)?;
+        if marker.schema != GEOMETRIC_ADDRESS_SCHEMA
+            || record.schema != GEOMETRIC_ADDRESS_SCHEMA
+            || record.operation != expected_operation
+            || marker.record_sha256 != hex::encode(Sha256::digest(&bytes))
+            || record.config_sha256
+                != hex::encode(Sha256::digest(serde_json::to_vec_pretty(&config)?))
+            || record.model_sha256
+                != hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?))
+            || config.arch != StackArch::Geometric
+            || config.pattern != "rra"
+            || config.select.is_some()
+            || config.pointer.is_some()
+            || !matches!(
+                (span, latch),
+                (None, Some(ReadIdentityLatch::Held)) | (Some(_), None)
+            )
+        {
+            return Err(invalid(
+                "saved geometric address operation, parameters or model binding differs",
+            ));
+        }
+        Ok(Some(record.address))
+    }
+
+    /// Verify the distinct ordered-span producer and its exact parameter and
+    /// configuration binding. A scalar latch, missing address mode, orphaned
+    /// sidecar, unknown operation or changed root/action ordering fails closed.
+    pub fn saved_geometric_span(directory: &Path) -> Result<Option<GeometricSpanConfig>> {
+        #[derive(Deserialize)]
+        struct ConfigMarker {
+            #[serde(default)]
+            geometric_span: Option<ReadIdentityCarryMarker>,
+            #[serde(default)]
+            geometric_address: Option<ReadIdentityCarryMarker>,
+        }
+        let config_bytes = fs::read(directory.join("config.json"))?;
+        let marker: ConfigMarker = serde_json::from_slice(&config_bytes)?;
+        let has_address = marker.geometric_address.is_some();
+        let bytes = match fs::read(directory.join(GEOMETRIC_SPAN_RECORD)) {
+            Ok(bytes) => Some(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        let (marker, bytes) = match (marker.geometric_span, bytes) {
+            (None, None) => return Ok(None),
+            (Some(marker), Some(bytes)) => (marker, bytes),
+            _ => return Err(invalid("geometric span marker and record presence differ")),
+        };
+        let record: GeometricSpanRecord = serde_json::from_slice(&bytes)?;
+        let config: StackConfig = serde_json::from_slice(&config_bytes)?;
+        config.validate()?;
+        record.span.validate(config.width)?;
+        if marker.schema != GEOMETRIC_SPAN_SCHEMA
+            || record.schema != GEOMETRIC_SPAN_SCHEMA
+            || record.operation != GEOMETRIC_SPAN_OPERATION
+            || !has_address
+            || marker.record_sha256 != hex::encode(Sha256::digest(&bytes))
+            || record.config_sha256
+                != hex::encode(Sha256::digest(serde_json::to_vec_pretty(&config)?))
+            || record.model_sha256
+                != hex::encode(Sha256::digest(fs::read(
+                    directory.join("model.safetensors"),
+                )?))
+            || config.arch != StackArch::Geometric
+            || config.pattern != "rra"
+            || config.select.is_some()
+            || config.pointer.is_some()
+            || Self::saved_read_identity_latch(directory)?.is_some()
+            || Self::saved_read_identity_carry(directory)?
+            || Self::saved_served_representation(directory)?.is_some()
+        {
+            return Err(invalid(
+                "saved geometric span operation, model binding or configuration differs",
+            ));
+        }
+        Ok(Some(record.span))
+    }
+
     /// Load a saved model. A directory whose [`TRANSPORT_RECORD`] records a
     /// transport snap loads with it set ([`Self::saved_transport_snap`] checks
     /// its roots; [`Self::set_transport_snap`] checks the configuration), so
@@ -2146,8 +3935,30 @@ impl StackModel {
         let config: StackConfig =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
         config.validate()?;
+        let read_identity_latch = Self::saved_read_identity_latch(directory)?;
+        let geometric_span = Self::saved_geometric_span(directory)?;
+        let geometric_address = Self::saved_geometric_address(directory)?;
+        if geometric_address.is_some() && !device.is_cpu() {
+            return Err(invalid("geometric address models currently require CPU"));
+        }
         let tensors = candle_core::safetensors::load(directory.join("model.safetensors"), device)?;
-        let shapes = config.shapes();
+        let mut shapes = config.shapes();
+        if read_identity_latch.is_some() {
+            shapes.extend(read_identity_latch_shapes(&config));
+        }
+        if geometric_address.is_some() {
+            remove_address_projection_parameters(&mut shapes);
+            for (suffix, shape) in geometric_address::parameter_shapes(config.width, config.heads)?
+            {
+                shapes.insert(layer_name(2, &suffix), shape);
+            }
+        }
+        if geometric_span.is_some() {
+            if geometric_address.is_none() {
+                return Err(invalid("geometric span lacks geometric address mode"));
+            }
+            shapes.extend(geometric_span_shapes(&config));
+        }
         if tensors.len() != shapes.len() {
             return Err(invalid("saved stack tensors differ from the configuration"));
         }
@@ -2168,6 +3979,9 @@ impl StackModel {
             served: None,
             transport: None,
             read_identity_carry: false,
+            read_identity_latch,
+            geometric_address,
+            geometric_span,
         };
         model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
         model.set_read_identity_carry(Self::saved_read_identity_carry(directory)?)?;
@@ -2220,10 +4034,24 @@ impl StackModel {
     ) -> Result<Tensor> {
         let p = self.params()?;
         let mut x = self.embed_with(&p, ids, batch, time)?;
+        let tokens = x.clone();
         for layer in 0..self.config.layers() {
             let mixed = match self.config.layer_kind(layer) {
                 'r' => self.composed_recurrence(&p, layer, &x, transport)?,
-                _ => self.geometric_read(&p, layer, &x, &mut None, &mut None)?,
+                _ => self.geometric_read_with_source(
+                    &p,
+                    layer,
+                    &x,
+                    &mut None,
+                    &mut None,
+                    LatchGates::Soft,
+                    ReadSource {
+                        tokens: Some(&tokens),
+                        span_policy: SpanPolicy::Ordered,
+                        native_span: None,
+                        native_potential: None,
+                    },
+                )?,
             };
             x = x.add(&mixed)?;
             x = x.add(&self.mlp(&p, layer, &x, &mut None)?)?;
@@ -2397,6 +4225,55 @@ pub const READ_IDENTITY_CARRY_RECORD: &str = "read-identity-carry.json";
 const READ_IDENTITY_CARRY_SCHEMA: &str = "uor-r4.stack-read-identity-carry/1";
 const READ_IDENTITY_CARRY_OPERATION: &str =
     "q_key=normalized_input[t-1];t0=zeros;value=normalized_input[t];null=normalized_input[t];age=current;support=unchanged";
+
+pub const READ_IDENTITY_LATCH_RECORD: &str = "read-identity-latch.json";
+const READ_IDENTITY_LATCH_SCHEMA: &str = "uor-r4.stack-read-identity-latch/1";
+const READ_IDENTITY_LATCH_OPERATION: &str =
+    "g=sigmoid(W[u,prev_u]+b);held_h=(1-g)*prev_h+g*u;local_h=g*u;qk=current_role+identity(prev_h);initial=zeros;value_null_age_support=unchanged;no_state_normalization";
+const READ_IDENTITY_LATCH_ADDRESS_OPERATION: &str =
+    "g=sigmoid(W[u,prev_u]+b);held_h=(1-g)*prev_h+g*u;initial=zeros;direct_geometric_address=prior_h,current_u;no_qk_maps;value_null_age_support=unchanged;no_state_normalization";
+
+pub const GEOMETRIC_ADDRESS_RECORD: &str = "geometric-address.json";
+const GEOMETRIC_ADDRESS_SCHEMA: &str = "uor-r4.stack-geometric-address/1";
+const GEOMETRIC_ADDRESS_OPERATION: &str =
+    "content=prior_held_h;context=current_gained_u;paired_direct_4d_codes;directed_relatives;separate_radius_presence;learned_unary_bilinear_radius_presence;no_qk_maps;causal_including_self;NoRead_age_value_output=unchanged";
+const GEOMETRIC_ADDRESS_SPAN_OPERATION: &str =
+    "content=prior_committed_ordered_token_span;context=current_gained_u;paired_direct_4d_codes;directed_relatives;separate_radius_presence;learned_unary_bilinear_radius_presence;no_qk_maps;causal_including_self;NoRead_age_value_output=unchanged";
+
+pub const GEOMETRIC_SPAN_RECORD: &str = "geometric-span.json";
+const GEOMETRIC_SPAN_SCHEMA: &str = "uor-r4.stack-geometric-span/1";
+const GEOMETRIC_SPAN_OPERATION: &str =
+    "actions=raw_selected_embedding_4d_roots;controller=W[current_gained_u,previous_gained_u]+b;Hold_Open_Append_Commit;predicted_earliest_argmax;ordered_right_product;old_committed_content_before_step;unit_radius_separate_presence;training_labels_never_input";
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GeometricSpanRecord {
+    schema: String,
+    operation: String,
+    span: GeometricSpanConfig,
+    config_sha256: String,
+    model_sha256: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GeometricAddressRecord {
+    schema: String,
+    operation: String,
+    address: GeometricAddressConfig,
+    config_sha256: String,
+    model_sha256: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReadIdentityLatchRecord {
+    schema: String,
+    operation: String,
+    mode: ReadIdentityLatch,
+    config_sha256: String,
+    model_sha256: String,
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -3242,8 +5119,14 @@ impl StackModel {
     pub fn set_served_representation(&mut self, codec: Option<Arc<dyn MapCodec>>) -> Result<()> {
         self.served = match codec {
             None => None,
+            Some(_) if self.geometric_address.is_some() => {
+                return Err(invalid("geometric addressing has no served representation"));
+            }
             Some(_) if self.read_identity_carry => {
                 return Err(invalid("read identity carry has no served representation"));
+            }
+            Some(_) if self.read_identity_latch.is_some() => {
+                return Err(invalid("read identity latch has no served representation"));
             }
             Some(_) if self.config.pointer.is_some() => return Err(pointer_served_refusal()),
             Some(codec) => {
@@ -6042,6 +7925,8 @@ struct PointerRule {
     select: Option<PointerSelect>,
     /// The Lorentz scale `exp(pointer.log_beta)`; Dot has none.
     beta: f64,
+    /// Exact prime routing, which replaces the scores and selection.
+    route: Option<PrimeRoute>,
 }
 
 /// Query row `row` of a pointer's `side` (rows `[query | key | gate logit]`,
@@ -6147,8 +8032,19 @@ fn pointer_attention(
     first: usize,
     t: usize,
     rule: &PointerRule,
+    ids: &[u32],
 ) -> candle_core::Result<Vec<f64>> {
-    pointer_weights(pointer_scores(side, first, t, rule), rule.select)
+    match rule.route {
+        // The window's tokens: `ids` is indexed like `side`'s rows.
+        Some(route) => match ids.get(first..=first + t) {
+            Some(window) if route.ranked => {
+                ranked_attention(pointer_scores(side, first, t, rule), window, t, route)
+            }
+            Some(window) => Ok(route_attention(window, t, route)),
+            None => candle_core::bail!("a routed pointer needs the window's token ids"),
+        },
+        None => pointer_weights(pointer_scores(side, first, t, rule), rule.select),
+    }
 }
 
 /// One scored position of the mixture.
@@ -6182,6 +8078,8 @@ struct PointerMixture {
     dim: usize,
     score: ReadScore,
     select: Option<PointerSelect>,
+    /// Exact prime routing of the sources ([`PrimeRoute`]): no score gradient.
+    route: Option<PrimeRoute>,
     /// The input token of every position: what the head copies.
     ids: Vec<u32>,
     targets: Vec<u32>,
@@ -6206,6 +8104,7 @@ impl PointerMixture {
             score: self.score,
             select: self.select,
             beta,
+            route: self.route,
         }
     }
 
@@ -6219,7 +8118,7 @@ impl PointerMixture {
     ) -> candle_core::Result<MixtureRow> {
         let (first, t) = (n - n % self.time, n % self.time);
         let target = self.targets[n];
-        let attention = pointer_attention(side, first, t, &self.rule(beta))?;
+        let attention = pointer_attention(side, first, t, &self.rule(beta), &self.ids)?;
         let copy: f64 = attention
             .iter()
             .zip(&self.ids[first..=first + t])
@@ -6380,7 +8279,13 @@ impl CustomOp3 for PointerMixture {
                     // p_copy is 0 whatever the scores are, so this row gives
                     // them no gradient (and none is formed: zero times the
                     // overflow would be NaN).
-                    let sources: &[f64] = if row.copy > 0.0 { &row.attention } else { &[] };
+                    // An exact route has no learned score; a ranked one ranks by it.
+                    let scored = self.route.is_none_or(|route| route.ranked);
+                    let sources: &[f64] = if row.copy > 0.0 && scored {
+                        &row.attention
+                    } else {
+                        &[]
+                    };
                     let query = pointer_query(&s, dim, n);
                     let mut d_query = vec![0f64; dim];
                     let mut d_beta_sum = 0.0;
@@ -7308,6 +9213,1593 @@ mod tests {
         }
     }
 
+    fn tiny_address_model() -> Result<StackModel> {
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "rra", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        model.set_read_identity_latch(ReadIdentityLatch::Held)?;
+        model.set_geometric_address(GeometricAddressConfig::new(
+            model.config.width,
+            model.config.heads,
+        )?)?;
+        Ok(model)
+    }
+
+    fn tiny_span_model() -> Result<StackModel> {
+        let mut model = tiny_address_model()?;
+        model.set_geometric_span(GeometricSpanConfig::new(model.config.width)?)?;
+        // Construction-only controller: stable action markers occupy the
+        // first lane, while two payloads have different static action lanes.
+        // No forward API receives these expected labels.
+        let width = model.config.width;
+        let embedding = &model.variables()["embedding.weight"];
+        let mut rows = embedding.flatten_all()?.to_vec1::<f32>()?;
+        for (id, action) in [(1, 1), (2, 2), (3, 2), (4, 3), (5, 0), (6, 0)] {
+            rows[id * width..id * width + 4].fill(0.0);
+            rows[id * width + action] = 3.0;
+        }
+        for lane in 1..width / 4 {
+            rows[2 * width + 4 * lane..2 * width + 4 * lane + 4]
+                .copy_from_slice(&[0.0, 1.0, 0.0, 0.0]);
+            rows[3 * width + 4 * lane..3 * width + 4 * lane + 4]
+                .copy_from_slice(&[0.0, 0.0, 1.0, 0.0]);
+        }
+        embedding.set(&Tensor::from_vec(rows, embedding.shape(), &cpu())?)?;
+        let mut controller = vec![0.0f32; 8 * width];
+        for action in 0..4 {
+            controller[action * 2 * width + action] = 1.0;
+        }
+        model.variables()["layers.02.read.span_control.weight"].set(&Tensor::from_vec(
+            controller,
+            (4, 2 * width),
+            &cpu(),
+        )?)?;
+        Ok(model)
+    }
+
+    #[test]
+    fn geometric_span_shared_forward_source_observer_causality_and_controls() -> Result<()> {
+        let model = tiny_span_model()?;
+        let ids = [1, 2, 3, 4, 5, 1, 3, 2, 4, 6];
+        let expected_actions = vec![1, 2, 2, 3, 0, 1, 2, 2, 3, 0];
+        assert_eq!(
+            model
+                .geometric_span_control_logits(&ids, 1, 10)?
+                .argmax(2)?
+                .to_vec2::<u32>()?[0],
+            expected_actions
+        );
+        assert!(model.read_identity_latch().is_none());
+        for name in [
+            "query.weight",
+            "key.weight",
+            "query_identity.weight",
+            "key_identity.weight",
+            "identity_gate.weight",
+            "identity_gate.bias",
+            "log_beta",
+            "offset",
+        ] {
+            assert!(
+                !model
+                    .variables()
+                    .contains_key(&format!("layers.02.read.{name}")),
+                "{name}"
+            );
+        }
+        let reference = model.forward(&ids, 1, 10)?;
+        let target = ReadBindingTarget {
+            layer: 2,
+            head: 0,
+            rows: vec![ReadBinding {
+                batch: 0,
+                query: 9,
+                sources: vec![4],
+            }],
+        };
+        let p = model.params()?;
+        let (hidden, masses) = model.hidden_with_binding(&p, &ids, 1, 10, &target)?;
+        assert!(max_abs_gap(&hidden, &model.hidden(&ids, 1, 10)?)? < 1e-7);
+        let mass = masses.to_vec1::<f32>()?[0];
+        assert!(mass > 0.0 && mass < 1.0);
+        let mut other = target.clone();
+        other.rows[0].sources = vec![0, 2];
+        assert!(
+            max_abs_gap(
+                &hidden,
+                &model.hidden_with_binding(&p, &ids, 1, 10, &other)?.0
+            )? < 1e-7
+        );
+        let mut future = ids;
+        future[8] = 2;
+        future[9] = 3;
+        assert_eq!(
+            bits(&reference.narrow(0, 0, 8)?)?,
+            bits(&model.forward(&future, 1, 10)?.narrow(0, 0, 8)?)?
+        );
+        let counterfactual = model.forward_geometric_span_last_token(&ids, 1, 10)?;
+        assert!(max_abs_gap(&reference, &counterfactual)? > 0.0);
+        let last_mass = model
+            .read_binding_masses_geometric_span_last_token(&ids, 1, 10, &target)?
+            .to_vec1::<f32>()?[0];
+        assert!((mass - last_mass).abs() > 0.0);
+        assert_eq!(bits(&reference)?, bits(&model.forward(&ids, 1, 10)?)?);
+        let output = &model.variables()["layers.02.read.out.weight"];
+        let saved = output.as_tensor().copy()?;
+        output.set(&output.zeros_like()?)?;
+        assert!(max_abs_gap(&reference, &model.forward(&ids, 1, 10)?)? > 0.0);
+        output.set(&saved)?;
+        assert_eq!(bits(&reference)?, bits(&model.forward(&ids, 1, 10)?)?);
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_span_language_and_event_gradients_reach_controller_and_trunk() -> Result<()> {
+        let model = tiny_span_model()?;
+        let ids = [1, 2, 3, 4, 5, 1, 3, 2, 4, 6];
+        let targets: Vec<u32> = ids.iter().map(|x| (x + 7) % 37).collect();
+        let gradients = model.loss(&ids, &targets, 1, 10)?.backward()?;
+        for name in [
+            "layers.02.read.span_control.weight",
+            "layers.02.read.span_control.bias",
+            "layers.02.read.address.content_unary",
+            "layers.02.read.address.pair",
+            "layers.01.rec.in.weight",
+            "embedding.weight",
+        ] {
+            let gradient = gradients
+                .get(&model.variables()[name])
+                .ok_or_else(|| invalid(format!("language misses {name}")))?;
+            let size = gradient.abs()?.max_all()?.to_scalar::<f32>()?;
+            assert!(
+                size.is_finite() && size > 0.0,
+                "pure language {name}: {size}"
+            );
+        }
+        // Event CE is the explicit teaching path for validity-only OPEN and
+        // for initially uncommitted/empty states. No labels enter the scan.
+        let event = logits_cross_entropy(
+            &model
+                .geometric_span_control_logits(&ids, 1, 10)?
+                .reshape((10, 4))?,
+            &[1, 2, 2, 3, 0, 1, 2, 2, 3, 0],
+            None,
+        )?
+        .backward()?;
+        for name in [
+            "layers.02.read.span_control.weight",
+            "layers.01.rec.in.weight",
+            "embedding.weight",
+        ] {
+            assert!(
+                event
+                    .get(&model.variables()[name])
+                    .ok_or_else(|| invalid("event gradient absent"))?
+                    .abs()?
+                    .max_all()?
+                    .to_scalar::<f32>()?
+                    > 0.0,
+                "{name}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_span_earlier_token_credit_uses_ordered_product_not_context_route() -> Result<()> {
+        let model = tiny_span_model()?;
+        let ids = [1, 2, 3, 4, 5, 1, 3, 2, 4, 6];
+        let p = model.params()?;
+        let original = model.embed(&ids, 1, 10)?;
+        let tokens = Var::from_tensor(&original.detach())?;
+        let context = model
+            .norm(
+                &p,
+                &model.run_layers(original, 0..2)?,
+                "layers.02.read_norm.weight",
+            )?
+            .detach();
+        let controller = model.geometric_span_control_logits(&ids, 1, 10)?.detach();
+        let objective = |policy| -> Result<Tensor> {
+            let prior = geometric_span::produce(
+                tokens.as_tensor(),
+                &controller,
+                model.geometric_span().unwrap(),
+                policy,
+            )?;
+            let scores = geometric_address::score(
+                &context,
+                &prior,
+                model.geometric_address().unwrap(),
+                &model.address_weights(&p, 2)?,
+            )?;
+            let query = scores.get(0)?.get(0)?.get(9)?.reshape((1, 10))?;
+            logits_cross_entropy(&query, &[4], None)
+        };
+        let ordered = objective(SpanPolicy::Ordered)?.backward()?;
+        let last = objective(SpanPolicy::LastToken)?.backward()?;
+        let earlier = |grads: &candle_core::backprop::GradStore| -> Result<f32> {
+            Ok(grads
+                .get(tokens.as_tensor())
+                .ok_or_else(|| invalid("token action gradient absent"))?
+                .get(0)?
+                .get(1)?
+                .narrow(0, 4, 12)?
+                .abs()?
+                .max_all()?
+                .to_scalar::<f32>()?)
+        };
+        assert!(earlier(&ordered)? > 0.0);
+        assert_eq!(earlier(&last)?, 0.0);
+        Ok(())
+    }
+
+    #[test]
+    fn native_geometric_potential_reader_uses_saved_tables_and_refuses_stale_weights() -> Result<()>
+    {
+        use crate::geometric_potential_native::PotentialSourceBinding;
+        use crate::geometric_span_native::SpanSourceBinding;
+        let root = std::env::temp_dir().join(format!(
+            "native-potential-reader-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| invalid(e.to_string()))?
+                .as_nanos()
+        ));
+        let model = tiny_span_model()?;
+        model.save(&root)?;
+        let registry = b"test-token-registry/1";
+        let p = model.params()?;
+        let span_source = SpanSourceBinding::from_files(
+            &root.join("model.safetensors"),
+            &root.join("config.json"),
+            registry,
+        )?;
+        let span = CompiledSpanActions::compile(
+            p.get("embedding.weight")?,
+            model
+                .geometric_span()
+                .ok_or_else(|| invalid("span absent"))?,
+            &span_source,
+        )?;
+        let potential_source = PotentialSourceBinding::from_directory(&root, registry)?;
+        let config = model
+            .geometric_address()
+            .ok_or_else(|| invalid("address absent"))?;
+        let weights = model.geometric_address_potentials()?;
+        let potential = CompiledGeometricPotentials::compile(&weights, config, &potential_source)?;
+        let ids = [1, 2, 3, 4, 5, 1, 3, 2, 4, 6];
+        let before = bits(&model.forward(&ids, 1, 10)?)?;
+        let (current, prior) = model.geometric_potential_inputs(&ids, 1, 10, &span)?;
+        let expected_current = model.norm(
+            &p,
+            &model.run_layers(model.embed(&ids, 1, 10)?, 0..2)?,
+            "layers.02.read_norm.weight",
+        )?;
+        assert_eq!(bits(&current)?, bits(&expected_current)?);
+        let controller = model.geometric_span_control_logits(&ids, 1, 10)?;
+        let expected_prior = geometric_span::produce(
+            &model.embed(&ids, 1, 10)?,
+            &controller,
+            model
+                .geometric_span()
+                .ok_or_else(|| invalid("span absent"))?,
+            SpanPolicy::Ordered,
+        )?;
+        assert_eq!(bits(&prior)?, bits(&expected_prior)?);
+        let original_scores = geometric_address::score(&current, &prior, config, &weights)?;
+        let native_scores = geometric_potential_native::score_native(
+            &current, &prior, config, &weights, &potential,
+        )?;
+        assert_eq!(original_scores.dims(), native_scores.dims());
+        let native = model.forward_geometric_potential_native(&ids, 1, 10, &span, &potential)?;
+        assert_eq!(native.dims(), [10, model.config.vocab_size]);
+        assert!(native
+            .flatten_all()?
+            .to_vec1::<f32>()?
+            .iter()
+            .all(|x| x.is_finite()));
+        for head in 0..2 {
+            let target = ReadBindingTarget {
+                layer: 2,
+                head,
+                rows: vec![ReadBinding {
+                    batch: 0,
+                    query: 9,
+                    sources: vec![4],
+                }],
+            };
+            let masses = model
+                .read_binding_masses_geometric_potential_native(
+                    &ids, 1, 10, &target, &span, &potential,
+                )?
+                .to_vec1::<f32>()?;
+            assert_eq!(masses.len(), 1);
+            assert!(masses[0].is_finite() && (0.0..=1.0).contains(&masses[0]));
+        }
+        let legacy = tiny_address_model()?;
+        assert!(legacy
+            .forward_geometric_potential_native(&ids, 1, 10, &span, &potential)
+            .is_err());
+        let vars = model.variables();
+        let pair = vars
+            .get("layers.02.read.address.pair")
+            .ok_or_else(|| invalid("pair absent"))?;
+        let old = pair.as_tensor().copy()?;
+        pair.set(&old.affine(1.0, 0.001)?)?;
+        assert!(model
+            .forward_geometric_potential_native(&ids, 1, 10, &span, &potential)
+            .is_err());
+        pair.set(&old)?;
+        assert_eq!(bits(&model.forward(&ids, 1, 10)?)?, before);
+        assert_eq!(
+            bits(&model.forward_geometric_span_native(&ids, 1, 10, &span)?)?,
+            before
+        );
+        std::fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn native_geometric_span_reader_and_source_replay_bind_saved_actions() -> Result<()> {
+        use crate::geometric_span_native::SpanSourceBinding;
+        let root = std::env::temp_dir().join(format!(
+            "native-geometric-span-replay-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| invalid(e.to_string()))?
+                .as_nanos(),
+        ));
+        let model = tiny_span_model()?;
+        model.save(&root)?;
+        let source = SpanSourceBinding::from_files(
+            &root.join("model.safetensors"),
+            &root.join("config.json"),
+            b"test-token-registry/1",
+        )?;
+        let p = model.params()?;
+        let span = model
+            .geometric_span()
+            .ok_or_else(|| invalid("span fixture absent"))?;
+        let compiled = CompiledSpanActions::compile(p.get("embedding.weight")?, span, &source)?;
+        let ids = [1, 2, 3, 4, 5, 1, 3, 2, 4, 6];
+        let expected = bits(&model.forward(&ids, 1, 10)?)?;
+        assert_eq!(
+            bits(&model.forward_geometric_span_native(&ids, 1, 10, &compiled)?)?,
+            expected
+        );
+        for head in 0..2 {
+            let target = ReadBindingTarget {
+                layer: 2,
+                head,
+                rows: vec![ReadBinding {
+                    batch: 0,
+                    query: 9,
+                    sources: vec![4],
+                }],
+            };
+            assert_eq!(
+                bits(&model.read_binding_masses(&ids, 1, 10, &target)?)?,
+                bits(
+                    &model.read_binding_masses_geometric_span_native(
+                        &ids, 1, 10, &target, &compiled
+                    )?
+                )?
+            );
+        }
+        assert_eq!(bits(&model.forward(&ids, 1, 10)?)?, expected);
+        let legacy = tiny_address_model()?;
+        assert!(legacy
+            .forward_geometric_span_native(&ids, 1, 10, &compiled)
+            .is_err());
+        let variables = model.variables();
+        let embedding = variables
+            .get("embedding.weight")
+            .ok_or_else(|| invalid("embedding absent"))?;
+        let old = embedding.as_tensor().copy()?;
+        embedding.set(&old.affine(1.0, 0.001)?)?;
+        assert!(model
+            .forward_geometric_span_native(&ids, 1, 10, &compiled)
+            .is_err());
+        embedding.set(&old)?;
+        assert_eq!(
+            bits(&model.forward_geometric_span_native(&ids, 1, 10, &compiled)?)?,
+            expected
+        );
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_span_save_reload_legacy_and_metadata_refusals() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("stack-geometric-span-{}", std::process::id()));
+        let model = tiny_span_model()?;
+        let ids = [1, 2, 3, 4, 5, 1, 3, 2, 4, 6];
+        let expected = bits(&model.forward(&ids, 1, 10)?)?;
+        model.save(&root)?;
+        let loaded = StackModel::load(&root, &cpu())?;
+        assert_eq!(loaded.geometric_span(), model.geometric_span());
+        assert_eq!(loaded.parameter_count(), model.parameter_count());
+        assert_eq!(bits(&loaded.forward(&ids, 1, 10)?)?, expected);
+        let config_bytes = fs::read(root.join("config.json"))?;
+        let record_bytes = fs::read(root.join(GEOMETRIC_SPAN_RECORD))?;
+        fs::remove_file(root.join(GEOMETRIC_SPAN_RECORD))?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        for field in [
+            "schema",
+            "operation",
+            "config_sha256",
+            "model_sha256",
+            "root_table_sha256",
+            "action_order",
+        ] {
+            let mut record: serde_json::Value = serde_json::from_slice(&record_bytes)?;
+            if field == "root_table_sha256" {
+                record["span"][field] = serde_json::json!("unknown");
+            } else if field == "action_order" {
+                record["span"][field] = serde_json::json!(["open", "hold", "append", "commit"]);
+            } else {
+                record[field] = serde_json::json!("unknown");
+            }
+            let bytes = serde_json::to_vec_pretty(&record)?;
+            let mut config: serde_json::Value = serde_json::from_slice(&config_bytes)?;
+            config["geometric_span"]["record_sha256"] =
+                serde_json::json!(hex::encode(Sha256::digest(&bytes)));
+            fs::write(
+                root.join("config.json"),
+                serde_json::to_vec_pretty(&config)?,
+            )?;
+            fs::write(root.join(GEOMETRIC_SPAN_RECORD), bytes)?;
+            assert!(StackModel::load(&root, &cpu()).is_err(), "resealed {field}");
+        }
+        model.save(&root)?;
+        let mut config: serde_json::Value = serde_json::from_slice(&config_bytes)?;
+        config.as_object_mut().unwrap().remove("geometric_span");
+        fs::write(
+            root.join("config.json"),
+            serde_json::to_vec_pretty(&config)?,
+        )?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        let legacy = tiny_address_model()?;
+        legacy.save(&root)?;
+        assert!(!root.join(GEOMETRIC_SPAN_RECORD).exists());
+        let reloaded = StackModel::load(&root, &cpu())?;
+        assert!(reloaded.geometric_span().is_none());
+        assert_eq!(
+            bits(&legacy.forward(&ids, 1, 10)?)?,
+            bits(&reloaded.forward(&ids, 1, 10)?)?
+        );
+        fs::write(root.join(GEOMETRIC_SPAN_RECORD), &record_bytes)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_span_refuses_unprovenanced_inputs_and_old_latch_overrides() -> Result<()> {
+        let mut model = tiny_span_model()?;
+        let ids = [1, 2, 3, 4, 5, 6];
+        assert!(model.hidden_from_input(model.embed(&ids, 1, 6)?).is_err());
+        let prefix = model.run_layers(model.embed(&ids, 1, 6)?, 0..2)?;
+        assert!(model.run_layers(prefix, 2..3).is_err());
+        assert!(model.forward_hard_read_identity_latch(&ids, 1, 6).is_err());
+        assert!(model
+            .read_identity_latch_gate_logits(&ids, 1, 6, 2)
+            .is_err());
+        assert!(model
+            .set_read_identity_latch(ReadIdentityLatch::Held)
+            .is_err());
+        assert!(model.set_read_identity_carry(true).is_err());
+        assert!(model
+            .set_served_representation(Some(Arc::new(D11Interim)))
+            .is_err());
+        assert!(model.forward(&ids, 1, 6).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_address_removes_qk_maps_and_preserves_causal_label_free_forward() -> Result<()> {
+        let mut model = tiny_address_model()?;
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        let expected = model.forward(&ids, 2, 8)?;
+        let count = model.parameter_count();
+        for suffix in ["query", "key", "query_identity", "key_identity"] {
+            let name = layer_name(2, &format!("read.{suffix}.weight"));
+            assert!(!model.variables.contains_key(&name));
+            // Even an accidentally reintroduced obsolete map cannot affect
+            // the new forward. It is not part of a valid saved inventory.
+            model.variables.insert(
+                name,
+                Var::from_tensor(&Tensor::full(1000.0f32, (16, 16), &cpu())?)?,
+            );
+        }
+        assert_eq!(bits(&expected)?, bits(&model.forward(&ids, 2, 8)?)?);
+        remove_address_projection_parameters(&mut model.variables);
+        assert_eq!(model.parameter_count(), count);
+        assert!(!model.variables.contains_key("layers.02.read.log_beta"));
+        assert!(!model.variables.contains_key("layers.02.read.offset"));
+
+        let p = model.params()?;
+        let target = binding_rows(2);
+        let (hidden, masses) = model.hidden_with_binding(&p, &ids, 2, 8, &target)?;
+        assert!(max_abs_gap(&hidden, &model.hidden(&ids, 2, 8)?)? < 1e-7);
+        assert!(masses
+            .to_vec1::<f32>()?
+            .iter()
+            .all(|p| *p > 0.0 && *p < 1.0));
+        let mut changed_labels = target.clone();
+        changed_labels.rows[0].sources = vec![0, 3];
+        let (second, _) = model.hidden_with_binding(&p, &ids, 2, 8, &changed_labels)?;
+        assert!(max_abs_gap(&hidden, &second)? < 1e-7);
+        let mut future = ids.clone();
+        future[6] = 23;
+        future[7] = 17;
+        let changed = model.forward(&future, 2, 8)?;
+        assert_eq!(
+            max_abs_gap(&expected.narrow(0, 0, 6)?, &changed.narrow(0, 0, 6)?)?,
+            0.0
+        );
+        assert_eq!(
+            max_abs_gap(&expected.narrow(0, 8, 8)?, &changed.narrow(0, 8, 8)?)?,
+            0.0
+        );
+        // The normal language logits actually consume this reader.
+        let out = &model.variables()["layers.02.read.out.weight"];
+        let original = out.as_tensor().copy()?;
+        out.set(&out.as_tensor().zeros_like()?)?;
+        assert!(max_abs_gap(&expected, &model.forward(&ids, 2, 8)?)? > 0.0);
+        out.set(&original)?;
+        assert_eq!(bits(&expected)?, bits(&model.forward(&ids, 2, 8)?)?);
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_address_source_mass_matches_scalar_causal_null_age_reference() -> Result<()> {
+        let model = tiny_address_model()?;
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8];
+        let target = ReadBindingTarget {
+            layer: 2,
+            head: 1,
+            rows: vec![ReadBinding {
+                batch: 0,
+                query: 6,
+                sources: vec![1, 4],
+            }],
+        };
+        let p = model.params()?;
+        let x = model.run_layers(model.embed(&ids, 1, 8)?, 0..2)?;
+        let u = model.norm(&p, &x, "layers.02.read_norm.weight")?;
+        let prior = model
+            .read_latch_inputs(&p, 2, &u, ReadIdentityLatch::Held, LatchGates::Soft)?
+            .0;
+        let scores = geometric_address::score(
+            &u,
+            &prior,
+            model.geometric_address().unwrap(),
+            &model.address_weights(&p, 2)?,
+        )?
+        .flatten_all()?
+        .to_vec1::<f32>()?;
+        let null = StackModel::linear(&u, p.layer(2, "read.null.weight")?)?
+            .broadcast_add(p.layer(2, "read.null.bias")?)?
+            .transpose(1, 2)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let ages = p.layer(2, "read.age")?.flatten_all()?.to_vec1::<f32>()?;
+        let value = model
+            .heads(
+                &StackModel::linear(&u, p.layer(2, "read.value.weight")?)?,
+                1,
+                8,
+            )?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let (heads, time, width) = (2, 8, 8);
+        let mut reference = vec![0f32; heads * time * width];
+        let mut expected_mass = 0.0;
+        for head in 0..heads {
+            for query in 0..time {
+                let mut row = vec![f64::from(null[head * time + query])];
+                for source in 0..=query {
+                    row.push(f64::from(
+                        scores[(head * time + query) * time + source]
+                            + ages[head * model.config.context + query - source],
+                    ));
+                }
+                let max = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                let denominator: f64 = row.iter().map(|x| (x - max).exp()).sum();
+                for source in 0..=query {
+                    let mass = (row[source + 1] - max).exp() / denominator;
+                    if head == 1 && query == 6 && [1, 4].contains(&source) {
+                        expected_mass += mass;
+                    }
+                    for coordinate in 0..width {
+                        reference[(head * time + query) * width + coordinate] += (mass
+                            * f64::from(value[(head * time + source) * width + coordinate]))
+                            as f32;
+                    }
+                }
+            }
+        }
+        let reference = Tensor::from_vec(reference, (1, heads, time, width), &cpu())?;
+        let reference = StackModel::linear(
+            &model.merge_heads(&reference, 1, time)?,
+            p.layer(2, "read.out.weight")?,
+        )?;
+        let actual = model.geometric_read(&p, 2, &x, &mut None, &mut None, LatchGates::Soft)?;
+        assert!(max_abs_gap(&reference, &actual)? < 1e-6);
+        let mass = model
+            .read_binding_masses(&ids, 1, 8, &target)?
+            .to_vec1::<f32>()?[0];
+        assert!((f64::from(mass) - expected_mass).abs() < 1e-6);
+        // NoRead has a zero value but a real denominator contribution.
+        let null_bias = &model.variables()["layers.02.read.null.bias"];
+        null_bias.set(&Tensor::full(20.0f32, 2, &cpu())?)?;
+        assert!(
+            model
+                .read_binding_masses(&ids, 1, 8, &target)?
+                .to_vec1::<f32>()?[0]
+                < mass * 1e-5
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_address_language_binding_and_capture_gradients_reach_actual_context() -> Result<()>
+    {
+        let model = tiny_address_model()?;
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        let targets: Vec<u32> = ids.iter().map(|x| (x + 3) % 37).collect();
+        let language = model.loss(&ids, &targets, 2, 8)?;
+        let grads = language.backward()?;
+        for name in [
+            "layers.02.read.address.content_unary",
+            "layers.02.read.address.context_unary",
+            "layers.02.read.address.pair",
+            "layers.02.read.address.content_radius",
+            "layers.02.read.identity_gate.weight",
+            "layers.02.read.identity_gate.bias",
+            "layers.01.rec.in.weight",
+            "embedding.weight",
+        ] {
+            let gradient = grads
+                .get(&model.variables()[name])
+                .ok_or_else(|| invalid(format!("language misses {name}")))?;
+            let size = gradient.abs()?.max_all()?.to_scalar::<f32>()?;
+            assert!(
+                size.is_finite() && size > 0.0,
+                "pure language {name}: {size}"
+            );
+        }
+        let target = binding_rows(2);
+        let joint = model.loss_with_binding(&ids, &targets, None, 2, 8, &target)?;
+        assert!((language.to_scalar::<f32>()? - joint.language.to_scalar::<f32>()?).abs() < 1e-6);
+        let source = joint.binding.backward()?;
+        for name in [
+            "layers.02.read.address.pair",
+            "layers.02.read.identity_gate.weight",
+            "layers.01.rec.in.weight",
+        ] {
+            let gradient = source
+                .get(&model.variables()[name])
+                .ok_or_else(|| invalid(format!("source misses {name}")))?;
+            assert!(
+                gradient.abs()?.max_all()?.to_scalar::<f32>()? > 0.0,
+                "{name}"
+            );
+        }
+        let capture_targets: Vec<u32> = (0..16).map(|i| u32::from(i % 4 == 1)).collect();
+        let capture_loss = || -> Result<Tensor> {
+            let logits = model
+                .read_identity_latch_gate_logits(&ids, 2, 8, 2)?
+                .reshape((16, 1))?;
+            logits_cross_entropy(
+                &Tensor::cat(&[&logits.zeros_like()?, &logits], 1)?,
+                &capture_targets,
+                None,
+            )
+        };
+        let first = capture_loss()?.backward()?;
+        for name in [
+            "layers.02.read.identity_gate.weight",
+            "layers.02.read.identity_gate.bias",
+        ] {
+            let variable = &model.variables()[name];
+            let gradient = first
+                .get(variable)
+                .ok_or_else(|| invalid("capture gate gradient"))?;
+            assert!(gradient.abs()?.max_all()?.to_scalar::<f32>()? > 0.0);
+            variable.set(&variable.as_tensor().sub(&gradient.affine(0.1, 0.0)?)?)?;
+        }
+        let second = capture_loss()?.backward()?;
+        for name in [
+            "layers.01.rec.in.weight",
+            "layers.02.read_norm.weight",
+            "embedding.weight",
+        ] {
+            let gradient = second
+                .get(&model.variables()[name])
+                .ok_or_else(|| invalid("capture context gradient"))?;
+            assert!(
+                gradient.abs()?.max_all()?.to_scalar::<f32>()? > 0.0,
+                "{name}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_address_save_reload_is_bound_and_legacy_saves_stay_unchanged() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("stack-geometric-address-{}", std::process::id()));
+        let mut model = tiny_address_model()?;
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8];
+        let expected = bits(&model.forward(&ids, 1, 8)?)?;
+        model.save(&root)?;
+        let loaded = StackModel::load(&root, &cpu())?;
+        assert_eq!(loaded.geometric_address(), model.geometric_address());
+        assert_eq!(loaded.parameter_count(), model.parameter_count());
+        assert_eq!(bits(&loaded.forward(&ids, 1, 8)?)?, expected);
+        let config_bytes = fs::read(root.join("config.json"))?;
+        let record_bytes = fs::read(root.join(GEOMETRIC_ADDRESS_RECORD))?;
+        fs::remove_file(root.join(GEOMETRIC_ADDRESS_RECORD))?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        for field in [
+            "schema",
+            "operation",
+            "config_sha256",
+            "model_sha256",
+            "root_table_sha256",
+        ] {
+            let mut record: serde_json::Value = serde_json::from_slice(&record_bytes)?;
+            if field == "root_table_sha256" {
+                record["address"][field] = serde_json::json!("00");
+            } else {
+                record[field] = serde_json::json!("unknown");
+            }
+            let bytes = serde_json::to_vec_pretty(&record)?;
+            let mut config: serde_json::Value = serde_json::from_slice(&config_bytes)?;
+            config["geometric_address"]["record_sha256"] =
+                serde_json::json!(hex::encode(Sha256::digest(&bytes)));
+            fs::write(
+                root.join("config.json"),
+                serde_json::to_vec_pretty(&config)?,
+            )?;
+            fs::write(root.join(GEOMETRIC_ADDRESS_RECORD), bytes)?;
+            assert!(StackModel::load(&root, &cpu()).is_err(), "resealed {field}");
+        }
+        model.save(&root)?;
+        let mut config: serde_json::Value = serde_json::from_slice(&config_bytes)?;
+        config.as_object_mut().unwrap().remove("geometric_address");
+        fs::write(
+            root.join("config.json"),
+            serde_json::to_vec_pretty(&config)?,
+        )?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        model.save(&root)?;
+        let mut weights = fs::read(root.join("model.safetensors"))?;
+        weights.push(0);
+        fs::write(root.join("model.safetensors"), weights)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        let plain = StackModel::new(model.config.clone(), &cpu())?;
+        plain.save(&root)?;
+        assert!(!root.join(GEOMETRIC_ADDRESS_RECORD).exists());
+        assert_eq!(
+            fs::read(root.join("config.json"))?,
+            serde_json::to_vec_pretty(&plain.config)?
+        );
+        assert_eq!(
+            bits(&StackModel::load(&root, &cpu())?.forward(&ids, 1, 8)?)?,
+            bits(&plain.forward(&ids, 1, 8)?)?
+        );
+        fs::write(root.join(GEOMETRIC_ADDRESS_RECORD), &record_bytes)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        model.variables.remove("layers.02.read.address.pair");
+        model.save(&root)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_address_refuses_incompatible_views_without_mutation() -> Result<()> {
+        let mut config = tiny(StackArch::Geometric, "rra", ReadScore::Lorentz, true);
+        config.width = 32;
+        let mut model = StackModel::new(config.clone(), &cpu())?;
+        let (bytes, _) =
+            crate::stack_export::export_stack(&model, serde_json::json!({}), None, None)?;
+        let artifact = uor_r4_lut::format::StackArtifact::parse(bytes)
+            .map_err(|error| invalid(error.to_string()))?;
+        let address = GeometricAddressConfig::new(config.width, config.heads)?;
+        assert!(model.set_geometric_address(address.clone()).is_err());
+        model.set_read_identity_latch(ReadIdentityLatch::Held)?;
+        model.set_geometric_address(address.clone())?;
+        model.set_geometric_address(address)?;
+        let count = model.parameter_count();
+        assert!(model
+            .set_served_representation(Some(Arc::new(D11Interim)))
+            .is_err());
+        assert!(
+            crate::stack_export::export_stack(&model, serde_json::json!({}), None, None).is_err()
+        );
+        assert!(crate::stack_export::stack_grid_reference(&model, &artifact).is_err());
+        assert!(model.add_pointer(PointerConfig::new(8), 7).is_err());
+        assert!(model
+            .set_select(Some(FlockSelect {
+                sink: 0,
+                window: 1,
+                k: 1
+            }))
+            .is_err());
+        assert!(model
+            .set_read_identity_latch(ReadIdentityLatch::Local)
+            .is_err());
+        assert!(model.set_read_identity_carry(true).is_err());
+        let zero = Tensor::zeros((1, 4, 32), DType::F32, &cpu())?;
+        assert!(model
+            .forward_read_identity_latch_replay(&[1, 2, 3, 4], 1, 4, &zero)
+            .is_err());
+        assert!(model
+            .forward_read_projection_replay(&[1, 2, 3, 4], 1, 4, &zero, &zero)
+            .is_err());
+        assert_eq!(model.parameter_count(), count);
+        assert!(model.config.pointer.is_none() && model.config.select.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn hard_read_identity_latch_threshold_and_causal_state_match_reference() -> Result<()> {
+        let z = Tensor::from_vec(
+            vec![-1000.0f32, -1.0, -1e-12, -0.0, 0.0, 1e-12, 1.0, 1000.0],
+            8,
+            &cpu(),
+        )?;
+        assert_eq!(
+            LatchGates::Hard.apply(&z)?.to_vec1::<f32>()?,
+            vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        );
+        // The sigmoid comparison agrees away from its rounding interval; the
+        // signed-zero tie captures. Tiny negative logits must still HOLD.
+        let ordinary = Tensor::from_vec(vec![-2.0f32, -0.1, 0.0, 0.1, 2.0], 5, &cpu())?;
+        assert_eq!(
+            bits(&LatchGates::Hard.apply(&ordinary)?)?,
+            bits(
+                &candle_nn::ops::sigmoid(&ordinary)?
+                    .ge(0.5)?
+                    .to_dtype(DType::F32)?
+            )?
+        );
+        for invalid_logit in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(LatchGates::Hard
+                .apply(&Tensor::from_vec(vec![invalid_logit], 1, &cpu())?)
+                .is_err());
+        }
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "a", ReadScore::Lorentz, false),
+                &cpu(),
+            )?;
+            model.set_read_identity_latch(mode)?;
+            let mut weights = vec![0.0f32; 32];
+            weights[0] = 1.0;
+            weights[16] = 0.5;
+            model.variables()["layers.00.read.identity_gate.weight"].set(&Tensor::from_vec(
+                weights,
+                (1, 32),
+                &cpu(),
+            )?)?;
+            model.variables()["layers.00.read.identity_gate.bias"].set(&Tensor::zeros(
+                1,
+                DType::F32,
+                &cpu(),
+            )?)?;
+            let markers = [2.0f32, -2.0, -2.0, 1.0, 0.0, -2.0, 2.0];
+            let mut values = vec![0.0f32; 7 * 16];
+            for (t, &marker) in markers.iter().enumerate() {
+                values[t * 16] = marker;
+                for c in 1..16 {
+                    values[t * 16 + c] = (16 * t + c) as f32 / 32.0;
+                }
+                values[t * 16 + 15] = -0.0;
+            }
+            let u = Tensor::from_vec(values.clone(), (1, 7, 16), &cpu())?;
+            let (identity, gates) =
+                model.read_latch_inputs(&model.params()?, 0, &u, mode, LatchGates::Hard)?;
+            let identity = identity.flatten_all()?.to_vec1::<f32>()?;
+            let gates = gates.flatten_all()?.to_vec1::<f32>()?;
+            let mut state = vec![0.0f32; 16];
+            for t in 0..7 {
+                assert_eq!(
+                    identity[t * 16..(t + 1) * 16]
+                        .iter()
+                        .map(|x| x.to_bits())
+                        .collect::<Vec<_>>(),
+                    state.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                    "{mode:?}: prior identity at {t}"
+                );
+                let z = markers[t] + if t == 0 { 0.0 } else { 0.5 * markers[t - 1] };
+                assert_eq!(gates[t], if z >= 0.0 { 1.0 } else { 0.0 });
+                if z >= 0.0 {
+                    state.copy_from_slice(&values[t * 16..(t + 1) * 16]);
+                } else if mode == ReadIdentityLatch::Local {
+                    state.fill(0.0);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn hard_read_identity_latch_forward_binding_and_later_gates_share_policy() -> Result<()> {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "raa", ReadScore::Lorentz, true),
+                &cpu(),
+            )?;
+            assert!(model.forward_hard_read_identity_latch(&ids, 2, 8).is_err());
+            assert!(model.read_identity_latch_hard_gates(&ids, 2, 8, 1).is_err());
+            assert!(model
+                .read_binding_masses_hard_read_identity_latch(&ids, 2, 8, &binding_rows(2))
+                .is_err());
+            model.set_read_identity_latch(mode)?;
+            for layer in 1..3 {
+                let w = &model.variables()[&layer_name(layer, "read.identity_gate.weight")];
+                w.set(&random(
+                    &mut Initializer(791 + layer as u64),
+                    w.dims(),
+                    0.15,
+                ))?;
+                model.variables()[&layer_name(layer, "read.identity_gate.bias")]
+                    .set(&Tensor::zeros(1, DType::F32, &cpu())?)?;
+            }
+            let before: BTreeMap<String, Vec<u32>> = model
+                .variables()
+                .iter()
+                .map(|(name, var)| Ok((name.clone(), bits(var.as_tensor())?)))
+                .collect::<Result<_>>()?;
+            let soft = bits(&model.forward(&ids, 2, 8)?)?;
+            let hard = model.forward_hard_read_identity_latch(&ids, 2, 8)?;
+            let p = model.params()?;
+            let mut x = model.embed(&ids, 2, 8)?;
+            for layer in 0..3 {
+                if layer > 0 {
+                    let u = model.norm(&p, &x, &layer_name(layer, "read_norm.weight"))?;
+                    let expected = LatchGates::Hard
+                        .apply(&model.read_latch_gate_logits(&p, layer, &u)?)?
+                        .squeeze(2)?;
+                    assert_eq!(
+                        bits(&model.read_identity_latch_hard_gates(&ids, 2, 8, layer)?)?,
+                        bits(&expected)?
+                    );
+                }
+                let mixed = if layer == 0 {
+                    model.recurrence(&p, layer, &x, &mut None)?
+                } else {
+                    model.geometric_read(&p, layer, &x, &mut None, &mut None, LatchGates::Hard)?
+                };
+                x = x.add(&mixed)?;
+                x = x.add(&model.mlp(&p, layer, &x, &mut None)?)?;
+            }
+            assert_eq!(bits(&hard)?, bits(&model.head(&model.finish(x)?)?)?);
+            // The auxiliary mask observes the same hard read and is removed
+            // before its output map; changing the label cannot change logits.
+            let mut target = binding_rows(2);
+            for source in [1, 3] {
+                target.rows[0].sources = vec![source];
+                let (hidden, mass) =
+                    model.hidden_with_binding_policy(&p, &ids, 2, 8, &target, LatchGates::Hard)?;
+                assert_eq!(bits(&hard)?, bits(&model.head(&hidden)?)?);
+                assert_eq!(
+                    bits(&mass)?,
+                    bits(
+                        &model.read_binding_masses_hard_read_identity_latch(&ids, 2, 8, &target,)?
+                    )?
+                );
+            }
+            let mut future = ids.clone();
+            future[6] = (future[6] + 1) % 37;
+            let changed = model.forward_hard_read_identity_latch(&future, 2, 8)?;
+            assert_eq!(
+                bits(&hard.narrow(0, 0, 6)?)?,
+                bits(&changed.narrow(0, 0, 6)?)?
+            );
+            for layer in 1..3 {
+                assert_eq!(
+                    bits(
+                        &model
+                            .read_identity_latch_hard_gates(&ids, 2, 8, layer)?
+                            .narrow(1, 0, 6)?
+                    )?,
+                    bits(
+                        &model
+                            .read_identity_latch_hard_gates(&future, 2, 8, layer)?
+                            .narrow(1, 0, 6)?
+                    )?
+                );
+            }
+            assert_eq!(soft, bits(&model.forward(&ids, 2, 8)?)?);
+            for (name, var) in model.variables() {
+                assert_eq!(before[name], bits(var.as_tensor())?, "mutated {name}");
+            }
+            assert!(model.read_identity_latch_hard_gates(&ids, 2, 8, 0).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_latch_replay_matches_hard_reference_and_rejects_bad_inputs() -> Result<()> {
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8];
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "rra", ReadScore::Lorentz, true),
+                &cpu(),
+            )?;
+            model.set_read_identity_latch(mode)?;
+            let bias = &model.variables()["layers.02.read.identity_gate.bias"];
+            bias.set(&Tensor::from_vec(vec![1.0f32], 1, &cpu())?)?;
+            let soft = bits(&model.forward(&ids, 1, 8)?)?;
+            let u = model.read_identity_latch_replay_input(&ids, 1, 8)?;
+            let p = model.params()?;
+            let prior = model
+                .read_latch_inputs(&p, 2, &u, mode, LatchGates::Hard)?
+                .0;
+            assert_eq!(
+                bits(&model.forward_hard_read_identity_latch(&ids, 1, 8)?)?,
+                bits(&model.forward_read_identity_latch_replay(&ids, 1, 8, &prior)?)?
+            );
+            let target = ReadBindingTarget {
+                layer: 2,
+                head: 0,
+                rows: vec![ReadBinding {
+                    batch: 0,
+                    query: 7,
+                    sources: vec![3],
+                }],
+            };
+            assert_eq!(
+                bits(&model.read_binding_masses_hard_read_identity_latch(&ids, 1, 8, &target)?)?,
+                bits(
+                    &model
+                        .read_binding_masses_identity_latch_replay(&ids, 1, 8, &target, &prior)?
+                )?
+            );
+            assert_eq!(soft, bits(&model.forward(&ids, 1, 8)?)?);
+            assert!(model
+                .forward_read_identity_latch_replay(&ids, 1, 8, &u)
+                .is_err());
+            let nan = Tensor::full(f32::NAN, (1, 8, 16), &cpu())?;
+            assert!(model
+                .forward_read_identity_latch_replay(&ids, 1, 8, &nan)
+                .is_err());
+            assert!(model
+                .forward_read_identity_latch_replay(&ids, 1, 8, &prior.narrow(1, 0, 7)?)
+                .is_err());
+        }
+        let mut wrong = StackModel::new(
+            tiny(StackArch::Geometric, "raa", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        wrong.set_read_identity_latch(ReadIdentityLatch::Held)?;
+        assert!(wrong.read_identity_latch_replay_input(&ids, 1, 8).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn read_projection_replay_matches_identity_reference_and_is_per_call() -> Result<()> {
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8];
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "rra", ReadScore::Lorentz, true),
+                &cpu(),
+            )?;
+            model.set_read_identity_latch(mode)?;
+            let ordinary = bits(&model.forward(&ids, 1, 8)?)?;
+            let before: BTreeMap<_, _> = model
+                .variables()
+                .iter()
+                .map(|(name, var)| Ok((name.clone(), bits(var.as_tensor())?)))
+                .collect::<Result<_>>()?;
+            let u = model.read_identity_latch_replay_input(&ids, 1, 8)?;
+            let p = model.params()?;
+            let prior = model
+                .read_latch_inputs(&p, 2, &u, mode, LatchGates::Hard)?
+                .0;
+            let project = |part: &str| -> Result<Tensor> {
+                Ok(
+                    StackModel::linear(&u, p.layer(2, &format!("read.{part}.weight"))?)?.add(
+                        &StackModel::linear(
+                            &prior,
+                            p.layer(2, &format!("read.{part}_identity.weight"))?,
+                        )?,
+                    )?,
+                )
+            };
+            let query = project("query")?;
+            let key = project("key")?;
+            assert_eq!(
+                bits(&model.forward_read_identity_latch_replay(&ids, 1, 8, &prior)?)?,
+                bits(&model.forward_read_projection_replay(&ids, 1, 8, &query, &key)?)?
+            );
+            for head in 0..model.config.heads {
+                let target = ReadBindingTarget {
+                    layer: 2,
+                    head,
+                    rows: vec![ReadBinding {
+                        batch: 0,
+                        query: 7,
+                        sources: vec![3],
+                    }],
+                };
+                assert_eq!(
+                    bits(
+                        &model.read_binding_masses_identity_latch_replay(
+                            &ids, 1, 8, &target, &prior
+                        )?
+                    )?,
+                    bits(&model.read_binding_masses_projection_replay(
+                        &ids, 1, 8, &target, &query, &key
+                    )?)?
+                );
+            }
+            let zero = query.zeros_like()?;
+            model.forward_read_projection_replay(&ids, 1, 8, &zero, &zero)?;
+            assert_eq!(ordinary, bits(&model.forward(&ids, 1, 8)?)?);
+            for (name, var) in model.variables() {
+                assert_eq!(before[name], bits(var.as_tensor())?);
+            }
+            let nan = Tensor::full(f32::NAN, (1, 8, 16), &cpu())?;
+            assert!(model
+                .forward_read_projection_replay(&ids, 1, 8, &nan, &key)
+                .is_err());
+            assert!(model
+                .forward_read_projection_replay(&ids, 1, 8, &query, &nan)
+                .is_err());
+            assert!(model
+                .forward_read_projection_replay(&ids, 1, 8, &query.narrow(1, 0, 7)?, &key)
+                .is_err());
+            assert!(model
+                .forward_read_projection_replay(&ids, 1, 8, &query.to_dtype(DType::F64)?, &key)
+                .is_err());
+        }
+        let mut wrong = StackModel::new(
+            tiny(StackArch::Geometric, "raa", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        wrong.set_read_identity_latch(ReadIdentityLatch::Held)?;
+        let zero = Tensor::zeros((1, 8, 16), DType::F32, &cpu())?;
+        assert!(wrong
+            .forward_read_projection_replay(&ids, 1, 8, &zero, &zero)
+            .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn hard_read_identity_latch_is_per_call_and_save_remains_soft() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("stack-hard-read-latch-{}", std::process::id()));
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8];
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let dir = root.join(format!("{mode:?}"));
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "ra", ReadScore::Lorentz, true),
+                &cpu(),
+            )?;
+            model.set_read_identity_latch(mode)?;
+            model.save(&dir)?;
+            let names = [
+                "config.json",
+                "model.safetensors",
+                READ_IDENTITY_LATCH_RECORD,
+            ];
+            let saved: Vec<Vec<u8>> = names
+                .iter()
+                .map(|name| fs::read(dir.join(name)))
+                .collect::<std::io::Result<_>>()?;
+            let soft = bits(&model.forward(&ids, 1, 8)?)?;
+            let hard = bits(&model.forward_hard_read_identity_latch(&ids, 1, 8)?)?;
+            // Initial bias -2 makes the hard state exactly zero; the ordinary
+            // model retains its nonzero soft contribution after the call.
+            assert_ne!(soft, hard);
+            assert_eq!(bits(&model.forward(&ids, 1, 8)?)?, soft);
+            model.save(&dir)?;
+            for (name, expected) in names.iter().zip(&saved) {
+                assert_eq!(&fs::read(dir.join(name))?, expected, "changed {name}");
+            }
+            let loaded = StackModel::load(&dir, &cpu())?;
+            assert_eq!(loaded.read_identity_latch(), Some(mode));
+            assert_eq!(bits(&loaded.forward(&ids, 1, 8)?)?, soft);
+            assert_eq!(
+                bits(&loaded.forward_hard_read_identity_latch(&ids, 1, 8)?)?,
+                hard
+            );
+        }
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_latch_held_and_local_match_causal_reference_and_gradients() -> Result<()> {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            for score in [ReadScore::Dot, ReadScore::Lorentz] {
+                let mut model =
+                    StackModel::new(tiny(StackArch::Geometric, "ra", score, true), &cpu())?;
+                let baseline = bits(&model.forward(&ids, 2, 8)?)?;
+                let base_count = model.parameter_count();
+                model.set_read_identity_latch(mode)?;
+                assert_eq!(
+                    model.parameter_count(),
+                    base_count + 2 * 16 * 16 + 2 * 16 + 1
+                );
+                assert_eq!(
+                    bits(model.variables()["layers.01.read.query_identity.weight"].as_tensor())?,
+                    bits(model.variables()["layers.01.read.query.weight"].as_tensor())?
+                );
+                let initial_gates = model
+                    .read_identity_latch_gates(&ids, 2, 8, 1)?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                for gate in initial_gates {
+                    assert!((gate - sigmoid(-2.0)).abs() < 1e-7);
+                }
+                // Nonzero gate weights exercise both current and previous input.
+                let gate_weight = &model.variables()["layers.01.read.identity_gate.weight"];
+                gate_weight.set(&random(&mut Initializer(721), gate_weight.dims(), 0.03))?;
+                let p = model.params()?;
+                let x = model.run_layers(model.embed(&ids, 2, 8)?, 0..1)?;
+                let u = model.norm(&p, &x, &layer_name(1, "read_norm.weight"))?;
+                let (identity, gates) =
+                    model.read_latch_inputs(&p, 1, &u, mode, LatchGates::Soft)?;
+                let uv = u.to_vec3::<f32>()?;
+                let gv = gates.squeeze(2)?.to_vec2::<f32>()?;
+                let hv = identity.to_vec3::<f32>()?;
+                let w = gate_weight.flatten_all()?.to_vec1::<f32>()?;
+                for b in 0..2 {
+                    let mut state = [0.0f32; 16];
+                    for t in 0..8 {
+                        let mut z = -2.0;
+                        for c in 0..16 {
+                            z += w[c] * uv[b][t][c];
+                            if t > 0 {
+                                z += w[16 + c] * uv[b][t - 1][c];
+                            }
+                            assert!((hv[b][t][c] - state[c]).abs() < 1e-6);
+                        }
+                        let g = sigmoid(z);
+                        assert!((gv[b][t] - g).abs() < 1e-6);
+                        for c in 0..16 {
+                            state[c] = g * uv[b][t][c]
+                                + if mode == ReadIdentityLatch::Held {
+                                    (1.0 - g) * state[c]
+                                } else {
+                                    0.0
+                                };
+                        }
+                    }
+                }
+                let project = |part: &str| -> Result<Tensor> {
+                    let current =
+                        StackModel::linear(&u, p.layer(1, &format!("read.{part}.weight"))?)?;
+                    let result = if part == "value" {
+                        current
+                    } else {
+                        current.add(&StackModel::linear(
+                            &identity,
+                            p.layer(1, &format!("read.{part}_identity.weight"))?,
+                        )?)?
+                    };
+                    model.heads(&result, 2, 8)
+                };
+                let null = StackModel::linear(&u, p.layer(1, "read.null.weight")?)?
+                    .broadcast_add(p.layer(1, "read.null.bias")?)?
+                    .transpose(1, 2)?
+                    .flatten_all()?;
+                let age = p.layer(1, "read.age")?.narrow(1, 0, 8)?.flatten_all()?;
+                let mut aux = vec![null, age];
+                if score == ReadScore::Lorentz {
+                    aux.push(p.layer(1, "read.log_beta")?.exp()?);
+                    aux.push(p.layer(1, "read.offset")?.clone());
+                }
+                let read = fused_read_selected(
+                    &project("query")?,
+                    &project("key")?,
+                    &project("value")?,
+                    &Tensor::cat(&aux, 0)?,
+                    score,
+                    true,
+                    true,
+                    false,
+                    None,
+                )?;
+                let want = StackModel::linear(
+                    &model.merge_heads(&read, 2, 8)?,
+                    p.layer(1, "read.out.weight")?,
+                )?;
+                let got =
+                    model.geometric_read(&p, 1, &x, &mut None, &mut None, LatchGates::Soft)?;
+                assert_eq!(max_abs_gap(&got, &want)?, 0.0);
+                // Future changes cannot reach any prior prediction or gate.
+                let mut future = ids.clone();
+                future[6] = (future[6] + 1) % 37;
+                assert_eq!(
+                    max_abs_gap(
+                        &model.forward(&ids, 2, 8)?.narrow(0, 0, 6)?,
+                        &model.forward(&future, 2, 8)?.narrow(0, 0, 6)?
+                    )?,
+                    0.0
+                );
+                let target = binding_rows(1);
+                let objective = || -> Result<Tensor> {
+                    let loss = model.loss_with_binding(&ids, &ids, None, 2, 8, &target)?;
+                    Ok(loss.binding.add(&loss.language.affine(0.1, 0.0)?)?)
+                };
+                let names = [
+                    "layers.01.read.query_identity.weight",
+                    "layers.01.read.key_identity.weight",
+                    "layers.01.read.identity_gate.weight",
+                    "layers.01.read.identity_gate.bias",
+                    "layers.00.rec.in.weight",
+                    "layers.01.read.age",
+                ];
+                let vars: Vec<Var> = names
+                    .iter()
+                    .map(|name| model.variables()[*name].clone())
+                    .collect();
+                let grads = objective()?.backward()?;
+                for (name, var) in names.iter().zip(&vars) {
+                    let grad = grads
+                        .get(var)
+                        .ok_or_else(|| invalid(format!("missing latch gradient {name}")))?;
+                    let size = grad.abs()?.max_all()?.to_scalar::<f32>()?;
+                    assert!(
+                        size.is_finite() && size > 0.0,
+                        "{mode:?} {score:?} {name} {size}"
+                    );
+                }
+                check_gradient(&vars, objective, 2e-2)?;
+                // Zero identity maps recover the original current-role reader.
+                for name in [
+                    "layers.01.read.query_identity.weight",
+                    "layers.01.read.key_identity.weight",
+                ] {
+                    let var = &model.variables()[name];
+                    var.set(&Tensor::zeros(var.shape(), DType::F32, &cpu())?)?;
+                }
+                assert_eq!(bits(&model.forward(&ids, 2, 8)?)?, baseline);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_latch_gate_logits_match_sigmoid_and_causal_capture_gradients() -> Result<()> {
+        let ids = [1, 7, 3, 9, 11, 4, 6, 8];
+        let targets = [0, 1, 0, 0, 1, 0, 0, 0];
+        // Equal total weight for CAPTURE and NO_CAPTURE, not a padding loss.
+        let weights: Vec<f32> = targets
+            .iter()
+            .map(|&t| if t == 1 { 0.25 } else { 1.0 / 12.0 })
+            .collect();
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let mut model = StackModel::new(
+                tiny(StackArch::Geometric, "ra", ReadScore::Lorentz, true),
+                &cpu(),
+            )?;
+            assert!(model
+                .read_identity_latch_gate_logits(&ids, 1, 8, 1)
+                .is_err());
+            model.set_read_identity_latch(mode)?;
+            assert!(model
+                .read_identity_latch_gate_logits(&ids, 1, 8, 0)
+                .is_err());
+            let capture_loss = || -> Result<Tensor> {
+                let z = model
+                    .read_identity_latch_gate_logits(&ids, 1, 8, 1)?
+                    .reshape((8, 1))?;
+                let binary = Tensor::cat(&[&Tensor::zeros((8, 1), DType::F32, &cpu())?, &z], 1)?;
+                logits_cross_entropy(&binary, &targets, Some(&weights))
+            };
+            let first = capture_loss()?.backward()?;
+            for name in [
+                "layers.01.read.identity_gate.weight",
+                "layers.01.read.identity_gate.bias",
+            ] {
+                let var = &model.variables()[name];
+                let grad = first
+                    .get(var)
+                    .ok_or_else(|| invalid(format!("capture misses {name}")))?;
+                assert!(grad.abs()?.max_all()?.to_scalar::<f32>()? > 0.0);
+                var.set(&var.as_tensor().sub(&grad.affine(0.1, 0.0)?)?)?;
+            }
+            // W_gate starts zero: the first capture gradient updates it;
+            // after that update the same objective also reaches the trunk.
+            let second = capture_loss()?.backward()?;
+            for name in [
+                "embedding.weight",
+                "layers.00.rec.in.weight",
+                "layers.01.read_norm.weight",
+            ] {
+                let grad = second
+                    .get(&model.variables()[name])
+                    .ok_or_else(|| invalid(format!("capture trunk misses {name}")))?;
+                let size = grad.abs()?.max_all()?.to_scalar::<f32>()?;
+                assert!(size.is_finite() && size > 0.0, "{mode:?} {name}: {size}");
+            }
+            let before = bits(&model.forward(&ids, 1, 8)?)?;
+            let logits = model.read_identity_latch_gate_logits(&ids, 1, 8, 1)?;
+            let p = model.params()?;
+            let x = model.run_layers(model.embed(&ids, 1, 8)?, 0..1)?;
+            let u = model.norm(&p, &x, &layer_name(1, "read_norm.weight"))?;
+            let previous = Tensor::cat(
+                &[
+                    &Tensor::zeros((1, 1, 16), DType::F32, &cpu())?,
+                    &u.narrow(1, 0, 7)?,
+                ],
+                1,
+            )?;
+            let expected = StackModel::linear(
+                &Tensor::cat(&[&u, &previous], 2)?,
+                p.layer(1, "read.identity_gate.weight")?,
+            )?
+            .broadcast_add(p.layer(1, "read.identity_gate.bias")?)?
+            .squeeze(2)?;
+            assert_eq!(bits(&logits)?, bits(&expected)?);
+            let actual_gates = model
+                .read_latch_inputs(&p, 1, &u, mode, LatchGates::Soft)?
+                .1
+                .squeeze(2)?;
+            assert_eq!(
+                bits(&candle_nn::ops::sigmoid(&logits)?)?,
+                bits(&actual_gates)?
+            );
+            assert_eq!(
+                bits(&model.read_identity_latch_gates(&ids, 1, 8, 1)?)?,
+                bits(&actual_gates)?
+            );
+            assert_eq!(bits(&model.forward(&ids, 1, 8)?)?, before);
+            let mut future = ids;
+            future[6] = 19;
+            let changed = model.read_identity_latch_gate_logits(&future, 1, 8, 1)?;
+            assert_eq!(
+                max_abs_gap(&logits.narrow(1, 0, 6)?, &changed.narrow(1, 0, 6)?)?,
+                0.0
+            );
+            // Stable logit CE retains corrective gradients even when the
+            // actual sigmoid has rounded all the way to 0 or 1.
+            let bias = &model.variables()["layers.01.read.identity_gate.bias"];
+            for (value, expected_gradient) in [(-1000.0f32, -0.5f32), (1000.0, 0.5)] {
+                bias.set(&Tensor::from_vec(vec![value], 1, &cpu())?)?;
+                let loss = capture_loss()?;
+                assert!(loss.to_scalar::<f32>()?.is_finite());
+                let grads = loss.backward()?;
+                let gradient = grads
+                    .get(bias)
+                    .ok_or_else(|| invalid("missing saturated capture gradient"))?
+                    .sum_all()?
+                    .to_scalar::<f32>()?;
+                assert!(
+                    (gradient - expected_gradient).abs() < 1e-6,
+                    "{value}: {gradient}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_latch_save_reload_restores_mode_parameters_and_rejects_bad_metadata(
+    ) -> Result<()> {
+        let root = std::env::temp_dir().join(format!("stack-read-latch-{}", std::process::id()));
+        let config = tiny(StackArch::Geometric, "ra", ReadScore::Lorentz, true);
+        let plain = StackModel::new(config.clone(), &cpu())?;
+        let ids = [1, 2, 3, 4, 5, 6];
+        for mode in [ReadIdentityLatch::Held, ReadIdentityLatch::Local] {
+            let dir = root.join(format!("{mode:?}"));
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_identity_latch(mode)?;
+            model.set_transport_snap(Some(TransportSnap::Icosian))?;
+            let expected = bits(&model.forward(&ids, 1, ids.len())?)?;
+            model.save(&dir)?;
+            let config_bytes = fs::read(dir.join("config.json"))?;
+            let record = fs::read(dir.join(READ_IDENTITY_LATCH_RECORD))?;
+            let loaded = StackModel::load(&dir, &cpu())?;
+            assert_eq!(loaded.read_identity_latch(), Some(mode));
+            assert_eq!(loaded.parameter_count(), model.parameter_count());
+            assert_eq!(loaded.transport_snap(), Some(TransportSnap::Icosian));
+            assert_eq!(bits(&loaded.forward(&ids, 1, ids.len())?)?, expected);
+            for (name, var) in model.variables() {
+                assert_eq!(
+                    bits(var.as_tensor())?,
+                    bits(loaded.variables()[name].as_tensor())?,
+                    "{name}"
+                );
+            }
+            fs::remove_file(dir.join(READ_IDENTITY_LATCH_RECORD))?;
+            assert!(StackModel::load(&dir, &cpu()).is_err());
+            for (field, value) in [
+                ("schema", "unknown/2"),
+                ("operation", "future"),
+                ("mode", "unknown"),
+                ("config_sha256", "00"),
+                ("model_sha256", "00"),
+            ] {
+                let mut altered: serde_json::Value = serde_json::from_slice(&record)?;
+                altered[field] = serde_json::json!(value);
+                let bytes = serde_json::to_vec_pretty(&altered)?;
+                let mut marker: serde_json::Value = serde_json::from_slice(&config_bytes)?;
+                marker["read_identity_latch"]["record_sha256"] =
+                    serde_json::json!(hex::encode(Sha256::digest(&bytes)));
+                fs::write(dir.join("config.json"), serde_json::to_vec_pretty(&marker)?)?;
+                fs::write(dir.join(READ_IDENTITY_LATCH_RECORD), bytes)?;
+                assert!(StackModel::load(&dir, &cpu()).is_err(), "{field}");
+            }
+            // A default save removes stale metadata and remains legacy-shaped.
+            plain.save(&dir)?;
+            assert!(!dir.join(READ_IDENTITY_LATCH_RECORD).exists());
+            assert_eq!(
+                fs::read(dir.join("config.json"))?,
+                serde_json::to_vec_pretty(&config)?
+            );
+            assert_eq!(StackModel::load(&dir, &cpu())?.read_identity_latch(), None);
+            fs::write(dir.join(READ_IDENTITY_LATCH_RECORD), &record)?;
+            assert!(StackModel::load(&dir, &cpu()).is_err());
+            // Valid metadata does not waive exact parameter-shape admission.
+            model.variables.remove("layers.01.read.key_identity.weight");
+            model.save(&dir)?;
+            assert!(StackModel::load(&dir, &cpu()).is_err());
+        }
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_latch_modes_are_matched_and_refuse_carry_served_and_mode_changes() -> Result<()>
+    {
+        let mut config = tiny(StackArch::Geometric, "ra", ReadScore::Dot, true);
+        config.width = 32;
+        config.mlp_hidden = 64;
+        let mut held = StackModel::new(config.clone(), &cpu())?;
+        let mut local = StackModel::new(config.clone(), &cpu())?;
+        held.set_read_identity_latch(ReadIdentityLatch::Held)?;
+        local.set_read_identity_latch(ReadIdentityLatch::Local)?;
+        assert_eq!(held.parameter_count(), local.parameter_count());
+        for (name, var) in held.variables() {
+            assert_eq!(
+                bits(var.as_tensor())?,
+                bits(local.variables()[name].as_tensor())?,
+                "{name}"
+            );
+        }
+        held.set_read_identity_latch(ReadIdentityLatch::Held)?;
+        assert!(held
+            .set_read_identity_latch(ReadIdentityLatch::Local)
+            .is_err());
+        assert!(held.set_read_identity_carry(true).is_err());
+        assert!(held
+            .set_served_representation(Some(Arc::new(D11Interim)))
+            .is_err());
+        assert_eq!(held.read_identity_latch(), Some(ReadIdentityLatch::Held));
+        assert!(!held.read_identity_carry() && held.served_codec().is_none());
+        let mut carry = StackModel::new(config.clone(), &cpu())?;
+        carry.set_read_identity_carry(true)?;
+        assert!(carry
+            .set_read_identity_latch(ReadIdentityLatch::Held)
+            .is_err());
+        assert_eq!(carry.read_identity_latch(), None);
+        let mut served = StackModel::new(config, &cpu())?;
+        served.set_served_representation(Some(Arc::new(D11Interim)))?;
+        assert!(served
+            .set_read_identity_latch(ReadIdentityLatch::Held)
+            .is_err());
+        assert_eq!(served.read_identity_latch(), None);
+        Ok(())
+    }
+
     #[test]
     fn read_identity_carry_matches_predecessor_qk_current_values_and_binding_gradient() -> Result<()>
     {
@@ -7380,7 +10872,7 @@ mod tests {
                 &model.merge_heads(&reference, 2, 8)?,
                 p.layer(1, "read.out.weight")?,
             )?;
-            let actual = model.geometric_read(&p, 1, &x, &mut None, &mut None)?;
+            let actual = model.geometric_read(&p, 1, &x, &mut None, &mut None, LatchGates::Soft)?;
             assert_eq!(max_abs_gap(&actual, &reference)?, 0.0);
             let target = binding_rows(1);
             let (_, observed) = model.hidden_with_binding(&p, &ids, 2, 8, &target)?;
@@ -10427,8 +13919,9 @@ mod tests {
                         score,
                         select,
                         beta,
+                        route: None,
                     };
-                    let a = pointer_attention(&side, 0, t, &rule)?;
+                    let a = pointer_attention(&side, 0, t, &rule, &[])?;
                     let kept: Vec<bool> = match select {
                         None => vec![true; t + 1],
                         Some(PointerSelect::Flock(select)) => kept_sources(select, t, &scores),
@@ -10498,9 +13991,10 @@ mod tests {
             score: ReadScore::Lorentz,
             select: None,
             beta,
+            route: None,
         };
         for t in 0..time {
-            let a = pointer_attention(&side, 0, t, &rule)?;
+            let a = pointer_attention(&side, 0, t, &rule, &[])?;
             for j in 0..=t {
                 assert!(
                     (a[j] - f64::from(read[t * time + j])).abs() < 1e-5,
@@ -10716,11 +14210,34 @@ mod tests {
                 })
                 .collect();
             let normal: f64 = exps.iter().sum();
-            let copy: f64 = (0..=t)
-                .filter(|&j| ids[first + j] == targets[n])
-                .map(|j| exps[j] / normal)
-                .sum();
+            // A routed pointer keeps the sources its route admits: the exact
+            // route weighs them by the route's score, the ranked one by the
+            // learned score plus that, and falls back to the learned
+            // softmax over every source when none is admitted.
+            let admitted = pointer
+                .route
+                .map(|route| route_scores(&ids[first..=first + t], t, route))
+                .unwrap_or_default();
+            let (attention, keep): (Vec<f64>, Vec<bool>) = match pointer.route {
+                Some(route) if route.ranked && !admitted.is_empty() => {
+                    let combined: Vec<(usize, f64)> = admitted
+                        .iter()
+                        .map(|&(j, score)| (j, scores[j] + ROUTE_SHARPNESS * score))
+                        .collect();
+                    let attention = admitted_softmax(t, &combined);
+                    let kept = attention.iter().map(|&a| a > 0.0).collect();
+                    (attention, kept)
+                }
+                Some(route) if route.ranked => (exps.iter().map(|e| e / normal).collect(), keep),
+                Some(route) => {
+                    let attention = route_attention(&ids[first..=first + t], t, route);
+                    let admitted = attention.iter().map(|&a| a > 0.0).collect();
+                    (attention, admitted)
+                }
+                None => (exps.iter().map(|e| e / normal).collect(), keep),
+            };
             let holds = |j: usize| ids[first + j] == targets[n];
+            let copy: f64 = (0..=t).filter(|&j| holds(j)).map(|j| attention[j]).sum();
             contested |=
                 (0..=t).any(|j| keep[j] && holds(j)) && (0..=t).any(|j| keep[j] && !holds(j));
             let gate = 1.0 / (1.0 + (-(project(&wg, &hidden[n])[0] + bias)).exp());
@@ -10900,6 +14417,372 @@ mod tests {
     }
 
     #[test]
+    fn token_primes_are_the_registered_primes_in_order() {
+        assert_eq!(token_prime(0), Some(2));
+        assert_eq!(token_prime(1), Some(3));
+        assert_eq!(token_prime(9), Some(29));
+        assert_eq!(token_prime(65_535), Some(821_641));
+        assert_eq!(token_prime(65_536), None);
+        // An unregistered token is no atom of a key.
+        assert_eq!(route_key(&[65_536, 0], 1, 2), 2);
+        assert_eq!(route_key(&[1, 1, 0], 2, 3), 6);
+    }
+
+    #[test]
+    fn a_route_copies_the_value_after_the_matching_key() {
+        let two = PrimeRoute::exact(2);
+        // "10 11 50" earlier; the query ends with "10 11".
+        let ids = [5u32, 10, 11, 50, 6, 7, 10, 11];
+        let attention = route_attention(&ids, 7, two);
+        assert_eq!(attention.len(), 8);
+        assert!(attention[3] > 0.999, "{attention:?}");
+        assert!((attention.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+        // The key ending at 6 overlaps the query's own tokens: not a match.
+        assert_eq!(attention[7], 0.0);
+    }
+
+    #[test]
+    fn a_route_without_a_shared_atom_attends_nowhere() {
+        let one = PrimeRoute::exact(1);
+        let two = PrimeRoute::exact(2);
+        assert!(route_attention(&[1, 2, 3, 4], 3, one)
+            .iter()
+            .all(|&a| a == 0.0));
+        // The only key wholly before `[5, 6]` is `[4]`: nothing shared,
+        // although the overlapping key `[4, 5]` shares 5.
+        assert!(route_attention(&[4, 5, 6], 2, two)
+            .iter()
+            .all(|&a| a == 0.0));
+        assert_eq!(route_attention(&[9], 0, one), vec![0.0]);
+    }
+
+    #[test]
+    fn a_route_orders_by_shared_rarity_then_recency() {
+        let one = PrimeRoute::exact(1);
+        // Two earlier 9s: the later one's successor gets more mass, by the
+        // recency term only.
+        let a = route_attention(&[9, 1, 9, 2, 9], 4, one);
+        assert!(a[1] > 0.0 && a[3] > a[1], "{a:?}");
+        let ratio = (ROUTE_SHARPNESS * ROUTE_RECENCY * 2.0 / 5.0).exp();
+        assert!((a[3] / a[1] - ratio).abs() < 1e-9);
+        assert_eq!(a[0] + a[2] + a[4], 0.0);
+        // A shared rare atom (id 300) outweighs a later shared common one
+        // (id 1).
+        let two = PrimeRoute::exact(2);
+        let b = route_attention(&[300, 50, 1, 60, 8, 9, 1, 300], 7, two);
+        assert!(b[1] + b[2] > 0.999, "{b:?}");
+        assert!(b[2] > b[1]);
+    }
+
+    #[test]
+    fn a_route_is_validated_and_excludes_a_selection() -> Result<()> {
+        assert!(PrimeRoute::exact(0).validate().is_err());
+        assert!(PrimeRoute::exact(MAX_ROUTE_WINDOW + 1).validate().is_err());
+        let route = PrimeRoute::exact(2);
+        let mut config = PointerConfig::new(4);
+        config.route = Some(route);
+        config.validate()?;
+        config.select = Some(PointerSelect::TopK(1));
+        assert!(config.validate().is_err());
+        let mut model = pointer_model(ReadScore::Dot, Some(PointerSelect::TopK(2)), 0)?;
+        assert!(model.set_pointer_route(Some(route)).is_err());
+        model.set_pointer_select(None)?;
+        model.set_pointer_route(Some(route))?;
+        assert!(model
+            .set_pointer_select(Some(PointerSelect::TopK(2)))
+            .is_err());
+        let mut plain = StackModel::new(
+            tiny(StackArch::Geometric, "ar", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        assert!(plain.set_pointer_route(Some(route)).is_err());
+        plain.set_pointer_route(None)?;
+        // The route round-trips through the saved configuration, and a
+        // pointer without one has no key.
+        let json = serde_json::to_string(&model.config)?;
+        assert!(json.contains(r#""route":{"window":2}"#), "{json}");
+        let back: StackConfig = serde_json::from_str(&json)?;
+        assert_eq!(back.pointer.and_then(|p| p.route), Some(route));
+        model.set_pointer_route(None)?;
+        assert!(!serde_json::to_string(&model.config)?.contains("route"));
+        Ok(())
+    }
+
+    /// Two windows of 12 in which a token recurs with different successors,
+    /// so a row admits sources that hold its target and sources that do not
+    /// (and a first occurrence admits none); the target is the next token
+    /// (the window's first at its end), with [`pointer_batch`]'s weights.
+    fn routed_batch() -> (Vec<u32>, Vec<u32>, Vec<f32>) {
+        let ids: Vec<u32> = vec![
+            1, 2, 1, 3, 1, 2, 4, 1, 3, 5, 1, 0, 7, 8, 7, 9, 7, 8, 6, 7, 9, 5, 7, 4,
+        ];
+        let targets: Vec<u32> = (0..24)
+            .map(|n| {
+                if n % 12 == 11 {
+                    ids[n - 11]
+                } else {
+                    ids[n + 1]
+                }
+            })
+            .collect();
+        let (_, _, weights) = pointer_batch();
+        (ids, targets, weights)
+    }
+
+    fn route_bits(weights: &[f64]) -> Vec<u64> {
+        weights.iter().map(|w| w.to_bits()).collect()
+    }
+
+    #[test]
+    fn a_ranked_route_is_exact_at_zero_scores_and_learned_where_it_admits_nothing() -> Result<()> {
+        // At zero learned scores the ranked route is the exact one.
+        let ids = [5u32, 10, 11, 50, 6, 7, 10, 11];
+        let exact = route_attention(&ids, 7, PrimeRoute::exact(2));
+        let ranked = ranked_attention(vec![0.0; 8], &ids, 7, PrimeRoute::ranked(2))?;
+        assert_eq!(route_bits(&exact), route_bits(&ranked));
+        // Learned scores re-rank sources that share the same atoms, and never
+        // admit one the route does not.
+        let one = PrimeRoute::ranked(1);
+        let ids = [9u32, 1, 9, 2, 9];
+        let plain = ranked_attention(vec![0.0; 5], &ids, 4, one)?;
+        assert!(plain[3] > plain[1], "{plain:?}");
+        let reranked = ranked_attention(vec![0.0, 2.0, 0.0, 0.0, 9.0], &ids, 4, one)?;
+        assert!(reranked[1] > reranked[3], "{reranked:?}");
+        assert_eq!(reranked[0] + reranked[2] + reranked[4], 0.0);
+        // With none admitted it is the learned pointer over every source.
+        let learned = vec![0.5f32, -1.0, 2.0, 0.0];
+        let fallback = ranked_attention(learned.clone(), &[1, 2, 3, 4], 3, one)?;
+        assert_eq!(
+            route_bits(&fallback),
+            route_bits(&pointer_weights(learned, None)?)
+        );
+        assert_eq!(
+            parse_pointer_route("prime-ranked:3")?,
+            Some(PrimeRoute::ranked(3))
+        );
+        assert_eq!(parse_pointer_route("prime:3")?, Some(PrimeRoute::exact(3)));
+        assert!(parse_pointer_route("prime-ranked:0").is_err());
+        // The flag is saved only when set, and a route saved without it is exact.
+        assert_eq!(
+            serde_json::to_string(&PrimeRoute::exact(2))?,
+            r#"{"window":2}"#
+        );
+        let back: PrimeRoute = serde_json::from_str(r#"{"window":2}"#)?;
+        assert_eq!(back, PrimeRoute::exact(2));
+        Ok(())
+    }
+
+    #[test]
+    fn an_ngram_route_admits_the_longest_ordered_match() -> Result<()> {
+        let two = PrimeRoute::exact(2).admitting(RouteAdmission::Ngram);
+        // "10 11" matches as a bigram: only its successor is admitted,
+        // although the unigram 11 recurs elsewhere (a shared atom admits more).
+        let ids = [5u32, 10, 11, 50, 6, 11, 60, 10, 11];
+        let a = route_attention(&ids, 8, two);
+        assert_eq!(a[3], 1.0, "{a:?}");
+        let shared = route_attention(&ids, 8, PrimeRoute::exact(2));
+        assert!(
+            shared.iter().filter(|&&w| w > 0.0).count() > 1,
+            "{shared:?}"
+        );
+        // No bigram match: back off to the unigram.
+        let b = route_attention(&[7, 11, 60, 8, 11], 4, two);
+        assert_eq!(b[2], 1.0, "{b:?}");
+        // Order matters: "11 10" is not "10 11"; the unigram 10 matches.
+        let c = route_attention(&[10, 11, 50, 11, 10], 4, two);
+        assert_eq!(c[1], 1.0, "{c:?}");
+        // Two matches of one n-let: recency orders them.
+        let d = route_attention(&[4, 5, 6, 4, 5, 7, 4, 5], 7, two);
+        assert!(d[5] > d[2] && d[2] > 0.0, "{d:?}");
+        assert_eq!(d.iter().filter(|&&w| w > 0.0).count(), 2);
+        // Nothing recurs: nothing admitted.
+        assert!(route_attention(&[1, 2, 3], 2, two)
+            .iter()
+            .all(|&w| w == 0.0));
+        // The grammar and the saved form.
+        assert_eq!(parse_pointer_route("ngram:2")?, Some(two));
+        assert_eq!(
+            parse_pointer_route("ngram-ranked:3")?,
+            Some(PrimeRoute::ranked(3).admitting(RouteAdmission::Ngram))
+        );
+        assert!(parse_pointer_route("ngram:0").is_err());
+        let json = serde_json::to_string(&two)?;
+        assert_eq!(json, r#"{"window":2,"admission":"ngram"}"#);
+        assert_eq!(serde_json::from_str::<PrimeRoute>(&json)?, two);
+        Ok(())
+    }
+
+    #[test]
+    fn a_ranked_route_trains_the_scores_it_ranks_by() -> Result<()> {
+        let (ids, targets, weights) = routed_batch();
+        let data = (&ids[..], &targets[..], &weights[..]);
+        let ngram = PrimeRoute::ranked(2).admitting(RouteAdmission::Ngram);
+        for (score, route) in [
+            (ReadScore::Dot, PrimeRoute::ranked(1)),
+            (ReadScore::Lorentz, PrimeRoute::ranked(1)),
+            (ReadScore::Dot, ngram),
+            (ReadScore::Lorentz, ngram),
+        ] {
+            let mut model = pointer_model(score, None, 0)?;
+            let soft = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+            model.set_pointer_route(Some(PrimeRoute::exact(1)))?;
+            let exact = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+            model.set_pointer_route(Some(route))?;
+            let hidden = model.hidden(&ids, 2, 12)?.to_vec2::<f32>()?;
+            let (rows, _, contested) = reference_mixture(&model, &hidden, data, (2, 12))?;
+            assert!(contested);
+            let loss = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+            let got = f64::from(loss.to_scalar::<f32>()?);
+            let want = weighted_mean(&rows, &weights);
+            assert!(
+                (got - want).abs() < 1e-5 * want.abs().max(1.0),
+                "{score:?}: {got} against {want}"
+            );
+            for other in [&soft, &exact] {
+                assert_ne!(
+                    got.to_bits(),
+                    f64::from(other.to_scalar::<f32>()?).to_bits()
+                );
+            }
+            let scored = model.score_targets(&ids, &targets, Some(&weights), 2, 12)?;
+            for n in 0..24 {
+                assert!(
+                    (scored.nll[n] - rows[n]).abs() < 1e-5 * rows[n].abs().max(1.0),
+                    "{score:?}: row {n} scored {} against {}",
+                    scored.nll[n],
+                    rows[n]
+                );
+            }
+            for t in (0..12).filter(|&t| weights[t] != 0.0) {
+                let next = model.next_scores(&ids[..=t])?;
+                let value = f64::from(next[targets[t] as usize]);
+                assert!(
+                    (value + rows[t]).abs() < 1e-4 * rows[t].abs().max(1.0),
+                    "{score:?} position {t}: {value} against {}",
+                    -rows[t]
+                );
+            }
+            // Every pointer variable, the query and key included, gets the
+            // reference's gradient.
+            let grads = loss.backward()?;
+            for name in pointer_names(score) {
+                let numeric = reference_derivative(&model, name, &hidden, data, (2, 12))?;
+                let analytic = grads
+                    .get(model.variables()[name].as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let scale = numeric.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+                assert!(scale > 0.0, "{score:?}: {name} has no effect");
+                for (i, (&a, &n)) in analytic.iter().zip(&numeric).enumerate() {
+                    assert!(
+                        (f64::from(a) - n).abs() < 2e-4 * scale + 2e-6,
+                        "{score:?}: {name}[{i}] analytic {a} against numeric {n}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_routed_pointer_trains_its_gate_and_leaves_its_scores_alone() -> Result<()> {
+        exact_route_trains_only_its_gate(PrimeRoute::exact(1))?;
+        exact_route_trains_only_its_gate(PrimeRoute::exact(2).admitting(RouteAdmission::Ngram))
+    }
+
+    fn exact_route_trains_only_its_gate(route: PrimeRoute) -> Result<()> {
+        let (ids, targets, weights) = routed_batch();
+        let data = (&ids[..], &targets[..], &weights[..]);
+        let soft = pointer_model(ReadScore::Dot, None, 0)?;
+        let soft_loss = soft.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+        let mut model = pointer_model(ReadScore::Dot, None, 0)?;
+        model.set_pointer_route(Some(route))?;
+        // The loss and every scored row are the mixture with the route's
+        // attention, and some row keeps sources with and without its target.
+        let hidden = model.hidden(&ids, 2, 12)?.to_vec2::<f32>()?;
+        let (rows, _, contested) = reference_mixture(&model, &hidden, data, (2, 12))?;
+        assert!(contested);
+        let loss = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+        let got = f64::from(loss.to_scalar::<f32>()?);
+        let want = weighted_mean(&rows, &weights);
+        assert!(
+            (got - want).abs() < 1e-5 * want.abs().max(1.0),
+            "{got} against {want}"
+        );
+        assert_ne!(
+            got.to_bits(),
+            f64::from(soft_loss.to_scalar::<f32>()?).to_bits()
+        );
+        let scored = model.score_targets(&ids, &targets, Some(&weights), 2, 12)?;
+        for n in 0..24 {
+            assert!(
+                (scored.nll[n] - rows[n]).abs() < 1e-5 * rows[n].abs().max(1.0),
+                "row {n} scored {} against {}",
+                scored.nll[n],
+                rows[n]
+            );
+        }
+        // Generation mixes the same routed copy: the next-token score of the
+        // target is minus the row's loss.
+        for t in 0..12 {
+            if weights[t] == 0.0 {
+                continue;
+            }
+            let next = model.next_scores(&ids[..=t])?;
+            let score = f64::from(next[targets[t] as usize]);
+            assert!(
+                (score + rows[t]).abs() < 1e-4 * rows[t].abs().max(1.0),
+                "position {t}: next score {score} against {}",
+                -rows[t]
+            );
+        }
+        // The gate's gradient is the reference's; the unused query and key
+        // move nothing and get none.
+        let grads = loss.backward()?;
+        for name in ["pointer.gate.weight", "pointer.gate.bias"] {
+            let numeric = reference_derivative(&model, name, &hidden, data, (2, 12))?;
+            let analytic = grads
+                .get(model.variables()[name].as_tensor())
+                .ok_or_else(|| invalid("missing gradient"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            let scale = numeric.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+            assert!(scale > 0.0, "{name} has no effect on the routed loss");
+            for (i, (&a, &n)) in analytic.iter().zip(&numeric).enumerate() {
+                assert!(
+                    (f64::from(a) - n).abs() < 2e-4 * scale + 2e-6,
+                    "{name}[{i}] analytic {a} against numeric {n}"
+                );
+            }
+        }
+        for name in ["pointer.query.weight", "pointer.key.weight"] {
+            let numeric = reference_derivative(&model, name, &hidden, data, (2, 12))?;
+            assert!(
+                numeric.iter().all(|&n| n.abs() < 1e-12),
+                "{name} moves the loss"
+            );
+            if let Some(grad) = grads.get(model.variables()[name].as_tensor()) {
+                assert!(
+                    grad.flatten_all()?
+                        .to_vec1::<f32>()?
+                        .iter()
+                        .all(|&g| g == 0.0),
+                    "{name} has a gradient under the route"
+                );
+            }
+        }
+        // Clearing the route restores the learned scores bit for bit.
+        model.set_pointer_route(None)?;
+        let cleared = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+        assert_eq!(
+            cleared.to_scalar::<f32>()?.to_bits(),
+            soft_loss.to_scalar::<f32>()?.to_bits()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn a_row_without_copy_mass_is_exactly_the_generated_probability() -> Result<()> {
         // A vocabulary of 4, one window of 3 positions and a pointer of width 2.
         let (vocabulary, time, dim) = (4usize, 3usize, 2usize);
@@ -10919,6 +14802,7 @@ mod tests {
             dim,
             score: ReadScore::Dot,
             select: None,
+            route: None,
             ids: ids.clone(),
             targets: targets.clone(),
             weights: None,
@@ -10994,6 +14878,7 @@ mod tests {
                 dim,
                 score,
                 select: None,
+                route: None,
                 ids: ids.clone(),
                 targets: targets.clone(),
                 weights: None,
@@ -11048,6 +14933,7 @@ mod tests {
             dim: 1,
             score: ReadScore::Dot,
             select: None,
+            route: None,
             ids: ids.clone(),
             targets: targets.clone(),
             weights: None,
@@ -11420,6 +15306,7 @@ mod tests {
             score: ReadScore::Lorentz,
             select: Some(PointerSelect::TopK(1)),
             init_seed: Some(7),
+            route: None,
         });
         let json = serde_json::to_string(&new)?;
         assert!(json.contains(r#""score":"lorentz""#), "{json}");

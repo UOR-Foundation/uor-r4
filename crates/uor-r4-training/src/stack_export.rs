@@ -310,6 +310,12 @@ pub fn export_stack(
     if model.read_identity_carry() {
         return Err(invalid("read identity carry has no integer export"));
     }
+    if model.geometric_span().is_some() {
+        return Err(invalid("geometric span producer has no integer export"));
+    }
+    if model.read_identity_latch().is_some() {
+        return Err(invalid("read identity latch has no integer export"));
+    }
     let c = &model.config;
     check_export_config(c)?;
     if c.arch != StackArch::Geometric {
@@ -897,6 +903,14 @@ pub fn stack_grid_reference(
 ) -> Result<GridReference> {
     if model.read_identity_carry() {
         return Err(invalid("read identity carry has no integer grid reference"));
+    }
+    if model.geometric_span().is_some() {
+        return Err(invalid(
+            "geometric span producer has no integer grid reference",
+        ));
+    }
+    if model.read_identity_latch().is_some() {
+        return Err(invalid("read identity latch has no integer grid reference"));
     }
     let c = model.config.clone();
     // The reference reads raw float logits, and no artifact is exported from a
@@ -1565,6 +1579,40 @@ mod tests {
         let (bytes, _) = export_stack(&model, json!({}), None, None)?;
         let artifact = StackArtifact::parse(bytes).map_err(lut_error)?;
         model.set_read_identity_carry(true)?;
+        assert!(export_stack(&model, json!({}), None, None).is_err());
+        assert!(stack_grid_reference(&model, &artifact).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn read_identity_latch_refuses_export_and_grid_reference() -> Result<()> {
+        for mode in [
+            crate::geometric_stack::ReadIdentityLatch::Held,
+            crate::geometric_stack::ReadIdentityLatch::Local,
+        ] {
+            let mut model = small("rra", ReadScore::Lorentz, true);
+            let (bytes, _) = export_stack(&model, json!({}), None, None)?;
+            let artifact = StackArtifact::parse(bytes).map_err(lut_error)?;
+            model.set_read_identity_latch(mode)?;
+            assert!(export_stack(&model, json!({}), None, None).is_err());
+            assert!(stack_grid_reference(&model, &artifact).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn geometric_span_refuses_export_and_grid_reference() -> Result<()> {
+        let mut model = small("rra", ReadScore::Lorentz, true);
+        let (bytes, _) = export_stack(&model, json!({}), None, None)?;
+        let artifact = StackArtifact::parse(bytes).map_err(lut_error)?;
+        model.set_read_identity_latch(crate::geometric_stack::ReadIdentityLatch::Held)?;
+        model.set_geometric_address(crate::geometric_address::GeometricAddressConfig::new(
+            model.config.width,
+            model.config.heads,
+        )?)?;
+        model.set_geometric_span(crate::geometric_span::GeometricSpanConfig::new(
+            model.config.width,
+        )?)?;
         assert!(export_stack(&model, json!({}), None, None).is_err());
         assert!(stack_grid_reference(&model, &artifact).is_err());
         Ok(())

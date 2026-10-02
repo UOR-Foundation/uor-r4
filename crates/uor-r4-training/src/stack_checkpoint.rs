@@ -470,6 +470,11 @@ pub fn save_checkpoint(
                 .into(),
         ));
     }
+    if model.read_identity_latch().is_some() || model.geometric_span().is_some() {
+        return Err(StackCheckpointError::Identity(
+            "read identity latch requires its sidecar and added parameters; this checkpoint schema does not admit it".into(),
+        ));
+    }
     if let Some(snap) = model.transport_snap() {
         snap.check(&model.config)?;
     }
@@ -1256,6 +1261,62 @@ mod tests {
         ));
         assert!(!root.exists());
         fs::remove_dir_all(&base).expect("clean");
+    }
+
+    #[test]
+    fn read_identity_latch_checkpoint_refuses_before_claim() {
+        let (base, identity) = fixture("read-latch-refused");
+        for mode in [
+            crate::geometric_stack::ReadIdentityLatch::Held,
+            crate::geometric_stack::ReadIdentityLatch::Local,
+        ] {
+            let mut config = StackConfig::transformer_control(7);
+            config.arch = StackArch::Geometric;
+            config.width = 32;
+            config.heads = 2;
+            config.pattern = "rra".into();
+            let mut model = StackModel::new(config, &Device::Cpu).expect("stack");
+            model.set_read_identity_latch(mode).expect("latch");
+            let root = base.join(format!("refused-{mode:?}"));
+            assert!(matches!(
+                save_checkpoint(&root, &model, &identity, None),
+                Err(StackCheckpointError::Identity(_))
+            ));
+            assert!(!root.exists());
+        }
+        fs::remove_dir_all(&base).expect("clean");
+    }
+
+    #[test]
+    fn geometric_span_checkpoint_refuses_before_claim() {
+        let (base, identity) = fixture("geometric-span-refused");
+        let mut config = StackConfig::transformer_control(7);
+        config.arch = StackArch::Geometric;
+        config.width = 32;
+        config.heads = 2;
+        config.pattern = "rra".into();
+        let mut model = StackModel::new(config, &Device::Cpu).expect("fixture stack");
+        model
+            .set_read_identity_latch(crate::geometric_stack::ReadIdentityLatch::Held)
+            .expect("fixture latch");
+        model
+            .set_geometric_address(
+                crate::geometric_address::GeometricAddressConfig::new(32, 2)
+                    .expect("fixture config"),
+            )
+            .expect("fixture reader");
+        model
+            .set_geometric_span(
+                crate::geometric_span::GeometricSpanConfig::new(32).expect("fixture config"),
+            )
+            .expect("fixture span");
+        let root = base.join("refused");
+        assert!(matches!(
+            save_checkpoint(&root, &model, &identity, None),
+            Err(StackCheckpointError::Identity(_))
+        ));
+        assert!(!root.exists());
+        fs::remove_dir_all(base).expect("fixture clean");
     }
 
     #[test]
