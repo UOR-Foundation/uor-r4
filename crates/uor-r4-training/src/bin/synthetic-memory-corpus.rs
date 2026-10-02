@@ -49,6 +49,10 @@ struct Relation {
     id: &'static str,
     asks: &'static [&'static str],
     states: &'static [&'static str],
+    /// How the answer is phrased. A template rather than the relation id
+    /// interpolated into one sentence, because the ids are not all noun phrases
+    /// and `"Your brothers is seven."` is not English.
+    answers: &'static [&'static str],
 }
 
 const RELATIONS: &[Relation] = &[
@@ -56,51 +60,70 @@ const RELATIONS: &[Relation] = &[
         id: "name",
         asks: &["What is my name?", "Do you know my name?"],
         states: &["My name is {v}.", "I am called {v}."],
+        answers: &["Your name is {v}.", "You are called {v}."],
     },
     Relation {
         id: "cat",
         asks: &["What is my cat's name?", "What did I name my cat?"],
         states: &["My cat is named {v}.", "I named my cat {v}."],
+        answers: &["Your cat is named {v}.", "Your cat's name is {v}."],
     },
     Relation {
         id: "colour",
         asks: &["What is my favorite color?", "Which color do I like best?"],
         states: &["My favorite color is {v}.", "I like {v} best."],
+        answers: &["Your favorite color is {v}.", "You like {v} best."],
     },
     Relation {
         id: "job",
         asks: &["What is my job?", "What do I do for work?"],
         states: &["I work as a {v}.", "My job is {v}."],
+        answers: &["Your job is {v}.", "You work as a {v}."],
     },
     Relation {
         id: "sister",
         asks: &["Where does my sister live?", "Which city is my sister in?"],
         states: &["My sister lives in {v}.", "My sister is in {v}."],
+        answers: &["Your sister lives in {v}.", "Your sister is in {v}."],
     },
     Relation {
         id: "brothers",
-        asks: &["How many brothers do I have?", "How many brothers are there?"],
+        asks: &[
+            "How many brothers do I have?",
+            "How many brothers are there?",
+        ],
         states: &["I have {v} brothers.", "There are {v} of us brothers."],
+        answers: &["You have {v} brothers."],
     },
     Relation {
         id: "birthday",
         asks: &["When is my birthday?", "Which month is my birthday?"],
         states: &["My birthday is in {v}.", "I was born in {v}."],
+        answers: &["Your birthday is in {v}.", "You were born in {v}."],
     },
     Relation {
         id: "car",
         asks: &["What color is my car?", "Which color is my car?"],
         states: &["I drive a {v} car.", "My car is {v}."],
+        answers: &["Your car is {v}.", "You drive a {v} car."],
     },
     Relation {
         id: "instrument",
-        asks: &["What instrument am I learning?", "Which instrument am I learning?"],
+        asks: &[
+            "What instrument am I learning?",
+            "Which instrument am I learning?",
+        ],
         states: &["I am learning to play the {v}.", "I am learning the {v}."],
+        answers: &[
+            "You are learning to play the {v}.",
+            "You are learning the {v}.",
+        ],
     },
     Relation {
         id: "food",
         asks: &["What is my favorite food?", "Which food do I like best?"],
         states: &["My favorite food is {v}.", "I like {v} best."],
+        answers: &["Your favorite food is {v}.", "You like {v} best."],
     },
 ];
 
@@ -108,19 +131,40 @@ const RELATIONS: &[Relation] = &[
 /// relation's value (for example `blue` for both colour and car), so the model
 /// cannot answer by surfacing a value that only ever belongs to one relation.
 const VALUES: &[(&str, &[&str])] = &[
-    ("name", &["Alex", "Sam", "Jordan", "Riley", "Casey", "Morgan"]),
+    (
+        "name",
+        &["Alex", "Sam", "Jordan", "Riley", "Casey", "Morgan"],
+    ),
     ("cat", &["Momo", "Piper", "Otis", "Juno", "Cleo", "Milo"]),
-    ("colour", &["green", "blue", "red", "amber", "violet", "teal"]),
-    ("job", &["teacher", "nurse", "engineer", "baker", "pilot", "farmer"]),
-    ("sister", &["Tokyo", "Lisbon", "Denver", "Cairo", "Oslo", "Quito"]),
-    ("brothers", &["two", "three", "four", "five", "six", "seven"]),
+    (
+        "colour",
+        &["green", "blue", "red", "amber", "violet", "teal"],
+    ),
+    (
+        "job",
+        &["teacher", "nurse", "engineer", "baker", "pilot", "farmer"],
+    ),
+    (
+        "sister",
+        &["Tokyo", "Lisbon", "Denver", "Cairo", "Oslo", "Quito"],
+    ),
+    (
+        "brothers",
+        &["two", "three", "four", "five", "six", "seven"],
+    ),
     (
         "birthday",
         &["July", "March", "October", "January", "June", "December"],
     ),
     ("car", &["blue", "silver", "black", "white", "red", "green"]),
-    ("instrument", &["piano", "violin", "flute", "guitar", "cello", "harp"]),
-    ("food", &["pizza", "soup", "curry", "noodles", "salad", "rice"]),
+    (
+        "instrument",
+        &["piano", "violin", "flute", "guitar", "cello", "harp"],
+    ),
+    (
+        "food",
+        &["pizza", "soup", "curry", "noodles", "salad", "rice"],
+    ),
 ];
 
 /// Relations whose value sets overlap, so a distractor can reuse the asked
@@ -208,7 +252,7 @@ fn document(rng: &mut Rng) -> Result<Document> {
         first,
         second,
         question,
-        answer: format!("Your {} is {wanted}.", asked.id),
+        answer: rng.pick(asked.answers).replace("{v}", wanted),
         wanted: wanted.to_string(),
     })
 }
@@ -257,10 +301,22 @@ fn run(args: &[String]) -> Result<()> {
     for _ in 0..rows {
         let doc = document(&mut rng)?;
         let messages = [
-            Message { role: "user", content: &doc.first },
-            Message { role: "user", content: &doc.second },
-            Message { role: "user", content: &doc.question },
-            Message { role: "assistant", content: &doc.answer },
+            Message {
+                role: "user",
+                content: &doc.first,
+            },
+            Message {
+                role: "user",
+                content: &doc.second,
+            },
+            Message {
+                role: "user",
+                content: &doc.question,
+            },
+            Message {
+                role: "assistant",
+                content: &doc.answer,
+            },
         ];
         let encoded = encoder.encode_document(&messages);
         if encoded.emitted_turns != messages.len() {
@@ -279,6 +335,13 @@ fn run(args: &[String]) -> Result<()> {
         if encoded.response_mask.iter().filter(|&&m| m == 1).count() == 0 {
             return Err("a document has no masked response tokens".into());
         }
+        if encoded.tokens.len() != encoded.response_mask.len() {
+            return Err(format!(
+                "the encoder returned {} tokens and {} mask bytes",
+                encoded.tokens.len(),
+                encoded.response_mask.len()
+            ));
+        }
         // Decode exactly the masked region -- the scored answer and its EOS --
         // and require the wanted value to appear in it. This is the check that
         // matters: if the mask does not cover the answer, the fit scores the
@@ -290,7 +353,10 @@ fn run(args: &[String]) -> Result<()> {
             .map(|(&id, _)| id as u32)
             .collect();
         let scored_text = tokenizer.decode(&scored);
-        if !scored_text.to_lowercase().contains(&doc.wanted.to_lowercase()) {
+        if !scored_text
+            .to_lowercase()
+            .contains(&doc.wanted.to_lowercase())
+        {
             return Err(format!(
                 "the scored region {scored_text:?} does not contain the answer {:?}",
                 doc.wanted
@@ -312,13 +378,24 @@ fn run(args: &[String]) -> Result<()> {
     if written as usize != total {
         return Err(format!("wrote {written} tokens, expected {total}"));
     }
+    // The mask must be exactly as long as the token stream: the trainer reads
+    // them as parallel arrays, and a short mask would silently misalign every
+    // document after the first divergence. `total` is the sum of the encoded
+    // token vectors, so the two agree by construction unless the encoder's
+    // `tokens` and `response_mask` are themselves different lengths, which is
+    // checked here because it is the one way this can still be wrong.
+    if mask.len() != total {
+        return Err(format!(
+            "the mask is {} bytes for {total} tokens",
+            mask.len()
+        ));
+    }
     let mask_path = out.join("response_mask.u8");
     fs::write(&mask_path, &mask).map_err(|e| e.to_string())?;
 
     let tokens_sha = uor_r4_training::sha256_file(&tokens_path).map_err(|e| e.to_string())?;
     let mask_sha = uor_r4_training::sha256_file(&mask_path).map_err(|e| e.to_string())?;
-    let tokenizer_sha =
-        uor_r4_training::sha256_file(&tokenizer_path).map_err(|e| e.to_string())?;
+    let tokenizer_sha = uor_r4_training::sha256_file(&tokenizer_path).map_err(|e| e.to_string())?;
     let manifest = json!({
         "schema": "uor-r4-chat-corpus/v1",
         "mask_schema": "uor-r4-response-mask/u8/v1",
