@@ -1127,7 +1127,9 @@ pub fn op_text(example: &Example) -> Option<String> {
 
 /// The action of a generated op for `source`. A statement's value must occur
 /// in the source (exactly, else ignoring ASCII case), and its span is that
-/// occurrence; anything else is unresolved with a reason. `relation_id` maps
+/// occurrence; a statement whose value does not occur is a query of its
+/// relation (the turn holds no value to store); anything else is unresolved
+/// with a reason. `relation_id` maps
 /// a relation name to its store ID.
 pub fn parse_op(
     text: &str,
@@ -1163,8 +1165,11 @@ pub fn parse_op(
                     .to_ascii_lowercase()
                     .find(&value.to_ascii_lowercase())
             });
+            // A turn that names a relation but holds no value for it cannot
+            // be stored; it asks for the stored one ("Remind me what my job
+            // is." generated as an assert with an invented value).
             let Some(start) = start else {
-                return unresolved("the op's value does not occur in the turn");
+                return CompiledAction::QueryCurrent { relation };
             };
             let span = SourceSpan {
                 start,
@@ -2725,13 +2730,18 @@ mod tests {
             parse_op("Op: query hometown", "Where am I from?", ids),
             CompiledAction::QueryCurrent { relation: 4 }
         );
+        // A statement whose value is not in the turn asks for the stored one.
+        assert_eq!(
+            parse_op("Op: assert user_name Plimbo", source, ids),
+            CompiledAction::QueryCurrent { relation: 1 }
+        );
+        assert_eq!(
+            parse_op("Op: update hometown Oslo", "Remind me where I live.", ids),
+            CompiledAction::QueryCurrent { relation: 4 }
+        );
         for (text, reason) in [
             ("Op: none", "the op is none"),
             ("Your name is Zorvak.", "the model produced no op"),
-            (
-                "Op: assert user_name Plimbo",
-                "the op's value does not occur in the turn",
-            ),
             ("Op: query pet_kind", "the op names an unknown relation"),
             ("Op: assert user_name", "the op does not parse"),
             ("Op: query hometown extra", "the op does not parse"),
