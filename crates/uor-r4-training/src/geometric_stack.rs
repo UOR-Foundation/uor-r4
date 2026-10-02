@@ -195,7 +195,11 @@ struct ReadSource<'a> {
     event_control: Option<SpanEvents<'a>>,
     context: Option<ContextInput<'a>>,
     native_reducer: Option<&'a crate::geometric_read_native::CompiledGeometricRead>,
+    native_trace: NativeReadTraceSink<'a>,
 }
+
+type NativeReadTraceSink<'a> =
+    Option<&'a std::cell::RefCell<Option<crate::geometric_read_native::NativeReadTrace>>>;
 
 impl Default for ReadSource<'_> {
     fn default() -> Self {
@@ -207,6 +211,7 @@ impl Default for ReadSource<'_> {
             event_control: None,
             context: None,
             native_reducer: None,
+            native_trace: None,
         }
     }
 }
@@ -2043,6 +2048,7 @@ impl StackModel {
                 event_control: None,
                 context: None,
                 native_reducer: None,
+                native_trace: None,
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
@@ -2195,6 +2201,7 @@ impl StackModel {
                 event_control: None,
                 context: None,
                 native_reducer: None,
+                native_trace: None,
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
@@ -2489,9 +2496,47 @@ impl StackModel {
             potential,
             reducer,
             reset_each_token,
+            None,
         )?;
         let p = self.params()?;
         Ok(hidden.matmul(&p.head()?.t()?)?)
+    }
+
+    /// Capture the raw native reduction trace from the SAME predictive pass.
+    /// This offline diagnostic accepts no source labels and does not persist
+    /// an override or modify weights. No second scorer is evaluated.
+    pub fn forward_geometric_context_read_native_with_trace(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        context: &CompiledContext,
+        events: &CompiledEvents,
+        span: &CompiledSpanActions,
+        potential: &CompiledGeometricPotentials,
+        reducer: &crate::geometric_read_native::CompiledGeometricRead,
+        reset_each_token: bool,
+    ) -> Result<(Tensor, crate::geometric_read_native::NativeReadTrace)> {
+        let trace = std::cell::RefCell::new(None);
+        let (hidden, _) = self.hidden_geometric_context_read_native(
+            ids,
+            batch,
+            time,
+            None,
+            context,
+            events,
+            span,
+            potential,
+            reducer,
+            reset_each_token,
+            Some(&trace),
+        )?;
+        let p = self.params()?;
+        let logits = hidden.matmul(&p.head()?.t()?)?;
+        let trace = trace
+            .into_inner()
+            .ok_or_else(|| invalid("native weighted read trace was not evaluated"))?;
+        Ok((logits, trace))
     }
 
     pub fn read_binding_masses_geometric_context_read_native(
@@ -2518,6 +2563,7 @@ impl StackModel {
             potential,
             reducer,
             reset_each_token,
+            None,
         )?
         .1
         .ok_or_else(|| invalid("native weighted source observer was not evaluated"))
@@ -2535,6 +2581,7 @@ impl StackModel {
         potential: &CompiledGeometricPotentials,
         reducer: &crate::geometric_read_native::CompiledGeometricRead,
         reset_each_token: bool,
+        native_trace: NativeReadTraceSink<'_>,
     ) -> Result<(Tensor, Option<Tensor>)> {
         self.validate_context_config(context.config())?;
         self.validate_context_dependencies(context, events, span, potential)?;
@@ -2555,6 +2602,7 @@ impl StackModel {
             Some(potential),
             Some(ContextInput::Native(&ctx.codes)),
             Some(reducer),
+            native_trace,
         )
     }
 
@@ -2677,7 +2725,7 @@ impl StackModel {
         context: Option<ContextInput<'_>>,
     ) -> Result<(Tensor, Option<Tensor>)> {
         self.hidden_geometric_context_reduced(
-            ids, batch, time, control, target, compiled, potential, context, None,
+            ids, batch, time, control, target, compiled, potential, context, None, None,
         )
     }
 
@@ -2692,6 +2740,7 @@ impl StackModel {
         potential: Option<&CompiledGeometricPotentials>,
         context: Option<ContextInput<'_>>,
         native_reducer: Option<&crate::geometric_read_native::CompiledGeometricRead>,
+        native_trace: NativeReadTraceSink<'_>,
     ) -> Result<(Tensor, Option<Tensor>)> {
         let span = self
             .geometric_span
@@ -2729,6 +2778,7 @@ impl StackModel {
                 event_control: Some(control),
                 context,
                 native_reducer,
+                native_trace,
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
@@ -3107,6 +3157,15 @@ impl StackModel {
         } else {
             output.read
         };
+        if let Some(sink) = source.native_trace {
+            let mut sink = sink
+                .try_borrow_mut()
+                .map_err(|_| invalid("native read trace is already borrowed"))?;
+            if sink.is_some() {
+                return Err(invalid("native read trace was produced more than once"));
+            }
+            *sink = Some(output.trace);
+        }
         self.finish_geometric_read(p, layer, &read, value_width, capture, binding)
     }
 
@@ -3552,6 +3611,7 @@ impl StackModel {
                 event_control: None,
                 context: None,
                 native_reducer: None,
+                native_trace: None,
             };
             let hidden = self.layer_range_with_source(
                 p,
@@ -3909,6 +3969,7 @@ impl StackModel {
                 event_control: None,
                 context: None,
                 native_reducer: None,
+                native_trace: None,
             },
         )?;
         let hidden = self.finish_hooked(p, x, &mut None)?;
@@ -4855,6 +4916,7 @@ impl StackModel {
                         event_control: None,
                         context: None,
                         native_reducer: None,
+                        native_trace: None,
                     },
                 )?,
             };
@@ -10419,6 +10481,17 @@ mod tests {
             .to_vec1::<f32>()?;
         assert_eq!(observed.len(), 1);
         assert!(observed[0].is_finite() && (0.0..=1.0).contains(&observed[0]));
+        let (traced, raw) = model.forward_geometric_context_read_native_with_trace(
+            &ids, 1, 10, &loaded, &event, &span, &potential, &reducer, false,
+        )?;
+        assert_eq!(bits(&traced)?, bits(&reduced)?);
+        assert_eq!((raw.batch, raw.heads, raw.time), (1, 2, 10));
+        assert_eq!(raw.rows.len(), 20);
+        assert_eq!(
+            raw.source_mass(0, 0, 9, &[1, 2])?.to_bits(),
+            observed[0].to_bits()
+        );
+        assert!((0.0..=1.0).contains(&raw.no_read_mass(0, 0, 9)?));
         // Observing an arbitrary source set cannot alter predictive parameters,
         // context, or history. The label channel is removed before read.out.
         let after_observation = model.forward_geometric_context_read_native(
