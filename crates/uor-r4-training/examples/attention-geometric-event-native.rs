@@ -281,6 +281,18 @@ fn valid_masses(values: &[f32], count: usize) -> Result<()> {
     }
     Ok(())
 }
+fn native_trace_json(trace: &geometric_event::NativeEventTrace) -> Value {
+    json!({
+        "batch": trace.batch,
+        "time": trace.time,
+        "lanes": trace.lanes,
+        "actions": trace.actions.iter().map(|action| *action as u8).collect::<Vec<_>>(),
+        "transition_actions": trace.transition_actions,
+        "states": trace.states,
+        "event_scores": trace.event_scores,
+        "coefficient_reads": trace.coefficient_reads,
+    })
+}
 fn validate_code_trace(
     states: &[Vec<u8>],
     actions: &[Vec<u8>],
@@ -492,7 +504,7 @@ fn score(
         fs::write(
             out.join(format!("chunk-{chunk}.json")),
             serde_json::to_vec_pretty(
-                &json!({"batch":group.len(),"time":time,"ids":ids,"float_trace":float_trace,"native_trace":native,"reset_trace":reset,"span_trace":prior,"rows":chunk_rows,"events":chunk_events}),
+                &json!({"batch":group.len(),"time":time,"ids":ids,"float_trace":float_trace,"native_trace":native_trace_json(&native),"reset_trace":native_trace_json(&reset),"span_trace":prior,"rows":chunk_rows,"events":chunk_events}),
             )?,
         )?;
     }
