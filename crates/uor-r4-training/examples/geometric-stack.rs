@@ -682,6 +682,21 @@ fn device_arg(args: &Args) -> Result<Device> {
     }
 }
 
+/// Refuse a Metal *training* run before it claims a report root and burns
+/// wall time: `RecurrenceCore` and `FusedRead` have Metal forward kernels but
+/// no Metal backward kernels, so the first backward pass falls back and the
+/// run cannot complete. Forward-only evaluation is unaffected.
+fn refuse_metal_training(device: &Device) -> Result<()> {
+    if matches!(device, Device::Metal(_)) {
+        return Err(invalid(
+            "device=metal cannot train: RecurrenceCore and FusedRead have no Metal \
+             backward kernel, so the first backward pass cannot execute. Use the \
+             forward-only paths, or device=cpu.",
+        ));
+    }
+    Ok(())
+}
+
 /// The served representation of `qat=true`.
 fn qat_codec() -> Arc<dyn MapCodec> {
     Arc::new(D11Interim)
@@ -1626,6 +1641,7 @@ fn load_checkpoint(
 
 fn train(settings: &Settings, out: &Path) -> Result<()> {
     let device = settings.device.clone();
+    refuse_metal_training(&device)?;
     // `init=`'s files are hashed once, here, before the model is loaded.
     let init_files = settings
         .init
@@ -3593,6 +3609,7 @@ fn panel_transport(
 
 fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
     let device = s.device.clone();
+    refuse_metal_training(&device)?;
     let tokenizer =
         uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(&s.tokenizer)?)
             .ok_or_else(|| invalid("unreadable tokenizer.json"))?;
