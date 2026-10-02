@@ -1,0 +1,10 @@
+{
+  "event": {
+    "available": true,
+    "event_id": "claude-lab-20260930-hb14-20261002T035243-32",
+    "op": "heartbeat",
+    "session": "claude-lab-20260930"
+  },
+  "observed_server_time": 1790913164,
+  "previous_head": "00e7a8ed0b6074acc40dc50b1563fcd1c28591f8"
+}
