@@ -368,19 +368,29 @@ pub fn parse_pointer_select(text: &str) -> Result<Option<PointerSelect>> {
 /// A pointer route from its command-line form: `none`, `prime:<window>` (the
 /// exact route, admitting by a shared atom), `prime-ranked:<window>`, or
 /// `ngram:<window>` / `ngram-ranked:<window>` (admitting by the longest
-/// ordered n-let match).
+/// ordered n-let match). The `-gated` forms of the ranked routes blend the
+/// ranked route with the soft pointer by a learned gate
+/// ([`PrimeRoute::route_gate`]).
 pub fn parse_pointer_route(text: &str) -> Result<Option<PrimeRoute>> {
     if text == "none" {
         return Ok(None);
     }
     let route = match text.split_once(':') {
-        Some((kind @ ("prime" | "prime-ranked" | "ngram" | "ngram-ranked"), window)) => {
+        Some((
+            kind @ ("prime" | "prime-ranked" | "prime-gated" | "ngram" | "ngram-ranked"
+            | "ngram-gated"),
+            window,
+        )) => {
             let window = window.parse().map_err(|_| {
                 invalid(format!(
-                    "invalid pointer route {text:?} (none, prime:<window>, prime-ranked:<window>, ngram:<window> or ngram-ranked:<window>)"
+                    "invalid pointer route {text:?} (none, prime:<window>, prime-ranked:<window>, \
+                     prime-gated:<window>, ngram:<window>, ngram-ranked:<window> or \
+                     ngram-gated:<window>)"
                 ))
             })?;
-            let route = if kind.ends_with("-ranked") {
+            let route = if kind.ends_with("-gated") {
+                PrimeRoute::ranked(window).gated()
+            } else if kind.ends_with("-ranked") {
                 PrimeRoute::ranked(window)
             } else {
                 PrimeRoute::exact(window)
@@ -481,6 +491,13 @@ pub struct PrimeRoute {
     /// admits by a shared atom.
     #[serde(default, skip_serializing_if = "RouteAdmission::is_shared_atom")]
     pub admission: RouteAdmission,
+    /// Blend the ranked route with the soft pointer by a learned gate `r`:
+    /// `(1 - r) a_soft + r a_route` where the route admits, and `a_soft` where
+    /// it admits nothing. `false` (the default, and what a route saved before
+    /// this field means) uses `a_route` alone. Implies [`Self::ranked`], whose
+    /// ranking the blend mixes in.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub route_gate: bool,
 }
 
 /// How a [`PrimeRoute`] admits a source.
@@ -521,6 +538,7 @@ impl PrimeRoute {
             window,
             ranked: false,
             admission: RouteAdmission::SharedAtom,
+            route_gate: false,
         }
     }
 
@@ -535,6 +553,16 @@ impl PrimeRoute {
     /// The same route admitting by `admission`.
     pub fn admitting(self, admission: RouteAdmission) -> Self {
         Self { admission, ..self }
+    }
+
+    /// The same route with the learned blend of the ranked route and the soft
+    /// pointer ([`Self::route_gate`]).
+    pub fn gated(self) -> Self {
+        Self {
+            ranked: true,
+            route_gate: true,
+            ..self
+        }
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -973,6 +1001,13 @@ impl StackConfig {
             shapes.insert("pointer.key.weight".to_owned(), vec![pointer.dim, d]);
             shapes.insert("pointer.gate.weight".to_owned(), vec![1, d]);
             shapes.insert("pointer.gate.bias".to_owned(), vec![1]);
+            // Declared only for a gated route: `StackModel::load` rejects a
+            // declared-but-missing or undeclared-extra stack variable, so a
+            // head saved before this field must not acquire it.
+            if pointer.route.as_ref().is_some_and(|route| route.route_gate) {
+                shapes.insert("pointer.route_gate.weight".to_owned(), vec![1, d]);
+                shapes.insert("pointer.route_gate.bias".to_owned(), vec![1]);
+            }
             if pointer.score == ReadScore::Lorentz {
                 shapes.insert("pointer.log_beta".to_owned(), vec![1]);
             }
@@ -1080,6 +1115,11 @@ impl Initializer {
 const POINTER_PREFIX: &str = "pointer.";
 /// The pointer gate's initial bias: `sigmoid(-2)`, about 0.12.
 const POINTER_GATE_BIAS: f32 = -2.0;
+/// Initial bias of a gated route's blend gate: `sigmoid(-6)`, about 0.0025.
+/// A gated route therefore *starts* as the soft pointer -- `r` is the weight on
+/// the route -- so setting `route_gate` does not perturb a run that starts from
+/// a saved head, and an ungated route stays the exact comparison.
+const POINTER_ROUTE_GATE_BIAS: f32 = -6.0;
 /// Initial scale of the pointer query and key, times `1 / sqrt(width)`.
 const POINTER_INITIAL_SCALE: f64 = 0.5;
 /// Mixed into the seed of the pointer head's initializer.
@@ -1105,8 +1145,11 @@ fn pointer_variables(
         }
         let count: usize = shape.iter().product();
         let values: Vec<f32> = match name.as_str() {
-            "pointer.gate.weight" | "pointer.log_beta" => vec![0.0; count],
+            "pointer.gate.weight" | "pointer.log_beta" | "pointer.route_gate.weight" => {
+                vec![0.0; count]
+            }
             "pointer.gate.bias" => vec![POINTER_GATE_BIAS; count],
+            "pointer.route_gate.bias" => vec![POINTER_ROUTE_GATE_BIAS; count],
             _ => (0..count).map(|_| (rng.normal() * std) as f32).collect(),
         };
         variables.insert(name, Var::from_vec(values, shape.as_slice(), device)?);
@@ -2823,22 +2866,41 @@ impl StackModel {
             .config
             .pointer
             .ok_or_else(|| invalid("the model has no pointer head"))?;
-        let weight = Tensor::cat(
-            &[
-                p.get("pointer.query.weight")?,
-                p.get("pointer.key.weight")?,
-                p.get("pointer.gate.weight")?,
-            ],
-            0,
-        )?;
-        let bias = Tensor::cat(
-            &[
-                &Tensor::zeros(2 * pointer.dim, DType::F32, &self.device)?,
-                p.get("pointer.gate.bias")?,
-            ],
-            0,
-        )?;
+        // A gated route carries a fourth appended row: its blend gate's logit.
+        // The gate must be computed *here*, in the graph that `apply_op3`
+        // differentiates, or its variables receive no loss gradient -- routing
+        // the logit through the mixture as data severs it.
+        let gated_route = pointer.route.as_ref().is_some_and(|route| route.route_gate);
+        let mut rows = vec![
+            p.get("pointer.query.weight")?,
+            p.get("pointer.key.weight")?,
+            p.get("pointer.gate.weight")?,
+        ];
+        if gated_route {
+            rows.push(p.get("pointer.route_gate.weight")?);
+        }
+        let weight = Tensor::cat(&rows, 0)?;
+        let mut biases = vec![Tensor::zeros(2 * pointer.dim, DType::F32, &self.device)?];
+        biases.push(p.get("pointer.gate.bias")?.clone());
+        if gated_route {
+            biases.push(p.get("pointer.route_gate.bias")?.clone());
+        }
+        let bias = Tensor::cat(&biases.iter().collect::<Vec<_>>(), 0)?;
         Ok(hidden.matmul(&weight.t()?)?.broadcast_add(&bias)?)
+    }
+
+    /// [`Self::pointer_side`]'s row width: `2 * dim + 1` (`[query | key | copy
+    /// gate logit]`), plus one for a gated route's blend-gate logit.
+    fn pointer_side_width(config: &StackConfig) -> usize {
+        let dim = config.pointer.map_or(0, |pointer| pointer.dim);
+        dim * 2
+            + 1
+            + usize::from(
+                config
+                    .pointer
+                    .and_then(|pointer| pointer.route)
+                    .is_some_and(|route| route.route_gate),
+            )
     }
 
     /// The pointer's Lorentz scale `exp(pointer.log_beta)` as a one-element
@@ -3337,6 +3399,16 @@ impl StackModel {
             select: pointer.select,
             beta: one_value(&self.pointer_beta(&p)?)?,
             route: pointer.route,
+            // This path scores one position (the last), so the gate is that
+            // row's logit, read from `side` to stay in the graph.
+            route_gate_logit: pointer
+                .route
+                .is_some_and(|route| route.route_gate)
+                .then(|| {
+                    side[(time - 1) * StackModel::pointer_side_width(&self.config)
+                        + pointer.dim * 2
+                        + 1]
+                }),
         };
         let attention = pointer_attention(&side, 0, time - 1, &rule, ids)?;
         let gate = sigmoid_f64(f64::from(
@@ -7835,6 +7907,11 @@ struct PointerRule {
     beta: f64,
     /// Exact prime routing, which replaces the scores and selection.
     route: Option<PrimeRoute>,
+    /// The learned blend gate's logit for the query row being scored, when the
+    /// route is gated: `sigmoid` of it weights the ranked route against the
+    /// soft pointer ([`PrimeRoute::route_gate`]). `None` leaves the route's own
+    /// attention alone.
+    route_gate_logit: Option<f32>,
 }
 
 /// Query row `row` of a pointer's `side` (rows `[query | key | gate logit]`,
@@ -7942,16 +8019,43 @@ fn pointer_attention(
     rule: &PointerRule,
     ids: &[u32],
 ) -> candle_core::Result<Vec<f64>> {
+    // The soft pointer over every source `0..=t`: the fallback when a route
+    // admits nothing, and the second term of a gated route's blend.
+    let soft = || pointer_weights(pointer_scores(side, first, t, rule), rule.select);
     match rule.route {
         // The window's tokens: `ids` is indexed like `side`'s rows.
         Some(route) => match ids.get(first..=first + t) {
-            Some(window) if route.ranked => {
-                ranked_attention(pointer_scores(side, first, t, rule), window, t, route)
-            }
+            Some(window) if route.ranked => match rule.route_gate_logit {
+                // A gated route blends the two where it admits: the ranked
+                // route's attention `a_route` and the soft pointer's `a_soft`,
+                // as `(1 - r) a_soft + r a_route` with `r = sigmoid(logit)`
+                // the weight on the route. Where nothing is admitted the
+                // attention is the soft pointer, exactly as an ungated ranked
+                // route does.
+                Some(logit) => {
+                    // Test admission explicitly rather than comparing the two
+                    // vectors: an admitted ranking can coincide with the soft
+                    // pointer's weights, and the fallback must not depend on
+                    // that coincidence.
+                    if route_scores(window, t, route).is_empty() {
+                        return soft();
+                    }
+                    let learned = pointer_scores(side, first, t, rule);
+                    let ranked = ranked_attention(learned, window, t, route)?;
+                    let r = sigmoid_f64(f64::from(logit));
+                    let soft = soft()?;
+                    Ok(ranked
+                        .into_iter()
+                        .zip(soft)
+                        .map(|(a_route, a_soft)| (1.0 - r) * a_soft + r * a_route)
+                        .collect())
+                }
+                None => ranked_attention(pointer_scores(side, first, t, rule), window, t, route),
+            },
             Some(window) => Ok(route_attention(window, t, route)),
             None => candle_core::bail!("a routed pointer needs the window's token ids"),
         },
-        None => pointer_weights(pointer_scores(side, first, t, rule), rule.select),
+        None => soft(),
     }
 }
 
@@ -8006,6 +8110,12 @@ impl PointerMixture {
         }
     }
 
+    /// A row of `side`: `[query | key | copy gate logit]`, plus a gated
+    /// route's blend-gate logit last.
+    fn side_width(&self) -> usize {
+        self.dim * 2 + 1 + usize::from(self.route.is_some_and(|route| route.route_gate))
+    }
+
     fn rule(&self, beta: f64) -> PointerRule {
         PointerRule {
             dim: self.dim,
@@ -8013,6 +8123,18 @@ impl PointerMixture {
             select: self.select,
             beta,
             route: self.route,
+            route_gate_logit: None,
+        }
+    }
+
+    /// [`Self::rule`] with row `n`'s blend-gate logit read from its `side` row
+    /// ([`PrimeRoute::route_gate`]). It is read from `side` rather than held
+    /// here so that it stays in the graph the loss differentiates.
+    fn rule_at(&self, side: &[f32], beta: f64, n: usize) -> PointerRule {
+        let gated = self.route.is_some_and(|route| route.route_gate);
+        PointerRule {
+            route_gate_logit: gated.then(|| side[n * self.side_width() + self.dim * 2 + 1]),
+            ..self.rule(beta)
         }
     }
 
@@ -8026,14 +8148,14 @@ impl PointerMixture {
     ) -> candle_core::Result<MixtureRow> {
         let (first, t) = (n - n % self.time, n % self.time);
         let target = self.targets[n];
-        let attention = pointer_attention(side, first, t, &self.rule(beta), &self.ids)?;
+        let attention = pointer_attention(side, first, t, &self.rule_at(side, beta, n), &self.ids)?;
         let copy: f64 = attention
             .iter()
             .zip(&self.ids[first..=first + t])
             .filter(|(_, &id)| id == target)
             .map(|(&a, _)| a)
             .sum();
-        let logit = f64::from(side[n * (2 * self.dim + 1) + 2 * self.dim]);
+        let logit = f64::from(side[n * self.side_width() + self.dim * 2]);
         let lse = row_log_sum_exp(logits);
         let generate = -softplus(logit) + f64::from(logits[target as usize]) - lse;
         // No kept source holds the target: the copy branch has probability 0
@@ -8063,7 +8185,7 @@ impl PointerMixture {
         beta: &Layout,
     ) -> candle_core::Result<(usize, usize)> {
         let (rows, vocabulary) = logits.shape().dims2()?;
-        if side.shape().dims() != [rows, 2 * self.dim + 1]
+        if side.shape().dims() != [rows, self.side_width()]
             || beta.shape().dims() != [1usize]
             || self.ids.len() != rows
             || self.targets.len() != rows
@@ -13721,6 +13843,7 @@ mod tests {
                         select,
                         beta,
                         route: None,
+                        route_gate_logit: None,
                     };
                     let a = pointer_attention(&side, 0, t, &rule, &[])?;
                     let kept: Vec<bool> = match select {
@@ -13793,6 +13916,7 @@ mod tests {
             select: None,
             beta,
             route: None,
+            route_gate_logit: None,
         };
         for t in 0..time {
             let a = pointer_attention(&side, 0, t, &rule, &[])?;
@@ -13840,6 +13964,198 @@ mod tests {
             )?)?;
         }
         Ok(model)
+    }
+
+    /// [`pointer_model`] with a route already in the configuration. A gated
+    /// route's blend variables are declared by `StackConfig::shapes`, so the
+    /// route must be present before the model is built: setting it afterwards
+    /// would leave the variables undeclared.
+    fn routed_pointer_model(score: ReadScore, route: PrimeRoute, seed: u64) -> Result<StackModel> {
+        let mut config = tiny(StackArch::Geometric, "ar", ReadScore::Lorentz, true);
+        config.pointer = Some(PointerConfig {
+            score,
+            select: None,
+            route: Some(route),
+            ..PointerConfig::new(4)
+        });
+        let model = StackModel::new(config, &cpu())?;
+        let mut rng = Initializer(31 + seed);
+        for (name, scale) in [
+            ("pointer.query.weight", 0.3),
+            ("pointer.key.weight", 0.3),
+            ("pointer.gate.weight", 0.5),
+        ] {
+            let var = &model.variables()[name];
+            var.set(&random(&mut rng, var.dims(), scale))?;
+        }
+        model.variables()["pointer.gate.bias"].set(&Tensor::from_vec(vec![0.3f32], 1, &cpu())?)?;
+        if score == ReadScore::Lorentz {
+            model.variables()["pointer.log_beta"].set(&Tensor::from_vec(
+                vec![0.4f32],
+                1,
+                &cpu(),
+            )?)?;
+        }
+        if route.route_gate {
+            // A non-trivial gate, so `r` is neither 0 nor 1 and the blend has
+            // to be exercised rather than falling through to a limit. The
+            // weight is one row over the hidden width.
+            let width = model.variables()["pointer.route_gate.weight"].dims()[1];
+            model.variables()["pointer.route_gate.weight"].set(&Tensor::from_vec(
+                vec![0.25f32; width],
+                (1, width),
+                &cpu(),
+            )?)?;
+            model.variables()["pointer.route_gate.bias"].set(&Tensor::from_vec(
+                vec![0.5f32],
+                1,
+                &cpu(),
+            )?)?;
+        }
+        Ok(model)
+    }
+
+    /// A gated route blends the ranked route with the soft pointer by the
+    /// learned gate `r = sigmoid(w_r . h + b_r)`: `(1 - r) a_soft + r a_route`
+    /// where the route admits, and the soft pointer where it admits nothing.
+    /// The limits are exact -- `r -> 1` is the ranked route and `r -> 0` is the
+    /// soft pointer -- so the test fixes both, and checks that the gate's own
+    /// variables receive the loss gradient, which is the only way a gate can
+    /// learn.
+    #[test]
+    fn a_gated_route_blends_the_ranked_route_with_the_soft_pointer() -> Result<()> {
+        let (ids, targets, weights) = routed_batch();
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let ranked = PrimeRoute::ranked(1);
+            let gated = PrimeRoute::ranked(1).gated();
+
+            let mut soft_model = routed_pointer_model(score, ranked, 0)?;
+            soft_model.set_pointer_route(None)?;
+            let soft = soft_model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+
+            let ranked_model = routed_pointer_model(score, ranked, 0)?;
+            let ranked_loss = ranked_model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+
+            // A gated model whose gate this test has not touched: the fresh
+            // initial value must leave the route closed, so that setting
+            // `route_gate` does not perturb a run starting from a saved head.
+            let fresh = {
+                let mut config = tiny(StackArch::Geometric, "ar", ReadScore::Lorentz, true);
+                config.pointer = Some(PointerConfig {
+                    score,
+                    select: None,
+                    route: Some(gated),
+                    ..PointerConfig::new(4)
+                });
+                StackModel::new(config, &cpu())?
+            };
+            let closed = f64::from(
+                fresh.variables()["pointer.route_gate.bias"]
+                    .as_tensor()
+                    .to_vec1::<f32>()?[0],
+            );
+            assert!(
+                sigmoid_f64(closed) < 0.01,
+                "{score:?}: a fresh gate is {closed}, not closed (sigmoid {})",
+                sigmoid_f64(closed)
+            );
+
+            let mut model = routed_pointer_model(score, gated, 0)?;
+            let f = |model: &StackModel| -> Result<f64> {
+                Ok(f64::from(
+                    model
+                        .weighted_loss(&ids, &targets, &weights, 2, 12)?
+                        .to_scalar::<f32>()?,
+                ))
+            };
+            let blended = f(&model)?;
+            // With a closed gate the blended loss is the soft pointer's; that
+            // identity is what makes the gated and ungated arms comparable.
+            set_route_gate_bias(&model, -40.0)?;
+            let at_soft = f(&model)?;
+            assert!(
+                (at_soft - f(&soft_model)?).abs() < 1e-6,
+                "{score:?}: r->0 gives {at_soft}, the soft pointer {}",
+                f(&soft_model)?
+            );
+            // `r -> 1` is the ranked route, which `ranked_attention` computes
+            // exactly when the gate is open.
+            set_route_gate_bias(&model, 40.0)?;
+            let at_ranked = f(&model)?;
+            assert!(
+                (at_ranked - f(&ranked_model)?).abs() < 1e-6,
+                "{score:?}: r->1 gives {at_ranked}, the ranked route {}",
+                f(&ranked_model)?
+            );
+            // A real gate produces a third value, distinct from both limits.
+            // The mixture loss is `-log` of a blend of probabilities, so it is
+            // not linear in the gate and the blended loss is *not* bounded by
+            // the two endpoint losses -- it only has to differ from both.
+            set_route_gate_bias(&model, 0.5)?;
+            let blended = {
+                let (_, _, contested) = reference_mixture(
+                    &model,
+                    &model.hidden(&ids, 2, 12)?.to_vec2::<f32>()?,
+                    (&ids[..], &targets[..], &weights[..]),
+                    (2, 12),
+                )?;
+                assert!(contested, "{score:?}: the batch does not exercise a route");
+                f(&model)?
+            };
+            for (limit, name) in [(at_soft, "soft"), (at_ranked, "ranked")] {
+                assert!(
+                    (blended - limit).abs() > 1e-9,
+                    "{score:?}: the blend {blended} does not differ from the {name} limit {limit}"
+                );
+            }
+
+            // The gate's own variables get the loss gradient, and the route's
+            // learned scores get it through both terms of the blend.
+            set_route_gate_bias(&model, 0.5)?;
+            let loss = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+            let grads = loss.backward()?;
+            let hidden = model.hidden(&ids, 2, 12)?.to_vec2::<f32>()?;
+            for name in [
+                "pointer.route_gate.weight",
+                "pointer.route_gate.bias",
+                "pointer.query.weight",
+                "pointer.key.weight",
+            ] {
+                let numeric = reference_derivative(
+                    &model,
+                    name,
+                    &hidden,
+                    (&ids[..], &targets[..], &weights[..]),
+                    (2, 12),
+                )?;
+                let analytic = grads
+                    .get(model.variables()[name].as_tensor())
+                    .ok_or_else(|| invalid(format!("missing gradient for {name}")))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let scale = numeric.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+                assert!(scale > 0.0, "{score:?}: {name} has no effect");
+                for (got, want) in analytic.iter().zip(&numeric) {
+                    assert!(
+                        (f64::from(*got) - want).abs() < 1e-3 * scale.max(1.0),
+                        "{score:?}: {name} gradient {got} against {want}"
+                    );
+                }
+            }
+            let _ = blended;
+        }
+        Ok(())
+    }
+
+    /// Set a model's route-gate bias, so the limits `r -> 0` and `r -> 1` can
+    /// be taken exactly rather than approximated.
+    fn set_route_gate_bias(model: &StackModel, bias: f32) -> Result<()> {
+        model.variables()["pointer.route_gate.bias"].set(&Tensor::from_vec(
+            vec![bias],
+            1,
+            &cpu(),
+        )?)?;
+        Ok(())
     }
 
     /// The variables of a pointer head.
