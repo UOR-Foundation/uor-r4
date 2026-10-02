@@ -99,7 +99,7 @@ print(1 if ok else 0)" 2>/dev/null || echo 0)
   # mistaken for patience: logging only state changes is indistinguishable from
   # a hung monitor.
   if [ $((i % 12)) = 1 ]; then
-    log "waiting: others=$others load=$load swap_free=${swap_free_mb}MB (need others=0, load<$limit, swap>=${MIN_SWAP_FREE_MB:-1500}MB)"
+    log "waiting: others=$others load=$load avail=${avail_mb}MB swap_free=${swap_free_mb}MB (need others=0, load<$limit, avail>=${MIN_AVAIL_MB:-2100}MB, swap>=${MIN_SWAP_FREE_MB:-512}MB)"
   fi
 
   if [ "$others" = "0" ] && [ "$quiet" = "1" ] && [ "$roomy" = "1" ]; then
