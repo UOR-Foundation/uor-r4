@@ -73,6 +73,14 @@ overhead and temporary stack frames. It is not peak RSS or an energy measure.
 Compiled successful-push/callee allocation and instruction inspection remain
 necessary before claiming no allocation, float, multiplier or divide opcode.
 
+A follow-up caller review found six complete legacy `ReadSource` initializers
+that omitted the new optional residual field. All six now explicitly initialize
+it to `None`; the other four literals use the default or set the injected
+residual. This repairs a source-level compilation blocker across ordinary,
+span, binding and composed callers. Direct parsing/formatting and diff checks
+pass; actual compilation and behavioral checks remain NOT_RUN. No numerical
+operator, learned artifact or learning policy changes in this repair.
+
 ## Execution admission and continuation
 
 The source projection is240min total: source/review120, cold rebuild/checks45,

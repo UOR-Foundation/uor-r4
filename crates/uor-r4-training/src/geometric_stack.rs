@@ -2133,6 +2133,7 @@ impl StackModel {
                 native_learned_values: None,
                 no_read: NoReadSource::LegacyFloat,
                 composition: None,
+                integer_residual: None,
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
@@ -2291,6 +2292,7 @@ impl StackModel {
                 native_learned_values: None,
                 no_read: NoReadSource::LegacyFloat,
                 composition: None,
+                integer_residual: None,
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
@@ -4028,6 +4030,7 @@ impl StackModel {
                 native_learned_values: None,
                 no_read: NoReadSource::LegacyFloat,
                 composition: None,
+                integer_residual: None,
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
@@ -5248,6 +5251,7 @@ impl StackModel {
                 native_learned_values: None,
                 no_read: NoReadSource::LegacyFloat,
                 composition: None,
+                integer_residual: None,
             };
             let hidden = self.layer_range_with_source(
                 p,
@@ -5622,6 +5626,7 @@ impl StackModel {
                 native_learned_values: None,
                 no_read: NoReadSource::LegacyFloat,
                 composition: None,
+                integer_residual: None,
             },
         )?;
         let hidden = self.finish_hooked(p, x, &mut None)?;
@@ -6574,6 +6579,7 @@ impl StackModel {
                         native_learned_values: None,
                         no_read: NoReadSource::LegacyFloat,
                         composition: None,
+                        integer_residual: None,
                     },
                 )?,
             };
