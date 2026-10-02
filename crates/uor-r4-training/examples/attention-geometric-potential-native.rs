@@ -85,6 +85,18 @@ fn target(es: &[Episode], head: usize) -> ReadBindingTarget {
             .collect(),
     }
 }
+fn valid_masses(values: &[f32], rows: usize) -> Result<()> {
+    if values.len() != rows
+        || values
+            .iter()
+            .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+    {
+        return Err(invalid(
+            "source observations have invalid shape or probability",
+        ));
+    }
+    Ok(())
+}
 fn bits_equal(a: &[f32], b: &[f32]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits())
 }
@@ -310,6 +322,10 @@ fn compare_panel(
                     potential,
                 )?
                 .to_vec1::<f32>()?;
+        }
+        for head in 0..2 {
+            valid_masses(&base_mass[head], group.len())?;
+            valid_masses(&native_mass[head], group.len())?;
         }
         let mut rows = Vec::new();
         for (i, e) in group.iter().enumerate() {
@@ -631,6 +647,10 @@ mod tests {
             (0, 0, false)
         );
         assert!(rank_observation(&[0.], &[0.], 1).is_err());
+        valid_masses(&[0., 0.5, 1.], 3)?;
+        assert!(valid_masses(&[0.], 2).is_err());
+        assert!(valid_masses(&[f32::NAN], 1).is_err());
+        assert!(valid_masses(&[1.01], 1).is_err());
         Ok(())
     }
 }
