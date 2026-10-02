@@ -13,7 +13,7 @@ set -euo pipefail
 
 ROOT="${1:?usage: post-epoch-eval.sh <arm-root> <label>}"
 LABEL="${2:?usage: post-epoch-eval.sh <arm-root> <label>}"
-REPORTS="$HOME/uor-r4-worktrees/stack-prose-reports"
+REPORTS="${REPORTS:-$HOME/uor-r4-worktrees/reports}"
 # Resolve the root: ~, then a bare name under the reports root, so callers can
 # pass just the arm name the way score-chat-arm.py accepts it.
 ROOT="${ROOT/#\~/$HOME}"

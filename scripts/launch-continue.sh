@@ -25,8 +25,8 @@
 set -uo pipefail
 P="$HOME/uor-r4-local/chat-v0-20260925/prepared"
 T="$HOME/uor-r4-local/inputs/claude-t4-1433-resume/bundle-learned-1/tokenizer.json"
-W="$HOME/uor-r4-worktrees/stack-prose-reports/chat-prose-init-phase-a-1/lm/model"
-O="${OUT:-$HOME/uor-r4-worktrees/stack-prose-reports/chat-dose-continue-1}"
+W="${INIT_LM:-$HOME/uor-r4-worktrees/reports/chat-prose-init-phase-a-1/lm/model}"
+O="${OUT:-$HOME/uor-r4-worktrees/reports/chat-dose-continue-1}"
 # 6 threads, not 8: peers are active and 8 would oversubscribe the machine,
 # slowing them and me. Slower wall clock, but it coexists rather than contends.
 export RAYON_NUM_THREADS="${THREADS:-6}"
