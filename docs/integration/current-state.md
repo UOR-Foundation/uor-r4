@@ -1,21 +1,31 @@
 # Current UOR-R4 research state
 
-## Persistent integer attention — hosted fixture checkpoint, October 2
+## Persistent integer attention — native runtime repair, October 2
 
 The [persistent session implementation](geometric-attention-session-2026-10-02.md)
-now contains the integer occurrence cache/newest-row reader, strict admitted
+contains the integer occurrence cache/newest-row reader, strict admitted
 component adapter, CPU Stack residual bridge and retained-parent comparison
-driver. Direct formatting and independent source reviews are complete; six
-legacy caller initializer omissions are repaired. Hosted Linux release checks
-now pass all3 intended integer fixtures,0 failed/ignored. The training library
-compiles; the replay example's E0508 packet move is repaired with a borrow and
-its driver-only hosted retry passes in6m03s. Downloaded binary and owned-source
-SHA bindings are verified; the Linux execution receipt is linked in the record. Loaded-parent comparison and
-allocation/opcode qualification remain NOT_RUN; no serving or answer claim
-follows. No local Cargo/model process or private artifact upload occurred.
-Continue #1512 with the source-bound hosted build, then artifact-bound replay;
-preserve both context lineages. Event/age source policies, selected access and
-the float model tail remain explicit unfinished boundaries.
+driver. Hosted Linux and native M1 compilation pass. At source4a0b0224, native
+M1 passes3 session tests,5 context tests and the external allocation census:
+256 successful pushes and2 resets, with0 allocations/reallocations/deallocations.
+Construction, first-use and error/reporting paths are outside that census.
+Independent source review finds no material blocker.
+
+The first actual compiled integer call scan retains3 MADD instructions from
+48/104-byte context descriptor indexing. Private64/128-byte layout repair
+4a0b0224 preserves learned tables, artifacts and geometry; additional64-bit
+metadata is16*vocabulary+24*total_lanes bytes, max65,728B before allocator
+bookkeeping. The actual rebuilt M1 driver passes the19-symbol integer call scan:0
+multiply/divide/floating arithmetic/conversion/FMOV instructions, with the prior
+3-MADD failure retained. External libc/panic callees are
+unscanned and no complete serving claim follows.
+
+Loaded-parent comparison remains NOT_RUN while live local peer trainers occupy
+shared capacity; #820 records the required2-thread/3GiB replay slot. No local
+Cargo/model process, private artifact upload or optimizer update occurs.
+Continue #1512 with artifact-bound two-lineage
+replay; preserve both context parents. Event/age source policies, selected
+access and the float model tail remain explicit unfinished boundaries.
 
 ## Strict q4 geometric context — fixed construction and three-route credit complete, October 2
 

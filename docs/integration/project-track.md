@@ -134,9 +134,10 @@ embeddings alone are not assumed to contain reasoning.
    both conversions and complete three-route answer credit, alongside every
    regression and the long-draw gradient-stability concern. End construction
    without automatic recovery training. The [persistent integer session source](geometric-attention-session-2026-10-02.md)
-   is implemented; three hosted Linux integer fixtures pass and the replay
-   driver release build passes after a concrete borrow repair. Loaded comparison
-   and compiled runtime qualification remain pending. Exercise
+   is implemented; hosted Linux/M1 builds and native session/context/allocation
+   checks pass. An observed descriptor-indexing multiplier has a causal layout
+   repair passing rebuilt19-symbol instruction inspection; loaded comparison remains
+   pending. Exercise
    the session using existing event/context/span/value/NoRead/potential/
    reducer/bank primitives: compute each occurrence once and only the newest
    query row. Preserve old-held timing, all absent/zero candidates, exact

@@ -166,3 +166,40 @@ these jobs. Linux binary/instruction evidence is platform-specific and cannot
 qualify M1 runtime, energy or whole-model serving. There is no local Cargo/model
 run. The clean temporary CI checkout was removed after its workflow commit was
 pushed; its branch/workflow and all research remain preserved.
+
+## Native M1 runtime checks and observed descriptor repair
+
+[Run37065787933](https://github.com/UOR-Foundation/uor-r4/actions/runs/37065787933)
+passes the same three release integer session fixtures and builds the native
+ARM64 macOS replay driver with Rust1.97.1. Downloaded binary and owned-source
+hashes agree. [Allocation run37067431577](https://github.com/UOR-Foundation/uor-r4/actions/runs/37067431577)
+atd2df6588 executes256 successful pushes and2 resets over two full128-occurrence
+sessions:4 nonzero,2 present-zero and250 cancelling-nonzero rows, with zero
+allocations, allocated bytes, reallocations or deallocations. Constructor, TLS
+initialization, warm-up, assertions and error/report formatting are excluded.
+This measures the synthetic successful session path, not a complete model.
+
+The first actual M1 opcode scan reaches19 emitted integer symbols from
+`NativeAttentionSession::push`. It finds3 MADD instructions in context step
+descriptor indexing, with no hardware divider, floating arithmetic/conversion
+or FMOV transfer in those ranges. This retained contract failure motivates
+4a0b0224: private48-byte token and104-byte lane descriptors become64/128-byte
+power-of-two strides. Coefficient arrays, artifact bytes and geometric
+transition/readout arithmetic are unchanged. Additional64-bit metadata costs
+16*vocabulary +24*total_lanes bytes, at most65,728B; existing coefficient-only
+`stored_bytes` excludes this metadata and allocator bookkeeping/alignment
+overhead. The focused size test guards the new descriptor strides.
+
+[Repair run37067792966](https://github.com/UOR-Foundation/uor-r4/actions/runs/37067792966)
+passes3 session tests,5 context tests and the allocation census at4a0b0224.
+Its rebuilt native driver passes the19-symbol integer scan:0 multiplier,
+hardware divide, floating arithmetic/conversion or FMOV instructions. The
+observed3-MADD defect is removed in the actual emitted binary. Downloaded binary
+SHA and all compiled source hashes agree; no new optimizer update occurs.
+The scan uses the existing strict auditor's multiplier/divider/FP patterns
+without weakening them. External memcpy/memset/bzero and defensive core panic
+callees are explicitly outside its scope; closed-call whole-model serving is
+not qualified. Loaded-parent replay remains NOT_RUN while actual local peer
+trainers exceed shared capacity. No private model artifacts are uploaded, no
+local Cargo/model run or optimizer update occurs, and no geometry family is
+retired by these implementation checks.
