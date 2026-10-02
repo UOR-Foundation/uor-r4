@@ -71,6 +71,30 @@ for i in $(seq 1 "$MAX_POLLS"); do
   fi
   quiet=$(python3 -c "print(1 if float('$load') < $limit else 0)" 2>/dev/null || echo 0)
 
+  # Idle CPU, measured directly. Load average is a proxy, and a poor one for
+  # this decision: what matters is whether EIGHT cores are available for a
+  # job whose whole point is throughput. Observed here with a peer at 168% and
+  # a build at 190%: load 7.4 but only 33% idle, i.e. ~2.7 free cores against a
+  # need for 8. Launching into that oversubscribes and slows every peer, which
+  # is the exact harm the sequencing exists to avoid -- so require idle.
+  # Parsed with python and iostat, not by matching top's output: an earlier
+  # attempt with `sed` on `top` returned 0 when it failed to match, and a 0
+  # would have made the guard NEVER fire -- the same class of bug as a guard
+  # that can never fire for any other reason. iostat's second sample is a
+  # measured interval, and a failed parse here is detectable rather than
+  # silently zero.
+  idle_pct=$(python3 -c "
+import subprocess
+try:
+    lines = [l for l in subprocess.run(['iostat','-c','2'],capture_output=True,text=True).stdout.splitlines() if l.strip()]
+    f = [float(x) for x in lines[-1].split()]
+    print(round(100.0 - f[0] - f[2], 1))   # 100 - user - sys = idle
+except Exception:
+    print(-1)                              # sentinel: unknown, never 'roomy'
+" 2>/dev/null)
+  [ -n "$idle_pct" ] || idle_pct=-1
+  idle_ok=$(python3 -c "print(1 if float('$idle_pct') >= ${MIN_IDLE_PCT:-50} else 0)" 2>/dev/null || echo 0)
+
   # Memory guard. Two numbers, because they measure different things.
   #
   # Reclaimable memory (free + inactive + speculative + purgeable) is what a new
@@ -108,11 +132,11 @@ print(1 if ok else 0)" 2>/dev/null || echo 0)
   # mistaken for patience: logging only state changes is indistinguishable from
   # a hung monitor.
   if [ $((i % 12)) = 1 ]; then
-    log "waiting: others=$others load=$load avail=${avail_mb}MB swap_free=${swap_free_mb}MB (tier poll=$i: peer_ok=$owner_ok load<$limit avail>=$avail_floor swap>=${MIN_SWAP_FREE_MB:-512})"
+    log "waiting: others=$others load=$load idle=${idle_pct}% avail=${avail_mb}MB swap_free=${swap_free_mb}MB (tier poll=$i: peer_ok=$owner_ok load<$limit avail>=$avail_floor swap>=${MIN_SWAP_FREE_MB:-512})"
   fi
 
-  if [ "$owner_ok" = "1" ] && [ "$quiet" = "1" ] && [ "$roomy" = "1" ]; then
-    log "machine free (others=$others load=$load bar=$limit avail=${avail_mb}MB swap_free=${swap_free_mb}MB); claiming slot"
+  if [ "$owner_ok" = "1" ] && [ "$quiet" = "1" ] && [ "$roomy" = "1" ] && [ "$idle_ok" = "1" ]; then
+    log "machine free (others=$others load=$load idle=${idle_pct}% avail=${avail_mb}MB swap_free=${swap_free_mb}MB); claiming slot"
     if (set -o noclobber; cat > "$SLOT" <<SLOTEOF
 {"lab":"deepseek","card":"full-dose chat-v0 LM + response #1512","pid":$$,"started_utc":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","expected_end_utc":"$(date -u -v+12H +%Y-%m-%dT%H:%M:%SZ)","threads":8}
 SLOTEOF

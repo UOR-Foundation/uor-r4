@@ -59,3 +59,14 @@ expect "$(tier3 0 1.0 4000 2000 10)" FIRE "tier 1 unaffected"
 
 echo
 if [ "$fail" = 0 ]; then echo "all launch-guard cases pass (including tier 3)"; else echo "FAILURES PRESENT"; exit 1; fi
+
+echo "=== idle-CPU condition, including the unknown sentinel ==="
+idlecase(){ python3 -c "print('roomy' if float('$1') >= 50 else 'blocked')"; }
+expect "$(idlecase 84.9)" roomy   "idle 84.9%"
+expect "$(idlecase 50.0)" roomy   "idle exactly at the 50% floor"
+expect "$(idlecase 49.9)" blocked "idle just under the floor"
+expect "$(idlecase 0)"    blocked "idle 0%"
+expect "$(idlecase -1)"   blocked "idle unknown (-1) must NOT read as roomy"
+
+echo
+if [ "$fail" = 0 ]; then echo "all launch-guard cases pass (tiers + idle)"; else echo "FAILURES PRESENT"; exit 1; fi
