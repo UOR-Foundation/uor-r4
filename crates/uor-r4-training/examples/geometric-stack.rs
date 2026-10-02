@@ -1300,6 +1300,47 @@ fn train_settings(args: &Args) -> Result<Settings> {
     Ok(settings)
 }
 
+/// `UOR_NAN_TRACE`: rerun the failing batch through the forward with every
+/// weight map's input captured, and name the first site whose input holds a
+/// nonfinite value and the final state's finiteness (diagnosis only).
+fn first_nonfinite_site(
+    model: &StackModel,
+    ids: &[u32],
+    batch: usize,
+    time: usize,
+) -> Result<String> {
+    let mut first: Option<String> = None;
+    let mut sites = 0usize;
+    let hidden = model.hidden_with_capture(ids, batch, time, &mut |site, input| {
+        sites += 1;
+        if first.is_none() {
+            let values = input.flatten_all()?.to_vec1::<f32>()?;
+            let bad = values.iter().filter(|v| !v.is_finite()).count();
+            if bad > 0 {
+                let largest = values
+                    .iter()
+                    .filter(|v| v.is_finite())
+                    .fold(0f32, |m, v| m.max(v.abs()));
+                first = Some(format!(
+                    "{site:?}: {bad}/{} nonfinite, largest finite {largest:e}",
+                    values.len()
+                ));
+            }
+        }
+        Ok(())
+    })?;
+    let final_bad = hidden
+        .flatten_all()?
+        .to_vec1::<f32>()?
+        .iter()
+        .filter(|v| !v.is_finite())
+        .count();
+    Ok(format!(
+        "; first nonfinite site of {sites}: {}; final state nonfinite values {final_bad}",
+        first.unwrap_or_else(|| "none (the head or loss)".into())
+    ))
+}
+
 /// `UOR_NAN_TRACE`: fail before the update when any gradient (or parameter)
 /// is nonfinite, naming the variables, their largest finite magnitude and
 /// the step, so a run that would poison every parameter shows where the
@@ -1791,8 +1832,13 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
         let loss = model.loss(&ids, &targets, settings.batch, time)?;
         let value = f64::from(loss.to_scalar::<f32>()?);
         if !value.is_finite() {
+            let site = if nan_trace {
+                first_nonfinite_site(&model, &ids, settings.batch, time)?
+            } else {
+                String::new()
+            };
             return Err(invalid(format!(
-                "nonfinite training loss at step {}",
+                "nonfinite training loss at step {}{site}",
                 progress.step
             )));
         }
