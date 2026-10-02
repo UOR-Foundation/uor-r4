@@ -91,7 +91,13 @@ fn main() -> Result<()> {
 }
 fn run(a: &Args, at: Instant) -> Result<()> {
     report_output::verify(&a.context_attempt)?;
-    let parent: ParentArgs = serde_json::from_slice(&fs::read(&a.parent_arguments)?)?;
+    let parent_bytes = fs::read(&a.parent_arguments)?;
+    if parent_bytes != fs::read(a.context_attempt.join("arguments.json"))? {
+        return Err(invalid(
+            "comparison parent arguments differ from sealed construction",
+        ));
+    }
+    let parent: ParentArgs = serde_json::from_slice(&parent_bytes)?;
     let context_report = fs::read(a.context_attempt.join("report.json"))?;
     let report: Value = serde_json::from_slice(&context_report)?;
     let expected = match parent.seed {
@@ -365,6 +371,7 @@ fn run(a: &Args, at: Instant) -> Result<()> {
         &a.out.join("report.json"),
         &json!({"schema":"uor-r4.geometric-attention-session-comparison/1",
         "complete":true,"seed":parent.seed,"optimizer_updates":0,"parent_report_sha256":expected,
+        "parent_arguments_sha256":sha256_bytes(&parent_bytes),
         "admission":admitted.metadata(),"panels":panels,"elapsed_seconds":at.elapsed().as_secs_f64(),
         "session_storage":admitted.session(128)?.storage_bytes(),"stack_interface_checks":interface_checks,
         "mismatched_valid_value_context_dependency_refused":true,

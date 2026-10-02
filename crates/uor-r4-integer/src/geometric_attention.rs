@@ -765,6 +765,28 @@ mod tests {
                 + storage.span_heap
                 + storage.reducer_heap
         );
+        // Exercise the actual maximum, including the reducer's current-token
+        // support and its extra NoRead term at the 128th occurrence.
+        let mut maximum = NativeAttentionSession::new(fixture.components(), MAX_CONTEXT)?;
+        for position in 0..MAX_CONTEXT {
+            let row = maximum.push(position.min(3))?;
+            assert_eq!(row.position, position);
+            for head in &row.heads {
+                assert_eq!(head.occurrence_weights_q31.len(), position + 1);
+                let denominator = head.occurrence_weights_q31.iter().copied().sum::<u64>()
+                    + head.no_read_weight_q31;
+                assert_eq!(head.total_weight_q31, denominator);
+            }
+        }
+        let final_publication = format!("{:?}", maximum.last());
+        assert!(matches!(
+            maximum.push(3),
+            Err(AttentionError::Full {
+                capacity: MAX_CONTEXT
+            })
+        ));
+        assert_eq!(maximum.len(), MAX_CONTEXT);
+        assert_eq!(format!("{:?}", maximum.last()), final_publication);
         Ok(())
     }
 }
