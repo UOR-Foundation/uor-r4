@@ -2398,6 +2398,34 @@ mod tests {
     }
 
     #[test]
+    fn log_recall_is_off_by_default_and_rebuilds_from_prior_turns_only() {
+        let (base, session) = fixture("log-recall", 512, ContextPolicy::StrictFullHistory);
+        // The provider names how many user turns preceded the query, so a
+        // rebuilt line made from the wrong slice of the log would differ.
+        let mut session =
+            session.with_log_recall(std::sync::Arc::new(|log: &[&str], _query: &str| {
+                Some(log.len().to_string())
+            }));
+        let write = fixed_turn(&mut session, "put blue");
+        assert!(matches!(write.memory, MemoryEffect::Write { .. }));
+        assert_eq!(write.recall, RecallDisposition::NotRequested);
+        let first = fixed_turn(&mut session, "hello");
+        assert_eq!(first.recall, RecallDisposition::LogValue);
+        assert!(session
+            .tokenizer
+            .decode(&first.emitter_input_ids)
+            .contains("User: hello\nSystem: Memory: 1.\nAssistant: "));
+        let second = fixed_turn(&mut session, "hello");
+        let text = session.tokenizer.decode(&second.emitter_input_ids);
+        assert!(text.contains("System: Memory: 1.\n"), "{text}");
+        assert!(text.contains("System: Memory: 2.\nAssistant: "), "{text}");
+        // A read turn keeps the store's own recall.
+        let query = fixed_turn(&mut session, "ask");
+        assert_eq!(query.recall, RecallDisposition::Value);
+        fs::remove_dir_all(base).expect("clean");
+    }
+
+    #[test]
     fn valid_store_values_are_not_lost_to_emitter_format_limits() {
         for value in ["none", "a\rb"] {
             let (base, mut session) = fixture("format", 128, ContextPolicy::WholeCompletedTurns);
