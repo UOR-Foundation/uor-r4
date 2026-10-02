@@ -1030,6 +1030,7 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
             .map_err(|_| invalid("the tokenizer's vocabulary does not fit the token store"))?,
     };
     let count = |text: &str| tokenizer.encode(text).len();
+    let spaced_meter = uor_r4_training::milestone_world_v2::Meter::spaced(&count);
     let mut world = MWorld2::new(&count, mix)?;
     let mut rng = Rng::new(seed);
     // Training excludes the sealed English probe by an overlap rule: a
@@ -1087,10 +1088,18 @@ fn corpus_v2(args: &Args, out: &Path) -> Result<()> {
                 "M-world v2 conversation {index} did not encode"
             )));
         }
-        if encoded.tokens.len() != conversation.tokens {
+        // Conversations are drawn under version 1's meter, so both versions
+        // encode the same conversations; a version 2 document is checked
+        // against version 2's layout.
+        let metered = if version == 1 {
+            conversation.tokens
+        } else {
+            spaced_meter.document(&conversation.turns)
+        };
+        if encoded.tokens.len() != metered {
             return Err(invalid(format!(
                 "M-world v2 conversation {index}: the meter counted {} tokens, the protocol {}",
-                conversation.tokens,
+                metered,
                 encoded.tokens.len()
             )));
         }
