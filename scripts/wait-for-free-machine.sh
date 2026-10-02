@@ -62,15 +62,30 @@ for i in $(seq 1 "$MAX_POLLS"); do
   fi
   quiet=$(python3 -c "print(1 if float('$load') < $limit else 0)" 2>/dev/null || echo 0)
 
+  # Memory guard. This is not only about protecting my own run: the LM phase
+  # needs ~1.4 GB resident, and on a box whose swap is already nearly full the
+  # kernel may resolve the shortfall by killing the largest task on the machine
+  # -- which here would be a peer lab's multi-hour run. Observed during this
+  # queue: swap free fell to 0.85 GiB of 15 GiB while a 6 GB teacher model sat
+  # resident, so launching into that state is a way to destroy someone else's
+  # work rather than merely run slowly.
+  swap_free_mb=$(python3 -c "
+import re,subprocess
+out = subprocess.run(['sysctl','-n','vm.swapusage'],capture_output=True,text=True).stdout
+m = re.search(r'free = ([0-9.]+)M', out)
+print(int(float(m.group(1))) if m else 0)
+" 2>/dev/null || echo 0)
+  roomy=$(python3 -c "print(1 if $swap_free_mb >= ${MIN_SWAP_FREE_MB:-1500} else 0)" 2>/dev/null || echo 0)
+
   # Heartbeat every ~30 min so the wait is observable and a stall cannot be
   # mistaken for patience: logging only state changes is indistinguishable from
   # a hung monitor.
   if [ $((i % 12)) = 1 ]; then
-    log "waiting: others=$others load=$load (need others=0 and load<$limit)"
+    log "waiting: others=$others load=$load swap_free=${swap_free_mb}MB (need others=0, load<$limit, swap>=${MIN_SWAP_FREE_MB:-1500}MB)"
   fi
 
-  if [ "$others" = "0" ] && [ "$quiet" = "1" ]; then
-    log "machine free (others=0, load=$load, bar=$limit); claiming slot"
+  if [ "$others" = "0" ] && [ "$quiet" = "1" ] && [ "$roomy" = "1" ]; then
+    log "machine free (others=0, load=$load, bar=$limit, swap_free=${swap_free_mb}MB); claiming slot"
     if (set -o noclobber; cat > "$SLOT" <<SLOTEOF
 {"lab":"deepseek","card":"full-dose chat-v0 LM + response #1512","pid":$$,"started_utc":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","expected_end_utc":"$(date -u -v+12H +%Y-%m-%dT%H:%M:%SZ)","threads":8}
 SLOTEOF
