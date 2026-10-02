@@ -453,6 +453,23 @@ fn reserved() -> &'static BTreeSet<String> {
     })
 }
 
+/// v2's copy and MQAR phrasing tables by intent name: `(intent, train,
+/// development)`, for teacher paraphrases (`teacher-paraphrase set=memory`).
+pub fn memory_tables() -> Vec<(
+    &'static str,
+    &'static [&'static str],
+    &'static [&'static str],
+)> {
+    [
+        ("copy", &COPY),
+        ("mqar_assert", &MQAR_LEAD),
+        ("mqar_query", &MQAR_QUERY),
+    ]
+    .into_iter()
+    .map(|(intent, p)| (intent, p.train, p.development))
+    .collect()
+}
+
 /// Every user phrasing template of `split` in v1 and v2.
 fn split_templates(split: Split) -> BTreeSet<&'static str> {
     let side = |p: &Phrasings| match split {
