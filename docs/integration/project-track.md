@@ -136,8 +136,9 @@ embeddings alone are not assumed to contain reasoning.
    without automatic recovery training. The [persistent integer session source](geometric-attention-session-2026-10-02.md)
    is implemented; hosted Linux/M1 builds and native session/context/allocation
    checks pass. An observed descriptor-indexing multiplier has a causal layout
-   repair passing rebuilt19-symbol instruction inspection; loaded comparison remains
-   pending. Exercise
+   repair passing rebuilt19-symbol instruction inspection. Both retained lineages
+   preserve512/512 saved answers and all actual-position logit bits in incremental
+   replay; independent saved-output review passes and protected delivery remains. The session exercises
    the session using existing event/context/span/value/NoRead/potential/
    reducer/bank primitives: compute each occurrence once and only the newest
    query row. Preserve old-held timing, all absent/zero candidates, exact

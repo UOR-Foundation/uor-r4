@@ -19,7 +19,7 @@
   "platform": "x86_64-unknown-linux-gnu",
   "rust": "1.97.1",
   "owned_changed_rust_sha_verified": 12,
-  "loaded_model_comparison": "NOT_RUN",
+  "loaded_model_comparison": "PASS on512 exposed retained rows, independent saved-output review pending; see geometric-attention-loaded-2026-10-02.json",
   "m1_runtime_allocation_opcodes": "PASS within declared successful fixture and19 emitted integer symbols at4a0b0224; loaded comparison NOT_RUN",
   "optimizer_updates": 0,
   "local_cargo_or_model": false,

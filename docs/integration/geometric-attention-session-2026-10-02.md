@@ -199,7 +199,43 @@ SHA and all compiled source hashes agree; no new optimizer update occurs.
 The scan uses the existing strict auditor's multiplier/divider/FP patterns
 without weakening them. External memcpy/memset/bzero and defensive core panic
 callees are explicitly outside its scope; closed-call whole-model serving is
-not qualified. Loaded-parent replay remains NOT_RUN while actual local peer
-trainers exceed shared capacity. No private model artifacts are uploaded, no
-local Cargo/model run or optimizer update occurs, and no geometry family is
-retired by these implementation checks.
+not qualified. At this hosted checkpoint loaded-parent replay is NOT_RUN while
+actual local peer trainers occupy shared capacity. The subsequent capacity
+release and replay are recorded below. No private model artifacts are uploaded
+or geometry family retired by these implementation checks.
+
+## Loaded-parent replay after capacity release
+
+DeepSeek exits; the two registered Claude arms use5 threads/7GiB, so the
+declared sequential2-thread/3GiB replay workers are admitted. Both exact
+retained parents complete in8.78s and9.46s external elapsed; peak RSS is
+843,300,864 and735,199,232 bytes. Each worker seals and verifies its report.
+Saved-parent/context dependency identities remain pinned;0optimizer updates.
+
+All512 exposed retained rows preserve saved answers and all actual-position
+whole-window/incremental float-tail logit bits. Answers remain93/110 for seed1
+and124/119 for seed2,446/512 total. This preserves the prior context conversion's
+13gains/45losses against its older478/512 parents; it is not a recovery fit or
+model-quality improvement. Exact token-step reader comparisons pass, including
+OLD held spans, context/event actions/states, packet status and composed values,
+causal compatibility/age scores, current occurrence support, separate NoRead
+weights/denominators, per-head reductions and checked head sum. Capacity, invalid
+token and reset checks pass. B2 same-shape and short-prefix checks pass; a valid
+older value artifact with the wrong context dependency is rejected.
+
+[Loaded execution receipt](../evidence/geometric-attention-loaded-2026-10-02.json).
+Independent saved-output review passes:512 saved answer vectors are bit-identical,
+all66 errors unchanged,28,976 token context/value traces and1,883,664 causal score
+pairs match,57,952 head normalizations/reductions reconstruct, and1,024 parent
+query heads match with0mismatches. The saved-data audit takes18.52s. Full-position
+logit equality, unsaved fresh-reference event/OLD-held fields and B2/reset/refusal
+remain fail-closed executed-driver assertions, distinct from the independent
+saved-output audit. The complete token traces exceed
+the original256MiB retention estimate by~84MiB; the overrun is recorded, and the
+standing owner storage extension sets a512MiB research ceiling before further
+archive/delivery. No result is discarded. Session-owned inline/heaped elements
+are165,976B per report, excluding borrowed tables/allocator overhead/temp stack;
+RSS includes the offline model driver and reporting and is not a serving/energy
+measurement. Event/age wider coefficients, selected access and float trunk/output
+remain unfinished. Preserve this component and advance those boundaries after
+delivery.
