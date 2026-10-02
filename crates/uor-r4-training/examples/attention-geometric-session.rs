@@ -511,7 +511,7 @@ fn compare_rows(
             for lane in 0..4 {
                 for atom in 0..2 {
                     let actual = step.values.packets[h * 4 + lane][atom];
-                    let prior = values.packets[(h * time + q) * 4 + lane][atom];
+                    let prior = &values.packets[(h * time + q) * 4 + lane][atom];
                     let status = match actual.state() {
                         ValueState::Absent => uor_r4_training::geometric_value_native::ValuePacketStatus::Absent,
                         ValueState::PresentZero => uor_r4_training::geometric_value_native::ValuePacketStatus::PresentZero,
