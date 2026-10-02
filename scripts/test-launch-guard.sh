@@ -39,3 +39,23 @@ expect "$(check 0 3.99 2100 511)"  wait "one MB under the swap floor"
 
 echo
 if [ "$fail" = 0 ]; then echo "all launch-guard cases pass"; else echo "FAILURES PRESENT"; exit 1; fi
+
+echo "=== tier 3: after LONG_WAIT_POLLS, a lingering peer no longer blocks,"
+echo "    but load and memory bars both tighten ==="
+tier3(){ # others load avail swap poll -> FIRE|wait
+  local others="$1" load="$2" avail="$3" swap="$4" i="${5:-800}"
+  python3 -c "
+if $i <= 48:      owner, limit, floor = $others == 0, 4.0, 2100
+elif $i <= 720:   owner, limit, floor = $others == 0, 8.0, 2100
+else:             owner, limit, floor = True,        1.5, 3000
+ok = owner and float('$load') < limit and int('$avail') >= floor and int('$swap') >= 512
+print('FIRE' if ok else 'wait')"
+}
+expect "$(tier3 1 1.0 4000 2000)"   FIRE "tier 3, a lingering peer, quiet and roomy"
+expect "$(tier3 1 2.0 4000 2000)"   wait "tier 3, load 2.0 exceeds the tightened bar"
+expect "$(tier3 1 1.0 2500 2000)"   wait "tier 3, 2500 < the raised 3000 floor"
+expect "$(tier3 2 8.0 1000 100)"    wait "tier 2, everything still tight"
+expect "$(tier3 0 1.0 4000 2000 10)" FIRE "tier 1 unaffected"
+
+echo
+if [ "$fail" = 0 ]; then echo "all launch-guard cases pass (including tier 3)"; else echo "FAILURES PRESENT"; exit 1; fi

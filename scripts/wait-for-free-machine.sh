@@ -43,22 +43,31 @@ for i in $(seq 1 "$MAX_POLLS"); do
   others=$(pgrep -f "geometric-stack" | wc -l | tr -d ' ')
   load=$(uptime | sed -E 's/.*averages: ([0-9.]+).*/\1/')
 
-  # Two tiers, because the two conditions measure different things.
+  # `others` counts *processes*, but what cost me 9x was *resource contention*
+  # (0.87 cores; 4.7 h -> 43.4 h). Those differ. Observed here: a peer job held
+  # 0.14 cores for 40 minutes with no evaluation -- a process competing with
+  # nothing -- yet `others=0` blocked on it. An all-or-nothing trigger can
+  # therefore wait out a job that will never finish, however safe the machine
+  # becomes.
   #
-  # `others=0` is the condition that matters: the 9x penalty I measured came
-  # from a second *trainer* competing for the same cores (0.87 cores, 4.7 h ->
-  # 43.4 h). A peer trainer is therefore always disqualifying, at any load.
-  #
-  # The load bar is a guard against unrelated desktop load (a browser and the
-  # app harness can hold the machine at load 10-30). Holding the run for hours
-  # because of a browser would defeat the objective, so after STRICT_POLLS the
-  # bar relaxes to RELAXED_LOAD_LIMIT while `others=0` stays absolute. The
-  # relaxed tier still excludes a busy machine: 8 cores, so load 8 means every
-  # core has a runnable task.
+  # So the trigger is resource-based, in two tiers:
+  #   tier 1 (always)   others=0 exactly -- the normal case
+  #   tier 2 (after LONG_WAIT_POLLS)  allow lingering processes, but only on a
+  #                     genuinely quiet machine: stricter load AND larger memory
+  #                     margin than tier 1, buying back with measured headroom
+  #                     the "no peer at all" guarantee it trades away
   if [ "$i" -le "${STRICT_POLLS:-48}" ]; then
     limit="$LOAD_LIMIT"
-  else
+    owner_ok=$(python3 -c "print(1 if $others == 0 else 0)")
+    avail_floor="${MIN_AVAIL_MB:-2100}"
+  elif [ "$i" -le "${LONG_WAIT_POLLS:-720}" ]; then
     limit="${RELAXED_LOAD_LIMIT:-8.0}"
+    owner_ok=$(python3 -c "print(1 if $others == 0 else 0)")
+    avail_floor="${MIN_AVAIL_MB:-2100}"
+  else
+    limit="${LONG_WAIT_LOAD:-1.5}"
+    owner_ok=1
+    avail_floor="${LONG_WAIT_AVAIL_MB:-3000}"
   fi
   quiet=$(python3 -c "print(1 if float('$load') < $limit else 0)" 2>/dev/null || echo 0)
 
@@ -92,18 +101,18 @@ print(avail, int(float(m.group(1))) if m else 0)
 " 2>/dev/null || echo "0 0")
 EOF2
   roomy=$(python3 -c "
-ok = $avail_mb >= ${MIN_AVAIL_MB:-2100} and $swap_free_mb >= ${MIN_SWAP_FREE_MB:-512}
+ok = $avail_mb >= $avail_floor and $swap_free_mb >= ${MIN_SWAP_FREE_MB:-512}
 print(1 if ok else 0)" 2>/dev/null || echo 0)
 
   # Heartbeat every ~30 min so the wait is observable and a stall cannot be
   # mistaken for patience: logging only state changes is indistinguishable from
   # a hung monitor.
   if [ $((i % 12)) = 1 ]; then
-    log "waiting: others=$others load=$load avail=${avail_mb}MB swap_free=${swap_free_mb}MB (need others=0, load<$limit, avail>=${MIN_AVAIL_MB:-2100}MB, swap>=${MIN_SWAP_FREE_MB:-512}MB)"
+    log "waiting: others=$others load=$load avail=${avail_mb}MB swap_free=${swap_free_mb}MB (tier poll=$i: peer_ok=$owner_ok load<$limit avail>=$avail_floor swap>=${MIN_SWAP_FREE_MB:-512})"
   fi
 
-  if [ "$others" = "0" ] && [ "$quiet" = "1" ] && [ "$roomy" = "1" ]; then
-    log "machine free (others=0, load=$load, bar=$limit, swap_free=${swap_free_mb}MB); claiming slot"
+  if [ "$owner_ok" = "1" ] && [ "$quiet" = "1" ] && [ "$roomy" = "1" ]; then
+    log "machine free (others=$others load=$load bar=$limit avail=${avail_mb}MB swap_free=${swap_free_mb}MB); claiming slot"
     if (set -o noclobber; cat > "$SLOT" <<SLOTEOF
 {"lab":"deepseek","card":"full-dose chat-v0 LM + response #1512","pid":$$,"started_utc":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","expected_end_utc":"$(date -u -v+12H +%Y-%m-%dT%H:%M:%SZ)","threads":8}
 SLOTEOF
