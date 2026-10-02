@@ -8030,6 +8030,33 @@ impl RecurrenceCore {
     }
 }
 
+/// Runs a three-input op's exact CPU forward on host copies of Metal inputs
+/// and returns the result as a Metal buffer. Used where a Metal kernel does
+/// not cover the op's configuration, so a Metal model computes exactly what
+/// the CPU model computes (unified memory makes the copies cheap).
+#[cfg(feature = "metal")]
+fn metal_via_host(
+    op: &impl CustomOp3,
+    inputs: [(&MetalStorage, &Layout); 3],
+) -> candle_core::Result<(MetalStorage, Shape)> {
+    let [(s1, l1), (s2, l2), (s3, l3)] = inputs;
+    let (c1, c2, c3) = (
+        s1.to_cpu_storage()?,
+        s2.to_cpu_storage()?,
+        s3.to_cpu_storage()?,
+    );
+    let (out, shape) = op.cpu_fwd(&c1, l1, &c2, l2, &c3, l3)?;
+    let CpuStorage::F32(values) = out else {
+        candle_core::bail!("{} host fallback expects F32 output", op.name());
+    };
+    let device = s1.device();
+    let buffer = device.new_buffer_with_data(&values)?;
+    Ok((
+        MetalStorage::new(buffer, device.clone(), values.len(), DType::F32),
+        shape,
+    ))
+}
+
 impl CustomOp3 for RecurrenceCore {
     fn name(&self) -> &'static str {
         "geometric-stack-recurrence"
@@ -8087,7 +8114,7 @@ impl CustomOp3 for RecurrenceCore {
         l3: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
         if self.snap.is_some() {
-            candle_core::bail!("Metal RecurrenceCore currently does not support transport snap");
+            return metal_via_host(self, [(s1, l1), (s2, l2), (s3, l3)]);
         }
         if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 || s3.dtype() != DType::F32 {
             candle_core::bail!("Metal RecurrenceCore requires F32 dtype");
@@ -8907,9 +8934,7 @@ impl CustomOp3 for FusedRead {
         l3: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
         if self.score != ReadScore::Dot || self.null || self.age || self.rope {
-            candle_core::bail!(
-                "Metal FusedRead currently supports only ReadScore::Dot without null, age, or rope"
-            );
+            return metal_via_host(self, [(s1, l1), (s2, l2), (s3, l3)]);
         }
         if s1.dtype() != DType::F32 || s2.dtype() != DType::F32 || s3.dtype() != DType::F32 {
             candle_core::bail!("Metal FusedRead requires F32 dtype");
@@ -10282,6 +10307,19 @@ impl CustomOp3 for PointerMixture {
             CpuStorage::F32(vec![(sum / self.total()) as f32]),
             Shape::from(()),
         ))
+    }
+
+    #[cfg(feature = "metal")]
+    fn metal_fwd(
+        &self,
+        s1: &MetalStorage,
+        l1: &Layout,
+        s2: &MetalStorage,
+        l2: &Layout,
+        s3: &MetalStorage,
+        l3: &Layout,
+    ) -> candle_core::Result<(MetalStorage, Shape)> {
+        metal_via_host(self, [(s1, l1), (s2, l2), (s3, l3)])
     }
 
     fn bwd(
