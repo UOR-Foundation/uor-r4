@@ -432,6 +432,62 @@ fn test_cross_entropy_backward_parity() -> uor_r4_training::Result<()> {
     Ok(())
 }
 
+/// The weighted mean cross-entropy (with a zero-weight row), forward and
+/// backward: CUDA computes the weighted gradient on the device.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_weighted_cross_entropy_parity() -> uor_r4_training::Result<()> {
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(_) => return Ok(()),
+    };
+    let (rows, vocab) = (6usize, 300usize);
+    let logits_data: Vec<f32> = (0..rows * vocab)
+        .map(|i| (i as f32 * 0.013).sin() * 4.0)
+        .collect();
+    let targets: Vec<u32> = (0..rows).map(|r| (r * 47 % vocab) as u32).collect();
+    let weights = [1.0f32, 0.0, 2.5, 0.25, 1.0, 3.0];
+    let run = |device: &candle_core::Device| -> uor_r4_training::Result<(f32, Vec<f32>)> {
+        let logits = candle_core::Var::from_tensor(&candle_core::Tensor::from_vec(
+            logits_data.clone(),
+            (rows, vocab),
+            device,
+        )?)?;
+        let loss = uor_r4_training::geometric_stack::logits_cross_entropy(
+            logits.as_tensor(),
+            &targets,
+            Some(&weights),
+        )?;
+        let grads = (&loss * 1.7)?.backward()?;
+        let grad = grads
+            .get(logits.as_tensor())
+            .expect("logit gradient")
+            .flatten_all()?
+            .to_device(&candle_core::Device::Cpu)?
+            .to_vec1::<f32>()?;
+        Ok((
+            loss.to_device(&candle_core::Device::Cpu)?
+                .to_scalar::<f32>()?,
+            grad,
+        ))
+    };
+    let (loss_cpu, grad_cpu) = run(&candle_core::Device::Cpu)?;
+    let (loss_cuda, grad_cuda) = run(&cuda_dev)?;
+    assert!(
+        (loss_cpu - loss_cuda).abs() <= 1e-5 * loss_cpu.abs().max(1.0),
+        "weighted loss {loss_cpu} vs {loss_cuda}"
+    );
+    assert_finite_and_close(
+        &grad_cpu,
+        &grad_cuda,
+        1e-5,
+        "Weighted CrossEntropy backward",
+    );
+    // The zero-weight row has an exactly zero gradient on both devices.
+    assert!(grad_cuda[vocab..2 * vocab].iter().all(|&g| g == 0.0));
+    Ok(())
+}
+
 #[cfg(feature = "cuda")]
 #[test]
 fn test_quaternion_scan_backward_parity() -> uor_r4_training::Result<()> {
