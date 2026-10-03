@@ -31,11 +31,57 @@ Together the fits score285/512 versus444/512 fixed conversion and446/512 unconve
 
 The saved640-batch histories per seed record zero all-HOLD episodes and zero absent OLD-held answer observations across all10,240 training episodes. Seed2 training loss rises late: short/long block means0.454/0.666 in updates1–80 versus2.268/2.919 in561–640. Valid held content can still encode the wrong tuple or be interpreted incompatibly by frozen consumers. Thus the cold all-HOLD auxiliary remains unjustified. The combined event/age fit does not isolate which block caused the collapse or prove a gradient-sign defect. Export disagreement is excluded on the executed final comparisons; learning-estimator faithfulness and block attribution remain open.
 
-## Next causal research task
+## Zero-update event × age attribution
 
-First complete the missing native event×age counterfactuals on seed2: final events with parent age, and parent events with final age. Retain existing parent/parent and final/final. Change no numerical consumer, base, data, alphabet or scale; perform no optimizer update. Under fixed events, packets, held tuples, raw compatibility and NoRead must remain exact while only age-dependent masses change. Under changed events, valid held content and all three consumer inputs may change. Save per-row gains/losses/CE and exact dependencies.
+Sourceb4b3cddd and independently verified hosted binary complete only the two
+missing seed2 cells:512 new predictions, no optimizer updates or sampler draws.
+The saved parent/parent and final/final endpoints are not rerun.
 
-An event-dominated result directs the next check to hard geometric capture/transport choices and the inherited biased adjoint. An age-dominated result directs it to native common-denominator credit and NoRead competition. Only the joint arm failing indicates interaction, not either block in isolation. This experiment does not establish causal usefulness of geometry against an ordinary control, and no new learning mechanism is adopted before attribution. If capture credit needs replacement, prefer a local exact-H4 neighbor/typed-action direction audit against actual hard CE over another arbitrary selector feature or schedule sweep.
+| Event source | Age source | Correct /256 | Mean answer CE |
+| --- | --- | ---: | ---: |
+| Parent | Parent | 244 | 0.510234 |
+| Final | Parent | 83 | 3.476278 |
+| Parent | Final | 244 | 0.502333 |
+| Final | Final | 83 | 3.436669 |
+
+Changed events alone reproduce the complete accuracy loss (1 gain/162 losses),
+while changed age alone changes no correctness row and slightly improves CE.
+Final age also slightly improves CE under final events. Accuracy interaction
+is zero on both panels; the CE interaction is not zero. This isolates the
+observed accuracy collapse to the event block at these fixed endpoints, not to
+age-only damage. Age changes answer logits and five already-wrong final-event
+predictions; it is not numerically inert. Independent saved-data review
+reconstructs all256 paired rows and1024 answer vectors with no blocker.
+It does not identify transition versus event-readout credit,
+prove a gradient-sign defect, or certify all intermediate updates.
+
+Both new arms preserve same-event packet/value/composed-payload/NoRead/event
+traces against the corresponding saved endpoint. Final-event potential and
+OLD-held also match. Parent baseline did not save its potential/held fields;
+those two endpoint equalities remain unverified and are not silently inferred.
+Chosen age tables are exact, selected/frozen source bytes and parameters stay
+unchanged, and the complete attempt is sealed. Actual external worker22.87s,
+peak RSS319,078,400B,1 thread/1GiB; public source compile, private local data.
+
+The next causal research action is a small finite geometric direction audit,
+not another fit: one predetermined event-damaged row, earliest transition
+choice divergence, at most10 adjacent admissible q4 token-coefficient changes
+targeting the parent action and exact signed antipode. Compare current biased
+adjoint g·actual_shadow_delta with actual hard native answer CE differences.
+Replay the complete affected prefix, synchronous OLD event states and OLD-held
+capture timing. An unchanged packed choice is a plateau; a loss-neutral late
+choice may be outside the causal horizon. Opposite signs on a changed relevant
+path provide a local misalignment counterexample, not a global explanation.
+If only event readout differs, this transition-specific design does not apply.
+The audit is designed but NOT_RUN; no estimator or served source is adopted.
+
+Primary straight-through results do not qualify this recurrent deterministic
+q4 selector: stochastic variance reduction is not bias removal, categorical
+quadratic-loss unbiasedness is not deterministic-argmax credit, and population
+binary-network descent assumptions do not cover this model. See
+[Paulus et al.](https://arxiv.org/html/2010.04838v1),
+[Shekhovtsov](https://proceedings.mlr.press/v202/shekhovtsov23a.html), and
+[Yin et al.](https://arxiv.org/html/1903.05662v4).
 
 This work remains #1512 geometric attention. Claude retains the owner-adopted #820 emitter, geometry-control and pointer-binding gates. Existing donor-weight compilation remains an offline option; no transformer serving, teacher response path or competing8M/store/30M campaign is adopted. General conversation/reasoning, selected access, full model integer serving and energy remain unfinished.
 
