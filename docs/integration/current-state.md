@@ -17,12 +17,23 @@ mixture. This is a specific representation/output limitation, not a geometry
 negative or a proof that all alternative rendered replies are impossible.
 
 Source-view /2 implementation preserves raw identity and byte provenance.
-Its changed-path validation is pending. Hybrid64 fit remains **NOT_ADMITTED**.
-Next: validate the support repair, then implement learned native geometric
-Copy/EmitPeriod/Stop scores in one integer action pool, with ordinary full-answer
-credit and own-prefix generation. The parent-free pool alone is arithmetic;
-learned stopping and complete native chat are unfinished. No scripted cursor or
-forced suffix is adopted. Keep shared session hooks coordinated on#1552.
+Its changed-path validation passes: 32+58 tokens, all3families credit, exact
+reload and representation-policy negatives, zero updates and unchanged payloads;
+19.686s monitored worker. Hybrid64 fit remains **NOT_ADMITTED**.
+Learned native geometric Copy/EmitPeriod/Stop projections and ordinary full-answer
+credit are now implemented at`ab4d3d7a`. Ten focused local checks pass. Independent
+source review approves the bounded parent-free numeric path. Actual construction
+passes complete B8 credit and exported reload in15.804s, then one64/B8 fit finishes
+in380.667s monitored time, maximum RSS2,453,618,688B. All four coefficient payloads
+change and final reload is exact. Own-prefix complete replies improve0→4/20;
+EOS20/20 in both. The four successes repeat `dancer`; suffix repetition, source
+piece scrambling and premature EOS remain. This is exposed development
+selected-source realization, not shared-session or general chat acceptance.
+Next: zero-update actual-artifact occurrence/progress-state audit before another
+fit; separate representation collisions from wrong ranking and estimator credit.
+No scripted cursor or forced suffix is adopted. Keep shared session hooks
+coordinated on#1552. Avoid GitHub research runners to preserve the merge queue;
+do not contend with DeepSeek's active CPU run.
 [Bound evidence](../evidence/geometric-source-learning-2026-10-03.json).
 
 ## Selected-record BPE consumer — connected construction, October 3

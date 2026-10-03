@@ -60,22 +60,39 @@ source format. Reader entry points reject crossing the two representations.
 The adapter and trace wrapper allocate outside the numerical kernel. No
 allocation-free or complete native serving claim follows from this repair.
 
-Validation of the changed source-view path is pending. The old cost and audit
-are retained independently; they are not reported as tests of the repaired path.
+The changed source-view path passes at `b5320a26`: 32+58 complete answer tokens,
+nonzero context/potential/NoRead credit, exact exported-payload reload, raw/view
+cross-entry rejection and corrupted-policy rejection. Zero updates; packed
+coefficients unchanged. The monitored worker takes19.686s, report-internal18.199s,
+maximum RSS1,014,792,192B. Short/long B8 backward times are2.956/5.081s. The driver
+also refuses the blocked view fit before claiming an output or loading a model.
+This validates lexical admission and connected credit, not complete replies.
 
 ## Next geometric output mechanism
 
-The next bounded candidate removes the frozen parent from source realization:
+The implemented bounded candidate removes the frozen parent from source realization:
 learn geometric scores for Copy occurrences, EmitPeriod and Stop, sum head Q24
 logits before one integer normalization, then sum all action masses yielding the
 same token. Punctuation/EOS identities come from tokenizer/protocol, never answer
 labels. All actions remain available at every structurally legal prefix; no
 scripted copy cursor, forced period or forced stop is adopted.
 
-The integer pool alone is arithmetic scaffolding. Learned action projections,
-ordinary complete-answer credit, artifact reload and own-prefix generation must
-still be implemented and measured. Ordering/progress collisions, repeated-token
-mass and ambiguous same-token action provenance remain explicit risks. This
+At source `ab4d3d7a`, `geometric_source_realizer` now connects the existing H4
+occurrence scores to Copy, existing NoRead projection to Stop, and an independent
+seeded q4 projection of the same family to Period. It reuses prepared context per
+update. The loss has native alias-summed probability forward and the declared
+biased adjoint `-(1/p_native) * d(p_soft)/dtheta`; it is not the derivative of
+integer rounding/lookup or ordinary softmax CE. Zero native target mass rejects.
+The generation loop takes the integer token winner and its own prefix, without
+parent scores or labels. The checkpoint is used for offline identity admission,
+then dropped. The research loader verifies floating source shadows offline;
+a complete product-serving loader remains outside this result.
+
+Eight view/action tests and two realizer loss/reload tests pass locally at
+`ab4d3d7a`, including Period-to-earlier-context credit. Independent source review
+approves this bounded mechanism. The measured construction and first fit below
+extend the test evidence. Ordering/progress collisions, repeated-token mass and
+ambiguous same-token action provenance remain explicit risks. This
 scope is bounded selected-source realization; free prose, NotFound replies,
 coding/reasoning and general conversation are unfinished.
 
@@ -84,11 +101,55 @@ questions, not first-fit gates. Preserve accepted parents and historical negativ
 rows. Do not repeat an unchanged hybrid dose or retire geometry from this support
 failure. Keep `stack_grounded_session.rs` untouched pending #1552 coordination.
 
+## Actual native construction and fixed fit
+
+At frozen source `ab4d3d7af45c8da5e1d967ee86abd19e1caaaddf`, native construction
+passes complete shortest/longest B8 credit (32+58 tokens), four active gradient
+families, unchanged coefficient payloads and exact exported-payload reload.
+The monitored worker takes15.804s; maximum RSS1,081,098,240B. The slower B8 takes
+5.132s. Its untrained own-prefix generation produces0/20 complete replies and
+20/20 EOS. This admits the declared native fit; it does not admit the old hybrid.
+
+One64/B8 AdamW fit completes with LR0.003, decay0, norm clip1 and quarter-range
+projection. The worker takes380.667s (report378.171s), maximum RSS2,453,618,688B;
+peak memory footprint3,151,809,416B is a separate metric. Five CPU threads,3GiB
+RSS and1200s worker limits were configured. No GPU or hosted research runner
+was used. All four learned packed payloads change; the fixed exp table does not.
+File-name inventory equality is not coefficient-byte equality. The final exported
+artifact independently reloads with exact traces, and generation loads it from disk.
+
+Complete own-prefix replies improve0→4/20; all20 reach EOS in both artifacts and
+all final decoded byte strings are valid UTF8. The four successes are repeated
+presentations of the source value `dancer`, not four distinct learned values.
+`singer` changes from `er.` to `er.er.er.`; `Brimfold` changes from `f` to
+`Br Brold Brim.`; `Louston` becomes an immediate EOS. Every row is retained in
+[the evidence](../evidence/geometric-source-learning-2026-10-03.json).
+Independent saved-result review checks all96 generated steps: summed head
+scores, token masses and greedy decisions agree. The20 rows contain five distinct
+numerical source/query inputs, and no complete observed state repeats within a
+reply. Suffix repetition does not establish a geometric-state cycle or collision.
+These are exposed development results. No heldout, free-prose, shared-session,
+geometry-superiority, energy or complete-chat claim follows.
+
+**Next causal decision:** compare correct-prefix and own-prefix integer ranking,
+then audit exact scorer inputs
+without optimizer updates. Separately inspect first-source-token ranking,
+re-entry after Period and premature Stop. Compare the exact available scorer
+inputs before asserting a state collision. Conflicting desired decisions with
+identical inputs justify added learned geometric occurrence/progress state;
+distinguishable inputs require a training-coverage/hard-versus-relaxed credit
+diagnosis. Do not impose an authored cursor or forced suffix, and do not repeat
+an unchanged64-update dose. The wider correct-prefix
+audit is proposed, not executed; the saved own-prefix audit above is complete. DeepSeek's CPU
+work takes priority over a new local run; GitHub runners are excluded from
+research runs by owner direction. A GPU port is separate implementation work.
+
 ## Retained evidence
 
 Local roots under `~/uor-r4-local/workspace/research/geometric-source-learning-20261003`:
-`cost-1` and `boundary-audit-1`, each exclusively claimed, sealed and verified by
-the Rust driver. Source-view validation will use a new independent root.
+`cost-1`, `boundary-audit-1`, `source-view-1`, `native-construction-1` and
+`native-fit-1`, each exclusively claimed, sealed and verified by the Rust driver.
+The fit retains checkpoints at16/32/48/64 updates and the final source/native artifact.
 
 Cost executable SHA256:
 `8609afc6aa0e29b6d1e96b72825f034581645c34f0983f8dcaeb4b38bac48791`.

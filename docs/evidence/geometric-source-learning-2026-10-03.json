@@ -1,6 +1,6 @@
 {
   "schema": "uor-r4.geometric-source-learning-evidence/1",
-  "scope": "zero-update exposed-development cost and canonical-token support audit; not fitted/native chat",
+  "scope": "Exposed-development source-emission support audit, zero-update native construction and one64/B8 native fit; not heldout quality, shared chat integration or complete serving.",
   "cost": {
     "retained_root": "/Users/casey.allard/uor-r4-local/workspace/research/geometric-source-learning-20261003/cost-1",
     "report_sha256": "aaf77e2a3f9dae7854377d2f8abdad38bb9af2f2628d5745cce4104db7fc421b",
@@ -10379,5 +10379,2598 @@
         ]
       }
     ]
+  },
+  "source_view_validation": {
+    "status": "completed",
+    "source_commit": "b5320a26c0122be76f590b1ffbc3ebfa5e5d9239",
+    "optimizer_updates": 0,
+    "any_hard_native_payload_changed": false,
+    "wall_seconds": 18.198782208,
+    "hard_payload_changes": [
+      {
+        "changed": false,
+        "file": "context-q4.bin",
+        "final_sha256": "1f7ad5173e48b19f931caf5c3acbb7b53215de12685fbf981570a084b8d14a17",
+        "initial_sha256": "1f7ad5173e48b19f931caf5c3acbb7b53215de12685fbf981570a084b8d14a17"
+      },
+      {
+        "changed": false,
+        "file": "potential-q4.bin",
+        "final_sha256": "f64c7862ebfbcb212b70bcce2bac4fce3e1b940935fb712a720863b50fac43a8",
+        "initial_sha256": "f64c7862ebfbcb212b70bcce2bac4fce3e1b940935fb712a720863b50fac43a8"
+      },
+      {
+        "changed": false,
+        "file": "no-read-q4.bin",
+        "final_sha256": "c708d6e87133864e6f6f0dbc3deabc9cd763a128c4d8fb18bf50d912881cb56e",
+        "initial_sha256": "c708d6e87133864e6f6f0dbc3deabc9cd763a128c4d8fb18bf50d912881cb56e"
+      }
+    ],
+    "retained_root": "/Users/casey.allard/uor-r4-local/workspace/research/geometric-source-learning-20261003/source-view-1",
+    "report_sha256": "9b3e5f200c454f094cb9f219f176166d4313b02c5d55d220b326628d244d6872",
+    "manifest_sha256": "fda34c2098db82189ea24be21591da5cbf42da0f7f295b62aa44e1a456199345",
+    "executable_sha256": "9c5369ebea50681cd02984487d723898fd2f012edc8c4c14481756f5b620ae80",
+    "resource": {
+      "exit_code": 0,
+      "elapsed_seconds": 19.686022125,
+      "sampled_process_tree_peak_rss_bytes": 748879872,
+      "rss_limit_bytes": 3221225472,
+      "cpu_threads_configured": 5,
+      "worker_seconds_limit": 300,
+      "checkpoint_grace_seconds": 120,
+      "stop_reason": null,
+      "scope": "local orchestration; maximum Rust RSS also in time -l log"
+    },
+    "maximum_rss_bytes": 1014792192,
+    "representation_guards": {
+      "corrupt_metadata_sha256": "4a05e1225df2f0c7383c2d319ae82dabac9636ccd4d7738ef1dbae3db8209e5f",
+      "corrupt_source_view_policy_rejected": true,
+      "loaded_source_view_rejects_raw_read": true,
+      "original_metadata_sha256": "59ebf9753650be846ba952c09e5da905a2026798785910fb7e7b87f2ba4fbff8",
+      "policy_error": "invalid reference request: consumer native/source/parent identity differs",
+      "raw_read_error": "invalid reference request: emission-view artifact cannot consume a raw source frame",
+      "raw_source_rejects_view_read": true,
+      "view_read_error": "invalid reference request: source emission view policy/tokenizer differs from artifact"
+    },
+    "independent_reload_equal": true,
+    "batches": [
+      {
+        "batch_episodes": 8,
+        "token_count": 32,
+        "elapsed_seconds": 2.955818583,
+        "mean_episode_nll": 2.422061376273632,
+        "gradient_global_norm": 0.5792932818556661,
+        "family_nonzero_counts": {
+          "context": 33888,
+          "no_read": 184,
+          "potential": 164
+        },
+        "parent_cache_seconds": 2.226184584
+      },
+      {
+        "batch_episodes": 8,
+        "token_count": 58,
+        "elapsed_seconds": 5.080583167,
+        "mean_episode_nll": 2.5715100654034,
+        "gradient_global_norm": 0.9565613224300906,
+        "family_nonzero_counts": {
+          "context": 64464,
+          "no_read": 350,
+          "potential": 839
+        },
+        "parent_cache_seconds": 4.656299916
+      }
+    ]
+  },
+  "native_construction": {
+    "source_commit": "ab4d3d7af45c8da5e1d967ee86abd19e1caaaddf",
+    "status": "completed",
+    "mode": "construction",
+    "optimizer_updates": 0,
+    "declared_updates": 0,
+    "optimizer": {
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "epsilon": 1e-08,
+      "gradient_clip": 1.0,
+      "lr": 0.003,
+      "updates": 64,
+      "weight_decay": 0.0
+    },
+    "wall_seconds": 15.363026959,
+    "all_active_gradient_families_present": true,
+    "gradient_family_l1": {
+      "consumer.context": 29.806597362219875,
+      "consumer.no_read": 16.356857272447087,
+      "consumer.potential": 20.20062834394048,
+      "period.coefficients": 12.322695862618275
+    },
+    "hard_inventory_equal": true,
+    "hard_payload_changes": [
+      {
+        "changed": false,
+        "coefficient_payload": true,
+        "file": "consumer/context-q4.bin",
+        "final_sha256": "1f7ad5173e48b19f931caf5c3acbb7b53215de12685fbf981570a084b8d14a17",
+        "initial_sha256": "1f7ad5173e48b19f931caf5c3acbb7b53215de12685fbf981570a084b8d14a17"
+      },
+      {
+        "changed": false,
+        "coefficient_payload": false,
+        "file": "consumer/exp-q31.bin",
+        "final_sha256": "79485d6e63cc28f5e01d98c5d73abe021db33fa7fef368142ae6592d06b4817f",
+        "initial_sha256": "79485d6e63cc28f5e01d98c5d73abe021db33fa7fef368142ae6592d06b4817f"
+      },
+      {
+        "changed": false,
+        "coefficient_payload": true,
+        "file": "consumer/no-read-q4.bin",
+        "final_sha256": "c708d6e87133864e6f6f0dbc3deabc9cd763a128c4d8fb18bf50d912881cb56e",
+        "initial_sha256": "c708d6e87133864e6f6f0dbc3deabc9cd763a128c4d8fb18bf50d912881cb56e"
+      },
+      {
+        "changed": false,
+        "coefficient_payload": true,
+        "file": "consumer/potential-q4.bin",
+        "final_sha256": "f64c7862ebfbcb212b70bcce2bac4fce3e1b940935fb712a720863b50fac43a8",
+        "initial_sha256": "f64c7862ebfbcb212b70bcce2bac4fce3e1b940935fb712a720863b50fac43a8"
+      },
+      {
+        "changed": false,
+        "coefficient_payload": true,
+        "file": "period-q4.bin",
+        "final_sha256": "ffba81c157ff6c55076a5f0cd646fe78115b9e6b95830a2a8b8e77e9878e7869",
+        "initial_sha256": "ffba81c157ff6c55076a5f0cd646fe78115b9e6b95830a2a8b8e77e9878e7869"
+      }
+    ],
+    "any_coefficient_payload_changed": false,
+    "shadow_only_fit": false,
+    "construction_payload_unchanged": true,
+    "no_parent_scores": true,
+    "work_error": null,
+    "final_checkpoint_error": null,
+    "scope": "20 exposed development selected-source Copy/Period/Stop native component; no parent model scores in loss or generation; no heldout or complete-chat claim",
+    "retained_root": "/Users/casey.allard/uor-r4-local/workspace/research/geometric-source-learning-20261003/native-construction-1",
+    "report_sha256": "9fad06787e503f05668fd308c13952b07085c219ac7e007616cbd2fca54c830d",
+    "manifest_sha256": "c8a930f4e4e2bb25345c6d83a9ea7bf9589b083cd3ba8c5abb6cab56af0b5c48",
+    "generation_sha256": "82a3d9c67add67061b143f9e5543d3a867072bb82325ba1c4b301ffbe2819522",
+    "executable_sha256": "803775353679cb116d169654522a07591c58944dcc7f21590b04838211253be3",
+    "hard_inventory_equal_meaning": "File-name inventory equality only; coefficient byte changes are listed separately.",
+    "reload_equal": true,
+    "native_stats": {
+      "consumer": {
+        "additional_potential_table_copy_bytes": 597760,
+        "algebra_bytes": 15601,
+        "context": {
+          "expanded_table_bytes": 44564480,
+          "expanded_table_entries": 11141120,
+          "learned_coefficients": 8963136,
+          "packed_bytes": 4481568
+        },
+        "exp_bytes": 32776,
+        "no_read": {
+          "expanded_table_bytes": 53320,
+          "learned_coefficients": 8866,
+          "packed_bytes": 4433,
+          "with_span_reads": 68,
+          "without_span_reads": 36
+        },
+        "potential": {
+          "expanded_table_bytes": 597760,
+          "expanded_table_entries": 149440,
+          "learned_coefficients": 16640,
+          "packed_bytes": 8320
+        },
+        "scope": "logical packed/expanded component payload; excludes allocator/RSS/source shadows/parent and wrapper per-call construction"
+      },
+      "extra_context_replays_per_read": 1,
+      "final_joint_reductions_per_read": 1,
+      "inherited_per_head_reductions_discarded": 2,
+      "period": {
+        "expanded_table_bytes": 53320,
+        "learned_coefficients": 8866,
+        "packed_bytes": 4433,
+        "with_span_reads": 68,
+        "without_span_reads": 36
+      },
+      "scope": "native integer components inside allocating wrapper; no parent-model inference, no complete-path opcode/allocation qualification"
+    },
+    "generation": {
+      "cases": 20,
+      "complete_answers": 0,
+      "eos_count": 20,
+      "elapsed_seconds": 0.148064667,
+      "native_loaded_from_disk": true,
+      "native_metadata_sha256": "459dd0aec52749d598d5b978f1d20f1de04c8c351faefdda4eaa669276ec37bd"
+    },
+    "rows": [
+      {
+        "id": "mw2-0246-s0-d0",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0246-s0-d1",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0246-s1-d0",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0246-s1-d1",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s0-d0",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s0-d1",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s1-d0",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s1-d1",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16
+        ],
+        "reply_text": "er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s0-d0",
+        "source_text": "Klotdradburg",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          45,
+          78,
+          302,
+          70,
+          84,
+          373,
+          68,
+          456,
+          73
+        ],
+        "generated_ids": [],
+        "reply_text": "",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s0-d1",
+        "source_text": "Klotdradburg",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          45,
+          78,
+          302,
+          70,
+          84,
+          373,
+          68,
+          456,
+          73
+        ],
+        "generated_ids": [],
+        "reply_text": "",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s1-d0",
+        "source_text": "Brimfold",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          72
+        ],
+        "reply_text": "f",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s1-d1",
+        "source_text": "Brimfold",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          72
+        ],
+        "reply_text": "f",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s0-d0",
+        "source_text": "Louston",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [
+          363,
+          277,
+          292,
+          277,
+          353,
+          16
+        ],
+        "reply_text": "Louonoust.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s0-d1",
+        "source_text": "Louston",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [
+          363,
+          277,
+          292,
+          277,
+          353,
+          16
+        ],
+        "reply_text": "Louonoust.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s1-d0",
+        "source_text": "Brimfold",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          72
+        ],
+        "reply_text": "f",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s1-d1",
+        "source_text": "Brimfold",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          72
+        ],
+        "reply_text": "f",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s0-d0",
+        "source_text": "Louston",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [
+          363,
+          277,
+          292,
+          277,
+          353,
+          16
+        ],
+        "reply_text": "Louonoust.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s0-d1",
+        "source_text": "Louston",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [
+          363,
+          277,
+          292,
+          277,
+          353,
+          16
+        ],
+        "reply_text": "Louonoust.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s1-d0",
+        "source_text": "Brimfold",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          72
+        ],
+        "reply_text": "f",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s1-d1",
+        "source_text": "Brimfold",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          72
+        ],
+        "reply_text": "f",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      }
+    ],
+    "monitored_worker_seconds": 15.803939,
+    "maximum_rss_bytes": 1081098240,
+    "complete_b8": [
+      {
+        "episodes": 8,
+        "tokens": 32,
+        "elapsed_seconds": 3.685142292,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "episodes": 8,
+        "tokens": 58,
+        "elapsed_seconds": 5.131951625,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699100189209
+      }
+    ]
+  },
+  "native_fit": {
+    "source_commit": "ab4d3d7af45c8da5e1d967ee86abd19e1caaaddf",
+    "status": "completed",
+    "mode": "fit",
+    "optimizer_updates": 64,
+    "declared_updates": 64,
+    "optimizer": {
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "epsilon": 1e-08,
+      "gradient_clip": 1.0,
+      "lr": 0.003,
+      "updates": 64,
+      "weight_decay": 0.0
+    },
+    "wall_seconds": 378.171212375,
+    "all_active_gradient_families_present": true,
+    "gradient_family_l1": {
+      "consumer.context": 993.6430906189713,
+      "consumer.no_read": 453.05337562327986,
+      "consumer.potential": 646.05994337437,
+      "period.coefficients": 400.17089594440563
+    },
+    "hard_inventory_equal": true,
+    "hard_payload_changes": [
+      {
+        "changed": true,
+        "coefficient_payload": true,
+        "file": "consumer/context-q4.bin",
+        "final_sha256": "5928e79f02f9b7a8fbc45f926b462bda83c8d89073a11793373f6ebd500e5824",
+        "initial_sha256": "1f7ad5173e48b19f931caf5c3acbb7b53215de12685fbf981570a084b8d14a17"
+      },
+      {
+        "changed": false,
+        "coefficient_payload": false,
+        "file": "consumer/exp-q31.bin",
+        "final_sha256": "79485d6e63cc28f5e01d98c5d73abe021db33fa7fef368142ae6592d06b4817f",
+        "initial_sha256": "79485d6e63cc28f5e01d98c5d73abe021db33fa7fef368142ae6592d06b4817f"
+      },
+      {
+        "changed": true,
+        "coefficient_payload": true,
+        "file": "consumer/no-read-q4.bin",
+        "final_sha256": "b3a65ba6a954b38fd9baf17033c1344567018be8232d7d24ddc625db29746ef0",
+        "initial_sha256": "c708d6e87133864e6f6f0dbc3deabc9cd763a128c4d8fb18bf50d912881cb56e"
+      },
+      {
+        "changed": true,
+        "coefficient_payload": true,
+        "file": "consumer/potential-q4.bin",
+        "final_sha256": "b508fab9b472382650b0468fdd43b1936331573b04d08c3d7d6d7019a9e4e0da",
+        "initial_sha256": "f64c7862ebfbcb212b70bcce2bac4fce3e1b940935fb712a720863b50fac43a8"
+      },
+      {
+        "changed": true,
+        "coefficient_payload": true,
+        "file": "period-q4.bin",
+        "final_sha256": "5da067ea50a707ced197097fd147e31fd6859e76d8dee2b1ff860f32462ac36b",
+        "initial_sha256": "ffba81c157ff6c55076a5f0cd646fe78115b9e6b95830a2a8b8e77e9878e7869"
+      }
+    ],
+    "any_coefficient_payload_changed": true,
+    "shadow_only_fit": false,
+    "construction_payload_unchanged": null,
+    "no_parent_scores": true,
+    "work_error": null,
+    "final_checkpoint_error": null,
+    "scope": "20 exposed development selected-source Copy/Period/Stop native component; no parent model scores in loss or generation; no heldout or complete-chat claim",
+    "retained_root": "/Users/casey.allard/uor-r4-local/workspace/research/geometric-source-learning-20261003/native-fit-1",
+    "report_sha256": "efea8c78190c364e27b597b0463ff24b1d93e2162278fef9dcac84dcdf2c27cf",
+    "manifest_sha256": "e456361b5c4ab268ccf3b02a9343a4f9bb03f352b297abdb61d9bb223657699c",
+    "generation_sha256": "d4b39c1627cde29687aeb130d5384c78937144f7d969610a0632564b133380e2",
+    "executable_sha256": "803775353679cb116d169654522a07591c58944dcc7f21590b04838211253be3",
+    "hard_inventory_equal_meaning": "File-name inventory equality only; coefficient byte changes are listed separately.",
+    "reload_equal": true,
+    "native_stats": {
+      "consumer": {
+        "additional_potential_table_copy_bytes": 597760,
+        "algebra_bytes": 15601,
+        "context": {
+          "expanded_table_bytes": 44564480,
+          "expanded_table_entries": 11141120,
+          "learned_coefficients": 8963136,
+          "packed_bytes": 4481568
+        },
+        "exp_bytes": 32776,
+        "no_read": {
+          "expanded_table_bytes": 53320,
+          "learned_coefficients": 8866,
+          "packed_bytes": 4433,
+          "with_span_reads": 68,
+          "without_span_reads": 36
+        },
+        "potential": {
+          "expanded_table_bytes": 597760,
+          "expanded_table_entries": 149440,
+          "learned_coefficients": 16640,
+          "packed_bytes": 8320
+        },
+        "scope": "logical packed/expanded component payload; excludes allocator/RSS/source shadows/parent and wrapper per-call construction"
+      },
+      "extra_context_replays_per_read": 1,
+      "final_joint_reductions_per_read": 1,
+      "inherited_per_head_reductions_discarded": 2,
+      "period": {
+        "expanded_table_bytes": 53320,
+        "learned_coefficients": 8866,
+        "packed_bytes": 4433,
+        "with_span_reads": 68,
+        "without_span_reads": 36
+      },
+      "scope": "native integer components inside allocating wrapper; no parent-model inference, no complete-path opcode/allocation qualification"
+    },
+    "generation": {
+      "cases": 20,
+      "complete_answers": 4,
+      "eos_count": 20,
+      "elapsed_seconds": 0.168039292,
+      "native_loaded_from_disk": true,
+      "native_metadata_sha256": "ef857c9e2c2378b7ac67c20657b198f8fd5e681b5f8f4d95f55411a087ed68ed"
+    },
+    "rows": [
+      {
+        "id": "mw2-0246-s0-d0",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16,
+          284,
+          16,
+          284,
+          16
+        ],
+        "reply_text": "er.er.er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0246-s0-d1",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16,
+          284,
+          16,
+          284,
+          16
+        ],
+        "reply_text": "er.er.er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0246-s1-d0",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          1357,
+          284,
+          16
+        ],
+        "reply_text": "dancer.",
+        "accepted_complete_answer": true,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0246-s1-d1",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          1357,
+          284,
+          16
+        ],
+        "reply_text": "dancer.",
+        "accepted_complete_answer": true,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s0-d0",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16,
+          284,
+          16,
+          284,
+          16
+        ],
+        "reply_text": "er.er.er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s0-d1",
+        "source_text": "singer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          85,
+          300,
+          284
+        ],
+        "generated_ids": [
+          284,
+          16,
+          284,
+          16,
+          284,
+          16
+        ],
+        "reply_text": "er.er.er.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s1-d0",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          1357,
+          284,
+          16
+        ],
+        "reply_text": "dancer.",
+        "accepted_complete_answer": true,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0146-s1-d1",
+        "source_text": "dancer",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          70,
+          304,
+          69,
+          284
+        ],
+        "generated_ids": [
+          1357,
+          284,
+          16
+        ],
+        "reply_text": "dancer.",
+        "accepted_complete_answer": true,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s0-d0",
+        "source_text": "Klotdradburg",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          45,
+          78,
+          302,
+          70,
+          84,
+          373,
+          68,
+          456,
+          73
+        ],
+        "generated_ids": [
+          73,
+          16
+        ],
+        "reply_text": "g.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s0-d1",
+        "source_text": "Klotdradburg",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          45,
+          78,
+          302,
+          70,
+          84,
+          373,
+          68,
+          456,
+          73
+        ],
+        "generated_ids": [
+          73,
+          16
+        ],
+        "reply_text": "g.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s1-d0",
+        "source_text": "Brimfold",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          2593,
+          2593,
+          3931,
+          2593,
+          293,
+          16
+        ],
+        "reply_text": "Br Brold Brim.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0288-s1-d1",
+        "source_text": "Brimfold",
+        "source_record": 2,
+        "source_commit": 2,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          2593,
+          2593,
+          3931,
+          2593,
+          293,
+          16
+        ],
+        "reply_text": "Br Brold Brim.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s0-d0",
+        "source_text": "Louston",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [],
+        "reply_text": "",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s0-d1",
+        "source_text": "Louston",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [],
+        "reply_text": "",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s1-d0",
+        "source_text": "Brimfold",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          2593,
+          2593,
+          3931,
+          2593,
+          293,
+          16
+        ],
+        "reply_text": "Br Brold Brim.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "mw2-0124-s1-d1",
+        "source_text": "Brimfold",
+        "source_record": 3,
+        "source_commit": 3,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          2593,
+          2593,
+          3931,
+          2593,
+          293,
+          16
+        ],
+        "reply_text": "Br Brold Brim.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s0-d0",
+        "source_text": "Louston",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [],
+        "reply_text": "",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s0-d1",
+        "source_text": "Louston",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          46,
+          277,
+          353,
+          292
+        ],
+        "generated_ids": [],
+        "reply_text": "",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s1-d0",
+        "source_text": "Brimfold",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          2593,
+          2593,
+          3931,
+          2593,
+          293,
+          16
+        ],
+        "reply_text": "Br Brold Brim.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      },
+      {
+        "id": "authored-city-city-s1-d1",
+        "source_text": "Brimfold",
+        "source_record": 1,
+        "source_commit": 1,
+        "original_source_ids": [
+          36,
+          84,
+          293,
+          72,
+          3931
+        ],
+        "generated_ids": [
+          2593,
+          2593,
+          3931,
+          2593,
+          293,
+          16
+        ],
+        "reply_text": "Br Brold Brim.",
+        "accepted_complete_answer": false,
+        "eos": true,
+        "raw_utf8_valid": true
+      }
+    ],
+    "monitored_worker_seconds": 380.6670155,
+    "maximum_rss_bytes": 2453618688,
+    "peak_memory_footprint_bytes": 3151809416,
+    "sampled_process_tree_peak_rss_bytes": 2367586304,
+    "limits": {
+      "cpu_threads": 5,
+      "maximum_rss_bytes": 3221225472,
+      "worker_seconds": 1200,
+      "updates": 64
+    },
+    "batches": [
+      {
+        "optimizer_update": 1,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.109843792,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 2,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.349076334,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 3,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 3.789580958,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 4,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 4.662969417,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 5,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.520074125,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 6,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.340626292,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 7,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 4.994066917,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 8,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 4.019456167,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 9,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 4.508852,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 10,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.450306834,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 11,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.28151325,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 12,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.103829209,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 13,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 3.916035,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 14,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 4.496497166,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 15,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.517460541,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 16,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.139797209,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 17,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.046873584,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 18,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 3.820153584,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 19,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 4.634104167,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 20,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.463390083,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 21,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.6319839160000003,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 22,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.171732959,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 23,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 3.9419105,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 24,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 4.467214708,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 25,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.441639333,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 26,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.2756425,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 27,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.424145167,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 28,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 4.003402084,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 29,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 4.8196955,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 30,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.6634220840000005,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 31,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.395935625,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 32,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.254430667,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 33,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 4.064328209,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 34,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 5.416773125,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 35,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 5.24405325,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 36,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.820921708,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 37,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.824090791,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 38,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 4.366977792,
+        "mean_episode_nll": 1.4584436907122533,
+        "gradient_global_norm": 0.9535335996600357
+      },
+      {
+        "optimizer_update": 39,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 5.314222709,
+        "mean_episode_nll": 1.7939967014685725,
+        "gradient_global_norm": 0.9061131258872217
+      },
+      {
+        "optimizer_update": 40,
+        "clip_factor": 0.7745056259467887,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.683224333,
+        "mean_episode_nll": 1.8636409391959508,
+        "gradient_global_norm": 1.2911462053972287
+      },
+      {
+        "optimizer_update": 41,
+        "clip_factor": 0.7347577172304531,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.465419125,
+        "mean_episode_nll": 1.0532464422285557,
+        "gradient_global_norm": 1.3609928504995268
+      },
+      {
+        "optimizer_update": 42,
+        "clip_factor": 0.9313849614889493,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.520086083,
+        "mean_episode_nll": 2.19919394995227,
+        "gradient_global_norm": 1.0736699016498616
+      },
+      {
+        "optimizer_update": 43,
+        "clip_factor": 0.8924230894964077,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 3.897347333,
+        "mean_episode_nll": 1.501100529295703,
+        "gradient_global_norm": 1.120544741356139
+      },
+      {
+        "optimizer_update": 44,
+        "clip_factor": 0.8967611076992663,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 4.735896875,
+        "mean_episode_nll": 2.1170879065934005,
+        "gradient_global_norm": 1.11512418571051
+      },
+      {
+        "optimizer_update": 45,
+        "clip_factor": 0.7477015690314317,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 4.4804005,
+        "mean_episode_nll": 1.8743829528490703,
+        "gradient_global_norm": 1.3374319934829004
+      },
+      {
+        "optimizer_update": 46,
+        "clip_factor": 0.5597562089372542,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.669935791,
+        "mean_episode_nll": 1.866723157465458,
+        "gradient_global_norm": 1.7864920192642224
+      },
+      {
+        "optimizer_update": 47,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.433413334,
+        "mean_episode_nll": 2.0699357681653714,
+        "gradient_global_norm": 0.9664226701265839
+      },
+      {
+        "optimizer_update": 48,
+        "clip_factor": 0.8851860615260837,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 3.629508625,
+        "mean_episode_nll": 1.7453147557874522,
+        "gradient_global_norm": 1.1297059945521224
+      },
+      {
+        "optimizer_update": 49,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 5.842754959,
+        "mean_episode_nll": 1.6755088779397986,
+        "gradient_global_norm": 0.8986382178289661
+      },
+      {
+        "optimizer_update": 50,
+        "clip_factor": 0.6213059407891522,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 6.322474042,
+        "mean_episode_nll": 2.3963740070660906,
+        "gradient_global_norm": 1.6095130182239181
+      },
+      {
+        "optimizer_update": 51,
+        "clip_factor": 0.46502800542252987,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.533945125,
+        "mean_episode_nll": 1.8487473670393229,
+        "gradient_global_norm": 2.150408122391226
+      },
+      {
+        "optimizer_update": 52,
+        "clip_factor": 0.6556485722083029,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 6.444975,
+        "mean_episode_nll": 2.3334386450323192,
+        "gradient_global_norm": 1.5252073174381782
+      },
+      {
+        "optimizer_update": 53,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 5.670201417,
+        "mean_episode_nll": 1.61050825069348,
+        "gradient_global_norm": 0.983398334182884
+      },
+      {
+        "optimizer_update": 54,
+        "clip_factor": 0.9426234328019392,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 7.147629542,
+        "mean_episode_nll": 2.066944649866359,
+        "gradient_global_norm": 1.0608690227735054
+      },
+      {
+        "optimizer_update": 55,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 5.803097292,
+        "mean_episode_nll": 1.2774693133930364,
+        "gradient_global_norm": 0.9823399346015441
+      },
+      {
+        "optimizer_update": 56,
+        "clip_factor": 0.5940727348345956,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.672366791,
+        "mean_episode_nll": 1.1434565335512161,
+        "gradient_global_norm": 1.6832955652785953
+      },
+      {
+        "optimizer_update": 57,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.957282875,
+        "mean_episode_nll": 1.761276277854587,
+        "gradient_global_norm": 0.9416266243728867
+      },
+      {
+        "optimizer_update": 58,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 4.33261075,
+        "mean_episode_nll": 1.1467899151224021,
+        "gradient_global_norm": 0.7909334133289081
+      },
+      {
+        "optimizer_update": 59,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 5.387297083,
+        "mean_episode_nll": 1.597114961947117,
+        "gradient_global_norm": 0.9232053044636429
+      },
+      {
+        "optimizer_update": 60,
+        "clip_factor": 0.9258167155175171,
+        "episode_indices": [
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "tokens": 48,
+        "elapsed_seconds": 5.081511459,
+        "mean_episode_nll": 1.2564907697960734,
+        "gradient_global_norm": 1.0801273980466182
+      },
+      {
+        "optimizer_update": 61,
+        "clip_factor": 0.7209503627403263,
+        "episode_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "tokens": 32,
+        "elapsed_seconds": 3.5154365,
+        "mean_episode_nll": 0.666906270198524,
+        "gradient_global_norm": 1.3870580440503684
+      },
+      {
+        "optimizer_update": 62,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "tokens": 58,
+        "elapsed_seconds": 5.768442709,
+        "mean_episode_nll": 1.880152029973088,
+        "gradient_global_norm": 0.8321908805324015
+      },
+      {
+        "optimizer_update": 63,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          16,
+          17,
+          18,
+          19,
+          0,
+          1,
+          2,
+          3
+        ],
+        "tokens": 40,
+        "elapsed_seconds": 4.198764584,
+        "mean_episode_nll": 1.1002968708053231,
+        "gradient_global_norm": 0.8915649179113386
+      },
+      {
+        "optimizer_update": 64,
+        "clip_factor": 1.0,
+        "episode_indices": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "tokens": 50,
+        "elapsed_seconds": 5.055809333,
+        "mean_episode_nll": 1.9944230243210876,
+        "gradient_global_norm": 0.9880785631934705
+      }
+    ],
+    "independent_result_review": {
+      "distinct_numerical_source_query_inputs": 5,
+      "final_generated_steps_checked": 96,
+      "complete_answer_gains": 4,
+      "complete_answer_losses": 0,
+      "observed_exact_complete_state_repeats": 0,
+      "scope": "Independent saved-trace score sums, mass totals and greedy-choice audit; no observed exact-state repeat is not proof of general representational sufficiency.",
+      "status": "receipt_pending"
+    }
+  },
+  "native_row_comparison": [
+    {
+      "id": "mw2-0246-s0-d0",
+      "source_text": "singer",
+      "initial_reply": "er.",
+      "final_reply": "er.er.er.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0246-s0-d1",
+      "source_text": "singer",
+      "initial_reply": "er.",
+      "final_reply": "er.er.er.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0246-s1-d0",
+      "source_text": "dancer",
+      "initial_reply": "er.",
+      "final_reply": "dancer.",
+      "initial_complete": false,
+      "final_complete": true,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0246-s1-d1",
+      "source_text": "dancer",
+      "initial_reply": "er.",
+      "final_reply": "dancer.",
+      "initial_complete": false,
+      "final_complete": true,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0146-s0-d0",
+      "source_text": "singer",
+      "initial_reply": "er.",
+      "final_reply": "er.er.er.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0146-s0-d1",
+      "source_text": "singer",
+      "initial_reply": "er.",
+      "final_reply": "er.er.er.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0146-s1-d0",
+      "source_text": "dancer",
+      "initial_reply": "er.",
+      "final_reply": "dancer.",
+      "initial_complete": false,
+      "final_complete": true,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0146-s1-d1",
+      "source_text": "dancer",
+      "initial_reply": "er.",
+      "final_reply": "dancer.",
+      "initial_complete": false,
+      "final_complete": true,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0288-s0-d0",
+      "source_text": "Klotdradburg",
+      "initial_reply": "",
+      "final_reply": "g.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0288-s0-d1",
+      "source_text": "Klotdradburg",
+      "initial_reply": "",
+      "final_reply": "g.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0288-s1-d0",
+      "source_text": "Brimfold",
+      "initial_reply": "f",
+      "final_reply": "Br Brold Brim.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0288-s1-d1",
+      "source_text": "Brimfold",
+      "initial_reply": "f",
+      "final_reply": "Br Brold Brim.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0124-s0-d0",
+      "source_text": "Louston",
+      "initial_reply": "Louonoust.",
+      "final_reply": "",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0124-s0-d1",
+      "source_text": "Louston",
+      "initial_reply": "Louonoust.",
+      "final_reply": "",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0124-s1-d0",
+      "source_text": "Brimfold",
+      "initial_reply": "f",
+      "final_reply": "Br Brold Brim.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "mw2-0124-s1-d1",
+      "source_text": "Brimfold",
+      "initial_reply": "f",
+      "final_reply": "Br Brold Brim.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "authored-city-city-s0-d0",
+      "source_text": "Louston",
+      "initial_reply": "Louonoust.",
+      "final_reply": "",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "authored-city-city-s0-d1",
+      "source_text": "Louston",
+      "initial_reply": "Louonoust.",
+      "final_reply": "",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "authored-city-city-s1-d0",
+      "source_text": "Brimfold",
+      "initial_reply": "f",
+      "final_reply": "Br Brold Brim.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    },
+    {
+      "id": "authored-city-city-s1-d1",
+      "source_text": "Brimfold",
+      "initial_reply": "f",
+      "final_reply": "Br Brold Brim.",
+      "initial_complete": false,
+      "final_complete": false,
+      "initial_eos": true,
+      "final_eos": true
+    }
+  ],
+  "next_decision": {
+    "status": "PROPOSED_NOT_RUN",
+    "task": "Zero-update correct-prefix versus own-prefix ranking and exact scorer-input audit before another fit",
+    "conditions": "Retain final native artifact. No parent scores, answer-conditioned runtime phase, forced cursor or suffix. Diagnose source-start selection, recurrence after Period and premature Stop separately. Compare exact scorer inputs before claiming a representation collision. Saved own-prefix traces show no exact complete-state repeat; do not preselect new progress state from suffix repetition.",
+    "outcomes": [
+      "Conflicting target decisions with identical available scorer state require added learned geometric progress/occurrence information.",
+      "Distinguishable inputs with wrong ranking require inspection of training coverage and hard/relaxed estimator, without an unchanged dose sweep."
+    ],
+    "limitations": "4/20 exposed rows are four presentations of one successful source value, dancer; no unique-value generalization established."
   }
 }

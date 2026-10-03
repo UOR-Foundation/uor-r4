@@ -84,8 +84,12 @@ that the frozen-parent mixture cannot reorder the unsupported canonical period.
 Do not admit an unchanged hybrid fit. Preserve exact store IDs/bytes while
 validating the label-free lexical view, then learn bounded geometric
 Copy/EmitPeriod/Stop output scores without a parent distribution. Bind the action
-vocabulary to tokenizer/protocol; complete own-prefix answers and learned EOS
-remain the next outcomes. A tested integer pool alone is not learned realization.
+vocabulary to tokenizer/protocol. One fixed64/B8 parent-free native fit now
+improves exposed complete replies0→4/20 with EOS20/20 and changed packed
+coefficients; the four successes repeat one source value. Next audit actual
+occurrence/progress state, source-start ranking, post-Period recurrence and
+premature Stop without another unchanged fit. Preserve these partial results;
+they do not establish complete chat or generalization.
 
 The [implemented occurrence consumer](geometric-source-consumer-2026-10-03.md)
 passes the bounded actual-BPE zero-update credit/export construction; it is not
