@@ -28,11 +28,13 @@ use crate::{
     geometric_context_credit::{frozen_no_read_forward, frozen_potential_forward},
     geometric_no_read::{NoReadBatch, NoReadWeights},
     geometric_potential_q4::PotentialQ4Weights,
+    geometric_source_emission_view::{SourceEmissionView, POLICY as SOURCE_VIEW_POLICY},
     geometric_stack::{ReadIdentityLatch, ReadScore, StackArch, StackConfig, StackModel},
     invalid, sha256_bytes, Result,
 };
 
 pub const SCHEMA: &str = "uor-r4.geometric-occurrence-consumer/1";
+pub const SOURCE_VIEW_SCHEMA: &str = "uor-r4.geometric-occurrence-consumer/2";
 pub const SURROGATE: &str = "native-Q31-normalized-forward;softmax-score-adjoint;hard-quarter-source-STE;coefficient-and-frozen-context-input-credit;whole-parent-NoRead-fallback;target-loss-only/1";
 const ALGEBRA: &[u8] = include_bytes!("../../uor-r4-integer/fixtures/historical-h4-tables-v1.bin");
 const NATIVE_FILES: [&str; 4] = [
@@ -123,6 +125,42 @@ pub struct ConsumerLoss {
     pub trace: OccurrenceTrace,
     /// Normalized floating reference log probabilities, not native serving.
     pub mixed_scores: Vec<f32>,
+}
+
+/// The inner token offsets belong to the explicitly derived emission view.
+/// Original source bytes, token identities and byte-span provenance remain in
+/// `emission_view`; they must not be confused with those view offsets.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SourceEmissionTrace {
+    pub record: u64,
+    pub commit: u64,
+    pub scope: Vec<u8>,
+    pub entity: Vec<u32>,
+    pub relation: u32,
+    pub source_store_view: u32,
+    pub emission_view: SourceEmissionView,
+    pub view_kernel_trace: OccurrenceTrace,
+}
+pub struct SourceEmissionLoss {
+    pub loss: Tensor,
+    pub trace: SourceEmissionTrace,
+    pub mixed_scores: Vec<f32>,
+}
+fn source_view_trace(
+    frame: SelectedRecordFrame<'_>,
+    view: &SourceEmissionView,
+    kernel: OccurrenceTrace,
+) -> SourceEmissionTrace {
+    SourceEmissionTrace {
+        record: frame.identity.record,
+        commit: frame.identity.commit,
+        scope: frame.metadata.scope.to_vec(),
+        entity: frame.metadata.entity.to_vec(),
+        relation: frame.metadata.relation,
+        source_store_view: frame.metadata.view,
+        emission_view: view.clone(),
+        view_kernel_trace: kernel,
+    }
 }
 
 fn set_seeded(parameters: &BTreeMap<String, Var>, state: &mut u64) -> Result<()> {
@@ -225,6 +263,16 @@ impl ConsumerWeights {
             identity,
         )
     }
+    /// Same learned numeric operators, with a distinct admitted lexical view.
+    pub fn compile_source_view(
+        &self,
+        identity: ConsumerIdentity,
+    ) -> Result<NativeConsumerArtifact> {
+        let mut native = self.compile(identity)?;
+        native.metadata.schema = SOURCE_VIEW_SCHEMA.into();
+        native.metadata.source_view_policy = Some(SOURCE_VIEW_POLICY.into());
+        Ok(native)
+    }
     pub fn save_source(&self, path: &Path) -> Result<()> {
         fs::create_dir(path)?;
         fs::write(
@@ -324,10 +372,39 @@ impl PreparedConsumerStep<'_> {
         parent: &[f32],
         target: u32,
     ) -> Result<ConsumerLoss> {
+        self.native.require_raw_source()?;
+        self.loss_kernel(frame, query, prefix, parent, target)
+    }
+    pub fn loss_source_view(
+        &self,
+        frame: SelectedRecordFrame<'_>,
+        view: &SourceEmissionView,
+        query: &[u32],
+        prefix: &[u32],
+        parent: &[f32],
+        target: u32,
+    ) -> Result<SourceEmissionLoss> {
+        self.native.require_source_view(view)?;
+        let derived = view.derived_frame(frame)?;
+        let out = self.loss_kernel(derived, query, prefix, parent, target)?;
+        Ok(SourceEmissionLoss {
+            loss: out.loss,
+            trace: source_view_trace(frame, view, out.trace),
+            mixed_scores: out.mixed_scores,
+        })
+    }
+    fn loss_kernel(
+        &self,
+        frame: SelectedRecordFrame<'_>,
+        query: &[u32],
+        prefix: &[u32],
+        parent: &[f32],
+        target: u32,
+    ) -> Result<ConsumerLoss> {
         if parent.len() != self.source.config().vocab_size || target as usize >= parent.len() {
             return Err(invalid("consumer parent/target vocabulary differs"));
         }
-        let trace = self.native.read(frame, query, prefix)?;
+        let trace = self.native.read_kernel(frame, query, prefix)?;
         let mixed_scores = mix_scores(parent, &trace, true)?;
         let probabilities = normalized_parent(parent)?;
         let ids = frame
@@ -486,6 +563,13 @@ pub fn mix_scores(parent: &[f32], trace: &OccurrenceTrace, enabled: bool) -> Res
     }
     Ok(mixture.into_iter().map(|p| p.ln() as f32).collect())
 }
+pub fn mix_source_view_scores(
+    parent: &[f32],
+    trace: &SourceEmissionTrace,
+    enabled: bool,
+) -> Result<Vec<f32>> {
+    mix_scores(parent, &trace.view_kernel_trace, enabled)
+}
 /// Same-information uniform diagnostic; not a matched learned-capacity control.
 pub fn uniform_scores(parent: &[f32], trace: &OccurrenceTrace) -> Result<Vec<f32>> {
     let mut uniform = trace.clone();
@@ -509,6 +593,8 @@ struct NativeMetadata {
     no_read: uor_r4_integer::geometric_no_read::NoReadConfig,
     algebra_sha256: String,
     files: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_view_policy: Option<String>,
 }
 pub struct NativeConsumerArtifact {
     metadata: NativeMetadata,
@@ -560,6 +646,7 @@ impl NativeConsumerArtifact {
             no_read: n,
             algebra_sha256: sha256_bytes(ALGEBRA),
             files: BTreeMap::new(),
+            source_view_policy: None,
         };
         let result = Self {
             metadata,
@@ -598,6 +685,46 @@ impl NativeConsumerArtifact {
         Ok(())
     }
     pub fn read(
+        &self,
+        frame: SelectedRecordFrame<'_>,
+        query: &[u32],
+        prefix: &[u32],
+    ) -> Result<OccurrenceTrace> {
+        self.require_raw_source()?;
+        self.read_kernel(frame, query, prefix)
+    }
+    fn require_raw_source(&self) -> Result<()> {
+        if self.metadata.schema != SCHEMA || self.metadata.source_view_policy.is_some() {
+            return Err(invalid(
+                "emission-view artifact cannot consume a raw source frame",
+            ));
+        }
+        Ok(())
+    }
+    fn require_source_view(&self, view: &SourceEmissionView) -> Result<()> {
+        if self.metadata.schema != SOURCE_VIEW_SCHEMA
+            || self.metadata.source_view_policy.as_deref() != Some(SOURCE_VIEW_POLICY)
+            || view.policy() != SOURCE_VIEW_POLICY
+            || view.tokenizer_sha256() != self.metadata.identity.tokenizer_sha256
+        {
+            return Err(invalid(
+                "source emission view policy/tokenizer differs from artifact",
+            ));
+        }
+        Ok(())
+    }
+    pub fn read_source_view(
+        &self,
+        frame: SelectedRecordFrame<'_>,
+        view: &SourceEmissionView,
+        query: &[u32],
+        prefix: &[u32],
+    ) -> Result<SourceEmissionTrace> {
+        self.require_source_view(view)?;
+        let kernel = self.read_kernel(view.derived_frame(frame)?, query, prefix)?;
+        Ok(source_view_trace(frame, view, kernel))
+    }
+    fn read_kernel(
         &self,
         frame: SelectedRecordFrame<'_>,
         query: &[u32],
@@ -679,7 +806,11 @@ impl NativeConsumerArtifact {
         let metadata: NativeMetadata =
             serde_json::from_slice(&fs::read(path.join("metadata.json"))?)?;
         let expected = source.compile(identity.clone())?;
-        if metadata.schema != SCHEMA
+        let representation_valid = (metadata.schema == SCHEMA
+            && metadata.source_view_policy.is_none())
+            || (metadata.schema == SOURCE_VIEW_SCHEMA
+                && metadata.source_view_policy.as_deref() == Some(SOURCE_VIEW_POLICY));
+        if !representation_valid
             || metadata.policy != expected.metadata.policy
             || metadata.surrogate != SURROGATE
             || metadata.identity != *identity

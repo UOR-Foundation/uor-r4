@@ -78,6 +78,15 @@ authored answer template alone is not a learned geometric consumer. Compare a
 geometric selector with an ordinary control given the same frame information,
 candidate access, capacity and cost. Gold labels remain training/diagnostic only.
 
+The [complete-answer cost and boundary audit](geometric-source-learning-2026-10-03.md)
+now show that the raw source tokenization omits protocol-space first tokens, and
+that the frozen-parent mixture cannot reorder the unsupported canonical period.
+Do not admit an unchanged hybrid fit. Preserve exact store IDs/bytes while
+validating the label-free lexical view, then learn bounded geometric
+Copy/EmitPeriod/Stop output scores without a parent distribution. Bind the action
+vocabulary to tokenizer/protocol; complete own-prefix answers and learned EOS
+remain the next outcomes. A tested integer pool alone is not learned realization.
+
 The [implemented occurrence consumer](geometric-source-consumer-2026-10-03.md)
 passes the bounded actual-BPE zero-update credit/export construction; it is not
 yet fitted or integrated into the shared chat session. **Owner correction,

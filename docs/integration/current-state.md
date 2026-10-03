@@ -1,5 +1,30 @@
 # Current UOR-R4 research state
 
+## Geometric source learning — lexical support blocker, October 3
+
+The [learning continuation](geometric-source-learning-2026-10-03.md) prepares
+immutable q4 graphs once per update and measures complete protocol-2 shortest/
+longest B8 answer credit: 32+58 tokens, all three families nonzero, zero updates,
+unchanged packed payloads and exact source/native reload. The worker takes24.98s
+real, maximum RSS590,348,288B. This is cost/credit evidence with a frozen floating
+parent, not a fit or native conversation result.
+
+The114-position all20 boundary audit establishes a canonical-token support
+blocker: raw source tokens omit every first reply token due to protocol-space
+BPE fusion. A label-free exact-byte source view covers those first tokens, but
+all20 canonical periods remain unsupported and outranked under the parent
+mixture. This is a specific representation/output limitation, not a geometry
+negative or a proof that all alternative rendered replies are impossible.
+
+Source-view /2 implementation preserves raw identity and byte provenance.
+Its changed-path validation is pending. Hybrid64 fit remains **NOT_ADMITTED**.
+Next: validate the support repair, then implement learned native geometric
+Copy/EmitPeriod/Stop scores in one integer action pool, with ordinary full-answer
+credit and own-prefix generation. The parent-free pool alone is arithmetic;
+learned stopping and complete native chat are unfinished. No scripted cursor or
+forced suffix is adopted. Keep shared session hooks coordinated on#1552.
+[Bound evidence](../evidence/geometric-source-learning-2026-10-03.json).
+
 ## Selected-record BPE consumer — connected construction, October 3
 
 The [geometric source consumer](geometric-source-consumer-2026-10-03.md) now connects
