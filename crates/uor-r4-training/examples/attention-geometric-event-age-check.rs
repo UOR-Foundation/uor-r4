@@ -461,7 +461,7 @@ fn run(a: &Args, at: Instant) -> Result<()> {
         {
             return Err(invalid("all-route cut still connects event or age"));
         }
-        checks.push(json!({"absolute_step":absolute_step,"facts":[2,4][check],"episodes":8,"actual_positions":episodes.iter().map(|e|e.ids.len()).sum::<usize>(),"padded_positions":ids.len(),"time":time,"rng_before":rng_before,"diagnostic_rng_after":rng.0,"answer_denominator":8,"answer_ce":ce,"native_baseline_seconds":native_seconds,"connected_forward_backward_seconds":connected_seconds,"cut_seconds":cut_at.elapsed().as_secs_f64(),"event_gradients":event_gradients,"age_gradient":age_gradient,"all_position_native_forward_bits_equal":true,"all_routes_cut_disconnected":true,"frozen_parameter_gradients_absent":true,"optimizer_updates":0}));
+        checks.push(json!({"absolute_step":absolute_step,"facts":([2,4][check]),"episodes":8,"actual_positions":episodes.iter().map(|e|e.ids.len()).sum::<usize>(),"padded_positions":ids.len(),"time":time,"rng_before":rng_before,"diagnostic_rng_after":rng.0,"answer_denominator":8,"answer_ce":ce,"native_baseline_seconds":native_seconds,"connected_forward_backward_seconds":connected_seconds,"cut_seconds":cut_at.elapsed().as_secs_f64(),"event_gradients":event_gradients,"age_gradient":age_gradient,"all_position_native_forward_bits_equal":true,"all_routes_cut_disconnected":true,"frozen_parameter_gradients_absent":true,"optimizer_updates":0}));
         write(&a.out.join("partial-checks.json"), &checks)?;
     }
     if hashes(model.variables())? != base_before
