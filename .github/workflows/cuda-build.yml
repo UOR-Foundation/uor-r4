@@ -1,0 +1,90 @@
+name: cuda-build
+
+# Compile-only evidence for the CUDA stack kernels on a hosted runner without
+# a GPU: installs a CUDA 12.x toolkit, builds the training example and the
+# CUDA parity test binary with `--features cuda`, compiles the kernel source
+# with nvcc, and runs the NVRTC compile test against the toolkit's driver
+# stub (device tests return early there; nothing executes on a GPU).
+on:
+  push:
+    branches:
+      - 'codex/ci/farm/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cuda-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      CUDA_COMPUTE_CAP: '80'
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.36
+        id: cuda
+        with:
+          cuda: '12.6.3'
+          method: network
+          sub-packages: '["nvcc", "nvrtc", "nvrtc-dev", "cudart", "cudart-dev", "driver-dev", "cccl"]'
+          non-cuda-sub-packages: '["libcublas", "libcublas-dev", "libcurand", "libcurand-dev"]'
+          use-github-cache: false
+
+      - name: Toolkit
+        run: |
+          echo "CUDA_PATH=${{ steps.cuda.outputs.CUDA_PATH }}"
+          nvcc --version
+          ls "${{ steps.cuda.outputs.CUDA_PATH }}/lib64" | head -50
+          ls "${{ steps.cuda.outputs.CUDA_PATH }}/lib64/stubs" || true
+
+      - name: Rust toolchain
+        run: |
+          rustup show
+          cargo --version
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cuda-build-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cuda-build-${{ runner.os }}-
+
+      - name: nvcc compiles the kernel source
+        run: |
+          awk '/pub const CUDA_STACK_SOURCE: &str = r#"/{flag=1; next} /^"#;/{flag=0} flag' \
+            crates/uor-r4-training/src/cuda_stack_kernels.rs > /tmp/uor_stack.cu
+          wc -l /tmp/uor_stack.cu
+          nvcc --ptx -arch=compute_80 -o /tmp/uor_stack.ptx /tmp/uor_stack.cu
+          grep -c '^.visible .entry' /tmp/uor_stack.ptx
+
+      - name: Build geometric-stack example (release, cuda)
+        run: |
+          export LIBRARY_PATH="${{ steps.cuda.outputs.CUDA_PATH }}/lib64/stubs:${LIBRARY_PATH:-}"
+          cargo build --release -p uor-r4-training --features cuda --example geometric-stack
+
+      - name: Build CUDA parity tests (release, cuda, no run)
+        run: |
+          export LIBRARY_PATH="${{ steps.cuda.outputs.CUDA_PATH }}/lib64/stubs:${LIBRARY_PATH:-}"
+          cargo test --release -p uor-r4-training --features cuda --test cuda_stack_ops_parity --no-run
+
+      - name: NVRTC compile test against the driver stub
+        continue-on-error: true
+        run: |
+          STUBS="${{ steps.cuda.outputs.CUDA_PATH }}/lib64/stubs"
+          mkdir -p /tmp/cudastub
+          ln -sf "$STUBS/libcuda.so" /tmp/cudastub/libcuda.so.1
+          export LIBRARY_PATH="$STUBS:${LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="/tmp/cudastub:${{ steps.cuda.outputs.CUDA_PATH }}/lib64:${LD_LIBRARY_PATH:-}"
+          cargo test --release -p uor-r4-training --features cuda --test cuda_stack_ops_parity -- --nocapture
