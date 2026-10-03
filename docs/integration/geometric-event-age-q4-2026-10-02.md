@@ -62,16 +62,31 @@ credit, artifact/resealed tampering and native-action override cases pass. A
 root codec import failure at21d347aa is retained and repaired; its known-invalid
 training job was cancelled before unnecessary compilation.
 
-The later prior/residual extension and integrated fixed-conversion driver are
-separate from that tested source. Their exact-head checks, loaded-parent results,
-retained failed attempts and delivery are recorded on [#1512](https://github.com/UOR-Foundation/uor-r4/issues/1512).
-The driver uses exclusively claimed/sealed attempts and zero optimizer updates.
-It independently reloads components, checks unchanged context/value/NoRead/bank
-numerical payloads after rebinding, replays original parent answers, compares
-persistent and whole-prefix output bits at the same F32 tail shape, and retains
-all answer/CE gains and losses. Prefix causality compares integer reader rows;
-B2/prefix float interfaces use same-shape references with distinct sequences.
-No cross-shape F32 rounding difference is treated as a geometry defect.
+At093dc5e7, hosted M1 [run37082252725](https://github.com/UOR-Foundation/uor-r4/actions/runs/37082252725)
+passes4 integer and8 connected training/artifact cases and builds the release
+integrated driver. Both local retained-parent fixed-conversion attempts then
+complete and seal. All six learned source components (context, potential,
+values, NoRead, capture events and age residuals) are admitted with four-bit
+coefficients; the admission inventory has no wider learned source component.
+Expanded lookup tables and the fixed age prior still have wider integer storage.
+
+[Loaded evidence](../evidence/geometric-event-age-loaded-2026-10-02.json) retains
+512 rows: parent446 correct, converted444, with1 gain and3 losses. Seed1 original
+93→91 and stress110→109; seed2 original124→124 and stress119→120. Mean answer CE
+changes1.121969→1.122902 /1.112053→1.137371 for seed1 and
+.448722→.448524 /.573585→.571945 for seed2. The fixed event conversion changes
+24 capture action positions across19 rows (7/13/4/0 positions across the four panels).
+No optimizer updates are performed and no perfect parent imitation is required.
+
+The driver independently reloads components, checks unchanged
+context/value/NoRead/bank numerical payloads after dependency-envelope rebinding,
+replays original saved parent answers, and verifies source/native event traces.
+All512 incremental/whole-prefix comparisons match output bits at every actual
+position using the same F32 tail shape. Integer reader rows carry cross-length
+prefix causality; B2 uses distinct sequences with same-shape floating references.
+The workers take16.16s/15.05s, peak RSS1,089,830,912 /1,010,073,600 bytes,
+within two-thread/two-GiB reservations. No local Cargo or private model upload.
+The two direct quarter-grid refusals remain separately sealed.
 
 Admission refusal calls for a representation diagnosis. A trace mismatch calls
 for a bridge repair. An admitted quality loss is retained evidence for a
