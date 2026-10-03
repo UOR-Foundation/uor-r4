@@ -196,8 +196,8 @@ use uor_r4_training::stack_checkpoint::{
     save_checkpoint, sealed_manifest_sha256, CheckpointIdentity, DataIdentity,
 };
 use uor_r4_training::stack_grounded_session::{
-    CompiledAction, ContextPolicy, GroundedSession, RecallDisposition, SessionLimits, SessionScope,
-    SourceSpan, TurnCompiler, TurnControls, TurnOutcome,
+    CompiledAction, ContextPolicy, GroundedSession, MemoryEffect, RecallDisposition, SessionLimits,
+    SessionScope, SourceSpan, TurnCompiler, TurnControls, TurnOutcome,
 };
 use uor_r4_training::stack_store::StackStore;
 use uor_r4_training::temporal_compiler::GroundedCompiler;
@@ -3428,6 +3428,35 @@ fn disposition_name(recall: &RecallDisposition) -> &'static str {
 /// (no recall line enters the emitter) and `no_write` (statements are not
 /// stored). The first `reload=` conversations of the default arm are also run
 /// with a save and load at their middle turn, and must match.
+/// True when `needle` occurs in `hay` on word boundaries.
+///
+/// A plain `contains` is wrong for panel scoring: "an hour" is a substring of
+/// "half an hour", so a longer accepted answer would be scored as present when it
+/// is not. A padded comparison is wrong too, because a value may be followed by a
+/// period ("dust brings me out in a rash."). Boundaries are non-alphanumeric or
+/// the ends of the string.
+fn contains_word(hay: &str, needle: &str) -> bool {
+    let (h, n) = (hay.to_lowercase(), needle.to_lowercase());
+    let (hb, nb) = (h.as_bytes(), n.as_bytes());
+    if nb.is_empty() || nb.len() > hb.len() {
+        return false;
+    }
+    let boundary = |c: u8| !c.is_ascii_alphanumeric();
+    let mut i = 0;
+    while let Some(pos) = h[i..].find(&n) {
+        let start = i + pos;
+        let end = start + nb.len();
+        if (start == 0 || boundary(hb[start - 1])) && (end == hb.len() || boundary(hb[end])) {
+            return true;
+        }
+        i = start + 1;
+        if i >= hb.len() {
+            break;
+        }
+    }
+    false
+}
+
 fn session(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
     if args.optional("world").as_deref() != Some("v2") {
@@ -3757,6 +3786,106 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         },
         "wall_seconds": started.elapsed().as_secs_f64(),
     });
+    // ------------------------------------------------------------ external panel
+    //
+    // Scores an external panel through the SAME grounded session, so the store is
+    // exercised exactly as in the generated-world arm. The panel is never fed to
+    // the world; its user turns go straight to `turn_with_controls`.
+    //
+    // The miss split reads MECHANISM state, not reply text:
+    //   memory: MemoryEffect::Write{..}   the compiler/store recorded the fact
+    //   recall: RecallDisposition         Value | LogValue = a value was returned
+    // A text proxy ("no turn retained anything") cannot separate "the store never
+    // got it" from "the store had it and retrieval missed", which are different
+    // failures with different fixes, so it is not used.
+    let mut panel_block: Option<Value> = None;
+    if let Some(panel_path) = args.optional("panel") {
+        let expected_path = args
+            .optional("panel_expected")
+            .ok_or_else(|| invalid("panel= needs panel_expected=EXPECTED.json"))?;
+        let requests: Vec<Value> = serde_json::from_slice(&fs::read(&panel_path)?)?;
+        let expected: BTreeMap<String, String> =
+            serde_json::from_slice(&fs::read(&expected_path)?)?;
+        let (mut correct, mut never_stored) = (0usize, 0usize);
+        let (mut stored_not_recalled, mut recalled_not_rendered) = (0usize, 0usize);
+        let mut rows = Vec::with_capacity(requests.len());
+        // A FRESH session per row. Reuse does not work: the session accumulates
+        // turns and hits `max_turns: 64` after ~21 rows, and GroundedSession has no
+        // reset (only `from_checkpoint_path`). The cost is real -- each row reloads
+        // the checkpoint -- so a 100-row panel takes minutes and needs a generous
+        // timeout.
+        for request in &requests {
+            let id = request["id"].as_str().unwrap_or_default().to_string();
+            let turns: Vec<String> = request["user_turns"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|t| t.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let want = expected.get(&id).cloned().unwrap_or_default();
+            let mut session = open(compiler.clone())?;
+            let (mut stored, mut retrieved_value) = (false, false);
+            let mut recall_kind = String::new();
+            let mut reply = String::new();
+            for (i, user) in turns.iter().enumerate() {
+                let outcome = session
+                    .turn_with_controls(user, TurnControls::default())
+                    .map_err(|e| invalid(e.to_string()))?;
+                if matches!(outcome.memory, MemoryEffect::Write { .. }) {
+                    stored = true;
+                }
+                if i + 1 == turns.len() {
+                    reply = outcome.reply_text.clone();
+                    recall_kind = format!("{:?}", outcome.recall);
+                    retrieved_value = matches!(
+                        outcome.recall,
+                        RecallDisposition::Value | RecallDisposition::LogValue
+                    );
+                }
+            }
+            let hit = !want.is_empty() && contains_word(&reply, &want);
+            if hit {
+                correct += 1;
+            } else if !stored {
+                never_stored += 1;
+            } else if !retrieved_value {
+                stored_not_recalled += 1;
+            } else {
+                recalled_not_rendered += 1;
+            }
+            rows.push(json!({
+                "id": id, "expected": want, "reply": reply, "hit": hit,
+                "stored": stored, "retrieved": retrieved_value, "recall": recall_kind,
+            }));
+        }
+        let total = requests.len();
+        println!("panel memory: {correct}/{total}");
+        println!(
+            "panel misses: never_stored={never_stored} stored_but_not_recalled={stored_not_recalled} recalled_but_misrendered={recalled_not_rendered}"
+        );
+        panel_block = Some(json!({
+            "panel": panel_path,
+            "panel_sha256": sha256_file(Path::new(&panel_path))?,
+            "panel_expected": expected_path,
+            "panel_expected_sha256": sha256_file(Path::new(&expected_path))?,
+            "rows_total": total,
+            "correct": correct,
+            "miss_split": {
+                "never_stored": never_stored,
+                "stored_but_not_recalled": stored_not_recalled,
+                "recalled_but_misrendered": recalled_not_rendered,
+                "rule": "mechanism state, not reply text: never_stored = no turn produced MemoryEffect::Write; stored_but_not_recalled = a write landed but the final turn's RecallDisposition was neither Value nor LogValue; recalled_but_misrendered = a value was returned but the final reply does not contain the accepted answer",
+            },
+            "rows": rows,
+        }));
+    }
+
+    let mut report = report;
+    if let Some(block) = panel_block {
+        report["external_panel"] = block;
+    }
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
     Ok(())
 }
@@ -3996,6 +4125,8 @@ fn run_v2_extras(mode: &str, rest: &[String]) -> Option<Result<()>> {
         "trunk",
         "op_policy",
         "log_recall",
+        "panel",
+        "panel_expected",
     ];
     match mode {
         "compiler" => Some(claimed(rest, relation_compiler, compiler)),
