@@ -84,8 +84,10 @@ this diagnostic and does not constrain the subsequent learning task.
 Before that continuation, declare its bounded cost and source/configuration. Retain
 the parent and all candidates. Assess checkpoints with actual complete own-prefix
 replies/EOS, canonical joint and conditional Copy CE, and every stage gain/loss.
-Do not promote the lowest average CE by itself. This fit remains **NOT_RUN**.
-Shared session changes stay coordinated on#1552.
+Do not promote the lowest average CE by itself. At this diagnostic's completion,
+the fit was **NOT_RUN**; the [executed continuation](geometric-readout-coadapt-2026-10-03.md)
+now supplies its outcome and next action. Shared session changes stay coordinated
+on#1552.
 
 ## Checks, retained evidence and cost
 

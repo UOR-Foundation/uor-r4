@@ -1,5 +1,31 @@
 # Current UOR-R4 research state
 
+## Existing geometric readouts — complete source replies18/20, October 3
+
+The [executed frozen-context continuation](geometric-readout-coadapt-2026-10-03.md)
+reuses trained64 weights and the existing Rust learner. Source54bf68c7 passes seven
+focused tests, optimized build and64-update CPU-only Runpod fit. Context source
+bits remain exact after every update; exported context/table payloads stay fixed.
+Copy/Period/Stop coadapt under unchanged ordinary answer CE, with fresh AdamW
+moments because the original moments were not saved. No model/session library edits.
+
+Complete own-prefix replies improve4→18/20 with EOS20/20; all four parent successes
+remain,14 new replies complete. Final canonical decisions improve46→112/114,
+with64 gains/no losses; initialCopy20/20, later52/54, Period20/20, Stop20/20.
+Copy-only correct20→72/74 and joint CE1.340713→0.227013. Intermediate regressions
+are retained. Independent review recomputes all stages/masses/CE/row changes and
+generation, checks unchanged context and returned native payload hashes.
+
+The two remaining failures repeat the same Klotdradburg input, first diverging
+at Copy step4. Four distinct values now complete within five exposed numerical
+source/query groups; no unseen-source/general-chat or full-serving qualification.
+Retain final64 as an unadopted component candidate. Next: fixed novel-source/order
+transfer and paired source replacements against the original parent before shared
+session integration. This panel is NOT_RUN. Do not repeat the unchanged collision
+audit or dose. Pod jobcard released; all122 files/results/executable returned,
+ownedarea about5.84GiB; fit343.506s, maxchildRSS2,283,810,816B. No GPU/research
+runner/local modelCPU. [Bound evidence](../evidence/geometric-readout-coadapt-2026-10-03.json).
+
 ## Native q4 readout directions — existing learning works locally, October 3
 
 The [executed readout diagnostic](geometric-q4-readout-direction-2026-10-03.md)
@@ -18,11 +44,11 @@ joint Copy choices (48/114); its first-token error persists. Mean CE alone is
 therefore not a complete-answer criterion. Candidate own-prefix generation is
 NOT_RUN; baseline remains4/20 complete and20/20 EOS. No candidate is adopted.
 
-Next: one bounded continuation of the existing Copy/Period/Stop readouts with
-learned context frozen and ordinary joint CE unchanged. Let terminals coadapt;
-retain parent and stage rows, and evaluate complete own-prefix replies/EOS at
-checkpoints. No new state/estimator/loss or unchanged context-joint fit. This
-continuation is NOT_RUN. The Codex pod card is released, results returned, final
+The proposed existing Copy/Period/Stop continuation is now
+[executed](geometric-readout-coadapt-2026-10-03.md), with learned context frozen
+and ordinary joint CE unchanged; see the latest entry for its result and next
+action. No new state/estimator/loss or unchanged context-joint fit. At this
+diagnostic's completion, the Codex pod card is released, results returned, final
 ownedarea about5.21GiB; no GPU/GitHub research runner/session-hook changes.
 [Bound evidence](../evidence/geometric-q4-readout-direction-2026-10-03.json).
 
