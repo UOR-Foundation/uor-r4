@@ -1,9 +1,991 @@
 # Current UOR-R4 research state
 
-Updated September 29, 2026. **Pre-alpha; no useful general-language, coding,
+## Retained native capture/age learning — mixed result, October 2
+
+The [connected native reader](geometric-native-held-credit-2026-10-02.md) now carries
+answer credit into actual q4 capture and standalone age. Thirty-two actual B8
+episodes verify native forward equality and nonzero connected credit; eleven
+focused source cases and both hosted release drivers pass. This is attention
+component learning through frozen integer consumers, with a floating host tail.
+
+Both fixed640/B8 continuations complete and independently export/reload exactly.
+Seed1 improves200→202/256 on retained development rows; seed2 collapses244→83/256.
+Combined444→285/512, mean CE0.820185→2.278034. Neither is promoted as a replacement.
+Independent saved-row review confirms the negative. All10,240 training episodes
+have OLD held state at the answer, without certifying correct captured content.
+
+The zero-update512-prediction crossover isolates event damage: parent/parent244,
+final-event/parent-age83, parent-event/final-age244, final/final83, all outof256.
+Age-only CE slightly improves; capture changes reproduce the complete accuracy
+loss. Fixed-event invariants pass where saved, with parent held/potential
+explicitly unverified because absent from the baseline. The next task is a
+small exact-H4/q4 finite direction audit; it is designed but NOT_RUN. No repeated
+dose/scale/LR sweep, cold-capture auxiliary or estimator replacement is admitted. [Evidence](../evidence/geometric-native-held-credit-2026-10-02.json).
+PR1640 owns protected delivery; #1512 remains open. Claude retains #820 emitter,
+matched geometry controls and pointer-binding gates. Selected access, natural
+grounded language, the float tail and complete-path energy remain unfinished.
+
+## Event/age q4 bridge — retained conversion measured, October 2
+
+[Event/age source and causal design](geometric-event-age-q4-2026-10-02.md) adds
+native-action-conditioned offline capture credit and explicit four-bit age
+policies. Hosted M1 source8713997d passes6 integer and10 training/artifact cases;
+source093dc5e7 adds the prior/residual extension and passes4 integer/8 training
+cases (22 distinct cases across the two sources). Actual answer-loss fixtures
+reach event transitions, geometric span/address/age and the head. These are
+connected fixtures, not fitted language/capability results.
+
+Both actual retained parents refuse the unchanged quarter grid without clipping.
+One declared offline positive event rescaling followed by quarter quantization,
+and the fixed initialized age prior plus1/8-nat learned q4 residual, admit both.
+The six learned source components have four-bit coefficients and no wider learned
+source component in the attention admission inventory. Expanded integer tables,
+fixed prior, offline F32 tail and full causal-prefix access remain explicit.
+
+[Loaded evidence](../evidence/geometric-event-age-loaded-2026-10-02.json) retains
+512 comparisons: converted444/512 versus parent446/512, with1 gain/3 losses.
+Seed1 loses3 and CE worsens; seed2 gains1 and CE improves. Capture action
+sequences change at24 positions across19 rows. All actual-position incremental/whole-prefix output
+bits match, independent reload and integer prefix/B2 checks pass, zero updates.
+The source range refusal and every changed row are preserved. This supports a
+separately justified connected constrained-learning task, without automatic
+scale/dose sweeps or mechanism retirement. [#1512](https://github.com/UOR-Foundation/uor-r4/issues/1512)
+remains open for attention qualification. PR1638 owns delivery; persistent
+attention PR1635 is merged at1dc78d1b. Selected access, natural grounded language
+and the float model tail remain unfinished.
+
+
+## Persistent integer attention — native runtime repair, October 2
+
+The [persistent session implementation](geometric-attention-session-2026-10-02.md)
+contains the integer occurrence cache/newest-row reader, strict admitted
+component adapter, CPU Stack residual bridge and retained-parent comparison
+driver. Hosted Linux and native M1 compilation pass. At source4a0b0224, native
+M1 passes3 session tests,5 context tests and the external allocation census:
+256 successful pushes and2 resets, with0 allocations/reallocations/deallocations.
+Construction, first-use and error/reporting paths are outside that census.
+Independent source review finds no material blocker.
+
+The first actual compiled integer call scan retains3 MADD instructions from
+48/104-byte context descriptor indexing. Private64/128-byte layout repair
+4a0b0224 preserves learned tables, artifacts and geometry; additional64-bit
+metadata is16*vocabulary+24*total_lanes bytes, max65,728B before allocator
+bookkeeping. The actual rebuilt M1 driver passes the19-symbol integer call scan:0
+multiply/divide/floating arithmetic/conversion/FMOV instructions, with the prior
+3-MADD failure retained. External libc/panic callees are
+unscanned and no complete serving claim follows.
+
+After DeepSeek exits, both retained lineages complete the native M1 replay:
+512/512 incremental whole-window comparisons preserve all actual-position
+logit bits and saved answers, retaining446/512 correct (s1 original93/stress110;
+s2 original124/stress119). B2 same-shape and short-prefix checks pass; mismatched
+valid value/context dependency is refused. Zero optimizer updates. The two
+workers take8.78s/9.46s external elapsed, with measured peak RSS843,300,864 /
+735,199,232 bytes. [Loaded receipt](../evidence/geometric-attention-loaded-2026-10-02.json).
+Independent saved-output review passes:512 answer vectors match bitwise,
+28,976 context/value traces and1,883,664 causal score pairs join exactly,
+57,952 head reductions reconstruct, and1,024 parent query heads match.
+Full-position equality remains an executed-driver assertion; this is fidelity
+on exposed retained panels, not a new quality improvement. No local Cargo or private artifact upload.
+PR1635 is delivered through the protected queue; continue #1512 through the
+remaining event/age coefficient boundary. Selected access and the
+float model tail remain explicit unfinished boundaries.
+
+## Strict q4 geometric context — fixed construction and three-route credit complete, October 2
+
+Both saved potential parents complete native-conditioned q4 context conversion.
+Source/native choices and answers agree512/512; converted446/512 versus478/512
+parent retains13 gains and45 losses, with worse CE on all four development
+panels. All nine context families receive finite answer credit through frozen
+values, NoRead and compatibility; isolated cuts preserve hard logits and all-cut
+disconnects context. Long-draw transition-gradient norms are much larger, so
+connection is not fit/stability qualification. Zero optimizer updates, exact RNG
+preserved; all state/address/packet/score changes retained.
+
+Fifteen focused cases, release builds and both workers pass. Retained endpoint
+compile and legacy-only admission failures were repaired; completed workers
+33.897/25.181s at758136832/735838208B RSS. [Result and next boundary](geometric-context-q4-2026-10-02.md) ·
+[Evidence](../evidence/geometric-context-q4-2026-10-02.json).
+
+Retain both lineages; end conversion without an automatic context recovery dose.
+Next assemble a persistent integer attention session from existing primitives,
+preserving old-held timing, exact occurrences, absence/zero denominator support
+and separate head reductions. This removes whole-prefix reconstruction/Candle
+from the declared reader, not the float trunk/output. Event/age coefficient width,
+selected access and natural-language/session qualification remain unfinished.
+Coordinate shared CPU/Metal edits; stack_grounded_session.rs remains untouched.
+
+## Strict q4 geometric attention potentials — fixed conversion complete, October 2
+
+Both saved q4-value parents now compile the existing seven-family paired-H4
+potential from16,640 packed signed-q4 coefficients at fixed q/4 nat units.
+Source/native answers agree512/512; native478/512 versus479/512 parent retains
+one seed1 stress loss and no gains. All1,883,664 causal raw Q24 scores match the
+loaded native scorer. All seven families receive finite positive answer gradients
+in four B8 diagnostics; zero optimizer updates and preserved training RNG.
+Context/reducer/value/NoRead/bank numerical files remain unchanged after rebinding.
+Twelve focused cases and the standalone release build pass; one type-annotation
+compile failure is retained and repaired. Both actual workers finish in10.229/
+12.462s. [Construction/result](geometric-potential-q4-2026-10-02.md) ·
+[Receipt](../evidence/geometric-potential-q4-2026-10-02.json).
+
+Retain strict q4 potential and both parents; end construction without an automatic
+potential recovery dose. Advance packed-q4 context transition/observation source
+with actual state/address/value/answer comparisons before learning admission.
+Event/age coefficients, selected access, float trunk/output and natural inputs
+remain unfinished. The owner-approved scale ladder and Claude Metal work on #820
+run concurrently; this component evidence neither qualifies strict whole-model
+serving nor retires geometric attention. stack_grounded_session.rs stays untouched.
+
+## Strict q4 geometric values — both fixed answer fits complete, October 2
+
+Both retained projection2 producers complete640 answer-only updates through the
+frozen learned H4 bank. Independently reloaded source/native answers112/113 and
+126/128 total479/512, versus451 projection and467 unrestricted parent. All four
+answer-CE panels improve against both controls;24 parent gains and12 losses are
+retained. All512 source/native packet/Q16 traces and answers agree; maximum
+actual-position logit drift0.000364304. Frozen numerical NoRead/bank payloads
+remain byte-identical. On the12 parent losses, head0 still assigns98.7506–99.9800%
+mass to the correct source; do not change addressing on that evidence.
+
+Two focused driver cases, release build and both actual zero-update check modes
+pass. Both640-backward fits finish; workers148.275/124.302s at512278528/478838784
+bytes peak RSS. Model context128/width32, actual episode lengths24–80/24–78,
+actual positions245330/245334 and padded286496/285824 remain separate measures.
+[Completed learning and limits](geometric-value-q4-fit-2026-10-02.md) ·
+[Receipt](../evidence/geometric-value-q4-fit-2026-10-02.json).
+
+Retain both learned q4 values and all controls; end the fixed dose and advance
+the remaining attention coefficient boundary in connected geometric operators.
+No automatic value/bank/selector/scale/alphabet sweep or vocabulary-head detour.
+Additional-dose controls, geometric superiority, heldout language and full native
+serving/energy are not established. Wider context/event/potential coefficients,
+float tail, selected access and natural-input/session integration remain open.
+Claude's D19 work does not redirect this track; stack_grounded_session.rs is
+untouched, and broader offline donor/operator compilation remains available.
+
+## Strict q4 geometric values — loaded construction and hard bridge, October 2
+
+The K2 value producer now admits128,896 signed-four-bit coefficients at fixed
+q/4 scale (64,448 packed bytes), regenerates fixed-geometry native factor tables
+and receives ordinary answer credit through the frozen learned H4 bank. Legacy
+sources remain retained. All12 initial focused cases, the hard-choice/live-update
+case and integrated reader replay pass; both release examples build.
+
+First projection native94/104 and127/126 totals451/512 versus467/512 retained
+parents, with4 gains20 losses and worse CE in all four panels. Answers agreed
+between source/native while302 packet traces differed. The typed training caller
+now uses current packed coefficients and authoritative native context/span codes
+for actual integer hard choices; F32 scores are backward probabilities only.
+Both repaired loaded runs have zero packet/Q16 trace mismatches on512 rows and
+unchanged native predictions/logits/reader records. Maximum answer-logit drift
+is0.00009871. All four B8 backwards reach all ten producer families, bank gradients
+absent; no optimizer updates or frozen-source mutation. Workers10.054/10.265s,
+about310MB RSS. [Construction and limits](geometric-value-q4-2026-10-02.md) ·
+[Receipt](../evidence/geometric-value-q4-2026-10-02.json).
+
+Next preregister and implement a bounded answer-only q4 value-producer fit from
+these projected models with the learned bank/upstream/tail frozen. Compare the
+projection and unrestricted parent row by row; retain failures and do not demand
+perfect recovery or change scale/alphabet. No repeated bank/scalar sweep.
+Other wide producer/potential coefficients, float tail, bounded access, general
+language and complete energy qualification remain open. Claude's D19/session
+work remains separate; stack_grounded_session.rs is untouched.
+
+## Connected geometric read.out composition — source and construction, October 2
+
+The two-term signed-H4 left/right transport bank now consumes the actual K2
+value packets, uses packed q4 dimensionless gains and a versioned i64-Q16 wide
+reader, preserves each head's score/age/NoRead denominator, and sums heads before
+the float tail. Both source/native StackModel callers bypass legacy read.out.
+The offline full-value conditional action surrogate and independent source-bound
+compiler/reloader are connected. Seven integer cases, four new learner/admission
+cases and the actual integrated fixture pass; scoped ARM64 numerical symbols
+have no float/mul/div/allocator calls.
+
+Both saved-parent zero-update runs complete32 original/32 stress rows perseed:
+untrained source/native7/5 and0/4, versus retained parent24/22 and32/32. All128
+source/native answers agree; all evaluated parent logits/predictions replay,
+and raw packets/null/occurrence weights stay unchanged. Ordinary answer CE
+reaches gains and both selectors on the first original row perseed. Independent
+NaN read.out bypass, exact integer-prefix and reload checks pass. A diagnostic
+Var-alias restore defect is repaired and its failed sealed attempt retained.
+[Source and results](geometric-read-composition-2026-10-02.md) ·
+[Receipt](../evidence/geometric-read-composition-2026-10-02.json).
+
+Both bank-only answer fits now complete640 updates with all upstream producers,
+NoRead, base and tail frozen. Source/native answers102/109 and128/128 agree on
+all512 full-panel rows; initialized banks28/23 and0/9 are retained. Parent
+answers98/104 and128/128 are retained with every gained/lost row. Answer CE
+improves from initialization but is worse than parent in all four panels, so
+this is useful learned composition with mixed quality, not a preserving drop-in
+or geometric advantage. Actual workers take193.721/184.426s at about210MB RSS.
+[Learning record](geometric-read-composition-fit-2026-10-02.md) ·
+[Receipt](../evidence/geometric-read-composition-fit-2026-10-02.json).
+
+End this fixed dose; retain the learned bank and next address the strict four-bit
+learned-coefficient boundary in the actual K2 value producer: packed q4
+source factors and regenerated signed-root tables, with context, events,
+addressing, NoRead, learned composition and tail frozen. Compare loaded
+projection first; use its losses to decide whether bounded answer learning
+is needed. No packet-perfect imitation gate. No repeated bank
+dose, selector/alphabet sweep or final-vocabulary-head detour is prescribed.
+Untrained quality cannot retire this restricted geometry family; K2 transports
+are not an arbitrary donor compiler. Preserve broader offline weight compilation.
+Wide producer/potential coefficients, float trunk/vocabulary output, semantic
+absence, bounded access and whole-language/energy qualification remain open.
+Claude's D19/session work is concurrent and does not redirect this track.
+
+## Learned geometric NoRead — both fixed fits complete, October 2
+
+Both actual query-credit parents complete640 answer-only updates of the754
+packed-q4 scalar shadows with producers/output frozen. Fitted source/native
+answers98/104 and128/128 reproduce all512 legacy-parent predictions; zero and
+scalar-geometry-ablated alternatives99/104 and128/128 remain retained. Against
+zero, seed1 restores113 and loses72/102. CE is mixed, and query-token/validity
+collinearity prevents a geometric advantage or semantic-absence claim.
+
+Source/native scalar error reaches11 Q24 units; loaded answers agree. Ordinary
+answer gradients, q4 changes, fixedRNG/draws, frozen producer identities and
+save/compile/reload are exercised. Two focused driver cases and both actual
+check-mode attempts pass; all640 backward batches perseed complete. All models,
+checkpoints, changed rows and controls are retained.
+[Completed result](geometric-no-read-fit-2026-10-02.md) ·
+[Receipt](../evidence/geometric-no-read-fit-2026-10-02.json).
+
+End this fixed-dose scalar comparison. Next is geometric output/composition
+design and a connected replacement selected from actual callers and retained
+mechanisms, with the outstanding value/potential coefficient-width obligations
+explicit. No additional NoRead dose/scale/selector sweep is prescribed. Float
+trunk/output, bounded access, natural inputs, semantic absence and whole-path
+language/energy qualification remain open. Claude's D19/session work and offline
+donor-weight/operator compilation remain separate and retained.
+
+## Connected geometric NoRead — source and actual-parent construction, October 2
+
+Packed four-bit geometry-sensitive NoRead now enters the actual reader before
+floating read normalization and supplies raw Q24 to the common-denominator
+reducer. The offline answer-gradient learner and source-bound compiler/reloader
+are connected. Focused integer, training, raw-precision and integrated caller
+checks pass; the ARM64 release scalar score has no multiplier/divide/float or
+allocator call. That symbol inspection does not qualify the complete model.
+
+Both saved query-credit parents complete zero-update construction comparisons:
+legacy answers98/104 and128/128, geometric source/compiled99/104 and128/128,
+each128 original/stress rows. All512 historical-parent predictions are retained
+by the legacy branch; source/compiled answers agree. One actual backward per
+parent reaches all measured NoRead coefficient families. These are zero-q4
+construction results, not learned quality or semantic abstention.
+[Source and results](geometric-no-read-2026-10-02.md) ·
+[Receipt](../evidence/geometric-no-read-2026-10-02.json).
+
+Next on #1512: one fixed-dose answer-loss NoRead fit with frozen producers and
+output, preserving parents and row changes. Current query-token/validity
+collinearity prevents answer gains alone from proving geometric history use;
+measure scalar-only geometric attribution without changing addresses or values.
+No fit is run at this source checkpoint. Wider coefficients, trunk/output,
+semantic absence, bounded access and language/energy qualification remain open.
+Claude's D19/session track and offline donor compilation remain separate.
+
+## Completed geometric query-credit comparison — October 2
+
+All four fixed640-update continuations finish from the two learned context/value
+parents. Query/compiled answers are98/104 and128/128; uniform/compiled89/103 and
+128/127, each original/stress panel128rows. Query gains20 and loses9 rows against
+uniform. Both improve their parents; seed2 original is saturated. Retain query
+as the provisional next continuation candidate and preserve both controls and
+all changed rows. End this allocation comparison without an auxiliary sweep.
+
+Actual paired input/RNG/teacher/credit audits and loaded float/compiled panels
+are retained in the [result](geometric-query-credit-result-2026-10-02.md) and
+[receipt](../evidence/geometric-query-credit-result-2026-10-02.json). Ordinary
+answer credit reaches13trained context/value families. All measured compiled
+state/action/address/packet/Q16/answer choices agree; the surrounding trunk,
+NoRead and output remain floating. Context reset preserves held spans and float
+history, changes addresses and values together, and has mixed seed1 effects.
+Correct dominant source does not guarantee compatible learned-value emission.
+
+Next on #1512: implement history-sensitive native NoRead with packed signed
+four-bit coefficients and fixed quarter-nat scale; derived Q24 tables must
+regenerate from the pinned geometric basis. Enter before float read normalization
+and feed raw Q24 into the common-denominator reducer. This candidate's code/fit
+is NOT_RUN. Semantic absence, wider value/potential coefficient qualification,
+output/trunk, bounded access and general language remain explicit obligations.
+Claude's D19/session lane remains parallel; offline donor compilation is retained.
+
+## Query-read credit continuation — source and construction ready, October 2
+
+The opt-in Rust driver now reloads both actual learned context/value parents,
+restores exact saved RNG and compares query-read placement with uniform matched
+eligible mass, including NoRead and separate zero/root masks. Fresh Adam moments
+are declared; the old global-position mean remains a diagnostic. Three unique
+release cases pass after a preserved zero-graph repair. All four actual-parent
+construction checks complete zero updates/one backward batch, preserve parameter
+bits and measured hard choices on64 rows, and match paired draws/teacher streams.
+[Source result](geometric-query-credit-2026-10-02.md) ·
+[Receipt](../evidence/geometric-query-credit-driver-2026-10-02.json).
+
+The four640-update continuations are NOT_RUN at this source checkpoint. Their
+paired effect will concern joint learning, not isolated payload causality;
+transitions remain trainable. Preserve prior learned successes and scoped
+negatives. NoRead's float scalar is history-dependent; token-only lookup is not
+an exact replacement. Full native NoRead/output and language qualification remain.
+
+## Learned geometric values — completed two-seed fit, October 2
+
+Both fixed 640-update joint fits complete from the accepted context parents.
+Actual token/retained-H4/span-conditioned values now supply the reader without
+donor-value input. Learned float/compiled answers are 78/84 and 122/122 on
+original/stress (128 rows each); untrained heads are 7/12 and 3/8. Context reset
+is 69/81 and 45/45 while preserving held spans. All measured compiled state,
+action, address, packet, Q16 and answer choices agree; logits differ slightly.
+These are authored development results, not unchanged donor retention or
+complete integer serving. NoRead, trunk and output remain floating.
+
+The controlled no-fit payload replay holds both heads' integer query mixtures
+exactly fixed. New-context donor/K2 answers are 99/97 and 110/109 for seed1
+original/stress, and 128/128 on both seed2 panels. Both substitutions rescue
+65 of 106 learned failures; reverse cases are retained. This locates many
+regressions at learned-value/frozen-output compatibility rather than justifying
+an address or alphabet redesign. Keep the learned producer and both seeds.
+
+The [full result](geometric-value-learning-2026-10-02.md) and
+[receipt](../evidence/geometric-value-learning-2026-10-02.json) bind complete
+training/data/controls/cost and row-level artifacts. Source #1609 is merged
+at `66d09f2ff981390e3b5f1ba0afe79b52e790a439`, with all six reviewed blobs
+verified. Next is one declared comparison of frozen-teacher query-read-weighted
+auxiliary credit against uniform credit at matched additional dose and initial
+artifacts, preserving answer loss and geometry. Its driver is implemented and construction-checked above, but the fit is not run;
+optimizer moments were not saved and any restart must be shared and declared.
+No perfect donor-imitation gate or automatic dose/selector/alphabet sweep.
+Claude retains the concurrent D19 session lane; geometric attention stays #1512.
+
+
+## D19 grounded conversation session — measured best configuration, October 2
+
+The grounded session (#1552) now combines five merged changes:
+- the op-model compiler with its saved table, combined by
+  `op_policy=unless_query` (#1598);
+- an exact prime-atom log recall for turns the compiler leaves unresolved
+  (#1600), with its reload fix (#1604);
+- dialogue protocol 2, which puts the space after a role marker inside the
+  message (#1591, #1597);
+- a protocol-2 copy of chat-v0 (#1602);
+- teacher paraphrases of the *training* chat, instruction and relation
+  templates in the M-world training corpus (#1618).
+
+The emitter is emit-6r: emit-4p2a plus 1,500 steps on the instruction-heavy
+protocol-2 recipe, with teacher wordings of 178 training templates (chat,
+instruction and relation) drawn in half of their training picks. The teacher
+is qwen2.5:1.5b on local Ollama, used as an offline data source only. Wordings are screened out if they equal a
+development template or share a four-word sequence with one. Replies remain
+the oracle's replies from the typed intent. The model is in the iCloud store as
+`results/claude/emit-6r`.
+
+Measured on M-world v2 development (300 conversations, seed 9101, one draw),
+with `max_new_tokens=64`:
+
+| Configuration | Copy | Instruction | MQAR | Relation | Responsive |
+|---|---|---|---|---|---|
+| emit-1 × table compiler (start of 2 October) | 0/33 | 8/98 | 20/109 | 60/83 | 442/752 |
+| emit-5c × `unless_query` × `log_recall=sieve` | 18/33 | 28/98 | 108/109 | 76/83 | 589/752 |
+| emit-6p (chat paraphrases only) | 17/33 | 46/98 | 108/109 | 74/83 | 628/752 |
+| **emit-6r (chat and relation paraphrases)** | **17/33** | **43/98** | **108/109** | **74/83** | **647/752** |
+
+**Why paraphrases.** Evaluated alone, emit-5c answered its skills on the
+trained phrasings and failed the development phrasings:
+
+| Skill | Trained phrasings | Development phrasings |
+|---|---|---|
+| `first_letter` | 6/6 | 0/11 |
+| `next_day` | 28/28 | 4/35 |
+| `identity` | 42/42 | 11/32 |
+
+The gap was phrasing generalization, not capacity. With the chat paraphrases
+(emit-6p):
+- `next_day` rises from 4 to 16/35;
+- `animal_sound` from 6 to 17/22;
+- `first_letter` from 0 to 4/11;
+- `add` from 0 to 5/15.
+
+Assert acknowledgements inside relation conversations fell (`lucky_number`
+20 to 11/21). Adding the relation-template wordings (emit-6r) recovers them
+(`lucky_number` 20/21, `home` 12/12) and lifts Responsive to 647. `greet` and
+`identity` fall and Instruction moves from 46 to 43; at one seed these are
+within what another seed could change. Relation open is 43/52 in both
+paraphrase arms, against 45 for emit-5c.
+
+A save and fresh load of emit-6r continued identically in 20/20
+conversations, and the reloaded run reproduced every score above.
+
+**Scope.** This is measured behaviour on the authored M-world world, from one
+seed and one draw. It is not general prose, general reasoning or open-domain
+memory. The world's fixed vocabulary is the sieve's stop list. Every comparison
+above is paired on the same conversations; per-intent records are on #1552.
+
+**Next.** Arithmetic (`add`) stays weak even on trained phrasings. The memory
+path (compiler, store, log recall, reload) and the paraphrase data path are the
+retained D19 deliverables.
+
+
+## Finite-action learning and geometric value producer — October 2
+
+[PR #1608](https://github.com/UOR-Foundation/uor-r4/pull/1608) merged at
+`2b598f23f4d286b38cccc79e22c6a1afcf207bd4`; main ancestry and all ten
+reviewed file blobs were verified. The independent review binds exact head
+`99a3b653a1c690744bcb5ed104b3bcf418078ccd`. Its receipt records 22 unique
+passing focused cases, with revised/rerun cases counted separately from unique
+coverage. These are component checks, not a new fit or complete serving claim.
+
+The next source task is the Rust joint-fit driver on #1512, continuing both
+accepted 640-update context parents and learning transition families plus
+geometric value factors. The context observation/readout and surrounding
+base/event/span/scorer/NoRead/output remain frozen. Answer cross entropy is
+primary; separately normalized offline K2 root/category supervision has fixed
+weight 0.1. Untrained, floating fitted, independently reloaded compiled and
+context-reset results will be compared row by row with donor/K1/K2 baselines.
+The driver is implemented and its release target-layout/mask fixture passes.
+Actual-parent construction checks complete on both seeds with zero optimizer
+updates: ordinary answer gradients reach transition and value families, source
+and native reloads execute, and all measured context/action/address/packet/Q16/
+answer differences are zero on eight original and eight stress rows per seed.
+The [driver receipt](../evidence/geometric-value-joint-driver-2026-10-02.json)
+binds the executed sources and executable. These are construction checks; the
+fit had not run at that source checkpoint; the completed fit is recorded above.
+Data mass, substantive dose,
+checkpoints, evaluation reserve and complete cost must be declared before fit.
+Claude retains the concurrent GroundedSession/D19 lane; this work does not edit
+its session source or introduce serving q/k projections.
+
+The retained-state interface now exposes the actual post-update signed-H4
+roots through the same differentiable recurrence. A separately named,
+opt-in full-adjoint finite-choice policy carries current and delayed answer
+credit; legacy constructors and saved artifacts keep their tangent policy.
+Both policies preserve the same exact hard geometric forward. Eight focused
+context checks pass, including sign-answer current/earlier credit, reset cuts,
+synchronous within-head OLD-neighbor credit, and source/native policy reload.
+This executes the previously reasoned antipodal counterexample and correction;
+it does not establish better fitted language behavior or explain all old failures.
+
+A learned offline two-atom value head uses token, actual retained own/neighbor
+state, explicitly valid held-span features and a separate validity bias. It
+selects the fixed signed-root/dyadic packets and checks their integer Q16 sum.
+Five focused checks pass: both-atom antipodal credit, frozen-branch surrogate
+finite difference, status/cancellation/overflow/zero stop, actual earlier-state
+credit/causality, and saved-head reload. Category-zero answer credit remains
+stopped; declared category supervision or another explicit escape is required.
+Nonzero initialization does not prove answer-only discovery of all categories.
+
+The integrated answer-loss fixture passes with address gradients detached:
+value parameters and earlier geometric transitions receive credit through the
+produced values. Zeroing donor `read.value` weights leaves logits exactly
+unchanged. The public joint path keeps address and value credit. The floating
+reference reader carries offline gradients; NoRead, trunk and output remain
+floating. No new fitting or complete-serving/language/energy claim follows.
+The finite-factor integer producer/compiler is implemented. It compiles
+selected token/state/span factor rows to signed Q24 scores, uses widened integer
+choice sums and checked K2 Q16 decoding, and binds the entire compiled context
+identity. Four kernel and four compiler checks pass. The loaded reader fixture
+matches offline packet/Q16 choices and is unchanged by donor-value mutation;
+values enter the integer reducer without a floating reconstruction boundary.
+This is fixture parity, not a theorem of F32/Q24 hard-choice retention.
+
+Release compiler-emitted assembly inspection found and repaired two generated
+multiply-add sites: six-byte packet indexing and a 144-byte descriptor stride.
+The private descriptor is now 256 bytes (128-byte alignment), adding at most
+1,792 metadata bytes without changing artifact tables. Final inspection covers
+695 instructions in produce, select, decode-pair and decode, with no flagged
+multiply/divide/floating arithmetic. External bounds-panic paths, final linked
+executables and the complete model are not qualified by this scoped inspection.
+
+A retained-trace audit covers 14,488 actual positions per seed. Frozen full
+input tuples have differing K2 targets in three seed-1 and 68 seed-2 groups,
+while identical full prefixes have no target conflicts. Exact donor imitation
+is therefore impossible for those frozen inputs. The seed-1 target-source
+witness has the same required answer in both cases; no answer-capability limit
+follows. Local own/neighbor/span inputs have additional packet conflicts.
+Do not use perfect donor reconstruction as an admission criterion or retire
+geometry from this diagnostic. Next jointly learn transitions and values with
+ordinary answer loss primary and declared packet/category auxiliary credit,
+continuing accepted weights through the explicit consuming policy conversion.
+Fit dose/data/controls and complete cost must be declared before launch.
+
+## Bounded geometric residual values — next producer decision, October 2
+
+One fixed-first two-atom signed-H4 residual comparison completed on both
+saved models. It holds scores, age, NoRead, occurrence weights, coordinate width
+and decoder fixed, with no fitting or answer/source-label packet selection.
+The first atom is exactly K1; the zero residual preserves its representation.
+All 927,232 read-coordinate bounds pass and all 64 chunks restore the baseline.
+The [result receipt](../evidence/geometric-value-residual-2026-10-02.json) retains
+per-row comparisons against K1, the weighted reader and the precontext parent.
+
+| Seed / panel | Weighted baseline | K1 | Two atoms |
+|---|---|---|---|
+| 1 original | 100/128 | 85/128 | 97/128 |
+| 1 stress | 110/128 | 96/128 | 110/128 |
+| 2 original | 128/128 | 128/128 | 128/128 |
+| 2 stress | 127/128 | 127/128 | 127/128 |
+
+Seed 1 has 26 additional correct answers versus K1, comprising recovery of
+25 K1 baseline losses and one new gain. Three original baseline losses remain;
+stress has one baseline gain, one loss and one wrong-to-wrong change despite
+equal totals. Seed 2 preserves every weighted-baseline prediction but reverses
+K1's one gain/one loss on stress. Preserve those prior successful rows too.
+Maximum coordinate error falls from 73,955 to 34,486 Q16 units, but lane-L2
+improvement alone guarantees neither answer retention nor global K2 optimality.
+
+Retain the bounded two-atom representation for native producer learning; it
+is not a preserving drop-in map or a learned producer. End this representation
+comparison without an alphabet sweep. Next implement actual retained-state
+exposure and token/state/span-conditioned geometric values with ordinary answer
+credit, keeping NoRead/output as separate unfinished replacements. Offline
+donor targets remain useful; no donor vector or oracle search enters serving.
+
+Prospective source review found a specific tangent-credit limitation: with two
+identity group actions and a terminal sign-answer adjoint parallel to identity,
+projecting to the tangent kills both current finite-action and delayed state
+credit, although an antipodal action improves the answer. This is a reasoned
+counterexample, not an executed explanation of all prior failures. A new
+explicit finite-choice surrogate must preserve full adjoints through both the
+selected Hamilton path and action-choice credit. Keep the legacy policy and
+artifact identity, exact hard geometric forward, reset cuts and synchronous
+semantics. One focused delayed-credit test addresses this risk before a new
+value fit. No new context-only tuning programme follows.
+
+## Geometric value representation — measured K1 limitation, October 2
+
+The fixed-weight comparison replaces each four-coordinate donor value lane
+with its nearest signed-H4 root and dyadic radius packet (or present zero),
+then supplies decoded raw Q16 directly to the retained integer reader. It
+holds contextual scores, age, NoRead and occurrence weights exactly fixed.
+All four panels completed, with 927,232 actual read-coordinate error-bound
+checks and zero violations. Baseline behavior restores exactly after each
+comparison. [The receipt](../evidence/geometric-value-native-2026-10-02.json)
+binds source/executable/summaries and changed-row outcomes.
+
+| Saved seed | Original baseline / projected | Stress baseline / projected |
+|---|---|---|
+| 1 | 100 / 85 of 128 | 110 / 96 of 128 |
+| 2 | 128 / 128 of 128 | 127 / 127 of 128 |
+
+Seed 1 has 15 original and 14 stress correct-to-incorrect changes, plus
+three wrong-to-wrong changes. Seed 2 stress has one gain and one loss; equal
+127/128 totals do not qualify rowwise retention. Maximum donor-coordinate
+error reaches 73,955 Q16 units; maximum weighted-read error reaches 73,897.
+The exact H4 coordinate decoder is not the source of this coarse K1 loss.
+
+Do not admit this nearest-L2 K1 map as a preserving drop-in replacement for
+the frozen decoder. Do not retire K1 task learning or the geometric family:
+nearest reconstruction is not answer-optimized, and seed 2 original retains
+all answers. A bounded residual signed-root comparison can diagnose whether
+richer values remove the observed frozen-decoder distortion. Keep it separate
+from native input sufficiency, learned production and joint output adaptation.
+
+The next native producer must use actual token/retained-state/held-span inputs,
+not oracle donor values. Expose retained state differentiably during offline
+Rust training so ordinary answer credit can reach earlier transitions. Use an
+explicit decoded-prototype choice surrogate for value roots: a tangent-only
+rule can lose antipodal sign credit. Zero escape and radius credit need a
+declared bridge. NoRead and downstream output remain unfinished replacements.
+The current experiment is an oracle representation comparison with floating
+donor values and downstream layers, not full geometric serving or general
+language/energy qualification. Preserve all models, changed rows and failed
+fixture/orchestration attempts. Continue geometric attention on #1512.
+
+## Native geometric weighted reader — loaded retention, October 2
+
+The integer weighted reader preserves all 512 answer predictions across both
+saved native-context models and both 128-row panels per model. Seed 1 retains
+100 original / 110 stress answers; seed 2 retains 128 / 127. Actual answer
+logits are close but not bit-identical. Maximum actual-position logit drift
+across the four panels is 0.000223205. Each panel restores the baseline exactly
+in all 16 chunks. The [measured receipt](../evidence/geometric-read-native-2026-10-02.json)
+binds the executed source, release executable and all summary identities.
+
+This component normalizes Q31 table weights and reduces Q16 occurrence values
+with widened integer arithmetic and exact restoring division. Preserve
+occurrence identity, null weight and cancellation separately; rounded zero is
+not absence. The actual prediction-producing trace is retained. Donor value
+and NoRead computation and downstream layers remain floating, so these results
+do not qualify complete integer/geometric serving, general language, geometry
+advantage or energy. Continue the geometric value representation comparison
+and then learned native value/NoRead production on #1512. No additional fit or
+repeat of the completed reader comparison is required by these results.
+
+## Native geometric context — completed development study, October 2
+
+The learned latent signed-H4 context producer completed both fixed 640-update
+seeds, with batch 8, full causal contexts up to 128, width 32 and two heads.
+It separates retained group state from the noninjective address readout;
+absence in an emitted address does not erase retained state. Exact measured
+identities and panel totals are in the [executed receipt](../evidence/geometric-context-native-2026-10-02.json).
+
+| Saved seed | Original baseline / native / reset | Stress baseline / native / reset |
+|---|---|---|
+| 1 | 99 / 100 / 99 of 128 | 109 / 110 / 109 of 128 |
+| 2 | 128 / 128 / 128 of 128 | 128 / 127 / 127 of 128 |
+
+Hard-reference and independently loaded compiled execution have zero state,
+action, root, category, emitted-code and answer-prediction disagreements on
+all four panels. Donor-code imitation remains approximate. Seed 2's native
+stress error is pair 405, reversed order; reset corrects that row but instead
+misses pair 406. Equal aggregate scores therefore do not establish equal
+behavior or remove context sensitivity. Preserve these negative rows.
+
+The numerical context/scoring path uses bounded Q24 tables and integer
+operations. Donor floating computation still supplies values, NoRead and
+subsequent output layers. This is a retained implementation and measured
+finite-task result, not complete geometric serving or a predictive-advantage
+claim. The already-started debug study was preserved; it finished in
+7,001.02 seconds with no watchdog stop, within its declared 7,200-second
+model limit. Future training uses release builds under the shared #820
+capacity budget. No new context fit is justified by this aggregate result.
+
+The next integrated task is the existing native weighted reader and a
+fixed-weight geometric value representation comparison, followed by learned
+value/NoRead production. The value producer must receive actual retained
+geometric state and propagate ordinary answer credit into earlier state
+updates. Detached diagnostic state and emitted addresses alone do not meet
+that learning requirement. K1 representation loss, inadequate input state,
+learning failure and compiled drift require distinct decisions; none alone
+retires the geometric architecture. Codex owns this geometric track on #1512;
+Claude's dialogue/session work remains coordinated on #1552.
+
+## Immediate owner correction — geometric attention, October 1
+
+The owner redirected current work to actual geometric attention while the SSD is reformatted. Use the internal drive and remove this lab's disposable worktree/build cache after protected delivery, preserving unique research and models. Grounded conversation/memory remains the alpha priority; it does not displace this immediate attention research. Offline weight-informed geometric recompilation remains a supported research route alongside native learning; donor knowledge must execute through the resulting geometric runtime, with measured retention.
+
+The [occurrence-credit and identity-carry study](geometric-attention-binding-2026-10-01.md) changes the existing Rust native stack, not a separate model. A no-carry negative and saved-state probe motivated supplying predecessor identity to q/k while keeping payload values current. The same Lorentz scorer then learns correct occurrence selection on the finite synthetic task; Dot is an ordinary matched control. Exact results, carry-only credit controls and fresh length diagnostic live in that report. This does not establish natural language, geometric superiority, bounded indexed retrieval or integer serving.
+
+The [learned variable-gap latch study](geometric-attention-latch-2026-10-01.md) adds matched Held/Local identity inputs to that same reader. Answer-only and occurrence-credit arms remain query-insensitive at the declared dose. Training-only capture-event credit repairs both Held seeds: 128/128 original and longer-gap answers, correct occurrence majorities throughout; identity ablation drops original answers to 45/128 and 49/128. Local controls remain unsuccessful despite learned capture. All twelve fits and negative results are retained. This is explicitly supervised capture/hold/rebind on an authored one-token-key grammar, not natural-language or integer qualification. The [saved-model hard bridge](geometric-attention-hard-bridge-2026-10-01.md) now preserves both Held seeds at128/128 answers and correct-source majorities on both panels, with zero answer changes and maximum Held answer-logit drift9.61e-5. Local answers remain unchanged. This is a per-call float diagnostic, not an integer artifact or learned STE. The [integer gate/retained-state replay](geometric-attention-integer-latch-2026-10-01.md) preserves both Held seeds at128/128 answers and source majorities on both panels, with zero gate-action disagreements across allfour models. It uses four-bit gate coefficients and16-bit captured gained content; surrounding computation remainsfloat. Held panel input exponents areconstant-13; separate component tests cover unequal scales. The [paired integer q/k replay](geometric-attention-integer-qk-2026-10-01.md) now preserves both Held seeds at 128/128 answers and head-zero source majorities on both panels, with no Held prediction/majority changes. It combines four-bit current-role/identity map contributions exactly before one Q16 rounding; lowest Held source mass is 0.968609. Read-output ablation drops Held answers to 4/6 and 8/14. Local controls show retained numerical gains/losses. Trunk, values, Lorentz scorer and output stay float. Owner correction: numerical lowering is not the immediate architecture task. The [direct geometric reader](geometric-address-reader-2026-10-01.md) now implements separated signed-root relative content/context addressing in that same graph, with four q/k maps absent and joint language credit. Its fixed first fit and causal interventions are recorded there. The [ordered geometric span producer](geometric-span-actions-2026-10-01.md) now adds shared static token actions, ordered finite products and predicted OPEN/APPEND/COMMIT/HOLD capture in the same reader. Its fixed two-seed result and causal interventions are recorded there. The [compiled span-action replay](geometric-span-native-2026-10-01.md) now preserves both saved producers exactly through a source-bound token dictionary and integer register: all512 answer/source rows, held codes and full-prefix logits agree, with zero training. The controller, reconstruction and surrounding reader remain float. The [compiled geometric potential scorer](geometric-potential-native-2026-10-01.md) now retains all512 saved-model answer decisions, both heads’ source-majority decisions and top-ranked occurrence/NoRead choices using source-bound Q24 tables and integer additions. All5,051,904 head-specific score comparisons satisfy the declared bound; rounding changes some float logits without changing these decisions. Input classification, contextual/event producers, age/NoRead/softmax and values/output remain float. The [native geometric context/event study](geometric-event-native-2026-10-01.md) now learns synchronous signed-H4 group transitions and direct integer HOLD/OPEN/APPEND/COMMIT control in that reader. Both fixed seeds retain all512 answer decisions and both heads’ source-majority flags; all28976 actual events are correct and all34688 padded native/float context/action/event traces agree. Reset produces role-specific capture and downstream answer/source errors. One parent capture error is corrected without changing its answer; previous answer failures remain. This is authored supervised capture, not natural-language or complete integer serving. Next: replace floating current-context/radius/presence production through learned native geometric operators, retain typed scope/candidate distinctions, and preserve donor-informed offline compilation through token, contextual and output interfaces. The saved-controller donor transfer is a scoped next compiler study, not an embeddings-only reasoning claim. Native current-context/radial/presence production, typed role/scope spans, bounded access and values/output remain explicit subsequent obligations. Do not resume runtime q/k maps or discard useful compiled span selection because answer realization is incomplete. Correct source selection and answer realization remain distinct obligations; do not discard useful span selection because the output path is incomplete. Preserve offline donor-informed learning into the same geometric interface; static token embeddings alone do not qualify reasoning transfer. The unmerged Lorentz component is preserved, with model evaluation NOT_RUN. Learned span/commit interfaces and bounded candidate access remain open. Do not restart the prior selector/metric sweep. #1512 remains open for its wider language and serving acceptance.
+
+## Active execution contract — grounded conversation and durable memory, October 1
+
+The owner adopted the [canonical plan](project-track.md) under
+[D19](DECISIONS.md#d19--grounded-conversation-and-durable-memory-first).
+This supersedes the old scheduling and roster below, preserving all historical
+results. The first product priority is grounded conversation and durable memory;
+full alpha retains coding/reasoning on the same native geometric model.
+
+Source baseline for this adoption: `b06b46a35142c219a3946209c3ffa03db8499e22`.
+The [source/artifact evidence review](grounded-memory-evidence-2026-10-01.md)
+records E1/emit-1/E3/v11 and their actual interfaces. Live #1552 is ahead of the
+older D18 entries: the memo, emission fit at 384 positions and teacher-paraphrase
+classifier fits are already executed. No D11 export of that emitter is claimed.
+E3 v11 still fails its original gate. Treat its held-out phrasing separately
+from value exposure; do not infer a controlled model-size effect across lineages.
+
+**Next integrated deliverable:** saved learned relation/act/span compiler →
+existing exact versioned store → real emitter, using predicted inputs and the
+model's actual generated history. Minimal integration/reload comes before a
+large qualification campaign. Add scope/temporal/conflict coverage as the same
+interface grows. Reuse exact identity/store components; do not spawn a new
+engine. A development integration can diagnose an imperfect compiler without
+promoting it or rewriting E3's failed gate.
+
+**Concurrent work:** the owner authorized Claude's E4 end-to-end diagnostic
+(v12 on #1552, after v11) while this roadmap was drafted, then v13 teacher
+data plus classifier work. Every figure below is a development-cell diagnostic
+(`m-world evaluate world=v2 conversations=300 seed=9101`, `emit-1`, one draw),
+not a gate claim:
+
+| Card | Result |
+|---|---|
+| v13 | Second SmolLM2 batch: 403 kept, 23 screened (`b9a5f451…`); raw union 776 wordings |
+| v14 | E3 with both batches: the gated R1 trunk head stays below its gate (relation 1,754/2,098 = 0.836, act 0.766). Dense combined head 0.949, word table 0.900 on relations |
+| v12 → v15 → v16 | E4 open relation 25/52 → 30/52 (fixed table scale, both batches) → **36/52** (`route_acts=any`). MQAR 106/109 throughout. Oracle recall line 48/52; best trained read 27/52 |
+| v17 | R1 trunk features appended to the table: 33/52, a recorded negative variant |
+
+v16's 16 open-relation misses are 14 lookups and 2 emissions. The lookups are
+earlier statements in development wording, mostly `user_name` and `hometown`,
+named as another relation. Closed values (2/17) are dropped by the extraction
+rule, so this is an interface defect, not evidence against exact memory. No
+further route variant runs without new causal evidence. v14–v16 trained on the
+raw union, which carries audited label errors (below), so they measure that raw
+recipe, not validated supervision. Claude owns its
+compiler/emitter source; DeepSeek owns its current data/read task. Codex delivered
+plan/issue adoption in #1564 and checkpoint persistence in #1566, and now owns
+the complementary #962 session consumer. No model slot or another lab's source
+is claimed by this document.
+
+**Qualification and cost:** D11/D5, existing §8 and D17v2 remain unchanged.
+A1 training stays stopped; Track B stays parked. Compile/test/check receipts,
+model behavior and queue acknowledgements are different evidence. No useful
+chat, generalized reasoning, geometric advantage or energy improvement is
+claimed by this plan. See [admissibility](mechanism-admissibility-2026-10.md).
+
+**Checkpoint boundary (#1565):** `stack_checkpoint` now has a version-2
+inference format for the declared icosian transport snap, model parameters
+and optional exact `StackStore`. Unsnapped saves retain the original version-1
+fields. The loader binds `transport.json` by digest, validates its root set
+through the model loader, and rejects missing or inconsistent declarations.
+Unpersisted served/QAT state remains refused on save and load. Focused tests
+cover loaded logits, short greedy continuation and store updates; executed
+exact-head validation and delivery receipts belong to
+[#1565](https://github.com/UOR-Foundation/uor-r4/issues/1565).
+This library persistence interface is consumed by the grounded-session
+envelope and CLI below. A trained R1/S4 transport-snap artifact witness is
+**NOT_RUN**. The checkpoint itself does not include the learned compiler,
+transcript or live session cache; those belong to the separate session
+envelope. Checkpoint tests alone do not establish generated-history language
+behavior or D11 export.
+
+**Grounded session boundary (#962):** `stack_grounded_session` composes the
+checkpoint loader, a caller-supplied artifact-bound `TurnCompiler`, existing
+`StackStore` and the actual pointer-aware `greedy_reply` emitter. The compiler
+predicts Assert, Correct, current query or unresolved, with UTF-8 byte spans
+into unchanged user source. The session validates the span, stages the store
+operation and commits memory/history only after generation succeeds. Its
+separate sealed envelope preserves compiler bytes, tokenizer/protocol,
+model/store, original turns and actual generated IDs; a resume requires the
+same compiler identity and bytes. This is a floating-point development
+consumer, not a D11 export or a learned-compiler implementation.
+
+The explicit context policy is either strict full history or the largest
+fitting suffix of whole completed turns. Removing old turns from the emitter
+input resets its recomputed state and removes pointer candidates; it does not
+remove the durable log/store or claim full-history equivalence. Turn, source,
+history-token and store-record limits are separate. The existing textual recall
+channel cannot distinguish a value `none` from absence and normalizes carriage
+returns. Such values remain storable, but retrieval is recorded as found and
+unsupported by that channel; conflicts and eviction are also not absence.
+Only a proven absent read supplies `Memory: none.`. Unsupported handling here
+does not establish that the emitter reliably abstains.
+
+**Saved compiler and first session witness (#1552 cards v18–v19):**
+`relation_compiler::SavedCompiler` implements `TurnCompiler`. It holds the word
+table and a learned value-span head, which sees words only through a frame
+vocabulary and so learns no value identity. Both are saved as one canonical
+artifact that binds the parameters (by f64 bits), labels, features, tokenizer
+and training provenance. Under `act_rule=span`, a decoded value makes a turn a
+statement and its absence makes it a query.
+
+`m-world session` runs 300 development conversations through the actual
+`GroundedSession` with `emit-1` and its own generated history. With training
+values only and development phrasings × development values, the measured
+default arm gives:
+- open relation 34/52;
+- closed relation 13/17;
+- open abstention 7/8.
+
+The controls are NoRead (8/52, 8/17) and write-disabled (1/52, 3/17). Five
+save/load continuations equal the uninterrupted runs. The reference-history E4
+route gave 36/52 and 2/17.
+
+Of the remaining 18 open misses, 14 are relation naming of development
+wordings, 3 are conflicts and 1 is an emission miss. MQAR has no channel in the
+one-entity session. This is one draw on one development cell, with raw
+paraphrase labels, not a gate or capability claim.
+
+The ordinary-text CLI is `grounded-session`, with `init`, `turn`, `chat` and
+`show`. Each command loads a sealed envelope in a fresh process, with the
+compiler taken from the envelope's own bytes, and saves a new envelope. Three
+development conversations replayed this way, one process per turn, match the
+in-process run on 14/14 turns: reply, action and recall. Full #962
+temporal/scope/conflict and capability acceptance stays open.
+
+**Temporal session interface (#962):** an additive `Query { relation, view }`
+action exposes the store's Current, PreviousAssertion, PreviousDistinctValue
+and Initial views. `QueryCurrent` and current-only schema-1 output remain
+compatible. Transcripts using the new action save with schema 2; the loader
+rejects that action inside a schema-1 envelope. Receipt validation checks the
+selected version and original-commit residency, so a later eviction neither
+invalidates an earlier found receipt nor allows a previous-distinct read to
+cross its eviction barrier. Missing history and eviction remain unsupported
+recall states distinct from absence. The saved compiler still predicts only
+current queries: this interface does not establish learned temporal intent or
+complete temporal answers. Scope/conflict/reset/forget and capability
+acceptance remain open; executed checks and delivery are recorded on #962.
+
+**Learned temporal producer (#962):** `TemporalCompiler` fits a five-class
+query-view head on supplied text/intent rows using source word identities and
+ordered adjacent-word pairs. It reuses the existing sparse cross-entropy
+learner and embeds the selected `SavedCompiler` bytes unchanged. Only a base
+predicted query is decorated; statements, corrections and unresolved base
+actions pass through unchanged. Current predictions retain `QueryCurrent`;
+historical predictions use the typed view, and a learned unresolved prediction
+requests no memory. Labels refer to recorded history, not presumed real-world
+chronology. Ordered features preserve distinctions an unordered word set loses;
+this is an interim lexical interface, not geometric-advantage evidence.
+
+The `temporal-compiler fit|score` CLI saves the complete composite artifact and
+reports isolated view selection separately from composite action accuracy,
+including base relation/act failures in the denominator. Training rows, group
+identities, feature/label order, parameters, fit settings and original base bytes
+are bound in the artifact. `grounded-session` and `m-world session` explicitly
+load legacy or composite schemas, without malformed-artifact fallback. M-world's
+existing generator still supplies current-only gold intents; it is not a temporal
+qualification set. Ordinary-text consumers do not receive gold query views.
+Construction checks and delivery are recorded on #962. A selected trained-emitter
+temporal complete-answer witness is **NOT_RUN** during the SSD pause. Unsupported
+phrasing, learned scope/conflict/forget and full capability acceptance remain open.
+
+**Conversation lifecycle (#962):** `GroundedSession::start_conversation` and
+`grounded-session restart` start an empty conversation over the unchanged exact
+store. Both prior turns and generated-token context are cleared, and the new
+conversation begins at the current store commit. The caller can retain the
+current scope/entity or explicitly supply another address. Invalid identities
+are refused before mutation. Model, compiler, tokenizer, store versions and
+admission limits remain bound; store-record limits continue across restarts.
+New turns count from the fresh conversation while record IDs and commits remain
+global. The existing sealed envelope format already represents this baseline.
+
+The lifecycle is explicit caller-controlled addressing, not authentication,
+learned entity resolution or forgetting. Old envelopes and store value bytes,
+including eviction tombstones, remain available. This operation does not claim
+an erasure guarantee or a parent-to-child lifecycle audit trail. Focused
+construction checks use an initialized geometric emitter and saved learned
+compiler; they do not qualify unseen conversation or the selected trained-emitter
+scope/reset witness. Executed validation and delivery belong to #962.
+
+<!-- grounded-script-boundary -->
+**Typed conversation measurement (#962):** `grounded-session evaluate` runs
+versioned scripts through the same saved compiler, exact store and emitter.
+Scripts contain user text, caller scope/restart events and explicit controls.
+Expected act/relation/span/view, record identity/status and frozen complete
+answers are scoring annotations. They are never supplied to the compiler,
+store writes or emitter. Every case declares its baseline store commit and
+record count; a mismatch is an execution/precondition failure, not a model miss.
+
+The separate instrument preserves MWorld2 and its existing results. It reports
+compiler matching, memory matching and frozen complete-answer membership,
+with errors in the declared denominators and unsupported status cohorts visible.
+It preserves exact replies, generated IDs and emitter input identity. An unlisted
+legitimate paraphrase can fail membership, so rejected text remains available
+for separate review; that score alone is not a semantic or mechanism-family
+verdict. Frozen answer forms are authored before evaluation from recorded intent,
+without output-derived alternatives or location-template substitution.
+
+Clean durable-memory probes explicitly restart first: NoRead suppresses the
+current recall injection while its store read still occurs. Continuous-history
+conditions remain separate. Selected-update suppression retains the original
+task answer score and separately reports pre-authored intervention-consistent
+forms. Global record IDs and conversation-local source indexes remain distinct.
+Optional reload cuts replay the same script and compare full successful outcomes,
+history and store; matching failed turns cannot qualify continuity.
+
+The report binds input bytes, baseline/checkpoint/parameters, compiler,
+tokenizer, limits and executable/source identity. Training exposure is explicitly
+unverified unless checked against the actual selected artifacts. Internal
+construction uses authored rows and an initialized emitter; selected-trained
+temporal/scope complete-answer measurement remains **NOT_RUN** during the SSD
+pause. Executed checks, review and protected delivery are recorded on #962.
+<!-- /grounded-script-boundary -->
+
+**Combined relation head: a recorded negative (#1552 card v20).** Dense heads
+over the R1 trunk and words name relations better than the table (0.922
+against 0.900 on development phrasings × development values). But the combined
+act head almost never chooses an update (Correct exact 41/313, against 272/313
+for the table). Corrections then become bare asserts, which the store marks as
+conflicts. In the session the default arm falls to 26/52 open relation,
+against 34/52 for v19, so the v19 table compiler stays integrated. The source
+stays unmerged on `codex/compiler-combined`. The run stopped at its reload
+step on an SSD read fault, so v20 reload continuity was not measured.
+
+**Reviewed paraphrase labels (#1573).** Each of the 776 raw teacher
+paraphrases was judged against a rubric frozen before review. The outcome was
+372 keep, 22 relabel, 260 drop and 122 exact duplicates, giving a 394-row
+derivative over all ten relations; `hometown/update` is empty. The
+`paraphrase-review` tool checks every decision against the raw text and
+recomputes duplicates. The paired fit (reviewed against raw, everything else
+fixed) is the next causal test of label quality. It waits for the storage
+repair below.
+
+**Storage incident, 1 October (#820).** A region of at most 1 MiB in one band of
+`UOR-Workspace.sparsebundle` on the exFAT X10 Pro returns I/O errors. Four
+regenerable Claude roots written about 09:10–09:30 UTC are unreadable:
+`compiler-save-1/2` and `session-1/2`. Their numbers above were recorded on
+#1552 before the fault. By owner ruling, all labs pause SSD writes until the
+owner has backed up unique material and run First Aid.
+
+**Learning-data diagnosis:** a deterministic 40-row stratified audit of the
+373 accepted `paraphrases-1` rows found actual inherited-label errors, including
+user/addressee reversal and hometown/current-home confusion. The
+[artifact-bound audit](https://github.com/UOR-Foundation/uor-r4/issues/1552#issuecomment-5926424267)
+records all sampled pairs, selection method and verification scope. This
+establishes bad labels in that source, not their population rate or their
+causal contribution to E3. Preserve raw data/results and review a traceable
+derivative before treating a union as reliable supervision. DeepSeek's separate
+top-p normalization repair (#1567) does not repair these semantic labels and
+does not implicate Claude's top-k sampler.
+
+## Historical current-state entries
+
+Dated next tasks and lab assignments below are historical unless re-entered
+by the active contract above. Their measurements and original verdicts stand.
+
+Updated October 1, 2026. **Pre-alpha; no useful general-language, coding,
 frontier, geometric-advantage or full-path energy qualification.**
 
+## D18 outcome D — 1 October (owner-confirmed)
+
+The A1 arms met D18 §2's pre-registered kill on day 1, and the owner accepted outcome D at about 01:50 UTC on 1 October. Details and roots: [#1552](https://github.com/UOR-Foundation/uor-r4/issues/1552) and [#1512](https://github.com/UOR-Foundation/uor-r4/issues/1512).
+
+**A1 runs (measured).**
+- Setup: development cell (dev phrasing × dev value), `m-world evaluate world=v2`, 300 conversations, seed 9101; one training seed per arm; about 2.1M parameters; `corpus-v2.1` (chat-v0 + M-world v2.1); the #1017 tokenizer.
+- Every training run used binary `47850579…`; every evaluation used m-world `7edd6cc8…`.
+- Roots: `uor-r4-lab/opencode-a1-run-20260930/` (DeepSeek) and `uor-r4-lab/claude-a1-d18/` (Claude).
+
+| Arm | Steps | MQAR all | d16 | Open relation |
+|---|---|---:|---:|---:|
+| P: Lorentz read, no pointer | 2,590 of 3,000 (wall) | 0.009 | 0 | 0/52 |
+| F7: Lorentz with a trained flock (w16, k7) | 2,590 | 0.009 | 0 | 0/52 |
+| T: transformer control, no pointer | 1,908 of 2,590 (wall) | 0.009 | 0 | 0/52 |
+| **T at 2× steps** | **5,180** | 0.009 | **0** | 0/52 |
+| Lorentz read, dot pointer, seed 1 | 2,566 of 3,000 (wall) | 0.44 | 0.41 | 20/52 |
+| Lorentz read, dot pointer, seed 1 | 2,590 | 0.34 | 0.27 | 20/52 |
+| Lorentz read, dot pointer, seed 2 | 2,590 | 0.28 | 0.38 | 12/52 |
+| Dot read, dot pointer, seed 1 | 2,590 | 0.36 | 0.38 | 15/52 |
+| Dot read, dot pointer, seed 2 | 2,590 | 0.34 | 0.22 | 27/52 |
+| *R-recency (untrained instrument rule)* | — | 0.36 | 0.29 | 0.52 rate |
+
+**What the runs show:**
+- Without a pointer head, no read retrieves, the transformer control at 2× steps included.
+- Pointer arms fall as about 1/N (N = 2/4/8: 0.34–0.64 / 0.17–0.25 / 0.08–0.17) and do not beat the untrained recency rule. They copy the latest stated value; they do not bind the query to its key.
+- Copy is 0/33 in every arm, for a structural reason. Under the #1017 tokenizer (`add_prefix_space: false`), a reply-initial word's first token (`m`=79) never occurs in the user's text (`Ġm`=283), so a pointer cannot copy it.
+- Lorentz vs Dot read parity (D17 v2) is **undecided at two seeds**: MQAR differences +0.018 and +0.055, open relation −0.096 and +0.288. The third seed is new training and does not run under outcome D.
+- D18's "P+ptr" was specified as a Lorentz-scored pointer. Every pointer arm run used the default dot-scored pointer, so the Lorentz pointer did not run.
+
+**§8 token count (owner-run, `s8-panel-count` from #1554).**
+- The sealed panel `220cbdbe…` (revision 3) needs up to **285** positions with empty replies, and **317** with a 32-token reply budget, so `fits_context` is false at 256.
+- The owner kept D18 and re-entered A2 as source work.
+- #1557 lets `dialogue-train` grow a model's context (`StackModel::extend_context` keeps every learned age; scores within the old context are bit-identical). No model is trained at 384.
+
+**Delivered 30 September – 1 October**, each verified as the exact merge of its reviewed head:
+- #1553 (D18 docs);
+- #1554 (the §8 count tool);
+- #1555 (the #1546 legacy tests ignored);
+- #1556 (`TruncatedPrefix` and `dialogue-census`). FullPrefix recounts the chat-v0 train split exactly: 14,826 eligible responses, 1,048,098 response tokens. TruncatedPrefix admits 50,592 responses and 6,257,012 tokens;
+- #1557 (context extension).
+
+**Next action.** The design memo for retrieval by an exact conversation log plus a prime sieve (Claude lab, started 1 October), with DeepSeek's D5 memo alongside. Under outcome D there is no new A1 training. The 7M fit (conditional on outcome A) does not run, and the TruncatedPrefix adoption smoke has no consumer this fortnight.
+
+## Active execution contract — D18, 1–14 October
+
+*Outcome D was reached on 1 October (above). This section is kept as the contract's record.*
+
+The owner approved [D18](DECISIONS.md#d18--one-retrieval-question-for-114-october-track-b-cost-and-memory-port-work-parked-with-re-entry-conditions) on 30 September. It follows the [direction review](direction-review-2026-09-30.md) and is tracked on [#1552](https://github.com/UOR-Foundation/uor-r4/issues/1552).
+
+**The question.** For two weeks both labs answer one question: can the native geometric stack copy a value it was just told, and does that survive D11 serving? The day-14 memo names outcome A (served retrieval, then §8), B (scale or phrasing), C (a read defect) or D (no learned retrieval, including the transformer control).
+
+**Labs.** Only the Claude lab and the OpenCode/DeepSeek lab remain; the owner removed Codex, Kimi and Anti-Gravity.
+- Claude: the A1 instrument freeze and arms (#1541's source is merged in #1548 as `302e0ad7`).
+- DeepSeek: R1-X, the `TruncatedPrefix` data unlock, a one-day D5 design memo, and the D11 pointer port if A1's pointer wins.
+
+**Rules.** A PR merges on a recorded review at its exact head (self-review allowed) plus passing compile/tests executed at that head (#820). PR checks run on GitHub's free runners.
+
+**State of `main` on 30 September.**
+- Every workspace target compiles ([#1547](https://github.com/UOR-Foundation/uor-r4/pull/1547) and [#1538](https://github.com/UOR-Foundation/uor-r4/pull/1538) repaired a main that CI had not been compiling).
+- Known test failures: 3 `joint_campaign` tests ("checkpoint/evaluator binding differs") and the workbench `compiled_authority_has_the_frozen_binding_shape` test. The four legacy low-bit learner tests of #1546 are ignored under D18 §9; the Adam guard is not restored.
+- **Merged on 30 September, each verified as the exact merge of its reviewed head:** #1519, #1526, #1527, #1528, #1532, #1534, #1538, #1539, #1540, #1543, #1547, #1548 and #1549.
+- **Parked:** Track B draft [#1518](https://github.com/UOR-Foundation/uor-r4/pull/1518). Its 1e-4 parity gate failed and that record is immutable.
+
+**No new capability is claimed.** The model cannot chat, in-context retrieval is untrained, and no runtime-cost or energy win is measured (see the direction review).
+
 ## Active execution contract — durable labs, September 29
+
+*Superseded for 1–14 October by the D18 contract above; kept as the September 29 record.*
 
 The owner's current continuation is [the durable-lab plan](../labs/plan-2026-09-29.md)
 under [D14](DECISIONS.md#d14--durable-autonomous-labs-and-correctable-governance).

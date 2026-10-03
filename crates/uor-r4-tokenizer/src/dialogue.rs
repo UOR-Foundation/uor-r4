@@ -13,6 +13,13 @@ use std::fmt;
 /// Documents ending in a non-assistant turn receive an unmasked terminal EOS.
 /// Assistant content and its EOS alone receive response-mask value 1.
 pub const SCHEMA: &str = "uor-r4.literal-role-dialogue/1";
+/// Version 2 of the literal-role format: each role marker ends at its colon
+/// (`User:`, `Assistant:`) and the message content carries the separating
+/// space, so a message's first word is encoded as it is mid-sentence (with
+/// its leading-space token) and a reply can copy a word from its context. A
+/// reply's decoded text drops that one space ([`DialogueProtocol::reply_text`]).
+/// Everything else (separators, BOS/EOS, masks) is version 1's.
+pub const SCHEMA_V2: &str = "uor-r4.literal-role-dialogue/2";
 const BOS: &str = "<|bos|>";
 const EOS: &str = "<|eos|>";
 const UNK: &str = "<|unk|>";
@@ -97,8 +104,29 @@ fn special(tokenizer: &ByteBpeTokenizer, surface: &'static str) -> Result<u32> {
 
 impl DialogueProtocol {
     pub fn literal_roles_v1(tokenizer: &ByteBpeTokenizer) -> Result<Self> {
+        Self::literal_roles(tokenizer, SCHEMA)
+    }
+
+    /// The version 2 format ([`SCHEMA_V2`]).
+    pub fn literal_roles_v2(tokenizer: &ByteBpeTokenizer) -> Result<Self> {
+        Self::literal_roles(tokenizer, SCHEMA_V2)
+    }
+
+    /// Version 1 or 2 of the literal-role format by number; other versions
+    /// are refused.
+    pub fn literal_roles_version(tokenizer: &ByteBpeTokenizer, version: u8) -> Result<Self> {
+        match version {
+            1 => Self::literal_roles_v1(tokenizer),
+            2 => Self::literal_roles_v2(tokenizer),
+            other => Err(DialogueError::UnsupportedSchema(format!(
+                "literal-role dialogue version {other}"
+            ))),
+        }
+    }
+
+    fn literal_roles(tokenizer: &ByteBpeTokenizer, schema: &str) -> Result<Self> {
         Ok(Self {
-            schema: SCHEMA.to_owned(),
+            schema: schema.to_owned(),
             tokenizer_cid: tokenizer.address(),
             bos_id: special(tokenizer, BOS)?,
             eos_id: special(tokenizer, EOS)?,
@@ -114,6 +142,32 @@ impl DialogueProtocol {
         Ok(protocol)
     }
 
+    /// Whether message content carries the space after its role marker
+    /// ([`SCHEMA_V2`]).
+    pub fn spaced_content(&self) -> bool {
+        self.schema == SCHEMA_V2
+    }
+
+    /// The literal marker that opens an assistant turn.
+    pub fn assistant_marker(&self) -> &'static str {
+        if self.spaced_content() {
+            "Assistant:"
+        } else {
+            "Assistant: "
+        }
+    }
+
+    /// A reply's text from its decoded tokens: under [`SCHEMA_V2`] the one
+    /// space the content carries after the marker is dropped; version 1
+    /// text is returned as decoded.
+    pub fn reply_text<'s>(&self, decoded: &'s str) -> &'s str {
+        if self.spaced_content() {
+            decoded.strip_prefix(' ').unwrap_or(decoded)
+        } else {
+            decoded
+        }
+    }
+
     /// Stable digest of the schema, tokenizer CID and resolved special IDs.
     pub fn identity(&self) -> Result<String> {
         let bytes = serde_json::to_vec(self).map_err(DialogueError::Json)?;
@@ -121,7 +175,7 @@ impl DialogueProtocol {
     }
 
     pub fn bind<'a>(&self, tokenizer: &'a ByteBpeTokenizer) -> Result<DialogueEncoder<'a>> {
-        if self.schema != SCHEMA {
+        if self.schema != SCHEMA && self.schema != SCHEMA_V2 {
             return Err(DialogueError::UnsupportedSchema(self.schema.clone()));
         }
         let actual = tokenizer.address();
@@ -205,18 +259,31 @@ impl DialogueEncoder<'_> {
         self.encode(messages, Ending::OpenHistory, true, false)
     }
 
+    /// Append messages and the next assistant marker to already closed history,
+    /// without re-encoding its token IDs. `has_history` adds a separator before
+    /// the first emitted message. No BOS or document-terminal EOS is inserted;
+    /// assistant messages in this suffix still receive their own closing EOS.
+    /// Separators, markers and normalized content retain their segment boundaries
+    /// and response masks. Empty/all-skipped input emits only the assistant
+    /// marker; callers must check `emitted_turns` when a new turn is required.
+    pub fn encode_assistant_suffix(
+        &self,
+        messages: &[Message<'_>],
+        has_history: bool,
+    ) -> EncodedDialogue {
+        self.encode(messages, Ending::AssistantPrefix, false, has_history)
+    }
+
     /// Append a user message and next assistant marker after already closed
     /// history. No BOS, assistant closure or document-terminal EOS is inserted.
     /// Each separator, marker and normalized content is encoded independently.
     /// The caller must reject emitted_turns == 0 for a required user request.
     pub fn encode_user_prefix(&self, content: &str, has_history: bool) -> EncodedDialogue {
-        self.encode(
+        self.encode_assistant_suffix(
             &[Message {
                 role: "user",
                 content,
             }],
-            Ending::AssistantPrefix,
-            false,
             has_history,
         )
     }
@@ -264,10 +331,14 @@ impl DialogueEncoder<'_> {
                 out.skipped_empty += 1;
                 continue;
             }
-            let (marker, assistant) = match message.role {
-                "system" => ("System: ", false),
-                "user" => ("User: ", false),
-                "assistant" => ("Assistant: ", true),
+            let spaced = self.protocol.spaced_content();
+            let (marker, assistant) = match (message.role, spaced) {
+                ("system", false) => ("System: ", false),
+                ("user", false) => ("User: ", false),
+                ("assistant", false) => ("Assistant: ", true),
+                ("system", true) => ("System:", false),
+                ("user", true) => ("User:", false),
+                ("assistant", true) => ("Assistant:", true),
                 _ => {
                     out.skipped_unknown_role += 1;
                     continue;
@@ -277,7 +348,11 @@ impl DialogueEncoder<'_> {
                 self.append(&mut out, "\n", 0);
             }
             self.append(&mut out, marker, 0);
-            self.append(&mut out, content, u8::from(assistant));
+            if spaced {
+                self.append(&mut out, &format!(" {content}"), u8::from(assistant));
+            } else {
+                self.append(&mut out, content, u8::from(assistant));
+            }
             if assistant {
                 out.tokens.push(self.protocol.eos_id);
                 out.response_mask.push(1);
@@ -289,7 +364,7 @@ impl DialogueEncoder<'_> {
             if out.emitted_turns != 0 {
                 self.append(&mut out, "\n", 0);
             }
-            self.append(&mut out, "Assistant: ", 0);
+            self.append(&mut out, self.protocol.assistant_marker(), 0);
         } else if matches!(ending, Ending::Document) && out.emitted_turns != 0 && !last_assistant {
             out.tokens.push(self.protocol.eos_id);
             out.response_mask.push(0);
@@ -335,6 +410,93 @@ mod tests {
 
     fn bytes(text: &str) -> Vec<u32> {
         text.bytes().map(|b| u32::from(b) + 3).collect()
+    }
+
+    #[test]
+    fn version_two_puts_the_space_in_the_content_so_a_reply_word_is_copyable() -> Result<()> {
+        let tokenizer = fixture(true, true);
+        let messages = [
+            Message {
+                role: "user",
+                content: "Hi",
+            },
+            Message {
+                role: "assistant",
+                content: "Hi there",
+            },
+        ];
+        // Version 1: the marker owns the space, so a reply's first word
+        // starts with the bare byte and never with the merged " H" (259).
+        let v1 = DialogueProtocol::literal_roles_v1(&tokenizer)?.bind(&tokenizer)?;
+        let one = v1.encode_document(&messages);
+        let mut expected = vec![0];
+        expected.extend(bytes(
+            "User: Hi
+Assistant: Hi there",
+        ));
+        expected.push(1);
+        assert_eq!(one.tokens, expected);
+        // Version 2: the content carries the space, so the user's word and
+        // the reply's first word are the same token, as mid-sentence.
+        let protocol = DialogueProtocol::literal_roles_v2(&tokenizer)?;
+        let v2 = protocol.bind(&tokenizer)?;
+        let two = v2.encode_document(&messages);
+        let mut expected = vec![0];
+        expected.extend(bytes("User:"));
+        expected.push(259);
+        expected.extend(bytes(
+            "i
+Assistant:",
+        ));
+        expected.push(259);
+        expected.extend(bytes("i there"));
+        expected.push(1);
+        assert_eq!(two.tokens, expected);
+        // The reply (its leading-space token included) and its EOS are the
+        // response; markers and the user turn are not.
+        let reply_start = 1
+            + bytes("User:").len()
+            + 1
+            + bytes(
+                "i
+Assistant:",
+            )
+            .len();
+        for (i, &mask) in two.response_mask.iter().enumerate() {
+            assert_eq!(mask, u8::from(i >= reply_start), "position {i}");
+        }
+        // The next-reply prompt ends at the colon, and the reply's text drops
+        // the one space its tokens carry.
+        let prompt = v2.encode_assistant_prefix(&messages[..1]);
+        assert!(prompt.tokens.ends_with(&bytes(
+            "
+Assistant:"
+        )));
+        assert_eq!(protocol.assistant_marker(), "Assistant:");
+        assert_eq!(protocol.reply_text(" Hi there"), "Hi there");
+        assert_eq!(protocol.reply_text("Hi"), "Hi");
+        let first = DialogueProtocol::literal_roles_v1(&tokenizer)?;
+        assert_eq!(first.reply_text(" Hi"), " Hi");
+        assert_eq!(first.assistant_marker(), "Assistant: ");
+        // Incremental encoding keeps the same stream.
+        let open = v2.encode_open_history(&messages);
+        let user = v2.encode_user_prefix("Hi", true);
+        let mut combined = open.tokens;
+        combined.extend(user.tokens);
+        let mut whole = messages.to_vec();
+        whole.push(messages[0]);
+        assert_eq!(combined, v2.encode_assistant_prefix(&whole).tokens);
+        // The schema is part of the identity, binds, round-trips, and only
+        // versions 1 and 2 exist.
+        assert_ne!(protocol.identity()?, first.identity()?);
+        let json = serde_json::to_vec(&protocol).map_err(DialogueError::Json)?;
+        assert_eq!(DialogueProtocol::from_json(&json, &tokenizer)?, protocol);
+        assert_eq!(
+            DialogueProtocol::literal_roles_version(&tokenizer, 2)?,
+            protocol
+        );
+        assert!(DialogueProtocol::literal_roles_version(&tokenizer, 3).is_err());
+        Ok(())
     }
 
     #[test]
@@ -394,6 +556,154 @@ mod tests {
             assert!(!open.tokens.contains(&1));
         }
         assert_eq!(encoder.encode_user_prefix("\r\n\t", true).emitted_turns, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn assistant_suffix_keeps_user_and_memory_segments_without_extra_delimiters() -> Result<()> {
+        let tokenizer = fixture(true, true);
+        let encoder = DialogueProtocol::literal_roles_v1(&tokenizer)?.bind(&tokenizer)?;
+        let messages = [
+            Message {
+                role: "user",
+                content: " \r\nHi\r世界 \t",
+            },
+            Message {
+                role: "system",
+                content: " Hello ",
+            },
+        ];
+        for has_history in [false, true] {
+            let suffix = encoder.encode_assistant_suffix(&messages, has_history);
+            let text = if has_history {
+                "\nUser: Hi\n世界\nSystem: Hello\nAssistant: "
+            } else {
+                "User: Hi\n世界\nSystem: Hello\nAssistant: "
+            };
+            assert_eq!(suffix.tokens, bytes(text));
+            assert_ne!(
+                suffix.tokens,
+                tokenizer.encode(text),
+                "BPE boundaries matter"
+            );
+            assert_eq!(suffix.response_mask, vec![0; suffix.tokens.len()]);
+            assert_eq!(suffix.emitted_turns, 2);
+            assert_eq!(suffix.special_token_occurrences, 0);
+            assert!(!suffix.tokens.contains(&0), "no inserted BOS");
+            assert!(!suffix.tokens.contains(&1), "no inserted EOS");
+            assert_eq!(
+                encoder.encode_assistant_suffix(&messages[..1], has_history),
+                encoder.encode_user_prefix(messages[0].content, has_history)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn assistant_suffix_extends_closed_history_like_a_complete_prefix() -> Result<()> {
+        let tokenizer = fixture(true, true);
+        let encoder = DialogueProtocol::literal_roles_v1(&tokenizer)?.bind(&tokenizer)?;
+        let history = [
+            Message {
+                role: "user",
+                content: "old",
+            },
+            Message {
+                role: "assistant",
+                content: "Hello",
+            },
+        ];
+        let messages = [
+            Message {
+                role: "user",
+                content: "Hi",
+            },
+            Message {
+                role: "system",
+                content: "Memory: old",
+            },
+        ];
+        for retained in [&history[..0], &history[..]] {
+            let open = encoder.encode_open_history(retained);
+            let suffix = encoder.encode_assistant_suffix(&messages, open.emitted_turns != 0);
+            let whole = encoder.encode_assistant_prefix(&[retained, &messages].concat());
+            assert_eq!([open.tokens, suffix.tokens].concat(), whole.tokens);
+            assert_eq!(
+                [open.response_mask, suffix.response_mask].concat(),
+                whole.response_mask
+            );
+            assert_eq!(
+                open.emitted_turns + suffix.emitted_turns,
+                whole.emitted_turns
+            );
+            assert_eq!(whole.tokens.iter().filter(|&&id| id == 0).count(), 1);
+            assert_eq!(
+                whole.tokens.iter().filter(|&&id| id == 1).count(),
+                usize::from(!retained.is_empty()),
+                "the completed history's EOS is preserved exactly once"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn assistant_suffix_preserves_skips_response_masks_and_literal_specials() -> Result<()> {
+        let tokenizer = fixture(false, true);
+        let encoder = DialogueProtocol::literal_roles_v1(&tokenizer)?.bind(&tokenizer)?;
+        let skipped = [
+            Message {
+                role: "unknown",
+                content: " \r\n ",
+            },
+            Message {
+                role: "tool",
+                content: "ignored",
+            },
+        ];
+        let messages = [
+            skipped[0],
+            skipped[1],
+            Message {
+                role: "system",
+                content: "<|bos|>",
+            },
+            Message {
+                role: "assistant",
+                content: "A<|unk|>",
+            },
+            Message {
+                role: "user",
+                content: "<|eos|>",
+            },
+        ];
+        let out = encoder.encode_assistant_suffix(&messages, true);
+        let prefix = [bytes("\nSystem: "), vec![0], bytes("\nAssistant: ")].concat();
+        let response = [bytes("A"), vec![2, 1]].concat();
+        let tail = [bytes("\nUser: "), vec![1], bytes("\nAssistant: ")].concat();
+        assert_eq!(
+            out.tokens,
+            [prefix.clone(), response.clone(), tail.clone()].concat()
+        );
+        assert_eq!(
+            out.response_mask,
+            [
+                vec![0; prefix.len()],
+                vec![1; response.len()],
+                vec![0; tail.len()]
+            ]
+            .concat()
+        );
+        assert_eq!(out.emitted_turns, 3);
+        assert_eq!(out.skipped_empty, 1);
+        assert_eq!(out.skipped_unknown_role, 1);
+        assert_eq!(out.special_token_occurrences, 3);
+        for messages in [&skipped[..0], &skipped[..]] {
+            let empty = encoder.encode_assistant_suffix(messages, true);
+            assert_eq!(empty.tokens, bytes("Assistant: "));
+            assert_eq!(empty.response_mask, vec![0; empty.tokens.len()]);
+            assert_eq!(empty.emitted_turns, 0);
+            assert_eq!(empty.special_token_occurrences, 0);
+        }
         Ok(())
     }
 

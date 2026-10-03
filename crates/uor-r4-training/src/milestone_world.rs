@@ -15,7 +15,8 @@
 //! final fit. Relation values also split (names, pets, cities), so a
 //! development recall cannot be a memorized training pair.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -91,7 +92,7 @@ pub struct Conversation {
     pub turns: Vec<Turn>,
 }
 
-fn words(text: &str) -> Vec<String> {
+pub(crate) fn words(text: &str) -> Vec<String> {
     text.replace(['\u{2018}', '\u{2019}'], "'")
         .split(|c: char| !(c.is_alphanumeric() || c == '\''))
         .map(|w| w.trim_matches('\''))
@@ -100,7 +101,7 @@ fn words(text: &str) -> Vec<String> {
         .collect()
 }
 
-fn contains_phrase(haystack: &[String], phrase: &str) -> bool {
+pub(crate) fn contains_phrase(haystack: &[String], phrase: &str) -> bool {
     let needle = words(phrase);
     !needle.is_empty()
         && haystack.len() >= needle.len()
@@ -133,7 +134,7 @@ const NUMBER_WORDS: [&str; 21] = [
     "twenty",
 ];
 
-fn number(word: &str) -> Option<u32> {
+pub(crate) fn number(word: &str) -> Option<u32> {
     word.parse::<u32>().ok().or_else(|| {
         NUMBER_WORDS
             .iter()
@@ -238,26 +239,78 @@ fn last_letter(reply: &str) -> Option<char> {
     }
 }
 
-fn pick<'a, T>(rng: &mut Rng, items: &'a [T]) -> &'a T {
+pub(crate) fn pick<'a, T>(rng: &mut Rng, items: &'a [T]) -> &'a T {
     &items[rng.below(items.len())]
 }
 
 /// Phrasings of one intent, split once.
-struct Phrasings {
-    train: &'static [&'static str],
-    development: &'static [&'static str],
+pub(crate) struct Phrasings {
+    pub(crate) train: &'static [&'static str],
+    pub(crate) development: &'static [&'static str],
+}
+
+/// Opt-in training paraphrases: other wordings of a training template (same
+/// intent, same slots), drawn instead of it in `share_permille` of training
+/// picks. Installed at most once per process, through
+/// `milestone_world_v2::install_train_paraphrases`; development picks never
+/// read it, and without it every draw is unchanged.
+pub(crate) struct TrainParaphrases {
+    pub(crate) share_permille: usize,
+    pub(crate) by_template: BTreeMap<&'static str, Vec<&'static str>>,
+}
+
+static TRAIN_PARAPHRASES: OnceLock<TrainParaphrases> = OnceLock::new();
+
+pub(crate) fn set_train_paraphrases(paraphrases: TrainParaphrases) -> Result<()> {
+    TRAIN_PARAPHRASES
+        .set(paraphrases)
+        .map_err(|_| invalid("training paraphrases are already installed"))
+}
+
+/// The sorted `{name}` slots of a template.
+pub(crate) fn slots(text: &str) -> Vec<&str> {
+    let mut found: Vec<&str> = text
+        .match_indices('{')
+        .filter_map(|(start, _)| {
+            let end = text[start..].find('}')?;
+            Some(&text[start..=start + end])
+        })
+        .collect();
+    found.sort_unstable();
+    found
 }
 
 impl Phrasings {
-    fn pick(&self, rng: &mut Rng, split: Split) -> &'static str {
+    pub(crate) fn pick(&self, rng: &mut Rng, split: Split) -> &'static str {
+        self.pick_with(rng, split, TRAIN_PARAPHRASES.get())
+    }
+
+    /// A pick under `paraphrases`: a training template with wordings is
+    /// replaced in `share_permille` of its draws (one extra draw decides); a
+    /// template without wordings, and every development pick, draws exactly
+    /// as without paraphrases.
+    pub(crate) fn pick_with(
+        &self,
+        rng: &mut Rng,
+        split: Split,
+        paraphrases: Option<&TrainParaphrases>,
+    ) -> &'static str {
         match split {
-            Split::Train => pick(rng, self.train),
+            Split::Train => {
+                let template = *pick(rng, self.train);
+                let installed = paraphrases
+                    .and_then(|p| Some((p.share_permille, p.by_template.get(template)?)));
+                match installed {
+                    Some((share, wordings)) if rng.below(1000) < share => *pick(rng, wordings),
+                    _ => template,
+                }
+            }
             Split::Development => pick(rng, self.development),
         }
     }
 }
 
-fn fill(template: &str, slots: &[(&str, &str)]) -> String {
+pub(crate) fn fill(template: &str, slots: &[(&str, &str)]) -> String {
     let mut text = template.to_owned();
     for (name, value) in slots {
         text = text.replace(&format!("{{{name}}}"), value);
@@ -265,7 +318,7 @@ fn fill(template: &str, slots: &[(&str, &str)]) -> String {
     text
 }
 
-fn strings(items: &[&str]) -> Vec<String> {
+pub(crate) fn strings(items: &[&str]) -> Vec<String> {
     items.iter().map(|s| (*s).to_owned()).collect()
 }
 
@@ -432,6 +485,17 @@ fn social(rng: &mut Rng, split: Split, intent: &Social) -> Turn {
         reply: (*pick(rng, intent.replies)).into(),
         checks,
     }
+}
+
+/// The greeting that may open a conversation ([`MWorld::conversation`]).
+pub(crate) fn opener(rng: &mut Rng, split: Split) -> Turn {
+    social(rng, split, &SOCIAL[0])
+}
+
+/// The thanks or farewell that may close a conversation.
+pub(crate) fn closer(rng: &mut Rng, split: Split) -> Turn {
+    let index = 2 + rng.below(2);
+    social(rng, split, &SOCIAL[index])
 }
 
 const THINGS: &[&str] = &[
@@ -718,14 +782,14 @@ fn fact(rng: &mut Rng, split: Split, relation: &Fact) -> Turn {
     }
 }
 
-fn capitalize(text: &mut String) {
+pub(crate) fn capitalize(text: &mut String) {
     if let Some(first) = text.chars().next() {
         let upper: String = first.to_uppercase().collect();
         text.replace_range(..first.len_utf8(), &upper);
     }
 }
 
-fn responsive(rng: &mut Rng, split: Split) -> Turn {
+pub(crate) fn responsive(rng: &mut Rng, split: Split) -> Turn {
     match rng.below(10) {
         0..=3 => {
             let relation = pick(rng, FACTS);
@@ -960,11 +1024,24 @@ const INSTRUCTIONS: [&Phrasings; 9] = [
     &SENTENCE,
 ];
 
+/// The intent names of [`INSTRUCTIONS`], in order.
+const INSTRUCTION_NAMES: [&str; 9] = [
+    "repeat",
+    "spell",
+    "count",
+    "add",
+    "opposite",
+    "list",
+    "first_letter",
+    "compare",
+    "sentence",
+];
+
 const SENTENCE_WORDS: &[&str] = &[
     "dog", "rain", "happy", "school", "apple", "garden", "music", "friend", "river", "blue",
 ];
 
-fn instruction(rng: &mut Rng, split: Split) -> Turn {
+pub(crate) fn instruction(rng: &mut Rng, split: Split) -> Turn {
     let (name, user, reply, checks) = match rng.below(10) {
         0 => {
             let phrase = *pick(rng, REPEAT_PHRASES);
@@ -1150,18 +1227,18 @@ fn instruction(rng: &mut Rng, split: Split) -> Turn {
 // ---------------------------------------------------------------------------
 // Relations: assert, optionally update, then query, in context.
 
-struct Relation {
-    name: &'static str,
-    train_values: &'static [&'static str],
-    development_values: &'static [&'static str],
-    assert: Phrasings,
-    update: Phrasings,
-    query: Phrasings,
-    acks: &'static [&'static str],
-    answers: &'static [&'static str],
+pub(crate) struct Relation {
+    pub(crate) name: &'static str,
+    pub(crate) train_values: &'static [&'static str],
+    pub(crate) development_values: &'static [&'static str],
+    pub(crate) assert: Phrasings,
+    pub(crate) update: Phrasings,
+    pub(crate) query: Phrasings,
+    pub(crate) acks: &'static [&'static str],
+    pub(crate) answers: &'static [&'static str],
 }
 
-const RELATIONS: &[Relation] = &[
+pub(crate) const RELATIONS: &[Relation] = &[
     Relation {
         name: "name",
         train_values: &[
@@ -1363,7 +1440,7 @@ fn relation_turn(
 /// Acknowledgment phrases for an assertion or an update, beside the stated
 /// value itself. Generic praise ("great", "nice") is not an acknowledgment:
 /// filler replies are full of it.
-const ACK_WORDS: &[&str] = &[
+pub(crate) const ACK_WORDS: &[&str] = &[
     "got it",
     "okay",
     "ok",
@@ -1459,13 +1536,13 @@ fn relation_conversation(rng: &mut Rng, split: Split) -> Vec<Turn> {
     turns
 }
 
-const ABSENT_REPLIES: &[&str] = &[
+pub(crate) const ABSENT_REPLIES: &[&str] = &[
     "I don't know. You haven't told me yet.",
     "You haven't told me that yet.",
     "I'm not sure, you didn't tell me.",
 ];
 
-const ABSENT_ACCEPT: &[&str] = &[
+pub(crate) const ABSENT_ACCEPT: &[&str] = &[
     "don't know",
     "do not know",
     "haven't told",
@@ -1541,6 +1618,34 @@ impl MWorld {
         ))
     }
 
+    /// The non-relation phrasing tables by intent name (social, share, fact
+    /// and instruction): `(intent, train, development)`. Yes/no questions
+    /// are whole sentences with fixed answers, not templates, and are left
+    /// out.
+    pub fn chat_tables() -> Vec<(
+        &'static str,
+        &'static [&'static str],
+        &'static [&'static str],
+    )> {
+        let mut all = Vec::new();
+        for social in SOCIAL {
+            all.push((social.name, social.user.train, social.user.development));
+        }
+        all.push(("share_event", SHARE_EVENT.train, SHARE_EVENT.development));
+        all.push((
+            "share_feeling",
+            SHARE_FEELING.train,
+            SHARE_FEELING.development,
+        ));
+        for fact in FACTS {
+            all.push((fact.name, fact.user.train, fact.user.development));
+        }
+        for (name, table) in INSTRUCTION_NAMES.iter().zip(INSTRUCTIONS) {
+            all.push((*name, table.train, table.development));
+        }
+        all
+    }
+
     /// Every user phrasing template of `split`, for disjointness checks.
     pub fn templates(split: Split) -> Vec<&'static str> {
         let mut all: Vec<&'static str> = Vec::new();
@@ -1602,7 +1707,7 @@ impl MWorld {
 /// "a" before a word that begins with a vowel letter becomes "an" ("an owl",
 /// "an apple"). The world's vocabulary has no vowel letter sounded as a
 /// consonant.
-fn articles(text: &str) -> String {
+pub(crate) fn articles(text: &str) -> String {
     let pieces: Vec<&str> = text.split(' ').collect();
     let mut out = Vec::with_capacity(pieces.len());
     for (i, piece) in pieces.iter().enumerate() {

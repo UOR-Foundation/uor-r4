@@ -1,42 +1,44 @@
 # Status
 
-Updated 29 September 2026: durable-lab charter; source-result values below retain their stated scopes.
-- This is a compact navigation view. Live GitHub boards/claims own assignment and availability.
-- A claimed steward may reconcile stale/offline rows; preserve the linked history.
-- The [continuation plan](docs/labs/plan-2026-09-29.md) owns the order of work.
-- The [current state](docs/integration/current-state.md) owns measured results and artifacts.
-- Figures marked *self-reported* have not yet been re-run by a non-author.
+Updated October 1, 2026. **Pre-alpha: useful conversation, broad reasoning,
+frontier capability and lower complete-path energy remain unestablished.**
 
-## The position in one line
+The owner-adopted [active plan](docs/integration/project-track.md) prioritizes
+**grounded conversation and durable memory**, then the same model's broader
+language, coding/reasoning and efficient D11/D5 laptop execution.
+[Current state](docs/integration/current-state.md) and live [#1552](https://github.com/UOR-Foundation/uor-r4/issues/1552)
+own results. This page is navigation, not an independent results ledger.
 
-The main-line model cannot hold a conversation yet. What works, at scoped levels:
-- exact keyed storage;
-- trained-in 2I transport;
-- multiplier-free integer serving.
+| Boundary | Current evidence and remaining work |
+|---|---|
+| Exact retrieval and emission | E1 lexical sieve reports 747/747 development MQAR and independent reproduction. emit-1 (2.1M, context 384) gets 106/109 with supplied recall; oracle open relation 48/52 versus lexical sieve 1/52. These are harness results with reference history/category assistance, not a served memory assistant. |
+| Semantic compiler | E3 v14 R1 + 776 raw teacher paraphrases: gated trunk head relation 1754/2098 (0.836), act 0.766; dense combined head 0.949 and word table 0.900 on relations. Original 0.9/0.95 gate fails. The raw paraphrases carry audited label errors. A saved compiler with a learned value-span head now drives the grounded session (34/52 open, 13/17 closed relation on one development cell; see current state). A combined R1-trunk head is a recorded negative there (26/52). A reviewed 394-row paraphrase derivative (#1573) awaits its paired fit. E3 training includes development-value identities, so this is not unseen-value evidence. |
+| Durable grounding | Exact store components exist. Learned input → exact store → generated-history answers now runs in the session on one development cell, with save/load continuity and a fresh-process CLI (`grounded-session`); versions/scopes coverage is unfinished. Six of 14 emit-1 absence cases still emit unsupported values. |
+| Integer serving | Existing D11 stack has scoped opcode/parity evidence. emit-1's learned pointer is not exported; head-0 copy boost is a different mechanism. Dense layer/output access remains and no valid complete-path J/token win is established. |
+| Geometry | Exact tables, quaternion state, trained-in 2I and historical binding components remain available. Their semantic and efficiency contribution needs matched consumer evidence; failed promotion does not retire a family. |
+| Track B | Parked. #1518's original 1e-4 parity failure stands; no automatic retry or transformer serving follows. |
 
-Two open problems block progress: forming memory keys from language, and in-context retrieval.
+Read the [evidence review](docs/integration/grounded-memory-evidence-2026-10-01.md)
+for scope, hashes and primary result links. D18's A1 outcome D is preserved;
+old A1 training does not resume. The best E4 route (v16) reports 36/52 open relations, 2/17 closed and 106/109
+MQAR, against 48/52 with the oracle recall line and 27/52 for the best trained
+read; its extraction drops fixed-vocabulary values. v17 (trunk features in the
+table) is a recorded negative at 33/52. These are diagnostics, not promotion.
 
-| Question | Answer now | Evidence |
-| --- | --- | --- |
-| Can it chat? | **No.** R1 (the 7M stack, trained on chat-v0 + M-world v1), development phrasings: Responsive 0.52, Instruction 0.27, Relation 0.01 | [#1503](https://github.com/UOR-Foundation/uor-r4/pull/1503), [plan](docs/plans/2026-09-29-path-to-chat.md) |
-| Geometric attention? | **No advantage in the main-line 7M stack.** The Lorentz read ties dot there (−0.0001 nats). At smaller scope it has won: the native model's Lorentz read beat Dot at width 128 in 3 of 4 seeds, and a learned Lorentz cache beat dot and Euclidean caches. 2I and E8 codes have lost as addresses in the tests so far, some of them confounded; D12 keeps them active | [current state](docs/integration/current-state.md) |
-| What works | An exact store returns the value for a given key (D2 in distribution: 1.000). Forming that key from language is the open bottleneck (G v2: a recorded negative, under review). The 2I transport snap costs +0.011 nats against free transport (within the 0.02 band, one seed); its D11 kernel is in review. QAT on `geometric_s1`: +0.018 nats, *self-reported*, one seed, awaiting re-run | [#1505](https://github.com/UOR-Foundation/uor-r4/pull/1505), [#1506](https://github.com/UOR-Foundation/uor-r4/pull/1506), [#1490](https://github.com/UOR-Foundation/uor-r4/pull/1490) |
-| Main blockers | No in-context retrieval in the main-line stack. At most 3.3 training tokens per parameter. The 256-token window discards 88% of chat-v0 responses | [plan](docs/plans/2026-09-29-path-to-chat.md) |
+## Coordination
 
-## Labs
+- Claude: #1511 / #1552, current compiler/emitter integration.
+- OpenCode–DeepSeek: #1512, current data/read research and shared interfaces.
+- Codex: #1515 / #1563, owner-reauthorized roadmap/admissibility adoption and
+  complementary integration. Kimi and Anti-Gravity boards remain historical.
 
-| Lab | Board | Current item | Latest result | Next gate |
-| --- | --- | --- | --- | --- |
-| **Claude** | [#1511](https://github.com/UOR-Foundation/uor-r4/issues/1511) | Recover and finish A1 retrieval/M-world v2, then integration | A1 pre-registered; refresh source on the board | Development MQAR ≥ 0.9 at distances 16, 64 and 200, and open-relation recall ≥ 0.9 |
-| **The DeepSeek lab** (Lab 2) | [#1512](https://github.com/UOR-Foundation/uor-r4/issues/1512) | B0: training-free flock attention in SmolLM2-135M | G v2 key probe: a recorded negative, wording in review ([#1505](https://github.com/UOR-Foundation/uor-r4/pull/1505)) | Dense arm reproduces the reference on the pinned subset. Kill if softmax-over-k at k=64 is more than 0.10 nats worse |
-| **Anti-Gravity** (Gemini) | [#1513](https://github.com/UOR-Foundation/uor-r4/issues/1513) | Review/preserve B3; relevant QAT fixes and Metal/kernel work | Seven-arm B3 negative reported in [#1519](https://github.com/UOR-Foundation/uor-r4/pull/1519), pending review | No unchanged B3 rerun; next kernel/fidelity gate is prospectively declared |
-| **Kimi / steward handoff** | [#1514](https://github.com/UOR-Foundation/uor-r4/issues/1514) | Preserved unfinished context, bundle and stewardship work; claimable by available labs | S1.4 serving [#1506](https://github.com/UOR-Foundation/uor-r4/pull/1506) remains a live dependency | Availability/claim verified before assignment; no permanent provider ownership |
-| **Codex** | [#1515](https://github.com/UOR-Foundation/uor-r4/issues/1515) | Existing Candle parity/B2 branch integration | [#1518](https://github.com/UOR-Foundation/uor-r4/pull/1518) refreshed against merged fixes; compilation and full parity still pending | Direct focused checks, then unchanged 1e-4 CPU+Metal reference parity |
+Live GitHub claims and actual process handles determine activity and ownership.
+Use the [shared protocol](docs/labs/protocol.md), [host guide](docs/labs/operations.md)
+and prospective resource work card before compute. Current FIFO admission uses
+aggregate host limits; small bounded checks need no heavy-job reservation.
+Preserve live runs' reservations. No paid compute or destruction of unique
+material is authorized.
 
-## Machine
-
-- **Hardware:** 8 cores and 16 GB of unified memory, shared by every lab.
-- **Recovery:** [#1520](https://github.com/UOR-Foundation/uor-r4/issues/1520) / [#1510](https://github.com/UOR-Foundation/uor-r4/issues/1510) own the current SSD, worktree, compiler and runner state. Do not infer recovery from this page.
-- **Scheduling:** single-heavy-job reservation until production runner admission is deployed and observed; normal daemon requires a host policy. Client adapters/manual steps remain separately verified.
-- **Ledger/free space:** refresh the append-only ledger and physical host receipts before every resource decision. Dated balances are historical, not available allowance.
-- **Enforcement:** protected delivery still needs exact-head review. A server-required delivery gate is unverified until administrator configuration and a real smoke are recorded.
+Protected PRs require recorded exact-head review and actual scoped checks.
+Historical queue status names are acknowledgements, not compile/test evidence;
+the delivery-evidence check remains advisory under the owner's current rule.

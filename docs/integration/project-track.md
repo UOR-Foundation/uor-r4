@@ -1,5 +1,413 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
+## Active programme — grounded conversation and durable memory, October 1
+
+**Owner-adopted direction:** [D19](DECISIONS.md#d19--grounded-conversation-and-durable-memory-first).
+This section is the active plan. It supersedes earlier schedules, fixed lab
+assignments and automatic fit instructions below, and the September 29
+[continuation plan](../labs/plan-2026-09-29.md). Historical results, original gates
+and unmet capability obligations remain intact. Live GitHub owns task status;
+[current state](current-state.md) owns changing artifacts and next actions.
+
+The first useful product is **grounded conversation with durable memory**. The
+full alpha still includes useful conversation/memory **and** executable
+coding/reasoning on the same native path. Frontier intelligence on a laptop is
+the long-term research objective, not an established feasibility or scaling
+result. Rust offline training may use floats and matrix multiplication. Final
+serving follows D11/D0-b; D5 selected parameter access remains the final cost
+target. No transformer backbone, hidden teacher answers or new Python model
+dependency is adopted. Geometry remains the preferred representation and
+operator family throughout the programme.
+
+### What changes and why
+
+The [October 1 evidence review](grounded-memory-evidence-2026-10-01.md) separates
+the useful components from the missing integration. Exact identity retrieval
+works on its bounded tests. emit-1 can use a supplied value, but semantic recall,
+absence, spans, generated-history conversation and faithful integer export are
+unfinished. E3 v11 improves relation classification without meeting its existing
+relation/act gates; it is a frozen-feature diagnostic, not a saved language
+compiler. E3's development-value exposure also prevents calling that classifier
+result unseen-value transfer. These findings choose the next interface, not a
+family-wide verdict against geometric attention.
+
+The next milestone is **one saved compiler/store/emitter path**, not another
+isolated reader score. Reuse existing source and retained artifacts. Separate
+module diagnosis from integrated capability qualification. Development wiring
+may proceed with an imperfect compiler to reveal the limiting stage; this does
+not promote it or waive any old threshold. A repeat frozen-probe fit, more
+teacher text or a larger model needs a new causal case under the
+[mechanism-admissibility policy](mechanism-admissibility-2026-10.md).
+
+### Owner-adopted sequencing correction — October 3
+
+The owner accepted the [geometric chat assessment](geometric-chat-direction-2026-10-03.md).
+Keep D19 and the native geometric objective. Prioritize natural-language source
+binding through actual emission over another isolated capture dose or synthetic
+backend conversion presented as chat. The existing relation/act/span compiler is
+reused; do not build a duplicate. The current grounded emitter and strict native
+attention component have different admitted shapes and callers, so joining them
+requires a learned language interface, not dimension padding.
+
+| Lane | Responsibility and decision boundary |
+|---|---|
+| Claude, #820/#1552 | Finish the already claimed matched scale/control, selected-emitter persistence and response-quality work. Keep learned binding failure separate from exact-store usefulness. Interpret relevance and paired judge controls separately from fluency. |
+| DeepSeek, #1512 | Complete the claimed distance and matched surface-form contrasts. Report the particular data/representation/gradient scope; failure does not prove an exhaustive state-capacity limit. |
+| Codex, #1552/#1512 | Build the typed geometric selected-record consumer after the [executed source-binding contrast](geometric-chat-source-binding-2026-10-03.md). Preserve exact token occurrences and source-bound native operators; measure connected ordinary-answer credit and cost before fitting. Coordinate any shared session hook on #1552. |
+
+The fixed Codex contrast changes the selected fact and unrelated distractor
+independently, preserves question/relation/phrase positions, and includes read-off
+controls. It uses the existing research loader; portable CLI loader repair is
+bounded product work, not a prerequisite campaign. An isolated recalled-payload
+intervention with frozen history, if needed, is a separately labelled diagnostic.
+This is open development diagnosis, not a fresh general-chat qualification.
+
+The [executed contrast](geometric-chat-source-binding-2026-10-03.md) verifies correct
+selected-payload delivery in all 20 read-on cases, with four wrong distractor
+answers. Advance the consumer implementation below; these cases do not call for
+a compiler/store repair or an unchanged scale/selector campaign. Successful
+comparison histories retain their scope, and the finite answer scorer and
+own-history read-off limitations remain explicit.
+
+If correct selected-payload delivery is established but answers follow the
+distractor, implement a typed geometric selected-record-to-emission reference on
+real BPE/protocol-2 inputs. Keep scope/entity/relation/view/status, occurrence and
+version distinct from exact payload token spans. Copy addresses retain frame and
+token-offset identity through the consuming operation. Extra text metadata or an
+authored answer template alone is not a learned geometric consumer. Compare a
+geometric selector with an ordinary control given the same frame information,
+candidate access, capacity and cost. Gold labels remain training/diagnostic only.
+
+If predicted actions or stored records are wrong, repair the existing supervised
+compiler/write interface. If answers follow the right value but fail wording or
+Stop, repair emission. Mixed evidence does not automatically admit a scale run,
+new estimator or joint fit. The exact-H4/q4 finite direction audit remains a
+separate local event-credit diagnostic before further capture optimization; it
+does not block D19 or qualify the language consumer.
+
+Preserve the registered comparison identities: the reported 8M-geometric versus
+2.1M-emit-6r pointer result is negative for those artifacts, not the completed
+both-8M geometric-versus-transformer criterion. Preserve the provisional learned
+bridge hold. A significant fluency/relevance conjunction without relevance
+discrimination does not qualify chat. The short L2 win supports that measured
+read configuration, not a mathematical impossibility of Lorentz attention.
+
+After a useful language interface is accepted, lower the same computation across
+recurrence, all reads/values, trained copy mixture, normalization, vocabulary,
+response/Stop and session lifecycle. The width-32 authored component is not the
+width-288 BPE language artifact. Keep remaining floats and dense accesses explicit;
+measure whole-path quality, RAM, speed and energy before claiming laptop savings.
+Offline donor weight/behavior compilation remains available through contextual,
+value and output operators. Do not resume unchanged retired campaigns.
+
+### Architecture and first implementation
+
+```text
+user text + actual conversation history
+  -> learned typed compiler: relation, act, value/source span, query view
+  -> stable exact identities + versioned event log / existing StackStore
+  -> bounded candidate access and geometric compatibility/transport
+  -> actual trained memory-conditioned emitter/copy distribution
+  -> saved model + memory + tokenizer/protocol + session continuation
+  -> same computation lowered to the D11 integer session
+```
+
+Start with the existing ten relations and default user scope, exposing the
+boundary explicitly. Save the learned heads/encoder and their label/tokenizer
+schema; add token-aligned value-span supervision and learned query/write intent.
+Do not feed gold category, relation, act, value or prior assistant answers into
+the deployed path. Gold/oracle paths remain labelled diagnostic upper bounds.
+Do not silently equate Assert, Correct, reassertion and temporal views merely
+because the present lexical sieve uses the latest matching clause.
+
+Use direct relation/act/span credit, query/write consistency and binding hard
+negatives, plus answer loss where the interface permits it. Inspect actual
+gradients or another declared learning signal through each learned component;
+an exact store may be nondifferentiable and need supervised interface credit.
+Choose between a small compiler encoder and limited joint trunk adaptation from
+observed confusions and cost, with the ordinary lexical probe retained as a
+control. Do not assume poor frozen linear decodability proves information absent
+from the trunk. Teacher paraphrases need meaning/label validation as well as
+overlap screening. Evaluation separates phrasing, value identity, relation type,
+entity/scope and compositional transfer; only claim axes actually held out.
+
+The first integration must save/reload, process the model's **own** preceding
+replies, and demonstrate changed-source dependence, exact copied spans including
+BPE boundaries, correct updates and an absent-fact response. Report the whole
+answer and per-stage errors, including spurious writes from questions. These
+small construction/development checks establish the seam; they do not qualify
+general language or the sealed product panel. Independent values and wordings
+are required for later promotion.
+
+### Ordered deliverables and dependency graph
+
+The immediate native attention chain on [#1512](https://github.com/UOR-Foundation/uor-r4/issues/1512)
+remains geometric. Claude's dialogue/session integration on #1552 is concurrent
+product work and does not replace this mechanism track. Preserve offline donor
+weight and behavior compilation through contextual, value and output operators;
+embeddings alone are not assumed to contain reasoning.
+
+1. Retain exact occurrence/span identity and learned geometric capture. Learn
+   internal signed-H4 context state separately from its noninjective address
+   readout. Compile the learned transitions and contextual root/radius/presence
+   operations; test learning and compiler retention separately.
+2. Keep geometric compatibility scores integer through age, explicit NoRead,
+   normalization and weighted occurrence reduction. Preserve full declared
+   causal support; numerical lowering does not by itself supply learned values.
+3. Replace donor value and NoRead maps with learned geometric readouts. First
+   measure the proposed value alphabet's reconstruction loss on the unchanged
+   saved cases, without answers or source labels selecting packets. A coarse
+   single-root/dyadic representation failure justifies a bounded residual
+   representation if measured; it does not reject geometric attention. NoRead
+   remains a separately learned scalar in the same absolute score units.
+   The [connected NoRead source and construction](geometric-no-read-2026-10-02.md)
+   now pass focused caller/gradient/reload/raw-Q24 checks and actual-parent
+   zero-update comparisons. The [fixed answer-only scalar fit](geometric-no-read-fit-2026-10-02.md)
+   now completes both640-update seeds with frozen producers/output. Compiled
+   answers retain all512 legacy-parent predictions; versus zero, seed1 restores
+   one row and loses two. CE is mixed. Preserve fitted, zero and ablated scalar
+   candidates; end this comparison. Query-token/validity collinearity prevents
+   attributing general geometric history use. Next complete the connected geometric
+   output/composition learning and remaining coefficient-width dependencies;
+   no additional scalar sweep is prescribed.
+4. The [connected geometric read.out composition](geometric-read-composition-2026-10-02.md)
+   now supplies a native two-term H4 transport/q4 bank before per-head reduction.
+   The [fixed bank-only answer fits](geometric-read-composition-fit-2026-10-02.md)
+   now complete both640-update seeds: source/native102/109 and128/128, with
+   all512 answers agreeing after independent reload. Preserve learned, initialized
+   and parent candidates: accuracy improves or ties parent while CE is worse.
+   End this fixed dose and advance the strict four-bit learned-coefficient
+   boundary first in the K2 value producer: packed q4 source factors and
+   regenerated signed-root tables with context/events/address/NoRead/composition/
+   tail frozen. The [strict q4 construction](geometric-value-q4-2026-10-02.md)
+   now completes loaded projection451/512 versus467/512 parent and repairs the
+   source/native hard-choice bridge: all512 packet/Q16 traces agree with native
+   outputs unchanged. The [fixed q4 answer fits](geometric-value-q4-fit-2026-10-02.md)
+   now complete640 updates perseed with bank/upstream/tail frozen. Retain both
+   learned candidates, projection and unrestricted parents, including every
+   gain/loss and CE. End this dose; advance the remaining attention coefficient
+   boundary through connected geometric source/compiler/learning/native callers.
+   The [strict q4 potential construction](geometric-potential-q4-2026-10-02.md)
+   now completes both saved-parent conversions with connected answer gradients
+   and independent native reload. Retain both converted models and every changed
+   row; end construction without an automatic potential fit. The
+   [strict q4 context construction](geometric-context-q4-2026-10-02.md) now retains
+   both conversions and complete three-route answer credit, alongside every
+   regression and the long-draw gradient-stability concern. End construction
+   without automatic recovery training. The [persistent integer session source](geometric-attention-session-2026-10-02.md)
+   is implemented; hosted Linux/M1 builds and native session/context/allocation
+   checks pass. An observed descriptor-indexing multiplier has a causal layout
+   repair passing rebuilt19-symbol instruction inspection. Both retained lineages
+   preserve512/512 saved answers and all actual-position logit bits in incremental
+   replay; independent saved-output review passes and protected delivery remains. The session exercises
+   the session using existing event/context/span/value/NoRead/potential/
+   reducer/bank primitives: compute each occurrence once and only the newest
+   query row. Preserve old-held timing, all absent/zero candidates, exact
+   occurrence identity and head-specific denominators; reject capacity overflow
+   explicitly before mutation. Compare the actual native whole-window reference
+   and unchanged Stack residual seam before any runtime/answer claim. Event and
+   age coefficient policies remain separate subsequent boundaries, along with
+   selected access and float trunk/output. Any context fit needs a causal case
+   and stability assessment; imperfect conversion does not retire geometry.
+   Current-state owns exact results and next source selection. Packet-perfect
+   donor imitation or perfect answer recovery is not an
+   admission gate. No coefficient-scale/bank/selector/alphabet sweep.
+   Neither initialization nor a mixed fitted result retires geometry. Preserve
+   offline donor compilation as a separate option.
+   Learn compatible geometric output/combination operators and integrate natural
+   token spans, role, scope and temporal intent with the durable store/session.
+   Preserve exact payload references for copying and identity-sensitive reads.
+   A source address is not automatically a value frame, and cancellation is
+   not absence. Joint answer credit must reach the operators that need it;
+   declared supervised interface credit remains distinct from answer-only work.
+5. Complete selected candidate/parameter access and the native decoder, then
+   qualify the whole saved serving path on generated-history conversation and
+   coding/reasoning. Measure complete laptop cost at matched quality. Useful
+   component retention, geometric advantage, language capability and final
+   numerical/energy qualification remain separate decisions.
+
+The [completed K1](../evidence/geometric-value-native-2026-10-02.json) and
+[two-atom residual comparisons](../evidence/geometric-value-residual-2026-10-02.json)
+retain the bounded residual representation for native producer learning. The
+residual recovers most seed-1 losses and preserves seed-2 baseline predictions,
+but is not a preserving drop-in replacement; retain all changed and prior
+successful rows. End this representation comparison without an alphabet sweep. The next
+learning bridge and its source-bound finite-factor compiler are implemented in
+[PR #1608](https://github.com/UOR-Foundation/uor-r4/pull/1608), with focused
+executed interface, gradient, reload and arithmetic checks. They are not fitted
+language evidence. The first fixed joint fit now completes both accepted 640-update context
+continuations; [the result](geometric-value-learning-2026-10-02.md) retains all
+learned, parent and reconstruction rows. Integer compilation retains measured
+choices, while useful learned values still lose donor answers. Exact controlled
+payload substitutions with the new context recover many failures, including
+128/128 on both seed2 panels. Retain geometric addressing and the fixed K2
+alphabet; do not infer architecture failure or force exact imitation.
+
+The [fixed query-credit comparison](geometric-query-credit-result-2026-10-02.md)
+is complete. Retain query-weighted learning as the provisional continuation
+candidate, alongside both matched uniform controls and all regressions. This
+ends the allocation comparison; it does not establish geometric superiority,
+complete serving or isolated payload causality. Do not automatically sweep dose
+or auxiliary weights. Current state owns the measured rowwise outcomes.
+
+The next implementation is a history-sensitive **native NoRead producer** over
+actual token/retained signed roots, typed radius/presence and old-held span
+validity. Use packed signed four-bit coefficients with one fixed score scale;
+wide score tables must regenerate from those coefficients and the pinned basis.
+Select the native branch before floating normalization and retain raw Q24 scores,
+NoRead's zero payload and the common-denominator reduction. Train with actual
+answer credit; exact donor imitation is not the capability gate. Keep missing
+semantic-absence data, wider learned value/potential coefficients, trunk/output
+and complete candidate-access costs explicit. This implementation is NOT_RUN
+at the comparison checkpoint. Offline donor-informed compilation remains useful;
+no runtime Q/K or transformer path is restored.
+
+Preserve every old and newly learned success/failure, including learned answers
+absent from the K2 oracle. Keep input sufficiency, additive-factor expressivity,
+optimization and F32/Q24 compilation retention distinct. The finite-action
+policy is a biased surrogate, not an argmax derivative or optimization guarantee.
+Record actual data mass/context access, checkpoints, evaluation reserve and
+complete cost before launch; partial dose is not a family-quality verdict.
+NoRead and compatible geometric output remain subsequent obligations.
+
+For value compilation, keep the existing four coordinates per lane and sixteen
+per head until an explicit decoder-interface change. Packet status, exact
+occurrence/version identity and numeric coordinates are distinct. Assess
+representation adequacy before learned-input sufficiency: an oracle projection
+can receive the donor vector, whereas the eventual native producer must receive
+actual geometric latent state, token and typed span inputs. It cannot recover
+that state from an address assumed to be sufficient. Use the
+[mechanism-admissibility policy](mechanism-admissibility-2026-10.md) to diagnose
+representation, optimization, compilation and serving failures at their actual
+scope; do not use a budget stop or a small construction panel to retire a family.
+
+Each row is an obligation, not a claim that its predecessor is complete. Safe
+engineering and bounded discovery may proceed in parallel with explicit file
+ownership. Resource admission is separate from scientific priority.
+
+The owner's October 1 immediate correction puts actual geometric attention first while the SSD is restored. The [identity-carry result](geometric-attention-binding-2026-10-01.md) retains the existing Lorentz scorer and identifies key-to-payload alignment as a causal learning bottleneck on a finite synthetic task. The [variable-gap latch continuation](geometric-attention-latch-2026-10-01.md) shows training-only capture credit enables both matched Held seeds to solve original/longer-gap association; Local and prior answer/occurrence-credit controls do not. Preserve the successful soft artifacts. The saved-model hard bridge below advances the capture/hold mechanism; learned span/commit inputs and bounded candidate access remain open. Fixed-carry answer-only learning and supervised variable-gap retention retain their distinct scopes; neither establishes natural language or geometry superiority. The [saved-model hard bridge](geometric-attention-hard-bridge-2026-10-01.md) preserves both successful seeds without training; the [integer gate/state replay](geometric-attention-integer-latch-2026-10-01.md) now retains that behavior. The [paired integer q/k replay](geometric-attention-integer-qk-2026-10-01.md) also preserves both Held seeds at 128/128 answers and source majorities on both panels, while retaining Local numerical gains/losses. The [direct geometric reader](geometric-address-reader-2026-10-01.md) now implements separated signed-root relative content/context addressing in that same graph, with four q/k maps absent and joint language credit. Its fixed first fit and causal interventions are recorded there. The [ordered geometric span producer](geometric-span-actions-2026-10-01.md) now adds shared static token actions, ordered finite products and predicted OPEN/APPEND/COMMIT/HOLD capture in the same reader. Its fixed two-seed result and causal interventions are recorded there. The [compiled span-action replay](geometric-span-native-2026-10-01.md) now preserves both saved producers exactly through a source-bound token dictionary and integer register: all512 answer/source rows, held codes and full-prefix logits agree, with zero training. The controller, reconstruction and surrounding reader remain float. The [compiled geometric potential scorer](geometric-potential-native-2026-10-01.md) now retains all512 saved-model answer decisions, both heads’ source-majority decisions and top-ranked occurrence/NoRead choices using source-bound Q24 tables and integer additions. All5,051,904 head-specific score comparisons satisfy the declared bound; rounding changes some float logits without changing these decisions. Input classification, contextual/event producers, age/NoRead/softmax and values/output remain float. The [native geometric context/event study](geometric-event-native-2026-10-01.md) now learns synchronous signed-H4 group transitions and direct integer HOLD/OPEN/APPEND/COMMIT control in that reader. Both fixed seeds retain all512 answer decisions and both heads’ source-majority flags; all28976 actual events are correct and all34688 padded native/float context/action/event traces agree. Reset produces role-specific capture and downstream answer/source errors. One parent capture error is corrected without changing its answer; previous answer failures remain. This is authored supervised capture, not natural-language or complete integer serving. Next: replace floating current-context/radius/presence production through learned native geometric operators, retain typed scope/candidate distinctions, and preserve donor-informed offline compilation through token, contextual and output interfaces. The saved-controller donor transfer is a scoped next compiler study, not an embeddings-only reasoning claim. Native current-context/radial/presence production, typed role/scope spans, bounded access and values/output remain explicit subsequent obligations. Do not resume runtime q/k maps or discard useful compiled span selection because answer realization is incomplete. Correct source selection and answer realization remain distinct obligations; do not discard useful span selection because the output path is incomplete. Preserve offline donor-informed learning into the same geometric interface; static token embeddings alone do not qualify reasoning transfer. Preserve radial/zero/orientation information, age, causal admission and NoRead. Numerical Lorentz lowering remains preserved work, not the immediate research priority. Values/output, bounded access and natural-span capture remain unfinished; retain soft/hard/integer parents and their separate capability obligations.
+
+| Stage | Integrated deliverable / issue | Evidence and next decision |
+|---|---|---|
+| 1. Learned language-to-memory interface | #1552 under #1508/#973: saved compiler, typed span/intent, existing store and emitter; minimal generated-history session | Fit → save → independent reload → actual predicted-input replies. Compare predicted/oracle/off on the same prompts as diagnostics; score transfer axes and source changes. On an act/span/semantic failure, repair that boundary; do not restart all readers. |
+| 2. Durable grounded conversation | #962 with grounding #954: versions, temporal views, conflict/absence, scope and restart in the same session | Preserve exact occurrence/value identity; mixed-session isolation, correction versus reassertion, current/previous/initial and verified eviction, reload-equal greedy continuation. Train/measure nonasserting and unsupported-input handling. Add multiple entities, explicit scopes/polarity and clauses as versioned extensions to the first ten-relation interface. |
+| 2G. Geometric semantic addressing and working state | #973/#1512, parallel to stage 2 using stage 1's shared interface | Directed multi-channel 2I/H4 or R4 query/write representations retain required norm, fiber, orientation and exact IDs. Matched information/capacity/training/cost controls distinguish useful geometry from extra features. Start with one causal change; do not hold durable integration hostage to geometric superiority. |
+| 3. Faithful native serving | #964, with #1533/#1476 where their contracts apply | Export the actual selected compiler, memory and emitter, preserving the trained pointer mixture or measuring a deliberately retrained replacement. Bounded arena/caps, serialization/versioning, generated-history reload and declared-kernel instruction audit. Separate parameter, interface and arithmetic error; preserve D17 retention and consumer behavior. |
+| 4. Useful conversation and instructions | #1508/#973, grounding #954 | Natural language and instructional learning on the same artifact, retrieval/absence preserved. Learning curves and changed wordings/values on development; then the existing sealed §8 product milestone after readiness. No category oracle or teacher response at runtime. |
+| 5. Compositional reasoning and executable Rust | #955 and #1088 | Reuse typed operations and memory across changed constraints; execute generated Rust on semantic tests in a controlled workspace. Report failures, source dependence, generalization axes and abstention. Familiar arithmetic/fixture code alone is insufficient. |
+| 6. Selected-access efficiency and scaling | #963 with #1512; narrow D5 design/source work can proceed in parallel | End-to-end parameter/state bytes touched, index build/update, fallback, output head, latency/RSS and quality-matched measured energy. Mechanism selection precedes a larger fit; throughput alone or fewer score terms cannot establish D5 or lower J/token. |
+| 7. Distribution and full alpha | #1172 API/WASM → #1173 Studio; #965 integrated release | Load the same qualified native artifacts through real public interfaces; portable format/error contracts, offline operation, declared machine limits and release/recovery. Full alpha requires conversation/memory and coding/reasoning evidence, not interface readiness. |
+
+The precise current stage and active claim belong in current-state and GitHub,
+not a duplicate status table here. Infrastructure #1510 unblocks actual users
+and jobs; it is not an indefinite prerequisite campaign. Track B #1509/#1518
+retains its historical parked compute scope. The owner reaffirms offline weight-informed geometric recompilation as a valuable research route sharing the native runtime target; embeddings and operator behavior are possible compiler inputs, with explicit capability-retention evidence. Its original 1e-4 failure stands and no unchanged parity chase,
+teacher conversion or third engine follows from this plan. Re-entry requires
+an explicit decision for a concrete native-path consumer and its own bounded
+evidence contract; merely being in the backlog does not admit compute.
+
+### Geometry, exactness and novelty
+
+Prime/UOR addresses preserve exact identity. Ordered n-lets and typed roles
+preserve order that a commutative product cannot. R4/S3 and relative 2I transport
+are candidates for learned role binding and composition. Retain exact Z[phi],
+chirality/polarity and typed golden/Galois pairing; the companion is not an
+independent learned state. Hopf observations retain the fiber when the consumer
+needs it. Fixed zeta phases are a structural prior, not a semantic oracle.
+
+A shared isometry cannot change an otherwise identical ranking. A 120-state
+code cannot injectively encode an arbitrary vocabulary, and multiplication of
+many codes back into one element loses tuple capacity. Relative-element and
+class-function scores have different invariances; do not collapse direction
+without a task reason. Exact arbitrary-key/value recall needs distinguishable
+persistent state growing with the stored information. Working summaries,
+harmonic state or VSA may aid bounded reasoning but cannot substitute for that
+exact log without a measured approximation contract.
+
+Discovery remains open at three useful boundaries: learned query/write
+alignment, compositional recurrent state, and selected parameter access. A new
+idea needs a consumer and distinguishable prediction, not an immediate
+whole-language win. [D12's toolbox](geometric-toolbox-2026-09-28.md) and the
+[historical reconciliation](roadmap-reconciliation-2026-10-01.md) locate reusable
+mechanisms. Root-cause evidence can reopen a configuration; failed promotion
+does not erase it, and no generic family-retirement label is inferred.
+
+### Admissibility and pacing
+
+Use the [detailed admissibility policy](mechanism-admissibility-2026-10.md)
+proportionately for the actual unknown. Before a new learning comparison, bind
+the representation, causal input, target, loss/credit, data axes, context,
+candidate access, retained state and export interface. Verify the instrument
+can distinguish the proposed explanations. If every architecture fails, a
+common bottleneck remains possible; it is not proof of one specific cause.
+
+Freeze promotion criteria before evaluating the chosen candidate. Keep existing
+A1, E3, D17 and §8 verdicts immutable. Set learning dose in updates/examples or
+targets using measured throughput and loss/behavior curves; project wall/RAM/
+storage for current concurrency. A wall timeout is incomplete exposure, not a
+matched model comparison. No universal tiny timer, automatic long sweep or
+endless retry is prescribed. Continue a run only under its prospectively stated
+rule or record a new successor with preserved prior outcome. A negative without
+a new causal intervention advances an independent dependency.
+
+Counts and error strata accompany rates. Distances, candidate counts and actual
+context must be reported jointly; a long distance with two keys does not
+establish eight-key retrieval. Small noisy cells can guide development but
+cannot establish a robust advantage. Existing D17 parity rule v2 remains the
+promotion comparison, including its predeclared third draw for a split pair.
+No new full proof campaign or blanket suite is required for a routine edit.
+
+The existing sealed §8 milestone remains unchanged: 40 responsive multi-turn,
+30 updated-relation and 30 instruction conversations, at least 80% scored turns
+in each category, identical greedy continuation after fresh-process reload,
+declared context/eviction/output limits and a cost report. The owner-held panel
+stays unavailable to development; the reported 317-position need must fit the
+actual tokenizer/output policy. An intermediate component gate is not this
+milestone, and this milestone is not the complete coding/reasoning alpha.
+
+### Cost and cross-lab execution
+
+Claude and OpenCode–DeepSeek remain concurrent peers. The owner's October 1
+request reauthorizes Codex for roadmap integration and successive necessary
+work; it does not reactivate Kimi or Anti-Gravity. Live boards #1511, #1512 and
+#1515 carry current claims. Refresh them and main before editing; do not
+reassign another lab's live job based on a stale lease or this table. Publish
+exact source/file ownership, handoff and result on the owning issue. Heartbeats
+and recovery checkpoints follow the existing shared cadence.
+
+Use the current owner-directed FIFO admission within the aggregate eight-thread,
+11 GiB envelope and verified host limits; small bounded checks need no heavy-job
+reservation. Existing runs retain their declared reservations. A daemon or
+advisory check alone is not evidence of successful admission. When deployment
+is unverified, use the documented manual resource accounting fallback without
+inventing a new global serial-job gate. Before model or
+build work, project full preparation/build/fit/control/evaluation/retry/delivery
+cost against the live cumulative ledger, physical disks and RAM. Necessary
+local extensions retain the standing owner authorization and prospective
+record; no paid/external compute or destructive cleanup is implied.
+
+For D5, count all dense layer maps, routing overhead, updates, selected/fallback
+rows and full vocabulary/copy output. Distinguish logical row inspections from
+physical bytes and joules. A sparse score result after a full scan is not
+sparse search. Preserve dense interim paths with their true cost while testing
+learned geometric routing; neither prime IDs nor post-hoc row truncation alone
+is a learned parameter selector. An energy claim needs measured, comparable
+useful work and instrumentation, not a byte-count proxy.
+
+Deliver through protected PRs, review the exact head, run the checks relevant to
+changed code and preserve actual compile/test evidence separately from queue
+acknowledgements. The owner has authorized merges without another permission
+round. Verify merged patch/main, update consumers and issues, release the claim,
+and take the next ready dependency. Do not close an umbrella because one
+component passed or because its tracking moved. The issue reconciliation is
+an ownership map, not a new capability result.
+
+## Historical programme entries
+
+The dated sections below preserve evidence and former decisions. Their next
+actions apply only when explicitly re-entered by the active plan above.
+
+
 ## Current programme entry point, September 29
 
 Before reading the historical plans below, read:

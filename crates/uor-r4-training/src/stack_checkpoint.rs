@@ -10,16 +10,23 @@
 //! |---|---|
 //! | `attempt.json` | the claim sentinel |
 //! | `config.json`, `model.safetensors` | the [`StackModel`], written by its own `save` |
+//! | `transport.json` | the model's transport snap and root-set identity, in schema 2 only |
 //! | `identity.json` | the [`CheckpointRecord`]: schema, restore kind, provenance identities and digests |
 //! | `memory.json` | the session [`StackStore`] in `Memory`'s own serialization, when a store is given |
 //! | `manifest.json` | the seal: every file with its size and BLAKE3 digest |
 //!
+//! Free-transport saves retain schema 1 and its original fields. Schema 2
+//! requires a transport identity and its file; old readers refuse it. The
+//! model's own transport reader validates the recorded roots on load.
+//!
 //! # Inference reload, not training resume
 //!
 //! This is an **inference** checkpoint. It restores the model's configuration
-//! and weights, the model's provenance identities and the session store. A
-//! reloaded session therefore computes the same logits and reads the same
-//! memory. The checkpoint holds none of the following:
+//! and weights, its declared transport snap, the model's provenance
+//! identities and the session store. A reloaded model therefore computes
+//! the same logits and the restored store returns the same memory reads.
+//! It does not retain a generated transcript or a live model-session cache.
+//! The checkpoint holds none of the following:
 //! - optimizer moments (`StackAdamW`);
 //! - the learning-rate schedule position;
 //! - the data-sampler position;
@@ -39,10 +46,11 @@
 //! 4. The declared identities: their formats, the tokenizer the protocol
 //!    names, and the recomputed protocol identity.
 //! 5. The recorded SHA-256 of `config.json`, `model.safetensors` and
-//!    `memory.json`.
+//!    `memory.json`, and `transport.json` when a snap is declared.
 //! 6. The model: its configuration and tensor shapes (`StackModel::load`),
 //!    its parameter count, and the protocol's special ids against its
-//!    vocabulary.
+//!    vocabulary. A transport record must match this build's roots and the
+//!    declared snap; saved served/QAT representations are refused.
 //! 7. The store:
 //!    - `Memory`'s validation and the token encoding;
 //!    - the recorded lineage, so a foreign lineage is rejected;
@@ -68,15 +76,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uor_r4_core::native_geometric::learner::realtext_support::sha256_hex;
 use uor_r4_core::report_output;
-use uor_r4_tokenizer::dialogue::{DialogueError, DialogueProtocol, SCHEMA as DIALOGUE_SCHEMA};
+use uor_r4_tokenizer::dialogue::{
+    DialogueError, DialogueProtocol, SCHEMA as DIALOGUE_SCHEMA, SCHEMA_V2 as DIALOGUE_SCHEMA_V2,
+};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
-use crate::geometric_stack::{StackConfig, StackModel};
+use crate::geometric_stack::{StackConfig, StackModel, TransportSnap, TRANSPORT_RECORD};
 use crate::stack_store::{StackStore, StackStoreError};
 use crate::{sha256_file, TrainingError};
 
-/// The schema of `identity.json`.
+/// The original, free-transport schema of `identity.json`. Saves without a
+/// transport snap retain this schema and its original fields.
 pub const CHECKPOINT_SCHEMA: &str = "uor-r4.stack-checkpoint/1";
+/// The inference checkpoint schema with an explicitly bound transport snap.
+pub const CHECKPOINT_TRANSPORT_SCHEMA: &str = "uor-r4.stack-checkpoint/2";
 /// The only restore kind: inference reload, never training resume.
 pub const RESTORE_INFERENCE: &str = "inference";
 /// The files `StackModel::save` writes.
@@ -92,13 +105,18 @@ const RESTORE_SCOPE: &str = "Inference reload of the geometric stack: configurat
 provenance identities and the optional session store. No optimizer moments, learning-rate \
 schedule position, data-sampler position or RNG state: training cannot resume from this \
 checkpoint.";
+const TRANSPORT_RESTORE_SCOPE: &str = "Inference reload of the geometric stack: configuration, \
+weights, declared transport snap, provenance identities and the optional session store. No \
+optimizer moments, learning-rate schedule position, data-sampler position or RNG state: \
+training cannot resume from this checkpoint.";
 
-const CHECKPOINT_FILES: [&str; 5] = [
+const CHECKPOINT_FILES: [&str; 6] = [
     report_output::ATTEMPT_FILE,
     CONFIG_FILE,
     MODEL_FILE,
     IDENTITY_FILE,
     MEMORY_FILE,
+    TRANSPORT_RECORD,
 ];
 
 /// The content identity of one training input.
@@ -144,10 +162,23 @@ pub struct CheckpointIdentity {
 
 impl CheckpointIdentity {
     /// The identity of a model trained with `tokenizer_json` under the
-    /// literal-role dialogue protocol. The SHA-256, the CID and the protocol
-    /// all come from the same bytes.
+    /// version-1 literal-role dialogue protocol. The SHA-256, the CID and the
+    /// protocol all come from the same bytes. Existing callers retain their
+    /// original identity; version 2 requires explicit selection.
     pub fn from_tokenizer(
         tokenizer_json: &[u8],
+        data: Vec<DataIdentity>,
+        training_manifest_sha256: String,
+    ) -> Result<Self, StackCheckpointError> {
+        Self::from_tokenizer_version(tokenizer_json, 1, data, training_manifest_sha256)
+    }
+
+    /// Bind the explicitly selected literal-role protocol (1 or 2) to the
+    /// tokenizer bytes. Select the version used to train the model; this does
+    /// not convert model weights or migrate an existing transcript.
+    pub fn from_tokenizer_version(
+        tokenizer_json: &[u8],
+        version: u8,
         data: Vec<DataIdentity>,
         training_manifest_sha256: String,
     ) -> Result<Self, StackCheckpointError> {
@@ -156,7 +187,7 @@ impl CheckpointIdentity {
         let identity = Self {
             tokenizer_sha256: sha256_hex(tokenizer_json),
             tokenizer_cid: tokenizer.address(),
-            protocol: DialogueProtocol::literal_roles_v1(&tokenizer)?,
+            protocol: DialogueProtocol::literal_roles_version(&tokenizer, version)?,
             data,
             training_manifest_sha256,
         };
@@ -202,7 +233,7 @@ impl CheckpointIdentity {
                 "tokenizer_cid must be blake3: and 64 lowercase hex digits",
             ));
         }
-        if self.protocol.schema != DIALOGUE_SCHEMA {
+        if self.protocol.schema != DIALOGUE_SCHEMA && self.protocol.schema != DIALOGUE_SCHEMA_V2 {
             return Err(identity_error(format!(
                 "unsupported dialogue protocol {}",
                 self.protocol.schema
@@ -255,11 +286,23 @@ pub struct MemoryRecord {
     pub history_sha256: String,
 }
 
+/// The transport identity required by schema 2. The bound file is written
+/// by [`StackModel::save`]; its own schema and root-set identity are checked
+/// by [`StackModel::load`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckpointTransportRecord {
+    pub snap: TransportSnap,
+    /// Lowercase hex SHA-256 of `transport.json`.
+    pub sha256: String,
+}
+
 /// `identity.json`: what a checkpoint is and what it binds.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CheckpointRecord {
-    /// Always [`CHECKPOINT_SCHEMA`].
+    /// [`CHECKPOINT_SCHEMA`] without a snap, [`CHECKPOINT_TRANSPORT_SCHEMA`]
+    /// with one.
     pub schema: String,
     /// Always [`RESTORE_INFERENCE`].
     pub restore: String,
@@ -274,6 +317,9 @@ pub struct CheckpointRecord {
     pub model_sha256: String,
     pub parameters: usize,
     pub memory: Option<MemoryRecord>,
+    /// Absent from schema 1; required and non-null in schema 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<CheckpointTransportRecord>,
 }
 
 /// A loaded, verified checkpoint.
@@ -317,7 +363,7 @@ pub enum StackCheckpointError {
     Training(TrainingError),
     Store(StackStoreError),
     Protocol(DialogueError),
-    /// `identity.json` names a schema other than [`CHECKPOINT_SCHEMA`].
+    /// `identity.json` names an unsupported checkpoint schema.
     Schema {
         found: String,
     },
@@ -333,15 +379,14 @@ pub enum StackCheckpointError {
     },
     /// The store differs from its recorded identity.
     Memory(String),
-    /// The model is in served (QAT) mode. Its forward reads the export's
-    /// values, which an inference checkpoint does not store, so a reload
-    /// would silently run the float weights. Save with served mode off, or
-    /// export the model instead.
+    /// The model is in served (QAT) mode, or its saved configuration records
+    /// that mode. Its forward reads the export's values, which an inference
+    /// checkpoint does not store, so a reload would silently run the float
+    /// weights. Save with served mode off, or export the model instead.
     ServedMode,
-    /// The model snaps its transport (`StackModel::set_transport_snap`).
-    /// An inference checkpoint restores the float weights without the snap,
-    /// so a reload would silently run the unsnapped transport.
-    TransportSnap,
+    /// The schema's transport declaration is missing or inconsistent with
+    /// the model that was saved or loaded.
+    Transport(String),
 }
 
 impl fmt::Display for StackCheckpointError {
@@ -356,7 +401,8 @@ impl fmt::Display for StackCheckpointError {
             Self::Protocol(error) => write!(f, "stack checkpoint protocol: {error}"),
             Self::Schema { found } => write!(
                 f,
-                "stack checkpoint schema {found:?} is not {CHECKPOINT_SCHEMA:?}"
+                "stack checkpoint schema {found:?} is neither {CHECKPOINT_SCHEMA:?} nor \
+                 {CHECKPOINT_TRANSPORT_SCHEMA:?}"
             ),
             Self::Identity(message) => write!(f, "stack checkpoint identity: {message}"),
             Self::FileSet(message) => write!(f, "stack checkpoint file set: {message}"),
@@ -374,11 +420,7 @@ impl fmt::Display for StackCheckpointError {
                 "stack checkpoint: the model is in served (QAT) mode; its forward reads exported \
                  values that an inference checkpoint does not store"
             ),
-            Self::TransportSnap => write!(
-                f,
-                "stack checkpoint: the model snaps its transport; an inference checkpoint \
-                 restores the float weights without the snap"
-            ),
+            Self::Transport(message) => write!(f, "stack checkpoint transport: {message}"),
         }
     }
 }
@@ -437,8 +479,19 @@ pub fn save_checkpoint(
     if model.served_codec().is_some() {
         return Err(StackCheckpointError::ServedMode);
     }
-    if model.transport_snap().is_some() {
-        return Err(StackCheckpointError::TransportSnap);
+    if model.read_identity_carry() {
+        return Err(StackCheckpointError::Identity(
+            "read identity carry requires its sidecar; this checkpoint schema does not admit it"
+                .into(),
+        ));
+    }
+    if model.read_identity_latch().is_some() || model.geometric_span().is_some() {
+        return Err(StackCheckpointError::Identity(
+            "read identity latch requires its sidecar and added parameters; this checkpoint schema does not admit it".into(),
+        ));
+    }
+    if let Some(snap) = model.transport_snap() {
+        snap.check(&model.config)?;
     }
     identity.validate()?;
     check_against_model(identity, &model.config)?;
@@ -504,6 +557,11 @@ pub fn load_checkpoint(
             "memory.json and the recorded memory identity disagree".into(),
         ));
     }
+    if listed.contains(TRANSPORT_RECORD) != record.transport.is_some() {
+        return Err(StackCheckpointError::FileSet(
+            "transport.json and the recorded transport identity disagree".into(),
+        ));
+    }
     record.identity.validate()?;
     if record.identity.protocol.identity()? != record.protocol_identity {
         return Err(identity_error(
@@ -512,7 +570,26 @@ pub fn load_checkpoint(
     }
     check_digest(root, CONFIG_FILE, &record.config_sha256)?;
     check_digest(root, MODEL_FILE, &record.model_sha256)?;
+    if let Some(transport) = &record.transport {
+        if !is_sha256_hex(&transport.sha256) {
+            return Err(identity_error(
+                "transport.sha256 must be 64 lowercase hex digits",
+            ));
+        }
+        check_digest(root, TRANSPORT_RECORD, &transport.sha256)?;
+    }
+    // StackModel::load restores the transport snap, but deliberately does
+    // not restore a served representation. Do not silently switch that
+    // saved model to the float variables even if its checkpoint was resealed.
+    if StackModel::saved_served_representation(root)?.is_some() {
+        return Err(StackCheckpointError::ServedMode);
+    }
     let model = StackModel::load(root, device)?;
+    if model.transport_snap() != record.transport.as_ref().map(|entry| entry.snap) {
+        return Err(StackCheckpointError::Transport(
+            "the loaded model's snap differs from the recorded transport identity".into(),
+        ));
+    }
     check_against_model(&record.identity, &model.config)?;
     if model.parameter_count() != record.parameters {
         return Err(identity_error(format!(
@@ -591,6 +668,20 @@ fn write_checkpoint(
     memory: Option<(Vec<u8>, MemoryRecord)>,
 ) -> Result<CheckpointRecord, StackCheckpointError> {
     model.save(root)?;
+    if StackModel::saved_transport_snap(root)? != model.transport_snap() {
+        return Err(StackCheckpointError::Transport(
+            "the saved transport differs from the model's active snap".into(),
+        ));
+    }
+    let transport = model
+        .transport_snap()
+        .map(|snap| {
+            Ok::<_, StackCheckpointError>(CheckpointTransportRecord {
+                snap,
+                sha256: sha256_file(&root.join(TRANSPORT_RECORD))?,
+            })
+        })
+        .transpose()?;
     let memory = match memory {
         Some((bytes, record)) => {
             write_new(&root.join(MEMORY_FILE), &bytes)?;
@@ -599,15 +690,26 @@ fn write_checkpoint(
         None => None,
     };
     let record = CheckpointRecord {
-        schema: CHECKPOINT_SCHEMA.to_owned(),
+        schema: if transport.is_some() {
+            CHECKPOINT_TRANSPORT_SCHEMA
+        } else {
+            CHECKPOINT_SCHEMA
+        }
+        .to_owned(),
         restore: RESTORE_INFERENCE.to_owned(),
-        scope: RESTORE_SCOPE.to_owned(),
+        scope: if transport.is_some() {
+            TRANSPORT_RESTORE_SCOPE
+        } else {
+            RESTORE_SCOPE
+        }
+        .to_owned(),
         identity: identity.clone(),
         protocol_identity,
         config_sha256: sha256_file(&root.join(CONFIG_FILE))?,
         model_sha256: sha256_file(&root.join(MODEL_FILE))?,
         parameters: model.parameter_count(),
         memory,
+        transport,
     };
     write_new(
         &root.join(IDENTITY_FILE),
@@ -643,7 +745,18 @@ fn sealed_files(root: &Path) -> Result<BTreeSet<String>, StackCheckpointError> {
 fn read_record(path: &Path) -> Result<CheckpointRecord, StackCheckpointError> {
     let value: Value = serde_json::from_slice(&fs::read(path)?)?;
     match value.get("schema").and_then(Value::as_str) {
-        Some(CHECKPOINT_SCHEMA) => Ok(serde_json::from_value(value)?),
+        Some(CHECKPOINT_SCHEMA) if value.get("transport").is_some() => Err(
+            StackCheckpointError::Transport("schema 1 cannot declare a transport field".into()),
+        ),
+        Some(CHECKPOINT_SCHEMA | CHECKPOINT_TRANSPORT_SCHEMA) => {
+            let record: CheckpointRecord = serde_json::from_value(value)?;
+            if record.schema == CHECKPOINT_TRANSPORT_SCHEMA && record.transport.is_none() {
+                return Err(StackCheckpointError::Transport(
+                    "schema 2 requires a non-null transport identity".into(),
+                ));
+            }
+            Ok(record)
+        }
         found => Err(StackCheckpointError::Schema {
             found: found.unwrap_or("none").to_owned(),
         }),
@@ -787,8 +900,11 @@ mod tests {
             pattern: "rrarra".into(),
             read: ReadScore::Lorentz,
             rotation: true,
+            rotation_group: Default::default(),
             seed: 5,
             memory: None,
+            select: None,
+            pointer: None,
         };
         StackModel::new(config, &Device::Cpu).expect("tiny stack")
     }
@@ -805,6 +921,33 @@ mod tests {
             .into_iter()
             .map(f32::to_bits)
             .collect()
+    }
+
+    /// Greedy continuation and every deciding logit row, with generated
+    /// tokens fed back on the next step. This is a persistence witness, not
+    /// a language-quality test.
+    fn greedy_steps(model: &StackModel, prefix: &[u32]) -> Vec<(u32, Vec<u32>)> {
+        let mut ids = prefix.to_vec();
+        let mut trace = Vec::new();
+        for _ in 0..4 {
+            let start = ids.len().saturating_sub(model.config.context);
+            let input = &ids[start..];
+            let rows = model
+                .forward(input, 1, input.len())
+                .expect("forward")
+                .to_vec2::<f32>()
+                .expect("logits");
+            let row = rows.last().expect("last logits");
+            let next = row
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                .expect("nonempty vocabulary")
+                .0 as u32;
+            trace.push((next, row.iter().map(|value| value.to_bits()).collect()));
+            ids.push(next);
+        }
+        trace
     }
 
     /// A saved checkpoint of the tiny model and the test store.
@@ -824,7 +967,13 @@ mod tests {
     /// checks can reject it.
     fn reseal(source: &Path, target: &Path, edit: impl FnOnce(&Path)) {
         report_output::claim(target).expect("claim");
-        for name in [CONFIG_FILE, MODEL_FILE, IDENTITY_FILE, MEMORY_FILE] {
+        for name in [
+            CONFIG_FILE,
+            MODEL_FILE,
+            IDENTITY_FILE,
+            MEMORY_FILE,
+            TRANSPORT_RECORD,
+        ] {
             if source.join(name).exists() {
                 fs::copy(source.join(name), target.join(name)).expect("copy");
             }
@@ -849,12 +998,113 @@ mod tests {
     }
 
     #[test]
+    fn dialogue_protocol_versions_are_explicit_bound_and_reloadable() {
+        let (base, legacy) = fixture("dialogue-protocols");
+        let tokenizer = tokenizer_json(VOCAB);
+        let construct = |version| {
+            CheckpointIdentity::from_tokenizer_version(
+                &tokenizer,
+                version,
+                legacy.data.clone(),
+                legacy.training_manifest_sha256.clone(),
+            )
+        };
+        let v1 = construct(1).expect("explicit v1");
+        assert_eq!(legacy, v1);
+        assert_eq!(
+            serde_json::to_vec(&legacy).expect("legacy identity"),
+            serde_json::to_vec(&v1).expect("explicit identity")
+        );
+        let v2 = construct(2).expect("explicit v2");
+        assert_eq!(v2.protocol.schema, DIALOGUE_SCHEMA_V2);
+        assert_ne!(
+            v1.protocol.identity().expect("v1"),
+            v2.protocol.identity().expect("v2")
+        );
+        for version in [0, 3, u8::MAX] {
+            assert!(matches!(
+                construct(version),
+                Err(StackCheckpointError::Protocol(
+                    DialogueError::UnsupportedSchema(_)
+                ))
+            ));
+        }
+        let model = tiny_model();
+        for (name, identity) in [("v1", &v1), ("v2", &v2)] {
+            let root = base.join(name);
+            save_checkpoint(&root, &model, identity, None).expect("save protocol");
+            let loaded = load_checkpoint(&root, &Device::Cpu).expect("load protocol");
+            loaded
+                .identity()
+                .check_tokenizer(&tokenizer)
+                .expect("tokenizer binding");
+            assert_eq!(loaded.identity(), identity);
+            assert_eq!(loaded.record.schema, CHECKPOINT_SCHEMA);
+            assert_eq!(
+                loaded.record.protocol_identity,
+                identity.protocol.identity().expect("identity")
+            );
+            assert_eq!(logit_bits(&loaded.model), logit_bits(&model));
+        }
+        let mismatch = base.join("protocol-digest-mismatch");
+        reseal(&base.join("v2"), &mismatch, |root| {
+            edit_record(root, |record| {
+                record["identity"]["protocol"]["schema"] = json!(DIALOGUE_SCHEMA);
+            });
+        });
+        assert!(matches!(
+            load_error(&mismatch),
+            StackCheckpointError::Identity(_)
+        ));
+        // A matching digest does not admit an unsupported protocol schema.
+        let unknown = base.join("unknown-protocol");
+        reseal(&base.join("v2"), &unknown, |root| {
+            edit_record(root, |record| {
+                let mut protocol = v2.protocol.clone();
+                protocol.schema = "uor-r4.literal-role-dialogue/3".into();
+                record["identity"]["protocol"] = json!(protocol);
+                record["protocol_identity"] = json!(protocol.identity().expect("digest"));
+            });
+        });
+        assert!(matches!(
+            load_error(&unknown),
+            StackCheckpointError::Identity(_)
+        ));
+        fs::remove_dir_all(base).expect("clean");
+    }
+
+    #[test]
     fn save_and_load_reproduce_logits_and_memory_reads_bit_for_bit() {
         let (base, identity) = fixture("round-trip");
         let (root, model, store) = saved(&base, "checkpoint", &identity);
         let loaded = load_checkpoint(&root, &Device::Cpu).expect("load");
         assert_eq!(loaded.identity(), &identity);
         assert_eq!(loaded.record.schema, CHECKPOINT_SCHEMA);
+        assert!(loaded.record.transport.is_none());
+        assert!(!root.join(TRANSPORT_RECORD).exists());
+        let encoded: Value =
+            serde_json::from_slice(&fs::read(root.join(IDENTITY_FILE)).expect("identity"))
+                .expect("record");
+        assert_eq!(
+            encoded
+                .as_object()
+                .expect("object")
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "schema",
+                "restore",
+                "scope",
+                "identity",
+                "protocol_identity",
+                "config_sha256",
+                "model_sha256",
+                "parameters",
+                "memory",
+            ]),
+            "free-transport checkpoints retain the schema-1 fields"
+        );
         assert_eq!(loaded.record.restore, RESTORE_INFERENCE);
         assert_eq!(
             loaded.record.model_sha256,
@@ -1087,7 +1337,82 @@ mod tests {
     }
 
     #[test]
-    fn a_model_in_served_mode_is_refused_before_claiming() {
+    fn read_identity_carry_checkpoint_refuses_before_claim() {
+        let (base, identity) = fixture("read-carry-refused");
+        let mut config = StackConfig::transformer_control(7);
+        config.arch = StackArch::Geometric;
+        config.width = 32;
+        config.heads = 2;
+        config.pattern = "rra".into();
+        let mut model = StackModel::new(config, &Device::Cpu).expect("stack");
+        model.set_read_identity_carry(true).expect("carry");
+        let root = base.join("refused");
+        assert!(matches!(
+            save_checkpoint(&root, &model, &identity, None),
+            Err(StackCheckpointError::Identity(_))
+        ));
+        assert!(!root.exists());
+        fs::remove_dir_all(&base).expect("clean");
+    }
+
+    #[test]
+    fn read_identity_latch_checkpoint_refuses_before_claim() {
+        let (base, identity) = fixture("read-latch-refused");
+        for mode in [
+            crate::geometric_stack::ReadIdentityLatch::Held,
+            crate::geometric_stack::ReadIdentityLatch::Local,
+        ] {
+            let mut config = StackConfig::transformer_control(7);
+            config.arch = StackArch::Geometric;
+            config.width = 32;
+            config.heads = 2;
+            config.pattern = "rra".into();
+            let mut model = StackModel::new(config, &Device::Cpu).expect("stack");
+            model.set_read_identity_latch(mode).expect("latch");
+            let root = base.join(format!("refused-{mode:?}"));
+            assert!(matches!(
+                save_checkpoint(&root, &model, &identity, None),
+                Err(StackCheckpointError::Identity(_))
+            ));
+            assert!(!root.exists());
+        }
+        fs::remove_dir_all(&base).expect("clean");
+    }
+
+    #[test]
+    fn geometric_span_checkpoint_refuses_before_claim() {
+        let (base, identity) = fixture("geometric-span-refused");
+        let mut config = StackConfig::transformer_control(7);
+        config.arch = StackArch::Geometric;
+        config.width = 32;
+        config.heads = 2;
+        config.pattern = "rra".into();
+        let mut model = StackModel::new(config, &Device::Cpu).expect("fixture stack");
+        model
+            .set_read_identity_latch(crate::geometric_stack::ReadIdentityLatch::Held)
+            .expect("fixture latch");
+        model
+            .set_geometric_address(
+                crate::geometric_address::GeometricAddressConfig::new(32, 2)
+                    .expect("fixture config"),
+            )
+            .expect("fixture reader");
+        model
+            .set_geometric_span(
+                crate::geometric_span::GeometricSpanConfig::new(32).expect("fixture config"),
+            )
+            .expect("fixture span");
+        let root = base.join("refused");
+        assert!(matches!(
+            save_checkpoint(&root, &model, &identity, None),
+            Err(StackCheckpointError::Identity(_))
+        ));
+        assert!(!root.exists());
+        fs::remove_dir_all(base).expect("fixture clean");
+    }
+
+    #[test]
+    fn served_mode_is_refused_on_save_and_load_with_or_without_a_snap() {
         let (base, identity) = fixture("served");
         let config = StackConfig {
             arch: StackArch::Geometric,
@@ -1099,39 +1424,277 @@ mod tests {
             pattern: "rar".into(),
             read: ReadScore::Lorentz,
             rotation: true,
+            rotation_group: Default::default(),
             seed: 7,
             memory: None,
+            select: None,
+            pointer: None,
         };
         let mut model = StackModel::new(config, &Device::Cpu).expect("stack");
-        model
-            .set_served_representation(Some(std::sync::Arc::new(
-                crate::geometric_stack::D11Interim,
-            )))
-            .expect("served mode");
-        let root = base.join("served-checkpoint");
-        match save_checkpoint(&root, &model, &identity, None) {
-            Err(StackCheckpointError::ServedMode) => {}
-            other => panic!("{other:?}"),
+        for (name, snap) in [("free", None), ("snapped", Some(TransportSnap::Icosian))] {
+            model.set_served_representation(None).expect("float mode");
+            model.set_transport_snap(snap).expect("snap");
+            let clean = base.join(format!("{name}-clean"));
+            save_checkpoint(&clean, &model, &identity, None).expect("checkpoint");
+            model
+                .set_served_representation(Some(std::sync::Arc::new(
+                    crate::geometric_stack::D11Interim,
+                )))
+                .expect("served mode");
+            let root = base.join(format!("{name}-refused"));
+            assert!(matches!(
+                save_checkpoint(&root, &model, &identity, None),
+                Err(StackCheckpointError::ServedMode)
+            ));
+            assert!(!root.exists(), "no root is claimed for a served-mode model");
+            // StackModel::save is a training save and can write this mode.
+            // A resealed inference checkpoint must not silently discard it.
+            let resealed = base.join(format!("{name}-resealed"));
+            reseal(&clean, &resealed, |root| {
+                model.save(root).expect("training save");
+                edit_record(root, |record| {
+                    record["config_sha256"] =
+                        json!(sha256_file(&root.join(CONFIG_FILE)).expect("digest"));
+                    record["model_sha256"] =
+                        json!(sha256_file(&root.join(MODEL_FILE)).expect("digest"));
+                });
+            });
+            assert!(matches!(
+                load_error(&resealed),
+                StackCheckpointError::ServedMode
+            ));
         }
-        assert!(!root.exists(), "no root is claimed for a served-mode model");
+        fs::remove_dir_all(&base).expect("clean");
     }
 
     #[test]
-    fn a_model_with_a_transport_snap_is_refused_before_claiming() {
+    fn a_snapped_checkpoint_reproduces_logits_greedy_steps_and_memory() {
         let (base, identity) = fixture("snapped");
         let mut model = tiny_model();
+        let free_logits = logit_bits(&model);
         model
-            .set_transport_snap(Some(crate::geometric_stack::TransportSnap::Icosian))
+            .set_transport_snap(Some(TransportSnap::Icosian))
             .expect("transport snap");
+        let snapped_logits = logit_bits(&model);
+        assert_ne!(snapped_logits, free_logits, "the snap affects this witness");
+        let store = test_store(41);
         let root = base.join("snapped-checkpoint");
-        match save_checkpoint(&root, &model, &identity, None) {
-            Err(StackCheckpointError::TransportSnap) => {}
-            other => panic!("{other:?}"),
+        let record = save_checkpoint(&root, &model, &identity, Some(&store)).expect("save");
+        assert_eq!(record.schema, CHECKPOINT_TRANSPORT_SCHEMA);
+        assert_eq!(
+            record.transport,
+            Some(CheckpointTransportRecord {
+                snap: TransportSnap::Icosian,
+                sha256: sha256_file(&root.join(TRANSPORT_RECORD)).expect("digest"),
+            })
+        );
+        let loaded = load_checkpoint(&root, &Device::Cpu).expect("load");
+        assert_eq!(loaded.record, record);
+        assert_eq!(loaded.model.transport_snap(), Some(TransportSnap::Icosian));
+        assert_eq!(logit_bits(&loaded.model), snapped_logits);
+        let first = greedy_steps(&model, &[3, 10, 17, 24]);
+        let changed = greedy_steps(&model, &[3, 11, 17, 24]);
+        assert_ne!(first[0].1, changed[0].1, "earlier input affects the logits");
+        assert_eq!(greedy_steps(&loaded.model, &[3, 10, 17, 24]), first);
+        assert_eq!(greedy_steps(&loaded.model, &[3, 11, 17, 24]), changed);
+        let memory = loaded.memory.as_ref().expect("memory");
+        assert_eq!(memory, &store);
+        for address in store.addresses().expect("addresses") {
+            for view in VIEWS {
+                assert_eq!(
+                    memory.read(&address.scope, &address.entity, address.relation, view),
+                    store.read(&address.scope, &address.entity, address.relation, view)
+                );
+            }
         }
-        assert!(!root.exists(), "no root is claimed for a snapped model");
-        // Without the snap the same model saves.
-        model.set_transport_snap(None).expect("no snap");
-        save_checkpoint(&root, &model, &identity, None).expect("checkpoint");
+        let (mut before, mut after) = (store.clone(), memory.clone());
+        for (value, update) in [(&[30u32][..], Update::Assert), (&[31], Update::Correct)] {
+            assert_eq!(
+                before.write(b"alice", &[3, 4], 1, value, update),
+                after.write(b"alice", &[3, 4], 1, value, update)
+            );
+        }
+        assert_eq!(
+            before.to_bytes().expect("bytes"),
+            after.to_bytes().expect("bytes")
+        );
+        let second = base.join("second-save");
+        save_checkpoint(&second, &loaded.model, &identity, Some(&after)).expect("save again");
+        let second = load_checkpoint(&second, &Device::Cpu).expect("load again");
+        assert_eq!(second.model.transport_snap(), Some(TransportSnap::Icosian));
+        assert_eq!(logit_bits(&second.model), snapped_logits);
+        assert_eq!(second.memory.as_ref(), Some(&after));
+        let bare = base.join("bare");
+        save_checkpoint(&bare, &model, &identity, None).expect("save without memory");
+        let bare = load_checkpoint(&bare, &Device::Cpu).expect("load without memory");
+        assert!(bare.memory.is_none());
+        assert_eq!(bare.model.transport_snap(), Some(TransportSnap::Icosian));
+        fs::remove_dir_all(&base).expect("clean");
+    }
+
+    #[test]
+    fn transport_presence_and_schema_are_enforced_after_resealing() {
+        let (base, identity) = fixture("transport-presence");
+        let mut model = tiny_model();
+        let free = base.join("free");
+        save_checkpoint(&free, &model, &identity, None).expect("free checkpoint");
+        model
+            .set_transport_snap(Some(TransportSnap::Icosian))
+            .expect("snap");
+        let snapped = base.join("snapped");
+        save_checkpoint(&snapped, &model, &identity, None).expect("snapped checkpoint");
+
+        let missing = base.join("missing-file");
+        reseal(&snapped, &missing, |root| {
+            fs::remove_file(root.join(TRANSPORT_RECORD)).expect("remove");
+        });
+        assert!(matches!(
+            load_error(&missing),
+            StackCheckpointError::FileSet(_)
+        ));
+        let extra = base.join("extra-file");
+        reseal(&free, &extra, |root| {
+            fs::copy(snapped.join(TRANSPORT_RECORD), root.join(TRANSPORT_RECORD)).expect("copy");
+        });
+        assert!(matches!(
+            load_error(&extra),
+            StackCheckpointError::FileSet(_)
+        ));
+        for (name, declaration) in [("null", Some(Value::Null)), ("absent", None)] {
+            let target = base.join(name);
+            reseal(&snapped, &target, |root| {
+                edit_record(root, |record| {
+                    let object = record.as_object_mut().expect("object");
+                    match declaration {
+                        Some(value) => {
+                            object.insert("transport".into(), value);
+                        }
+                        None => {
+                            object.remove("transport");
+                        }
+                    }
+                });
+            });
+            assert!(matches!(
+                load_error(&target),
+                StackCheckpointError::Transport(_)
+            ));
+        }
+        let downgraded = base.join("downgraded-schema");
+        reseal(&snapped, &downgraded, |root| {
+            edit_record(root, |record| record["schema"] = json!(CHECKPOINT_SCHEMA));
+        });
+        assert!(matches!(
+            load_error(&downgraded),
+            StackCheckpointError::Transport(_)
+        ));
+        let old_null = base.join("old-schema-null");
+        reseal(&free, &old_null, |root| {
+            edit_record(root, |record| record["transport"] = Value::Null);
+        });
+        assert!(matches!(
+            load_error(&old_null),
+            StackCheckpointError::Transport(_)
+        ));
+        // Loss after sealing is caught by the outer seal as well.
+        fs::remove_file(snapped.join(TRANSPORT_RECORD)).expect("remove");
+        assert!(matches!(
+            load_error(&snapped),
+            StackCheckpointError::Seal(_)
+        ));
+        fs::remove_dir_all(&base).expect("clean");
+    }
+
+    #[test]
+    fn transport_digest_roots_and_configuration_are_checked() {
+        let (base, identity) = fixture("transport-content");
+        let mut model = tiny_model();
+        model
+            .set_transport_snap(Some(TransportSnap::Icosian))
+            .expect("snap");
+        let clean = base.join("clean");
+        save_checkpoint(&clean, &model, &identity, None).expect("checkpoint");
+        let tampered = base.join("tampered");
+        reseal(&clean, &tampered, |_| {});
+        let mut bytes = fs::read(tampered.join(TRANSPORT_RECORD)).expect("transport");
+        bytes.push(b' ');
+        fs::write(tampered.join(TRANSPORT_RECORD), &bytes).expect("write");
+        assert!(matches!(
+            load_error(&tampered),
+            StackCheckpointError::Seal(_)
+        ));
+        let changed = base.join("changed-resealed");
+        reseal(&tampered, &changed, |_| {});
+        assert!(matches!(
+            load_error(&changed),
+            StackCheckpointError::Digest {
+                file: TRANSPORT_RECORD,
+                ..
+            }
+        ));
+        // Even a recomputed outer digest cannot bless malformed metadata or
+        // another root set. The model's own reader validates the record.
+        for (name, field, value) in [
+            ("roots", "roots", json!(119)),
+            ("root-digest", "roots_sha256", json!("0".repeat(64))),
+            ("record-schema", "schema", json!("uor-r4.stack-transport/0")),
+            ("unknown-snap", "snap", json!("unknown")),
+        ] {
+            let target = base.join(name);
+            reseal(&clean, &target, |root| {
+                let path = root.join(TRANSPORT_RECORD);
+                let mut transport: Value =
+                    serde_json::from_slice(&fs::read(&path).expect("read")).expect("transport");
+                transport[field] = value;
+                let bytes = serde_json::to_vec_pretty(&transport).expect("json");
+                fs::write(&path, &bytes).expect("write");
+                edit_record(root, |record| {
+                    record["transport"]["sha256"] = json!(sha256_hex(&bytes))
+                });
+            });
+            assert!(
+                matches!(load_error(&target), StackCheckpointError::Training(_)),
+                "{name}"
+            );
+        }
+        let corrupt = base.join("corrupt-record");
+        reseal(&clean, &corrupt, |root| {
+            fs::write(root.join(TRANSPORT_RECORD), b"{").expect("write");
+            edit_record(root, |record| {
+                record["transport"]["sha256"] = json!(sha256_hex(b"{"))
+            });
+        });
+        assert!(matches!(
+            load_error(&corrupt),
+            StackCheckpointError::Training(_)
+        ));
+        let incompatible = base.join("incompatible-config");
+        reseal(&clean, &incompatible, |root| {
+            let path = root.join(CONFIG_FILE);
+            let mut config: Value =
+                serde_json::from_slice(&fs::read(&path).expect("read")).expect("config");
+            config["rotation"] = json!(false);
+            let bytes = serde_json::to_vec_pretty(&config).expect("json");
+            fs::write(&path, &bytes).expect("write");
+            edit_record(root, |record| {
+                record["config_sha256"] = json!(sha256_hex(&bytes))
+            });
+        });
+        assert!(matches!(
+            load_error(&incompatible),
+            StackCheckpointError::Training(_)
+        ));
+        // StackConfig is public. If a caller changes it after setting the
+        // snap, reject the incompatible model before claiming any root.
+        model.config.rotation = false;
+        let invalid = base.join("invalid-before-save");
+        assert!(matches!(
+            save_checkpoint(&invalid, &model, &identity, None),
+            Err(StackCheckpointError::Training(_))
+        ));
+        assert!(!invalid.exists());
+        load_checkpoint(&clean, &Device::Cpu).expect("clean checkpoint still loads");
+        fs::remove_dir_all(&base).expect("clean");
     }
 
     #[test]

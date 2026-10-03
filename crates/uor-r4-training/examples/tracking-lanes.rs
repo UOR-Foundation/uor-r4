@@ -355,8 +355,11 @@ fn mixed(args: &Args, out: &Path) -> Result<()> {
             .unwrap_or_else(|| "rrar".into()),
         read: ReadScore::Dot,
         rotation: true,
+        rotation_group: Default::default(),
         seed: 0,
         memory: None,
+        select: None,
+        pointer: None,
     };
     stack_template.validate()?;
     let mixed_template = MixedConfig {
@@ -597,8 +600,11 @@ fn stories(args: &Args, out: &Path) -> Result<()> {
             .unwrap_or_else(|| "rrar".into()),
         read: ReadScore::Dot,
         rotation: true,
+        rotation_group: Default::default(),
         seed: 0,
         memory: None,
+        select: None,
+        pointer: None,
     };
     stack_template.validate()?;
     let story_template = StoryConfig {

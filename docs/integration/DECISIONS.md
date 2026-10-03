@@ -677,3 +677,206 @@ does not retroactively claim that #1522 passed its pre-merge gates.
    reconcile attempts, and adopt this exact policy merge using its genuine
    Class C receipt before new claims or execution. This one-use exception ends
    on successful migration; later changes use the normal coordinator.
+
+## D18 — One retrieval question for 1–14 October; Track B, cost and memory-port work parked with re-entry conditions
+
+**Owner-approved on 30 September 2026** (menu choice "Approve", recorded on [#820](https://github.com/UOR-Foundation/uor-r4/issues/820)). In force for 1–14 October. Tracked on [#1552](https://github.com/UOR-Foundation/uor-r4/issues/1552).
+
+**Authority.** Proposed by the Claude lab from the 30 September direction review: four evidence briefs, three proposals, capability and cost critiques, and a judge. The review was carried out by the Claude lab alone under the owner's 20:20 UTC ruling that a lab may review its own work. The full review is kept in [direction-review-2026-09-30.md](direction-review-2026-09-30.md).
+
+It changes the programme's priorities for 1–14 October only, prospectively. It changes no measurement and no earlier verdict.
+
+### 1. The question
+
+For these two weeks both labs and the laptop answer one question: **can the native geometric stack bind and copy a value it has never seen, stated earlier in the same conversation, and does that survive D11 serving?**
+
+The question rests on two things:
+
+- **Measured.** Every English memory score is 0/10, and R1's development relation recall is 0/64.
+- **Hypothesis.** The §8 conversations fit in 256 tokens. The longest is 137 words against a ≤140-word proxy, and the exact #1017-tokenizer count is pending. If that count fails, this decision is reopened.
+
+### 2. A1, run as pre-registered, with one budget amendment
+
+The pre-registration is #1511, comments 5898059603 and 5902211457, and `a1_gate` in `milestone_world_v2.rs`.
+
+- **Instrument check first.**
+  - Run it on the real #1017 tokenizer.
+  - `instrument_freeze_ok` must be true: R-recency and R-nlet each below 0.6 on every gated cell.
+  - Every MQAR distance bucket must be populated, and every probe item must fit in 256 tokens.
+  - The digest is posted before any treatment run.
+  - A leaking cell is reported, not gated. There is no second revision of the instrument.
+- **Arms.**
+  - P: plain Lorentz read.
+  - P+ptr: Lorentz pointer.
+  - T: the transformer control, in round 1.
+  - C: the Dot control of the better arm.
+  - Post hoc on fixed weights: a flock sweep and `top:1`.
+  - Seed 2 for the best arm and its Dot control. D17 parity rule v2 decides between them.
+- **Budget (the amendment).** The budget is an equal step count, fixed from a smoke measured under the same thread and core concurrency the arms will use. The 30-minute wall is a stop only. An arm stopped by the wall is reported and excluded from parity comparisons, with no extension.
+- **Gate (unchanged).** On the development-phrasing × development-value cell, MQAR recall ≥0.9 at distances 16, 64 and 200 AND open-relation recall ≥0.9.
+- **Kill (unchanged).** Every arm, including T and T at 2× steps, below 0.5 at distance 16. Track A retrieval then moves to the exact log plus the prime sieve, with no third round.
+
+### 3. The four outcomes, decided on 14 October
+
+- **A — retrieval is learned and served.** An arm passes `a1_gate`, and served retrieval is within 0.03 of the model's own float (item 5). The §8 panel is requested only if D11-served development cells reach ≥0.80 in Responsive, Instruction and Relation, the 38-request memory score is ≥8/10, and greedy streams are identical across a fresh-process reload.
+- **B — scale or phrasing.** Retrieval passes on the pure-retrieval cell (train phrasing × development value), but Responsive or Instruction stays below 0.80, or development × development relation is below 0.6. The owner then chooses among size (10–30M), Metal coverage of the Lorentz and pointer ops, and teacher data.
+- **C — read defect.** T beats the best stack arm by ≥0.2 at distance 64 after the seed-2 pair. The parity rule is then applied to the read.
+- **D — no learned retrieval at this scale, T included.** The item 2 kill applies. Week 2 produces a design memo for the log-plus-sieve route, and no new training.
+
+A result on the development cells is a phrasing-transfer proxy. Only the sealed §8 panel qualifies an artifact.
+
+### 4. Data unlock and the conditional 7M fit
+
+- **`PrefixPolicy::TruncatedPrefix{keep_last}`.**
+  - It must reproduce FullPrefix exactly: 14,826 eligible of 129,486 runs; 1,048,098 of 56,650,286 response tokens.
+  - There are no mid-response windows.
+  - It is adopted only if, on two seeds, the truncated arm is ≥0.02 nats better than FullPrefix on the 161-response panel AND does not regress the relation and abstention cells.
+- **The 7M fit, only on outcome A of A1.**
+  - Setup: the S4 arm A trunk, the A1 winner and the item 4 data policy, with M-world v2 at ≥30% of tokens.
+  - The work card fixes the learning rate and the rule for a guard failure before the run. R1's lr 1e-3 already failed the 2.597954 guard. A guard failure means the model is not the §8 candidate; the retrieval readouts are still reported.
+  - The fit stops after 12M new positions unless development Instruction is ≥0.40 and pure retrieval is ≥0.5. Otherwise the result is outcome B.
+  - One continuation, to 10 tokens per parameter cumulative, is allowed only under the same rule.
+
+### 5. Serving
+
+- **Porting the pointer.** Only the trained A1 pointer is ported into `IntegerStackSession`. #1540's head-0 boost is a different mechanism.
+- **Gate.**
+  - The zero-multiply audit stays FULL PASS, with the pointer inside the audited roots.
+  - D11 still equals D10 on the non-pointer path.
+  - D11-served MQAR and open-relation recall are within 0.03 of the model's own training forward pass. D10 refuses pointer models, so it is not the comparator here.
+  - Served recall more than 0.10 below float makes QAT with the pointer the next untested step. It is not run inside this window.
+- **Flock.** Flock is recorded for parity only and is not ported for serving at 256 tokens. #1528 selects over scores the caller has already formed, so it saves no bytes there (derived).
+- **Eviction, on outcome A only.** A sink-plus-sliding-window eviction policy is added to the D11 session, because §8 requires a declared eviction policy.
+- **Energy.** The D15 item 3 J/token capture, with its comparators, is taken at that export.
+
+### 6. Parked, not killed (D12)
+
+Each item keeps its records and its re-entry condition.
+
+- **Track B conversion:** the #1518 chase, B0, B1, B2, harmonic arms and the B3 rerun. It re-enters on owner direction.
+  - #1518's FAIL record stays immutable.
+  - A prospective successor host gate is defined here but not run: dense NLL on the D3 held-out split (596 articles, 71,714 targets) within a band of the independent referee's 3.8425 bits/token, frozen before any run (±0.01 proposed), plus a flock identity arm within 1e-5 nats of dense.
+  - It amends D16 item 5 only on owner approval.
+  - A B3 rerun first needs a one-matrix exhaustive-encoder check.
+- **QAT and codec reruns on the old lineages.** They re-enter on item 5's kill.
+- **Kernel-speed, K-cost and energy work,** except the capture in item 5. Re-entry: a served model answers at least half of the development turns, or a D5 design exists.
+- **Memory port, AERM, G v2 probes, I1 integration.** Re-entry: outcome D, or §8 passes.
+- **A2 beyond 256 tokens, age buckets and ring buffer.** Re-entry: the §8 token count fails, or §8 passes.
+- **Teacher T3/T4 generation.** Only the teacher-ceiling measurement may run, scored by the frozen M-world oracle, and only if R1-X shows the limit is phrasing.
+
+### 7. Claims
+
+This line claims no chat, no geometric advantage and no runtime or energy saving.
+
+- **Measured.** D11 is about 3–5× slower than D10 NEON (self-reported), reads 100% of its weights per token, and has no valid J/token.
+- **The runtime-cost thesis is not tested by this decision.** It needs a D5 selected-weight-access mechanism, and no such mechanism is built.
+
+### 8. Process
+
+- One immutable work card per run, posted before launch.
+- A wall is a stop, not a budget.
+- Reviews follow the owner's 20:20 rule: a recorded review at the exact head, and self-review is allowed.
+- A PR merges only after its exact-head compile and test run has completed and passed.
+- STATUS.md and current-state.md are corrected when this entry is delivered, and then at each outcome.
+
+### 9. Owner rulings recorded with the approval (30 September)
+
+- **Labs.** Only the Claude lab and the OpenCode/DeepSeek lab remain. Codex, Kimi and Anti-Gravity were removed by the owner; their merged work keeps its scope.
+- **Reviews.** A lab may review its own PR. Each review is recorded at the exact head with its scope and evidence, and the merge follows the exact-head compile and test run.
+- **§8 token count.** The owner runs a count-only #1017-tokenizer check on the sealed panel. The Claude lab supplies the tool, tested only on a non-panel fixture. No lab reads the panel. A count above 256 reopens item 1.
+- **Cost design.** The DeepSeek lab writes a one-day, no-compute design memo for a D5 selected-weight-access mechanism (prime or semiprime routing, or another candidate) as input to the 14 October decision. Nothing is run.
+- **#1546.** The low-bit trainers' Adam guard is not needed by the current stack, so it is **not restored**. The four legacy `uor-r4-core` learner tests that depended on it are marked ignored, with a pointer to #1546 and this entry, so that `main`'s test signal reflects the current stack. The tests and their records are kept.
+
+### 10. Outcome — D, reached on 1 October (owner-confirmed)
+
+- **The kill in item 2 was met.** Every A1 arm scored below 0.5 MQAR recall at distance 16 on the development cell, the transformer control at 2× steps (5,180) included, which scored 0. The owner confirmed outcome D on 1 October; the record and roots are on #1552.
+- **Measured reading.**
+  - Without a pointer head, no read retrieves (MQAR 1/109).
+  - Pointer arms score 0.28–0.44 MQAR, falling as about 1/N. That matches the untrained "most recent value" rule (0.36): they copy recency and do not bind a query to its key.
+  - Lorentz-vs-Dot read parity is undecided at two seeds. The D18 Lorentz-scored pointer did not run.
+- **Consequences.**
+  - No new A1 training.
+  - The exact-log plus prime-sieve design memo starts at once rather than in week 2.
+  - The 7M fit (item 4) and the pointer's D11 port (item 5) do not run.
+  - The pointer head stays in the toolbox (D12).
+- **Item 1's premise also failed.** The owner-run §8 count needs up to 317 positions with a 32-token reply budget, against 256. The owner kept this decision and re-entered A2 as source work (#1557).
+
+## D19 — Grounded conversation and durable memory first
+
+**Authority, October 1:** the owner requested: “Please solidify your plan as the
+active plan for the project and restructure the github roadmap and issues list
+as you recommend”, protect mechanisms from poorly planned/executed tests,
+“always merge your prs”, and proceed autonomously with Claude and
+OpenCode–DeepSeek working concurrently. The owner's selected first product
+priority is **“Grounded conversation and durable memory first.”** The retained
+public work card is [#1563](https://github.com/UOR-Foundation/uor-r4/issues/1563);
+the [programme coordination record](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5925730048)
+publishes the authorization and division of work. This entry records that
+direction; it does not attribute every implementation detail to an owner quote.
+
+1. **One active plan.** [project-track.md](project-track.md) now owns the active
+   scientific sequence and capability obligations; current-state owns changing
+   results; ROADMAP/STATUS/lab entry are navigation. The September 29 schedules
+   and D18's fortnight-only next-action/roster restrictions are superseded where
+   they conflict. D18 outcome D, A1's stopped training, original failed gates
+   and Track B's parked disposition remain. No sealed panel is opened.
+2. **Next useful mechanism.** Complete a learned saved compiler/store/emitter
+   path, then durable grounded conversation on the same model. Retain geometric
+   query/write alignment, compositional state and selected-access discovery as
+   shared-interface research. D11/D0-b/D5, Rust-native implementation, exact
+   identity and typed geometry are unchanged. Full alpha still requires useful
+   coding/reasoning; frontier capability remains an objective.
+3. **Admissibility.** The [October policy](mechanism-admissibility-2026-10.md)
+   makes D12/D17/D9 operational: assess the learning opportunity, instrument,
+   information, control and consumer before interpreting a negative. A failed
+   promotion stays failed. A materially changed successor may re-enter with a
+   causal prediction and bounded work card; no automatic family retirement or
+   blind retry follows. D17v2's exact prospective retention rule remains in
+   force. Existing E3 thresholds and §8 acceptance are not weakened.
+4. **Development integration is not promotion.** E3 v11 and a small lexical
+   compiler may enter a labelled end-to-end diagnostic to localize failures
+   before reaching their old component gate. This is consistent with the
+   concurrent owner-authorized E4 v12 on #1552. Source/category/answer oracles
+   cannot stand in for predicted-input capability. Changes to semantic labels
+   must preserve Assert/Correct/reassertion/query behavior or explicitly declare
+   a narrower development scope, not silently discard temporal obligations.
+5. **Coordination and delivery.** Codex is reauthorized by this direct request
+   alongside Claude and OpenCode–DeepSeek. Kimi/Anti-Gravity remain historical;
+   this does not restart clients or transfer live source/jobs. Live issue claims
+   and verified workers decide ownership. The current owner rule from D18 §8–9
+   remains: recorded exact-head review (self-review allowed), actual relevant
+   compile/tests, then protected merge; delivery-evidence is advisory. This
+   owner-authorized plan gets adversarial specialist review with authorship
+   disclosed; it does not fabricate non-author council votes. Future ordinary
+   decisions follow the shared protocol subject to the newer owner rules.
+6. **Cadence and resources.** Keep GitHub updates, five-minute active heartbeat
+   and thirty-minute recoverable checkpoints; use the documented manual
+   coordination fallback when the deployed coordinator/policy is unverified.
+   Owner-directed FIFO starts within the aggregate eight-thread/11 GiB envelope,
+   cumulative charges, physical storage/RAM checks and prospective local
+   extensions remain. Small bounded checks do not require a heavy-job slot;
+   preserve existing runs' declared reservations and verified host limits. No paid compute, unique-material
+   deletion, protected-branch bypass or new universal test/timer regime is
+   authorized. A PR's passing transport statuses are not test execution.
+7. **Issue structure.** Reopen transferred capability tracking where needed and
+   give each obligation a current parent, dependencies, explicit acceptance and
+   ready/blocked/parked status. Preserve original bodies/results in history.
+   Do not close a capability because a component or its tracking migration
+   completed. Close a delivered scoped task only against its complete evidence.
+
+**Alternatives and objections.** More frozen E3 fits do not repair missing spans,
+persistence or autoregressive integration; a whole new learner would duplicate
+the exact-store work. A fixed ten-relation compiler risks becoming a scripted
+assistant, so it is the first integration boundary only, with explicit later
+scope/compositional/language obligations. Geometry parity is not superiority;
+exact storage is not language understanding. Preserve these objections in the
+acceptance and use measured consumer behavior to choose successors.
+
+**Effect, review and rollback.** Effective on protected delivery of this change;
+exact-head reviews/checks and merge identity are recorded on its PR/#1563.
+The documentation task adds no model compute or new numerical result. Reverting
+this scheduling change would restore the prior ordering, not invalidate new
+evidence, delete artifacts or restore obsolete serving exceptions. Any later
+working change records the affected interface, costs and next discriminator
+prospectively. The existing sealed milestone stays fixed unless the owner
+explicitly changes it before a new candidate.
