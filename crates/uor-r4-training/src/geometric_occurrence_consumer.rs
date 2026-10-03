@@ -24,7 +24,7 @@ use uor_r4_integer::{
 
 use crate::{
     geometric_address::GeometricAddressConfig,
-    geometric_context::{ContextWeights, GeometricContextConfig},
+    geometric_context::{ContextWeights, GeometricContextConfig, PreparedContextQ4},
     geometric_context_credit::{frozen_no_read_forward, frozen_potential_forward},
     geometric_no_read::{NoReadBatch, NoReadWeights},
     geometric_potential_q4::PotentialQ4Weights,
@@ -274,8 +274,27 @@ impl ConsumerWeights {
         })
     }
 
-    /// One ordinary answer-token CE. Prefix contains only preceding response
-    /// tokens. The target is never passed to the context, selector or reader.
+    /// Admit source/native identity and prepare immutable graphs once per update.
+    /// Drop this value before modifying any parameter returned by `parameters`.
+    pub fn prepare<'a>(
+        &'a self,
+        native: &'a NativeConsumerArtifact,
+    ) -> Result<PreparedConsumerStep<'a>> {
+        native.validate_source(self)?;
+        Ok(PreparedConsumerStep {
+            source: self,
+            native,
+            context: self.context.prepare_q4(&native.context)?,
+        })
+    }
+
+    pub fn project_quarter_range(&self) -> Result<()> {
+        self.context.project_shadow_range()?;
+        self.potential.project_shadow_range()?;
+        self.no_read.project_shadow_range()
+    }
+
+    /// One ordinary answer-token CE. Target enters only the loss.
     pub fn loss(
         &self,
         frame: SelectedRecordFrame<'_>,
@@ -285,11 +304,30 @@ impl ConsumerWeights {
         target: u32,
         native: &NativeConsumerArtifact,
     ) -> Result<ConsumerLoss> {
-        native.validate_source(self)?;
-        if parent.len() != self.config().vocab_size || target as usize >= parent.len() {
+        self.prepare(native)?
+            .loss(frame, query, prefix, parent, target)
+    }
+}
+
+/// Update-local graph reuse; source variables must remain unchanged until dropped.
+pub struct PreparedConsumerStep<'a> {
+    source: &'a ConsumerWeights,
+    native: &'a NativeConsumerArtifact,
+    context: PreparedContextQ4<'a>,
+}
+impl PreparedConsumerStep<'_> {
+    pub fn loss(
+        &self,
+        frame: SelectedRecordFrame<'_>,
+        query: &[u32],
+        prefix: &[u32],
+        parent: &[f32],
+        target: u32,
+    ) -> Result<ConsumerLoss> {
+        if parent.len() != self.source.config().vocab_size || target as usize >= parent.len() {
             return Err(invalid("consumer parent/target vocabulary differs"));
         }
-        let trace = native.read(frame, query, prefix)?;
+        let trace = self.native.read(frame, query, prefix)?;
         let mixed_scores = mix_scores(parent, &trace, true)?;
         let probabilities = normalized_parent(parent)?;
         let ids = frame
@@ -300,15 +338,16 @@ impl ConsumerWeights {
             .copied()
             .collect::<Vec<_>>();
         let time = ids.len();
-        let heads = self.config().heads;
-        let lanes = self.config().lanes_per_head;
-        let context = self.context.forward_q4(&ids, 1, time, false)?;
+        let heads = self.source.config().heads;
+        let lanes = self.source.config().lanes_per_head;
+        let context = self.context.forward(&ids, 1, time, false)?;
         let absent = AddressLane::new(1, 0, false).map_err(|e| invalid(e.to_string()))?;
         let content = vec![absent; time * heads * lanes];
-        let coefficient = self
-            .potential
-            .forward_codes(1, time, &content, &context.trace.codes)?;
-        let input_credit = frozen_potential_forward(&self.potential, &content, &context)?;
+        let coefficient =
+            self.source
+                .potential
+                .forward_codes(1, time, &content, &context.trace.codes)?;
+        let input_credit = frozen_potential_forward(&self.source.potential, &content, &context)?;
         if coefficient.scores_q24 != input_credit.scores_q24 {
             return Err(invalid("consumer potential credit hard traces differ"));
         }
@@ -323,7 +362,7 @@ impl ConsumerWeights {
             .collect::<Result<Vec<_>>>()?;
         let held = vec![H4Code::IDENTITY; latent.len()];
         let valid = vec![false; time];
-        let null_coeff = self.no_read.forward(NoReadBatch {
+        let null_coeff = self.source.no_read.forward(NoReadBatch {
             ids: &ids,
             batch: 1,
             time,
@@ -332,7 +371,8 @@ impl ConsumerWeights {
             held: &held,
             span_valid: &valid,
         })?;
-        let null_context = frozen_no_read_forward(&self.no_read, &ids, &context, &held, &valid)?;
+        let null_context =
+            frozen_no_read_forward(&self.source.no_read, &ids, &context, &held, &valid)?;
         let mut target_probabilities = Vec::with_capacity(heads);
         let n = frame.token_ids.len();
         for head in 0..heads {
