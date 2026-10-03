@@ -361,6 +361,56 @@ No perfect donor-imitation gate or automatic dose/selector/alphabet sweep.
 Claude retains the concurrent D19 session lane; geometric attention stays #1512.
 
 
+## Scale ladder and the first-principles audit — 2–3 October
+
+**Direction (owner decisions on #820).** The scale-first path was adopted on 2 October. An adversarial first-principles audit then ran (nine agents, verdict on #820). Its trimmed plan was adopted:
+- learned weights carry language;
+- exact geometry carries memory, state tracking and integer serving;
+- three gated steps come before any 30M rung.
+
+**Step 1 — geometric against transformer at 8M** (pending the control).
+- geo-8m-a: the geometric stack, 7,155,396 parameters, width 288, `rrarra`, Lorentz read, quaternion rotation, context 384.
+- Data: 98.3M tokens of TinyStories V2, TinyDialogues and chat-v0 (weights 0.6 / 0.15 / 0.25), encoded by `prepare-text-corpus` with zero round-trip drops.
+- Final NLL: **1.5974** on TinyStories validation (512 windows), **1.8942** on TinyDialogues validation and **2.2110** on chat-v0 held-out (whole splits).
+- The matched 8M transformer (7,155,360 parameters, same windows) is training on the rented server. At equal steps the curves are within 0.015 nats (geometric slightly lower).
+- Kill rule: geometric worse by more than 0.05 nats removes the stack's emitter role.
+
+**Step 2 — attribution with matched controls** (#1639).
+- Setup: 7,155,396 parameters each, 1,000 updates (6.1M tokens), 2 seeds, free GitHub runners, TinyStories validation over 512 windows.
+
+| Arm | Mean NLL | Δ vs baseline |
+|---|---|---|
+| quaternion + Lorentz (baseline) | 2.2138 | — |
+| U(1) lanes + Lorentz | 2.2372 | +0.0234 (both seeds) |
+| quaternion + flat L2 read | 2.1793 | −0.0345 (both seeds) |
+
+- **Ruling.** Non-commutative quaternion transport keeps its language claim; it is the first main-line geometric mechanism measured better than its matched control on text. The Lorentz read is replaced by the flat L2 read.
+- The L2 result is being confirmed at the full 8M budget.
+
+**Step 3 — binding pre-test.**
+- Setup: the A1 development cell (development phrasing × development value, 300 conversations, seed 9101), `recall=off`.
+- Result: MQAR at distance 16 is 1/37 for both chat-8m-a and emit-6r, against 13/37 for the recency rule.
+- **Learned binding fails at 8M.** Memory remains the exact closed-world store, and no learned bridge is built.
+
+**D19 emitter.** chat-8m-a = geo-8m-a + pointer + 4,000 steps of emit-6r's corpus. On the same 300 conversations it is the new best:
+
+| Emitter | Copy | Instruction | MQAR | Relation | Responsive | Total |
+|---|---|---|---|---|---|---|
+| emit-6r (2.1M) | 17/33 | 43/98 | 108/109 | 74/83 | 647/752 | 889 |
+| chat-8m-a (8M) | 31/33 | 67/98 | 107/109 | 75/83 | 679/752 | 959 |
+
+**Chat panel.**
+- Instrument: the frozen everyday-32 plus stretch-32 panel (`chat-grade`), graded with a paired McNemar test against a derangement control (#1637).
+- Under qwen2.5:7b, acceptable replies rise from 3/64 to 6/64, discordant 5:0, p = 0.063 (not yet significant).
+- Under qwen2.5:1.5b, acceptable rises from 26/64 to 32/64, p = 0.012.
+
+**Compute.**
+- Laptop: CPU with Accelerate; Metal training now works (#1625, NaN fix #1636).
+- A rented 8-vCPU server, owner-paid.
+- Free GitHub runners for evidence and short arms (about 2,300 tok/s per job at 7M).
+
+**Scope.** One seed and one draw for the session and the panel. The world is authored. This is not general prose or open-domain memory.
+
 ## D19 grounded conversation session — measured best configuration, October 2
 
 The grounded session (#1552) now combines five merged changes:
