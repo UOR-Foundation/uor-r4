@@ -33,6 +33,9 @@ use crate::{
     invalid, sha256_bytes, Result,
 };
 
+#[path = "geometric_source_realizer.rs"]
+pub mod source_realizer;
+
 pub const SCHEMA: &str = "uor-r4.geometric-occurrence-consumer/1";
 pub const SOURCE_VIEW_SCHEMA: &str = "uor-r4.geometric-occurrence-consumer/2";
 pub const SURROGATE: &str = "native-Q31-normalized-forward;softmax-score-adjoint;hard-quarter-source-STE;coefficient-and-frozen-context-input-credit;whole-parent-NoRead-fallback;target-loss-only/1";
