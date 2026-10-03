@@ -631,12 +631,29 @@ fn run(a: &Args) -> Result<()> {
             &json!({"error":e.to_string(),"optimizer_updates":updates}),
         )?;
     }
+    let mut hard_payload_changes = Vec::new();
+    let mut any_hard_change = false;
+    if final_checkpoint.is_ok() {
+        for name in ["context-q4.bin", "potential-q4.bin", "no-read-q4.bin"] {
+            let initial_sha =
+                sha256_file(&a.initial_construction.join("consumer-native").join(name))?;
+            let final_sha =
+                sha256_file(&a.out.join("final-checkpoint/consumer-native").join(name))?;
+            let changed = initial_sha != final_sha;
+            any_hard_change |= changed;
+            hard_payload_changes.push(json!({"file":name,"initial_sha256":initial_sha,"final_sha256":final_sha,"changed":changed}));
+        }
+    }
+    let hard_change_available = final_checkpoint.is_ok();
     write(
         &a.out.join("report.json"),
-        &json!({"schema":"uor-r4.geometric-source-learning/1","mode":a.mode,"status":status,"optimizer_updates":updates,"declared_updates":a.maximum_updates,"scope":"exposed-development frozen floating parent and learned geometric consumer; not native complete chat or heldout quality","batches":batch_reports,"wall_seconds":start.elapsed().as_secs_f64(),"source_commit":source_commit,"final_checkpoint":final_checkpoint.as_ref().ok(),"work_error":work.as_ref().err().map(|x|x.to_string())}),
+        &json!({"schema":"uor-r4.geometric-source-learning/1","mode":a.mode,"status":status,"optimizer_updates":updates,"declared_updates":a.maximum_updates,"scope":"exposed-development frozen floating parent and learned geometric consumer; not native complete chat or heldout quality","batches":batch_reports,"wall_seconds":start.elapsed().as_secs_f64(),"source_commit":source_commit,"final_checkpoint":final_checkpoint.as_ref().ok(),"hard_payload_change_available":hard_change_available,"hard_payload_changes":hard_payload_changes,"any_hard_native_payload_changed":if hard_change_available {Some(any_hard_change)}else{None},"shadow_only_fit":if hard_change_available {Some(updates>0&&!any_hard_change)}else{None},"hard_change_scope":"packed q4 coefficient changes; not evidence of changed trace, quality or generalization","work_error":work.as_ref().err().map(|x|x.to_string())}),
     )?;
     work?;
     final_checkpoint?;
+    if a.mode == "cost" && any_hard_change {
+        return Err(invalid("zero-update cost changed packed native payload"));
+    }
     Ok(())
 }
 fn main() -> Result<()> {
