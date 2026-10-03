@@ -145,7 +145,33 @@ def is_degenerate(reply: str, user: str) -> dict:
     }
 
 
-def score_arm(label: str, chat_path: str, expected: dict, values: dict | None) -> dict:
+def stated_competing(requests: list, values: dict | None) -> dict:
+    """row id -> the value stated by the competing (middle) user turn.
+
+    The panel's competing rows put the distractor in the second user turn; the
+    value it states is recovered by matching the relation value table against
+    that turn, so "did the arm answer with the distractor?" needs no extra
+    panel metadata.
+    """
+    if not values:
+        return {}
+    known = [value for value_list in values.values() for value in value_list]
+    stated = {}
+    for row in requests:
+        turns = row.get("user_turns") or []
+        if len(turns) < 3:
+            continue
+        middle = turns[1]
+        found = [v for v in known if phrase_pattern(v).search(middle)]
+        # Exactly one value must be present, or the recovery is ambiguous.
+        if len(found) == 1:
+            stated[row.get("id")] = found[0]
+    return stated
+
+
+def score_arm(
+    label: str, chat_path: str, expected: dict, values: dict | None, stated: dict | None = None
+) -> dict:
     # `+`-separated paths merge into one arm: `lut-chat` caps a panel at 128
     # requests, so a larger panel is run as chunks and scored as a union.
     replies: dict = {}
@@ -166,6 +192,7 @@ def score_arm(label: str, chat_path: str, expected: dict, values: dict | None) -
             "echo": 0,
             "words": 0,
             "other_value": 0,
+            "distractor": 0,
         }
     )
     per_row = {}
@@ -197,6 +224,11 @@ def score_arm(label: str, chat_path: str, expected: dict, values: dict | None) -
             others = [v for v in values[asked] if v.lower() != want.lower()]
             if any(v.lower() in reply.lower() for v in others):
                 cell["other_value"] += 1
+        # The distractor the arm was shown, when the row states one: a reply
+        # that contains it copied the wrong fact rather than failing to copy.
+        distractor = (stated or {}).get(row_id)
+        if distractor and phrase_pattern(distractor).search(reply):
+            cell["distractor"] += 1
         per_row[row_id] = {
             "strict": strict,
             "lenient": lenient,
@@ -217,7 +249,16 @@ def score_arm(label: str, chat_path: str, expected: dict, values: dict | None) -
         row["strict_ci95"] = list(wilson(cell["strict"], cell["n"]))
         row["lenient_ci95"] = list(wilson(cell["lenient"], cell["n"]))
         row["mean_words"] = cell["words"] / cell["n"]
-        for key in ("empty", "truncated", "no_eos", "repeat", "echo", "missing", "other_value"):
+        for key in (
+            "empty",
+            "truncated",
+            "no_eos",
+            "repeat",
+            "echo",
+            "missing",
+            "other_value",
+            "distractor",
+        ):
             row[key + "_rate"] = cell[key] / cell["n"]
         summary["cells"][condition] = row
     return summary
@@ -243,8 +284,8 @@ def mcnemar(a: dict, b: dict) -> dict:
 
 def markdown(summaries: list[dict], pair: dict | None, values_known: bool) -> str:
     lines = []
-    lines.append("| arm | condition | n | strict | strict 95% CI | lenient | empty | trunc | no_eos | repeat | echo |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    lines.append("| arm | condition | n | strict | strict 95% CI | lenient | other | distractor | empty | trunc | no_eos | repeat | echo |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for summary in summaries:
         keys = [c for c in CONDITIONS if c in summary["cells"]]
         keys += sorted(k for k in summary["cells"] if k not in CONDITIONS)
@@ -254,7 +295,7 @@ def markdown(summaries: list[dict], pair: dict | None, values_known: bool) -> st
                 continue
             ci = cell["strict_ci95"]
             lines.append(
-                "| {label} | {cond} | {n} | {s}/{n} = {sr:.1%} | [{lo:.1%}, {hi:.1%}] | {l}/{n} = {lr:.1%} | {e:.1%} | {t:.1%} | {ne:.1%} | {r:.1%} | {ec:.1%} |".format(
+                "| {label} | {cond} | {n} | {s}/{n} = {sr:.1%} | [{lo:.1%}, {hi:.1%}] | {l}/{n} = {lr:.1%} | {o:.1%} | {d:.1%} | {e:.1%} | {t:.1%} | {ne:.1%} | {r:.1%} | {ec:.1%} |".format(
                     label=summary["label"],
                     cond=condition,
                     n=cell["n"],
@@ -264,6 +305,8 @@ def markdown(summaries: list[dict], pair: dict | None, values_known: bool) -> st
                     hi=ci[1],
                     l=cell["lenient"],
                     lr=cell["lenient_rate"],
+                    o=cell["other_value_rate"],
+                    d=cell["distractor_rate"],
                     e=cell["empty_rate"],
                     t=cell["truncated_rate"],
                     ne=cell["no_eos_rate"],
@@ -283,6 +326,15 @@ def markdown(summaries: list[dict], pair: dict | None, values_known: bool) -> st
                 n=pair["mcnemar"]["shared_rows"],
             )
         )
+        lines.append("")
+        lines.append("| condition | only {a} | only {b} | p (exact) |".format(a=pair["a"], b=pair["b"]))
+        lines.append("|---|---|---|---|")
+        for condition, cell in pair["by_condition"].items():
+            lines.append(
+                "| {cond} | {only_a} | {only_b} | {p:.4g} |".format(
+                    cond=condition, only_a=cell["only_a"], only_b=cell["only_b"], p=cell["p_exact"]
+                )
+            )
     if not values_known:
         lines.append("")
         lines.append("(no `values.json` supplied: `other_value` not measured)")
@@ -317,17 +369,46 @@ def main() -> int:
         if not path:
             print(f"bad --arm {spec!r}; want LABEL=path", file=sys.stderr)
             return 2
-        summaries.append(score_arm(label, path, expected, values))
+        with open(os.path.join(args.panel, "requests.json")) as handle:
+            requests = json.load(handle)
+        summaries.append(score_arm(label, path, expected, values, stated_competing(requests, values)))
 
     pair = None
     if args.pair:
         first, _, second = args.pair.partition(",")
         by_label = {summary["label"]: summary for summary in summaries}
         if first in by_label and second in by_label:
+            # Per condition, not just pooled: the headline is the held-out
+            # conditions, and a pooled test would be dominated by the trained
+            # conditions where both arms are at ceiling.
+            conditions = []
+            for summary in (by_label[first], by_label[second]):
+                for condition in summary["cells"]:
+                    if condition not in conditions:
+                        conditions.append(condition)
             pair = {
                 "a": first,
                 "b": second,
                 "mcnemar": mcnemar(by_label[first], by_label[second]),
+                "by_condition": {
+                    condition: mcnemar(
+                        {
+                            "rows": {
+                                key: value
+                                for key, value in by_label[first]["rows"].items()
+                                if value.get("condition") == condition
+                            }
+                        },
+                        {
+                            "rows": {
+                                key: value
+                                for key, value in by_label[second]["rows"].items()
+                                if value.get("condition") == condition
+                            }
+                        },
+                    )
+                    for condition in conditions
+                },
             }
 
     table = markdown(summaries, pair, values is not None)
