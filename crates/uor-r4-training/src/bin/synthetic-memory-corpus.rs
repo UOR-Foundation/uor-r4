@@ -4,8 +4,19 @@
 //! ```text
 //! geometric-stack synthetic-memory out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \
 //!   rows=2000 seed=7 [split=train] [vocab_size=4096] \
-//!   [distance=N | curriculum=1 [max_distance=N]] [token_budget=N]
+//!   [distance=N | curriculum=1 [max_distance=N]] [token_budget=N] \
+//!   [forms=N] [panel_out=NEW_PANEL_ROOT]
 //! ```
+//!
+//! `forms` controls how many surface FORMS per relation the generator may draw
+//! from. Form 0 is the relation's canonical phrase and forms 1..7 are paraphrase
+//! question and statement templates over a hand-authored per-relation topic; the
+//! reply always keeps the single canonical answer form, so an arm that varies
+//! `forms` varies how a fact is *stated and asked*, not how it is answered.
+//! Forms 8..12 are held out: `forms` is clamped to 1..=8, so a training store
+//! cannot contain them, and `panel_out=` writes the panel that scores them.
+//! `forms=1` leaves the stream untouched, so it combines with the distance knobs
+//! without disturbing byte identity (verified against the pre-forms generator).
 //!
 //! `distance` controls how far the asserted fact sits from the question. In the
 //! legacy form the document is exactly four turns, so the asked statement is
@@ -17,10 +28,11 @@
 //! uniformly from `0..=max_distance` (default 8), giving a mixture that keeps the
 //! easy case in distribution while forcing the hard ones.
 //!
-//! Both knobs are additive: with `distance=0` and no curriculum every byte of
-//! `tokens.u16`, `response_mask.u8` and `manifest.json` is exactly what the
-//! pre-distance generator wrote for the same rows and seed, so prior artifacts
-//! stay comparable.
+//! Both knob families are additive. With `distance=0`, no curriculum and
+//! `forms=1`, `tokens.u16` and `response_mask.u8` are exactly what the
+//! pre-distance, pre-forms generator wrote for the same rows and seed, so prior
+//! artifacts stay comparable; the manifest gains the `forms` block either way,
+//! and the `distance` block only when a distance knob is used.
 //!
 //! Distance is capped at `MAX_DISTANCE` because `dialogue-train` under
 //! `policy=full_prefix` **excludes** any document whose start-to-answer span
