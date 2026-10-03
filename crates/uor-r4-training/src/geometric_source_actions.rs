@@ -339,7 +339,7 @@ mod tests {
     use super::*;
     use uor_r4_integer::geometric_read::{EXP_TABLE_LEN, WEIGHT_ONE};
 
-    const TOKENIZER: &[u8] = br#"{"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"},{"id":9,"content":"<gap>"}]}"#;
+    const TOKENIZER: &[u8] = br#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"},{"id":9,"content":"<gap>"}]}"#;
 
     // Exact arithmetic fixture, not an exponential-approximation claim.
     fn table() -> Vec<u32> {
