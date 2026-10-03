@@ -1,5 +1,27 @@
 # Current UOR-R4 research state
 
+## Event/age q4 bridge — source-range correction, October 2
+
+[Event/age source and causal design](geometric-event-age-q4-2026-10-02.md) adds
+native-action-conditioned offline capture credit and explicit four-bit age
+policies. Hosted M1 source8713997d passes6 integer and10 training/artifact cases,
+including actual answer-loss credit through geometric span/address/age to the
+head. This is a connected fixture, not a fitted language/capability result.
+The unchanged quarter grid refuses both actual retained parents: event263/261
+coefficients and age100/102 exceed±1.75. No clipping or family verdict follows.
+The fixed initialized age prior is separated from learned residuals; all saved
+residuals fit the adopted1/8-nat q4 range. One explicit offline positive event
+rescaling is declared before quantization, with its changed surrogate and hard
+margin risks preserved. Schema `/1` and direct `/2` parents remain retained.
+
+The prior/residual extension and integrated conversion are separate from the
+8713997d executed source. [#1512](https://github.com/UOR-Foundation/uor-r4/issues/1512)
+owns their exact-head checks, loaded rows and delivery decision. No automatic
+training/scale sweep is admitted. Persistent attention PR1635 is merged at
+1dc78d1b; its14 owned attention Rust files match the reviewed head. Selected
+access, natural language qualification and the float model tail remain unfinished.
+
+
 ## Persistent integer attention — native runtime repair, October 2
 
 The [persistent session implementation](geometric-attention-session-2026-10-02.md)
@@ -32,8 +54,8 @@ Independent saved-output review passes:512 answer vectors match bitwise,
 57,952 head reductions reconstruct, and1,024 parent query heads match.
 Full-position equality remains an executed-driver assertion; this is fidelity
 on exposed retained panels, not a new quality improvement. No local Cargo or private artifact upload.
-Continue #1512 through protected delivery,
-then the remaining event/age coefficient boundary. Selected access and the
+PR1635 is delivered through the protected queue; continue #1512 through the
+remaining event/age coefficient boundary. Selected access and the
 float model tail remain explicit unfinished boundaries.
 
 ## Strict q4 geometric context — fixed construction and three-route credit complete, October 2

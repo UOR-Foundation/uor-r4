@@ -9,9 +9,9 @@
 //!
 //! Context, potential, value, and NoRead use their strict q4 source policies;
 //! the composition bank uses signed geometric selector IDs and q4 gains. Event
-//! coefficients and age biases retain their admitted wider source policies.
-//! Thus a native integer session is not a claim that every learned coefficient
-//! in the attention component already satisfies the four-bit source limit.
+//! and age may use legacy wider sources or explicit strict source modes; the
+//! admission metadata reports each separately. A native integer session alone
+//! does not establish a four-bit source policy for every admitted component.
 //!
 //! `session` allocates bounded history/scratch once. Its returned integer
 //! session consumes token IDs and returns i64 Q16 residuals with no Tensor,
@@ -192,7 +192,12 @@ impl<'a> CompiledGeometricAttention<'a> {
             || pm.address.heads != HEADS
             || pm.address.lanes_per_head != LANES_PER_HEAD
             || context.metadata().source.frozen.address != pm.address
-            || rm.schema != crate::geometric_read_native::SCHEMA
+            || !matches!(
+                rm.schema.as_str(),
+                crate::geometric_read_native::SCHEMA
+                    | crate::geometric_read_native::Q4_AGE_SCHEMA
+                    | crate::geometric_read_native::Q4_AGE_RESIDUAL_SCHEMA
+            )
             || rm.layer != 2
             || rm.heads != HEADS
             || rm.context == 0
