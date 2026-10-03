@@ -172,6 +172,7 @@ use uor_r4_training::stack_dialogue::{
     DialogueSplit, Reply, Request,
 };
 use uor_r4_training::stack_memory_replies::score_memory;
+use uor_r4_training::stack_store::StoreRead;
 use uor_r4_training::stack_tracking::Rng;
 use uor_r4_training::{sha256_file, Result, TrainingError};
 
@@ -3420,6 +3421,149 @@ fn disposition_name(recall: &RecallDisposition) -> &'static str {
     }
 }
 
+/// True when `needle` occurs in `hay` as a whole word.
+///
+/// **This does NOT disambiguate a longer answer that contains the target as a
+/// word.** "an hour" is a whole word inside "half an hour", so a whole-word test
+/// matches both. Callers that must tell 30 minutes from 90 minutes cannot rely on
+/// this alone; they must know which value was actually retrieved (see the panel
+/// split) or reject answers that contain a longer accepted answer.
+///
+/// It does handle the two cases a plain `contains` gets wrong: a value followed by
+/// punctuation ("dust brings me out in a rash.") and a value embedded in a longer
+/// token. Iteration advances by whole characters, so a multi-byte character can
+/// never leave the index inside a code point.
+fn contains_word(hay: &str, needle: &str) -> bool {
+    let (h, n) = (hay.to_lowercase(), needle.to_lowercase());
+    if n.is_empty() || n.len() > h.len() {
+        return false;
+    }
+    let is_word = |c: char| c.is_alphanumeric();
+    let mut from = 0usize;
+    while let Some(rel) = h[from..].find(&n) {
+        let start = from + rel;
+        let end = start + n.len();
+        let left_ok = h[..start]
+            .chars()
+            .next_back()
+            .map(|c| !is_word(c))
+            .unwrap_or(true);
+        let right_ok = h[end..].chars().next().map(|c| !is_word(c)).unwrap_or(true);
+        if left_ok && right_ok {
+            return true;
+        }
+        // advance one whole character past the match start
+        from = match h[start..].chars().next() {
+            Some(c) => start + c.len_utf8(),
+            None => break,
+        };
+        if from >= h.len() {
+            break;
+        }
+    }
+    false
+}
+
+/// One validated panel row.
+struct PanelRow {
+    id: String,
+    turns: Vec<String>,
+    answers: Vec<String>,
+}
+
+/// Load and validate an external panel. Both files are read ONCE here and their
+/// sha256 is taken from these bytes, so the hash is of what was actually scored
+/// rather than of a re-read at the end.
+///
+/// Every malformed input is rejected rather than silently defaulted: a missing
+/// id, an empty or absent `user_turns`, or an expected answer with no matching
+/// row would otherwise be scored as a miss and quietly deflate the result.
+fn load_panel(
+    panel_path: &str,
+    expected_path: &str,
+) -> Result<(Vec<PanelRow>, String, String, String, String)> {
+    let panel_bytes = fs::read(panel_path)?;
+    let expected_bytes = fs::read(expected_path)?;
+    let panel_sha = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(&panel_bytes);
+        format!("{:x}", h.finalize())
+    };
+    let expected_sha = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(&expected_bytes);
+        format!("{:x}", h.finalize())
+    };
+    let raw: Vec<Value> = serde_json::from_slice(&panel_bytes)?;
+    let answers: BTreeMap<String, Value> = serde_json::from_slice(&expected_bytes)?;
+    let mut rows = Vec::with_capacity(raw.len());
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for row in &raw {
+        let id = row["id"]
+            .as_str()
+            .ok_or_else(|| invalid("a panel row has no string id"))?
+            .to_string();
+        if !seen.insert(id.clone()) {
+            return Err(invalid(format!("duplicate panel id {id}")));
+        }
+        let turns: Vec<String> = row["user_turns"]
+            .as_array()
+            .ok_or_else(|| invalid(format!("panel row {id} has no user_turns array")))?
+            .iter()
+            .map(|t| {
+                t.as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| invalid(format!("panel row {id} has a non-string turn")))
+            })
+            .collect::<Result<_>>()?;
+        if turns.is_empty() {
+            return Err(invalid(format!("panel row {id} has no turns")));
+        }
+        let entry = answers
+            .get(&id)
+            .ok_or_else(|| invalid(format!("expected answers have no entry for panel row {id}")))?;
+        // Accept either a bare string or a list of accepted answers.
+        let accepted: Vec<String> = match entry {
+            Value::String(s) if !s.is_empty() => vec![s.clone()],
+            Value::Array(a) => a
+                .iter()
+                .filter_map(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect(),
+            _ => {
+                return Err(invalid(format!(
+                    "expected answer for {id} is empty or not a string"
+                )))
+            }
+        };
+        if accepted.is_empty() {
+            return Err(invalid(format!("expected answer for {id} is empty")));
+        }
+        rows.push(PanelRow {
+            id,
+            turns,
+            answers: accepted,
+        });
+    }
+    for key in answers.keys() {
+        if !seen.contains(key) {
+            return Err(invalid(format!(
+                "expected answers reference unknown panel row {key}"
+            )));
+        }
+    }
+    Ok((
+        rows,
+        panel_sha,
+        expected_sha,
+        panel_path.to_string(),
+        expected_path.to_string(),
+    ))
+}
+
 /// `session`: M-world development conversations through the actual grounded
 /// session (#962): the saved compiler (`compiler=`) predicts each user turn's
 /// action, the exact store applies it, and the emitter (`model_root=`'s
@@ -3428,34 +3572,6 @@ fn disposition_name(recall: &RecallDisposition) -> &'static str {
 /// (no recall line enters the emitter) and `no_write` (statements are not
 /// stored). The first `reload=` conversations of the default arm are also run
 /// with a save and load at their middle turn, and must match.
-/// True when `needle` occurs in `hay` on word boundaries.
-///
-/// A plain `contains` is wrong for panel scoring: "an hour" is a substring of
-/// "half an hour", so a longer accepted answer would be scored as present when it
-/// is not. A padded comparison is wrong too, because a value may be followed by a
-/// period ("dust brings me out in a rash."). Boundaries are non-alphanumeric or
-/// the ends of the string.
-fn contains_word(hay: &str, needle: &str) -> bool {
-    let (h, n) = (hay.to_lowercase(), needle.to_lowercase());
-    let (hb, nb) = (h.as_bytes(), n.as_bytes());
-    if nb.is_empty() || nb.len() > hb.len() {
-        return false;
-    }
-    let boundary = |c: u8| !c.is_ascii_alphanumeric();
-    let mut i = 0;
-    while let Some(pos) = h[i..].find(&n) {
-        let start = i + pos;
-        let end = start + nb.len();
-        if (start == 0 || boundary(hb[start - 1])) && (end == hb.len() || boundary(hb[end])) {
-            return true;
-        }
-        i = start + 1;
-        if i >= hb.len() {
-            break;
-        }
-    }
-    false
-}
 
 fn session(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
@@ -3618,6 +3734,18 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     let drawn: Vec<Conversation2> = (0..conversations)
         .map(|_| world.conversation(&mut rng, Split::Development))
         .collect::<Result<_>>()?;
+    // Validate and load the external panel HERE, before any arm runs, so a
+    // malformed panel fails fast instead of after the world arms have already
+    // spent their time. Both files are read once and their sha256 taken from
+    // these bytes.
+    let mut loaded_panel: Option<(Vec<PanelRow>, String, String, String, String)> = None;
+    if let Some(panel_path) = args.optional("panel") {
+        let expected_path = args
+            .optional("panel_expected")
+            .ok_or_else(|| invalid("panel= needs panel_expected=EXPECTED.json"))?;
+        loaded_panel = Some(load_panel(&panel_path, &expected_path)?);
+    }
+
     let mut arm_reports = serde_json::Map::new();
     let mut default_outcomes: Vec<Vec<Option<TurnOutcome>>> = Vec::new();
     for arm in &arms {
@@ -3788,97 +3916,120 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     });
     // ------------------------------------------------------------ external panel
     //
-    // Scores an external panel through the SAME grounded session, so the store is
-    // exercised exactly as in the generated-world arm. The panel is never fed to
-    // the world; its user turns go straight to `turn_with_controls`.
+    // Scores an external panel through the SAME grounded session. Use with
+    // `conversations=0 reload=0` for a panel-only run.
     //
-    // The miss split reads MECHANISM state, not reply text:
-    //   memory: MemoryEffect::Write{..}   the compiler/store recorded the fact
-    //   recall: RecallDisposition         Value | LogValue = a value was returned
-    // A text proxy ("no turn retained anything") cannot separate "the store never
-    // got it" from "the store had it and retrieval missed", which are different
-    // failures with different fixes, so it is not used.
+    // The split reads the session's own state, not reply text:
+    //   memory: MemoryEffect::Write{ value_tokens, .. }  a fact was stored
+    //   memory: MemoryEffect::Read { read }              what retrieval returned
+    //   recall: RecallDisposition                        whether the log-sieve ran
+    //
+    // `stored` counts only writes on turns BEFORE the final one whose decoded
+    // tokens match an accepted answer: a write on the question turn, or one that
+    // stored the distractor, does not mean the asked fact was stored.
     let mut panel_block: Option<Value> = None;
-    if let Some(panel_path) = args.optional("panel") {
-        let expected_path = args
-            .optional("panel_expected")
-            .ok_or_else(|| invalid("panel= needs panel_expected=EXPECTED.json"))?;
-        let requests: Vec<Value> = serde_json::from_slice(&fs::read(&panel_path)?)?;
-        let expected: BTreeMap<String, String> =
-            serde_json::from_slice(&fs::read(&expected_path)?)?;
-        let (mut correct, mut never_stored) = (0usize, 0usize);
-        let (mut stored_not_recalled, mut recalled_not_rendered) = (0usize, 0usize);
-        let mut rows = Vec::with_capacity(requests.len());
+    if let Some((rows_in, panel_sha, expected_sha, panel_name, expected_name)) = loaded_panel {
+        let (mut correct, mut never_stored, mut stored_not_recalled) = (0usize, 0usize, 0usize);
+        let (mut recalled_wrong_value, mut recalled_misrendered, mut unverified, mut errors) =
+            (0usize, 0usize, 0usize, 0usize);
+        let mut error_examples: Vec<Value> = Vec::new();
+        let mut judged = Vec::with_capacity(rows_in.len());
         // A FRESH session per row. Reuse does not work: the session accumulates
         // turns and hits `max_turns: 64` after ~21 rows, and GroundedSession has no
-        // reset (only `from_checkpoint_path`). The cost is real -- each row reloads
-        // the checkpoint -- so a 100-row panel takes minutes and needs a generous
-        // timeout.
-        for request in &requests {
-            let id = request["id"].as_str().unwrap_or_default().to_string();
-            let turns: Vec<String> = request["user_turns"]
-                .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|t| t.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default();
-            let want = expected.get(&id).cloned().unwrap_or_default();
+        // reset. Each row reloads the checkpoint, so a 100-row panel takes minutes.
+        for row in &rows_in {
             let mut session = open(compiler.clone())?;
-            let (mut stored, mut retrieved_value) = (false, false);
-            let mut recall_kind = String::new();
+            let last = row.turns.len() - 1;
+            let (mut stored, mut read_value, mut read_found, mut log_value) =
+                (false, String::new(), false, false);
             let mut reply = String::new();
-            for (i, user) in turns.iter().enumerate() {
-                let outcome = session
-                    .turn_with_controls(user, TurnControls::default())
-                    .map_err(|e| invalid(e.to_string()))?;
-                if matches!(outcome.memory, MemoryEffect::Write { .. }) {
-                    stored = true;
-                }
-                if i + 1 == turns.len() {
-                    reply = outcome.reply_text.clone();
-                    recall_kind = format!("{:?}", outcome.recall);
-                    retrieved_value = matches!(
-                        outcome.recall,
-                        RecallDisposition::Value | RecallDisposition::LogValue
-                    );
+            let mut recalled_value = String::new();
+            let mut turn_error: Option<String> = None;
+            for (i, user) in row.turns.iter().enumerate() {
+                match session.turn_with_controls(user, TurnControls::default()) {
+                    Ok(outcome) => {
+                        if i < last {
+                            if let MemoryEffect::Write { value_tokens, .. } = &outcome.memory {
+                                let text = tokenizer.decode(value_tokens);
+                                if row.answers.iter().any(|a| a == text.trim()) {
+                                    stored = true;
+                                }
+                            }
+                        } else {
+                            reply = outcome.reply_text.clone();
+                            if let MemoryEffect::Read { read } = &outcome.memory {
+                                if let StoreRead::Found(v) = read {
+                                    read_value = tokenizer.decode(&v.tokens);
+                                    read_found = true;
+                                }
+                            }
+                            log_value = matches!(outcome.recall, RecallDisposition::LogValue);
+                        }
+                    }
+                    Err(e) => {
+                        turn_error = Some(e.to_string());
+                        break;
+                    }
                 }
             }
-            let hit = !want.is_empty() && contains_word(&reply, &want);
+            if let Some(e) = turn_error {
+                errors += 1;
+                if error_examples.len() < 10 {
+                    error_examples.push(json!({"id": row.id, "error": e}));
+                }
+                judged.push(json!({"id": row.id, "error": e}));
+                continue;
+            }
+            // Which accepted answer, if any, did the reply contain? An accepted
+            // answer that CONTAINS a longer one ("an hour" in "half an hour") is
+            // only counted when the retrieved value confirms it, so a whole-word
+            // match alone cannot award a wrong value.
+            let hit = row.answers.iter().any(|a| {
+                contains_word(&reply, a)
+                    && (read_found || !row.answers.iter().any(|o| o != a && o.contains(a.as_str())))
+            });
+            let verified = read_found && row.answers.iter().any(|a| a == read_value.trim());
             if hit {
                 correct += 1;
             } else if !stored {
                 never_stored += 1;
-            } else if !retrieved_value {
-                stored_not_recalled += 1;
+            } else if read_found && !verified {
+                recalled_wrong_value += 1;
+                recalled_value = read_value.clone();
+            } else if verified {
+                recalled_misrendered += 1;
+                recalled_value = read_value.clone();
+            } else if log_value {
+                unverified += 1;
             } else {
-                recalled_not_rendered += 1;
+                stored_not_recalled += 1;
             }
-            rows.push(json!({
-                "id": id, "expected": want, "reply": reply, "hit": hit,
-                "stored": stored, "retrieved": retrieved_value, "recall": recall_kind,
+            judged.push(json!({
+                "id": row.id, "expected": row.answers, "reply": reply, "hit": hit,
+                "stored": stored, "read_found": read_found,
+                "read_value": read_value, "recalled_value": recalled_value,
+                "log_value": log_value,
             }));
         }
-        let total = requests.len();
-        println!("panel memory: {correct}/{total}");
+        let total = rows_in.len();
         println!(
-            "panel misses: never_stored={never_stored} stored_but_not_recalled={stored_not_recalled} recalled_but_misrendered={recalled_not_rendered}"
+            "panel memory: {correct}/{total}; misses never_stored={never_stored} stored_not_recalled={stored_not_recalled} recalled_wrong_value={recalled_wrong_value} misrendered={recalled_misrendered} unverified={unverified} errors={errors}"
         );
         panel_block = Some(json!({
-            "panel": panel_path,
-            "panel_sha256": sha256_file(Path::new(&panel_path))?,
-            "panel_expected": expected_path,
-            "panel_expected_sha256": sha256_file(Path::new(&expected_path))?,
-            "rows_total": total,
-            "correct": correct,
+            "panel": panel_name, "panel_sha256": panel_sha,
+            "panel_expected": expected_name, "panel_expected_sha256": expected_sha,
+            "rows_total": total, "correct": correct,
             "miss_split": {
                 "never_stored": never_stored,
                 "stored_but_not_recalled": stored_not_recalled,
-                "recalled_but_misrendered": recalled_not_rendered,
-                "rule": "mechanism state, not reply text: never_stored = no turn produced MemoryEffect::Write; stored_but_not_recalled = a write landed but the final turn's RecallDisposition was neither Value nor LogValue; recalled_but_misrendered = a value was returned but the final reply does not contain the accepted answer",
+                "recalled_wrong_value": recalled_wrong_value,
+                "recalled_but_misrendered": recalled_misrendered,
+                "unverified_log_value": unverified,
+                "turn_errors": errors,
+                "rule": "mechanism state, not reply text. stored counts only writes on turns before the final one whose decoded value_tokens match an accepted answer. verified means the final turn's StoreRead::Found tokens decode to an accepted answer. unverified_log_value counts rows where the log-sieve supplied a value that the session does not expose as tokens, so retrieval cannot be confirmed either way.",
             },
-            "rows": rows,
+            "error_examples": error_examples,
+            "rows": judged,
         }));
     }
 
