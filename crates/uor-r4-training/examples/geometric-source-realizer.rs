@@ -786,7 +786,7 @@ fn main() -> Result<()> {
     let a: Args = serde_json::from_slice(&fs::read(p)?)?;
     if !matches!(
         a.mode.as_str(),
-        "construction" | "fit" | "audit" | "direction"
+        "construction" | "fit" | "audit" | "direction" | "readout-fit"
     ) || a.maximum_seconds == 0
         || (a.mode == "construction" && a.maximum_seconds > 300)
         || (a.mode == "fit" && a.maximum_seconds > 1200)
@@ -799,22 +799,30 @@ fn main() -> Result<()> {
                 || a.audit_checkpoint.is_none()
                 || a.audit_report.is_none()
                 || a.fit_admission.is_some()))
-        || (!matches!(a.mode.as_str(), "audit" | "direction")
+        || (a.mode == "readout-fit"
+            && (a.maximum_seconds > 1200
+                || a.audit_checkpoint.is_none()
+                || a.expected_generation.is_none()
+                || a.audit_report.is_some()
+                || a.fit_admission.is_some()))
+        || (!matches!(a.mode.as_str(), "audit" | "direction" | "readout-fit")
             && (a.audit_checkpoint.is_some()
                 || a.expected_generation.is_some()
                 || a.audit_report.is_some()))
     {
         return Err(invalid(
-            "construction/audit limit 1..300; direction limit 1..900; fit limit 1..1200 with fixed64 updates",
+            "construction/audit limit 1..300; direction limit 1..900; fit/readout-fit limit 1..1200 with fixed64 updates",
         ));
     }
     let admitted = admission(&a)?;
-    if matches!(a.mode.as_str(), "audit" | "direction") {
+    if matches!(a.mode.as_str(), "audit" | "direction" | "readout-fit") {
         audit_output_location(&a)?;
     }
     report_output::claim(&a.out)?;
     write(&a.out.join("args.json"), &a)?;
-    let result = if a.mode == "direction" {
+    let result = if a.mode == "readout-fit" {
+        readout_fit(&a)
+    } else if a.mode == "direction" {
         direction(&a)
     } else if a.mode == "audit" {
         audit(&a)
@@ -1469,6 +1477,230 @@ fn canonical_measure(
     }
     Ok(json!({"mean_episode_ce":objective,"target_steps":steps,"rows":rows}))
 }
+// Retained source weights initialize this continuation; optimizer moments were
+// not saved by the original fit, so AdamW starts fresh on these readouts only.
+fn readout_parameter(name: &str) -> bool {
+    name.starts_with("consumer.potential.")
+        || name.starts_with("consumer.no_read.")
+        || name.starts_with("period.")
+}
+fn readout_gradients(gradients: BTreeMap<String, Tensor>) -> Result<BTreeMap<String, Tensor>> {
+    if gradients
+        .keys()
+        .any(|n| !readout_parameter(n) && !n.starts_with("consumer.context."))
+    {
+        return Err(invalid("unexpected readout continuation gradient family"));
+    }
+    Ok(gradients
+        .into_iter()
+        .filter(|(n, _)| readout_parameter(n))
+        .collect())
+}
+fn context_shadow(weights: &SourceRealizerWeights) -> Result<BTreeMap<String, Vec<u32>>> {
+    weights
+        .parameters()
+        .into_iter()
+        .filter(|(n, _)| n.starts_with("consumer.context."))
+        .map(|(n, v)| {
+            Ok((
+                n,
+                v.flatten_all()?
+                    .to_vec1::<f32>()?
+                    .into_iter()
+                    .map(f32::to_bits)
+                    .collect(),
+            ))
+        })
+        .collect()
+}
+fn verify_context_shadow(
+    weights: &SourceRealizerWeights,
+    before: &BTreeMap<String, Vec<u32>>,
+) -> Result<()> {
+    if before.is_empty() || context_shadow(weights)? != *before {
+        return Err(invalid("frozen context source bits changed"));
+    }
+    Ok(())
+}
+fn readout_fit(a: &Args) -> Result<()> {
+    let start = Instant::now();
+    let LoadedFinal {
+        source: weights,
+        native,
+        identity,
+        tok,
+        episodes,
+        fit,
+        retained_sha,
+        before,
+    } = load_final(a)?;
+    let input = a
+        .audit_checkpoint
+        .as_ref()
+        .ok_or_else(|| invalid("continuation checkpoint missing"))?;
+    let expected_path = a
+        .expected_generation
+        .as_ref()
+        .ok_or_else(|| invalid("continuation generation missing"))?;
+    report_output::verify(
+        expected_path
+            .parent()
+            .ok_or_else(|| invalid("expected envelope missing"))?,
+    )?;
+    let expected: Value = serde_json::from_slice(&fs::read(expected_path)?)?;
+    let initial_generation = generate("readout-baseline", &native, &episodes, &tok, start, a)?;
+    if expected["native_loaded_from_disk"] != true
+        || expected["native_metadata_sha256"]
+            != sha256_file(&input.join("realizer-native/metadata.json"))?
+        || expected["rows"] != initial_generation["rows"]
+    {
+        return Err(invalid(
+            "readout continuation baseline own-prefix replay differs",
+        ));
+    }
+    let frozen = context_shadow(&weights)?;
+    verify_context_shadow(&weights, &frozen)?;
+    let context_sha = before
+        .get("consumer/context-q4.bin")
+        .ok_or_else(|| invalid("native context payload absent"))?;
+    let bytes = fs::read(&a.tokenizer)?;
+    let mut optimizer = AdamW::new(
+        weights
+            .parameters()
+            .into_iter()
+            .filter(|(n, _)| readout_parameter(n))
+            .map(|(_, v)| v)
+            .collect(),
+        ParamsAdamW {
+            lr: 0.003,
+            beta1: 0.9,
+            beta2: 0.999,
+            eps: 1e-8,
+            weight_decay: 0.,
+        },
+    )?;
+    let mut updates = 0usize;
+    let mut batches = Vec::new();
+    let mut checkpoints = Vec::new();
+    let mut measured_admission = None::<Value>;
+    let mut export = |updates: usize| -> Result<()> {
+        deadline(start, a)?;
+        verify_context_shadow(&weights, &frozen)?;
+        let path = a.out.join(format!("checkpoint-{updates:04}"));
+        let (receipt, loaded) = checkpoint(
+            &path,
+            &weights,
+            &identity,
+            &bytes,
+            &episodes,
+            updates,
+            "readout_continuation_unadopted",
+        )?;
+        let bins = bin_files(&path.join("realizer-native"))?;
+        if before.keys().ne(bins.keys())
+            || (updates == 0 && bins != before)
+            || bins.get("consumer/context-q4.bin") != Some(context_sha)
+            || bins.get("consumer/exp-q31.bin") != before.get("consumer/exp-q31.bin")
+        {
+            return Err(invalid(
+                "continuation native context/table inventory changed",
+            ));
+        }
+        let canonical = canonical_measure(&loaded, &episodes, start, a)?;
+        if canonical["target_steps"] != 114 {
+            return Err(invalid(
+                "continuation requires exact114 canonical positions",
+            ));
+        }
+        let mut generation = if updates == 0 {
+            initial_generation.clone()
+        } else {
+            generate(
+                &format!("readout-{updates:04}"),
+                &loaded,
+                &episodes,
+                &tok,
+                start,
+                a,
+            )?
+        };
+        generation["native_loaded_from_disk"] = json!(true);
+        generation["native_metadata_sha256"] =
+            json!(sha256_file(&path.join("realizer-native/metadata.json"))?);
+        let evaluation = json!({"optimizer_updates":updates,"checkpoint":receipt,"canonical":canonical,"ownprefix":generation,"context_source_bits_unchanged":true,"context_native_payload_unchanged":true,"hard_payload_sha256":bins});
+        write(
+            &a.out.join(format!("evaluation-{updates:04}.json")),
+            &evaluation,
+        )?;
+        checkpoints.push(evaluation);
+        Ok(())
+    };
+    let work = (|| -> Result<()> {
+        export(0)?;
+        let baseline_stage_seconds = start.elapsed().as_secs_f64();
+        for step in 0..UPDATES {
+            deadline(start, a)?;
+            let indices = (0..8)
+                .map(|i| (step * 8 + i) % episodes.len())
+                .collect::<Vec<_>>();
+            let current = weights.compile(identity.clone())?;
+            let measured = batch(&indices, &episodes, &weights, &current, start, a)?;
+            if step == 0 {
+                let first_b8_seconds = measured.report["elapsed_seconds"]
+                    .as_f64()
+                    .ok_or_else(|| invalid("first B8 elapsed absent"))?;
+                // Four remaining evaluations plus an export/report stop margin.
+                // Baseline stage includes load/replay and is a conservative
+                // measured reserve, not a second construction campaign.
+                let evaluation_reserve_seconds = 4. * baseline_stage_seconds + 30.;
+                let projected_remaining_seconds =
+                    UPDATES as f64 * first_b8_seconds + evaluation_reserve_seconds;
+                let remaining_seconds = a.maximum_seconds as f64 - start.elapsed().as_secs_f64();
+                measured_admission = Some(
+                    json!({"first_b8_seconds":first_b8_seconds,"baseline_stage_seconds":baseline_stage_seconds,"evaluation_and_stop_reserve_seconds":evaluation_reserve_seconds,"projected_remaining_seconds":projected_remaining_seconds,"remaining_declared_seconds":remaining_seconds,"admitted":projected_remaining_seconds <= remaining_seconds}),
+                );
+                write(&a.out.join("measured-admission.json"), &measured_admission)?;
+                if !first_b8_seconds.is_finite()
+                    || first_b8_seconds <= 0.
+                    || projected_remaining_seconds > remaining_seconds
+                {
+                    return Err(invalid("measured first B8 continuation projection exceeds remaining wall allowance"));
+                }
+            }
+            // Frozen gradients are removed before the existing global clipping
+            // calculation, not merely omitted from the optimizer parameter list.
+            let gradients = readout_gradients(measured.gradients)?;
+            let clip = apply(&weights, &mut optimizer, gradients)?;
+            verify_context_shadow(&weights, &frozen)?;
+            updates += 1;
+            batches.push(json!({"optimizer_update":updates,"readout_only_clip_factor":clip,"unfiltered_batch_diagnostic":measured.report}));
+            write(
+                &a.out.join("progress.json"),
+                &json!({"mode":a.mode,"optimizer_updates":updates,"declared_updates":UPDATES,"batches":batches,"wall_seconds":start.elapsed().as_secs_f64()}),
+            )?;
+            if updates % 16 == 0 {
+                export(updates)?;
+            }
+        }
+        Ok(())
+    })();
+    write(
+        &a.out.join("report.json"),
+        &json!({
+            "schema":"uor-r4.geometric-readout-continuation/1","mode":a.mode,"status":if work.is_ok(){"completed"}else{"stopped_or_error"},
+            "source_commit":source_commit()?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"fit_source_commit":fit["source_commit"],
+            "initial_checkpoint_manifest_sha256":sha256_file(&input.join("manifest.json"))?,"retained_report_sha256":retained_sha,"saved_identity":identity,
+            "optimizer_updates":updates,"declared_updates":UPDATES,"measured_admission":measured_admission,"optimizer":optimizer_identity(),"optimizer_moments":"fresh AdamW state; original moments not saved",
+            "updated_families":["consumer.potential.*","consumer.no_read.*","period.*"],"frozen_families":["consumer.context.*"],
+            "gradient_filter_before_clipping":true,"objective":"unchanged mean8episodes(mean joint answer token+EOS CE)","baseline_saved_generation_exact":true,
+            "checkpoints":checkpoints,"batches":batches,"context_source_bits_unchanged":context_shadow(&weights)? == frozen,
+            "input_native_payload_unchanged":bin_files(&input.join("realizer-native"))? == before,"no_adopted_model":true,
+            "scope":"64-update existing-readout continuation on20 exposed development cases; five numerical source/query groups; no heldout, geometric-advantage or complete-chat qualification",
+            "work_error":work.as_ref().err().map(|e|e.to_string()),"wall_seconds":start.elapsed().as_secs_f64()
+        }),
+    )?;
+    work
+}
 fn direction(a: &Args) -> Result<()> {
     let start = Instant::now();
     let LoadedFinal {
@@ -1948,6 +2180,41 @@ fn direction(a: &Args) -> Result<()> {
 #[cfg(test)]
 mod direction_tests {
     use super::*;
+    #[test]
+    fn frozen_context_gradient_is_removed_before_clip() -> Result<()> {
+        let mut gradients = BTreeMap::new();
+        gradients.insert(
+            "consumer.context.transition".into(),
+            Tensor::new(&[1000f32], &Device::Cpu)?,
+        );
+        gradients.insert(
+            "consumer.potential.context_unary".into(),
+            Tensor::new(&[0.5f32], &Device::Cpu)?,
+        );
+        gradients.insert(
+            "consumer.no_read.bias".into(),
+            Tensor::new(&[0.25f32], &Device::Cpu)?,
+        );
+        gradients.insert("period.bias".into(), Tensor::new(&[0.25f32], &Device::Cpu)?);
+        let selected = readout_gradients(gradients)?;
+        assert_eq!(selected.len(), 3);
+        let mut norm_square = 0.;
+        for (name, tensor) in selected {
+            assert!(readout_parameter(&name));
+            for v in tensor.flatten_all()?.to_vec1::<f32>()? {
+                norm_square += f64::from(v).powi(2);
+            }
+        }
+        assert_eq!(norm_square, 0.375);
+        assert!(!readout_parameter("consumer.context.transition"));
+        let mut unexpected = BTreeMap::new();
+        unexpected.insert(
+            "unexpected.bias".into(),
+            Tensor::new(&[1f32], &Device::Cpu)?,
+        );
+        assert!(readout_gradients(unexpected).is_err());
+        Ok(())
+    }
     #[test]
     fn exact_one_legal_quantum_is_required() -> Result<()> {
         quantum_change(&[0x00], &[0x01], 0, 1)?;
