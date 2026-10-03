@@ -1,0 +1,30 @@
+{
+  "schema": "uor-r4.cuda-source-delivery/1",
+  "source_original": "e92108a34402b61f8ee36069693d682ed7f970d6",
+  "source_integration": "667c545b",
+  "status": "DRAFT_EXISTING_DEVICE_LOGS_NOT_SOURCE_OR_EXECUTABLE_BOUND",
+  "scope": "Optional Rust offline training only; no CUDA serving or new paid run. Actual existing logs are retained separately; exact device run source/executable identity is pending Claude receipt.",
+  "reported_parity": {
+    "passed": 18,
+    "failed": 0,
+    "ignored": 1,
+    "relative_error_approx": 3.4e-06
+  },
+  "logs": [
+    {
+      "path": "/Users/casey.allard/uor-r4-local/ladder/gpu-pod-20261003/parity-full.log",
+      "bytes": 21235,
+      "sha256": "3479e2ddac3c5826cce8ec177b031f8d61c3279eebef139b2ef28b6fdebe1210"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4-local/ladder/gpu-pod-20261003/gpu-runs.log",
+      "bytes": 1091,
+      "sha256": "0a993b705c529cc7a3ba92e3c2da986b57ab6f3ca0f76b63191fb5f83ea2541e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4-local/ladder/gpu-pod-20261003/trace-8m-s2.log",
+      "bytes": 4287,
+      "sha256": "3720d42e6341717b3bcdd65214b306aed684962c4efe8a94e3003c20d9f08cbd"
+    }
+  ]
+}
