@@ -1,13 +1,14 @@
 # Geometric scale ladder runbook (20M / 29M / ~96M)
 
-Written 3 October 2026 (Eastern Time) by the support lab (Antigravity) from the archived launch scripts (`~/uor-r4-local/ladder/`), merged training and evaluation tools, and [PR #1660](https://github.com/UOR-Foundation/uor-r4/pull/1660) (`b88ba166`). The Claude lab administers the GPU pod and executed the ladder experiments; outcome numbers are recorded on [issue #820](https://github.com/UOR-Foundation/uor-r4/issues/820) and [issue #1552](https://github.com/UOR-Foundation/uor-r4/issues/1552).
+Written 3 October 2026 (Eastern Time) by the support lab (Antigravity) from the archived launch scripts (`~/uor-r4-local/ladder/`), merged training and evaluation tools, and [PR #1660](https://github.com/UOR-Foundation/uor-r4/pull/1660) (`b88ba166`). The Claude lab administers the GPU pod and executed the ladder experiments; outcome numbers are recorded on [issue #820 comment 5974333259](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5974333259) and [issue #1552](https://github.com/UOR-Foundation/uor-r4/issues/1552).
 
 ## 1. Scope and non-claims
 
 - **What it is:** an operational, step-by-step reproduction guide for data preparation, base geometric training, chat fine-tuning, grounded conversation sessions, and offline panel grading for the 20M, 29M, and ~96M rungs of the scale ladder.
 - **Hardware split:**
   - Base training and chat fine-tuning run offline on the rented Runpod 2× RTX 4090 pod (driver 595.91.07, CUDA 12.6, `CUDA_COMPUTE_CAP=89`).
-  - Grounded conversation sessions (D19) and chat grading run locally on the M1 laptop under bounded CPU thread budgets, with grading queried against a local Ollama instance (`qwen2.5:7b`).
+  - Grounded conversation sessions (D19): the 20M sessions ran locally on the M1 laptop (`eval-chat-20m.sh`); the 29M sessions ran on the pod via `/root/run-sessions.sh` (`log_recall=sieve`) and `/root/run-sessions-off.sh` (`log_recall=off`), `RAYON_NUM_THREADS=16`, `m-world` built from `main`.
+  - Chat panel grading runs locally on the M1 laptop under bounded CPU thread budgets against a local Ollama instance (`qwen2.5:7b`).
 - **Pre-alpha status:** the UOR-R4 geometric state model remains pre-alpha. General conversation, broad reasoning, frontier capability, and complete-path energy savings are not established.
 - **No transformer baselines:** per [owner direction of 3 October (~1:20 PM ET)](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5971681179), transformer comparisons are discontinued. Comparisons are strictly within the geometric architecture family (e.g., quaternion vs U(1) transport lanes; flat L2 vs Lorentz read) and against preceding geometric rungs.
 
@@ -41,7 +42,7 @@ target/release/prepare-text-corpus \
 target/release/prepare-text-corpus \
   out=$D/corpora/td-train \
   tokenizer=$D/tokenizer.json \
-  input=$RAW/TinyDialogues-train.txt \
+  input=$RAW/tinydialogue_train_ordered.txt \
   format=tinydialogues
 ```
 
@@ -60,18 +61,20 @@ target/release/prepare-text-corpus \
 Prepared directly from Hugging Face Parquet exports using the `parquet-input` feature (merged in [PR #1660](https://github.com/UOR-Foundation/uor-r4/pull/1660)):
 
 ```sh
-cargo run --release -p uor-r4-training --features parquet-input --bin prepare-chat-parquet -- \
-  out=/root/data/chat-v1-p2 \
+RAYON_NUM_THREADS=48 prepare-chat-parquet \
+  out=/root/data/chat-v1-p2-train \
   tokenizer=/root/data/tokenizer.json \
-  source=smoltalk:OpenRAIL-M:13900:/root/data/parquet/smoltalk_smol-magpie-ultra.train.parquet \
-  source=ultrachat:MIT:10200:/root/data/parquet/ultrachat_200k.default.train_sft.parquet \
-  protocol=2
+  protocol=2 \
+  max_tokens=8192 \
+  source='smoltalk_smol-magpie-ultra.train:Apache-2.0:13900:<6 parquet files joined by |>' \
+  source='ultrachat_200k.default.train_sft:MIT:10200:<3 parquet files joined by |>'
 ```
 
+- **Output:** 589,939 rows, 1,388,814,239 tokens.
 - **Skip offsets (13900 and 10200) and held-out panel integrity:**
   - SmolTalk Magpie Ultra skip: `13900` rows.
   - UltraChat 200k skip: `10200` rows.
-  - **Rationale:** chat-v0 was extracted from row 0 through row 13,900 of SmolTalk and row 0 through row 10,200 of UltraChat. Skipping these exact counts ensures the new chat-v1 training rows are strictly disjoint from both the chat-v0 training split and chat-v0 held-out documents. Because the held-out evaluation panel (`heldout-200-a.json`, `heldout-200-b.json`) was sampled from chat-v0's held-out split, skipping this prefix prevents data contamination in downstream evaluations.
+  - **Rationale:** chat-v0 was fetched from row 0 of the same splits; each SKIP is past chat-v0's last fetched row (`prepare-chat-parquet.rs` header). Skipping these exact counts ensures the new chat-v1 training rows are strictly disjoint from both the chat-v0 training split and chat-v0 held-out documents. Because the held-out evaluation panel (`heldout-200-a.json`, `heldout-200-b.json`) was sampled from chat-v0's held-out split, skipping this prefix prevents data contamination in downstream evaluations.
 - **Filtering:** rows lacking assistant responses, empty rows, oversized rows (>8,192 tokens), or rows containing literal special tokens are dropped and counted in the resulting `manifest.json`. Produces parallel `tokens.u16` and `response_mask.u8`.
 
 ## 3. Base training per rung (`geometric-stack train`)
@@ -110,8 +113,8 @@ CUDA_VISIBLE_DEVICES=0 RAYON_NUM_THREADS=8 nohup /root/target/release/examples/g
 
 - **Transformer control termination:** an `arch=transformer` control on GPU 1 was started in `run-20m.sh` but was stopped ~25 minutes in pursuant to the 3 October owner direction; no further transformer controls are trained.
 - **Learning rate checks (`run-lr.sh`, `run-lr2.sh`):**
-  - Short runs (660 s limit) compared learning rates 0.002, 0.001, 0.003, and 0.0005.
-  - Validation losses are recorded on [#820](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5971681179); lower learning rates (0.001 and 0.0005) demonstrated improved loss at steps 2500 and 5000.
+  - Short runs (660 s) at 0.001, 0.003 and 0.0005 were compared against the 0.002 default run (geo-20m) at steps 2500/5000/7500.
+  - Validation losses are recorded on [issue #820 comment 5974333259](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5974333259).
 
 ### 3.3 29M rung (~28.9M parameters, 433.8M tokens)
 
@@ -137,33 +140,48 @@ CUDA_VISIBLE_DEVICES=$GPU RAYON_NUM_THREADS=8 $B train \
   > /root/runs/$NAME.log 2>&1
 ```
 
-- Two arms were evaluated: `lr=0.001` and `lr=0.0005`. TinyStories validation NLL results are linked on [#820](https://github.com/UOR-Foundation/uor-r4/issues/820).
+- Two arms were evaluated: `lr=0.001` and `lr=0.0005`. TinyStories validation NLL results are recorded on [issue #820 comment 5974333259](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5974333259).
 
 ### 3.4 ~96M rung (two GPUs via `data_parallel=2`)
 
-- **Architecture:** ~96M parameters, targeting ~1.5B tokens.
-- **Two-GPU data parallelism (`data_parallel=2`):**
-  - Requires `device=cuda`, an even batch size (e.g., `batch=16`), and standard float training (no QAT or transport snap).
-  - Each step splits the batch into equal halves across GPU 0 and GPU 1.
-  - Forward and backward passes run concurrently on both devices.
-  - The replica gradients on GPU 1 are accumulated and averaged into GPU 0's buffers.
-  - Optimizer updates occur on GPU 0, and updated weights are copied back to GPU 1 (`StackModel::copy_variables_from`).
-  - Because the arithmetic mean of two half-batch means equals the full-batch mean, the update is mathematically identical to a single-device step (up to floating-point addition order).
-- **Invocation command:**
-  ```sh
-  RAYON_NUM_THREADS=8 target/release/examples/geometric-stack train \
-    out=/root/runs/geo-96m \
-    data_parallel=2 device=cuda ...
-  ```
-  *(Exact pod wrapper script: unverified from local repository checkout; mechanism and CLI arguments verified in `crates/uor-r4-training/examples/geometric-stack.rs` lines 687-691, 1328-1342, and 1843-1860).*
+- **Architecture:** `width=1024`, `heads=16`, `layers=14`, `context=384`, 95,957,184 parameters.
+- **Tokens & steps:** `steps=122070`, `batch=32` (122,070 × 32 × 384 = 1,499,996,160 tokens; ~1.5B tokens).
+- **Hyperparameters:** `lr=0.0004`, `warmup=500`, `eval_every=5000`, `eval_windows=64`, `final_windows=512`, `checkpoint_every=10000`, `max_seconds=61200`.
+- **Data mixture & weights:** TinyStories / TinyDialogues / chat-v0 / chat-v1 weighted 0.35 / 0.05 / 0.10 / 0.50:
+  `train=$D/corpora/ts-train/tokens.u16,$D/corpora/td-train/tokens.u16,$D/chat-v0-p2/train/tokens.u16,$D/chat-v1-p2-train/tokens.u16`
+  `train_weights=0.35,0.05,0.10,0.50`
+- **Execution & two-GPU data parallelism (`data_parallel=2`):**
+  - Binary built at `74d8189d` ([PR #1660](https://github.com/UOR-Foundation/uor-r4/pull/1660)).
+  - Executed via pod wrapper script `/root/run-100m.sh` with `RAYON_NUM_THREADS=16`.
+  - Command:
+    ```sh
+    RAYON_NUM_THREADS=16 /root/target/release/examples/geometric-stack train \
+      out=/root/runs/geo-96m \
+      train=$D/corpora/ts-train/tokens.u16,$D/corpora/td-train/tokens.u16,$D/chat-v0-p2/train/tokens.u16,$D/chat-v1-p2-train/tokens.u16 \
+      train_weights=0.35,0.05,0.10,0.50 \
+      valid=$D/corpora/ts-valid/tokens.u16 \
+      tokenizer=$D/tokenizer.json \
+      width=1024 heads=16 layers=14 context=384 \
+      steps=122070 batch=32 data_parallel=2 lr=0.0004 warmup=500 \
+      eval_every=5000 eval_windows=64 final_windows=512 \
+      checkpoint_every=10000 max_seconds=61200 \
+      device=cuda arch=geometric read=l2 rotation=true \
+      > /root/runs/geo-96m.log 2>&1
+    ```
+  - Operational mechanism: `data_parallel=2` splits each step's batch of 32 into two half-batches of 16 on GPU 0 and GPU 1. Replica gradients on GPU 1 are accumulated and averaged into GPU 0, model updates are applied on GPU 0, and updated weights are copied back to GPU 1 (`StackModel::copy_variables_from`). The update is mathematically equivalent to the full-batch mean. Intermediate step 5,000 progress is recorded on [issue #820 comment 5974333259](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5974333259).
 
 ## 4. Chat fine-tune (`dialogue-train`)
 
 Chat fine-tuning trains the base geometric model on dialogue sequences with masked loss (loss computed only on assistant turns and their `<|eos|>` tokens).
 
-### 4.1 Invocation pattern (`run-ft.sh`)
+### 4.1 Invocation pattern (`run-ft.sh` and `run-ft29.sh`)
 
 ```sh
+B=/root/target-rope/release/examples/geometric-stack
+T=/root/data/tokenizer.json
+D=/root/data/ft/dev
+I=/root/runs/geo-20m/model
+
 ft() {
   name=$1; corpus=$2; gpu=$3
   CUDA_VISIBLE_DEVICES=$gpu RAYON_NUM_THREADS=8 $B dialogue-train \
@@ -184,21 +202,25 @@ ft() {
 }
 ```
 
+- **29M fine-tunes:** `/root/run-ft29.sh`, recipe B, `init=/root/runs/<base>/model`.
+
 ### 4.2 Critical parameter constraints
 
 - **`init=<run>/model` (MANDATORY):**
   `init` **must point directly to the model subfolder** (e.g., `/root/runs/geo-20m/model`), **never the run root**.
   *Reason:* `dialogue-train` calls `StackModel::load`, which looks for `config.json` and weight files directly inside the directory specified by `init`. Passing the run root fails immediately with a missing file error.
-- **`pointer=32`:** enables the 32-dimensional pointer mixture head for addressable memory readout.
+- **`pointer=32`:** enables a 32-wide copy (pointer) head after the final norm.
 - **`protocol=2`:** enforces literal role markers (`System: `, `User: `, `Assistant: `).
-- **`policy=full_prefix`:** conditions generation on the complete preceding conversational context.
+- **`policy=full_prefix`:** selects training-episode prefixes.
 - **Fine-tuning recipes:**
   - **Recipe A (M-world only):** corpus `/root/data/ft/parar` (emit-6r synthetic factual grounding).
-  - **Recipe B (Mixed):** corpus `/root/data/ft/mixed` (M-world synthetic turns + chat-v0 responses).
+  - **Recipe B (Mixed):** corpus `/root/data/ft/mixed` (M-world synthetic turns + chat-v0 responses; 49,437 responses).
 
 ## 5. Grounded conversation session (D19 session)
 
-Multi-turn factual grounding and memory retention are evaluated locally using `m-world session` (`examples/m-world.rs`).
+Multi-turn factual grounding and memory retention are evaluated using `m-world session` (`examples/m-world.rs`).
+
+### 5.1 20M session on laptop (`eval-chat-20m.sh`)
 
 ```sh
 # Fetch completed run from pod
@@ -220,10 +242,20 @@ RAYON_NUM_THREADS=3 VECLIB_MAXIMUM_THREADS=3 $BIN/m-world session \
   > $L/evals/session-$NAME.log 2>&1
 ```
 
+### 5.2 29M sessions on GPU pod (`run-sessions.sh` and `run-sessions-off.sh`)
+
+Because local laptop threads were budgeted, the 29M grounded sessions ran directly on the pod:
+- `/root/run-sessions.sh` (`log_recall=sieve`)
+- `/root/run-sessions-off.sh` (`log_recall=off`)
+- Built from `main` with `RAYON_NUM_THREADS=16`.
+- The pod execution reproduced the laptop's scoring exactly per category.
+
+### 5.3 Recall modes and session outcomes
+
 - **`log_recall` modes:**
   - `log_recall=sieve`: queries an exact prime-atom sieve over previous user turns to supply a recall line when the compiler leaves the turn unresolved.
   - `log_recall=off`: baseline session without sieve recall, evaluating raw unaugmented state retention.
-- **Turn count & scoring:** evaluates 1,075 turns across 64 conversations. Results (e.g. 29M B lr 5e-4 scoring 972/1,075 with sieve vs 865 with store off) are documented in [issue #820](https://github.com/UOR-Foundation/uor-r4/issues/820) and [issue #1552](https://github.com/UOR-Foundation/uor-r4/issues/1552).
+- **Turn count & scoring:** evaluates 1,075 scored turns over 300 conversations. Results (e.g. 29M B lr 5e-4 scoring 972/1,075 with sieve vs 865 with store off) are documented in [issue #820 comment 5974333259](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5974333259) and [issue #1552](https://github.com/UOR-Foundation/uor-r4/issues/1552).
 
 ## 6. Chat-grade panel evaluation (`chat-grade`)
 
@@ -273,7 +305,7 @@ RAYON_NUM_THREADS=2 target/release/chat-grade grade \
     - $c = \text{control\_only}$ (deranged control acceptable, actual reply unacceptable)
   - Computes the two-sided exact McNemar p-value:
     $$p = \min\left(1.0, 2 \sum_{k=0}^{\min(b,c)} \binom{b+c}{k} 0.5^{b+c}\right)$$
-  - A model discriminates relevance when $b > c$ and $p < 0.05$. Scores and p-values are recorded on [issue #820](https://github.com/UOR-Foundation/uor-r4/issues/820).
+  - A model discriminates relevance when $b > c$ and $p < 0.05$. Scores and p-values are recorded on [issue #820 comment 5974333259](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5974333259).
 
 ## 7. Operational rules and reproduction checklist
 
@@ -284,4 +316,4 @@ RAYON_NUM_THREADS=2 target/release/chat-grade grade \
    - Panel grading runs with `RAYON_NUM_THREADS=2`.
    - All active local jobs register in `~/.local/share/uor-r4/locks/jobs/<job>.json` to enforce the shared 8-thread machine budget.
 4. **Pod file transfers:** transfer files off the pod via `scp` before destroying or terminating the cloud instance; all checkpoints, manifests, and logs must be stored locally in `~/uor-r4-local/ladder/`.
-5. **D11 serving compliance:** the scale ladder checkpoints (8M, 20M, 29M) represent floating-point training artifacts; exact D11 integer serving and multiplier-free kernel verification remain open (tracked in [issue #964](https://github.com/UOR-Foundation/uor-r4/issues/964)).
+5. **D11 serving compliance:** the scale ladder checkpoints (8M, 20M, 29M, ~96M) represent floating-point training artifacts; exact D11 integer serving and multiplier-free kernel verification remain open (tracked in [issue #964](https://github.com/UOR-Foundation/uor-r4/issues/964)).
