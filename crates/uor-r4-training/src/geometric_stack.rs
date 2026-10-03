@@ -14240,18 +14240,59 @@ mod tests {
             bits(&all.0)?,
             bits(&forward(&reloaded, &ids, 1, ids.len(), [true; 4])?.0)?
         );
-        let double = ids
+        let other = ids
             .iter()
-            .copied()
-            .chain(ids.iter().copied())
+            .map(|&token| match token {
+                2 => 3,
+                3 => 2,
+                x => x,
+            })
             .collect::<Vec<_>>();
+        assert_ne!(ids.as_slice(), other.as_slice());
+        let double = ids.iter().copied().chain(other).collect::<Vec<_>>();
         let two = forward(&model, &double, 2, ids.len(), [true; 4])?;
-        assert_eq!(
-            bits(&all.0)?,
-            bits(&two.0.narrow(0, ids.len(), ids.len())?)?
-        );
+        let native_two = model.forward_geometric_composition_native_with_trace(
+            &double,
+            2,
+            ids.len(),
+            &context,
+            &event,
+            &span,
+            &potential,
+            &reducer,
+            &values,
+            &null,
+            &bank,
+            false,
+        )?;
+        assert_eq!(bits(&two.0)?, bits(&native_two.0)?);
+        assert_eq!(two.1.read, native_two.1);
         let prefix = forward(&model, &ids[..10], 1, 10, [true; 4])?;
-        assert_eq!(bits(&all.0.narrow(0, 0, 10)?)?, bits(&prefix.0)?);
+        // Integer reader rows carry cross-length causality. Float-tail parity
+        // compares identical shapes because BLAS rounding may depend on shape.
+        for head in 0..2 {
+            for query in 0..10 {
+                assert_eq!(
+                    all.1.read.rows[head * ids.len() + query],
+                    prefix.1.read.rows[head * 10 + query],
+                );
+            }
+        }
+        let native_prefix = model.forward_geometric_composition_native_with_trace(
+            &ids[..10],
+            1,
+            10,
+            &context,
+            &event,
+            &span,
+            &potential,
+            &reducer,
+            &values,
+            &null,
+            &bank,
+            false,
+        )?;
+        assert_eq!(bits(&prefix.0)?, bits(&native_prefix.0)?);
         let out = &model.variables()["layers.02.read.out.weight"];
         let old = out.copy()?;
         out.set(&Tensor::full(f32::NAN, out.shape(), &cpu())?)?;
