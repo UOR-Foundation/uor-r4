@@ -28,7 +28,7 @@ use crate::{
     geometric_context_credit::{frozen_no_read_forward, frozen_potential_forward},
     geometric_no_read::{NoReadBatch, NoReadWeights},
     geometric_potential_q4::PotentialQ4Weights,
-    geometric_stack::{ReadScore, StackArch, StackConfig, StackModel},
+    geometric_stack::{ReadIdentityLatch, ReadScore, StackArch, StackConfig, StackModel},
     invalid, sha256_bytes, Result,
 };
 
@@ -169,6 +169,9 @@ impl ConsumerWeights {
         config.read = ReadScore::Lorentz;
         config.rotation = true;
         let mut initializer = StackModel::new(config, &Device::Cpu)?;
+        // Required only by the existing potential-source constructor's admission.
+        // This Stack is never evaluated; the consumer has no held-span channel.
+        initializer.set_read_identity_latch(ReadIdentityLatch::Held)?;
         initializer.set_geometric_address(GeometricAddressConfig::new(width, heads)?)?;
         initializer.save(base)?;
         let potential = PotentialQ4Weights::from_base(base, tokenizer)?;
