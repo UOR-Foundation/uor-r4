@@ -74,10 +74,14 @@ The complete section is preserved verbatim in
 [current-state-2026-10-03-overnight](../history/current-state-2026-10-03-overnight.md). In brief, scoped to the
 four 8M arms (width288, context384, 16,000 steps, mixture 0.6/0.15/0.25): the
 quaternion/flat L2 seed1 arm has the lowest TinyStories final NLL (1.589840) among
-the retained arms; chat-8m-a gets 959/1,075 accepted authored development session
-turns; the source-consumption diagnostic delivers the selected payload in 20/20
-read-on cases, with 16 complete answers. No response-quality, general-language or
-integer-serving qualification follows.
+the retained arms, L2 wins all three panels and the geometric development stack
+retains the emitter role; chat-8m-a gets 959/1,075 accepted authored development
+session turns; the source-consumption diagnostic delivers the selected payload in
+20/20 read-on cases, but only 16 give a complete answer and 4 emit the unrelated
+distractor (the chat blocker: source consumption after correct delivery). Open
+relation 45/52 misses the 0.9 gate; recall-off distance-16 stays 1/37 versus 13/37
+for the recency rule; save/reload equality is same-process only. No
+response-quality, general-language or integer-serving qualification follows.
 
 ## Active execution contract — grounded conversation and durable memory, October 1
 
